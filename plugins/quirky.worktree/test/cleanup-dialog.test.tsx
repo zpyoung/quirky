@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import type { UiPluginContext } from '@quirky/protocol'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
-import type { CleanupCandidate } from '../src/control-types'
+import type { CleanupCandidate, CleanupRemovalResult } from '../src/control-types'
 
 type CleanupDialogType = typeof import('../src/CleanupDialog').CleanupDialog
 
@@ -38,26 +38,40 @@ const candidate = (overrides: Partial<CleanupCandidate> & { worktreeId: string }
   ...overrides
 })
 
-async function mount(candidates: CleanupCandidate[], confirm: (options: { title: string; body: string; confirmLabel?: string }) => Promise<boolean> = async () => true) {
+type MountOptions = {
+  cleanupPreview?: () => Promise<{ generatedAt: number; candidates: CleanupCandidate[] }>
+  cleanupRemove?: () => Promise<{ results: CleanupRemovalResult[] }>
+  onClose?: () => void
+}
+
+async function mount(
+  candidates: CleanupCandidate[],
+  confirm: (options: { title: string; body: string; confirmLabel?: string }) => Promise<boolean> = async () => true,
+  options: MountOptions = {}
+) {
   const calls: Array<{ method: string; params: unknown }> = []
   const confirms: Array<{ title: string; body: string; confirmLabel?: string }> = []
   const context = {
     call: async (method: string, params?: unknown) => {
       calls.push({ method, params })
-      if (method === 'quirky.worktree/cleanupPreview') return { generatedAt: 1, candidates }
-      if (method === 'quirky.worktree/cleanupRemove') return { results: [] }
+      if (method === 'quirky.worktree/cleanupPreview') {
+        return options.cleanupPreview ? options.cleanupPreview() : { generatedAt: 1, candidates }
+      }
+      if (method === 'quirky.worktree/cleanupRemove') {
+        return options.cleanupRemove ? options.cleanupRemove() : { results: [] }
+      }
       return undefined
     },
-    confirm: async (options: { title: string; body: string; confirmLabel?: string }) => {
-      confirms.push(options)
-      return confirm(options)
+    confirm: async (confirmation: { title: string; body: string; confirmLabel?: string }) => {
+      confirms.push(confirmation)
+      return confirm(confirmation)
     }
   } as unknown as UiPluginContext
   const host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
   await act(async () => {
-    root!.render(createElement(CleanupDialog, { context, onClose: () => {} }))
+    root!.render(createElement(CleanupDialog, { context, onClose: options.onClose ?? (() => {}) }))
   })
   await act(async () => { await Promise.resolve() })
   return { calls, confirms }
@@ -93,6 +107,7 @@ test('an empty preview says nothing needs cleaning and what qualifies', async ()
   expect(text).toContain('Nothing to clean up')
   expect(text).toContain('Worktrees archived for 7 days or more with nothing unpushed')
   expect(text).not.toContain('No idle cleanup candidates')
+  expect(dialog().querySelector('.ui-empty-state')?.textContent).toContain('Nothing to clean up')
 })
 
 test('the header offers Refresh preview and Restore ignored, and rows offer Ignore', async () => {
@@ -132,3 +147,66 @@ test('the reason sits on its own line under the name', async () => {
   expect(item.querySelector('label')?.contains(reason)).toBe(false)
   expect(item.querySelector('label')?.textContent).toBe('old-experiment')
 })
+
+test('shows a loading state while checking current worktree safety', async () => {
+  const pendingPreview = Promise.withResolvers<{ generatedAt: number; candidates: CleanupCandidate[] }>().promise
+  await mount([], async () => true, { cleanupPreview: () => pendingPreview })
+  expect(dialog().querySelector('[role="status"] .ui-notice-line')?.textContent).toBe('Checking current worktree safety…')
+})
+
+test('shows preview errors without an empty state', async () => {
+  await mount([], async () => true, {
+    cleanupPreview: async () => { throw new Error('Store locked') }
+  })
+  expect(dialog().querySelector('.ui-inline-error')?.textContent).toContain('Store locked')
+  expect(dialog().querySelector('.ui-empty-state')).toBeNull()
+})
+
+test('shows each cleanup removal result and marks retained work as an error', async () => {
+  await mount([candidate({ worktreeId: 'one' }), candidate({ worktreeId: 'two' })], async () => true, {
+    cleanupRemove: async () => ({
+      results: [
+        { worktreeId: 'one', removed: true },
+        { worktreeId: 'two', removed: false, error: 'Session still running' }
+      ]
+    })
+  })
+  for (const checkbox of dialog().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) await click(checkbox)
+  await click(button('Delete selected')!)
+  const results = dialog().querySelector<HTMLElement>('[aria-label="Cleanup results"]')!
+  expect(results.textContent).toContain('Removed one')
+  expect(results.querySelector('.ui-inline-error')?.textContent).toBe('Kept two: Session still running')
+})
+
+test('holds Escape close while removal is busy', async () => {
+  const { promise: pendingRemoval, resolve: resolveRemoval } = Promise.withResolvers<{ results: CleanupRemovalResult[] }>()
+  let closeCalls = 0
+  await mount([candidate({ worktreeId: 'one' })], async () => true, {
+    cleanupRemove: () => pendingRemoval,
+    onClose: () => { closeCalls++ }
+  })
+  await click(dialog().querySelector<HTMLInputElement>('input[type="checkbox"]')!)
+  await click(button('Delete selected')!)
+  await act(async () => {
+    dialog().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  })
+  expect(closeCalls).toBe(0)
+
+  await act(async () => {
+    resolveRemoval({ results: [] })
+    const nextTurn = Promise.withResolvers<void>()
+    setTimeout(() => nextTurn.resolve(), 0)
+    await nextTurn.promise
+  })
+  await act(async () => {
+    dialog().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  })
+  expect(closeCalls).toBe(1)
+})
+
+test('refresh preview requests a new cleanup preview', async () => {
+  const { calls } = await mount([candidate({ worktreeId: 'one' })])
+  await click(button('Refresh preview')!)
+  expect(calls.filter((call) => call.method === 'quirky.worktree/cleanupPreview')).toHaveLength(2)
+})
+
