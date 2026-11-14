@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Badge, Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, StatusDot, Tabs, TextField, ToolPanelActions, type ContextMenuItem } from '@quirky/ui'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { Badge, Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, InlineError, NoticeLine, StatusDot, Tabs, TextField, ToolPanelActions, type ContextMenuItem } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { AutomationDefinition, AutomationRun, AutomationRunsPage } from '../../types'
 import type { AutomationOwner, AutomationTargetResolution } from '../../dispatch-contract'
@@ -63,7 +63,7 @@ const INITIAL_FETCH_STATE: FetchState = {
 }
 
 type NativeDeleteDialog = { kind: 'native'; definition: AutomationDefinition; skipNextTime: boolean; error: string | null }
-type ExternalDeleteDialog = { kind: 'external'; manager: ExternalManager; job: ExternalJob; error: string | null }
+type ExternalDeleteDialog = { kind: 'external'; manager: ExternalManager; job: ExternalJob; description: string | null; error: string | null }
 type DeleteDialog = NativeDeleteDialog | ExternalDeleteDialog
 
 type TargetProbe = { available: boolean; error: string | null }
@@ -89,9 +89,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-async function callApi<T>(context: UiPluginContext, method: string, params: Record<string, unknown> = {}): Promise<T> {
-  return await context.call(method.startsWith('setting.') ? method : `${API}${method}`, params) as T
-}
+
 
 function validateRunPage(value: unknown): AutomationRunsPage {
   if (!isRecord(value) || !Array.isArray(value.runs) || !(value.nextCursor === null || typeof value.nextCursor === 'string')) {
@@ -101,7 +99,7 @@ function validateRunPage(value: unknown): AutomationRunsPage {
 }
 
 async function readRunPage(context: UiPluginContext, automationId: string | null, limit: number, cursor: string | null): Promise<AutomationRunsPage> {
-  const page = await callApi<unknown>(context, 'runs', {
+  const page = await context.call('quirky.automations/runs', {
     ...(automationId === null ? {} : { automationId }), limit, ...(cursor === null ? {} : { cursor })
   })
   return validateRunPage(page)
@@ -137,14 +135,14 @@ function assertOwnerUnchanged(displayed: AutomationDefinition, fresh: Automation
 }
 
 async function freshDefinition(context: UiPluginContext, id: string): Promise<AutomationDefinition> {
-  const definition = await callApi<AutomationDefinition>(context, 'show', { id })
+  const definition = await context.call('quirky.automations/show', { id }) as AutomationDefinition
   if (!definition || definition.id !== id) throw new Error('The automation could not be refreshed from its owner.')
   return definition
 }
 
 async function checkTarget(context: UiPluginContext, id: string): Promise<TargetProbe> {
   try {
-    const result = await callApi<AutomationTargetResolution>(context, 'target', { id })
+    const result = await context.call('quirky.automations/target', { id }) as AutomationTargetResolution
     if (!result || result.available !== true) return { available: false, error: result && 'error' in result ? result.error : 'The automation target is unavailable.' }
     if (!result.target || result.target.owner?.kind !== 'local') {
       return { available: false, error: 'Only locally owned automation targets are available from this client.' }
@@ -375,6 +373,61 @@ function getAutomationHostId(definition: AutomationDefinition | null, data: Auto
 function stopKeyboardPropagation(event: KeyboardEvent<HTMLElement>): void {
   if (event.key === 'Escape') event.stopPropagation()
 }
+type RowActionsMenuProps = {
+  label: string
+  open: boolean
+  items: ContextMenuItem[]
+  onToggle(event: MouseEvent<HTMLButtonElement>): void
+  onClose(): void
+}
+
+function RowActionsMenu({ label, open, items, onToggle, onClose }: RowActionsMenuProps) {
+  return <div className="auto-row-menu">
+    <IconButton
+      label={label}
+      className="auto-row-menu__trigger"
+      aria-haspopup="menu"
+      aria-expanded={open}
+      onClick={onToggle}
+    >•••</IconButton>
+    {open && <div className="auto-row-menu-panel" onContextMenu={(event) => event.preventDefault()}>
+      <ContextMenuList
+        label={label}
+        items={items}
+        onChoose={(item) => item.onSelect?.()}
+        onClose={onClose}
+      />
+    </div>}
+  </div>
+}
+
+type DeleteConfirmDialogProps = {
+  titleId: string
+  title: string
+  busy: boolean
+  error: string | null
+  confirmLabel: string
+  onCancel(): void
+  onConfirm(): void
+  children: ReactNode
+}
+
+function DeleteConfirmDialog({ titleId, title, busy, error, confirmLabel, onCancel, onConfirm, children }: DeleteConfirmDialogProps) {
+  return <div className="auto-dialog-backdrop" role="presentation" onMouseDown={(event) => {
+    if (event.target === event.currentTarget && !busy) onCancel()
+  }}>
+    <section className="auto-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={stopKeyboardPropagation}>
+      <h2 id={titleId}>{title}</h2>
+      {children}
+      {error && <InlineError message={error} />}
+      <div className="auto-dialog-actions">
+        <Button disabled={busy} onClick={onCancel}>Cancel</Button>
+        <Button variant="destructive" disabled={busy} onClick={onConfirm}>{confirmLabel}</Button>
+      </div>
+    </section>
+  </div>
+}
+
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -408,19 +461,18 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialog | null>(null)
-  const [showSettingsLink, setShowSettingsLink] = useState(false)
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null)
   const [agentFilterQuery, setAgentFilterQuery] = useState('')
   const [targetChecks, setTargetChecks] = useState<Record<string, TargetProbe>>({})
   const [detailState, setDetailState] = useState<{ id: string | null; definition: AutomationDefinition | null; loading: boolean; error: string | null }>({ id: null, definition: null, loading: false, error: null })
   const [history, setHistory] = useState<HistoryState>({ automationId: null, runs: [], cursor: null, loaded: false, loading: false, error: null })
+  const historyLatest = useRef(history)
+  historyLatest.current = history
   const [detailUsage, setDetailUsage] = useState<DetailUsageState>({ automationId: null, runs: [], loaded: false, loading: false, error: null })
-  const [historyStarts, setHistoryStarts] = useState<number[]>([0])
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(0)
   const [historyRetry, setHistoryRetry] = useState(0)
   const [usageRetry, setUsageRetry] = useState(0)
-  const [promptExpanded, setPromptExpanded] = useState(false)
   const [runDetail, setRunDetail] = useState<RunDetailState>({ runId: null, run: null, loading: false, error: null })
   const [runRetry, setRunRetry] = useState(0)
   const [runAutomation, setRunAutomation] = useState<AutomationDefinition | null>(null)
@@ -428,7 +480,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
   const [runOpenError, setRunOpenError] = useState<string | null>(null)
   const [rerunPending, setRerunPending] = useState(false)
   const rerunGate = useRef(false)
-  const [dashboardVisibleCount, setDashboardVisibleCount] = useState(DASHBOARD_RENDER_LIMIT)
+  const externalDeletePreparing = useRef(false)
   const loadGeneration = useRef(0)
   const dashboardGeneration = useRef(0)
   const rowElements = useRef(new Map<string, HTMLTableRowElement>())
@@ -445,8 +497,12 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     historySelection.current = { automationId: activeHistoryAutomationId }
   }
   const historyEffectAutomationId = useRef<string | null>(null)
+  const historyStartsRef = useRef(navigation.historyStarts)
+  historyStartsRef.current = navigation.historyStarts
+  const usageGeneration = useRef(0)
+  const runDetailGeneration = useRef(0)
 
-  const reload = useCallback((): Promise<void> => {
+  const reload = (): Promise<void> => {
     if (reloadPromise.current !== null) {
       reloadAgain.current = true
       return reloadPromise.current
@@ -460,9 +516,9 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
           nativeError: null, editorError: null, externalError: null
         }))
         const [definitionsResult, editorResult, externalResult] = await Promise.allSettled([
-          callApi<AutomationDefinition[]>(props.context, 'list', {}),
-          callApi<AutomationEditorData>(props.context, 'editorData', {}),
-          callApi<unknown>(props.context, 'externalList', {})
+          props.context.call('quirky.automations/list', {}) as Promise<AutomationDefinition[]>,
+          props.context.call('quirky.automations/editorData', {}) as Promise<AutomationEditorData>,
+          props.context.call('quirky.automations/externalList', {})
         ])
         if (!mounted.current || generation !== loadGeneration.current) return
         const definitions = definitionsResult.status === 'fulfilled' && Array.isArray(definitionsResult.value) ? definitionsResult.value : null
@@ -492,7 +548,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
           return next
         })
         if (definitions === null) return
-        const lastRuns: Record<string, AutomationRun | null> = {}
+        const lastRunEntries: [string, AutomationRun | null][] = []
         const errors: string[] = []
         for (let index = 0; index < definitions.length; index += 8) {
           const group = definitions.slice(index, index + 8)
@@ -503,14 +559,15 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
           if (!mounted.current || generation !== loadGeneration.current) return
           results.forEach((result, resultIndex) => {
             const id = group[resultIndex]!.id
-            if (result.status === 'fulfilled') lastRuns[id] = result.value.run
+            if (result.status === 'fulfilled') lastRunEntries.push([id, result.value.run])
             else {
-              lastRuns[id] = null
+              lastRunEntries.push([id, null])
               errors.push(id)
             }
           })
         }
         if (!mounted.current || generation !== loadGeneration.current) return
+        const lastRuns = Object.fromEntries(lastRunEntries)
         setData((current) => ({ ...current, lastRuns, lastRunsLoaded: true, lastRunErrors: errors }))
         if (!reloadAgain.current) return
       }
@@ -527,15 +584,15 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     }
     void promise.then(clear, clear)
     return promise
-  }, [props.context])
+  }
   reloadLatest.current = reload
 
   useEffect(() => {
     mounted.current = true
-    void reload()
+    void reloadLatest.current()
     const unsubscribe = props.context.subscribe((event) => {
       if (!mounted.current || event.type !== `${API}changed`) return
-      void reload()
+      void reloadLatest.current()
       setHistoryRetry((current) => current + 1)
       setUsageRetry((current) => current + 1)
       setRunRetry((current) => current + 1)
@@ -547,7 +604,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       loadGeneration.current++
       dashboardGeneration.current++
     }
-  }, [props.context, reload])
+  }, [props.context])
 
   useEffect(() => {
     if (navigation.page !== 'runs' || !data.nativeLoaded) {
@@ -599,69 +656,136 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     return () => { cancelled = true }
   }, [data.definitions, navigation.automationId, navigation.page, props.context])
 
-  useEffect(() => {
-    const id = navigation.page === 'detail' && navigation.tab === 'runs' ? navigation.automationId : null
-    const sameAutomation = historyEffectAutomationId.current === id
-    historyEffectAutomationId.current = id
+  const loadHistoryFirstPage = async (id: string) => {
     const requestGeneration = ++historyRequestGeneration.current
     const selection = historySelection.current
-    if (!id) {
-      setHistory({ automationId: null, runs: [], cursor: null, loaded: false, loading: false, error: null })
-      setHistoryStarts([0])
-      setSelectedHistoryIndex(0)
-      return () => { historyRequestGeneration.current++ }
-    }
-    let cancelled = false
     setHistory((current) => current.automationId === id
       ? { ...current, loading: true, error: null }
       : { automationId: id, runs: [], cursor: null, loaded: false, loading: true, error: null })
-    if (!sameAutomation) {
-      setHistoryStarts([0])
-      setSelectedHistoryIndex(0)
-    }
-    void readRunPage(props.context, id, RUN_PAGE_SIZE, null).then((page) => {
-      if (cancelled || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
+    try {
+      const page = await readRunPage(props.context, id, RUN_PAGE_SIZE, null)
       setHistory((current) => {
-        if (current.automationId !== id) return current
+        if (historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection || current.automationId !== id) return current
         const hasOlderLoaded = current.runs.length > page.runs.length
         const merged = hasOlderLoaded ? appendRunPage(page.runs, { runs: current.runs, nextCursor: current.cursor }) : { runs: page.runs, nextCursor: page.nextCursor }
         return { ...current, runs: merged.runs, cursor: merged.nextCursor, loaded: true, loading: false, error: null }
       })
-    }).catch((error: unknown) => {
-      if (cancelled || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
-      setHistory((current) => current.automationId === id
+    } catch (error) {
+      setHistory((current) => historyRequestGeneration.current === requestGeneration
+        && historySelection.current === selection && current.automationId === id
         ? { ...current, loading: false, error: errorMessage(error) }
         : current)
-    })
-    return () => {
-      cancelled = true
-      if (historyRequestGeneration.current === requestGeneration) historyRequestGeneration.current++
     }
+  }
+
+  useEffect(() => {
+    const id = activeHistoryAutomationId
+    const sameAutomation = historyEffectAutomationId.current === id
+    historyEffectAutomationId.current = id
+    if (!id) {
+      setHistory({ automationId: null, runs: [], cursor: null, loaded: false, loading: false, error: null })
+      setSelectedHistoryIndex(0)
+      return () => { historyRequestGeneration.current++ }
+    }
+    if (!sameAutomation) setSelectedHistoryIndex(0)
+    void loadHistoryFirstPage(id)
+    return () => { historyRequestGeneration.current++ }
   }, [historyRetry, navigation.automationId, navigation.page, navigation.tab, props.context])
+
+  const loadDetailUsage = async (id: string) => {
+    const generation = ++usageGeneration.current
+    setDetailUsage((current) => current.automationId === id
+      ? { ...current, loading: true, error: null }
+      : { automationId: id, runs: [], loaded: false, loading: true, error: null })
+    try {
+      const result = await readAllRuns(props.context, id)
+      setDetailUsage((current) => {
+        if (usageGeneration.current !== generation || current.automationId !== id) return current
+        const runs = result.error !== null && current.runs.length > result.runs.length ? current.runs : result.runs
+        return { automationId: id, runs, loaded: result.error === null, loading: false, error: result.error }
+      })
+    } catch (error) {
+      setDetailUsage((current) => usageGeneration.current === generation && current.automationId === id
+        ? { ...current, loaded: false, loading: false, error: errorMessage(error) }
+        : current)
+    }
+  }
+
   useEffect(() => {
     const id = navigation.page === 'detail' && navigation.tab === 'overview' ? navigation.automationId : null
     if (!id) {
       setDetailUsage({ automationId: null, runs: [], loaded: false, loading: false, error: null })
       return
     }
-    let cancelled = false
-    setDetailUsage((current) => current.automationId === id
-      ? { ...current, loading: true, error: null }
-      : { automationId: id, runs: [], loaded: false, loading: true, error: null })
-    void readAllRuns(props.context, id).then((result) => {
-      if (cancelled) return
-      setDetailUsage((current) => {
-        if (current.automationId !== id) return current
-        const runs = result.error !== null && current.runs.length > result.runs.length ? current.runs : result.runs
-        return { automationId: id, runs, loaded: result.error === null, loading: false, error: result.error }
-      })
-    }).catch((error: unknown) => {
-      if (!cancelled) setDetailUsage((current) => current.automationId === id
-        ? { ...current, loaded: false, loading: false, error: errorMessage(error) }
-        : { automationId: id, runs: [], loaded: false, loading: false, error: errorMessage(error) })
-    })
-    return () => { cancelled = true }
+    void loadDetailUsage(id)
+    return () => { usageGeneration.current++ }
   }, [data.definitions, navigation.automationId, navigation.page, navigation.tab, props.context, usageRetry])
+
+  const loadRunDetail = async (runId: string, useCache: boolean) => {
+    const generation = ++runDetailGeneration.current
+    const isCurrent = () => runDetailGeneration.current === generation
+    const cached = useCache ? data.dashboardRuns.find((run) => run.id === runId) ?? history.runs.find((run) => run.id === runId) ?? null : null
+    setRunAutomation(null)
+    setRunOpenTarget(null)
+    setRunOpenError(null)
+    setRunDetail({ runId, run: cached, loading: true, error: null })
+    const findRun = async (): Promise<AutomationRun | null> => {
+      if (cached) return cached
+      const automationId = navigation.automationId
+      let cursor: string | null = null
+      const seen = new Set<string>()
+      do {
+        const page = await readRunPage(props.context, automationId, 100, cursor)
+        if (!isCurrent()) return null
+        const found = page.runs.find((run) => run.id === runId)
+        if (found) return found
+        if (page.nextCursor === null) break
+        if (seen.has(page.nextCursor)) throw new Error('Run history repeated a paging cursor.')
+        seen.add(page.nextCursor)
+        cursor = page.nextCursor
+      } while (true)
+      throw new Error('This run is no longer present in available history.')
+    }
+    let run: AutomationRun | null
+    try {
+      run = await findRun()
+    } catch (error) {
+      if (isCurrent()) setRunDetail({ runId, run: null, loading: false, error: errorMessage(error) })
+      return
+    }
+    if (!isCurrent() || !run) return
+    setRunDetail({ runId, run, loading: false, error: null })
+    let definition: AutomationDefinition
+    try {
+      definition = await freshDefinition(props.context, run.automationId)
+    } catch (error) {
+      if (!isCurrent()) return
+      setRunAutomation(null)
+      setTargetChecks((current) => ({ ...current, [run.automationId]: { available: false, error: errorMessage(error) } }))
+      setRunOpenError(errorMessage(error))
+      return
+    }
+    if (!isCurrent()) return
+    setRunAutomation(definition)
+    if (definition.owner?.kind !== 'local') {
+      const error = 'This run belongs to an automation that cannot be opened from the local authority.'
+      setTargetChecks((current) => ({ ...current, [run.automationId]: { available: false, error } }))
+      setRunOpenError(error)
+      return
+    }
+    setTargetChecks((current) => ({ ...current, [run.automationId]: { available: false, error: 'Checking target availability…' } }))
+    const probe = await checkTarget(props.context, run.automationId)
+    if (!isCurrent()) return
+    setTargetChecks((current) => ({ ...current, [run.automationId]: probe }))
+    try {
+      const target = await getRunTarget(props.context, run, definition.owner)
+      if (!isCurrent()) return
+      setRunOpenTarget(target)
+    } catch (error) {
+      if (isCurrent()) setRunOpenError(errorMessage(error))
+    }
+  }
+
   useEffect(() => {
     if (navigation.page !== 'run' || !navigation.runId) {
       setRunDetail({ runId: null, run: null, loading: false, error: null })
@@ -672,66 +796,8 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       return
     }
     const runId = navigation.runId
-    const cached = runRetry === 0 ? data.dashboardRuns.find((run) => run.id === runId) ?? history.runs.find((run) => run.id === runId) ?? null : null
-    let cancelled = false
-    setRunAutomation(null)
-    setRunOpenTarget(null)
-    setRunOpenError(null)
-    setRunDetail({ runId, run: cached, loading: true, error: null })
-    const findRun = async (): Promise<AutomationRun> => {
-      if (cached) return cached
-      const automationId = navigation.automationId
-      let cursor: string | null = null
-      const seen = new Set<string>()
-      do {
-        const page = await readRunPage(props.context, automationId, 100, cursor)
-        const found = page.runs.find((run) => run.id === runId)
-        if (found) return found
-        if (page.nextCursor === null) break
-        if (seen.has(page.nextCursor)) throw new Error('Run history repeated a paging cursor.')
-        seen.add(page.nextCursor)
-        cursor = page.nextCursor
-      } while (true)
-      throw new Error('This run is no longer present in available history.')
-    }
-    void findRun().then(async (run) => {
-      if (cancelled) return
-      setRunDetail({ runId, run, loading: false, error: null })
-      setRunOpenTarget(null)
-      setRunOpenError(null)
-      let definition: AutomationDefinition
-      try {
-        definition = await freshDefinition(props.context, run.automationId)
-      } catch (error) {
-        if (!cancelled) {
-          setRunAutomation(null)
-          setTargetChecks((current) => ({ ...current, [run.automationId]: { available: false, error: errorMessage(error) } }))
-          setRunOpenError(errorMessage(error))
-        }
-        return
-      }
-      if (cancelled) return
-      setRunAutomation(definition)
-      if (definition.owner?.kind !== 'local') {
-        const error = 'This run belongs to an automation that cannot be opened from the local authority.'
-        setTargetChecks((current) => ({ ...current, [run.automationId]: { available: false, error } }))
-        setRunOpenError(error)
-        return
-      }
-      setTargetChecks((current) => ({ ...current, [run.automationId]: { available: false, error: 'Checking target availability…' } }))
-      const probe = await checkTarget(props.context, run.automationId)
-      if (cancelled) return
-      setTargetChecks((current) => ({ ...current, [run.automationId]: probe }))
-      try {
-        const target = await getRunTarget(props.context, run, definition.owner)
-        if (!cancelled) setRunOpenTarget(target)
-      } catch (error) {
-        if (!cancelled) setRunOpenError(errorMessage(error))
-      }
-    }).catch((error: unknown) => {
-      if (!cancelled) setRunDetail({ runId, run: null, loading: false, error: errorMessage(error) })
-    })
-    return () => { cancelled = true }
+    void loadRunDetail(runId, runRetry === 0)
+    return () => { runDetailGeneration.current++ }
   }, [data.dashboardRuns, data.definitions, history.runs, navigation.automationId, navigation.page, navigation.runId, props.context, runRetry])
 
   const nativeRows = useMemo(() => buildListRows(data), [data])
@@ -751,7 +817,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     loading: { native: data.nativeLoading, external: data.externalLoading, latestRuns: data.nativeLoaded && !data.lastRunsLoaded, detail: detailState.loading, history: history.loading, usageHistory: detailUsage.loading, runDetails: runDetail.loading, dashboard: data.dashboardLoading },
     busy: busyAction ?? (refreshing ? 'refresh' : rerunPending ? 'rerun' : null),
     errors: { native: reportText(data.nativeError), editorData: reportText(data.editorError), external: reportText(data.externalError), latestRuns: reportIds(data.lastRunErrors), action: reportText(actionError), detail: reportText(detailState.error), history: reportText(history.error), usageHistory: reportText(detailUsage.error), runDetails: reportText(runDetail.error), runOpen: reportText(runOpenError) },
-    selected: { automationId: reportText(navigation.automationId), runId: reportText(navigation.runId), tab: navigation.tab, rowKey: reportText(selectedRowKey), historyRunId: reportText(history.runs[(historyStarts[historyStarts.length - 1] ?? 0) + selectedHistoryIndex]?.id ?? null) },
+    selected: { automationId: reportText(navigation.automationId), runId: reportText(navigation.runId), tab: navigation.tab, rowKey: reportText(selectedRowKey), historyRunId: reportText(history.runs[(navigation.historyStarts[navigation.historyStarts.length - 1] ?? 0) + selectedHistoryIndex]?.id ?? null) },
     dialog: deleteDialog === null ? null : deleteDialog.kind === 'native'
       ? { kind: 'native-delete', automationId: reportText(deleteDialog.definition.id), skipNextTime: deleteDialog.skipNextTime, error: reportText(deleteDialog.error) }
       : { kind: 'external-delete', managerId: reportText(deleteDialog.manager.id), jobId: reportText(deleteDialog.job.id), error: reportText(deleteDialog.error) },
@@ -759,25 +825,26 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     runNavigation: runOpenTarget ? { kind: runOpenTarget.kind, workspaceId: reportText(runOpenTarget.workspaceId) } : null,
     definitionCount: data.definitions.length, definitionIds: reportIds(data.definitions.map((definition) => definition.id)),
     rowCount: sortedRows.length, visibleRowKeys: reportIds(sortedRows.map((row) => row.key)),
-    history: { loadedCount: history.runs.length || detailUsage.runs.length, visibleRunIds: reportIds(history.runs.slice(historyStarts[historyStarts.length - 1] ?? 0, (historyStarts[historyStarts.length - 1] ?? 0) + RUN_RENDER_LIMIT).map((run) => run.id)), cursorAvailable: history.cursor !== null, unavailable: history.error !== null || data.lastRunErrors.length > 0 || detailUsage.error !== null, unavailableCount: data.lastRunErrors.length + (history.error ? 1 : 0) + (detailUsage.error ? 1 : 0) },
+    history: { loadedCount: history.runs.length || detailUsage.runs.length, visibleRunIds: reportIds(history.runs.slice(navigation.historyStarts[navigation.historyStarts.length - 1] ?? 0, (navigation.historyStarts[navigation.historyStarts.length - 1] ?? 0) + RUN_RENDER_LIMIT).map((run) => run.id)), cursorAvailable: history.cursor !== null, unavailable: history.error !== null || data.lastRunErrors.length > 0 || detailUsage.error !== null, unavailableCount: data.lastRunErrors.length + (history.error ? 1 : 0) + (detailUsage.error ? 1 : 0) },
     dashboard: { counts: dashboardMetrics, loadedCount: data.dashboardRuns.length, visibleRunIds: reportIds(dashboardResult.runs.map((run) => run.id)), unavailableCount: data.dashboardErrors.length, loaded: data.dashboardLoaded },
     external: { loaded: data.externalLoaded, unavailableManagerIds: reportIds(data.managers.filter((manager) => manager.status === 'unavailable').map((manager) => manager.id)) },
-    settingsLinkAvailable: showSettingsLink,
+    settingsLinkAvailable: navigation.settingsNotice,
     listHistory: { loaded: data.lastRunsLoaded, unavailableAutomationIds: reportIds(data.lastRunErrors) }
-  }), [actionError, busyAction, data.dashboardErrors.length, data.dashboardLoaded, data.dashboardLoading, data.dashboardRuns.length, data.definitions, data.editorError, data.externalError, data.externalLoaded, data.externalLoading, data.lastRunErrors, data.lastRunsLoaded, data.managers, data.nativeError, data.nativeLoaded, data.nativeLoading, dashboardMetrics, dashboardResult.runs, deleteDialog, detailState.error, detailState.loading, detailUsage.error, detailUsage.loading, detailUsage.runs.length, history.cursor, history.error, history.loading, history.runs.length, historyStarts, navigation, openMenuKey, refreshing, rerunPending, runDetail.error, runDetail.loading, runOpenError, runOpenTarget, selectedHistoryIndex, selectedRowKey, showSettingsLink, sortedRows, targetChecks])
+  }), [actionError, busyAction, data.dashboardErrors.length, data.dashboardLoaded, data.dashboardLoading, data.dashboardRuns.length, data.definitions, data.editorError, data.externalError, data.externalLoaded, data.externalLoading, data.lastRunErrors, data.lastRunsLoaded, data.managers, data.nativeError, data.nativeLoaded, data.nativeLoading, dashboardMetrics, dashboardResult.runs, deleteDialog, detailState.error, detailState.loading, detailUsage.error, detailUsage.loading, detailUsage.runs.length, history.cursor, history.error, history.loading, history.runs.length, navigation, openMenuKey, refreshing, rerunPending, runDetail.error, runDetail.loading, runOpenError, runOpenTarget, selectedHistoryIndex, selectedRowKey, sortedRows, targetChecks])
 
   useEffect(() => { report?.(reportState) }, [report, reportState])
+  const actionErrorElement = actionError ? <InlineError message={actionError} /> : null
 
-  const navigate = useCallback(async (patch: Partial<AutomationNavigation>) => {
+  const navigate = async (patch: Partial<AutomationNavigation>) => {
     try {
-      await callApi(props.context, 'uiNavigate', patch as Record<string, unknown>)
+      await props.context.call('quirky.automations/uiNavigate', patch as Record<string, unknown>)
       setActionError(null)
     } catch (error) {
       setActionError(errorMessage(error))
     }
-  }, [props.context])
+  }
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = async () => {
     setOpenMenuKey(null)
     rowMenuTriggerElements.current.clear()
     setRefreshing(true)
@@ -790,22 +857,22 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       setRefreshing(false)
     }
     await reload()
-  }, [props.refresh, reload])
+  }
 
-  const targetForMenu = useCallback(async (id: string) => {
+  const targetForMenu = async (id: string) => {
     setTargetChecks((current) => ({ ...current, [id]: { available: false, error: 'Checking target availability…' } }))
     const probe = await checkTarget(props.context, id)
     setTargetChecks((current) => ({ ...current, [id]: probe }))
-  }, [props.context])
+  }
   useEffect(() => {
     if (navigation.page === 'detail' && navigation.automationId) void targetForMenu(navigation.automationId)
-  }, [navigation.automationId, navigation.page, targetForMenu])
-  const displayedDefinition = useCallback((id: string) => {
+  }, [navigation.automationId, navigation.page, props.context])
+  const displayedDefinition = (id: string) => {
     if (detailState.id === id && detailState.definition) return detailState.definition
     return data.definitions.find((definition) => definition.id === id) ?? null
-  }, [data.definitions, detailState.definition, detailState.id])
+  }
 
-  const openEditor = useCallback(async (id?: string, template?: string) => {
+  const openEditor = async (id?: string, template?: string) => {
     setBusyAction(id ? `edit:${id}` : 'create')
     setActionError(null)
     try {
@@ -814,11 +881,11 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         if (!displayed) throw new Error('Automation must be refreshed before editing.')
         const fresh = await freshDefinition(props.context, id)
         assertOwnerUnchanged(displayed, fresh)
-        await callApi(props.context, 'openEditor', { id: fresh.id })
+        await props.context.call('quirky.automations/openEditor', { id: fresh.id })
       } else {
         const local = data.editorData?.hosts.find((host) => host.id === 'local' && host.available)
         if (!local) throw new Error('No available local automation host is configured.')
-        await callApi(props.context, 'openEditor', template ? { template } : {})
+        await props.context.call('quirky.automations/openEditor', template ? { template } : {})
       }
     } catch (error) {
       const message = errorMessage(error)
@@ -827,9 +894,9 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     } finally {
       setBusyAction(null)
     }
-  }, [data.editorData, displayedDefinition, props.context, props.notify])
+  }
 
-  const runNative = useCallback(async (id: string) => {
+  const runNative = async (id: string) => {
     setBusyAction(`run:${id}`)
     setActionError(null)
     try {
@@ -839,7 +906,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       assertOwnerUnchanged(displayed, fresh)
       const probe = await checkTarget(props.context, id)
       if (!probe.available) throw new Error(probe.error ?? 'The automation target is unavailable.')
-      const run = await callApi<AutomationRun>(props.context, 'run', { id, ...expectedOwner(fresh) })
+      const run = await props.context.call('quirky.automations/run', { id, ...expectedOwner(fresh) }) as AutomationRun
       props.notify('Automation run queued.', 'success')
       setSelectedRowKey(`native:${id}`)
       await reload()
@@ -853,9 +920,9 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     } finally {
       setBusyAction(null)
     }
-  }, [displayedDefinition, navigation.automationId, navigation.page, navigation.tab, props.context, props.notify, reload])
+  }
 
-  const setEnabled = useCallback(async (id: string, enabled: boolean) => {
+  const setEnabled = async (id: string, enabled: boolean) => {
     setBusyAction(`${enabled ? 'resume' : 'pause'}:${id}`)
     setActionError(null)
     try {
@@ -863,7 +930,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       if (!displayed) throw new Error('Automation must be refreshed before changing its status.')
       const fresh = await freshDefinition(props.context, id)
       assertOwnerUnchanged(displayed, fresh)
-      await callApi(props.context, 'edit', { id, enabled, ...expectedOwner(fresh) })
+      await props.context.call('quirky.automations/edit', { id, enabled, ...expectedOwner(fresh) })
       props.notify(enabled ? 'Automation resumed.' : 'Automation paused.', 'success')
       await reload()
     } catch (error) {
@@ -872,15 +939,15 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     } finally {
       setBusyAction(null)
     }
-  }, [displayedDefinition, props.context, props.notify, reload])
+  }
 
-  const deleteNative = useCallback(async (definition: AutomationDefinition) => {
+  const deleteNative = async (definition: AutomationDefinition) => {
     setBusyAction(`delete:${definition.id}`)
     setActionError(null)
     try {
       const fresh = await freshDefinition(props.context, definition.id)
       assertOwnerUnchanged(definition, fresh)
-      await callApi(props.context, 'remove', { id: fresh.id, yes: true, ...expectedOwner(fresh) })
+      await props.context.call('quirky.automations/remove', { id: fresh.id, yes: true, ...expectedOwner(fresh) })
       props.notify('Automation deleted. Existing workspaces were not removed.', 'success')
       setDeleteDialog(null)
       await reload()
@@ -895,9 +962,9 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     } finally {
       setBusyAction(null)
     }
-  }, [navigation.automationId, navigation.page, navigate, props.context, props.notify, reload])
+  }
 
-  const beginNativeDelete = useCallback(async (id: string) => {
+  const beginNativeDelete = async (id: string) => {
     setBusyAction(`confirm-delete:${id}`)
     setActionError(null)
     try {
@@ -907,7 +974,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       assertOwnerUnchanged(displayed, definition)
       let askBeforeDelete = true
       try {
-        const setting = await callApi<{ value: unknown }>(props.context, 'setting.get', { id: ASK_BEFORE_DELETE_SETTING })
+        const setting = await props.context.call('setting.get', { id: ASK_BEFORE_DELETE_SETTING }) as { value: unknown }
         if (typeof setting.value === 'boolean') askBeforeDelete = setting.value
       } catch {
         setActionError('The delete preference could not be checked; confirmation is required.')
@@ -920,14 +987,14 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     } finally {
       setBusyAction(null)
     }
-  }, [deleteNative, displayedDefinition, props.context, props.notify])
+  }
 
-  const confirmNativeDelete = useCallback(async () => {
+  const confirmNativeDelete = async () => {
     if (!deleteDialog || deleteDialog.kind !== 'native') return
     if (deleteDialog.skipNextTime) {
       setBusyAction(`preference:${deleteDialog.definition.id}`)
       try {
-        await callApi(props.context, 'setting.set', { id: ASK_BEFORE_DELETE_SETTING, value: false })
+        await props.context.call('setting.set', { id: ASK_BEFORE_DELETE_SETTING, value: false })
       } catch (error) {
         const message = `Could not save the delete preference: ${errorMessage(error)}`
         setDeleteDialog((current) => current?.kind === 'native' ? { ...current, error: message } : current)
@@ -935,21 +1002,36 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         return
       }
       props.notify('We’ll skip this confirmation next time. Change this preference in Settings.', 'info')
-      setShowSettingsLink(true)
+      await navigate({ settingsNotice: true })
       setBusyAction(null)
     }
     await deleteNative(deleteDialog.definition)
-  }, [deleteDialog, deleteNative, props.context, props.notify])
+  }
 
-  const openExternalDelete = useCallback((manager: ExternalManager, job: ExternalJob) => {
+  const openExternalDelete = async (manager: ExternalManager, job: ExternalJob) => {
+    if (externalDeletePreparing.current || busyAction !== null) return
     if (!canManageExternal(manager)) {
       setActionError(manager.error ?? 'This external host cannot be managed from the local client.')
       return
     }
-    setDeleteDialog({ kind: 'external', manager, job, error: null })
-  }, [])
+    externalDeletePreparing.current = true
+    setBusyAction(`external:describe-delete:${job.id}`)
+    setActionError(null)
+    try {
+      const description = await props.context.call('quirky.automations/externalActionDescribe', {
+        owner: manager.owner, jobId: job.id, action: 'delete'
+      })
+      if (!mounted.current) return
+      setDeleteDialog({ kind: 'external', manager, job, description: typeof description === 'string' ? description : null, error: null })
+    } catch (error) {
+      if (mounted.current) setActionError(errorMessage(error))
+    } finally {
+      externalDeletePreparing.current = false
+      if (mounted.current) setBusyAction(null)
+    }
+  }
 
-  const externalAction = useCallback(async (manager: ExternalManager, job: ExternalJob, action: 'pause' | 'resume' | 'run' | 'delete') => {
+  const externalAction = async (manager: ExternalManager, job: ExternalJob, action: 'pause' | 'resume' | 'run' | 'delete') => {
     if (!canManageExternal(manager)) {
       const message = manager.error ?? 'This external host cannot be managed from the local client.'
       setActionError(message)
@@ -958,7 +1040,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     setBusyAction(`external:${action}:${job.id}`)
     setActionError(null)
     try {
-      await props.context.call(`${API}externalAction`, {
+      await props.context.call('quirky.automations/externalAction', {
         owner: manager.owner, jobId: job.id, action, ...(action === 'delete' ? { yes: true } : {})
       })
       if (action === 'delete') {
@@ -975,29 +1057,31 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     } finally {
       setBusyAction(null)
     }
-  }, [props.context, props.notify, reload])
+  }
 
-  const loadMoreHistory = useCallback(async () => {
+  const loadMoreHistory = async () => {
     const automationId = history.automationId
     if (!automationId || automationId !== activeHistoryAutomationId || !history.cursor || history.loading) return
     const cursor = history.cursor
     const requestGeneration = historyRequestGeneration.current
     const selection = historySelection.current
     const currentLength = history.runs.length
-    const windowStart = historyStarts[historyStarts.length - 1] ?? 0
+    const windowStart = historyStartsRef.current[historyStartsRef.current.length - 1] ?? 0
     setHistory((current) => current.automationId === automationId ? { ...current, loading: true, error: null } : current)
     try {
       const page = await readRunPage(props.context, automationId, RUN_PAGE_SIZE, cursor)
-      if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
+      const currentHistory = historyLatest.current
+      if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection
+        || currentHistory.automationId !== automationId || currentHistory.cursor !== cursor) return
       if (page.nextCursor === cursor) throw new Error('Run history repeated a paging cursor.')
       const merged = appendRunPage(history.runs, page)
       const newlyLoaded = merged.runs.length - currentLength
       if (newlyLoaded > 0 && currentLength <= windowStart + RUN_RENDER_LIMIT && merged.runs.length > windowStart + RUN_RENDER_LIMIT) {
-        setHistoryStarts((current) => {
-          const currentStart = current[current.length - 1] ?? 0
-          return currentStart === windowStart ? [...current, currentStart + newlyLoaded] : current
-        })
-        setSelectedHistoryIndex(0)
+        const latest = historyStartsRef.current
+        if ((latest[latest.length - 1] ?? 0) === windowStart) {
+          void navigate({ historyStarts: [...latest, windowStart + newlyLoaded] })
+          setSelectedHistoryIndex(0)
+        }
       }
       setHistory((current) => {
         if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection
@@ -1007,13 +1091,13 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       })
     } catch (error) {
       if (!mounted.current || historyRequestGeneration.current !== requestGeneration || historySelection.current !== selection) return
-      setHistory((current) => current.automationId === automationId
+      setHistory((current) => current.automationId === automationId && current.cursor === cursor
         ? { ...current, loading: false, error: errorMessage(error) }
         : current)
     }
-  }, [activeHistoryAutomationId, history.automationId, history.cursor, history.loading, history.runs, historyStarts, props.context])
+  }
 
-  const rerun = useCallback(async (run: AutomationRun) => {
+  const rerun = async (run: AutomationRun) => {
     if (!canRerun(run.status) || rerunPending || rerunGate.current || busyAction !== null) return
     const startedAt = Date.now()
     rerunGate.current = true
@@ -1026,7 +1110,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       assertOwnerUnchanged(displayed, fresh)
       const probe = await checkTarget(props.context, run.automationId)
       if (!probe.available) throw new Error(probe.error ?? 'The automation target is unavailable.')
-      await callApi<AutomationRun>(props.context, 'run', { id: run.automationId, ...expectedOwner(fresh) })
+      await props.context.call('quirky.automations/run', { id: run.automationId, ...expectedOwner(fresh) })
       props.notify('Automation run queued.', 'success')
       await reload()
     } catch (error) {
@@ -1040,7 +1124,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         setRerunPending(false)
       }, remaining)
     }
-  }, [busyAction, props.context, props.notify, reload, rerunPending, runAutomation])
+  }
 
   useEffect(() => {
     function keydown(event: globalThis.KeyboardEvent) {
@@ -1073,29 +1157,28 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     }
     window.addEventListener('keydown', keydown)
     return () => window.removeEventListener('keydown', keydown)
-  }, [deleteDialog, navigation.automationId, navigation.page, navigation.tab, navigate, openMenuKey])
+  }, [deleteDialog, navigation.automationId, navigation.page, navigation.tab, props.context, openMenuKey])
 
-  const runPage = useCallback((run: AutomationRun) => {
+  const runPage = (run: AutomationRun) => {
     setSelectedHistoryIndex(0)
-    setDashboardVisibleCount(DASHBOARD_RENDER_LIMIT)
     void navigate({ page: 'run', automationId: run.automationId, runId: run.id })
-  }, [navigate])
+  }
 
-  const openNativeDetail = useCallback((id: string) => {
+  const openNativeDetail = (id: string) => {
     setSelectedRowKey(`native:${id}`)
     setOpenMenuKey(null)
     rowMenuTriggerElements.current.clear()
     void navigate({ page: 'detail', automationId: id, runId: null, tab: 'overview' })
-  }, [navigate])
+  }
 
-  const openRowMenu = useCallback((key: string) => {
+  const openRowMenu = (key: string) => {
     if (openMenuKey !== null && openMenuKey !== key) rowMenuTriggerElements.current.delete(openMenuKey)
     const trigger = rowElements.current.get(key)?.querySelector<HTMLButtonElement>('.auto-row-menu__trigger')
     if (trigger) rowMenuTriggerElements.current.set(key, trigger)
     setOpenMenuKey(key)
-  }, [openMenuKey])
+  }
 
-  const onListRowKeyDown = useCallback((event: KeyboardEvent<HTMLTableRowElement>, row: AutomationListRow) => {
+  const onListRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, row: AutomationListRow) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       const currentIndex = sortedRows.findIndex((candidate) => candidate.key === row.key)
@@ -1110,21 +1193,45 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       if (row.kind === 'native') openNativeDetail(row.id)
       else openRowMenu(row.key)
     }
-  }, [openNativeDetail, openRowMenu, sortedRows])
+  }
 
-  const openRunTarget = useCallback(() => {
+  const openRunTarget = () => {
     if (!runOpenTarget) return
     props.context.openView(AUTOMATION_PAGE_VIEW, {
       worktree: runOpenTarget.workspaceId,
       ...(runOpenTarget.kind === 'session' && runOpenTarget.sessionId ? { session: runOpenTarget.sessionId } : {})
     })
-  }, [props.context, runOpenTarget])
+  }
+
+  const openSettings = async () => {
+    await navigate({ settingsNotice: false })
+    props.context.openView(AUTOMATIONS_SETTINGS_VIEW)
+  }
+  const dismissSettingsNotice = () => void navigate({ settingsNotice: false })
 
   const activeHostLabel = hostChoices.find((host) => host.id === navigation.host)?.label ?? navigation.host
   const agentChoices = (data.editorData?.agents ?? []).filter((agent) => agent.label.toLocaleLowerCase().includes(agentFilterQuery.toLocaleLowerCase()))
   const clearListFilters = () => void navigate({ host: 'all', status: 'all', lastRun: 'all', agent: '' })
   const listFilterCount = Number(navigation.host !== 'all') + Number(navigation.status !== 'all') + Number(navigation.lastRun !== 'all') + Number(navigation.agent !== '')
   const dashboardFilterCount = Number(navigation.host !== 'all') + Number(navigation.runStatus !== 'all')
+
+
+  const toggleRowMenu = (key: string, event: MouseEvent<HTMLButtonElement>, automationId: string | null) => {
+    const opening = openMenuKey !== key
+    if (opening) {
+      if (openMenuKey !== null) rowMenuTriggerElements.current.delete(openMenuKey)
+      rowMenuTriggerElements.current.set(key, event.currentTarget)
+    } else rowMenuTriggerElements.current.delete(key)
+    setOpenMenuKey(opening ? key : null)
+    if (opening && automationId) void targetForMenu(automationId)
+  }
+
+  const closeRowMenu = (key: string) => {
+    const trigger = rowMenuTriggerElements.current.get(key)
+    setOpenMenuKey(null)
+    trigger?.focus()
+    rowMenuTriggerElements.current.delete(key)
+  }
 
   const renderRowMenu = (row: AutomationListRow): ReactNode => {
     if (row.kind === 'native') {
@@ -1142,36 +1249,13 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         { label: '', separator: true },
         { id: 'delete', label: 'Delete', enabled: !mutationDisabled, danger: true, onSelect: () => { void beginNativeDelete(row.id) } }
       ]
-      return <div className="auto-row-menu" onClick={(event) => event.stopPropagation()}>
-        <IconButton
-          label="Automation actions"
-          className="auto-row-menu__trigger"
-          aria-haspopup="menu"
-          aria-expanded={openMenuKey === row.key}
-          onClick={(event) => {
-            const opening = openMenuKey !== row.key
-            if (opening) {
-              if (openMenuKey !== null) rowMenuTriggerElements.current.delete(openMenuKey)
-              rowMenuTriggerElements.current.set(row.key, event.currentTarget)
-            } else rowMenuTriggerElements.current.delete(row.key)
-            setOpenMenuKey(opening ? row.key : null)
-            if (opening) void targetForMenu(row.id)
-          }}
-        >•••</IconButton>
-        {openMenuKey === row.key && <div className="auto-row-menu-panel" onContextMenu={(event) => event.preventDefault()}>
-          <ContextMenuList
-            label="Automation actions"
-            items={items}
-            onChoose={(item) => item.onSelect?.()}
-            onClose={() => {
-              const trigger = rowMenuTriggerElements.current.get(row.key)
-              setOpenMenuKey(null)
-              trigger?.focus()
-              rowMenuTriggerElements.current.delete(row.key)
-            }}
-          />
-        </div>}
-      </div>
+      return <RowActionsMenu
+        label="Automation actions"
+        open={openMenuKey === row.key}
+        items={items}
+        onToggle={(event) => toggleRowMenu(row.key, event, row.id)}
+        onClose={() => closeRowMenu(row.key)}
+      />
     }
     const manager = data.managers.find((candidate) => candidate.id === row.key.split(':').slice(1, -1).join(':'))
       ?? data.managers.find((candidate) => candidate.hostId === row.hostId)
@@ -1184,38 +1268,16 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         { id: 'run', label: 'Run Now', enabled: manageable && busyAction === null, onSelect: () => { void externalAction(manager, job, 'run') } },
         { id: 'toggle', label: job.enabled ? 'Pause' : 'Resume', enabled: manageable && busyAction === null, onSelect: () => { void externalAction(manager, job, job.enabled ? 'pause' : 'resume') } },
         { label: '', separator: true },
-        { id: 'delete', label: 'Delete', enabled: manageable && busyAction === null, danger: true, onSelect: () => openExternalDelete(manager, job) }
+        { id: 'delete', label: 'Delete', enabled: manageable && busyAction === null, danger: true, onSelect: () => { void openExternalDelete(manager, job) } }
       )
     }
-    return <div className="auto-row-menu" onClick={(event) => event.stopPropagation()}>
-      <IconButton
-        label="External automation actions"
-        className="auto-row-menu__trigger"
-        aria-haspopup="menu"
-        aria-expanded={openMenuKey === row.key}
-        onClick={(event) => {
-          const opening = openMenuKey !== row.key
-          if (opening) {
-            if (openMenuKey !== null) rowMenuTriggerElements.current.delete(openMenuKey)
-            rowMenuTriggerElements.current.set(row.key, event.currentTarget)
-          } else rowMenuTriggerElements.current.delete(row.key)
-          setOpenMenuKey(opening ? row.key : null)
-        }}
-      >•••</IconButton>
-      {openMenuKey === row.key && <div className="auto-row-menu-panel">
-        <ContextMenuList
-          label="External automation actions"
-          items={items}
-          onChoose={(item) => item.onSelect?.()}
-          onClose={() => {
-            const trigger = rowMenuTriggerElements.current.get(row.key)
-            setOpenMenuKey(null)
-            trigger?.focus()
-            rowMenuTriggerElements.current.delete(row.key)
-          }}
-        />
-      </div>}
-    </div>
+    return <RowActionsMenu
+      label="External automation actions"
+      open={openMenuKey === row.key}
+      items={items}
+      onToggle={(event) => toggleRowMenu(row.key, event, null)}
+      onClose={() => closeRowMenu(row.key)}
+    />
   }
 
   const renderList = () => {
@@ -1238,17 +1300,17 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
           <IconButton label={busyAction === 'create' ? 'Opening…' : 'New Automation'} title={busyAction === 'create' ? 'Opening…' : 'New Automation'} variant="primary" onClick={() => void openEditor()} disabled={busyAction !== null || !canCreateLocally}><ControlIcon name="plus" /></IconButton>
       </ToolPanelActions>
       <span className="auto-cell-sub">Schedule structured agent work and review its run history.</span>
-      {showSettingsLink && <div className="auto-info" role="status">The confirmation preference was saved. <Button onClick={() => { setShowSettingsLink(false); props.context.openView(AUTOMATIONS_SETTINGS_VIEW) }}>Open Settings</Button><Button onClick={() => setShowSettingsLink(false)}>Dismiss</Button></div>}
-      {lastRunFilterPending && <div className="auto-info" role="status">Loading run history before applying this filter…</div>}
-      {lastRunFilterUnavailable && <div className="auto-warning" role="status">Run-history filter results are incomplete because some history could not be loaded.</div>}
-      {data.nativeError && <div className="auto-error" role="alert">Automations could not be loaded. {data.nativeError} <Button onClick={() => void refreshAll()}>Retry</Button></div>}
-      {data.editorError && <div className="auto-warning" role="status">Project, host, and agent labels are incomplete because the catalog could not be loaded: {data.editorError}</div>}
-      {data.editorData && !canCreateLocally && <div className="auto-warning" role="status">{localHost?.reason ?? 'No available local automation host is configured.'}</div>}
-      {data.externalError && <div className="auto-warning" role="status">OpenClaw jobs could not be checked; native automation rows remain available. {data.externalError} <Button onClick={() => void refreshAll()}>Retry</Button></div>}
-      {data.editorData?.errors.map((error, index) => <div className="auto-warning" role="status" key={`${index}:${error}`}>{error}</div>)}
-      {data.lastRunErrors.length > 0 && <div className="auto-warning" role="status">Run history is unavailable for {data.lastRunErrors.length} automation{data.lastRunErrors.length === 1 ? '' : 's'}; list rows remain available.</div>}
-      {data.managers.filter((manager) => manager.status === 'unavailable').map((manager) => <div className="auto-warning" role="status" key={`unavailable:${manager.id}`}>{manager.label} is unavailable. Its jobs could not be read: {manager.error ?? 'No manager response was available.'} <Button onClick={() => void refreshAll()}>Retry</Button></div>)}
-      {data.externalLoaded && data.managers.filter((manager) => manager.status === 'ready' && !canManageExternal(manager)).map((manager) => <div className="auto-warning" role="status" key={manager.id}>{manager.label}: this host is read-only or unsupported for local OpenClaw actions. Jobs are not changed on another host.</div>)}
+      {navigation.settingsNotice && <div role="status"><NoticeLine actions={[{ label: 'Open Settings', onAction: openSettings }, { label: 'Dismiss', onAction: dismissSettingsNotice }]}>The confirmation preference was saved.</NoticeLine></div>}
+      {lastRunFilterPending && <div role="status"><NoticeLine>Loading run history before applying this filter…</NoticeLine></div>}
+      {lastRunFilterUnavailable && <div role="status"><NoticeLine>Run-history filter results are incomplete because some history could not be loaded.</NoticeLine></div>}
+      {data.nativeError && <InlineError message={`Automations could not be loaded. ${data.nativeError}`} action={{ label: 'Retry', onAction: () => { void refreshAll() } }} />}
+      {data.editorError && <div role="status"><NoticeLine>Project, host, and agent labels are incomplete because the catalog could not be loaded: {data.editorError}</NoticeLine></div>}
+      {data.editorData && !canCreateLocally && <div role="status"><NoticeLine>{localHost?.reason ?? 'No available local automation host is configured.'}</NoticeLine></div>}
+      {data.externalError && <div role="status"><NoticeLine actions={[{ label: 'Retry', onAction: () => { void refreshAll() } }]}>OpenClaw jobs could not be checked; native automation rows remain available. {data.externalError}</NoticeLine></div>}
+      {data.editorData?.errors.map((error, index) => <div role="status" key={`${index}:${error}`}><NoticeLine>{error}</NoticeLine></div>)}
+      {data.lastRunErrors.length > 0 && <div role="status"><NoticeLine>Run history is unavailable for {data.lastRunErrors.length} automation{data.lastRunErrors.length === 1 ? '' : 's'}; list rows remain available.</NoticeLine></div>}
+      {data.managers.filter((manager) => manager.status === 'unavailable').map((manager) => <div role="status" key={`unavailable:${manager.id}`}><NoticeLine actions={[{ label: 'Retry', onAction: () => { void refreshAll() } }]}>{manager.label} is unavailable. Its jobs could not be read: {manager.error ?? 'No manager response was available.'}</NoticeLine></div>)}
+      {data.externalLoaded && data.managers.filter((manager) => manager.status === 'ready' && !canManageExternal(manager)).map((manager) => <div role="status" key={manager.id}><NoticeLine>{manager.label}: this host is read-only or unsupported for local OpenClaw actions. Jobs are not changed on another host.</NoticeLine></div>)}
       <div className="auto-toolbar">
         <TextField label="Search automations" className="auto-search" type="search" placeholder="Search…" aria-label="Search automations" value={navigation.query} onChange={(event) => void navigate({ query: event.target.value })} onKeyDown={(event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -1267,7 +1329,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
             else if (row) openRowMenu(row.key)
           }
         }} />
-        {filters.tooLong && <span role="status" title="Search text is too long — list is unfiltered" className="auto-warning">Too long</span>}
+        {filters.tooLong && <div role="status" title="Search text is too long — list is unfiltered"><NoticeLine>Too long</NoticeLine></div>}
         <details className="auto-filter-menu"><summary>Filters{listFilterCount ? ` (${listFilterCount})` : ''}</summary><div className="auto-filter-panel">
           <div><strong>Host</strong><div className="auto-filter-choices"><Button aria-pressed={navigation.host === 'all'} onClick={() => void navigate({ host: 'all' })}>All hosts</Button>{hostChoices.map((host) => <Button key={host.id} aria-pressed={navigation.host === host.id} onClick={() => void navigate({ host: host.id })}>{host.label}</Button>)}</div></div>
           <FormRow label="Status" htmlFor="auto-list-status">
@@ -1276,7 +1338,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
           <FormRow label="Last run" htmlFor="auto-list-last-run">
             <select id="auto-list-last-run" aria-label="Filter by last run" value={navigation.lastRun} onChange={(event) => void navigate({ lastRun: event.target.value as AutomationNavigation['lastRun'] })}><option value="all">All</option><option value="failed">Failed</option><option value="succeeded">Succeeded</option><option value="never">Never ran</option></select>
           </FormRow>
-          <div><TextField label="Search agents" type="search" aria-label="Search agents" placeholder="Search agents…" value={agentFilterQuery} onChange={(event) => setAgentFilterQuery(event.target.value)} /><div className="auto-filter-choices"><Button aria-pressed={navigation.agent === ''} onClick={() => void navigate({ agent: '' })}>All agents</Button>{agentChoices.map((agent) => <Button key={agent.id} aria-pressed={navigation.agent === agent.id} onClick={() => void navigate({ agent: agent.id })}>{agent.label}</Button>)}</div>{data.editorData && agentChoices.length === 0 && <p className="auto-muted">No agents match your search.</p>}</div>
+          <div><TextField label="Search agents" type="search" aria-label="Search agents" placeholder="Search agents…" value={agentFilterQuery} onChange={(event) => setAgentFilterQuery(event.target.value)} /><div className="auto-filter-choices"><Button aria-pressed={navigation.agent === ''} onClick={() => void navigate({ agent: '' })}>All agents</Button>{agentChoices.map((agent) => <Button key={agent.id} aria-pressed={navigation.agent === agent.id} onClick={() => void navigate({ agent: agent.id })}>{agent.label}</Button>)}</div>{data.editorData && agentChoices.length === 0 && <EmptyState message="No agents match your search." />}</div>
           <Button onClick={clearListFilters}>Clear filters</Button>
         </div></details>
       </div>
@@ -1296,7 +1358,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
             ['release-prep-weekly', 'Release readiness review', 'Thursdays at 2:00 PM'],
             ['recurring-review-daily', 'Daily change review', 'Daily at 4:30 PM'],
             ['maintenance-hourly', 'Hourly maintenance check', 'Hourly at :15']
-          ].map(([template, name, schedule]) => <Button className="auto-template" key={template} onClick={() => void openEditor(undefined, template)} disabled={busyAction !== null || !canCreateLocally}><strong>{name}</strong><span>{schedule}</span><span className="auto-muted">Create from template</span></Button>)}
+          ].map(([template, name, schedule]) => <Button className="auto-template" key={template} onClick={() => void openEditor(undefined, template)} disabled={busyAction !== null || !canCreateLocally}><strong>{name}</strong><span>{schedule}</span><span className="auto-cell-sub">Create from template</span></Button>)}
         </div>
         <Button variant="primary" onClick={() => void openEditor()} disabled={!canCreateLocally}>Add new</Button>
       </section>}
@@ -1312,7 +1374,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
           const manager = row.kind === 'external' ? data.managers.find((candidate) => candidate.jobs.some((job) => job.id === row.id)) : null
           const job = manager?.jobs.find((candidate) => candidate.id === row.id)
           const rowUsage = row.lastRunRead === 'loading' ? 'Loading run usage…' : row.lastRunRead === 'unavailable' ? 'Usage unavailable' : latest ? usageLabel([latest]) : row.kind === 'native' && row.lastRunAt === null && row.lastStatus === null ? 'No run usage yet' : row.kind === 'native' ? 'Usage unavailable' : 'External scheduler'
-          return <tr key={row.key} data-row-key={row.key} ref={(element) => { if (element) rowElements.current.set(row.key, element); else rowElements.current.delete(row.key) }} tabIndex={0} aria-selected={selectedRowKey === row.key} onFocus={() => setSelectedRowKey(row.key)} onClick={() => { if (row.kind === 'native') openNativeDetail(row.id) }} onContextMenu={(event) => { event.preventDefault(); openRowMenu(row.key); if (row.kind === 'native') void targetForMenu(row.id) }} onKeyDown={(event) => onListRowKeyDown(event, row)}>
+          return <tr key={row.key} data-row-key={row.key} ref={(element) => { if (element) rowElements.current.set(row.key, element); else rowElements.current.delete(row.key) }} tabIndex={0} aria-selected={selectedRowKey === row.key} onFocus={() => setSelectedRowKey(row.key)} onClick={(event) => { if (event.target instanceof Element && event.target.closest('.auto-row-menu')) return; if (row.kind === 'native') openNativeDetail(row.id) }} onContextMenu={(event) => { event.preventDefault(); openRowMenu(row.key); if (row.kind === 'native') void targetForMenu(row.id) }} onKeyDown={(event) => onListRowKeyDown(event, row)}>
             <td><strong>{row.name}</strong>{row.kind === 'external' && <span className="auto-cell-sub">External · OpenClaw · {job?.runCount !== null && job?.runCount !== undefined ? `${job.runCount} runs` : 'Run count unavailable'}</span>}</td>
             <td>{definition ? describeAutomationSchedule(definition.rrule).label : job?.schedule ?? 'Unavailable'}</td>
             <td>{row.projectName}{definition && definition.workspaceMode === 'existing' && <span className="auto-cell-sub">{detailWorkspace(definition, data.editorData)}</span>}{job?.promptPreview && <span className="auto-cell-sub">{job.promptPreview}</span>}</td>
@@ -1326,8 +1388,8 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         })}
       </tbody></table></div>}
       {data.nativeLoaded && data.externalLoaded && sortedRows.length === 0 && !hasLoadedEmpty && !noFiltersMatch && !lastRunFilterPending && !lastRunFilterUnavailable && (!externalUnavailable || nativeRows.length > 0) && <div className="auto-empty-message"><EmptyState message="No automations match the current view." /></div>}
-      {actionError && <div className="auto-error" role="alert">{actionError}</div>}
-      {busyAction && <div className="auto-info" role="status">Working: {busyAction}</div>}
+      {actionErrorElement}
+      {busyAction && <div role="status"><NoticeLine>Working: {busyAction}</NoticeLine></div>}
     </main>
   }
 
@@ -1348,16 +1410,16 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     const ownerHost = project?.hostId ?? (definition?.runContext && typeof definition.runContext.hostId === 'string' ? definition.runContext.hostId : null)
     const sshHost = ownerHost?.startsWith('ssh:') === true
     const schedule = definition ? describeAutomationSchedule(definition.rrule) : null
-    const runWindowStart = historyStarts[historyStarts.length - 1] ?? 0
+    const runWindowStart = navigation.historyStarts[navigation.historyStarts.length - 1] ?? 0
     const historyRows = history.runs.slice(runWindowStart, runWindowStart + RUN_RENDER_LIMIT)
     const selectedHistoryRun = historyRows[selectedHistoryIndex] ?? historyRows[0]
     return <main className="auto-automations" aria-label="Automation details">
       <div className="auto-breadcrumb"><Button onClick={() => void navigate({ page: 'list', automationId: null, runId: null })}>Automations</Button><span>›</span><span>{definition?.name ?? 'Automation'}</span></div>
-      {detailState.error && <div className="auto-warning" role="status">Automation details could not be refreshed. {detailState.error}{definition ? ' Showing the last loaded definition; mutations remain guarded by a fresh owner read.' : ''}</div>}
-      {detailState.loading && !definition && <div className="auto-info" role="status">Loading automation…</div>}
-      {!definition && !detailState.loading && <div className="auto-error" role="alert">Automation details are unavailable. {detailState.error ?? ''}<Button onClick={() => void reload()}>Retry</Button></div>}
+      {detailState.error && <div role="status"><NoticeLine>Automation details could not be refreshed. {detailState.error}{definition ? ' Showing the last loaded definition; mutations remain guarded by a fresh owner read.' : ''}</NoticeLine></div>}
+      {detailState.loading && !definition && <div role="status"><NoticeLine>Loading automation…</NoticeLine></div>}
+      {!definition && !detailState.loading && <InlineError message={`Automation details are unavailable.${detailState.error ? ` ${detailState.error}` : ''}`} action={{ label: 'Retry', onAction: () => { void reload() } }} />}
       {definition && <>
-        {detailUsage.error && <div className="auto-warning" role="status">Run history is unavailable from this host. This does not mean the automation failed or has no runs. {detailUsage.error} <Button onClick={() => setUsageRetry((current) => current + 1)}>Retry</Button></div>}
+        {detailUsage.error && <div role="status"><NoticeLine actions={[{ label: 'Retry', onAction: () => { void loadDetailUsage(id) } }]}>Run history is unavailable from this host. This does not mean the automation failed or has no runs. {detailUsage.error}</NoticeLine></div>}
         <header className="auto-detail-header"><div><h1>{definition.name}</h1><Badge tone={definition.enabled ? 'working' : 'neutral'}>{definition.enabled ? 'Enabled' : 'Paused'}</Badge><span className="auto-cell-sub">{project?.name ?? 'Unknown project'} / {detailWorkspace(definition, data.editorData)} · {hostLabel(data.editorData, ownerHost)}</span></div>
           <div className="auto-toolbar"><Button variant="primary" disabled={busyAction !== null || target?.available !== true || detailState.error !== null} title={target?.error ?? undefined} onClick={() => void runNative(definition.id)}>Run Now</Button>
             <Button disabled={busyAction !== null || detailState.error !== null} onClick={() => void openEditor(definition.id)}>Edit automation</Button>
@@ -1365,8 +1427,8 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
             <Button variant="destructive" disabled={busyAction !== null || detailState.error !== null} onClick={() => void beginNativeDelete(definition.id)}>Delete automation</Button>
           </div>
         </header>
-        {target?.available === false && <div className="auto-warning" role="status">This automation cannot be run from the local host: {target.error}</div>}
-        {sshHost && <div className="auto-info">This automation runs only while the local authority can reach its SSH host. If credentials are required or the host is unavailable, the run is recorded as skipped.</div>}
+        {target?.available === false && <div role="status"><NoticeLine>This automation cannot be run from the local host: {target.error}</NoticeLine></div>}
+        {sshHost && <NoticeLine>This automation runs only while the local authority can reach its SSH host. If credentials are required or the host is unavailable, the run is recorded as skipped.</NoticeLine>}
         <Tabs label="Automation detail tabs" items={[{ id: 'overview', label: 'Overview' }, { id: 'runs', label: 'Runs' }]} value={navigation.tab} onChange={(tab) => void navigate({ tab: tab as AutomationNavigation['tab'] })} />
         {navigation.tab === 'overview' && <>
           {schedule && <div className="auto-metric-grid">
@@ -1386,12 +1448,12 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
             <div className="auto-metric"><strong>Tokens</strong><span className={usage.tokens === null ? 'auto-usage-missing' : ''}>{usageLoading ? 'Loading…' : usageTokensLabel(usage)}</span></div>
             <div className="auto-metric"><strong>Usage coverage</strong><span>{usageLoading ? 'Loading run history…' : usageCoverageLabel(usage)}</span></div>
           </div>
-          {history.error && <div className="auto-warning" role="status">Run history is unavailable from this host. This does not mean the automation failed or has no runs. {history.error}</div>}
-          <section className="auto-prompt-disclosure"><div className="auto-section-heading"><strong>Prompt</strong><Button aria-expanded={promptExpanded} onClick={() => setPromptExpanded(!promptExpanded)}>{promptExpanded ? 'Show less' : 'Show more'}</Button></div><pre>{promptExpanded ? definition.prompt : definition.prompt.slice(0, 400)}{!promptExpanded && definition.prompt.length > 400 ? '…' : ''}</pre></section>
+          {history.error && <div role="status"><NoticeLine>Run history is unavailable from this host. This does not mean the automation failed or has no runs. {history.error}</NoticeLine></div>}
+          <section className="auto-prompt-disclosure"><div className="auto-section-heading"><strong>Prompt</strong><Button aria-expanded={navigation.promptExpanded} onClick={() => void navigate({ promptExpanded: !navigation.promptExpanded })}>{navigation.promptExpanded ? 'Show less' : 'Show more'}</Button></div><pre>{navigation.promptExpanded ? definition.prompt : definition.prompt.slice(0, 400)}{!navigation.promptExpanded && definition.prompt.length > 400 ? '…' : ''}</pre></section>
         </>}
         {navigation.tab === 'runs' && <section aria-label="Run history"><div className="auto-section-heading"><h2>Run history</h2><span>{history.loaded ? `${history.runs.length} loaded` : ''}</span></div>
-          {history.loading && history.runs.length === 0 && <div className="auto-info" role="status">Loading runs…</div>}
-          {history.error && <div className="auto-error" role="alert">Run history is unavailable from this host. This does not mean the automation failed or has no runs. {history.error} <Button onClick={() => setHistoryRetry((current) => current + 1)}>Retry</Button></div>}
+          {history.loading && history.runs.length === 0 && <div role="status"><NoticeLine>Loading run history…</NoticeLine></div>}
+          {history.error && <InlineError message={`Run history is unavailable from this host. This does not mean the automation failed or has no runs. ${history.error}`} action={{ label: 'Retry', onAction: () => { void loadHistoryFirstPage(id) } }} />}
           {history.loaded && history.runs.length === 0 && <EmptyState message="No runs yet." />}
           {historyRows.length > 0 && <div className="auto-table-wrap"><table className="auto-table" aria-label="Run history"><thead><tr><th>Run</th><th>Workspace</th><th>Spend</th><th>Tokens</th><th>Status</th></tr></thead><tbody>
             {historyRows.map((run, index) => {
@@ -1414,25 +1476,25 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
               </tr>
             })}
           </tbody></table></div>}
-          {historyStarts.length > 1 && <Button onClick={() => { setHistoryStarts((current) => current.slice(0, -1)); setSelectedHistoryIndex(0) }}>Show newer runs</Button>}
+          {navigation.historyStarts.length > 1 && <Button onClick={() => { void navigate({ historyStarts: navigation.historyStarts.slice(0, -1) }); setSelectedHistoryIndex(0) }}>Show newer runs</Button>}
           {history.runs.length > runWindowStart + RUN_RENDER_LIMIT && <Button onClick={() => {
             const maximumStart = Math.max(0, history.runs.length - RUN_RENDER_LIMIT)
-            setHistoryStarts((current) => {
-              const currentStart = current[current.length - 1] ?? 0
-              return currentStart < maximumStart ? [...current, Math.min(currentStart + RUN_PAGE_SIZE, maximumStart)] : current
-            })
-            setSelectedHistoryIndex(0)
+            const currentStart = navigation.historyStarts[navigation.historyStarts.length - 1] ?? 0
+            if (currentStart < maximumStart) {
+              void navigate({ historyStarts: [...navigation.historyStarts, Math.min(currentStart + RUN_PAGE_SIZE, maximumStart)] })
+              setSelectedHistoryIndex(0)
+            }
           }}>Show older runs</Button>}
           {history.cursor && <Button disabled={history.loading} onClick={() => void loadMoreHistory()}>{history.loading ? 'Loading…' : 'Load older runs'}</Button>}
-          {history.runs.length > RUN_RENDER_LIMIT && <p className="auto-muted">At most {RUN_RENDER_LIMIT} run rows are mounted at once.</p>}
+          {history.runs.length > RUN_RENDER_LIMIT && <NoticeLine>At most {RUN_RENDER_LIMIT} run rows are mounted at once.</NoticeLine>}
         </section>}
       </>}
-      {actionError && <div className="auto-error" role="alert">{actionError}</div>}
+      {actionErrorElement}
     </main>
   }
 
   const renderDashboard = () => {
-    const visibleRuns = dashboardResult.runs.slice(0, dashboardVisibleCount)
+    const visibleRuns = dashboardResult.runs.slice(0, navigation.runLimit)
     const names = new Map(data.definitions.map((definition) => [definition.id, definition.name]))
     const hostForRun = (run: AutomationRun) => {
       const projectId = typeof run.runContext?.projectId === 'string' ? run.runContext.projectId : data.definitions.find((definition) => definition.id === run.automationId)?.projectId
@@ -1447,8 +1509,8 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     return <main className="auto-automations" aria-label="Automation runs">
       <div className="auto-breadcrumb"><Button onClick={() => void navigate({ page: 'list', runId: null, automationId: null })}>Automations</Button><span>›</span><span>Runs</span></div>
       <header className="auto-page-header"><div><h1>Runs</h1><span className="auto-cell-sub">Recent automation activity and outcomes.</span></div><div className="auto-toolbar"><Button disabled={refreshing} onClick={() => void refreshAll()} aria-label="Refresh runs">{refreshing ? 'Refreshing…' : 'Refresh runs'}</Button><Button onClick={() => void navigate({ page: 'list', runId: null, automationId: null })}>Back to automations</Button></div></header>
-      {data.nativeError && <div className="auto-error" role="alert">Automations could not be loaded; run history cannot be described reliably. {data.nativeError} <Button onClick={() => void refreshAll()}>Retry</Button></div>}
-      {data.dashboardErrors.length > 0 && <div className="auto-warning" role="status">Run history is unavailable for {data.dashboardErrors.length} automation{data.dashboardErrors.length === 1 ? '' : 's'}. Counts include available history only.</div>}
+      {data.nativeError && <InlineError message={`Automations could not be loaded; run history cannot be described reliably. ${data.nativeError}`} action={{ label: 'Retry', onAction: () => { void refreshAll() } }} />}
+      {data.dashboardErrors.length > 0 && <div role="status"><NoticeLine>Run history is unavailable for {data.dashboardErrors.length} automation{data.dashboardErrors.length === 1 ? '' : 's'}. Counts include available history only.</NoticeLine></div>}
       <div className="auto-dashboard-cards" aria-label="Run summary">
         <div className="auto-dashboard-card"><span>Successful · 24h</span><strong>{dashboardMetrics.successful24h}</strong></div>
         <div className="auto-dashboard-card"><span>Failed · 24h</span><strong>{dashboardMetrics.failed24h}</strong></div>
@@ -1457,7 +1519,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
       </div>
       <div className="auto-toolbar">
         <TextField label="Search runs" className="auto-search" type="search" placeholder="Search runs…" aria-label="Search runs" value={navigation.runQuery} onChange={(event) => void navigate({ runQuery: event.target.value })} />
-        {dashboardResult.tooLong && <span title="Search text is too long — runs are unfiltered" className="auto-warning" role="status">Too long</span>}
+        {dashboardResult.tooLong && <div title="Search text is too long — runs are unfiltered" role="status"><NoticeLine>Too long</NoticeLine></div>}
         <details className="auto-filter-menu"><summary>Filters{dashboardFilterCount ? ` (${dashboardFilterCount})` : ''}</summary><div className="auto-filter-panel"><div><strong>Host</strong><div className="auto-filter-choices"><Button aria-pressed={navigation.host === 'all'} onClick={() => void navigate({ host: 'all' })}>All hosts</Button>{dashboardHosts.map((host) => <Button key={host.id} aria-pressed={navigation.host === host.id} onClick={() => void navigate({ host: host.id })}>{host.label}</Button>)}</div></div>
           <FormRow label="Status" htmlFor="auto-runs-status">
             <select id="auto-runs-status" aria-label="Filter runs by status" value={navigation.runStatus} onChange={(event) => void navigate({ runStatus: event.target.value as AutomationNavigation['runStatus'] })}><option value="all">All statuses</option><option value="successful">Successful</option><option value="failed">Failed</option><option value="progress">In progress</option><option value="skipped">Skipped</option></select>
@@ -1465,7 +1527,7 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
         </div></details>
       </div>
       <div className="auto-filter-pills">{navigation.host !== 'all' && <Button className="auto-pill" aria-label={`Remove ${activeHostLabel} filter`} onClick={() => void navigate({ host: 'all' })}>Host: {activeHostLabel} ×</Button>}{navigation.runStatus !== 'all' && <Button className="auto-pill" aria-label={`Remove ${navigation.runStatus} filter`} onClick={() => void navigate({ runStatus: 'all' })}>Status: {navigation.runStatus} ×</Button>}{dashboardFilterCount > 0 && <Button onClick={() => void navigate({ host: 'all', runStatus: 'all' })}>Clear filters</Button>}</div>
-      {data.dashboardLoading && data.dashboardRuns.length === 0 && <div className="auto-info" role="status">Loading runs…</div>}
+      {data.dashboardLoading && data.dashboardRuns.length === 0 && <div role="status"><NoticeLine>Loading runs…</NoticeLine></div>}
       {data.dashboardLoaded && data.dashboardRuns.length === 0 && data.dashboardErrors.length === 0 && <EmptyState message="No runs yet. Runs appear here after an automation is triggered." />}
       {data.dashboardLoaded && data.dashboardRuns.length > 0 && dashboardResult.runs.length === 0 && <EmptyState message={navigation.runQuery && !dashboardResult.tooLong ? 'No runs match your search.' : 'No runs match your filters.'} />}
       {visibleRuns.length > 0 && <div className="auto-table-wrap"><table className="auto-table" aria-label="Automation runs"><thead><tr><th>Automation</th><th>Triggered</th><th>Trigger</th><th>Host</th><th>Status</th></tr></thead><tbody>
@@ -1476,13 +1538,14 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
           </tr>
         })}
       </tbody></table></div>}
-      {dashboardResult.runs.length > dashboardVisibleCount && <Button onClick={() => setDashboardVisibleCount((current) => Math.min(dashboardResult.runs.length, current + DASHBOARD_RENDER_LIMIT))}>Load more runs</Button>}
+      {dashboardResult.runs.length > navigation.runLimit && <Button onClick={() => void navigate({ runLimit: Math.min(dashboardResult.runs.length, navigation.runLimit + DASHBOARD_RENDER_LIMIT) })}>Load more runs</Button>}
       {data.dashboardErrors.length > 0 && <Button onClick={() => void refreshAll()}>Retry run history</Button>}
-      {actionError && <div className="auto-error" role="alert">{actionError}</div>}
+      {actionErrorElement}
     </main>
   }
 
   const renderRunDetail = () => {
+    const runId = navigation.runId
     const run = runDetail.run
     const content = run ? runContent(run) : null
     const dashboardName = run ? data.definitions.find((definition) => definition.id === run.automationId)?.name : null
@@ -1493,41 +1556,52 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
     const runHost = hostLabel(data.editorData, runHostId)
     return <main className="auto-automations" aria-label="Run details">
       <div className="auto-breadcrumb"><Button onClick={() => void navigate({ page: 'list', runId: null, automationId: null })}>Automations</Button><span>›</span><Button onClick={() => navigation.automationId ? void navigate({ page: 'detail', automationId: navigation.automationId, runId: null, tab: 'runs' }) : void navigate({ page: 'runs', runId: null, automationId: null })}>{dashboardName ?? 'Runs'}</Button><span>›</span><span>Run details</span></div>
-      {runDetail.loading && !run && <div className="auto-info" role="status">Loading run…</div>}
-      {runDetail.loading && run && <div className="auto-info" role="status">Refreshing run and navigation availability…</div>}
-      {runDetail.error && <div className="auto-error" role="alert">Run details are unavailable. {runDetail.error} <Button onClick={() => setRunRetry((current) => current + 1)}>Retry</Button></div>}
+      {runDetail.loading && !run && <div role="status"><NoticeLine>Loading run…</NoticeLine></div>}
+      {runDetail.loading && run && <div role="status"><NoticeLine>Refreshing run and navigation availability…</NoticeLine></div>}
+      {runDetail.error && runId && <InlineError message={`Run details are unavailable. ${runDetail.error}`} action={{ label: 'Retry', onAction: () => { void loadRunDetail(runId, false) } }} />}
       {run && <>
         <header className="auto-run-header"><div><h1>{run.title}</h1><span className="auto-cell-sub">{formatDate(run.scheduledFor)} · Quirky · {runHost} · {runWorkspace(run)}{currentAgent ? ` · ${currentAgent}` : ''}</span></div>
           <div className="auto-toolbar"><AutomationRunStatus status={run.status} />{rerunnable && <Button variant="primary" disabled={rerunPending || busyAction !== null || runAutomation?.owner?.kind !== 'local' || runTarget?.available !== true} title={runTarget?.error ?? (runAutomation?.owner?.kind !== 'local' ? 'Only locally owned automations can be rerun from this client.' : undefined)} onClick={() => void rerun(run)}>{rerunPending ? 'Queueing…' : 'Rerun'}</Button>}{runOpenTarget && <Button onClick={openRunTarget}>{runOpenTarget.kind === 'session' ? 'View run' : 'Open workspace'}</Button>}</div>
         </header>
-        {rerunnable && runTarget?.available === false && runTarget.error !== 'Checking target availability…' && <div className="auto-warning" role="status">Rerun unavailable: {runTarget.error}</div>}
+        {rerunnable && runTarget?.available === false && runTarget.error !== 'Checking target availability…' && <div role="status"><NoticeLine>Rerun unavailable: {runTarget.error}</NoticeLine></div>}
         <div className="auto-metric-grid"><div className="auto-metric"><strong>Scheduled for</strong><span>{formatDate(run.scheduledFor)}</span></div><div className="auto-metric"><strong>Trigger</strong><span>{run.trigger}</span></div><div className="auto-metric"><strong>Workspace</strong><span>{runWorkspace(run)}</span></div><div className="auto-metric"><strong>Agent / launch</strong><span>{currentAgent || 'Unavailable'}</span></div></div>
-        {content?.annotation && <div className="auto-info">{content.annotation}. The saved output may not include the full run transcript.</div>}
+        {content?.annotation && <NoticeLine>{content.annotation}. The saved output may not include the full run transcript.</NoticeLine>}
         {content && <section className="auto-run-output" aria-label="Saved run output"><SafeMarkdown content={content.content} /></section>}
-        {!runOpenTarget && run.workspaceId && runOpenError && <div className="auto-warning" role="status">No workspace or session navigation link is available. {runOpenError} <Button onClick={() => setRunRetry((current) => current + 1)}>Retry availability check</Button></div>}
-        {!runOpenTarget && run.workspaceId && !runOpenError && !runOpenTarget && <div className="auto-muted">No extant structured session or workspace is available for navigation.</div>}
+        {!runOpenTarget && run.workspaceId && runOpenError && runId && <div role="status"><NoticeLine actions={[{ label: 'Retry availability check', onAction: () => { void loadRunDetail(runId, false) } }]}>No workspace or session navigation link is available. {runOpenError}</NoticeLine></div>}
+        {!runOpenTarget && run.workspaceId && !runOpenError && <NoticeLine>No extant structured session or workspace is available for navigation.</NoticeLine>}
       </>}
-      {actionError && <div className="auto-error" role="alert">{actionError}</div>}
+      {actionErrorElement}
     </main>
   }
 
   return <>
     {navigation.page === 'detail' ? renderDetail() : navigation.page === 'runs' ? renderDashboard() : navigation.page === 'run' ? renderRunDetail() : renderList()}
-    {deleteDialog && <div className="auto-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busyAction) setDeleteDialog(null) }}>
-      {deleteDialog.kind === 'native' ? <section className="auto-dialog" role="dialog" aria-modal="true" aria-labelledby="auto-delete-title" onKeyDown={stopKeyboardPropagation}>
-        <h2 id="auto-delete-title">Delete Automation</h2><p>Delete {deleteDialog.definition.name} and its run history. Workspaces created by previous runs are not deleted.</p>
-        <div className="auto-info">{deleteDialog.definition.workspaceMode === 'new_per_run' ? 'New workspace each run' : `Selected workspace: ${detailWorkspace(deleteDialog.definition, data.editorData)}`}</div>
-        <FormRow label="Don’t ask again" htmlFor="auto-delete-skip-next">
-          <input id="auto-delete-skip-next" type="checkbox" checked={deleteDialog.skipNextTime} onChange={(event) => setDeleteDialog({ ...deleteDialog, skipNextTime: event.target.checked, error: null })} />
-        </FormRow>
-        {deleteDialog.error && <div className="auto-error" role="alert">{deleteDialog.error}</div>}
-        <div className="auto-dialog-actions"><Button disabled={busyAction !== null} onClick={() => setDeleteDialog(null)}>Cancel</Button><Button variant="destructive" disabled={busyAction !== null} onClick={() => void confirmNativeDelete()}>{busyAction?.startsWith('delete:') ? 'Deleting…' : 'Delete'}</Button></div>
-      </section> : <section className="auto-dialog" role="dialog" aria-modal="true" aria-labelledby="auto-external-delete-title" onKeyDown={stopKeyboardPropagation}>
-        <h2 id="auto-external-delete-title">Delete External Automation</h2><p>Delete {deleteDialog.job.name || deleteDialog.job.id} from {deleteDialog.manager.label}? This changes the OpenClaw job only and does not remove native automation history.</p>
-        <div className="auto-info">External jobs are managed by OpenClaw on the local host. The manager must remain available to confirm the captured owner.</div>
-        {deleteDialog.error && <div className="auto-error" role="alert">{deleteDialog.error}</div>}
-        <div className="auto-dialog-actions"><Button disabled={busyAction !== null} onClick={() => setDeleteDialog(null)}>Cancel</Button><Button variant="destructive" disabled={busyAction !== null} onClick={() => void externalAction(deleteDialog.manager, deleteDialog.job, 'delete')}>{busyAction?.startsWith('external:delete:') ? 'Deleting…' : 'Delete external job'}</Button></div>
-      </section>}
-    </div>}
+    {deleteDialog?.kind === 'native' && <DeleteConfirmDialog
+      titleId="auto-delete-title"
+      title="Delete Automation"
+      busy={busyAction !== null}
+      error={deleteDialog.error}
+      confirmLabel={busyAction?.startsWith('delete:') ? 'Deleting…' : 'Delete'}
+      onCancel={() => setDeleteDialog(null)}
+      onConfirm={() => { void confirmNativeDelete() }}
+    >
+      <p>Delete {deleteDialog.definition.name} and its run history. Workspaces created by previous runs are not deleted.</p>
+      <NoticeLine>{deleteDialog.definition.workspaceMode === 'new_per_run' ? 'New workspace each run' : `Selected workspace: ${detailWorkspace(deleteDialog.definition, data.editorData)}`}</NoticeLine>
+      <FormRow label="Don’t ask again" htmlFor="auto-delete-skip-next">
+        <input id="auto-delete-skip-next" type="checkbox" checked={deleteDialog.skipNextTime} onChange={(event) => setDeleteDialog({ ...deleteDialog, skipNextTime: event.target.checked, error: null })} />
+      </FormRow>
+    </DeleteConfirmDialog>}
+    {deleteDialog?.kind === 'external' && <DeleteConfirmDialog
+      titleId="auto-external-delete-title"
+      title="Delete External Automation"
+      busy={busyAction !== null}
+      error={deleteDialog.error}
+      confirmLabel={busyAction?.startsWith('external:delete:') ? 'Deleting…' : 'Delete external job'}
+      onCancel={() => setDeleteDialog(null)}
+      onConfirm={() => { void externalAction(deleteDialog.manager, deleteDialog.job, 'delete') }}
+    >
+      <p>{deleteDialog.description ?? `Delete ${deleteDialog.job.name || deleteDialog.job.id} from ${deleteDialog.manager.label}? This changes the OpenClaw job only and does not remove native automation history.`}</p>
+      <NoticeLine>External jobs are managed by OpenClaw on the local host. The manager must remain available to confirm the captured owner.</NoticeLine>
+    </DeleteConfirmDialog>}
   </>
 }
