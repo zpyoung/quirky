@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -194,6 +195,35 @@ function runnerOptions(
 
 function currentAttempt(entries: JournalEntry[]): Attempt | undefined {
   return entries.filter((entry): entry is Attempt => entry.kind === 'attempt').at(-1)
+}
+function seedOpenEscalation(
+  stored: TestStorage,
+  escalationId: string,
+  escalationKind: string,
+  approvalScope?: Record<string, string>
+): void {
+  stored.store.append('watcher-1', {
+    kind: 'escalation',
+    class: 'fact',
+    origin: 'owner',
+    resolved: false,
+    eventId: `seed-escalation:${escalationId}`,
+    escalationId,
+    escalationKind,
+    status: 'open',
+    foldCount: 1,
+    ...(approvalScope ? { approvalScope } : {})
+  })
+}
+
+function approvalEscalationId(action: KernelAction): string {
+  const scope = {
+    actionKind: action.kind,
+    contentIdentity: action.contentIdentity,
+    evidenceKey: action.evidenceKey,
+    ...(typeof action.preparedCommitSha === 'string' ? { preparedCommitSha: action.preparedCommitSha } : {})
+  }
+  return `approval:${createHash('sha256').update(JSON.stringify(scope)).digest('hex')}`
 }
 function seedWorkerPark(
   stored: TestStorage,
@@ -1378,6 +1408,88 @@ describe('Heimdall runner gate and budget behavior', () => {
       await runner.pulse()
       expect(stored.store.get('watcher-1')?.terminalAtMs).toBe(1_000)
       expect(stored.store.summary('watcher-1')).toMatchObject({ state:'complete' })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('resolves superseded approval escalations after a changed decision while preserving the active scope and unrelated escalations', async () => {
+    const stored = storage()
+    const nextAction = { ...action, evidenceKey: 'evidence-2' }
+    const activeEscalationId = approvalEscalationId(nextAction)
+    const watcherKind = kind({ decide: () => ({ action: nextAction }), pace: () => 'stopped' })
+    const options = runnerOptions(stored, watcherKind, {
+      enrollment: enrollment({ capabilities: { publish: 'gated' } })
+    })
+    seedOpenEscalation(stored, approvalEscalationId(action), 'awaiting-approval')
+    seedOpenEscalation(stored, activeEscalationId, 'awaiting-approval', {
+      actionKind: nextAction.kind,
+      contentIdentity: nextAction.contentIdentity,
+      evidenceKey: nextAction.evidenceKey
+    })
+    seedOpenEscalation(stored, 'worker-escalation:unrelated', 'worker-escalation')
+    const runner = createRunner(options)
+    try {
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      expect(journal.filter((entry) => entry.escalationId === approvalEscalationId(action)).at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'resolved', reason: 'superseded', resolved: true })
+      expect(journal.filter((entry) => entry.escalationId === activeEscalationId).at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'open', escalationKind: 'awaiting-approval' })
+      expect(journal.filter((entry) => entry.escalationId === 'worker-escalation:unrelated').at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'open', escalationKind: 'worker-escalation' })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('resolves awaiting-approval escalations after a null decision without touching unrelated escalations', async () => {
+    const stored = storage()
+    const watcherKind = kind({ decide: () => ({ action: null, reason: 'waiting' }), pace: () => 'stopped' })
+    const options = runnerOptions(stored, watcherKind)
+    seedOpenEscalation(stored, approvalEscalationId(action), 'awaiting-approval')
+    seedOpenEscalation(stored, 'worker-escalation:unrelated', 'worker-escalation')
+    const runner = createRunner(options)
+    try {
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      expect(journal.filter((entry) => entry.escalationId === approvalEscalationId(action)).at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'resolved', reason: 'superseded', resolved: true })
+      expect(journal.filter((entry) => entry.escalationId === 'worker-escalation:unrelated').at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'open', escalationKind: 'worker-escalation' })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('resolves awaiting-approval escalations when terminal state commits without touching unrelated escalations', async () => {
+    const stored = storage()
+    let journalBeforeTerminalRetention: JournalEntry[] = []
+    const persistTerminal = stored.store.terminal.bind(stored.store)
+    stored.store.terminal = (terminalEnrollment, summary) => {
+      journalBeforeTerminalRetention = stored.store.journal(terminalEnrollment.watcherId)
+      persistTerminal(terminalEnrollment, summary)
+    }
+    const watcherKind = kind({
+      stop: () => ({ kind: 'terminal', state: 'complete', reason: 'target reached' }),
+      pace: () => 'stopped'
+    })
+    const options = runnerOptions(stored, watcherKind)
+    seedOpenEscalation(stored, approvalEscalationId(action), 'awaiting-approval')
+    seedOpenEscalation(stored, 'worker-escalation:unrelated', 'worker-escalation')
+    const runner = createRunner(options)
+    try {
+      await runner.pulse()
+      expect(stored.store.get('watcher-1')?.terminalAtMs).toBe(1_000)
+      expect(journalBeforeTerminalRetention.filter((entry) => entry.escalationId === approvalEscalationId(action)).at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'resolved', reason: 'superseded', resolved: true })
+      expect(journalBeforeTerminalRetention.filter((entry) => entry.escalationId === 'worker-escalation:unrelated').at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'open', escalationKind: 'worker-escalation' })
+      expect(stored.store.journal('watcher-1').some((entry) =>
+        entry.kind === 'escalation' &&
+        entry.escalationKind === 'awaiting-approval' &&
+        entry.status === 'open'
+      )).toBe(false)
     } finally {
       await runner.shutdown(0)
     }
