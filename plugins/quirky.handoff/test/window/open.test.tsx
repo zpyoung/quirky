@@ -240,6 +240,21 @@ describe('SC-5: the worktree list and its search', () => {
     expect(fake.callsTo('preview')).toHaveLength(2)
     expect(fake.callsTo('preview')[1]!.params.controls.target).toEqual({ worktree: 'wt_W2' })
   })
+
+  test('closing the worktree picker with its toggle clears the search before reopening', async () => {
+    const { overlay } = await opened()
+    const v = overlay.view
+    const combo = v.q('[aria-label="Worktree"]')!
+    await v.click(combo)
+    await v.type(v.q('input[aria-label="Search worktrees"]') as HTMLInputElement, 'zzz')
+    expect(v.all('[role="option"]')).toHaveLength(0)
+    await v.click(combo)
+    expect(v.q('[role="listbox"]')).toBeNull()
+    expect(overlay.last().candidates).toHaveLength(3)
+    await v.click(combo)
+    expect((v.q('input[aria-label="Search worktrees"]') as HTMLInputElement).value).toBe('')
+    expect(v.all('[role="option"]')).toHaveLength(3)
+  })
 })
 
 describe('SC-6 and SC-8: creating a worktree', () => {

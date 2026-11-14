@@ -910,7 +910,7 @@
     {
       "site": {
         "file": "plugins/quirky.handoff/src/window/Dialog.tsx",
-        "quote": "onToggleWorktree={() => setWorktreeOpen(!worktreeOpen)}"
+        "quote": "onToggleWorktree={() => {\n              setWorktreeOpen(!worktreeOpen)\n              if (worktreeOpen) dialog.search('')\n            }}"
       },
       "transient": "draft",
       "reason": "Synchronous controlled typing or picker/editor visibility changes only the local draft."

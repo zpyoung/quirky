@@ -411,7 +411,10 @@ export function Dialog({ dialog, context }: { dialog: HandoffDialog; context: Ui
             snapshot={snapshot}
             context={context}
             worktreeOpen={worktreeOpen}
-            onToggleWorktree={() => setWorktreeOpen(!worktreeOpen)}
+            onToggleWorktree={() => {
+              setWorktreeOpen(!worktreeOpen)
+              if (worktreeOpen) dialog.search('')
+            }}
             onCloseWorktree={() => {
               setWorktreeOpen(false)
               dialog.search('')
