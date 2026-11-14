@@ -1021,3 +1021,17 @@ for (const method of ['ui.window.self', 'ui.window.command.run']) {
     expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('window fixture failed')
   })
 }
+
+test('cancelling a save that waits for its draft releases the editor for future snapshots', async () => {
+  const ui = mount((props) => <ChecksPanel {...props} />, stateFor({ titleDraft: 'before' }))
+  const write = ui.holdNext('quirky.reviews/checksSetTitleDraft')
+  changeValue(titleInput(ui.element), 'latest')
+  await click(button(ui.element, 'Save pull request title'))
+  await click(button(ui.element, 'Cancel title edit'))
+  await act(async () => write.resolve({ titleDraft: 'latest' }))
+  await settle()
+  expect(callCount(ui, 'checksSaveTitle')).toBe(0)
+  expect(titleInput(ui.element)).toBeNull()
+  ui.render(stateFor({ titleDraft: 'remote after cancellation' }), nextDraftTick())
+  expect(titleInput(ui.element)?.value).toBe('remote after cancellation')
+})

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, Menu, NoticeLine, SectionHeader, TextField, ToolPanelFrame } from '@quirky/ui'
 import { CHECKS_PANEL, REVIEW_VIEW, type JsonRecord, type ReviewData, type ReviewsSurfaceProps } from '../contracts'
@@ -344,9 +344,11 @@ function useReviewsUiControl(options: {
   const actionsRef = useRef(options.actions)
   const runRef = useRef(options.run)
   const errorRef = useRef(options.onError)
-  actionsRef.current = options.actions
-  runRef.current = options.run
-  errorRef.current = options.onError
+  useLayoutEffect(() => {
+    actionsRef.current = options.actions
+    runRef.current = options.run
+    errorRef.current = options.onError
+  })
   const registrationRef = useRef<{
     target: string
     generation: number
@@ -356,7 +358,7 @@ function useReviewsUiControl(options: {
   const [reported, setReported] = useState<{ target: string; generation: number } | null>(null)
   const actionsKey = JSON.stringify(options.actions())
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!options.active) {
       registrationRef.current = null
       setReported(null)
@@ -1384,9 +1386,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const canRelink = offeredBlockerAction === 'relink' && activeWorktree !== null && active !== null && !active.loading
   const canLink = currentReview !== null && currentReviewOwner !== null && activeWorktree !== null && active !== null && !active.loading
   const canTitleEdit = currentReview !== null && titleOwner !== null && activeWorktree !== null && active !== null && !active.loading
-  const canCreate = noReviewEligibility && active !== null && !active.loading
+  const canCreate = () => active !== null && !active.loading && eligibilityIsCurrent(state, activeWorktree)
   const canBlocker = offeredBlockerAction !== null && activeWorktree !== null && active !== null && !active.loading
-  const canOpenLink = currentReview !== null && currentReviewOwner !== null && activeWorktree !== null && active !== null && !active.loading && safeHttpUrl(currentReview.url) !== null
+  const canOpenLink = currentReview !== null && currentReviewOwner !== null && activeWorktree !== null && active !== null && safeHttpUrl(currentReview.url) !== null
   const canCopyLink = activeWorktree !== null && ((currentReview !== null && currentReviewOwner !== null && safeHttpUrl(currentReview.url) !== null) || diagnosticData !== null)
   const canAgentOpen = triageAction !== null && activeWorktree !== null && active !== null && !active.loading
   const canSetHeight = active !== null && activeWorktree !== null
@@ -1515,7 +1517,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     }
     if (request.action === 'create') {
       controlValue(request, [])
-      if (activeWorktree && noReviewEligibility) {
+      if (activeWorktree && eligibilityIsCurrent(state, activeWorktree)) {
         await runReviewOperation(() => context.call('quirky.reviews/createOpen', { worktree: activeWorktree }), isCurrent, false)
       }
       return
@@ -1591,7 +1593,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       { action: 'relink', enabled: canRelink },
       { action: 'link-open', enabled: canLink },
       { action: 'title-edit', enabled: canTitleEdit },
-      { action: 'create', enabled: canCreate },
+      { action: 'create', enabled: canCreate() },
       { action: 'blocker', enabled: canBlocker },
       { action: 'open-link', enabled: canOpenLink },
       { action: 'copy-link', enabled: canCopyLink },
@@ -1622,6 +1624,8 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       else if (request.action === 'title-cancel') {
         if (titleOwner && currentReview && isCurrent()) {
           setActionError(null)
+          titleSaveAction.current?.fail()
+          titleSaveAction.current = null
           titleField.edit(null)
         }
       } else throw new Error('Unknown title editor action.')

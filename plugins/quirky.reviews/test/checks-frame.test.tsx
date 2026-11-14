@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act } from 'react'
+import { act, useLayoutEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { ToolPanelFrame } from '@quirky/ui'
@@ -53,12 +53,18 @@ interface MountOptions {
   refreshResult?: unknown | ((worktree: string) => unknown)
 }
 
+function CommitProbe({ run }: { run(): void }) {
+  useLayoutEffect(run)
+  return null
+}
+
 function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult = { ok: true } }: MountOptions = {}) {
   const calls: { method: string; params: Record<string, unknown> }[] = []
   const provided = new Map<string, (...args: unknown[]) => unknown>()
   let connectionId = 42
   let beforeSelf: (() => Promise<unknown>) | null = null
   let beforeCommand: (() => Promise<void>) | null = null
+  let onCommit: (() => void) | null = null
   let layoutListener: (layout: UiLayout) => void = () => {}
   const makeLayout = (worktree: string | null) => ({
     worktree, view: { id: 'view:x' }, panel: null, sidebar: true, focus: 'view',
@@ -101,6 +107,7 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
   const render = () => act(() => root.render(
     <ToolPanelFrame title="Checks">
       <ChecksPanel context={context} state={state} refresh={async () => {}} />
+      <CommitProbe run={() => { const pending = onCommit; onCommit = null; pending?.() }} />
     </ToolPanelFrame>
   ))
   render()
@@ -111,6 +118,8 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
     setConnectionId(value: number) { connectionId = value },
     setBeforeSelf(value: (() => Promise<unknown>) | null) { beforeSelf = value },
     setBeforeCommand(value: (() => Promise<void>) | null) { beforeCommand = value },
+    onNextCommit(run: () => void) { onCommit = run },
+    runControl(request: unknown) { return provided.get(REVIEWS_UI_CONTROL)!(request) },
     unmount() {
       const index = roots.indexOf(root)
       if (index >= 0) roots.splice(index, 1)
@@ -538,4 +547,49 @@ test('the offered relink action keeps its suppression-aware daemon call', async 
   setState(state)
   await click(byText(element, 'Link PR #12')!)
   expect(calls.find((call) => call.method === 'quirky.reviews/checksRelink')?.params).toMatchObject({ worktree: WORKTREE })
+})
+
+test('a replacement layout commit invalidates the old command before passive effects', async () => {
+  const panel = mountPanel()
+  const stale = descriptorFor(panel.context, 'checks', 'unlink')
+  let delivery!: Promise<unknown>
+  panel.onNextCommit(() => { delivery = Promise.resolve(panel.runControl(stale)) })
+  const next = stateWith()
+  next.checks.review = { ...next.checks.review!, number: 13, url: 'https://github.com/test-owner/test-repo/pull/13' }
+  panel.setState(next)
+  expect(await delivery).toEqual({ delivered: false, reason: 'target-unavailable' })
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/checksUnlink')).toEqual([])
+})
+
+test('create rechecks eligibility expiration when a command arrives without another render', async () => {
+  const originalNow = Date.now
+  let now = originalNow()
+  Date.now = () => now
+  try {
+    const panel = mountPanel()
+    const state = stateWith()
+    state.checks.review = null
+    state.checks.lookup = { kind: 'no-review', gitStatus: { branch: 'feature', head: review.headRefOid } }
+    state.checks.eligibility = { eligible: true, worktree: WORKTREE, head: 'feature', headOid: review.headRefOid, confirmedAt: now }
+    panel.setState(state)
+    expect(listReviewsUiControls(panel.context, CHECKS_PANEL).find((control) => control.slot === 'checks')?.actions.find((action) => action.action === 'create')?.enabled).toBe(true)
+    now += 300_001
+    expect(await dispatchControl(panel.context, 'checks', 'create')).toEqual({ result: { delivered: false, reason: 'disabled' } })
+    expect(panel.calls.filter((call) => call.method === 'quirky.reviews/createOpen')).toEqual([])
+  } finally {
+    Date.now = originalNow
+  }
+})
+
+test('enabled stack member links remain usable while refresh retains the review', async () => {
+  const panel = mountPanel()
+  const state = stateWith()
+  state.checks.loading = true
+  const memberUrl = 'https://github.com/test-owner/test-repo/pull/13'
+  state.checks.review = { ...state.checks.review!, stack: { available: true, number: 1, position: 1, size: 2, entries: [{ number: 13, title: 'Member', url: memberUrl }] } }
+  panel.setState(state)
+  const member = [...panel.element.querySelectorAll<HTMLButtonElement>('[aria-label="Pull request stack"] button')].find((button) => button.textContent?.includes('#13'))!
+  expect(member.disabled).toBe(false)
+  await click(member)
+  expect(panel.calls.find((call) => call.method === 'quirky.reviews/openLink')?.params).toMatchObject({ url: memberUrl, worktree: WORKTREE })
 })
