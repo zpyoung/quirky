@@ -58,15 +58,11 @@ const EXPECTED_EXTRA_IDS = new Set([
   'wait-url',
   'wait-load'
 ])
-const DEFERRED_IDS = new Set([
-  'native-profile-persistence',
-  'native-profile-clear'
-])
-const DECLARED_FOLLOWUPS = {
-  routing: 'Reveal the selected browser page and route browser URLs to the intended client',
-  interception: 'Keep intercepted requests pending until explicitly released',
-  waitNavigation: 'Let a pending browser wait finish when the navigation it waits for lands',
-  waitNavigationCause: 'a wait fulfilled by a navigation is rejected with browser_tab_changed'
+const EXCLUDED_EXTRA_IDS: Record<string, true> = {
+  'tab-profile-create-imported': true,
+  'exec-unrestricted': true,
+  'native-profile-persistence': true,
+  'native-profile-clear': true
 }
 
 function fail(code: string, detail: string): never {
@@ -255,7 +251,7 @@ function parseEquivalent(value: string): { words: string; flags: string[]; metho
 
 function checkEquivalent(row: BrowserRow, manifest: BrowserManifest): void {
   if (row.equivalent === '—') {
-    if (row.primary || !['tab-profile-create-imported', 'exec-unrestricted', ...DEFERRED_IDS].includes(row.id)) {
+    if (row.primary || !Object.hasOwn(EXCLUDED_EXTRA_IDS, row.id) || row.disposition !== 'excluded') {
       fail('manifest-mismatch', `row ${row.id} has no CLI equivalent`)
     }
     return
@@ -277,19 +273,9 @@ function checkEquivalent(row: BrowserRow, manifest: BrowserManifest): void {
   }
 }
 
-function deferredRowValid(row: BrowserRow): boolean {
-  if (!DEFERRED_IDS.has(row.id)) return false
-  if (!row.deferred || row.disposition !== 'gap' || row.check) return false
-  if (row.id === 'native-profile-persistence' || row.id === 'native-profile-clear') {
-    return row.reason.includes('WKWebView')
-  }
-  return false
-}
-
 function executableExtraValid(row: BrowserRow): boolean {
   if (row.id === 'tab-switch-focus') {
-    return row.check === 'tab-switch-focus' && !row.deferred && row.disposition === 'gap' &&
-      row.reason.includes(DECLARED_FOLLOWUPS.routing)
+    return row.check === row.id && !row.deferred && row.disposition === 'covered'
   }
   if (row.id === 'wait-selector' || row.id === 'wait-text' || row.id === 'wait-js') {
     return row.check === row.id && !row.deferred && row.disposition === 'covered'
@@ -302,10 +288,7 @@ function executableExtraValid(row: BrowserRow): boolean {
     return row.check === row.id && !row.deferred && row.disposition === 'covered'
   }
   if (row.id === 'wait-url' || row.id === 'wait-load') {
-    return row.check === row.id && !row.deferred &&
-      (row.disposition === 'covered' || (row.disposition === 'gap' &&
-        row.reason.includes(DECLARED_FOLLOWUPS.waitNavigationCause) &&
-        row.reason.includes(DECLARED_FOLLOWUPS.waitNavigation)))
+    return row.check === row.id && !row.deferred && row.disposition === 'covered'
   }
   return false
 }
@@ -336,7 +319,7 @@ export function validateBrowserTable(rows: BrowserRow[], checkIds?: Iterable<str
     }
 
     if (row.deferred) {
-      if (!deferredRowValid(row)) fail('missing-check', `deferred row ${row.id} must remain an unexecuted gap with its named reason`)
+      fail('missing-check', `row ${row.id} has no executable observer; check it or exclude it with a reason`)
     } else if (row.disposition === 'excluded') {
       if (row.check) fail('missing-check', `excluded row ${row.id} must not claim an executable check`)
     } else {
@@ -374,20 +357,6 @@ export function validateBrowserTable(rows: BrowserRow[], checkIds?: Iterable<str
   ])
   for (const check of tableCheckIds) {
     if (!declaredCheckIds.has(check)) fail('missing-check', `check ${check} is not declared for this inventory`)
-  }
-
-  const followupRows: Array<[string, string]> = [
-    ['tab-switch-focus', DECLARED_FOLLOWUPS.routing],
-    ['open-url', DECLARED_FOLLOWUPS.routing],
-    ['intercept-enable', DECLARED_FOLLOWUPS.interception],
-    ['intercept-disable', DECLARED_FOLLOWUPS.interception],
-    ['intercept-list', DECLARED_FOLLOWUPS.interception],
-  ]
-  for (const [id, followup] of followupRows) {
-    const row = byId.get(id)
-    if (!row || row.disposition !== 'gap' || !row.reason.includes(followup)) {
-      fail('missing-reason', `${id} must name its gap follow-up: ${followup}`)
-    }
   }
 
   if (checkIds !== undefined) {
