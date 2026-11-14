@@ -23,7 +23,9 @@
       {"id":"active","title":"Feedback Mode","description":"Turns selection on in the main window.","type":"boolean","default":false,"menu":"view","whenSetting":"enabled"}
     ],
     "command": [
-      {"id":"toggle","title":"Toggle Feedback Mode","palette":true,"whenSetting":"enabled"}
+      {"id":"toggle","title":"Toggle Feedback Mode","palette":true,"whenSetting":"enabled"},
+      {"id":"copy","title":"Copy Feedback Comments as Markdown","description":"Copies every feedback comment to the clipboard as Markdown.","palette":true,"whenSetting":"enabled"},
+      {"id":"annotate","title":"Annotate a Browser Pane","description":"Leaves Feedback mode and starts Browser Annotate in the Native browser pane named by pane.","args":{"type":"object","properties":{"pane":{"type":"string"}},"required":["pane"],"additionalProperties":false},"whenSetting":"enabled"}
     ],
     "keybinding": [
       {"id":"toggle","key":"mod+alt+k","command":"toggle","description":"Toggle Feedback Mode","when":"terminalFocus || !terminalFocus","whenSetting":"enabled"}

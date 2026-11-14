@@ -39,6 +39,7 @@ function fakeContext(seed: Comment[], plugins: unknown) {
   const comments = [...seed]
   const calls: Call[] = []
   const toasts: { title: string; body: string }[] = []
+  const commandCalls: { command: string; args?: Record<string, unknown> }[] = []
   const handlers = new Map<string, (params?: Record<string, unknown>) => unknown>()
   const context = {
     pluginId: 'quirky.feedback',
@@ -46,6 +47,9 @@ function fakeContext(seed: Comment[], plugins: unknown) {
     onLayout: () => () => {},
     toast: (title: string, body: string) => { toasts.push({ title, body }) },
     confirm: async () => true,
+    executeCommand: async (command: string, args?: Record<string, unknown>) => {
+      commandCalls.push(args === undefined ? { command } : { command, args })
+    },
     call: async (method: string, params?: Record<string, unknown>) => {
       calls.push({ method, params })
       const handler = handlers.get(method)
@@ -63,15 +67,14 @@ function fakeContext(seed: Comment[], plugins: unknown) {
       }
     }
   } as unknown as UiPluginContext
-  return { context, calls, toasts, handlers }
+  return { context, calls, toasts, handlers, commandCalls }
 }
 
 let teardown: (() => void) | null = null
-let annotated: string[] = []
 
 async function start(seed: Comment[] = [], plugins: unknown = []) {
   const fake = fakeContext(seed, plugins)
-  await act(async () => { teardown = mountFeedbackMode(fake.context, { annotate: async (pane) => { annotated.push(pane) } }) })
+  await act(async () => { teardown = mountFeedbackMode(fake.context) })
   await flush()
   // copy and file issue live in the panel, which starts closed
   await click(document.querySelector('[data-feedback-toggle]')!)
@@ -94,21 +97,14 @@ function rect(element: Element, box: { x: number; y: number; width: number; heig
   element.getBoundingClientRect = () => ({ ...box, left: box.x, top: box.y, right: box.x + box.width, bottom: box.y + box.height, toJSON: () => box }) as DOMRect
 }
 
-const clipboard = { writes: [] as string[], settle: null as null | { resolve(): void; reject(error: Error): void } }
+const clipboard = { writes: [] as string[] }
 
 beforeEach(() => {
-  annotated = []
   clipboard.writes = []
-  clipboard.settle = null
   document.body.innerHTML = '<div id="app" class="app"><header class="window-bar" aria-label="Window bar"></header><div data-feedback-banner-slot></div><div class="shell-workspace"></div></div>'
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
-    value: {
-      writeText: (text: string) => {
-        clipboard.writes.push(text)
-        return new Promise<void>((resolve, reject) => { clipboard.settle = { resolve, reject } })
-      }
-    }
+    value: { writeText: (text: string) => { clipboard.writes.push(text); return Promise.resolve() } }
   })
 })
 
@@ -120,29 +116,13 @@ afterEach(async () => {
 })
 
 describe('copy', () => {
-  test('SC-9: confirms only after the clipboard write resolves, and keeps the comments', async () => {
-    const fake = await start([sample('a'), sample('b', { owner: 'quirky.terminal' })])
-    await click(button('Copy'))
-    expect(clipboard.writes).toHaveLength(1)
-    expect(clipboard.writes[0]).toContain('## Quirky UI Feedback')
-    expect(clipboard.writes[0]).toContain('comment a')
-    expect(clipboard.writes[0]).toContain('comment b')
-    expect(fake.toasts).toHaveLength(0)
-    await act(async () => { clipboard.settle!.resolve() })
-    await flush()
-    expect(fake.toasts).toHaveLength(1)
-    expect(fake.toasts[0]!.title).toBe('Copied')
-    expect(root().querySelectorAll('[data-feedback-row]')).toHaveLength(2)
-  })
-
-  test('a rejected write does not confirm', async () => {
+  test('routes Copy through the window command', async () => {
     const fake = await start([sample('a')])
     await click(button('Copy'))
-    await act(async () => { clipboard.settle!.reject(new Error('denied')) })
-    await flush()
-    expect(fake.toasts.map((toast) => toast.title)).toEqual(['Could not copy the comments'])
-    expect(fake.toasts[0]!.body).toContain('denied')
-    expect(root().querySelectorAll('[data-feedback-row]')).toHaveLength(1)
+    expect(fake.commandCalls).toEqual([{ command: 'command:quirky.feedback/copy' }])
+    expect(fake.calls.filter((call) => call.method === 'quirky.feedback/list')).toHaveLength(1)
+    expect(clipboard.writes).toHaveLength(0)
+    expect(fake.toasts).toHaveLength(0)
   })
 
   test('is disabled with no comments', async () => {
@@ -153,6 +133,7 @@ describe('copy', () => {
 
   test('nothing is sent anywhere without an explicit action', async () => {
     const fake = await start([sample('a')])
+    expect(fake.commandCalls).toHaveLength(0)
     expect(clipboard.writes).toHaveLength(0)
     expect(opened(fake.calls)).toHaveLength(0)
   })
@@ -291,11 +272,18 @@ describe('browser pane chip', () => {
     expect(capture.nearbyText).toBeNull()
   })
 
-  test('Annotate this page asks the stub to annotate that pane', async () => {
+  test('Annotate this page routes to the command for that pane', async () => {
     pane('native')
-    await start()
+    const fake = await start()
     await click(button('Annotate this page'))
-    expect(annotated).toEqual(['p1'])
+    expect(fake.commandCalls).toEqual([{ command: 'command:quirky.feedback/annotate', args: { pane: 'p1' } }])
+  })
+  test('reports a rejected Annotate command', async () => {
+    pane('native')
+    const fake = await start()
+    fake.context.executeCommand = async () => { throw new Error('host disconnected') }
+    await click(button('Annotate this page'))
+    expect(fake.toasts).toEqual([{ title: 'Could not start Annotate', body: 'host disconnected' }])
   })
 
   test('the selection host stays unmasked beside the chip', async () => {

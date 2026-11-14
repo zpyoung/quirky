@@ -1,10 +1,10 @@
 import { useLayoutEffect, useRef } from 'react'
-import { Badge, Button, EmptyState, SectionHeader } from '@quirky/ui'
+import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'
 import type { Found } from './markers'
 import { plural, type Session, type SessionState } from './session'
 import * as styles from './styles'
 
-type Props = { state: SessionState; found: Found; session: Session }
+type Props = { state: SessionState; found: Found; session: Session; onEdit(id: string): void }
 
 const WINDOW_MARGIN = 12
 const BANNER_GAP = 4
@@ -30,7 +30,7 @@ function placeUnderBanner(panel: HTMLElement) {
  * stacks above the comment card, which has to stay on top. App re-renders on every layout change, so
  * the placement stays current without observers of its own.
  */
-export function Tray({ state, found, session }: Props) {
+export function Tray({ state, found, session, onEdit }: Props) {
   const panel = useRef<HTMLElement>(null)
   useLayoutEffect(() => {
     if (panel.current !== null) placeUnderBanner(panel.current)
@@ -47,12 +47,14 @@ export function Tray({ state, found, session }: Props) {
       </>} />
     </div>
     <div style={styles.trayBody}>
-      {state.recovered ? <p data-feedback-recovered style={styles.notice}>An unreadable comments file was set aside, so the tray started empty.</p> : null}
+      {state.phase === 'loading' ? <NoticeLine>Loading feedback comments…</NoticeLine> : null}
+      {state.recovered ? <div data-feedback-recovered style={styles.notice}><InlineError message="An unreadable comments file was set aside, so the tray started empty." /></div> : null}
+      {state.phase === 'failed' ? <InlineError message={`Could not load feedback comments: ${state.loadError ?? ''}`} action={{ label: 'Retry', onAction: () => void session.load() }} /> : null}
       {state.notice !== null ? <p data-feedback-notice role="status" style={styles.notice}>{state.notice}</p> : null}
-      {empty ? <EmptyState message="Click part of the app to add a comment." /> : comments.map((comment, index) => {
+      {state.phase === 'ready' && empty ? <EmptyState message="Click part of the app to add a comment." /> : comments.map((comment, index) => {
         const stale = !found.has(comment.id)
         return <article key={comment.id} data-feedback-row={comment.id} style={styles.row}>
-          <button type="button" aria-label={`Edit comment ${index + 1}`} style={styles.rowMain} onClick={() => session.edit(comment.id)}>
+          <button type="button" aria-label={`Edit comment ${index + 1}`} style={styles.rowMain} onClick={() => onEdit(comment.id)}>
             <span style={styles.rowHead}>
               <strong>{index + 1}.</strong>
               <Badge>{comment.intent === 'change' ? 'Change' : 'Question'}</Badge>
