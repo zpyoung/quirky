@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { main } from '../soak.ts'
@@ -75,11 +75,11 @@ for (const count of [2, 3]) {
 }
 
 test.skipIf(executable === null)('bounds missing mounted-panel readiness and publishes no report', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'quirky-soak-feedback-unready-'))
+  const temporaryDirectory = tmpdir()
+  const root = mkdtempSync(join(temporaryDirectory, 'quirky-soak-feedback-unready-'))
   const out = join(root, 'out')
   const before = sourceOutputs()
   const preload = join(root, 'unready.ts')
-  mkdirSync(join(root, 'tmp'))
   writeFileSync(preload, `
 import { mock } from 'bun:test'
 import { startWorld as realStartWorld } from ${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}
@@ -101,7 +101,14 @@ mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
 `)
   const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--fault', 'feedback', '--windows', '2', '--minutes', '0.4', '--out', out], {
     cwd: repoRoot,
-    env: { ...createIsolatedRuntimeEnvironment(root, { repoRoot }), PLAYWRIGHT_BROWSERS_PATH: browserCache },
+    env: {
+      ...createIsolatedRuntimeEnvironment(root, { repoRoot }),
+      PLAYWRIGHT_BROWSERS_PATH: browserCache,
+      // startWorld owns its temporary home; nesting it exceeds Linux socket path limits
+      TMPDIR: temporaryDirectory,
+      TMP: temporaryDirectory,
+      TEMP: temporaryDirectory
+    },
     stdout: 'pipe', stderr: 'pipe'
   })
   const output = new Response(child.stdout).text()

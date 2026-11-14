@@ -174,6 +174,9 @@ for (const argv of [
     }
 
     expect(caught).toBeInstanceOf(UsageError)
+    if (caught instanceof UsageError) {
+      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block, slow-git, feedback')
+    }
   })
 }
 
