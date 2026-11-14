@@ -1090,6 +1090,7 @@ export function resolveOutcome(attempt: Attempt, snapshot: Snapshot<SitterWorld>
     if (world.lifecycle === 'merged') return { effect: 'landed' }
     if (world.headSha !== enqueue.head) return { effect: 'not-landed', reason: 'head-moved' }
     if (world.inMergeQueue) return { effect: 'landed' }
+    if (!world.mergeQueueKnown) return null
     if (age >= UNOBSERVED_EFFECT_MS) return { effect: 'not-landed', reason: 'no-enqueue-observed' }
     return null
   }

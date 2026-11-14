@@ -1812,3 +1812,52 @@ test('enqueue settles only on merge or the same head entering the queue and park
     queuedEnrollment
   ).action).toMatchObject({ kind: 'enqueue', head: H2 })
 })
+
+test('enqueue timeout requires known queue absence while conclusive outcomes remain usable', () => {
+  const queuedReview = world({ mergeQueueRequired: true, mergeQueueKnown: true, inMergeQueue: false })
+  const enqueue = decide(snapshot(queuedReview), [], enrollment()).action
+  if (!enqueue || enqueue.kind !== 'enqueue') throw new Error('expected a queue enqueue action')
+  const pending = attempt(enqueue, { effect: 'indeterminate', resolved: false })
+  const unknown = { ...queuedReview, mergeQueueKnown: false }
+  for (const age of [UNOBSERVED_EFFECT_MS, UNOBSERVED_EFFECT_MS + RETRY_DELAY_MS, 10 * UNOBSERVED_EFFECT_MS]) {
+    expect(resolveOutcome(pending, snapshot(unknown, T + age))).toBeNull()
+  }
+  expect(resolveOutcome(pending, snapshot(queuedReview, T + UNOBSERVED_EFFECT_MS)))
+    .toEqual({ effect: 'not-landed', reason: 'no-enqueue-observed' })
+  expect(resolveOutcome(pending, snapshot({ ...unknown, lifecycle: 'merged' }, T + UNOBSERVED_EFFECT_MS)))
+    .toEqual({ effect: 'landed' })
+  expect(resolveOutcome(pending, snapshot({ ...unknown, headSha: H2 }, T + UNOBSERVED_EFFECT_MS)))
+    .toEqual({ effect: 'not-landed', reason: 'head-moved' })
+})
+
+test('a prolonged queue lookup outage retains enqueue authority through queue entry and ejection without another mutation', () => {
+  const ready = world({ mergeQueueRequired: true, mergeQueueKnown: true, inMergeQueue: false })
+  const enrolled = enrollment()
+  const enqueue = decide(snapshot(ready), [], enrolled).action
+  if (!enqueue || enqueue.kind !== 'enqueue') throw new Error('expected a queue enqueue action')
+  let pending = attempt(enqueue, { effect: 'indeterminate', resolved: false })
+  const afterTimeout = T + UNOBSERVED_EFFECT_MS + RETRY_DELAY_MS + 1
+  const observations = [
+    snapshot({ ...ready, mergeQueueKnown: false }, afterTimeout),
+    snapshot({ ...ready, inMergeQueue: true }, afterTimeout + 1)
+  ]
+  for (const observation of observations) {
+    if (pending.effect === 'indeterminate') {
+      const outcome = resolveOutcome(pending, observation)
+      if (outcome) pending = { ...pending, ...outcome, resolved: true }
+    }
+    expect(decide(observation, [pending], enrolled).action).toBeNull()
+  }
+  const ejected = snapshot(ready, afterTimeout + RETRY_DELAY_MS + 2)
+  expect({
+    decision: decide(ejected, [pending], enrolled),
+    stopped: stop(ejected, [pending], enrolled)
+  }).toMatchObject({
+    decision: { action: null, reason: 'merge-queue-ejected' },
+    stopped: {
+      kind: 'park',
+      reason: 'stop-predicate',
+      deviation: { kind: 'landing-failed', naturalKey: `merge-queue-ejected:${H1}` }
+    }
+  })
+})
