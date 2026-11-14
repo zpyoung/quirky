@@ -821,6 +821,7 @@ test('publish execution routes a verified prepared commit through the review pus
     worktree: 'id:w1',
     purpose: 'review',
     expected: H1,
+    expectedLocalHead: H2,
     yes: true
   })
 })

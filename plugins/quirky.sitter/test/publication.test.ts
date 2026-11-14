@@ -390,7 +390,7 @@ test('publication re-verifies the prepared commit and pushes only with the expec
   expect(result).toMatchObject({ effect: 'landed' })
   expect(calls).toEqual([
     { method: 'quirky.git/pushTarget', params: { worktree: `id:${WORKTREE_ID}`, purpose: 'review' } },
-    { method: 'quirky.git/forcePush', params: { worktree: `id:${WORKTREE_ID}`, purpose: 'review', expected: repo.baseSha, yes: true } }
+    { method: 'quirky.git/forcePush', params: { worktree: `id:${WORKTREE_ID}`, purpose: 'review', expected: repo.baseSha, expectedLocalHead: repo.preparedSha, yes: true } }
   ])
 })
 
@@ -535,4 +535,24 @@ test('server-side actions do not require an idle or clean local worktree', async
     }, params)).toEqual({ verdict: 'allow' })
     expect(calls).toEqual([])
   }
+})
+
+test('publication rejects a local commit created while forcePush captures its source', async () => {
+  const repo = makePreparedRepo()
+  const result = await publishPreparedBranch(recordCalls({
+    'quirky.git/pushTarget': { ready: true, headOid: repo.baseSha },
+    'quirky.git/forcePush': (params: Record<string, unknown>) => {
+      writeFileSync(join(repo.path, 'concurrent.txt'), 'user commit\n')
+      git(repo.path, 'add', '-A')
+      git(repo.path, 'commit', '-q', '-m', 'Concurrent user change')
+      if (params.expectedLocalHead !== undefined && params.expectedLocalHead !== git(repo.path, 'rev-parse', 'HEAD')) {
+        throw Object.assign(new Error('local source changed'), { data: { reason: 'stale-target' } })
+      }
+      return { pushed: true }
+    }
+  }), processRun, {
+    worktreePath: repo.path, worktreeId: WORKTREE_ID, expectedHeadSha: repo.baseSha,
+    preparedCommitSha: repo.preparedSha, expectedPrepareFingerprint: repo.fingerprint, expectedKind: 'fix'
+  })
+  expect(result).toMatchObject({ effect: 'not-landed', reason: 'head-moved' })
 })

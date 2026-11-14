@@ -1105,3 +1105,30 @@ export function activate(context) {
   })
 }
 `
+
+test('force-push rejects a local commit that replaced the prepared publication SHA', async () => {
+  const fixture = await startFixFixture()
+  try {
+    setCheckFailure(fixture, 9501, fixture.head)
+    const watcherId = await enrollFixWatcher(fixture, { fixChecks: 'gated' })
+    await rerunThenPersistFailure(fixture, watcherId, fixture.head, 9502)
+    await reconcile(fixture, watcherId)
+    const prepared = fixture.git(['rev-parse', 'HEAD'])
+    const held = await waitFor(() => detail(fixture, watcherId), value =>
+      value.openEscalations.some(entry => entry.approvalScope?.actionKind === 'publish-fix' &&
+        entry.approvalScope.preparedCommitSha === prepared), 'the prepared-SHA publication approval')
+    expect(held.openEscalations.some(entry => entry.approvalScope?.preparedCommitSha === prepared)).toBe(true)
+    writeFileSync(join(fixture.repoPath, 'concurrent.txt'), 'concurrent user commit\n')
+    fixture.git(['add', 'concurrent.txt'])
+    fixture.git(['commit', '--quiet', '-m', 'Concurrent user change'])
+    expect(fixture.git(['rev-parse', 'HEAD'])).not.toBe(prepared)
+    await expect(fixture.client.callAny('quirky.git/forcePush', {
+      worktree: `id:${fixture.worktree}`, purpose: 'review', expected: fixture.head,
+      expectedLocalHead: prepared, yes: true
+    })).rejects.toMatchObject({ data: { reason: 'stale-target' } })
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(fixture.head)
+    expect(fixture.forcePushes()).toEqual([])
+  } finally {
+    await fixture.cleanup()
+  }
+}, 60_000)

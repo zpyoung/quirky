@@ -469,6 +469,7 @@ export async function publishPreparedBranch(
       worktree: `id:${params.worktreeId}`,
       purpose: 'review',
       expected: params.expectedHeadSha,
+      expectedLocalHead: params.preparedCommitSha,
       yes: true
     })
   } catch (error) {
