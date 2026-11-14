@@ -218,23 +218,6 @@
   overflow-wrap: anywhere;
 }
 
-.qvh-error,
-.qvh-error-inline {
-  color: var(--ui-failing);
-  font-size: var(--ui-font-label);
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.qvh-error {
-  flex: 0 0 auto;
-  padding: var(--ui-space-8) var(--ui-space-12);
-}
-
-.qvh-error .ui-button {
-  margin-inline-start: var(--ui-space-6);
-}
-
 .qvh-sortbar {
   display: flex;
   flex: 0 0 auto;
@@ -743,8 +726,7 @@
   border-block-start: var(--ui-border-width) solid var(--ui-border);
 }
 
-.qvh-degraded,
-.qvh-tip {
+.qvh-degraded {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
@@ -757,10 +739,6 @@
 
 .qvh-degraded {
   color: var(--ui-needs-you);
-}
-
-.qvh-tip {
-  color: var(--ui-muted);
 }
 
 .qvh-status-grid {
@@ -850,7 +828,7 @@
   flex: 0 0 auto;
 }
 
-.qvh-settings-host-row > .qvh-error-inline {
+.qvh-settings-host-row > .ui-inline-error {
   flex: 1 1 100%;
 }
 

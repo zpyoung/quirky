@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, FormRow, ListRow, SectionHeader } from '@quirky/ui'
+import { Badge, Button, FormRow, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'
 import type { HostOutcome, SearchStatus } from '../types'
 import { HISTORY_PANEL_ID } from './model'
 
@@ -68,27 +68,23 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
       const allStatus = await context.call('quirky.vault/searchStatus', { host: 'all' })
       if (!searchStatus(allStatus)) throw new Error('The all-host search status response was invalid.')
       const outcomes = hostOutcomes(allStatus)
-      const remoteStatuses: Record<string, RemoteSearchStatus> = {}
+      setState((current) => ({ ...current, hosts: mergeHostOutcomes(current.hosts, outcomes, true), scopeStatusError: null }))
+      const remoteEntries: Array<[string, RemoteSearchStatus]> = []
       for (const host of outcomes) {
         if (host.hostId === 'local' || host.hostId === 'all') continue
         if (host.kind !== 'ok') {
-          remoteStatuses[host.hostId] = { status: null, error: host.reason ?? 'This host could not be reached.' }
+          remoteEntries.push([host.hostId, { status: null, error: host.reason ?? 'This host could not be reached.' }])
           continue
         }
         try {
           const remote = searchStatus(await context.call('quirky.vault/searchStatus', { host: host.hostId }))
           if (!remote) throw new Error('The host search status response was invalid.')
-          remoteStatuses[host.hostId] = { status: remote, error: null }
+          remoteEntries.push([host.hostId, { status: remote, error: null }])
         } catch (error) {
-          remoteStatuses[host.hostId] = { status: null, error: errorText(error) }
+          remoteEntries.push([host.hostId, { status: null, error: errorText(error) }])
         }
       }
-      setState((current) => ({
-        ...current,
-        hosts: mergeHostOutcomes(current.hosts, outcomes, true),
-        remoteStatuses,
-        scopeStatusError: null
-      }))
+      setState((current) => ({ ...current, remoteStatuses: Object.fromEntries(remoteEntries) }))
     } catch (error) {
       setState((current) => ({ ...current, scopeStatusError: `Could not check other hosts. ${errorText(error)}` }))
     }
@@ -284,10 +280,11 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
       <section className="qvh-settings-card">
         <SectionHeader title="Search inside sessions" actions={<Badge tone={!status ? (state.loading ? 'neutral' : 'failing') : status.phase === 'degraded' ? 'needs-you' : status.enabled ? 'working' : 'neutral'}>{!status ? (state.loading ? 'Checking status' : 'Unavailable') : status.enabled ? (localIndexing ? 'Indexing' : 'Enabled') : 'Disabled'}</Badge>} />
         <p className="qvh-settings-description">{disclosure}</p>
+        {state.loading ? <div role="status" data-vault-search-loading><NoticeLine>Checking search status…</NoticeLine></div> : null}
         <div className="qvh-settings-host-row" data-vault-host-row data-vault-host-id="local" data-vault-host-status={status?.phase ?? 'checking'}>
           <ListRow
             title="Local Mac"
-            description={<span data-vault-status-summary>{status?.enabled ? (localIndexing ? `${status.filesIndexed.toLocaleString()} files indexed · ${status.filesDue.toLocaleString()} files owed · ${status.messagesIndexed.toLocaleString()} messages searchable` : `${sessions.toLocaleString()} sessions · ${status.messagesIndexed.toLocaleString()} messages searchable`) : state.loading ? 'Checking search status…' : 'Transcript search is off. Only titles are filtered until enabled.'}</span>}
+            description={state.loading ? undefined : <span data-vault-status-summary>{status?.enabled ? (localIndexing ? `${status.filesIndexed.toLocaleString()} files indexed · ${status.filesDue.toLocaleString()} files owed · ${status.messagesIndexed.toLocaleString()} messages searchable` : `${sessions.toLocaleString()} sessions · ${status.messagesIndexed.toLocaleString()} messages searchable`) : 'Transcript search is off. Only titles are filtered until enabled.'}</span>}
             trailing={<Badge tone={!status ? (state.loading ? 'neutral' : 'failing') : status.phase === 'degraded' ? 'needs-you' : status.enabled ? 'working' : 'neutral'}>{!status ? (state.loading ? 'Checking' : 'Unavailable') : status.enabled ? (localIndexing ? 'Indexing' : 'Enabled') : 'Disabled'}</Badge>}
           />
           <FormRow label="Enable local Agent Session Search" htmlFor={`${idPrefix}-local-search`}>
@@ -307,17 +304,16 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
           const remote = state.remoteStatuses[host.hostId]
           const remoteStatus = remote?.status ?? null
           const hostFailure = host.kind !== 'ok' || Boolean(remote?.error)
-          const description = host.kind !== 'ok'
+          const hostError = host.kind !== 'ok'
             ? host.reason ?? (host.kind === 'unavailable' ? 'This host does not provide history search.' : 'This host could not be reached.')
-            : remote?.error
-              ? `Could not read host search status. ${remote.error}`
-              : !remoteStatus
-                ? 'Checking search status…'
-                : remoteStatus.enabled
-                  ? remoteStatus.phase === 'indexing' || (remoteStatus.phase === 'degraded' && remoteStatus.filesDue > 0)
-                    ? `${remoteStatus.filesIndexed.toLocaleString()} files indexed · ${remoteStatus.filesDue.toLocaleString()} files owed · ${remoteStatus.messagesIndexed.toLocaleString()} messages searchable`
-                    : `${countSessions(remoteStatus).toLocaleString()} sessions · ${remoteStatus.messagesIndexed.toLocaleString()} messages searchable`
-                  : 'Transcript search is off on this host.'
+            : remote?.error ? `Could not read host search status. ${remote.error}` : null
+          const description = hostError !== null || !remoteStatus
+            ? undefined
+            : remoteStatus.enabled
+              ? remoteStatus.phase === 'indexing' || (remoteStatus.phase === 'degraded' && remoteStatus.filesDue > 0)
+                ? `${remoteStatus.filesIndexed.toLocaleString()} files indexed · ${remoteStatus.filesDue.toLocaleString()} files owed · ${remoteStatus.messagesIndexed.toLocaleString()} messages searchable`
+                : `${countSessions(remoteStatus).toLocaleString()} sessions · ${remoteStatus.messagesIndexed.toLocaleString()} messages searchable`
+              : 'Transcript search is off on this host.'
           const switchId = `${idPrefix}-host-${index}`
           return <div className="qvh-settings-host-row" data-vault-host-row data-vault-host-id={host.hostId} data-vault-host-status={host.kind !== 'ok' ? host.kind : remoteStatus?.phase ?? (remote?.error ? 'error' : 'checking')} data-vault-host-outcome={host.kind} key={host.hostId}>
             <ListRow
@@ -328,11 +324,12 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
             {host.kind === 'ok' && remoteStatus
               ? <FormRow label={`Enable Agent Session Search on ${host.label}`} htmlFor={switchId}><input id={switchId} type="checkbox" role="switch" aria-label={`Enable Agent Session Search on ${host.label}`} data-vault-host-switch checked={remoteStatus.enabled} disabled={state.busy} onChange={(event) => void setRemoteEnabled(host, event.currentTarget.checked)} /></FormRow>
               : <Button data-vault-retry-host disabled={state.busy} onClick={() => void refresh()}>Retry</Button>}
-            {hostFailure && host.kind === 'ok' ? <span className="qvh-error-inline" role="status">Unavailable</span> : null}
+            {hostError !== null ? <InlineError message={hostError} /> : null}
+            {hostError === null && !remoteStatus ? <div role="status" data-vault-host-checking><NoticeLine>Checking search status…</NoticeLine></div> : null}
           </div>
         })}
-        {state.error ? <div className="qvh-error-inline" role="alert">{state.error}</div> : null}
-        {state.scopeStatusError ? <div className="qvh-tip" role="status">{state.scopeStatusError}</div> : null}
+        {state.error ? <InlineError message={state.error} /> : null}
+        {state.scopeStatusError ? <div role="status" data-vault-scope-status><NoticeLine>{state.scopeStatusError}</NoticeLine></div> : null}
 
         {status && (status.filesFailed > 0 || status.degradedRoots.length > 0) ? (
           <div className="qvh-degraded" role="status"><Badge tone="needs-you">Attention</Badge>
