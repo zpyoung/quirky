@@ -6,6 +6,11 @@ import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { ExplorerPanel as ExplorerPanelComponent } from '../src/window/ExplorerPanel'
+import type { activate as Activate, deactivate as Deactivate } from '../src/ui'
+import type {
+  createEditorUiControlReportScope as CreateEditorUiControlReportScope,
+  EditorUiControlProvider as EditorUiControlProviderComponent
+} from '../src/window/uiControl'
 
 type Call = { method: string; params: Record<string, unknown> }
 
@@ -41,6 +46,23 @@ let ToolPanelFrame: (props: { title: string; children?: ReactNode }) => ReactNod
 let root: Root | null = null
 let container: HTMLDivElement
 let calls: Call[] = []
+type UiControlAddress = { surface: string; target: string; generation: string; actions: string[] }
+type UiControlReport = { uiControls?: UiControlAddress[] }
+type CommandHandler = (args?: unknown) => unknown
+
+let activate: typeof Activate
+let deactivate: typeof Deactivate
+let createEditorUiControlReportScope: typeof CreateEditorUiControlReportScope
+let EditorUiControlProvider: typeof EditorUiControlProviderComponent
+let report: UiControlReport = {}
+let disposeControlScope: (() => void) | undefined
+let disposeActivatedContext: (() => void) | undefined
+
+function tick(ms = 0): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  setTimeout(resolve, ms)
+  return promise
+}
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -48,6 +70,8 @@ beforeAll(async () => {
   ;({ createRoot } = await import('react-dom/client'))
   ;({ ExplorerPanel } = await import('../src/window/ExplorerPanel'))
   ;({ ToolPanelFrame } = await import('@quirky/ui') as unknown as { ToolPanelFrame: typeof ToolPanelFrame })
+  ;({ activate, deactivate } = await import('../src/ui'))
+  ;({ createEditorUiControlReportScope, EditorUiControlProvider } = await import('../src/window/uiControl'))
 })
 
 afterAll(async () => {
@@ -56,6 +80,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   calls = []
+  report = {}
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
@@ -64,6 +89,10 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root?.unmount())
   root = null
+  disposeControlScope?.()
+  disposeControlScope = undefined
+  disposeActivatedContext?.()
+  disposeActivatedContext = undefined
   document.body.replaceChildren()
 })
 
@@ -89,15 +118,51 @@ function makeContext(): UiPluginContext {
     getLayout: () => ({ worktree: 'w1', view: null, panel: null, sidebar: true, focus: 'view' }),
     onLayout: () => () => {},
     onConnection: () => () => {},
-    toast() {}
+    toast() {},
+    async executeCommand() { throw new Error('Owner-window dispatch is forbidden') }
   } as unknown as UiPluginContext
 }
 
-async function mountInHostFrame(): Promise<void> {
+function activateControlBridge(context: UiPluginContext): void {
+  const handlers = new Map<string, CommandHandler>()
+  const originalCall = context.call.bind(context)
+  context.provide = ((id: string, handler: CommandHandler) => { handlers.set(id, handler) }) as typeof context.provide
+  context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method === 'ui.window.self') {
+      calls.push({ method, params })
+      return { connId: 22 }
+    }
+    if (method === 'ui.window.command.run') {
+      calls.push({ method, params })
+      if (params.connId !== 22) throw new Error('The control must stay in this window.')
+      const handler = handlers.get(String(params.id))
+      if (!handler) throw new Error(`No activated handler for ${String(params.id)}.`)
+      return { result: await handler(params.args) }
+    }
+    return originalCall(method, params)
+  }) as typeof context.call
+  activate(context)
+  disposeActivatedContext = () => deactivate()
+}
+
+async function mountExplorer(surface = 'panel:quirky.editor/explorer', withFrame = true): Promise<void> {
+  const context = makeContext()
+  activateControlBridge(context)
+  const scope = createEditorUiControlReportScope((value) => { report = value as UiControlReport }, { surface })
+  disposeControlScope = () => scope.dispose()
+  const explorer = <ExplorerPanel context={context} report={scope.report} />
   await act(async () => {
-    root!.render(<ToolPanelFrame title="Explorer"><ExplorerPanel context={makeContext()} /></ToolPanelFrame>)
+    root!.render(
+      <EditorUiControlProvider scope={scope}>
+        {withFrame ? <ToolPanelFrame title="Explorer">{explorer}</ToolPanelFrame> : explorer}
+      </EditorUiControlProvider>
+    )
   })
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+  await act(async () => { await tick(20) })
+}
+
+async function mountInHostFrame(surface = 'panel:quirky.editor/explorer'): Promise<void> {
+  await mountExplorer(surface)
 }
 
 const control = (label: string) =>
@@ -145,9 +210,39 @@ test('the moved tools still act on the Explorer', async () => {
   expect(container.querySelector('input[aria-label="New file name"], .qe-explorer-inline-row input')).not.toBeNull()
 })
 
+test.each([
+  'panel:quirky.editor/explorer',
+  'sidebar-section:quirky.editor/explorer'
+])('New File uses the activated exact-window control route for %s', async (surface) => {
+  await mountInHostFrame(surface)
+  calls = []
+  const clickedAddress = report.uiControls?.find((entry) => entry.actions.includes('new-file'))
+  await act(async () => {
+    control('New File')!.click()
+    await tick()
+  })
+  const address = report.uiControls?.find((entry) => entry.actions.includes('new-file'))
+  expect(address).toMatchObject({
+    surface,
+    target: 'explorer:w1',
+    actions: expect.arrayContaining(['new-file', 'create', 'cancel-create', 'clear-filter', 'mode', 'copy-path'])
+  })
+  expect(address?.generation).not.toBe(clickedAddress?.generation)
+  expect(calls.find((entry) => entry.method === 'ui.window.self')).toBeDefined()
+  const bridge = calls.find((entry) => entry.method === 'ui.window.command.run')
+  expect(bridge?.params.connId).toBe(22)
+  expect(bridge?.params.id).toBe('command:quirky.editor/ui-control')
+  expect(bridge?.params.args).toMatchObject({
+    surface,
+    target: clickedAddress?.target,
+    generation: clickedAddress?.generation,
+    action: 'new-file'
+  })
+  expect(container.querySelector('.qe-explorer-inline-row')).not.toBeNull()
+})
+
 test('without a host frame the panel still shows its tools', async () => {
-  await act(async () => { root!.render(<ExplorerPanel context={makeContext()} />) })
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+  await mountExplorer('panel:quirky.editor/explorer', false)
   expect(control('Refresh Explorer')).not.toBeNull()
 })
 

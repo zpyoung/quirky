@@ -16,7 +16,12 @@ type Report = {
   busy?: boolean
   error?: string | null
   saveAs?: { open: boolean; requestId?: number | null; bufferId: string | null; busy: boolean; error: string | null }
+  worktreeId?: string | null
+  loading?: boolean
+  resultCount?: number
+  truncated?: boolean
 }
+type TestEvent = { type: string; id?: string; data?: unknown }
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -31,8 +36,20 @@ afterEach(async () => {
 })
 afterAll(async () => { await GlobalRegistrator.unregister() })
 
-async function fixture(respond: (method: string, params: Record<string, unknown>) => unknown, surface = 'overlay:quirky.editor/quick-open') {
+async function fixture(
+  respond: (method: string, params: Record<string, unknown>) => unknown,
+  surface = 'overlay:quirky.editor/quick-open',
+  layoutWorktree: string | null = 'w1'
+) {
   const handlers = new Map<string, Handler>()
+  const listeners = new Set<(event: TestEvent) => void>()
+  const settings = new Map<string, unknown>([
+    ['editorAutoSave', false], ['editorAutoSaveDelayMs', 1000], ['editorWordWrap', false],
+    ['editorFontFamily', 'monospace'], ['editorPreviewTabsEnabled', true],
+    ['richMarkdownSpellcheckEnabled', false], ['markdownReviewToolsEnabled', false],
+    ['showGitIgnoredFiles', false], ['followSymlinkedDirectories', false],
+    ['editorFontZoomLevel', 0], ['editorMinimapEnabled', false], ['editorSidebarWidth', 320]
+  ])
   const calls: { method: string; params: Record<string, unknown> }[] = []
   let report: Report = {}
   const context = {
@@ -41,11 +58,22 @@ async function fixture(respond: (method: string, params: Record<string, unknown>
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
       if (method === 'ui.window.self') return { connId: 22 }
-      if (method === 'ui.window.command.run') return { result: await handlers.get(String(params.id))!(params.args) }
+      if (method === 'ui.window.command.run') {
+        if (params.connId !== 22) throw new Error('The control must stay in this window.')
+        const handler = handlers.get(String(params.id))
+        if (!handler) throw new Error(`No activated handler for ${String(params.id)}.`)
+        return { result: await handler(params.args) }
+      }
       return respond(method, params)
     },
-    subscribe: () => () => {}, onConnection: () => () => {}, onLayout: () => () => {},
-    getLayout: () => ({ worktree: 'w1', panel: null }), getSetting: () => undefined,
+    subscribe: (listener: (event: TestEvent) => void) => {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    onConnection: () => () => {},
+    onLayout: () => () => {},
+    getLayout: () => layoutWorktree === null ? { panel: null } : { worktree: layoutWorktree, panel: null },
+    getSetting: (name: string) => settings.get(name),
     setPanelSize() {}, toast() {}, log() {},
     executeCommand: () => { throw new Error('Owner-window dispatch is forbidden') },
   } as unknown as UiPluginContext
@@ -64,7 +92,8 @@ async function fixture(respond: (method: string, params: Record<string, unknown>
     return command('ui-control', { surface: address!.surface, target: address!.target, generation: address!.generation, action, ...(data ? { data } : {}) })
   }
   const start = (name: string, args?: unknown) => Promise.resolve(handlers.get(`command:quirky.editor/${name}`)!(args))
-  return { element, calls, context, command, control, start, get report() { return report } }
+  const emit = (event: TestEvent) => { for (const listener of listeners) listener(event) }
+  return { element, calls, context, command, control, start, settings, emit, get report() { return report } }
 }
 
 async function tick(ms = 0) {
@@ -405,4 +434,116 @@ test('stale close-state reads cannot replace a newer dialog or reopen after clea
   expect(ui.report.requestId).toBeNull()
   expect(ui.report.uiControls?.some(({ target }) => target.startsWith('close:'))).toBe(false)
   expect(ui.element.querySelector('[role="dialog"]')).toBeNull()
+})
+
+test.each([
+  'panel:quirky.editor/explorer',
+  'sidebar-section:quirky.editor/explorer'
+])('Explorer %s distinguishes pending and empty roots and routes local controls', async (surface) => {
+  const rootRead = Promise.withResolvers<unknown>()
+  const ui = await fixture((method, params) => {
+    if (method === 'quirky.editor/state') return {
+      buffers: [], tabs: [], explorer: { worktreeId: 'w1', showDotfiles: true, expanded: [], selectedPaths: [], focusedPath: null },
+      search: null, quickOpenHistory: [], closeRequests: []
+    }
+    if (method === 'quirky.editor/documentRoot') return { id: 'w1', path: '/repo' }
+    if (method === 'quirky.git/status') return { files: [] }
+    if (method === 'quirky.editor/explorer' && params.action === 'list') return rootRead.promise
+    return {}
+  }, surface)
+  await tick()
+  expect(ui.element.querySelector('.ui-notice-line')?.textContent).toBe('Loading files…')
+  expect(ui.element.querySelector('.ui-empty-state')).toBeNull()
+
+  await act(async () => rootRead.resolve({
+    root: '/repo', entries: [], truncated: false, showDotfiles: true, showIgnored: false, followSymlinkedDirectories: false
+  }))
+  await tick()
+  expect(ui.element.querySelector('.ui-empty-state')?.textContent).toContain('No files in this folder.')
+
+  const address = ui.report.uiControls?.find((entry) => entry.actions.includes('new-file'))
+  expect(address).toMatchObject({
+    surface, target: 'explorer:w1',
+    actions: expect.arrayContaining([
+      'new-file', 'new-folder', 'create', 'cancel-create', 'rename-start', 'rename', 'cancel-rename',
+      'menu', 'menu-close', 'clear-filter', 'mode', 'choose-worktree', 'search-in-files', 'copy-path'
+    ])
+  })
+  ui.calls.length = 0
+  await act(async () => ui.element.querySelector<HTMLButtonElement>('button[title="New File"]')!.click())
+  await tick()
+  expect(ui.calls.some(({ method }) => method === 'ui.window.self')).toBe(true)
+  const bridge = ui.calls.find(({ method }) => method === 'ui.window.command.run')
+  expect(bridge?.params).toMatchObject({
+    connId: 22, id: 'command:quirky.editor/ui-control',
+    args: { surface, target: address?.target, generation: address?.generation, action: 'new-file' }
+  })
+
+  const current = ui.report.uiControls?.find((entry) => entry.actions.includes('create'))
+  expect(current).toBeDefined()
+  expect(current?.generation).not.toBe(address?.generation)
+  expect(await ui.command('ui-control', {
+    surface: current!.surface, target: current!.target, generation: current!.generation,
+    action: 'create', data: { name: 7 }
+  })).toEqual({ delivered: false })
+  expect(ui.calls.filter(({ method }) => method === 'quirky.editor/mutate')).toEqual([])
+  expect(ui.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input')?.value).toBe('')
+})
+
+test('Explorer ignores an empty Names response from the previous worktree while the current query is pending', async () => {
+  const firstFilter = Promise.withResolvers<unknown>()
+  const secondFilter = Promise.withResolvers<unknown>()
+  let firstStarted = 0
+  let secondStarted = 0
+  const ui = await fixture((method, params) => {
+    if (method === 'quirky.editor/state') return {
+      buffers: [], tabs: [], explorer: { worktreeId: String(params.worktree ?? 'w1'), showDotfiles: true, expanded: [], selectedPaths: [], focusedPath: null },
+      search: null, quickOpenHistory: [], closeRequests: []
+    }
+    if (method === 'quirky.worktree/list') return [
+      { id: 'w1', path: '/repo/one', name: 'one' }, { id: 'w2', path: '/repo/two', name: 'two' }
+    ]
+    if (method === 'quirky.editor/documentRoot') return { id: params.worktree, path: `/repo/${params.worktree}` }
+    if (method === 'quirky.git/status') return { files: [] }
+    if (method === 'quirky.editor/explorer' && params.action === 'list') {
+      return { root: `/repo/${params.worktree}`, entries: [], truncated: false, showDotfiles: true, showIgnored: false, followSymlinkedDirectories: false }
+    }
+    if (method === 'quirky.editor/explorer' && params.action === 'filter') {
+      if (params.worktree === 'w1') { firstStarted++; return firstFilter.promise }
+      if (params.worktree === 'w2') { secondStarted++; return secondFilter.promise }
+    }
+    return {}
+  }, 'panel:quirky.editor/explorer', null)
+  await tick()
+  await ui.control('choose-worktree', { worktree: 'w1' }, 'explorer:unselected')
+  await tick()
+  const firstAddress = ui.report.uiControls?.find((entry) => entry.target === 'explorer:w1')
+  const query = ui.element.querySelector<HTMLInputElement>('input[placeholder="Find files"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(query, 'missing-worktree')
+    query.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await tick(140)
+  expect(firstStarted).toBe(1)
+  expect(ui.report.uiControls?.find((entry) => entry.target === 'explorer:w1')?.generation).toBe(firstAddress?.generation)
+
+  await ui.control('choose-worktree', { worktree: 'w2' }, 'explorer:w1')
+  await tick(140)
+  expect(secondStarted).toBe(1)
+  const secondAddress = ui.report.uiControls?.find((entry) => entry.target === 'explorer:w2')
+  expect(secondAddress).toBeDefined()
+  expect(secondAddress?.generation).not.toBe(firstAddress?.generation)
+
+  await act(async () => firstFilter.resolve({
+    root: '/repo/one', entries: [], truncated: false, showDotfiles: true, showIgnored: false, followSymlinkedDirectories: false
+  }))
+  await tick()
+  expect(ui.element.querySelector('.ui-empty-state')).toBeNull()
+  expect(ui.element.querySelector('.qe-explorer-filter-empty')).toBeNull()
+
+  await act(async () => secondFilter.resolve({
+    root: '/repo/two', entries: [], truncated: false, showDotfiles: true, showIgnored: false, followSymlinkedDirectories: false
+  }))
+  await tick()
+  expect(ui.element.querySelector('.ui-empty-state')?.textContent).toContain('No files match “missing-worktree”.')
 })
