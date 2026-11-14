@@ -7,6 +7,7 @@ import type { BrowserProfile } from '../src/profiles/store'
 import type { BrowserPreferencesProps, PreferencesState } from '../src/preferences/contract'
 import { BrowserImportHint, BrowserProfileMenu } from '../src/preferences-window/BrowserProfileMenu'
 import { BrowserSettings } from '../src/preferences-window/BrowserSettings'
+import * as preferencesWindowShared from '../src/preferences-window/shared'
 
 const DEFAULT_PROFILE: BrowserProfile = { id: 'default', label: 'Default', scope: 'default' }
 const REVIEW_PROFILE_ID = 'profile_0123456789abcdef0123456789abcdef'
@@ -38,6 +39,13 @@ let profileSetHandler: (() => Promise<void>) | null
 let importJobProfile = 'default'
 let settingFailure: Error | null
 
+let commandCalls: { id: string; args?: unknown }[]
+let provided: Map<string, unknown>
+let toasts: unknown[]
+let executeCommandFailure: Error | null
+let preferencesStateFailure: Error | null
+let pendingPreferencesState: Promise<unknown> | null
+let profileCreateDeferred: Promise<unknown> | null
 beforeAll(async () => {
   GlobalRegistrator.register()
   // ReactDOM detects input-event support at module load; establish the test DOM first.
@@ -58,6 +66,13 @@ beforeEach(() => {
   profileSetHandler = null
   confirmResult = false
   importJobProfile = 'default'
+  commandCalls = []
+  provided = new Map()
+  toasts = []
+  executeCommandFailure = null
+  preferencesStateFailure = null
+  pendingPreferencesState = null
+  profileCreateDeferred = null
   state = {
     profiles: [{ profile: DEFAULT_PROFILE, active: true }],
     identity: { selected: 'clean', active: 'clean', restartRequired: false, nativeSupported: false },
@@ -92,7 +107,7 @@ function makeContext(): UiPluginContext {
     nativeDropPaths: async () => null,
     readClipboardText: async () => '',
     log: () => {},
-    provide: () => {},
+    provide: (id: string, implementation: unknown) => { provided.set(id, implementation) },
     nativeBrowser: {
       available: false,
       clearPartitionAvailable: false,
@@ -113,8 +128,17 @@ function makeContext(): UiPluginContext {
       if (method === 'quirky.browser/importGet') {
         return { id: String(params?.id ?? 'import-job'), profileId: importJobProfile, status: 'queued', createdAt: 1 }
       }
-      if (method === 'quirky.browser/preferencesState') return structuredClone(state)
+      if (method === 'quirky.browser/preferencesState') {
+        if (preferencesStateFailure) {
+          const failure = preferencesStateFailure
+          preferencesStateFailure = null
+          throw failure
+        }
+        if (pendingPreferencesState) return await pendingPreferencesState
+        return structuredClone(state)
+      }
       if (method === 'quirky.browser/profileCreate') {
+        if (profileCreateDeferred) return await profileCreateDeferred
         const name = String(params?.name ?? '').trim()
         if (state.profiles.some(({ profile }) => profile.label.toLowerCase() === name.toLowerCase())) throw new Error('A profile with that name already exists.')
         const profile = { id: REVIEW_PROFILE_ID, label: name, scope: 'isolated' as const }
@@ -144,8 +168,12 @@ function makeContext(): UiPluginContext {
       return () => { listeners = listeners.filter((current) => current !== listener) }
     },
     getSetting: (name: string) => settings[name],
-    executeCommand: async (id: string) => { commands.push(id) },
-    createCommandDrag: () => 'drag-token',
+    executeCommand: async (id, args) => {
+      commands.push(id)
+      commandCalls.push({ id, args })
+      if (executeCommandFailure) throw executeCommandFailure
+      if (id === 'command:quirky.browser/preferencesControl') dispatchControl(context, args)
+    },
     consumeCommandDrag: () => null,
     cancelCommandDrag: () => {},
     openView: () => {},
@@ -157,12 +185,17 @@ function makeContext(): UiPluginContext {
     onStream: () => () => {},
     onConnection: () => () => {},
     confirm: async () => confirmResult,
-    toast: () => {},
+    toast: (title, body, options) => { toasts.push({ title, body, options }) },
     setPanelBadge: () => {},
     setContext: () => {},
     mountView: () => () => {}
   }
   return context
+}
+function dispatchControl(context: UiPluginContext, args: unknown): void {
+  const dispatch = Reflect.get(preferencesWindowShared, 'dispatchPreferencesControl')
+  if (typeof dispatch !== 'function') throw new Error('Browser preferences control dispatcher is unavailable.')
+  ;(dispatch as (context: UiPluginContext, args: unknown) => void)(context, args)
 }
 
 function pane(): NonNullable<BrowserPreferencesProps['pane']> {
@@ -191,6 +224,18 @@ async function settleUI(): Promise<void> {
 
 function clickButton(label: string | RegExp): Promise<void> {
   const button = [...container.querySelectorAll('button')].find((candidate) => {
+    const accessibleName = candidate.getAttribute('aria-label') ?? candidate.textContent?.trim() ?? ''
+    return typeof label === 'string' ? accessibleName === label : label.test(accessibleName)
+  })
+  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${label}`)
+  return act(async () => {
+    button.click()
+    await settleUI()
+  })
+}
+
+function clickButtonIn(scope: ParentNode, label: string | RegExp): Promise<void> {
+  const button = [...scope.querySelectorAll('button')].find((candidate) => {
     const accessibleName = candidate.getAttribute('aria-label') ?? candidate.textContent?.trim() ?? ''
     return typeof label === 'string' ? accessibleName === label : label.test(accessibleName)
   })
@@ -535,6 +580,20 @@ test('Browser Settings import controls target the exact profile row and expand o
   await act(async () => { reviewImport.click(); await settleUI() })
   expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(1)
   expect(reviewRow?.querySelector('[aria-label="Import Cookies"]')).not.toBeNull()
+  if (!(reviewRow instanceof HTMLLIElement)) throw new Error('Missing Review profile row')
+  expect(commandCalls).toHaveLength(1)
+  expect(commandCalls[0]?.id).toBe('command:quirky.browser/preferencesControl')
+  const firstToggle = commandCalls[0]?.args as Record<string, unknown>
+  expect(firstToggle.action).toBe('toggle-import')
+  expect(typeof firstToggle.instance).toBe('string')
+  expect(firstToggle.instance).not.toBe('')
+  expect(firstToggle.profile).toBe(REVIEW_PROFILE_ID)
+
+  await clickButtonIn(reviewRow, 'Import Cookies')
+  expect(reviewRow.querySelector('[aria-label="Import Cookies"]')).toBeNull()
+  expect(container.querySelectorAll('[aria-label="Import Cookies"]')).toHaveLength(0)
+  await clickButtonIn(reviewRow, 'Import Cookies')
+  expect(commandCalls).toHaveLength(3)
 
   confirmResult = true
   await clickButton('From Firefox')
@@ -549,7 +608,7 @@ test('Browser Settings import controls target the exact profile row and expand o
   expect(defaultRow?.querySelector('[aria-label="Import Cookies"]')).not.toBeNull()
   expect(reviewRow?.querySelector('[aria-label="Import Cookies"]')).toBeNull()
   expect(container.querySelectorAll('[aria-label="Import Cookies"]')).toHaveLength(1)
-  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(2)
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(3)
 })
 
 test('menu and import hint target their pane profile, while a pane-less hint defaults independently of the active profile', async () => {
@@ -635,4 +694,145 @@ test('embedded settings subscribe to shared setting changes without duplicating 
   await act(async () => { root?.unmount() })
   root = null
   expect(listeners).toHaveLength(0)
+})
+
+
+test('Browser Settings shows a loading notice while preferencesState is pending', async () => {
+  pendingPreferencesState = Promise.withResolvers<unknown>().promise
+  const context = makeContext()
+  await mount(<BrowserSettings {...props(context)} />)
+
+  expect(container.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe('Loading Browser preferences…')
+})
+
+test('Browser Settings retries a failed preferences load', async () => {
+  preferencesStateFailure = new Error('State offline')
+  const context = makeContext()
+  await mount(<BrowserSettings {...props(context)} />)
+
+  expect(container.querySelector('[role="alert"].ui-inline-error')?.textContent).toContain('State offline')
+  await clickButton('Retry')
+
+  expect(calls.filter(({ method }) => method === 'quirky.browser/preferencesState')).toHaveLength(2)
+  expect(container.querySelector('.ui-inline-error')).toBeNull()
+  expect(container.querySelector('ul[aria-label="Browser profiles"]')?.textContent).toContain('Default')
+})
+
+test('Browser Settings shows an empty state instead of an empty profile list', async () => {
+  state = { ...state, profiles: [] }
+  const context = makeContext()
+  await mount(<BrowserSettings {...props(context)} />)
+
+  expect(container.querySelector('.ui-empty-state')?.textContent).toContain('No browser profiles are available.')
+  expect(container.querySelector('ul[aria-label="Browser profiles"]')).toBeNull()
+})
+
+test('Browser Settings shows profile removal failures as inline errors', async () => {
+  state = { ...state, profiles: [{ profile: DEFAULT_PROFILE, active: true }, { profile: REVIEW_PROFILE, active: false }] }
+  confirmResult = true
+  const context = makeContext()
+  await mount(<BrowserSettings {...props(context)} />)
+  await clickButton('Remove')
+
+  expect(container.querySelector('[role="alert"].ui-inline-error')?.textContent).toContain('Native partition clearing is unavailable in this runtime.')
+})
+
+test('Add Profile controls only the Browser Settings instance that invoked it', async () => {
+  const context = makeContext()
+  await mount(<>
+    <div data-testid="settings-first"><BrowserSettings {...props(context)} /></div>
+    <div data-testid="settings-second"><BrowserSettings {...props(context)} /></div>
+  </>)
+  const first = container.querySelector('[data-testid="settings-first"]')
+  if (!first) throw new Error('Missing first Browser Settings root')
+
+  await clickButtonIn(first, 'Add Profile')
+  expect(commandCalls).toHaveLength(1)
+  expect(commandCalls[0]?.id).toBe('command:quirky.browser/preferencesControl')
+  const openArgs = commandCalls[0]?.args as Record<string, unknown>
+  expect(openArgs.action).toBe('open-create-profile')
+  expect(typeof openArgs.instance).toBe('string')
+  expect(openArgs.instance).not.toBe('')
+  const dialogs = container.querySelectorAll('[role="dialog"][aria-label="New Browser Profile"]')
+  expect(dialogs).toHaveLength(1)
+  expect(first.querySelector('[role="dialog"][aria-label="New Browser Profile"]')).not.toBeNull()
+
+  await clickButton('Cancel')
+  expect(commandCalls[1]).toEqual({
+    id: 'command:quirky.browser/preferencesControl',
+    args: { action: 'close-create-profile', instance: openArgs.instance }
+  })
+  expect(container.querySelector('[role="dialog"][aria-label="New Browser Profile"]')).toBeNull()
+})
+
+test('a stale Add Profile command does not open a dialog in a replacement instance', async () => {
+  const context = makeContext()
+  await mount(<BrowserSettings {...props(context)} />)
+  await clickButton('Add Profile')
+  const openArgs = commandCalls[0]?.args as Record<string, unknown>
+  const oldInstance = openArgs.instance
+  await act(async () => { root?.unmount() })
+  root = null
+
+  await mount(<BrowserSettings {...props(context)} />)
+  expect(() => dispatchControl(context, { action: 'open-create-profile', instance: oldInstance })).not.toThrow()
+  expect(container.querySelector('[role="dialog"][aria-label="New Browser Profile"]')).toBeNull()
+})
+
+test('Add Profile displays command execution failures and reports them to onError', async () => {
+  executeCommandFailure = new Error('No command: command:quirky.browser/preferencesControl')
+  const context = makeContext()
+  await mount(<BrowserSettings {...props(context)} />)
+  await clickButton('Add Profile')
+
+  expect(container.querySelector('[role="alert"].ui-inline-error')?.textContent).toContain('No command: command:quirky.browser/preferencesControl')
+  expect(errors).toContain('No command: command:quirky.browser/preferencesControl')
+})
+
+test('the Browser settings mount reports load failures with an error toast', async () => {
+  preferencesStateFailure = new Error('State offline')
+  const context = makeContext()
+  // preferences-ui imports ReactDOM; load it after beforeAll registers the DOM.
+  const { registerPreferencesUi } = await import('../src/preferences-ui')
+  registerPreferencesUi(context)
+  const mountSettings = provided.get('view:quirky.browser/browser-settings') as
+    | ((element: HTMLElement, props: { report?: (value: unknown) => void }) => () => void)
+    | undefined
+  if (!mountSettings) throw new Error('Browser settings view mount was not provided')
+  const element = document.createElement('div')
+  container.append(element)
+  let dispose = () => {}
+  await act(async () => {
+    dispose = mountSettings(element, { report: () => {} })
+    await settleUI()
+  })
+
+  expect(toasts).toContainEqual({
+    title: 'Browser settings',
+    body: 'State offline',
+    options: { kind: 'error' }
+  })
+  await act(async () => { dispose(); await settleUI() })
+})
+
+test('ProfileCreator shows progress and keeps the dialog open with a rejected create error', async () => {
+  const { promise, reject } = Promise.withResolvers<unknown>()
+  profileCreateDeferred = promise
+  const context = makeContext()
+  await mount(<BrowserSettings {...props(context)} />)
+  await clickButton('Add Profile')
+  const name = container.querySelector<HTMLInputElement>('input[aria-label="Profile name"]')
+  if (!name) throw new Error('Missing Profile name input')
+  await changeValue(name, 'Review')
+  await clickButton('Create Profile')
+
+  expect(container.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe('Creating profile…')
+  await act(async () => {
+    reject(new Error('A profile with that name already exists.'))
+    await settleUI()
+  })
+
+  const dialog = container.querySelector('[role="dialog"][aria-label="New Browser Profile"]')
+  expect(dialog?.querySelector('[role="alert"].ui-inline-error')?.textContent).toContain('A profile with that name already exists.')
+  expect(dialog).not.toBeNull()
 })

@@ -8,7 +8,7 @@ export function registerPreferencesUi(context: UiPluginContext): void {
   const mountSettings = (embedded: boolean): MountFunction => (element, props) => {
     Object.assign(element.style, { minWidth: '0', width: '100%', overflow: 'auto' })
     const root = createRoot(element)
-    root.render(<BrowserSettings context={context} embedded={embedded} onError={(message) => context.toast('Browser settings', message)} />)
+    root.render(<BrowserSettings context={context} embedded={embedded} onError={(message) => context.toast('Browser settings', message, { kind: 'error' })} />)
     props.report?.({ section: 'browser' })
     return () => root.unmount()
   }
