@@ -176,6 +176,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   let port = 0
   let stopped = false
   let runtimeClosed = false
+  let lastPluginRevision = 0
   // the core and the host are built before the runtime that serves them, so they reach it late-bound
   let lateRuntime: PluginRuntime | undefined
   const core = new Core({
@@ -204,7 +205,13 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     emit: (event) => {
       if (event.type === 'plugin.changed') {
         lateRuntime?.scheduler.sync()
-        pluginChanged.signal()
+        const revision = plugins.revision()
+        if (revision !== lastPluginRevision) {
+          lastPluginRevision = revision
+          if (!stopped) core.broadcast({ type: 'plugin.changed' })
+        } else {
+          pluginChanged.signal()
+        }
       } else {
         core.broadcast(event)
       }
@@ -252,6 +259,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   }
 
   plugins.load()
+  lastPluginRevision = plugins.revision()
 
   const gate = createStartupGate(log)
   const rpcHandler = gate.rpc(createRpcHandler({ dispatcher: pluginRuntime.dispatcher, rpcToken, log }))
