@@ -2,7 +2,7 @@ import { afterEach, expect, setDefaultTimeout, test } from 'bun:test'
 import { createServer, type Server } from 'node:net'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { RpcErrorCode, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { call, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { hookEnvironment, shellQuote, writeRunner } from '../src/daemon/hooks-run'
 import { WorktreePorts, isPortFree, migrateWorktreePorts, type PortBlock } from '../src/daemon/ports'
@@ -10,6 +10,7 @@ import { makeProject, repoSet, setSetting, startWorld, type SessionMode, type Wo
 import { startGithubWorld, type GithubWorld } from './github-fixtures/world'
 import { portsLaunchHook } from '../main'
 import { openPluginStore } from '../../../packages/daemon/src/plugins/stores'
+import { waitForAsync } from '../../../packages/daemon/test/helpers'
 
 setDefaultTimeout(60_000)
 const { scratch } = isolateGitConfig()
@@ -184,20 +185,16 @@ test('restoring a host-restart shell launch keeps its worktree block', async () 
   const { base } = await start('real')
   const a = await create('restore')
   const session = await call(w!.client, 'quirky.session/create', { worktree: a.worktree.id, agent: 'shell' }) as Session
-  const { promise: exited, resolve: markExited } = Promise.withResolvers<void>()
-  const unsubscribe = w!.client.onEvent((event) => {
-    if (event.type !== 'quirky.session/changed') return
-    const data = event.data
-    if (typeof data !== 'object' || data === null || !('session' in data)) return
-    const changed = data.session
-    if (typeof changed === 'object' && changed !== null && 'id' in changed && 'status' in changed &&
-      changed.id === session.id && changed.status === 'exited') markExited()
-  })
-  await call(w!.client, 'events.subscribe')
-  try {
-    w!.t.h.pty.exit(session.id, null, { exitSignal: 'SIGHUP', exitCause: 'host-restart' })
-    await exited
-  } finally { unsubscribe() }
+  w!.t.h.pty.exit(session.id, null, { exitSignal: 'SIGHUP', exitCause: 'host-restart' })
+  await waitForAsync(async () => {
+    const current = await call(w!.client, 'quirky.session/get', { session: session.id }) as Session
+    if (current.status !== 'exited') return false
+    const identity = await call(w!.client, 'quirky.session/identity', { session: session.id }).catch((error) => {
+      if (error instanceof RpcError && error.code === RpcErrorCode.NotFound) return null
+      throw error
+    }) as { live: boolean } | null
+    return identity?.live === false
+  }, 5000)
   await call(w!.client, 'quirky.session/restore', { session: session.id })
   expect(w!.t.h.pty.requests.find((request) => request.type === 'create' && request.sessionId === session.id && request.restore)).toMatchObject({
     restore: true, env: { PORT: String(base), WORKTREE_PORT: String(base), WORKTREE_PORT_COUNT: '10' }
