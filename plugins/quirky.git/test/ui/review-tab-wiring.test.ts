@@ -157,14 +157,16 @@ describe('window commands open the Review tab', () => {
   let commands: ReturnType<typeof commandHandlers>
   beforeEach(() => {
     commands = commandHandlers(fake.context)
+    fake.on('ui.window.self', () => ({ connId: 7 }))
+    fake.on('quirky.worktree/navigate', () => ({}))
   })
 
   test('open-diff reveals the path in the worktree review', async () => {
+    fake.status = p.statusOf([p.entry(APP, 'unstaged')])
     await commands['open-diff']!({ path: APP, source: 'unstaged' })
     expect(lastOpen().key).toBe(REVIEW_KEY)
     expect(lastOpen().title).toBe('Review')
-    expect(lastOpen().input).toMatchObject({ worktree: 'w1', mode: 'review', reveal: APP })
-    expect(lastOpen().input).not.toHaveProperty('source')
+    expect(lastOpen().input).toMatchObject({ worktree: 'w1', mode: 'review', reveal: APP, source: 'unstaged' })
     expect(lastOpen().input).not.toHaveProperty('commit')
   })
 
@@ -187,14 +189,19 @@ describe('window commands open the Review tab', () => {
     await commands['open-changes']!({})
     expect(lastOpen().input).toEqual(expect.objectContaining({ mode: 'review' }))
     expect(lastOpen().input).not.toHaveProperty('area')
+    expect(lastOpen().input).not.toHaveProperty('source')
     await commands['open-changes']!({ area: 'staged' })
+    expect(lastOpen().input).toMatchObject({ source: 'staged' })
+    expect(lastOpen().input).not.toHaveProperty('area')
+    await commands['open-changes']!({})
+    expect(lastOpen().input).not.toHaveProperty('source')
     expect(lastOpen().input).not.toHaveProperty('area')
     await commands['open-branch-changes']!({})
     expect(lastOpen().input).toMatchObject({ mode: 'review' })
     expect(lastOpen().input).not.toHaveProperty('commit')
     await commands['open-commit']!({ commit: COMMIT })
     expect(lastOpen().input).toMatchObject({ mode: 'review', commit: COMMIT })
-    expect(fake.called('quirky.terminal/openViewTab').map((c) => c.params.key)).toEqual([REVIEW_KEY, REVIEW_KEY, REVIEW_KEY, REVIEW_KEY])
+    expect(fake.called('quirky.terminal/openViewTab').map((c) => c.params.key)).toEqual([REVIEW_KEY, REVIEW_KEY, REVIEW_KEY, REVIEW_KEY, REVIEW_KEY])
     expect(() => commands['open-commit']!({})).toThrow('open-commit needs a commit.')
   })
 
@@ -209,6 +216,10 @@ describe('window commands open the Review tab', () => {
       worktree: 'w1',
       reveal: (path, noteId) => void reveals.push([path, noteId]),
       scrollToTop: () => void tops++,
+      applyScope: async (scope) => {
+        scopes.push(scope && 'commit' in scope ? scope.commit : null)
+        return 'applied'
+      },
       setScope: (commit) => void scopes.push(commit)
     })
     try {
@@ -226,12 +237,13 @@ describe('window commands open the Review tab', () => {
     }
   })
 
-  test('a failed open shows a toast', async () => {
+  test('failed open-diff and open-changes reject without a toast', async () => {
     fake.on('quirky.terminal/workspace', () => {
       throw new Error('terminal is down')
     })
-    await commands['open-changes']!({})
-    expect(fake.toasts).toEqual([['Could not open diff', 'terminal is down']])
+    await expect(commands['open-changes']!({})).rejects.toThrow('terminal is down')
+    await expect(commands['open-diff']!({ path: APP })).rejects.toThrow('terminal is down')
+    expect(fake.toasts).toEqual([])
   })
 })
 
