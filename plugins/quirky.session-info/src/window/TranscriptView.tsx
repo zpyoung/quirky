@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, ListRow, ToolPanelFrame } from '@quirky/ui'
+import { EmptyState, InlineError, ListRow, NoticeLine, ToolPanelFrame } from '@quirky/ui'
 
 type Props = { context: UiPluginContext; input?: unknown }
 type TranscriptResult = { path: string; text: string }
@@ -20,10 +20,9 @@ function messageOf(error: unknown): string {
 export function TranscriptView({ context, input }: Props) {
   const session = sessionFrom(input)
   const [view, setView] = useState<ViewState>({ kind: 'loading' })
-  const [requestVersion, setRequestVersion] = useState(0)
   const requestRef = useRef(0)
 
-  const load = useCallback(async () => {
+  async function load(): Promise<void> {
     const request = ++requestRef.current
     if (!session) {
       setView({ kind: 'error', message: 'No session was selected for this transcript.' })
@@ -36,21 +35,21 @@ export function TranscriptView({ context, input }: Props) {
     } catch (error) {
       if (request === requestRef.current) setView({ kind: 'error', message: messageOf(error) })
     }
-  }, [context, session])
+  }
 
   useEffect(() => {
     void load()
     return () => { requestRef.current++ }
-  }, [load, requestVersion])
+  }, [context, session])
 
   return (
     <main aria-label="Session transcript" style={VIEW_STYLE}>
       <ToolPanelFrame title="Session transcript">
         <div style={CONTENT_STYLE}>
-          {view.kind === 'error' && <Button aria-label="Retry transcript" onClick={() => setRequestVersion((version) => version + 1)}>Retry</Button>}
-          {view.kind === 'loading' && <p role="status">Loading transcript…</p>}
-          {view.kind === 'error' && <p role="alert" style={{ overflowWrap: 'anywhere' }}>Could not load transcript: {view.message}</p>}
-          {view.kind === 'ready' && <>
+          {view.kind === 'loading' && <NoticeLine>Loading transcript…</NoticeLine>}
+          {view.kind === 'error' && <InlineError message={`Could not load transcript: ${view.message}`} action={{ label: 'Retry', onAction: () => void load() }} />}
+          {view.kind === 'ready' && view.transcript.text === '' && <EmptyState message="This transcript has no entries yet." />}
+          {view.kind === 'ready' && view.transcript.text !== '' && <>
             <ListRow title="Transcript path" description={view.transcript.path} />
             <pre aria-label="Transcript content" style={{ flex: '1', minHeight: '0', overflow: 'auto', margin: '0', padding: 'var(--ui-space-12)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: 'var(--ui-surface)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)' }}>{view.transcript.text}</pre>
           </>}
