@@ -108,6 +108,7 @@ function parseHistoryControlCommand(value: unknown): HistoryControlCommand {
   }
 }
 
+/** Routes validated controls to a live History mount, reporting stale targets without throwing. */
 export async function runHistoryControl(context: UiPluginContext, value: unknown): Promise<HistoryControlResult> {
   const args = recordOf(value)
   const command = parseHistoryControlCommand(value)
