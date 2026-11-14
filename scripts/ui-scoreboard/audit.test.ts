@@ -423,6 +423,30 @@ describe('quote-bound source audit', () => {
   })
 
   test.each([
+    ['module function', 'export function stop(event) { event.stopPropagation() }\nexport function View() { return <button onClick={stop}>Print</button> }'],
+    ['module const', 'const stop = (event) => event.stopPropagation();\nexport function View() { return <button onClick={stop}>Print</button> }'],
+    ['enclosing function local', 'export function View() { function stop(event) { event.stopPropagation() } return <button onClick={stop}>Print</button> }'],
+    ['enclosing const local', 'export function View() { const stop = (event) => event.stopPropagation(); return <button onClick={stop}>Print</button> }'],
+    ['enclosing closure', 'export function View() { const stop = (event) => event.stopPropagation(); return () => <button onClick={stop}>Print</button> }'],
+  ])('accepts a barrier binding visible from its JSX use: %s', (_name, content) => {
+    const data = actionFixture(content, barrierClassification, 'onClick')
+    expect(cell(data, 'commands').status).toBe('pass')
+    expect(codes(data, 'commands')).toContain('action-not-user')
+  })
+
+  test.each([
+    ['another function const', 'export function unused() { const print = (event) => event.stopPropagation(); return print }\nexport function View() { return <button onClick={print}>Print</button> }'],
+    ['another function declaration', 'export function unused() { function print(event) { event.stopPropagation() } return print }\nexport function View() { return <button onClick={print}>Print</button> }'],
+    ['sibling block const', 'export function View() { { const print = (event) => event.stopPropagation(); } { return <button onClick={print}>Print</button> } }'],
+    ['sibling block function', 'export function View() { { function print(event) { event.stopPropagation() } } { return <button onClick={print}>Print</button> } }'],
+    ['nested block escaped', 'export function View() { { const print = (event) => event.stopPropagation(); } return <button onClick={print}>Print</button> }'],
+  ])('rejects an out-of-scope barrier binding: %s', (_name, content) => {
+    const data = actionFixture(content, barrierClassification, 'onClick')
+    expect(cell(data, 'commands').status).toBe('fail')
+    expect(codes(data, 'commands')).toContain('barrier-invalid')
+  })
+
+  test.each([
     ['extra call', '<div onClick={(e) => { e.stopPropagation(); destroy() }} />', 'onClick'],
     ['prevent default only', '<div onClick={(e) => { e.preventDefault() }} />', 'onClick'],
     ['call argument', '<div onClick={(e) => { e.stopPropagation(destroy()) }} />', 'onClick'],

@@ -212,6 +212,13 @@ function resolveBarrierFunction(handler: ts.Node | undefined, source: ts.SourceF
   const declarations = declarationsNamed(source, expression.text)
   if (declarations.length !== 1) return undefined
   const declaration = declarations[0]!
+  let scope = declaration.parent
+  if (ts.isVariableDeclaration(declaration)) {
+    const statement = declaration.parent.parent
+    if (!ts.isVariableStatement(statement)) return undefined
+    scope = statement.parent
+  }
+  if ((!ts.isSourceFile(scope) && !ts.isBlock(scope) && !ts.isModuleBlock(scope)) || !contains(scope, expression)) return undefined
   if (ts.isFunctionDeclaration(declaration) && declaration.body) return { fn: declaration, name: expression.text }
   if (!ts.isVariableDeclaration(declaration) || !ts.isIdentifier(declaration.name) || !declaration.initializer) return undefined
   if (!ts.isVariableDeclarationList(declaration.parent) || !(declaration.parent.flags & ts.NodeFlags.Const)) return undefined
