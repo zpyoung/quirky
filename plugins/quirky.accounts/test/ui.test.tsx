@@ -816,6 +816,201 @@ test('copy-login-link is identity-bound and reports clipboard refusal without lo
   expect(await copy({ id: 'login-a', provider: 'codex', url: 'https://auth.openai.com/oauth/authorize?login=other' })).toEqual({ ok: false, reason: 'login-changed' })
   expect(JSON.stringify(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL }))).not.toContain(LOGIN_A_URL)
 })
+test('copy refuses a provider mismatch without calling Accounts or provider RPCs', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  activate(context)
+  await settle()
+  calls = []
+
+  const result = await commandHandler(COPY_LOGIN_LINK_COMMAND_ID)({
+    id: 'login-a',
+    provider: 'claude',
+    url: LOGIN_A_URL
+  })
+
+  expect(result).toEqual({ ok: false, reason: 'login-changed' })
+  expect(clipboardWrites).toEqual([])
+  expect(calls).toEqual([])
+})
+
+const activationIdentityCases = [
+  {
+    name: 'copy-login-link',
+    id: COPY_LOGIN_LINK_COMMAND_ID,
+    args: { id: 'login-a', provider: 'codex', url: LOGIN_A_URL, connId: 7 },
+    refusal: { ok: false, reason: 'login-changed' }
+  },
+  {
+    name: 'select-account',
+    id: SELECT_ACCOUNT_COMMAND_ID,
+    args: { provider: 'codex', accountId: 'codex-b', connId: 7 },
+    refusal: { ok: false, reason: 'owner-unavailable' }
+  },
+  {
+    name: 'refresh',
+    id: REFRESH_COMMAND_ID,
+    args: { provider: 'grok', connId: 7 },
+    refusal: { ok: false, reason: 'owner-unavailable' }
+  }
+] as const
+
+for (const lifecycle of ['deactivation', 'replacement'] as const) {
+  for (const scenario of activationIdentityCases) {
+    test(`${scenario.name} refuses local work after ${lifecycle} during identity lookup`, async () => {
+      listResponse = () => pendingCodexState()
+      const context = makeContext()
+      activate(context)
+      await settle()
+      const handler = commandHandler(scenario.id)
+      const identity = Promise.withResolvers<unknown>()
+      const originalCall = context.call.bind(context)
+      context.call = (method, params) => method === 'ui.window.self' ? identity.promise : originalCall(method, params)
+      calls = []
+
+      const pending = handler(scenario.args)
+      if (lifecycle === 'deactivation') {
+        deactivate()
+      } else {
+        const replacement = makeContext()
+        activate(replacement)
+        await settle()
+        calls = []
+      }
+      identity.resolve({ connId: 7 })
+
+      expect(await pending).toEqual(scenario.refusal)
+      expect(clipboardWrites).toEqual([])
+      expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+    })
+  }
+}
+
+for (const scenario of activationIdentityCases) {
+  test(`${scenario.name} does not forward after activation is lost during identity lookup`, async () => {
+    listResponse = () => pendingCodexState()
+    const context = makeContext()
+    activate(context)
+    await settle()
+    const handler = commandHandler(scenario.id)
+    const identity = Promise.withResolvers<unknown>()
+    const originalCall = context.call.bind(context)
+    const forwarded: string[] = []
+    context.call = (method, params) => {
+      if (method === 'ui.window.self') return identity.promise
+      if (method === 'ui.window.command.run') {
+        forwarded.push(String(params?.id))
+        return Promise.resolve({ result: null })
+      }
+      return originalCall(method, params)
+    }
+    calls = []
+
+    const pending = handler({ ...scenario.args, connId: 8 })
+    deactivate()
+    identity.resolve({ connId: 7 })
+
+    expect(await pending).toEqual(scenario.refusal)
+    expect(forwarded).toEqual([])
+    expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+    expect(clipboardWrites).toEqual([])
+  })
+}
+
+for (const scenario of activationIdentityCases) {
+  test(`${scenario.name} refuses stale local work on the no-connId async-yield path`, async () => {
+    listResponse = () => pendingCodexState()
+    const context = makeContext()
+    activate(context)
+    await settle()
+    const handler = commandHandler(scenario.id)
+    const args: Record<string, unknown> = { ...scenario.args }
+    delete args.connId
+    calls = []
+
+    const pending = handler(args)
+    deactivate()
+
+    expect(await pending).toEqual(scenario.refusal)
+    expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+    expect(clipboardWrites).toEqual([])
+  })
+}
+
+test('forwarding already in flight settles without local work after deactivation', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  activate(context)
+  await settle()
+  const originalCall = context.call.bind(context)
+  const forwarded = new Map<string, { resolve(value: unknown): void }>()
+  const allForwarded = Promise.withResolvers<void>()
+  let forwardCount = 0
+  context.call = (method, params) => {
+    if (method === 'ui.window.self') return Promise.resolve({ connId: 7 })
+    if (method === 'ui.window.command.run') {
+      const id = String(params?.id)
+      const result = Promise.withResolvers<unknown>()
+      forwarded.set(id, result)
+      forwardCount += 1
+      if (forwardCount === activationIdentityCases.length) allForwarded.resolve()
+      return result.promise
+    }
+    return originalCall(method, params)
+  }
+  calls = []
+
+  const pending = Promise.all(activationIdentityCases.map((scenario) =>
+    commandHandler(scenario.id)({ ...scenario.args, connId: 8 })
+  ))
+  await allForwarded.promise
+  deactivate()
+  forwarded.get(COPY_LOGIN_LINK_COMMAND_ID)?.resolve({ result: { ok: true } })
+  forwarded.get(SELECT_ACCOUNT_COMMAND_ID)?.resolve({ result: null })
+  forwarded.get(REFRESH_COMMAND_ID)?.resolve({ result: null })
+
+  expect(await pending).toEqual([{ ok: true }, undefined, undefined])
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+  expect(clipboardWrites).toEqual([])
+})
+
+for (const outcome of ['success', 'failure'] as const) {
+  test(`copy preserves an already-started clipboard ${outcome} after activation replacement`, async () => {
+    listResponse = () => pendingCodexState()
+    const started = Promise.withResolvers<void>()
+    const writing = Promise.withResolvers<void>()
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (value: string) => {
+          clipboardWrites.push(value)
+          started.resolve()
+          return writing.promise
+        }
+      }
+    })
+    const context = makeContext()
+    activate(context)
+    await settle()
+    const copy = commandHandler(COPY_LOGIN_LINK_COMMAND_ID)
+    const pending = copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL, connId: 7 })
+    await started.promise
+
+    const replacement = makeContext()
+    activate(replacement)
+    await settle()
+    toastCalls = []
+    if (outcome === 'success') writing.resolve()
+    else writing.reject(new Error('fixture clipboard failure'))
+
+    expect(await pending).toEqual(outcome === 'success'
+      ? { ok: true }
+      : { ok: false, reason: 'clipboard-failed' })
+    expect(clipboardWrites).toEqual([LOGIN_A_URL])
+    expect(toastCalls).toEqual([])
+  })
+}
+
 test('Settings refresh controls invoke the global and provider-scoped refresh commands', async () => {
   listResponse = () => pendingCodexState()
   const context = makeContext()

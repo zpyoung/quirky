@@ -184,7 +184,7 @@ export function activate(context: UiPluginContext): void {
       provider: parsed.provider,
       url: parsed.url
     }, isCurrent)
-    if (route.kind === 'refused') return route.refusal
+    if (route.kind === 'refused') return isCurrent() ? route.refusal : { ok: false, reason: 'login-changed' }
     if (route.kind === 'routed') {
       if (isCommandRefusal(route.result)) return route.result
       return isCopySuccess(route.result) ? { ok: true } : { ok: false, reason: 'owner-unavailable' }
