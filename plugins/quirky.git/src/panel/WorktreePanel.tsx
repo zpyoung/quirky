@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Button, ContextMenu, Dialog, EmptyState } from '@quirky/ui'
+import { Button, ContextMenu, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { GitBusyOp, GitChange, GitCommit, GitStatus, GitStatusEntry, ReviewFile, UiPluginContext } from '@quirky/protocol'
 import { CommitSparkle } from '../ai/CommitSparkle'
@@ -13,7 +13,7 @@ import { onSelectedPath, selectedPath, selectPath } from '../review/selection'
 import { setReviewMark, useReview } from '../review/useReview'
 import { PANEL_ID, type DiffViewInput } from '../shared/view-input'
 import type { ScmReport } from '../scm'
-import { CleanState, CompareUnavailable, HugeBanner, OperationCard } from './Cards'
+import { CompareUnavailable, HugeBanner, OperationCard } from './Cards'
 import { ChangeBaseDialog } from './ChangeBaseDialog'
 import { PR_AI_ACTIONS, readGitHubReview, useGitHubReview } from './GitHubReview'
 import { useCompare, useSettings, useStatus, useWorktreePath } from './data'
@@ -79,6 +79,7 @@ type ShipFailure = {
 type PushTargetPurpose = 'review' | 'creation'
 type ReviewPushTarget =
   | { key: string; state: 'loading' }
+  | { key: string; state: 'error'; message: string }
   | { key: string; state: 'unavailable'; message: string }
   | {
       key: string
@@ -175,6 +176,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const status = useMemo<GitStatus | null>(() => (polled === null ? null : { ...polled, busy: polled.busy ?? localBusy }), [polled, localBusy])
   const githubReview = useGitHubReview(context, worktree, status)
   const [reviewPushTarget, setReviewPushTarget] = useState<ReviewPushTarget | null>(null)
+  const [reviewPushAttempt, setReviewPushAttempt] = useState(0)
   const reviewPushKey = githubReview.kind === 'found'
     ? `${githubReview.target.worktree}\\0${githubReview.target.branch}\\0${githubReview.target.head}\\0${githubReview.review.number}\\0${githubReview.review.state}`
     : null
@@ -188,7 +190,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     void context.call('quirky.git/pushTarget', { worktree, purpose: 'review' }).then((raw: unknown) => {
       if (!alive) return
       const target = pushTargetResult(raw)
-      if (target && target.ready === true) {
+      if (target?.ready === true) {
         setReviewPushTarget({
           key: reviewPushKey,
           state: 'ready',
@@ -197,20 +199,18 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
           fork: target.fork,
           repository: target.repository
         })
+      } else if (target?.ready === false) {
+        setReviewPushTarget({ key: reviewPushKey, state: 'unavailable', message: target.message })
       } else {
-        setReviewPushTarget({
-          key: reviewPushKey,
-          state: 'unavailable',
-          message: target?.ready === false ? target.message : 'The linked pull-request push target is unavailable.'
-        })
+        setReviewPushTarget({ key: reviewPushKey, state: 'error', message: 'Git returned an invalid push destination.' })
       }
     }).catch((error: unknown) => {
-      if (alive) setReviewPushTarget({ key: reviewPushKey, state: 'unavailable', message: messageOf(error) })
+      if (alive) setReviewPushTarget({ key: reviewPushKey, state: 'error', message: messageOf(error) })
     })
     return () => {
       alive = false
     }
-  }, [context, worktree, reviewPushKey])
+  }, [context, worktree, reviewPushKey, reviewPushAttempt])
   const compareTrigger = `${polled?.head ?? ''}|${polled?.upstreamStatus.sha ?? ''}|${settings.compareBase}`
   const compareData = useCompare(context, worktree, compareTrigger, polled !== null)
   const { compare } = compareData
@@ -300,7 +300,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     if (text.trim() !== '') dropEmptyMessageError()
   }
 
-  const refreshAll = useCallback(async () => {
+  const refreshAll = useCallback(async function refreshAll(): Promise<void> {
     await Promise.all([data.refresh(), compareData.refresh()])
   }, [data.refresh, compareData.refresh])
 
@@ -377,7 +377,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
                 context
                   .call('quirky.git/ignoreFolder', { worktree, folder })
                   .then(() => refreshAll())
-                  .catch((e: unknown) => context.toast('Could not update .gitignore', messageOf(e)))
+                  .catch((e: unknown) => context.toast('Could not update .gitignore', messageOf(e), { kind: 'error' }))
               }
             }
           ]
@@ -421,7 +421,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
 
   const open = (input: Omit<DiffViewInput, 'worktree'>) => {
     void openHostedDiff(context, { worktree, ...input }).catch((error: unknown) =>
-      context.toast('Could not open diff', messageOf(error))
+      context.toast('Could not open diff', messageOf(error), { kind: 'error' })
     )
   }
 
@@ -483,13 +483,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     if (fileOf(path)?.conflict !== undefined || rowEntries(path).some((entry) => entry.conflict !== undefined)) {
       return open({ mode: 'conflict-file', path })
     }
-    void openReview(context, { worktree, reveal: path }).catch((error: unknown) => context.toast('Could not open diff', messageOf(error)))
+    void openReview(context, { worktree, reveal: path }).catch((error: unknown) => context.toast('Could not open diff', messageOf(error), { kind: 'error' }))
   }
 
   const openFile = (path: string) => {
     void context
       .call('quirky.editor/open', { worktree, path, focus: true })
-      .catch((error: unknown) => context.toast('Could not open file', messageOf(error)))
+      .catch((error: unknown) => context.toast('Could not open file', messageOf(error), { kind: 'error' }))
   }
 
   const toggleMark = async (path: string) => {
@@ -543,7 +543,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     if (!file) return
     const plan = revertPlan(file, entries, baseName)
     if (plan.kind === 'blocked') {
-      context.toast(`Can’t revert “${splitPath(path).name}”`, plan.reason)
+      context.toast(`Can’t revert “${splitPath(path).name}”`, plan.reason, { kind: 'error' })
       return
     }
     const active = document.activeElement
@@ -641,7 +641,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     try {
       await navigator.clipboard.writeText(text)
     } catch (e) {
-      context.toast('Could not copy', messageOf(e))
+      context.toast('Could not copy', messageOf(e), { kind: 'error' })
     }
   }
 
@@ -673,7 +673,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       {
         label: 'Reveal in Finder',
         onSelect: () => {
-          context.call('quirky.git/reveal', { worktree, path: item.path }).catch((e: unknown) => context.toast('Could not reveal', messageOf(e)))
+          context.call('quirky.git/reveal', { worktree, path: item.path }).catch((e: unknown) => context.toast('Could not reveal', messageOf(e), { kind: 'error' }))
         }
       }
     ]
@@ -1109,10 +1109,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   }
 
   const openCommit = (commit: GitCommit) =>
-    void openReview(context, { worktree, commit: commit.oid }).catch((error: unknown) => context.toast('Could not open diff', messageOf(error)))
+    void openReview(context, { worktree, commit: commit.oid }).catch((error: unknown) => context.toast('Could not open diff', messageOf(error), { kind: 'error' }))
   const openCommitFile = (commit: GitCommit, change: GitChange) =>
     void openReview(context, { worktree, commit: commit.oid, reveal: change.path }).catch((error: unknown) =>
-      context.toast('Could not open diff', messageOf(error))
+      context.toast('Could not open diff', messageOf(error), { kind: 'error' })
     )
 
   const areaSections = AREA_ORDER.map((area) => ({
@@ -1161,10 +1161,16 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     )
   }
 
-  const compareMessage = compare && compare.status !== 'ready' ? (compare.message ?? 'Branch compare is unavailable.') : compareData.error
+  const compareMessage = compareData.error === null && compare !== null && compare.status !== 'ready'
+    ? (compare.message ?? 'Branch compare is unavailable.')
+    : null
   const nothingUncommitted = status !== null && entries.length === 0
   const clean = status !== null && model !== null && step === null
   const baseShown = compare !== null && compare.base === null ? null : model?.base.name ?? compare?.base ?? null
+  const cleanUpstream = status !== null && status.upstreamStatus.hasUpstream
+    ? status.upstreamStatus.name ?? status.upstream
+    : null
+  const cleanMessage = `Nothing changed against ${baseShown ?? 'the base'}${cleanUpstream === null ? '' : ` · up to date with ${cleanUpstream}`}`
   const branchName = model?.branch ?? status?.branch ?? (status?.detached ? 'detached HEAD' : 'no branch')
   const loading = (status === null && data.error === null) || (model === null && review.error === null)
   const marks = model === null ? 0 : model.counts.reviewed + model.counts.changed
@@ -1204,25 +1210,32 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         <BranchRow branch={branchName} base={baseShown} totals={model?.totals ?? null} onChangeBase={() => setDialog({ kind: 'base' })} />
       )}
       {model !== null && model.counts.files > 0 && <CountLine counts={model.counts} />}
-      {(data.error || (review.error && model === null)) && (
-        <div className="ui-cluster" role="alert" style={{ color: 'var(--ui-failing)' }}>
-          <span>{data.error ?? review.error}</span>
-          <Button onClick={() => void refreshAll()}>Retry</Button>
+      {(data.error !== null || review.error !== null || compareData.error !== null) && (
+        <div className="ui-stack">
+          {data.error !== null && (
+            <InlineError message={data.error} action={{ label: 'Retry', onAction: () => void data.refresh() }} />
+          )}
+          {review.error !== null && (
+            <InlineError message={review.error} action={{ label: 'Retry', onAction: refreshReview }} />
+          )}
+          {compareData.error !== null && (
+            <InlineError message={compareData.error} action={{ label: 'Retry', onAction: () => void compareData.refresh() }} />
+          )}
         </div>
       )}
       <div className="ui-stack" data-git-content style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {loading && <EmptyState message="Loading…" />}
+        {loading && <div role="status"><NoticeLine>Loading…</NoticeLine></div>}
         {status?.capped && (
           <HugeBanner
             onStageAll={() => void stageScope('all')}
             onRetry={async () => {
-              if ((await data.refresh()) === null) context.toast('Could not refresh Source Control', 'Try again.')
+              if ((await data.refresh()) === null) context.toast('Could not refresh Source Control', 'Try again.', { kind: 'error' })
             }}
           />
         )}
         {tooLarge && (
           <div className="ui-stack">
-            <EmptyState message="Search text is too large" />
+            <InlineError message="Search text is too large" />
             <p className="ui-text-muted">Use a shorter file filter.</p>
           </div>
         )}
@@ -1238,7 +1251,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             onKeyDown={onListKeyDown}
           />
         )}
-        {filtering && !tooLarge && model !== null && visibleFiles.length === 0 && <p className="ui-text-muted">No files match the filter.</p>}
+        {filtering && !tooLarge && model !== null && visibleFiles.length === 0 && <EmptyState message="No files match the filter." />}
         {status && compareMessage !== null && !tooLarge && (
           <CompareUnavailable
             message={compareMessage}
@@ -1247,7 +1260,11 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             onRetry={() => void compareData.refresh()}
           />
         )}
-        {clean && !filtering && <CleanState base={baseShown ?? 'the base'} upstream={status.upstreamStatus.hasUpstream ? status.upstreamStatus.name ?? status.upstream : null} />}
+        {clean && !filtering && (
+          <div role="status" data-git-clean>
+            <EmptyState message={cleanMessage} />
+          </div>
+        )}
         {status && !filtering && (
           <HistoryDock
             context={context}
@@ -1319,9 +1336,18 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
               <>
                 {githubReview.kind === 'found' && reviewPushTarget?.key === reviewPushKey && (
                   reviewPushTarget.state === 'loading' ? (
-                    <p className="ui-text-muted" role="status" data-git-push-target>Checking the configured push destination for this pull request…</p>
+                    <div role="status" data-git-push-target>
+                      <NoticeLine>Checking the configured push destination for this pull request…</NoticeLine>
+                    </div>
+                  ) : reviewPushTarget.state === 'error' ? (
+                    <div data-git-push-target>
+                      <InlineError
+                        message={reviewPushTarget.message}
+                        action={{ label: 'Retry', onAction: () => setReviewPushAttempt((attempt) => attempt + 1) }}
+                      />
+                    </div>
                   ) : reviewPushTarget.state === 'unavailable' ? (
-                    <p role="alert" data-git-push-target style={{ color: 'var(--ui-failing)' }}>{reviewPushTarget.message}</p>
+                    <p role="status" data-git-push-target>{reviewPushTarget.message}</p>
                   ) : (
                     <p role="status" data-git-push-target>
                       <strong>{reviewPushTarget.fork ? 'Fork destination' : 'Push destination'}:</strong>{' '}

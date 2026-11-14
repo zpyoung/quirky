@@ -63,7 +63,7 @@ export function useSettings(context: UiPluginContext): [PanelSettings, (mode: Vi
     (mode: ViewMode) => {
       setSettings((prev) => ({ ...prev, viewMode: mode }))
       context.call('setting.set', { id: VIEW_MODE_ID, value: mode }).catch((error: unknown) => {
-        context.toast('Could not change the view', messageOf(error))
+        context.toast('Could not change the view', messageOf(error), { kind: 'error' })
         setSettings(readSettings(context))
       })
     },
@@ -127,7 +127,7 @@ export function useStatus(context: UiPluginContext, worktree: string): StatusDat
   const newest = useRef(0)
   const alive = useRef(true)
 
-  const refresh = useCallback(async (): Promise<GitStatus | null> => {
+  const refresh = useCallback(async function refresh(): Promise<GitStatus | null> {
     const ticket = ++newest.current
     try {
       const next = (await context.call('quirky.git/status', { worktree })) as GitStatus
@@ -184,7 +184,7 @@ export function useCompare(context: UiPluginContext, worktree: string, trigger: 
   const newest = useRef(0)
   const alive = useRef(true)
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async function refresh(): Promise<void> {
     const ticket = ++newest.current
     try {
       const next = (await context.call('quirky.git/compare', { worktree })) as GitCompare
