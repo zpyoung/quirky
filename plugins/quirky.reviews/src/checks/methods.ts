@@ -5,6 +5,7 @@ import {
   isDisarmableSitter,
   isRecord,
   sameApprovalScope,
+  type ChecksSitterState,
   type SitterBranchUpdateMode,
   type SitterApprovalScope,
   type SitterCapabilities,
@@ -1933,17 +1934,20 @@ async function checksSitterArm(
   const worktree = await resolveSitterWorktree(env, params, caller, false)
   if (!worktree) throw env.invalid('missing_worktree', 'A registered worktree is required to arm PR Sitter.')
   if (worktree.kind !== 'git') throw env.invalid('worktree_not_git', 'PR Sitter can only watch a Git worktree.')
-  if (!isRecord(params.capabilities) ||
-    Object.keys(params.capabilities).length !== SITTER_CAPABILITY_KEYS.length ||
-    Object.keys(params.capabilities).some((key) => !SITTER_CAPABILITY_KEYS.includes(key as keyof SitterCapabilities)) ||
-    !SITTER_CAPABILITY_KEYS.every((key) => capabilityMode(params.capabilities[key]))) {
+  const capabilityInput = params.capabilities
+  if (!isRecord(capabilityInput)) {
+    throw env.invalid('invalid_input', 'All four PR Sitter capabilities must be set to Off, Ask, or On.')
+  }
+  if (Object.keys(capabilityInput).length !== SITTER_CAPABILITY_KEYS.length ||
+    Object.keys(capabilityInput).some((key) => !SITTER_CAPABILITY_KEYS.includes(key as keyof SitterCapabilities)) ||
+    !SITTER_CAPABILITY_KEYS.every((key) => capabilityMode(capabilityInput[key]))) {
     throw env.invalid('invalid_input', 'All four PR Sitter capabilities must be set to Off, Ask, or On.')
   }
   const capabilities: SitterCapabilities = {
-    updateBranch: params.capabilities.updateBranch as SitterCapabilityMode,
-    resolveConflicts: params.capabilities.resolveConflicts as SitterCapabilityMode,
-    fixChecks: params.capabilities.fixChecks as SitterCapabilityMode,
-    merge: params.capabilities.merge as SitterCapabilityMode
+    updateBranch: capabilityInput.updateBranch as SitterCapabilityMode,
+    resolveConflicts: capabilityInput.resolveConflicts as SitterCapabilityMode,
+    fixChecks: capabilityInput.fixChecks as SitterCapabilityMode,
+    merge: capabilityInput.merge as SitterCapabilityMode
   }
   const branchUpdateMode: SitterBranchUpdateMode = params.branchUpdateMode === undefined
     ? 'merge-base-update'

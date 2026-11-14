@@ -91,6 +91,7 @@ type Options = {
   response?: unknown
   call?: (method: string, params: Record<string, unknown>) => unknown
   panelOpen?: boolean
+  deferMount?: boolean
 }
 
 function mount(options: Options = {}) {
@@ -137,9 +138,10 @@ function mount(options: Options = {}) {
   const root = createRoot(element)
   roots.push(root)
   const render = () => act(() => root.render(<ChecksPanel context={context} state={state} refresh={async () => {}} />))
-  render()
+  if (!options.deferMount) render()
   return {
     element, context, calls, executed,
+    showPanel: render,
     setResponse(next: unknown) { response = next },
     setState(next: ReviewsState) { state = next; render() },
     switchWorktree(worktree: string) {
@@ -299,11 +301,12 @@ test('a detached branch and invalid active-time budget cannot be armed', async (
 })
 
 test('open-sitter command opens Checks and the pending dialog even before panel mounts', async () => {
-  const ui = mount({ panelOpen: false })
-  await settle()
+  const ui = mount({ panelOpen: false, deferMount: true })
   await act(async () => { await ui.context.executeCommand(`${commandsPrefix}open-sitter`, { worktree: WORKTREE }) })
   await settle()
   expect(ui.calls.some(({ method }) => method === 'quirky.reviews/showChecks')).toBe(true)
+  ui.showPanel()
+  await settle()
   expect(button('Arm PR Sitter')).toBeDefined()
 })
 
