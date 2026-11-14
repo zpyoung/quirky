@@ -29,8 +29,8 @@ Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status`
 `quirky://pair` link, or pasting the code. Pairing pins the desktop key; bearer credentials stay
 in the phone's secure store. No relay or cloud account is used.
 
-The desktop Mobile page and Settings > Mobile offer **Try again** when settings fail to load.
-**Copy pairing code** is also available as
+The desktop Mobile page and Settings > Mobile offer “Try again” when settings fail to load.
+“Copy pairing code” is also available as
 `quirky ui run command:quirky.mobile/copy-pairing-code` while a pairing panel is open.
 The command never includes the pairing URL in its result.
 
