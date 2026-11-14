@@ -467,7 +467,6 @@ export async function runReviewsUiControl(context: UiPluginContext, input: unkno
   if (!action.enabled) return { delivered: false, reason: 'disabled' }
 
   const result = await lease.registration.run(request, isCurrent)
-  if (!isCurrent()) return { delivered: false, reason: 'target-unavailable' }
   return result === undefined ? { delivered: true } : { delivered: true, result }
 }
 

@@ -32,12 +32,12 @@ function shellControlTarget(kind: SurfaceKind, state: ReviewsState | null, layou
   const rawWorktree = kind === 'detail'
     ? state?.detail.target?.worktree
     : kind === 'checks'
-      ? state?.checks.worktree
+      ? layoutWorktree
       : kind === 'create'
         ? state?.creation.worktree
         : state?.settings.worktree
   const worktree = typeof rawWorktree === 'string' && rawWorktree.trim() !== '' ? rawWorktree : layoutWorktree
-  const review = kind === 'detail' ? state?.detail.review : kind === 'checks' ? state?.checks.review : null
+  const review = kind === 'detail' ? state?.detail.review : kind === 'checks' && state?.checks.worktree === layoutWorktree ? state?.checks.review : null
   const target = kind === 'detail' ? state?.detail.target : null
   const repositoryValue = review?.prRepo ?? target?.prRepo
   const repository = record(repositoryValue)

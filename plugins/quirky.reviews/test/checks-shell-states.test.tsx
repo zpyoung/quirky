@@ -91,7 +91,8 @@ function makeContext(connId = 41, worktree: string | null = WORKTREE) {
   const methods = new Map<string, Method>()
   const calls: Call[] = []
   const eventListeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
-  const layout = { worktree, view: { id: 'view:fixture' }, panel: null, sidebar: true, focus: 'view' } as unknown as UiLayout
+  const layoutListeners = new Set<(layout: UiLayout) => void>()
+  let layout = { worktree, view: { id: 'view:fixture' }, panel: null, sidebar: true, focus: 'view' } as unknown as UiLayout
   let executeCommandCalls = 0
   const context = {
     pluginId: 'quirky.reviews',
@@ -117,7 +118,7 @@ function makeContext(connId = 41, worktree: string | null = WORKTREE) {
       return () => eventListeners.delete(listener)
     },
     onConnection: () => () => {},
-    onLayout: () => () => {},
+    onLayout(listener: (layout: UiLayout) => void) { layoutListeners.add(listener); return () => layoutListeners.delete(listener) },
     getLayout: () => layout,
     getSetting: () => undefined,
     toast() {},
@@ -127,6 +128,10 @@ function makeContext(connId = 41, worktree: string | null = WORKTREE) {
   return {
     context, providers, methods, calls, eventListeners,
     executeCommandCalls: () => executeCommandCalls,
+    selectWorktree(worktree: string) {
+      layout = { ...layout, worktree }
+      for (const listener of layoutListeners) listener(layout)
+    },
     async emitChanged() {
       for (const listener of eventListeners) await listener({ type: 'quirky.reviews/changed' } as QuirkyEvent)
     }
@@ -234,6 +239,29 @@ test('a failed refresh retains the loaded shell child beside the shared error', 
   expect(element.querySelector('.ui-notice-line')).toBeNull()
 })
 
+test('a retained Checks shell cannot retry a replacement layout worktree through its old descriptor', async () => {
+  const harness = makeContext()
+  let offline = false
+  harness.methods.set('quirky.reviews/state', () => {
+    if (offline) throw new Error('offline fixture')
+    return reviewsState()
+  })
+  const reports: unknown[] = []
+  await mountSurface(harness, CHECKS_PANEL, reports)
+  offline = true
+  await act(async () => harness.emitChanged())
+  const oldControl = latestShellControl(reports, CHECKS_PANEL)
+  await act(async () => harness.selectWorktree('/replacement/tree'))
+  const readsBefore = harness.calls.filter((call) => call.method === 'quirky.reviews/state').length
+  const handler = harness.providers.get(CONTROL_COMMAND)!
+  expect(await handler({ target: oldControl.target, generation: oldControl.generation, action: 'retry' }))
+    .toEqual({ delivered: false, reason: 'target-unavailable' })
+  expect(harness.calls.filter((call) => call.method === 'quirky.reviews/state')).toHaveLength(readsBefore)
+  const current = latestShellControl(reports, CHECKS_PANEL)
+  expect(current.generation).not.toBe(oldControl.generation)
+  expect(JSON.parse(String(current.target))[2]).toBe('/replacement/tree')
+})
+
 const fixtureTarget = (id: string) => JSON.stringify([PANEL_SURFACE, 'fixture-child', WORKTREE, REPO, 12, 'a'.repeat(40), null]) + id
 function fixtureRegistration(target: string, run: ReviewsUiControlRegistration['run'], actions: ReviewsUiControlRegistration['actions'] = () => [{ action: 'fixture-action', enabled: true }]): ReviewsUiControlRegistration {
   return { surface: PANEL_SURFACE, slot: 'fixture-child', target, actions, run }
@@ -319,6 +347,21 @@ test('registration changes notify reports without renewing leases and cleanup ca
   replacement.dispose()
   expect(await runReviewsUiControl(harness.context, validRequest(target, replacement.generation))).toEqual({ delivered: false, reason: 'target-unavailable' })
   unsubscribe()
+})
+
+test('a delivered control may dispose its own session without losing acknowledgement', async () => {
+  const harness = makeContext()
+  activate(harness.context)
+  let dispose = () => {}
+  const target = fixtureTarget('self-disposing')
+  const lease = registerReviewsUiControl(harness.context, fixtureRegistration(target, () => {
+    dispose()
+    return 'session closed'
+  }))
+  dispose = lease.dispose
+  const handler = harness.providers.get(CONTROL_COMMAND)!
+  expect(await handler(validRequest(target, lease.generation))).toEqual({ delivered: true, result: 'session closed' })
+  expect(await handler(validRequest(target, lease.generation))).toEqual({ delivered: false, reason: 'target-unavailable' })
 })
 
 test('A to B to A registrations receive fresh generations and disabled or unknown actions do not run', async () => {
