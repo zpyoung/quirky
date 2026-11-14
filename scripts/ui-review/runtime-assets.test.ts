@@ -8,9 +8,11 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
+import type { UiModel } from '@quirky/protocol'
+
 import {
-  prepareRuntimeAssets, runtimeAssetEnvironment, snapshotRuntimeAssets,
-  type RuntimeAssets
+  prepareRuntimeAssets, runtimeAssetEnvironment, snapshotRuntimeAssets, verifyRuntimeAssets,
+  type AssetSnapshot, type RuntimeAssets
 } from './runtime-assets'
 
 const SHELL_ASSETS = [
@@ -386,6 +388,280 @@ describe('runtime asset confinement', () => {
       const assets = { repoRoot: fixture.repoRoot, uiDir: fixture.uiDir, pluginsDir: join(fixture.repoRoot, 'plugins'), ownedRoot: null }
       expect(() => snapshotRuntimeAssets(assets)).toThrow(/runtime assets: escapes root/)
       expect(readFileSync(sentinel, 'utf8')).toBe('do not touch')
+    }
+  })
+})
+function addUiPlugin(repoRoot: string, pluginId: string): string {
+  const pluginRoot = join(repoRoot, 'plugins', pluginId)
+  put(join(pluginRoot, 'quirky-plugin.json'), JSON.stringify({ id: pluginId, name: pluginId, version: '1.0.0', apiVersion: '1.0.0', ui: 'dist/ui.js' }))
+  put(join(pluginRoot, 'dist', 'ui.js'), `${pluginId}-entry`)
+  put(join(pluginRoot, 'dist', 'chunks', 'unselected.js'), `${pluginId}-chunk`)
+  return pluginRoot
+}
+
+function moduleUrl(pluginId = 'acme.fixture', path = 'dist/ui.js'): string {
+  return `/plugins/${encodeURIComponent(pluginId)}/${path.split('/').map(encodeURIComponent).join('/')}`
+}
+
+function modelWithModules(urls: Record<string, string>): UiModel {
+  return {
+    sidebarSections: [],
+    statusBars: [],
+    activityItems: [],
+    panels: [],
+    views: [],
+    overlays: [],
+    commands: [],
+    keybindings: [],
+    settings: [],
+    settingsSections: [],
+    menuItems: [],
+    themes: [],
+    theme: { chosen: 'default', active: 'default' },
+    modules: Object.fromEntries(Object.entries(urls).map(([pluginId, url]) => [
+      pluginId, { url, provides: [], apiVersion: '1.0.0' }
+    ]))
+  }
+}
+
+function expectedIndex(html: string, urls: string[]): string {
+  const importMap = /<script\b(?=[^>]*\s+type\s*=\s*(["'])importmap\1)[^>]*>/i.test(html)
+  const bodyEnd = /<\/body\s*>/i.exec(html)
+  if (!importMap || bodyEnd === null || urls.length === 0) return html
+  const links = urls.map((url) => `<link rel="modulepreload" href="${url.replace(/[&"'<>]/g, (character) => ({
+    '&': '&amp;', '"': '&quot;', "'": '&#39;', '<': '&lt;', '>': '&gt;'
+  })[character]!)}">`).join('\n')
+  return `${html.slice(0, bodyEnd.index)}${links}${html.slice(bodyEnd.index)}`
+}
+
+function serveSnapshot(snapshot: AssetSnapshot, urls: string[]) {
+  const seen: string[] = []
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request) {
+      const path = new URL(request.url).pathname
+      seen.push(path)
+      const publicPath = path === '/' ? '/index.html' : path
+      const asset = snapshot.get(publicPath)
+      if (!asset) return new Response('not found', { status: 404 })
+      const bytes = readFileSync(asset.path)
+      return publicPath === '/index.html'
+        ? new Response(expectedIndex(bytes.toString('utf8'), urls))
+        : new Response(bytes)
+    }
+  })
+  return { server, seen }
+}
+
+async function prebuilt(repoRoot: string) {
+  const home = join(dirname(repoRoot), 'prebuilt-home')
+  mkdirSync(home)
+  const assets = await prepareRuntimeAssets({ repoRoot, home, skipBuild: true })
+  return { assets, snapshot: snapshotRuntimeAssets(assets) }
+}
+
+function verifyOptions(port: number) {
+  return { port, timeoutMs: 2_000 }
+}
+
+async function rejectionMessage(operation: Promise<unknown>): Promise<string> {
+  try {
+    await operation
+  } catch (error) {
+    return String(error)
+  }
+  throw new Error('expected runtime asset verification to reject')
+}
+
+describe('runtime asset HTTP verification', () => {
+  test('rejects hostile module URLs before contacting either loopback server', async () => {
+    const root = freshRoot()
+    const fixture = makeRepo(root)
+    addUiPlugin(fixture.repoRoot, 'acme.unselected')
+    const { assets, snapshot } = await prebuilt(fixture.repoRoot)
+    const daemon = serveSnapshot(snapshot, [])
+    const trapRequests: string[] = []
+    const trap = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch(request) {
+        trapRequests.push(request.url)
+        return new Response('unexpected request')
+      }
+    })
+    const outside = join(root, 'outside')
+    put(join(outside, 'sentinel'), 'must survive')
+    const id65 = 'a'.repeat(65)
+    const attacks = [
+      `http://127.0.0.1:${trap.port!}/plugins/acme.fixture/dist/ui.js`,
+      `//127.0.0.1:${trap.port!}/plugins/acme.fixture/dist/ui.js`,
+      '/plugins/acme.fixture/dist/ui.js?mode=1',
+      '/plugins/acme.fixture/dist/ui.js#fragment',
+      '/plugins/acme.fixture/dist\\\\ui.js',
+      '/plugins/acme.fixture/dist%5cui.js',
+      '/plugins/acme.fixture/dist%2Fui.js',
+      '/plugins/acme.fixture/./dist/ui.js',
+      '/plugins/acme.fixture/../acme.fixture/dist/ui.js',
+      '/plugins/acme.fixture/%2e%2e%2fui.js',
+      '/plugins/acme.fixture/dist/%00ui.js',
+      '/plugins/acme.fixture/dist/%01ui.js',
+      '/plugins/acme.fixture/dist/%',
+      `/plugins/${id65}/dist/ui.js`,
+      '/plugins/acme.fixture-extra/dist/ui.js'
+    ]
+    try {
+      for (const url of attacks) {
+        const error = await rejectionMessage(verifyRuntimeAssets(
+          assets, snapshot, modelWithModules({ 'acme.fixture': url }), verifyOptions(daemon.server.port!)
+        ))
+        expect(error).toContain('runtime assets: invalid URL')
+      }
+      const longUrl = `/plugins/acme.fixture/dist/${'x'.repeat(4_096)}`
+      await expect(verifyRuntimeAssets(
+        assets, snapshot, modelWithModules({ 'acme.fixture': longUrl }), verifyOptions(daemon.server.port!)
+      )).rejects.toThrow()
+      await expect(verifyRuntimeAssets(
+        assets, snapshot, modelWithModules({ [id65]: moduleUrl(id65) }), verifyOptions(daemon.server.port!)
+      )).rejects.toThrow(/runtime assets: invalid URL/)
+      expect(daemon.seen).toHaveLength(0)
+      expect(trapRequests).toHaveLength(0)
+      expect(readFileSync(join(outside, 'sentinel'), 'utf8')).toBe('must survive')
+    } finally {
+      daemon.server.stop(true)
+      trap.stop(true)
+    }
+  })
+
+  test('accepts a double-encoded filename once and binds every module, including unselected plugins', async () => {
+    const root = freshRoot()
+    const fixture = makeRepo(root)
+    const unselectedRoot = addUiPlugin(fixture.repoRoot, 'acme.unselected')
+    const id64 = 'a'.repeat(64)
+    addUiPlugin(fixture.repoRoot, id64)
+    const encodedName = '%2e%2e%2foutside.txt'
+    put(join(fixture.pluginRoot, 'dist', encodedName), 'literal segment')
+    const { assets, snapshot } = await prebuilt(fixture.repoRoot)
+    const selectedUrl = moduleUrl(fixture.pluginId, `dist/${encodedName}`)
+    const unselectedUrl = moduleUrl('acme.unselected', 'dist/chunks/unselected.js')
+    const url64 = moduleUrl(id64)
+    expect(snapshot.has(selectedUrl)).toBe(true)
+    const urls = { 'acme.fixture': selectedUrl, 'acme.unselected': unselectedUrl, [id64]: url64 }
+    const server = serveSnapshot(snapshot, Object.values(urls))
+    try {
+      const wrongBinding = modelWithModules({ 'acme.fixture': selectedUrl, 'acme.unselected': selectedUrl })
+      await expect(verifyRuntimeAssets(assets, snapshot, wrongBinding, verifyOptions(server.server.port!)))
+        .rejects.toThrow(/runtime assets: invalid URL/)
+      expect(server.seen).toHaveLength(0)
+      await verifyRuntimeAssets(assets, snapshot, modelWithModules(urls), verifyOptions(server.server.port!))
+      expect(server.seen).toContain(selectedUrl)
+      expect(server.seen).toContain(unselectedUrl)
+      expect(server.seen).toContain(url64)
+      expect(readFileSync(join(unselectedRoot, 'dist', 'chunks', 'unselected.js'), 'utf8')).toBe('acme.unselected-chunk')
+    } finally {
+      server.server.stop(true)
+    }
+  })
+
+  test('matches daemon index transformation, UTF-8 byte bounds, and missing-transform prerequisites', async () => {
+    const cases = [
+      { name: 'transformed', html: '<!doctype html><script type="importmap">{\"imports\":{\"react\":\"./vendor/react.js\"}}</script><link rel=\"stylesheet\" href=\"./main.css\"><script type=\"module\" src=\"./main.js\"></script><p>café</p></body >', urls: true },
+      { name: 'empty modules', html: '<script type=\"importmap\">{}</script><p>café</p></body>', urls: false },
+      { name: 'missing import map', html: '<p>café</p></body>', urls: true },
+      { name: 'missing body', html: '<script type=\"importmap\">{}</script><p>café</p>', urls: true }
+    ]
+    for (const scenario of cases) {
+      const root = freshRoot()
+      const fixture = makeRepo(root)
+      put(join(fixture.uiDir, 'index.html'), scenario.html)
+      const { assets, snapshot } = await prebuilt(fixture.repoRoot)
+      const url = moduleUrl()
+      const modules: Record<string, string> = scenario.urls ? { 'acme.fixture': url } : {}
+      const urls = Object.values(modules)
+      const expected = expectedIndex(scenario.html, urls)
+      if (scenario.name === 'transformed') {
+        expect(expected).not.toBe(scenario.html)
+        expect(Buffer.byteLength(expected, 'utf8')).toBeGreaterThan(Buffer.byteLength(scenario.html, 'utf8'))
+        expect(expected.length).toBeLessThan(Buffer.byteLength(expected, 'utf8'))
+      } else expect(expected).toBe(scenario.html)
+      const server = serveSnapshot(snapshot, urls)
+      try {
+        await verifyRuntimeAssets(assets, snapshot, modelWithModules(modules), verifyOptions(server.server.port!))
+        expect(server.seen).toContain('/')
+        expect(server.seen).toContain('/index.html')
+      } finally {
+        server.server.stop(true)
+      }
+    }
+  })
+
+  test('rejects missing executable, stylesheet, and import-map outputs referenced by index HTML', async () => {
+    const documents = [
+      '<!doctype html><script type="importmap">{}</script><script type="module" src="./missing.js"></script><body></body>',
+      '<!doctype html><script type="importmap">{}</script><link rel="stylesheet" href="./missing.css"><body></body>',
+      '<!doctype html><script type="importmap">{"imports":{"missing":"./vendor/missing.js"}}</script><body></body>'
+    ]
+    for (const indexHtml of documents) {
+      const root = freshRoot()
+      const fixture = makeRepo(root)
+      put(join(fixture.uiDir, 'index.html'), indexHtml)
+      const { assets, snapshot } = await prebuilt(fixture.repoRoot)
+      const url = moduleUrl()
+      const server = serveSnapshot(snapshot, [url])
+      try {
+        await expect(verifyRuntimeAssets(assets, snapshot, modelWithModules({ 'acme.fixture': url }), verifyOptions(server.server.port!)))
+          .rejects.toThrow(/runtime assets: missing/)
+      } finally {
+        server.server.stop(true)
+      }
+    }
+  })
+
+  test('skip-build verifies unchanged output and rejects changed, missing, added, and symlinked output without repair', async () => {
+    for (const change of ['unchanged', 'changed', 'missing', 'added', 'symlink'] as const) {
+      const root = freshRoot()
+      const fixture = makeRepo(root)
+      const { assets, snapshot } = await prebuilt(fixture.repoRoot)
+      const url = moduleUrl()
+      const publicPath = `/plugins/${fixture.pluginId}/dist/ui.js`
+      const file = join(fixture.pluginRoot, 'dist', 'ui.js')
+      const outside = join(root, 'outside')
+      put(join(outside, 'sentinel'), 'must survive')
+      if (change === 'changed') {
+        const bytes = Buffer.from(readFileSync(file))
+        bytes[0] ^= 1
+        put(file, bytes)
+      } else if (change === 'missing') rmSync(file)
+      else if (change === 'added') put(join(fixture.pluginRoot, 'dist', 'added-after-snapshot.js'), 'new output')
+      else if (change === 'symlink') {
+        rmSync(file)
+        symlinkSync(join(outside, 'sentinel'), file)
+      }
+      const server = serveSnapshot(snapshot, [url])
+      try {
+        if (change === 'unchanged') {
+          await verifyRuntimeAssets(assets, snapshot, modelWithModules({ 'acme.fixture': url }), verifyOptions(server.server.port!))
+          expect(server.seen.length).toBeGreaterThan(0)
+        } else {
+          const error = await rejectionMessage(verifyRuntimeAssets(
+            assets, snapshot, modelWithModules({ 'acme.fixture': url }), verifyOptions(server.server.port!)
+          ))
+          expect(server.seen).toHaveLength(0)
+          if (change === 'symlink') expect(error).toContain('runtime assets: escapes root')
+          else {
+            const diagnostic = change === 'added' ? 'changed' : change
+            expect(error).toContain(`runtime assets: ${diagnostic} ${change === 'added' ? `${publicPath.slice(0, publicPath.lastIndexOf('/'))}/added-after-snapshot.js` : publicPath}`)
+            if (change === 'added') expect(error).toContain('(added)')
+          }
+        }
+        expect(readFileSync(join(outside, 'sentinel'), 'utf8')).toBe('must survive')
+        if (change === 'missing') expect(existsSync(file)).toBe(false)
+        if (change === 'added') expect(existsSync(join(fixture.pluginRoot, 'dist', 'added-after-snapshot.js'))).toBe(true)
+        if (change === 'symlink') expect(lstatSync(file).isSymbolicLink()).toBe(true)
+        if (change === 'changed') expect(readFileSync(file)).toHaveLength(snapshot.get(publicPath)!.size)
+      } finally {
+        server.server.stop(true)
+      }
     }
   })
 })
