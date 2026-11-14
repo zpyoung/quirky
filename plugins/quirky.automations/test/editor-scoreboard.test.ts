@@ -49,12 +49,11 @@ describe('Automations shell and editor scoreboard', () => {
     })
   })
 
-  test('only the list page remains uncovered by the editor fragment', () => {
+  test('all automations UI candidates have scoreboard coverage', () => {
     const failures = auditPlugin(inventory, plugin).flatMap(({ evidence }) => evidence).filter(({ code }) => !passCodes[code])
     expect(failures.filter(({ source, coverageFile }) => coveredFiles.includes(source?.file ?? '') || coveredFiles.includes(coverageFile ?? ''))).toEqual([])
     expect(failures.filter(({ code }) => code !== 'coverage-missing')).toEqual([])
     const missing = failures.filter(({ code }) => code === 'coverage-missing')
-    expect(missing.length).toBeGreaterThan(0)
-    expect([...new Set(missing.map(({ source }) => source?.file))]).toEqual([`${plugin.directory}/src/list/AutomationsPage.tsx`])
+    expect(missing).toEqual([])
   })
 })

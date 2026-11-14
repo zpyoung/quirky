@@ -61,8 +61,8 @@ Saved-target, model, option, and skipped-setup advisories keep polite announceme
 read, write, and save failures use shared alerts.
 
 `ui-scoreboard/editor.json` declares the sidebar, settings, and Automations surfaces
-and covers the shell, editor, and Markdown renderer. List-page coverage and plugin
-ratchet enrollment are separate from this fragment.
+and covers the shell, editor, and Markdown renderer. `ui-scoreboard/list.json` covers
+the list, details, run dashboard, and dialogs. All five static checks are ratcheted.
 
 Saved definitions and background-run evidence refresh without replacing the mounted page or losing search focus. Details show schedule/target/prompt, truthful usage coverage, and paged run history. The Runs dashboard excludes future occurrences from its 24-hour and seven-day counts. Run details prefer saved output, then precheck output, error, and usage diagnostics. **View run** explicitly selects the recorded structured session, including a background session not yet adopted into a tab; it never creates a replacement shell. Missing or wrong-worktree selections show an error rather than silently falling back. Native startup failures retain bounded child stderr so an external interpreter or library failure remains diagnosable.
 
@@ -84,6 +84,14 @@ The UI commands are scriptable:
 | `automations editor-save` | Validate and save the retained draft |
 | `automations editor-cancel` | Discard the draft without changing its definition |
 | `automations settings` / `automations close` | Open settings / restore the preceding view |
+
+Navigation also retains `promptExpanded`, `historyStarts` (the run-history window
+stack), `runLimit` (dashboard rows), and `settingsNotice` for the daemon session.
+For example, `automations navigate --patch '{"historyStarts":[0,25],"promptExpanded":true}'`.
+Changing the page, tab, or automation resets the history stack unless the patch
+supplies it; changing the page resets the run limit unless explicitly supplied.
+History offsets start at zero and strictly increase, with at most 4,096 entries;
+offsets and the positive run limit are bounded at 1,000,000.
 
 Delete confirms removing the definition and its history, never its workspaces. **Don't ask again** changes the public `ask-before-delete` setting. API/CLI deletion still follows the kernel's explicit `--yes` authorization convention.
 
