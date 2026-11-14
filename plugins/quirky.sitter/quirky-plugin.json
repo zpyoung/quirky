@@ -51,7 +51,7 @@
       },
       {
         "id": "preflight",
-        "description": "Heimdall preflight hook guarding worktree contention before prepare and publish actions.",
+        "description": "Heimdall preflight hook guarding worktree contention before preparation, publication, and rebase updates.",
         "readOnly": true,
         "params": { "type": "object", "additionalProperties": true },
         "result": { "type": "object", "additionalProperties": true }

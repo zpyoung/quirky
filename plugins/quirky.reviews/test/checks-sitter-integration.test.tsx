@@ -624,15 +624,30 @@ test('the real Checks panel, activated UI commands, Heimdall and the GitHub stan
   expect(JSON.parse(clipboardWrites[0]!)).toMatchObject({ enrollment: { watcherId }, status: { state: 'terminal' } })
 }, 90_000)
 
-test('CLI arm methods return real Heimdall refusals for unsupported branch-update and check-scope modes', async () => {
-  const host = await boot()
-  const rebase = await reviewCli(host, 'checks-sitter-arm', armParams(host.worktree, { branchUpdateMode: 'rebase' }))
-  expect(rebase.code).not.toBe(0)
-  expect(cliFailureText(rebase)).toContain('The PR sitter updates a branch by merging its base; rebase is not supported.')
-  expect((await host.client.callAny('quirky.heimdall/fleet', {}) as FleetSnapshot).rows).toEqual([])
+test('real reviews CLI arms rebase and required-check sitters and refuses an invalid check scope', async () => {
+  for (const modes of [
+    { branchUpdateMode: 'rebase', mergeCheckScope: 'all' },
+    { branchUpdateMode: 'merge-base-update', mergeCheckScope: 'required' }
+  ] as const) {
+    const host = await boot()
+    const armed = await reviewCli(host, 'checks-sitter-arm', armParams(host.worktree, modes))
+    expect(armed.code).toBe(0)
+    const result = cliJson<EnrollmentResult>(armed, 'checks-sitter-arm')
+    const fleet = await host.client.callAny('quirky.heimdall/fleet', {}) as FleetSnapshot
+    expect(fleet.rows).toMatchObject([{
+      enrollment: {
+        watcherId: result.enrollment.watcherId,
+        kindPayload: modes
+      }
+    }])
+  }
 
-  const requiredChecks = await reviewCli(host, 'checks-sitter-arm', armParams(host.worktree, { mergeCheckScope: 'required' }))
-  expect(requiredChecks.code).not.toBe(0)
-  expect(cliFailureText(requiredChecks)).toContain('The PR sitter supports only the all-checks merge scope.')
+  const host = await boot()
+  const refused = await reviewCli(host, 'checks-sitter-arm', {
+    ...armParams(host.worktree),
+    mergeCheckScope: 'bogus'
+  })
+  expect(refused.code).not.toBe(0)
+  expect(cliFailureText(refused)).toContain('--merge-check-scope must be one of all, required')
   expect((await host.client.callAny('quirky.heimdall/fleet', {}) as FleetSnapshot).rows).toEqual([])
 }, 60_000)
