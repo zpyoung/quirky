@@ -200,8 +200,7 @@ export function CloseOverlay({
     if (!request || currentRequestId === null ||
       !isCloseRequestCurrent(currentRequestId) ||
       controlIdentity.current.requestId !== currentRequestId ||
-      !controlIdentity.current.isCurrent() ||
-      (busyRef.current.requestId === currentRequestId && busyRef.current.busy)) return
+      !controlIdentity.current.isCurrent()) return
     updateCloseError(request.id, reason.message)
   }
   const controls = useEditorUiControl({ context, address, handler, onError: onControlError })

@@ -250,7 +250,7 @@ test('dirty close refuses an old address after synchronous clear', async () => {
     })
   })
   expect(staleResult).toEqual({ delivered: false })
-  expect(calls.filter(({ method, params }) => method === 'quirky.editor/close' && params.choice === 'discard')).toEqual([])
+  expect(calls.filter(({ method, params }) => method === 'quirky.editor/close' && params?.choice === 'discard')).toEqual([])
   expect(await closing).toBe(false)
 })
 
@@ -321,11 +321,11 @@ test('close busy state clears when its operation settles after the overlay remou
     action: 'choose',
     data: { choice: 'discard' }
   })).toEqual({ delivered: false })
-  expect(calls.filter(({ method, params }) => method === 'quirky.editor/close' && params.choice === 'discard')).toEqual([])
+  expect(calls.filter(({ method, params }) => method === 'quirky.editor/close' && params?.choice === 'discard')).toEqual([])
 
   await act(async () => { pending.resolve({ closed: false, needsDecision: true }); await saving })
   expect(await saving).toEqual({ delivered: false })
-  expect(calls.filter(({ method, params }) => method === 'quirky.editor/close' && params.choice === 'save')).toHaveLength(1)
+  expect(calls.filter(({ method, params }) => method === 'quirky.editor/close' && params?.choice === 'save')).toHaveLength(1)
   expect(report.requestId).toBe(requestId)
   expect(report.busy).toBe(false)
   expect(element.querySelector('.ui-inline-error')).toBeNull()

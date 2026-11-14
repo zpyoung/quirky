@@ -1908,8 +1908,9 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
                 onBlur={() => {
                   if (Date.now() - inlineOpenedAt.current < 200) return
                   if (inlineBlurTimer.current !== undefined) window.clearTimeout(inlineBlurTimer.current)
+                  const controls = controlsRef.current
                   inlineBlurTimer.current = window.setTimeout(() => {
-                    void controlsRef.current?.run('create')
+                    void controls?.run('create')
                   }, 150)
                 }}
               />

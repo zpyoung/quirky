@@ -51,13 +51,17 @@ async function fixture(
     ['editorFontZoomLevel', 0], ['editorMinimapEnabled', false], ['editorSidebarWidth', 320]
   ])
   const calls: { method: string; params: Record<string, unknown> }[] = []
+  const bridge: { error: Error | null } = { error: null }
   let report: Report = {}
   const context = {
     pluginId: 'quirky.editor',
     provide: (id: string, handler: Handler) => handlers.set(id, handler),
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
-      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.self') {
+        if (bridge.error) throw bridge.error
+        return { connId: 22 }
+      }
       if (method === 'ui.window.command.run') {
         if (params.connId !== 22) throw new Error('The control must stay in this window.')
         const handler = handlers.get(String(params.id))
@@ -93,7 +97,7 @@ async function fixture(
   }
   const start = (name: string, args?: unknown) => Promise.resolve(handlers.get(`command:quirky.editor/${name}`)!(args))
   const emit = (event: TestEvent) => { for (const listener of listeners) listener(event) }
-  return { element, calls, context, command, control, start, settings, emit, get report() { return report } }
+  return { element, calls, context, command, control, start, settings, emit, bridge, get report() { return report } }
 }
 
 async function tick(ms = 0) {
@@ -546,4 +550,59 @@ test('Explorer ignores an empty Names response from the previous worktree while 
   }))
   await tick()
   expect(ui.element.querySelector('.ui-empty-state')?.textContent).toContain('No files match “missing-worktree”.')
+})
+
+test('a delayed Explorer blur cannot submit a replacement create form', async () => {
+  const ui = await fixture((method) => {
+    if (method === 'quirky.editor/state') return { buffers: [], tabs: [], explorer: { worktreeId: 'w1', expanded: [], selectedPaths: [], focusedPath: null }, search: null }
+    if (method === 'quirky.editor/documentRoot') return { id: 'w1', path: '/repo' }
+    if (method === 'quirky.git/status') return { files: [] }
+    if (method === 'quirky.editor/explorer') return { root: '/repo', entries: [] }
+    return {}
+  }, 'panel:quirky.editor/explorer')
+  await tick()
+  await ui.control('new-file')
+  await tick(210)
+  const first = ui.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input')!
+  await act(async () => {
+    first.dispatchEvent(new FocusEvent('focusout', { bubbles: true }))
+  })
+  await ui.control('new-file')
+  const replacement = ui.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(replacement, 'replacement.txt')
+    replacement.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await tick(180)
+  expect(ui.calls.filter(({ method }) => method === 'quirky.editor/mutate')).toEqual([])
+  expect(replacement.value).toBe('replacement.txt')
+  expect(ui.element.querySelector('.qe-explorer-inline-row')).not.toBeNull()
+})
+
+test('a busy dirty-close dialog still displays an exact-window bridge failure', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const ui = await fixture((method, params) => {
+    if (method === 'quirky.editor/close') return params.choice === 'save' ? pending.promise : { closed: false, needsDecision: true }
+    if (method === 'quirky.editor/read') return { buffer: { id: 'b1', untitled: false } }
+    if (method === 'quirky.editor/state') return { buffers: [{ id: 'b1', tabId: 't1', name: 'notes.md', dirty: true }] }
+    return {}
+  }, 'overlay:quirky.editor/close')
+  let closing!: Promise<unknown>
+  let saving!: Promise<unknown>
+  try {
+    await act(async () => { closing = ui.start('close', { bufferId: 'b1', tabId: 't1' }); await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
+    const address = ui.report.uiControls![0]!
+    await act(async () => { saving = ui.start('ui-control', { surface: address.surface, target: address.target, generation: address.generation, action: 'choose', data: { choice: 'save' } }); await Promise.resolve() })
+    ui.bridge.error = new Error('Window disconnected.')
+    await act(async () => {
+      ui.element.querySelector('[role="dialog"]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    })
+    expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('Window disconnected.')
+    expect(ui.element.querySelector('.ui-notice-line')?.textContent).toBe('Saving Markdown…')
+  } finally {
+    ui.bridge.error = null
+    await act(async () => { pending.resolve({ closed: false, needsDecision: true }); await saving })
+    await ui.control('choose', { choice: 'cancel' })
+    await closing
+  }
 })

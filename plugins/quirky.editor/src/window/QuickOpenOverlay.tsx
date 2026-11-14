@@ -345,8 +345,7 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
   const onControlError = (reason: Error) => {
     if (!currentSession || !request || !isQuickOpenRequestCurrent(request.id) ||
       controlIdentity.current.session !== currentSession || !controlIdentity.current.isCurrent()) return
-    if (busyRef.current.session === currentSession && busyRef.current.busy) return
-    setOperation({ session: currentSession, busy: false, error: reason.message })
+    setOperation({ session: currentSession, busy: busyRef.current.session === currentSession && busyRef.current.busy, error: reason.message })
   }
   const controls = useEditorUiControl({ context, address, handler, onError: onControlError })
   controlIdentity.current = { session, isCurrent: controls.isCurrent }
