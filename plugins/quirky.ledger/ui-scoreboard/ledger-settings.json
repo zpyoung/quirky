@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.ledger/settings": {
+      "loading": { "applicable": true },
+      "empty": { "applicable": true },
+      "error": { "applicable": true }
+    }
+  },
+  "states": [
+    {
+      "surface": "view:quirky.ledger/settings",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "!response && !error &&"
+      },
+      "anchor": "!response && !error &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+          "quote": "<NoticeLine>Loading ledger settings…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+          "quote": "import { Button, EmptyState, InlineError, NoticeLine, TextField, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/settings",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "response?.ledger ? <>"
+      },
+      "anchor": "response?.ledger ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+          "quote": "<EmptyState message=\"This project has no ledger yet. File an entry to create one.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+          "quote": "import { Button, EmptyState, InlineError, NoticeLine, TextField, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "error && <InlineError"
+      },
+      "anchor": "error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+          "quote": "<InlineError message={error} action={{ label: response ? 'Reload' : 'Retry', onAction: () => void load(context, repoId, generation, setError, setResponse, setDays) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+          "quote": "import { Button, EmptyState, InlineError, NoticeLine, TextField, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "response && <EmptyState message=\"This project has no ledger yet. File an entry to create one.\" />"
+      },
+      "anchor": "response &&",
+      "reason": "The response guard only prevents showing the empty panel before the initial load; the shared loading notice represents that state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "saved && <span role=\"status\">Saved</span>"
+      },
+      "anchor": "saved &&",
+      "reason": "Saved is transient confirmation after a successful settings update, not a persistent page state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "role=\"status\">Saved"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "The status role announces transient save confirmation rather than a loading, empty, or error state."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "onChange"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Changing staleAfterDays updates only the local draft; the settings request runs through Save."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "onAction: () => void load(context, repoId, generation, setError, setResponse, setDays)"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+            "quote": "async function load(\n  context: UiPluginContext,\n  repoId: string,\n  generation: { current: number },\n  setError: (value: string) => void,\n  setResponse: (value: LedgerResponse | null) => void,\n  setDays: (value: string) => void\n): Promise<void> {\n  const current = ++generation.current\n  setError('')\n  if (!repoId) {\n    setError('A repository is required to load ledger settings.')\n    setResponse(null)\n    return\n  }\n  try {\n    const next = await fetchLedgerSettings(context, repoId)\n    if (generation.current !== current) return\n    setResponse(next)\n    setDays(String(next.ledger?.staleAfterDays ?? 90))\n  } catch (reason) {\n    if (generation.current === current) {\n      setError(errorMessage(reason))\n      setResponse(null)\n    }\n  }\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+            "quote": "function fetchLedgerSettings(context: UiPluginContext, repoId: string): Promise<LedgerResponse> {\n  return ledgerRequest(context, { operation: 'list', target: { owner: { tier: 'project', id: repoId } } })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+        "quote": "onClick={() => void save()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+            "quote": "async function save() {\n    if (!response?.ledger) return\n    if (!days.trim()) {\n      setError('Enter an integer from 0 to 3650 days.')\n      return\n    }\n    const value = Number(days)\n    if (!Number.isSafeInteger(value) || value < 0 || value > 3650) {\n      setError('Enter an integer from 0 to 3650 days.')\n      return\n    }\n    setBusy(true)\n    setSaved(false)\n    setError('')\n    try {\n      const next = await saveLedgerSettings(context, repoId, response.ledger.revision, value)\n      setResponse(next)\n      setDays(String(next.ledger?.staleAfterDays ?? value))\n      setSaved(true)\n    } catch (reason) {\n      const currentRevision = currentRevisionOf(reason)\n      setError(currentRevision === null ? errorMessage(reason) : `Ledger settings changed at revision ${currentRevision}. Reload before saving.`)\n    } finally {\n      setBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerSettings.tsx",
+            "quote": "function saveLedgerSettings(context: UiPluginContext, repoId: string, revision: number, staleAfterDays: number): Promise<LedgerResponse> {\n  return ledgerRequest(context, {\n    operation: 'settings',\n    target: { owner: { tier: 'project', id: repoId } },\n    ifLedgerRevision: revision,\n    staleAfterDays\n  })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    }
+  ]
+}
