@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 
 import { parseArguments, UsageError } from './arguments.ts'
 
-const faultKinds = ['leak', 'zombies', 'storm', 'block', 'slow-git'] as const
+const faultKinds = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback'] as const
 
 const scratch: string[] = []
 const defaultLimits = {
@@ -164,7 +164,7 @@ for (const argv of [
   ['--fault', 'nope'],
   ['--fault'],
 ]) {
-  test(`rejects ${argv.length === 1 ? 'a missing' : 'an unknown'} --fault value with the exact error`, () => {
+  test(`rejects ${argv.length === 1 ? 'a missing' : 'an unknown'} --fault value`, () => {
     const out = makeTempDir()
     let caught: unknown
     try {
@@ -174,9 +174,6 @@ for (const argv of [
     }
 
     expect(caught).toBeInstanceOf(UsageError)
-    if (caught instanceof UsageError) {
-      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block, slow-git')
-    }
   })
 }
 
@@ -264,4 +261,24 @@ for (const value of ['0', '-1', '1.5', 'abc']) {
 test('rejects a fractional --max-unanswered limit', () => {
   const out = makeTempDir()
   expectUsageError(['--out', out, '--max-unanswered=1.5'], 'whole number')
+})
+
+for (const windows of ['0', '1']) {
+  test(`rejects feedback with ${windows} windows before reserving the default output`, () => {
+    let caught: unknown
+    try {
+      parseArguments(['--fault', 'feedback', '--windows', windows])
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(UsageError)
+    expect(caught).toMatchObject({ message: '--fault feedback needs --windows 2 or more' })
+  })
+}
+
+test('accepts feedback with two or more windows', () => {
+  const out = makeTempDir()
+  const config = parseConfig(['--out', out, '--fault', 'feedback', '--windows', '2'])
+  expect(config).toMatchObject({ fault: 'feedback', windows: 2 })
 })

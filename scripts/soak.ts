@@ -3,11 +3,11 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from '
 import { resolve, join } from 'node:path'
 import { readRuntime } from '@quirky/protocol/node'
 import { parseArguments, USAGE, UsageError } from './soak/arguments.ts'
-import type { Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
+import type { PanelRefreshRecord, Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
 import { startFault, setGitDelay, type RunningFault } from './soak/faults.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
 import { startProbe, type Probe } from './soak/probe.ts'
-import { judge, windowAlive } from './soak/verdict.ts'
+import { isPanelRefreshRequest, judge, windowAlive } from './soak/verdict.ts'
 import { chromiumPath, openWindows, type SoakWindows } from './soak/windows.ts'
 import { startWorld, type SoakWorld } from './soak/world.ts'
 
@@ -72,6 +72,30 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
+async function readyFeedbackWindows(world: SoakWorld, windows: SoakWindows, signal: AbortSignal): Promise<[string, string]> {
+  await world.control.callAny('ui.tool.open', { id: 'panel:soak.faults/feedback' }, { timeoutMs: 5_000 })
+  const records = (await windows.finish()).records
+  const deadline = performance.now() + 30_000
+  const pending = new Map(records.map((record) => [record.index, record]))
+  while (pending.size > 0 && performance.now() < deadline) {
+    if (signal.aborted) throw new Error('feedback panel readiness was interrupted')
+    for (const [index, record] of pending) {
+      const state = await world.control.callAny('ui.window.state', { connId: record.connId }, { timeoutMs: 1_000 }) as {
+        slots?: { id: string; shown: boolean; report?: { ready?: boolean; worktree?: string; error?: string | null } }[]
+      }
+      const slot = state.slots?.find(({ id }) => id === 'panel:soak.faults/feedback')
+      if (slot?.report?.error) throw new Error(`feedback panel readiness: ${slot.report.error}`)
+      if (slot?.shown && slot.report?.ready === true && slot.report.worktree === record.worktree) pending.delete(index)
+      if (signal.aborted) throw new Error('feedback panel readiness was interrupted')
+    }
+    if (pending.size) await pause(Math.min(100, Math.max(0, deadline - performance.now())), signal)
+  }
+  if (pending.size) throw new Error(`feedback panel readiness missing for ${[...pending.values()].map(({ worktree }) => worktree).join(', ')} within 30000ms`)
+  const pair = records.slice(0, 2).map(({ worktree }) => worktree)
+  if (pair.length !== 2 || !pair[0] || !pair[1] || pair[0] === pair[1]) throw new Error('feedback needs two distinct ready window worktrees')
+  return [pair[0], pair[1]]
+}
+
 /** Runs an isolated real-daemon soak and returns its verdict or harness exit code. */
 export async function main(argv: string[]): Promise<number> {
   let config
@@ -108,6 +132,9 @@ export async function main(argv: string[]): Promise<number> {
   let probe: Probe | undefined
   let fault: RunningFault | undefined
   let windows: SoakWindows | undefined
+  const panelRefreshes: PanelRefreshRecord[] = []
+  let measurementStart: number | null = null
+  let measurementEnd: number | null = null
   try {
     mkdirSync(config.out, { recursive: true })
     const repoRoot = resolve(import.meta.dir, '..')
@@ -122,11 +149,26 @@ export async function main(argv: string[]): Promise<number> {
       slowGit: config.slowGitMs !== undefined || config.fault === 'slow-git',
     })
     if (config.windows > 0) {
-      windows = await openWindows({ world, count: config.windows, executable: executable!, out: config.out, signal: setupAbort.signal })
+      windows = await openWindows({
+        world, count: config.windows, executable: executable!, out: config.out, signal: setupAbort.signal,
+        onRequest: (request) => {
+          if (measurementStart === null || measurementEnd === null || request.at < measurementStart || request.at > measurementEnd
+            || !isPanelRefreshRequest(request.method, request.params)) return
+          panelRefreshes.push({
+            at: Number(((request.at - measurementStart) / 1000).toFixed(3)),
+            index: request.index, worktree: request.worktree, method: request.method
+          })
+        }
+      })
     }
+    const feedbackWorktrees = config.fault === 'feedback'
+      ? await readyFeedbackWindows(world, windows!, setupAbort.signal)
+      : undefined
     if (interrupted) return interrupted
     if (config.slowGitMs !== undefined) setGitDelay(world.home, config.slowGitMs)
     const startedAt = performance.now()
+    measurementStart = startedAt
+    measurementEnd = startedAt + config.minutes * 60_000
     const startedIso = new Date().toISOString()
     let samplingStopped = false
     let daemonMissing = false
@@ -152,6 +194,7 @@ export async function main(argv: string[]): Promise<number> {
         runSeconds: config.minutes * 60,
         startedAt,
         signal: runAbort.signal,
+        feedbackWorktrees,
       })
     }
     const elapsed = () => (performance.now() - startedAt) / 1000
@@ -187,6 +230,7 @@ export async function main(argv: string[]): Promise<number> {
       }
       await pause(Math.min(sampleStart + 1000, deadline) - performance.now(), runAbort.signal)
     }
+    measurementEnd = Math.min(performance.now(), measurementEnd!)
     if (interrupted) return interrupted
     if (!samplingStopped && !daemonMissing) probe.finish()
     else probe.stop()
@@ -195,6 +239,18 @@ export async function main(argv: string[]): Promise<number> {
       throw new Error(`ps failed for ${skippedSamples} of ${attemptedSamples} samples`)
     }
     const faultRecord = fault ? await fault.finish() : null
+    if (config.fault === 'feedback') {
+      const observed = panelRefreshes.filter(({ method }) => method === 'soak.faults/feedbackRefresh')
+      if (observed.length !== 17) throw new Error(`feedback observed ${observed.length} panel refreshes, expected 17`)
+      if (Math.round(observed.at(-1)!.at * 1000) - Math.round(observed[0]!.at * 1000) > 5_000) {
+        throw new Error('feedback observed panel refreshes span more than five seconds')
+      }
+      if (observed.some(({ worktree, index }, sequence) => index !== sequence % 2 || worktree !== feedbackWorktrees![sequence % 2])) {
+        throw new Error('feedback observed panel refreshes did not alternate the ready window pair')
+      }
+      const events = probe.events.filter(({ type }) => type === 'soak.faults/feedbackChanged')
+      if (events.length !== 17) throw new Error(`feedback observed ${events.length} changed events, expected 17`)
+    }
     const windowEvidence = windows ? await windows.finish() : { records: [], requests: [] }
     if (interrupted) return interrupted
     const now = Date.now()
@@ -206,6 +262,7 @@ export async function main(argv: string[]): Promise<number> {
       windowBeats: windowEvidence.records,
       samples,
       events: probe.events,
+      panelRefreshes,
       probes: probe.probes,
       workers: world.workers.map(({ worktree, path }) => heartbeat(worktree, path, now)),
       daemonExited: daemonMissing || probe.daemonExited(),
@@ -230,6 +287,7 @@ export async function main(argv: string[]): Promise<number> {
       fault: faultRecord,
       windows: windowEvidence.records,
       windowRequests: windowEvidence.requests,
+      panelRefreshes,
       daemon: { pid: world.daemonPid, rssKbFirst: rss[0] ?? null, rssKbMax: rss.length ? Math.max(...rss) : null, rssKbLast: rss.at(-1) ?? null },
       skippedSamples,
       skippedBeats: skippedBeatCount,
@@ -241,6 +299,7 @@ export async function main(argv: string[]): Promise<number> {
     if (report.fault) console.log(`fault ${report.fault.kind}: injected at ${report.fault.at}s, aimed at ${report.fault.check}`)
     return report.verdict === 'pass' ? 0 : 1
   } catch (error) {
+    rmSync(join(config.out, 'soak-report.json'), { force: true })
     if (interrupted) return interrupted
     const message = error instanceof Error ? error.message : String(error)
     console.error(world ? message.replaceAll(world.home, '<soak-home>') : message)
