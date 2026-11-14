@@ -11,6 +11,101 @@ async function boot() {
   fixtures.push(fixture)
   return fixture
 }
+test('navigation exposes validated view state and rejects invalid patches atomically', async () => {
+  const { client } = await boot()
+  const readState = async () => await client.callAny('quirky.automations/uiState', {}) as AutomationUiState
+  expect((await readState()).navigation).toMatchObject({
+    promptExpanded: false,
+    historyStarts: [0],
+    runLimit: 100,
+    settingsNotice: false
+  })
+
+  await client.callAny('quirky.automations/uiNavigate', {
+    promptExpanded: true,
+    historyStarts: [0, 25, 50, 53],
+    runLimit: 200,
+    settingsNotice: true
+  })
+  expect((await readState()).navigation).toMatchObject({
+    promptExpanded: true,
+    historyStarts: [0, 25, 50, 53],
+    runLimit: 200,
+    settingsNotice: true
+  })
+
+  const invalidPatches: Record<string, unknown>[] = [
+    { historyStarts: [] },
+    { historyStarts: [25] },
+    { historyStarts: [0, 25, 25] },
+    { historyStarts: [0, 50, 25] },
+    { historyStarts: [0, -1] },
+    { historyStarts: [0, 1.5] },
+    { historyStarts: [0, 1_000_001] },
+    { historyStarts: '0' },
+    { historyStarts: [0, ...Array.from({ length: 4096 }, (_, index) => index + 1)] },
+    { runLimit: 0 },
+    { runLimit: 1_000_001 },
+    { promptExpanded: 'yes' },
+    { settingsNotice: 1 }
+  ]
+  for (const patch of invalidPatches) {
+    const before = await readState()
+    await expect(client.callAny('quirky.automations/uiNavigate', patch)).rejects.toThrow()
+    expect(await readState()).toEqual(before)
+  }
+}, 20_000)
+
+test('navigation resets history and dashboard windows only when their routes change', async () => {
+  const { client } = await boot()
+  const readNavigation = async () => (await client.callAny('quirky.automations/uiState', {}) as AutomationUiState).navigation
+
+  await client.callAny('quirky.automations/uiNavigate', { page: 'detail', automationId: 'a', tab: 'runs', historyStarts: [0, 25, 50] })
+  await client.callAny('quirky.automations/uiNavigate', { query: 'x' })
+  expect((await readNavigation()).historyStarts).toEqual([0, 25, 50])
+  await client.callAny('quirky.automations/uiNavigate', { automationId: 'a' })
+  expect((await readNavigation()).historyStarts).toEqual([0, 25, 50])
+
+  await client.callAny('quirky.automations/uiNavigate', { tab: 'overview' })
+  expect((await readNavigation()).historyStarts).toEqual([0])
+  await client.callAny('quirky.automations/uiNavigate', { tab: 'runs', historyStarts: [0, 25] })
+  expect((await readNavigation()).historyStarts).toEqual([0, 25])
+  await client.callAny('quirky.automations/uiNavigate', { automationId: 'b' })
+  expect((await readNavigation()).historyStarts).toEqual([0])
+  await client.callAny('quirky.automations/uiNavigate', { historyStarts: [0, 40] })
+  await client.callAny('quirky.automations/uiNavigate', { page: 'list' })
+  expect((await readNavigation()).historyStarts).toEqual([0])
+
+  await client.callAny('quirky.automations/uiNavigate', { page: 'runs', runLimit: 300 })
+  await client.callAny('quirky.automations/uiNavigate', { runQuery: 'x' })
+  expect((await readNavigation()).runLimit).toBe(300)
+  await client.callAny('quirky.automations/uiNavigate', { page: 'run', runId: 'r' })
+  expect((await readNavigation()).runLimit).toBe(100)
+
+  await client.callAny('quirky.automations/uiNavigate', { promptExpanded: true, settingsNotice: true })
+  await client.callAny('quirky.automations/uiNavigate', { page: 'list', automationId: null })
+  expect(await readNavigation()).toMatchObject({ promptExpanded: true, settingsNotice: true })
+}, 20_000)
+
+test('CLI navigation accepts view state and rejects invalid history windows atomically', async () => {
+  const fixture = await boot()
+  const result = await runCli([
+    'automations', 'navigate', '--patch',
+    JSON.stringify({ historyStarts: [0, 25], promptExpanded: true }),
+    '--json'
+  ], { home: fixture.h.home, cwd: fixture.h.home })
+  expect(result.code).toBe(0)
+  expect(JSON.parse(result.stdout).navigation).toMatchObject({ historyStarts: [0, 25], promptExpanded: true })
+
+  const rejected = await runCli([
+    'automations', 'navigate', '--patch',
+    JSON.stringify({ historyStarts: [0, -1] }),
+    '--json'
+  ], { home: fixture.h.home, cwd: fixture.h.home })
+  expect(rejected.code).not.toBe(0)
+  const retained = await fixture.client.callAny('quirky.automations/uiState', {}) as AutomationUiState
+  expect(retained.navigation.historyStarts).toEqual([0, 25])
+}, 20_000)
 
 test('scripted automation navigation retains filters and restores predecessor without settings clobbering it', async () => {
   const { client } = await boot()

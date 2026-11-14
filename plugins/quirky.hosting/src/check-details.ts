@@ -24,6 +24,7 @@ export type CheckRecord = {
   checkRunId: number | null;
   workflowRunId: number | null;
   suiteId: number | null;
+  required: boolean | null;
 };
 
 type ChecksResult = {
@@ -57,8 +58,8 @@ const CHECKS_QUERY = `query HostingChecksRollup($owner: String!, $name: String!,
               contexts(first: 100) {
                 nodes {
                   __typename
-                  ... on CheckRun { databaseId name status conclusion detailsUrl }
-                  ... on StatusContext { context state targetUrl }
+                  ... on CheckRun { databaseId name status conclusion detailsUrl isRequired(pullRequestNumber: $number) }
+                  ... on StatusContext { context state targetUrl isRequired(pullRequestNumber: $number) }
                 }
                 pageInfo { hasNextPage }
               }
@@ -104,12 +105,16 @@ export function checkMethods(env: HostingEnv): Record<string, Handler> {
         : env.cache(key, 60_000, () => loadCheckDetails(env, context, checkRunId, workflowRunId, jobName));
     },
     rerunChecks: async (params, caller) => {
-      const context = await resolveDetailContext(env, params, caller);
       const failedOnly = params.failedOnly;
       if (typeof failedOnly !== 'boolean') {
         throw env.invalid('invalid_input', 'failedOnly must be a boolean.');
       }
-      return rerunChecks(env, context, failedOnly);
+      const allowPartial = params.allowPartial;
+      if (allowPartial !== undefined && typeof allowPartial !== 'boolean') {
+        throw env.invalid('invalid_input', 'allowPartial must be a boolean.');
+      }
+      const context = await resolveDetailContext(env, params, caller);
+      return rerunChecks(env, context, failedOnly, allowPartial === true);
     },
   };
 }
@@ -269,6 +274,7 @@ function mapCheckRun(value: unknown): CheckRecord | null {
     checkRunId: positiveOrNull(item.databaseId) ?? positiveOrNull(item.checkRunId) ?? positiveOrNull(item.id),
     workflowRunId: runId,
     suiteId: positiveOrNull(asRecord(item.check_suite)?.id) ?? positiveOrNull(item.checkSuiteId),
+    required: typeof item.isRequired === 'boolean' ? item.isRequired : null,
   };
 }
 
@@ -287,6 +293,7 @@ function mapStatus(value: unknown): CheckRecord | null {
     checkRunId: null,
     workflowRunId: null,
     suiteId: null,
+    required: typeof item.isRequired === 'boolean' ? item.isRequired : null,
   };
 }
 
@@ -303,6 +310,7 @@ function mapPorcelainCheck(value: DetailRecord): CheckRecord | null {
     checkRunId: null,
     workflowRunId: null,
     suiteId: null,
+    required: null,
   };
 }
 
@@ -324,6 +332,7 @@ function appendApprovalSuites(checks: CheckRecord[], suites: DetailRecord[]): vo
       checkRunId: null,
       workflowRunId: null,
       suiteId,
+      required: null,
     });
   }
 }
@@ -563,9 +572,10 @@ function sliceLogTail(value: string): { text: string; truncated: boolean } {
   }
   return { text: result, truncated };
 }
-async function rerunChecks(env: HostingEnv, context: DetailContext, failedOnly: boolean): Promise<unknown> {
+async function rerunChecks(env: HostingEnv, context: DetailContext, failedOnly: boolean, allowPartial: boolean): Promise<unknown> {
   const checks = await loadChecks(env, context);
-  if (checks.partialFailures.some((failure) => failure.toLowerCase().includes('truncated'))) {
+  const truncated = checks.partialFailures.some((failure) => failure.toLowerCase().includes('truncated'));
+  if (truncated && !(failedOnly && allowPartial)) {
     throw env.invalid('checks_incomplete', 'The check list is incomplete; refresh before rerunning checks.');
   }
   const selected = checks.checks.filter((check) => !failedOnly || isFailed(check));
@@ -611,7 +621,7 @@ async function rerunChecks(env: HostingEnv, context: DetailContext, failedOnly: 
       throw env.invalid('rerun_failed', 'Could not start the requested check rerun.');
     }
   }
-  return { started, targetCount: targetList.length, completedSteps };
+  return { started, targetCount: targetList.length, completedSteps, ...(truncated ? { partial: true } : {}) };
 }
 
 function isFailed(check: CheckRecord): boolean {
