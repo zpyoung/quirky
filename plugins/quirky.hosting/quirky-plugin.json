@@ -225,8 +225,8 @@
         "id": "rerunChecks",
         "timeout": "30m",
         "description": "Rerun all or failed-only GitHub Actions checks, reporting partial starts honestly.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "failedOnly": {"type": "boolean"}}, "required": ["number", "failedOnly"]},
-        "result": {"type": "object", "properties": {"started": {"type": "integer"}, "targetCount": {"type": "integer"}, "completedSteps": {"type": "array", "items": {"type": "string"}}}, "required": ["started", "targetCount", "completedSteps"]}
+        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "failedOnly": {"type": "boolean"}, "allowPartial": {"type": "boolean", "default": false, "description": "Allow failed-only reruns against an incomplete check list; omitted means false."}}, "required": ["number", "failedOnly"]},
+        "result": {"type": "object", "properties": {"started": {"type": "integer"}, "targetCount": {"type": "integer"}, "completedSteps": {"type": "array", "items": {"type": "string"}}, "partial": {"type": "boolean", "description": "True when only the observed failed checks were rerun from a truncated list."}}, "required": ["started", "targetCount", "completedSteps"]}
       },
       {
         "id": "comments",

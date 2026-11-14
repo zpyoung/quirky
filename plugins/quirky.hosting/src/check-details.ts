@@ -105,12 +105,16 @@ export function checkMethods(env: HostingEnv): Record<string, Handler> {
         : env.cache(key, 60_000, () => loadCheckDetails(env, context, checkRunId, workflowRunId, jobName));
     },
     rerunChecks: async (params, caller) => {
-      const context = await resolveDetailContext(env, params, caller);
       const failedOnly = params.failedOnly;
       if (typeof failedOnly !== 'boolean') {
         throw env.invalid('invalid_input', 'failedOnly must be a boolean.');
       }
-      return rerunChecks(env, context, failedOnly);
+      const allowPartial = params.allowPartial;
+      if (allowPartial !== undefined && typeof allowPartial !== 'boolean') {
+        throw env.invalid('invalid_input', 'allowPartial must be a boolean.');
+      }
+      const context = await resolveDetailContext(env, params, caller);
+      return rerunChecks(env, context, failedOnly, allowPartial === true);
     },
   };
 }
@@ -568,9 +572,10 @@ function sliceLogTail(value: string): { text: string; truncated: boolean } {
   }
   return { text: result, truncated };
 }
-async function rerunChecks(env: HostingEnv, context: DetailContext, failedOnly: boolean): Promise<unknown> {
+async function rerunChecks(env: HostingEnv, context: DetailContext, failedOnly: boolean, allowPartial: boolean): Promise<unknown> {
   const checks = await loadChecks(env, context);
-  if (checks.partialFailures.some((failure) => failure.toLowerCase().includes('truncated'))) {
+  const truncated = checks.partialFailures.some((failure) => failure.toLowerCase().includes('truncated'));
+  if (truncated && !(failedOnly && allowPartial)) {
     throw env.invalid('checks_incomplete', 'The check list is incomplete; refresh before rerunning checks.');
   }
   const selected = checks.checks.filter((check) => !failedOnly || isFailed(check));
@@ -616,7 +621,7 @@ async function rerunChecks(env: HostingEnv, context: DetailContext, failedOnly: 
       throw env.invalid('rerun_failed', 'Could not start the requested check rerun.');
     }
   }
-  return { started, targetCount: targetList.length, completedSteps };
+  return { started, targetCount: targetList.length, completedSteps, ...(truncated ? { partial: true } : {}) };
 }
 
 function isFailed(check: CheckRecord): boolean {

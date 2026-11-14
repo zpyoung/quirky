@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { RpcErrorCode } from '@quirky/protocol';
 import { bootHosting, type HostingTest } from './helpers';
 
 const fixtureGh = String.raw`
@@ -154,7 +155,7 @@ function providerMutations(host: HostingTest) {
   });
 }
 
-function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.repeat(40)): unknown {
+function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.repeat(40), contextsTruncated = false): unknown {
   return {
     data: {
       repository: {
@@ -164,7 +165,7 @@ function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.
             nodes: [{
               commit: {
                 statusCheckRollup: {
-                  contexts: { nodes: contexts },
+                  contexts: { nodes: contexts, ...(contextsTruncated ? { pageInfo: { hasNextPage: true } } : {}) },
                 },
                 checkSuites: { nodes: suites },
               },
@@ -446,6 +447,7 @@ describe('hosting detail API', () => {
     }, async (host) => {
       const result = await host.call('rerunChecks', { number: 1, failedOnly: false });
       expect(result).toMatchObject({ started: 2, targetCount: 2 });
+      expect(result).not.toHaveProperty('partial');
       const calls = invocations(host);
       expect(calls.filter((args) => args.includes('/actions/runs/51/rerun'))).toHaveLength(1);
       expect(calls.filter((args) => args.includes('/check-runs/22/rerequest'))).toHaveLength(1);
@@ -469,6 +471,46 @@ describe('hosting detail API', () => {
     });
   }, 20_000);
 
+  test('permits only opted-in failed-only reruns of a truncated check list', async () => {
+    const incomplete = graphRollup([checkRun(30, 'build', 'FAILURE', 61)], [], undefined, true);
+    const rerunPath = 'POST repos/test-owner/test-repo/actions/runs/61/rerun-failed-jobs';
+
+    await withHosting({ graphqlResponses: { HostingChecksRollup: incomplete } }, async (host) => {
+      const error = await host.call('rerunChecks', { number: 1, failedOnly: true }).then(() => null, (caught: unknown) => caught);
+      expect(error).toMatchObject({ data: { reason: 'checks_incomplete' } });
+      expect(providerMutations(host)).toHaveLength(0);
+    });
+
+    await withHosting({
+      graphqlResponses: { HostingChecksRollup: incomplete },
+      responses: { [rerunPath]: { ok: true } },
+    }, async (host) => {
+      const result = await host.call('rerunChecks', { number: 1, failedOnly: true, allowPartial: true });
+      expect(result).toMatchObject({
+        started: 1,
+        targetCount: 1,
+        completedSteps: ['workflow:61'],
+        partial: true,
+      });
+      expect(providerMutations(host)).toHaveLength(1);
+    });
+
+    await withHosting({ graphqlResponses: { HostingChecksRollup: incomplete } }, async (host) => {
+      const error = await host.call('rerunChecks', { number: 1, failedOnly: false, allowPartial: true }).then(() => null, (caught: unknown) => caught);
+      expect(error).toMatchObject({ data: { reason: 'checks_incomplete' } });
+      expect(providerMutations(host)).toHaveLength(0);
+    });
+  }, 20_000);
+
+  test('validates allowPartial as an optional boolean before loading checks', async () => {
+    await withHosting({
+      graphqlResponses: { HostingChecksRollup: graphRollup([]) },
+    }, async (host) => {
+      const error = await host.call('rerunChecks', { number: 1, failedOnly: true, allowPartial: 'yes' }).then(() => null, (caught: unknown) => caught);
+      expect(error).toMatchObject({ code: RpcErrorCode.InvalidParams });
+      expect(host.invocations().some((entry) => entry.args.includes('graphql') && entry.input.includes('HostingChecksRollup'))).toBe(false);
+    });
+  }, 20_000);
   test('returns sorted typed conversation, reviews and threads with source-specific partial failures', async () => {
     const graph = {
       data: {
