@@ -9,6 +9,7 @@ export type Evidence = {
   basis?: 'scan' | 'source-audit' | 'rendered-review'
   sharedEvidence?: 'compatibility-tokens'; targetId?: string; theme?: CaptureTheme
   api?: string; cli?: string; component?: string
+  coverageFile?: string
 }
 export type CheckResult = { id: CheckId; status: 'pass' | 'fail'; applicable: boolean; reason: string; evidence: Evidence[] }
 export type SourceFile = { file: string; content: string }
@@ -43,6 +44,7 @@ export type PluginInventory = {
   id: string; directory: string; hasUi: boolean; targets: string[]; sources: SourceFile[]
   contributions?: PluginContributions
   coverage?: SourceFile
+  coverageFragments?: SourceFile[]
 }
 export type Exclusion = { plugin: string; reason: 'paused-unmerged'; branch: string; pr: 305; steerDate: '2026-11-13' }
 export type Inventory = {

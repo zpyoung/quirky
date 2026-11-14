@@ -675,6 +675,16 @@ const named: CliModule['commands'] = {
     ctx.out.result(updated, () => `saved ${(updated as unknown[]).length} workspace statuses`)
   },
 
+  async ports(args, ctx) {
+    const worktree = stringFlag(args, 'worktree')
+    const result = await ctx.call('quirky.worktree/ports', worktree === undefined ? {} : { worktree }) as {
+      blocks: Array<{ worktreeId: string; name: string; path: string | null; base: number; count: number; last: number }>
+    }
+    ctx.out.result(result, () => result.blocks.length
+      ? ctx.format.table(['PORTS', 'WORKTREE', 'ID'], result.blocks.map((block) => [`${block.base}-${block.last}`, block.name, block.worktreeId]))
+      : 'no port blocks')
+  },
+
   async references(args, ctx) {
     const [worktree] = args.positionals as [string]
     const references = await ctx.call('quirky.worktree/references', { worktree }) as Array<{ id: string; url: string; label: string }>
