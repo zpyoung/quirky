@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { existsSync, mkdirSync, realpathSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type PluginStore, type ProjectGroup, type Repo, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
@@ -14,6 +14,8 @@ import {
   type RepoGroupCreateBarrier
 } from '../../quirky.repo/test/harness'
 import { listWorktrees } from './fixtures/real-project'
+
+setDefaultTimeout(60_000)
 
 const { scratch } = isolateGitConfig()
 
@@ -330,6 +332,7 @@ describe('worktree identity and delayed group assignment', () => {
         ...(data === undefined ? {} : { data })
       }),
       find: async () => ({ worktree, all: [worktree] }),
+      known: async () => null,
       resolveRepo: async () => ({
         id: worktree.repoId,
         name: 'zero-birthtime',

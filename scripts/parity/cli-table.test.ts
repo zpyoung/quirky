@@ -197,7 +197,21 @@ test('catalog validation checks each compiled target and returns refs in table o
   const checked = validateCatalog(syntheticCatalog(), rows)
   expect(checked.map((entry) => entry.rowId)).toEqual(rows.map((row) => row.id))
   expect(checked.find((entry) => entry.rowId === 'orchestration-dispatch')?.refs.length).toBeGreaterThan(0)
-  expect(checked.find((entry) => entry.rowId === 'serve')?.refs).toEqual([])
+  expect(checked.find((entry) => entry.rowId === 'serve-service-install')?.refs).toEqual([])
+  expect(checked.find((entry) => entry.rowId === 'serve')?.refs.length).toBeGreaterThan(0)
+})
+
+test('catalog validation rejects a missing serve command', () => {
+  const catalog = syntheticCatalog()
+  catalog.commands = catalog.commands.filter(command => command.command !== 'serve')
+  expect(() => validateCatalog(catalog, loadCliTable())).toThrow('missing-command')
+})
+
+test('catalog validation rejects serve without its port flag', () => {
+  const catalog = syntheticCatalog()
+  const entry = catalog.commands.find(command => command.command === 'serve')
+  if (entry) entry.flags = (entry.flags as Array<{ name: string }>).filter(flag => flag.name !== 'port')
+  expect(() => validateCatalog(catalog, loadCliTable())).toThrow('missing-flag')
 })
 
 test('catalog validation rejects a missing public method binding', () => {

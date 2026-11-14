@@ -1020,6 +1020,7 @@ export class LayoutService {
     const problem = validateValue(this.argsSchema(request.id), args, 'args')
     if (problem !== null) throw invalidParams(problem)
     const result = await this.route(owner, request.id, args)
+    if (request.activateOwner === false) return { result: result.result, activated: false }
     const activation = await this.requestDesktopShell(conn, {
       kind: 'window-activate-owner',
       request: { windowId: request.windowId }

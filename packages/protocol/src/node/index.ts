@@ -27,6 +27,7 @@ import { RPC_PATH, type ClientRole } from '../rpc'
 
 export { installProcessErrorGuards, type ProcessErrorGuardOptions } from './process-guard'
 export { homeLockPath, isPidAlive, tryHomeLock, type HomeLock } from './home-lock'
+export { parseExitWithParent, watchParent } from './parent-watch'
 
 /** Written by quirkyd at startup (mode 0600) and removed on clean exit. */
 export type RuntimeInfo = {

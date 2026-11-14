@@ -4,31 +4,33 @@ export type SoakLimits = {
   maxZombies: number
   maxEventsPer5s: number
   maxStallMs: number
+  maxUnanswered: number
 }
 
-export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block'] as const
+export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git'] as const
 export type FaultKind = (typeof FAULT_KINDS)[number]
-export type FaultCheck = 'children' | 'zombies' | 'events' | 'stalls'
+export type FaultCheck = 'children' | 'zombies' | 'events' | 'stalls' | 'calls'
 export const FAULT_CHECK: Record<FaultKind, FaultCheck> = {
   leak: 'children',
   zombies: 'zombies',
   storm: 'events',
   block: 'stalls',
+  'slow-git': 'calls',
 }
 export const FAULT_MIN_MINUTES = 0.25
 export const DEFAULT_WINDOWS = 3
 export const MAX_WINDOWS = 7
 export const WINDOW_SILENCE_SECONDS = 30
 
-/** `pids` is the leaked children for a leak, the holders for zombies, and empty otherwise. */
+/** `pids` is leaked children, zombie holders, or slow-git process groups; empty otherwise. */
 export type FaultDetail = { pids: number[]; refreshes: number; blockedMs: number | null }
 export type FaultRecord = { kind: FaultKind; check: FaultCheck; at: number; detail: FaultDetail }
 
-export const DEFAULT_LIMITS: SoakLimits = { maxChildren: 60, maxGrowth: 5, maxZombies: 0, maxEventsPer5s: 30, maxStallMs: 1000 }
+export const DEFAULT_LIMITS: SoakLimits = { maxChildren: 60, maxGrowth: 5, maxZombies: 0, maxEventsPer5s: 30, maxStallMs: 1000, maxUnanswered: 0 }
 export const QUALIFYING_MINUTES = 30
 export const QUALIFYING_WINDOWS = 2
 
-export type SoakConfig = { minutes: number; out: string; limits: SoakLimits; windows: number; fault?: FaultKind }
+export type SoakConfig = { minutes: number; out: string; limits: SoakLimits; windows: number; fault?: FaultKind; slowGitMs?: number }
 export type ProcessRow = { pid: number; ppid: number; state: string; rssKb: number; started: string; command: string }
 /** Excludes the daemon and PTY host themselves from owned processes. */
 export type Sample = { at: number; owned: ProcessRow[]; daemonRssKb: number | null }
@@ -56,7 +58,7 @@ export type SoakReport = {
   commit: string
   startedAt: string
   durationSeconds: number
-  config: { minutes: number; windows: number; worktrees: number; workers: number; limits: SoakLimits }
+  config: { minutes: number; windows: number; worktrees: number; workers: number; limits: SoakLimits; slowGitMs: number | null }
   verdict: 'pass' | 'fail'
   qualifies: boolean
   disqualified: string[]
@@ -69,6 +71,7 @@ export type SoakReport = {
     zombies: { ok: boolean; peak: number; persistent: number; examples: { pid: number; ppid: number; command: string; seconds: number }[] }
     events: { ok: boolean; total: number; peakPer5s: number; peakType: string | null; peakAt: number | null; byType: { type: string; total: number; peakPer5s: number }[] }
     stalls: { ok: boolean; probes: number; stalls: number; hostBusy: number; p50Ms: number; p95Ms: number; maxMs: number; worst: { at: number; ms: number }[]; daemonExited: boolean }
+    calls: { ok: boolean; unanswered: number; byMethod: { method: string; count: number }[]; gitTimeouts: number }
     workers: { ok: boolean; expected: number; alive: number; stale: string[] }
     windows: { ok: boolean; expected: number; alive: number; lost: string[] }
   }
@@ -77,5 +80,6 @@ export type SoakReport = {
   fault: FaultRecord | null
   daemon: { pid: number; rssKbFirst: number | null; rssKbMax: number | null; rssKbLast: number | null }
   skippedSamples: number
+  skippedBeats: number
   files: { samples: string; daemonLog: string }
 }

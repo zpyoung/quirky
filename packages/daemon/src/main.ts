@@ -1,6 +1,6 @@
 import { inspect } from 'node:util'
 import { stopAllProcesses } from '@quirky/process'
-import { daemonEntryHash, ensureHome, installProcessErrorGuards, isDaemonAlive, quirkyHome, readRuntime, runtimeFilePath } from '@quirky/protocol/node'
+import { daemonEntryHash, ensureHome, installProcessErrorGuards, isDaemonAlive, parseExitWithParent, quirkyHome, readRuntime, runtimeFilePath, watchParent } from '@quirky/protocol/node'
 import { startDaemon, type DaemonHandle } from './daemon'
 import { createShutdown } from './shutdown'
 import { acquireDaemonLock, type DaemonLock } from './lock'
@@ -9,6 +9,11 @@ installProcessErrorGuards({ label: 'quirkyd' })
 
 let lock: DaemonLock | null = null
 try {
+  const parentPid = parseExitWithParent(process.argv)
+  if (parentPid !== null && process.ppid !== parentPid) {
+    console.error('[quirkyd] the process that started this daemon has exited; exiting')
+    process.exit(0)
+  }
   const home = ensureHome(quirkyHome())
   if (await isDaemonAlive(readRuntime(home))) {
     console.error('[quirkyd] a daemon already owns this home; exiting')
@@ -34,6 +39,15 @@ try {
   })
   process.on('SIGTERM', shutdown)
   process.on('SIGINT', shutdown)
+  if (parentPid !== null) {
+    watchParent({
+      parentPid,
+      onLost: () => {
+        console.error('[quirkyd] parent process exited; stopping')
+        void shutdown()
+      }
+    })
+  }
   await startDaemon({
     home,
     entryHash: daemonEntryHash(process.argv[1]!),

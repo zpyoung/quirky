@@ -1,6 +1,8 @@
 import { accessSync, appendFileSync, constants } from 'node:fs'
 import { delimiter, join } from 'node:path'
 
+export const DEFAULT_BEAT_MS = 10_000
+
 const workerIndex = Number.isSafeInteger(Number(process.argv[2])) && Number(process.argv[2]) >= 0
   ? Number(process.argv[2])
   : 0
@@ -86,14 +88,27 @@ async function runCycle(cycle: number): Promise<void> {
 }
 async function run(): Promise<void> {
   let cycle = 1
-  let nextStart = launchAt + workerIndex * 1000
+  const configuredBeat = Number(process.env.QUIRKY_SOAK_BEAT_MS)
+  const beat = Number.isSafeInteger(configuredBeat) && configuredBeat > 0 ? configuredBeat : DEFAULT_BEAT_MS
+  let nextStart = launchAt + workerIndex * (beat / 10)
   for (;;) {
     const delay = nextStart - performance.now()
     if (delay > 0) await Bun.sleep(delay)
     await runCycle(cycle)
     cycle++
-    nextStart += 10_000
+    nextStart += beat
+    const now = performance.now()
+    if (nextStart <= now) {
+      // leave a full beat after an overrun so recovery cannot compress the next hook interval
+      const skipped = Math.ceil((now + beat - nextStart) / beat)
+      nextStart += skipped * beat
+      try {
+        appendFileSync(join(worktreePath, 'soak-skips.log'), `skipped ${skipped} ${new Date().toISOString()}\n`)
+      } catch (error) {
+        reportFailure('skipped beats', error)
+      }
+    }
   }
 }
 
-void run()
+if (import.meta.main) void run()

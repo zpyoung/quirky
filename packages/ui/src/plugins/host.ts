@@ -22,6 +22,7 @@ import {
   type UiPluginModule,
   type UiSlotEntry,
   type UiSubscribeOptions,
+  type UiExecuteCommandOptions,
   type UiState,
   type UiToolPlacement,
   type UiToolResize,
@@ -1074,11 +1075,23 @@ export class WindowPluginHost {
         }
       }),
       getSetting: live((name: string) => this.getSetting(pluginId, name)),
-      executeCommand: live(async (id: string, args?: unknown) => {
+      executeCommand: live(async (id: string, args?: unknown, options?: UiExecuteCommandOptions) => {
+        if (options !== undefined && (options === null || typeof options !== 'object' || Array.isArray(options))) {
+          throw new Error('executeCommand: options must be an object')
+        }
+        const activateOwner = options?.activateOwner
+        if (activateOwner !== undefined && typeof activateOwner !== 'boolean') {
+          throw new Error('executeCommand: options.activateOwner must be a boolean')
+        }
         const command = this.requireCommand(id)
         const route = this.state.windowRoute
         if (route) {
-          await this.deps.call('desktop.window.runOwnerCommand', { windowId: route.windowId, id, args: args ?? {} })
+          await this.deps.call('desktop.window.runOwnerCommand', {
+            windowId: route.windowId,
+            id,
+            args: args ?? {},
+            ...(activateOwner === false ? { activateOwner: false } : {})
+          })
           return
         }
         await this.invokeCommand(command, args)

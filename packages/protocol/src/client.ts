@@ -107,17 +107,31 @@ export class QuirkyClient {
 
   /**
    * Connects over the daemon's unix socket (newline-delimited JSON, Bun only). `hello.token`
-   * must be the runtime token; the daemon refuses any other first message.
+   * must be the runtime token; `options.signal` aborts connection/hello and force-closes the socket.
    */
-  static async connectSocket(path: string, hello: ClientHello): Promise<QuirkyClient> {
+  static async connectSocket(path: string, hello: ClientHello, options: { signal?: AbortSignal } = {}): Promise<QuirkyClient> {
+    const signal = options.signal
+    if (signal?.aborted) throw signal.reason
+
     let client: QuirkyClient | undefined
+    let socket: Bun.Socket<undefined> | undefined
+    const abortWait = signal ? Promise.withResolvers<never>() : undefined
+    const onAbort = () => {
+      socket?.terminate()
+      client?.handleClose()
+      abortWait?.reject(signal?.reason)
+    }
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) onAbort()
+    }
+
     const decoder = new TextDecoder()
     let pendingLine = ''
     let pendingBytes: Uint8Array | null = null
-    let socket: Bun.Socket<undefined>
 
     const flush = () => {
-      while (pendingBytes && pendingBytes.length > 0) {
+      while (socket && pendingBytes && pendingBytes.length > 0) {
         const written = socket.write(pendingBytes)
         if (written <= 0) return
         pendingBytes = written >= pendingBytes.length ? null : pendingBytes.subarray(written)
@@ -125,47 +139,68 @@ export class QuirkyClient {
     }
 
     try {
-      socket = await Bun.connect<undefined>({
-        unix: path,
-        socket: {
-          data(_socket, chunk) {
-            pendingLine += decoder.decode(chunk, { stream: true })
-            let newline = pendingLine.indexOf('\n')
-            while (newline !== -1) {
-              const line = pendingLine.slice(0, newline)
-              pendingLine = pendingLine.slice(newline + 1)
-              if (line !== '') client?.handleMessage(line)
-              newline = pendingLine.indexOf('\n')
-            }
-            if (pendingLine.length > MAX_SOCKET_LINE_BYTES) {
-              pendingLine = ''
-              client?.close()
-            }
-          },
-          drain: flush,
-          close: () => client?.handleClose(),
-          error: () => client?.handleClose()
-        }
-      })
-    } catch (error) {
-      throw new Error(`could not connect to quirkyd at ${path}: ${(error as Error).message}`)
-    }
+      let connectedSocket: Bun.Socket<undefined>
+      try {
+        const opening = Bun.connect<undefined>({
+          unix: path,
+          socket: {
+            open(openedSocket) {
+              socket = openedSocket
+              if (signal?.aborted) openedSocket.terminate()
+            },
+            data(_socket, chunk) {
+              pendingLine += decoder.decode(chunk, { stream: true })
+              let newline = pendingLine.indexOf('\n')
+              while (newline !== -1) {
+                const line = pendingLine.slice(0, newline)
+                pendingLine = pendingLine.slice(newline + 1)
+                if (line !== '') client?.handleMessage(line)
+                newline = pendingLine.indexOf('\n')
+              }
+              if (pendingLine.length > MAX_SOCKET_LINE_BYTES) {
+                pendingLine = ''
+                client?.close()
+              }
+            },
+            drain: flush,
+            close: () => client?.handleClose(),
+            error: () => client?.handleClose()
+          }
+        })
+        const connecting = opening.then((openedSocket) => {
+          socket = openedSocket
+          if (signal?.aborted) openedSocket.terminate()
+          return openedSocket
+        })
+        connectedSocket = await (abortWait ? Promise.race([connecting, abortWait.promise]) : connecting)
+      } catch (error) {
+        if (signal?.aborted) throw signal.reason
+        throw new Error(`could not connect to quirkyd at ${path}: ${(error as Error).message}`)
+      }
 
-    client = new QuirkyClient({
-      send(text) {
-        const bytes = new TextEncoder().encode(`${text}\n`)
-        pendingBytes = pendingBytes ? concat(pendingBytes, bytes) : bytes
-        flush()
-      },
-      close: () => socket.end()
-    })
-    try {
-      await client.handshake(hello)
+      socket = connectedSocket
+      client = new QuirkyClient({
+        send(text) {
+          const bytes = new TextEncoder().encode(`${text}\n`)
+          pendingBytes = pendingBytes ? concat(pendingBytes, bytes) : bytes
+          flush()
+        },
+        close: () => connectedSocket.end()
+      })
+      const handshake = client.handshake(hello)
+      await (abortWait ? Promise.race([handshake, abortWait.promise]) : handshake)
+      return client
     } catch (error) {
-      client.close()
+      if (signal?.aborted) {
+        socket?.terminate()
+        client?.handleClose()
+        throw signal.reason
+      }
+      client?.close()
       throw error
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
     }
-    return client
   }
 
   private async handshake(hello: ClientHello): Promise<void> {

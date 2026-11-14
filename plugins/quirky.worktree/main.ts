@@ -15,7 +15,7 @@ import { expandHome, resolveRealPath, worktreeIdForPath } from './paths'
 import { SelectorSyntaxError, matchWorktrees, selectedId, type CallerIdentity } from './selector'
 import { BranchCleaner } from './src/daemon/branches'
 import { createRemoteWorkspace, createWorkspace, prefetchWorktreeCreateBase, suggestName, type CreateEnv, type CreateParams, type PendingStart, type RemoteCreateParams } from './src/daemon/create'
-import { findOwned, groupRepoId, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
+import { findOwned, groupRepoId, knownWorktree, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
 import { KeyedQueue } from './src/daemon/queue'
 import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
 import { createGroupForWorktree, setWorktree, showWorktree, type CreateGroupParams, type SetEnv, type SetParams } from './src/daemon/set'
@@ -117,7 +117,19 @@ export async function activate(context: PluginContext): Promise<PluginActivation
   const fail = (kind: ErrorKind, message: string, data?: unknown) =>
     data === undefined ? context.error(kind, message) : Object.assign(context.error(kind, message), { data })
 
-  const listRepos = async () => (await context.call('quirky.repo/list')) as Repo[]
+  let registeredProjects: Repo[] | undefined
+  const listRepos = async (): Promise<Repo[]> => {
+    const repos = (await context.call('quirky.repo/list')) as Repo[]
+    if (registeredProjects && (registeredProjects.length !== repos.length || repos.some((repo, index) => {
+      const previous = registeredProjects![index]
+      return previous?.id !== repo.id || previous.path !== repo.path || previous.kind !== repo.kind
+    }))) {
+      listEnv.catalog.generation++
+      listEnv.listed.clear()
+    }
+    registeredProjects = repos
+    return repos
+  }
   const preparedEnv = { store, ownerId: preparationOwnerId, process: context.process, log: context.log }
   let preparedPoolQueue: KeyedQueue | undefined
   const armPreparedExpiry = (): void => {
@@ -171,7 +183,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
       start.dispose()
     }
   }
-  const listEnv: ListEnv = { store, groups: listGroups, log: context.log, removing, identitySource: filesystemIdentitySource }
+  const listEnv: ListEnv = { store, groups: listGroups, log: context.log, removing, listed: new Map(), catalog: { generation: 0 }, identitySource: filesystemIdentitySource }
 
   /** The group with this ID or exact name; several of one name is a conflict. */
   async function resolveGroup(selector: string): Promise<ProjectGroup> {
@@ -277,7 +289,14 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     removing,
     inflight: new Map<string, InFlightRemove>(),
     fail,
-    changed: (data) => void context.emit('changed', data),
+    changed: (data) => {
+      if (data.removed) {
+        for (const [key, facts] of listEnv.listed) {
+          if (facts.id === data.worktreeId) listEnv.listed.delete(key)
+        }
+      }
+      void context.emit('changed', data)
+    },
     repos: listRepos,
     resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
     hooksAt: async (repo, ref) => (await context.call('quirky.repo/hooks', { repo: repo.id, ref })) as EffectiveHooks,
@@ -321,6 +340,12 @@ export async function activate(context: PluginContext): Promise<PluginActivation
           store.run('DELETE FROM worktrees WHERE repo_id = ?', repoId)
         })
       }
+    }
+    for (const [key, facts] of listEnv.listed) {
+      const known = facts.repoId.startsWith('group:')
+        ? liveGroups === null || liveGroups.has(facts.repoId)
+        : live.has(facts.repoId)
+      if (!known) listEnv.listed.delete(key)
     }
   }
 
@@ -367,6 +392,16 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     },
     resolveRepo: async (selector) => (await context.call('quirky.repo/resolve', { selector })) as Repo,
     groups: listGroups,
+    known: async (id) => {
+      const repos = await listRepos()
+      const worktree = knownWorktree(listEnv, id)
+      if (!worktree) return null
+      if (worktree.groupId === null && !repos.some((repo) => repo.id === worktree.repoId)) return null
+      if (repos.some((repo) =>
+        repo.id !== worktree.repoId && listEnv.listed.has(`${worktree.repoId}:${worktreeIdForPath(repo.path)}`)
+      )) return null
+      return worktree
+    },
     call: (method, params) => context.call(method, params),
     identitySource: filesystemIdentitySource,
     changed: (data) => void context.emit('changed', data)
@@ -435,7 +470,8 @@ export async function activate(context: PluginContext): Promise<PluginActivation
     ownedIds,
     async list(params) {
       await reconcileDeletedGroups()
-      if (params.repo === undefined && params.group === undefined) return await listEverything(listEnv, await listRepos())
+      const repos = await listRepos()
+      if (params.repo === undefined && params.group === undefined) return await listEverything(listEnv, repos)
       const result: WorktreeControl[] = []
       if (params.repo !== undefined) {
         const repo = (await context.call('quirky.repo/resolve', { selector: String(params.repo) })) as Repo
