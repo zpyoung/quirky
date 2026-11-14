@@ -15,8 +15,11 @@ import type {
   WindowBeat,
   WorkerBeat,
 } from './contracts'
+import { summarizeWorktreeRefreshes } from './worktree-refresh'
+
 
 export type SoakEvidence = {
+  startedAt?: string
   durationSeconds: number
   windows: number
   windowBeats: WindowBeat[]
@@ -27,6 +30,7 @@ export type SoakEvidence = {
   daemonExited: boolean
   daemonLog?: string
 }
+
 
 /** Counts caller and dispatcher timeouts across plugin namespaces for the soak's calls check. */
 export function countDaemonLog(text: string): {
@@ -364,8 +368,17 @@ function disqualifications(evidence: SoakEvidence, config: SoakConfig, hostBusy:
 }
 
 function judgeCalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['checks']['calls'] {
-  const result = countDaemonLog(evidence.daemonLog ?? '')
-  return { ...result, ok: result.unanswered <= config.limits.maxUnanswered }
+  const text = evidence.daemonLog ?? ''
+  const result = countDaemonLog(text)
+  const refreshes = summarizeWorktreeRefreshes(text, evidence.startedAt, evidence.probes)
+  return {
+    ...result,
+    refreshes,
+    ok: result.unanswered <= config.limits.maxUnanswered &&
+      refreshes.failed === 0 &&
+      refreshes.pending === 0 &&
+      refreshes.invalid === 0,
+  }
 }
 
 export function judge(
