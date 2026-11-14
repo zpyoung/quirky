@@ -312,6 +312,18 @@ test('the reviewer is told host:popups deliberately shows several popups togethe
   expect(prompt).toMatch(/host:popups target deliberately shows several popups at once/i)
 })
 
+test('only browser page reviews exclude unavailable native page content', async () => {
+  await reviewManifest(manifest('view:quirky.browser/page'), options())
+  const prompts = readFileSync(promptLogFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string)
+  expect(prompts).toHaveLength(2)
+  for (const prompt of prompts) {
+    expect(prompt).toContain("The view:quirky.browser/page capture reviews only the browser view's own chrome around the native pane; native web page content is unavailable in browser-rendered captures and its absence is not a defect.")
+  }
+  rmSync(promptLogFile)
+  await reviewManifest(manifest(), options())
+  expect(readFileSync(promptLogFile, 'utf8')).not.toContain('native web page content is unavailable')
+})
+
 test('invalid JSON and out-of-range scores are reviewer errors', async () => {
   for (const mode of ['invalid-json', 'bad-score']) {
     setEnv('UI_REVIEW_FAKE_MODE', mode)
