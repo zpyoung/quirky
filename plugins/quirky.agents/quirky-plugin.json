@@ -4299,6 +4299,18 @@
       {
         "id": "new-jcode-tab",
         "title": "New Jcode tab"
+      },
+      {
+        "id": "agent-details",
+        "title": "Show agent details",
+        "args": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "expanded": { "type": "boolean" }
+          },
+          "required": ["agent", "expanded"]
+        }
       }
     ],
     "keybinding": [
