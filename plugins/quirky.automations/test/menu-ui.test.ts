@@ -147,6 +147,10 @@ function navigation(page: AutomationNavigation['page'], patch: Partial<Automatio
     direction: 'asc',
     runQuery: '',
     runStatus: 'all',
+    promptExpanded: false,
+    historyStarts: [0],
+    runLimit: 100,
+    settingsNotice: false,
     ...patch
   }
 }
