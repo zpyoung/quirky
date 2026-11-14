@@ -3,11 +3,18 @@ import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
 import type { ObjectivePayload } from '../src/contract'
 import type { ObjectiveStore } from '../src/store'
-import { baselineProblems, captureContentIdentity, runCriterionCheck, runEnrollmentGate, type ObjectiveRuntime } from '../src/checks'
+import {
+  baselineProblems,
+  captureContentIdentity,
+  readIndexSuppressionFlags,
+  runCriterionCheck,
+  runEnrollmentGate,
+  type ObjectiveRuntime
+} from '../src/checks'
 
 const cleanup: (() => void)[] = []
 afterEach(() => { for (const close of cleanup.splice(0).reverse()) close() })
@@ -91,6 +98,203 @@ function rig(afterRun?: ProcessHook) {
   }
   return { root, dataDir, calls, checkRows, overrunRows, payload, enrollment, store, context, runtime, runChecked, initGit }
 }
+
+type SuppressionFlagCase = {
+  flag: 'assume-unchanged' | 'skip-worktree'
+  path: string
+  create(root: string, path: string): void
+  remove(root: string, path: string): void
+}
+
+const suppressionFlagCases: SuppressionFlagCase[] = [
+  {
+    flag: 'assume-unchanged',
+    path: 'outside\nassumed-deletion-link',
+    create: (root, path) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true })
+      symlinkSync('missing-target', join(root, path))
+    },
+    remove: (root, path) => unlinkSync(join(root, path))
+  },
+  {
+    flag: 'skip-worktree',
+    path: 'outside\tskipped-deletion.ts',
+    create: (root, path) => {
+      mkdirSync(dirname(join(root, path)), { recursive: true })
+      writeFileSync(join(root, path), 'tracked outside territory\n')
+    },
+    remove: (root, path) => unlinkSync(join(root, path))
+  }
+]
+
+type ChecksFixture = {
+  root: string
+  dataDir: string
+  context: PluginContext
+  enrollment: { watcherId: string }
+  runtime: ObjectiveRuntime
+  runChecked(argv: string[], options?: RunOptions): Promise<string>
+}
+
+async function addSuppressedTrackedPath(
+  r: ChecksFixture,
+  scenario: SuppressionFlagCase
+): Promise<void> {
+  scenario.create(r.root, scenario.path)
+  await r.runChecked(['git', 'add', '--', scenario.path], { cwd: r.root })
+  await r.runChecked(['git', 'commit', '-m', `track ${scenario.flag} path`], { cwd: r.root })
+  await r.runChecked(['git', 'update-index', `--${scenario.flag}`, '--', scenario.path], { cwd: r.root })
+}
+
+async function rewriteIndexWithoutWorkspaceChange(r: ChecksFixture): Promise<Buffer> {
+  const basePath = join(r.root, 'src', 'base.ts')
+  writeFileSync(basePath, 'temporary index rewrite\n')
+  await r.runChecked(['git', 'add', '--', 'src/base.ts'], { cwd: r.root })
+  writeFileSync(basePath, 'base\n')
+  return readFileSync(join(r.root, '.git', 'index'))
+}
+
+function runtimeWithCaptureDirectory(
+  r: ChecksFixture,
+  dataDir: string
+): ObjectiveRuntime {
+  return {
+    ...r.runtime,
+    captureContentIdentity: () => captureContentIdentity(r.context, r.root, dataDir, r.enrollment.watcherId)
+  }
+}
+
+function rewriteIndexDuringCheck(root: string): Buffer {
+  const basePath = join(root, 'src', 'base.ts')
+  writeFileSync(basePath, 'temporary index rewrite\n')
+  const result = Bun.spawnSync(['git', 'add', '--', 'src/base.ts'], {
+    cwd: root,
+    env: { ...globalThis.process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+    stdout: 'pipe',
+    stderr: 'pipe'
+  })
+  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+  writeFileSync(basePath, 'base\n')
+  return readFileSync(join(root, '.git', 'index'))
+}
+
+function coldCaptureDirectory(): string {
+  const dataDir = mkdtempSync(join(tmpdir(), 'objective-checks-cold-data-'))
+  cleanup.push(() => rmSync(dataDir, { recursive: true, force: true }))
+  return dataDir
+}
+
+test('detects suppressed tracked deletions after real-index reloads and cold captures for implementers and reviewers', async () => {
+  for (const scenario of suppressionFlagCases) {
+    for (const capture of ['real-index-reload', 'cold-capture'] as const) {
+      for (const role of ['implementer', 'reviewer'] as const) {
+        const r = rig()
+        await r.initGit()
+        await addSuppressedTrackedPath(r, scenario)
+        const baselineTree = (await r.runtime.captureContentIdentity()).slice('objective-tree:'.length)
+        scenario.remove(r.root, scenario.path)
+
+        const runtime = capture === 'cold-capture'
+          ? runtimeWithCaptureDirectory(r, coldCaptureDirectory())
+          : r.runtime
+        const bytesToPreserve = capture === 'real-index-reload'
+          ? await rewriteIndexWithoutWorkspaceChange(r)
+          : readFileSync(join(r.root, '.git', 'index'))
+        const reportPath = join(r.root, '.quirky', 'objective', r.enrollment.watcherId, 'review.json')
+        const issued = {
+          attemptId: `deleted-${scenario.flag}-${capture}-${role}`,
+          watcherId: r.enrollment.watcherId,
+          role,
+          revision: 1,
+          taskKey: role === 'implementer' ? 'implement' : null,
+          reportPath,
+          issuedAtMs: 1,
+          baselineTree
+        }
+
+        const expected = role === 'reviewer'
+          ? `reviewer-modified-workspace:${scenario.path}`
+          : `observed-change-outside-write-territory:${scenario.path}`
+        expect(await baselineProblems(runtime, issued, role === 'implementer' ? [] : undefined)).toEqual([expected])
+        expect(readFileSync(join(r.root, '.git', 'index'))).toEqual(bytesToPreserve)
+      }
+    }
+  }
+}, 30_000)
+
+test('deleting suppressed tracked paths during a shell check leaves stale evidence after reloads and cold captures', async () => {
+  for (const scenario of suppressionFlagCases) {
+    for (const capture of ['real-index-reload', 'cold-capture'] as const) {
+      let root = ''
+      let captureDir = ''
+      let bytesToPreserve = Buffer.alloc(0)
+      const r = rig(argv => {
+        if (argv[0] !== 'sh') return
+        scenario.remove(root, scenario.path)
+        if (capture === 'real-index-reload') bytesToPreserve = rewriteIndexDuringCheck(root)
+        else captureDir = coldCaptureDirectory()
+      })
+      root = r.root
+      await r.initGit()
+      await addSuppressedTrackedPath(r, scenario)
+      captureDir = r.dataDir
+      const contentIdentity = await r.runtime.captureContentIdentity()
+      bytesToPreserve = readFileSync(join(r.root, '.git', 'index'))
+      const runtime: ObjectiveRuntime = {
+        ...r.runtime,
+        captureContentIdentity: () => captureContentIdentity(r.context, r.root, captureDir, r.enrollment.watcherId)
+      }
+
+      expect(await runCriterionCheck(runtime, {
+        revision: 1,
+        taskKey: 'check',
+        criterionIndex: 0,
+        command: 'true',
+        contentIdentity
+      }, `deleted-${scenario.flag}-${capture}`)).toEqual({
+        effect: 'not-landed',
+        reason: 'check-evidence-stale'
+      })
+      expect(r.checkRows.find(row => row.attemptId === `deleted-${scenario.flag}-${capture}`)).toMatchObject({
+        status: 'stale',
+        exitCode: 0,
+        contentIdentity
+      })
+      expect(r.checkRows.find(row => row.attemptId === `deleted-${scenario.flag}-${capture}`)?.status).not.toBe('passed')
+      expect(readFileSync(join(r.root, '.git', 'index'))).toEqual(bytesToPreserve)
+    }
+  }
+}, 30_000)
+
+test('detects deletions of sparse-included entries while retaining absent sparse-excluded blobs', async () => {
+  const r = rig()
+  await r.initGit()
+  mkdirSync(join(r.root, 'docs'), { recursive: true })
+  writeFileSync(join(r.root, 'docs', 'sparse-only.ts'), 'outside sparse cone\n')
+  await r.runChecked(['git', 'add', '--', 'docs/sparse-only.ts'], { cwd: r.root })
+  await r.runChecked(['git', 'commit', '-m', 'add sparse file'], { cwd: r.root })
+  await r.runChecked(['git', 'sparse-checkout', 'init', '--cone', '--sparse-index'], { cwd: r.root })
+  await r.runChecked(['git', 'sparse-checkout', 'set', 'src'], { cwd: r.root })
+  await r.runChecked(['git', 'update-index', '--skip-worktree', '--', 'src/base.ts'], { cwd: r.root })
+
+  const excludedPath = join(r.root, 'docs', 'sparse-only.ts')
+  const includedPath = join(r.root, 'src', 'base.ts')
+  expect(existsSync(excludedPath)).toBe(false)
+  expect(existsSync(includedPath)).toBe(true)
+  const indexPath = join(r.root, '.git', 'index')
+  const bytesToPreserve = readFileSync(indexPath)
+  const headTree = (await r.runChecked(['git', 'rev-parse', 'HEAD^{tree}'], { cwd: r.root })).trim()
+  unlinkSync(includedPath)
+
+  const identity = await r.runtime.captureContentIdentity()
+  expect(identity).not.toBe(`objective-tree:${headTree}`)
+  const capturedTree = identity.slice('objective-tree:'.length)
+  const capturedPaths = (await r.runChecked(['git', 'ls-tree', '-r', '-z', '--name-only', capturedTree], { cwd: r.root }))
+    .split('\0')
+  expect(capturedPaths).not.toContain('src/base.ts')
+  expect(capturedPaths).toContain('docs/sparse-only.ts')
+  expect(readFileSync(indexPath)).toEqual(bytesToPreserve)
+}, 30_000)
 
 test('captures dispatch baseline and rejects outside-territory or unreported writes without blaming pre-existing dirty files', async () => {
   const r = rig()
@@ -207,6 +411,9 @@ test('captures flagged tracked edits for territory, reviewer, and check evidence
 
     const indexPath = join(r.root, '.git', 'index')
     const originalIndex = readFileSync(indexPath)
+    expect(await readIndexSuppressionFlags(r.context, r.root)).toEqual(flag === 'assume-unchanged'
+      ? { assumeUnchanged: [path], skipWorktree: [] }
+      : { assumeUnchanged: [], skipWorktree: [path] })
     const realIndexEntry = flag === 'assume-unchanged' ? `h ${path}` : `S ${path}`
     const expectRealIndexUnchanged = async () => {
       expect(readFileSync(indexPath)).toEqual(originalIndex)
@@ -280,6 +487,7 @@ test('preserves absent sparse-checkout entries during identity capture', async (
     .toBe('physically present out-of-cone edit\n')
   expect(readFileSync(indexPath)).toEqual(originalIndex)
 })
+
 
 test('runs shell check and gate commands through context.process.run and stores tails by content identity', async () => {
   const r = rig()

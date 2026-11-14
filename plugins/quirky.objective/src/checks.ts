@@ -11,6 +11,11 @@ export interface ObjectiveRuntime {
   captureContentIdentity: () => Promise<string>
 }
 
+export interface IndexSuppressionFlags {
+  assumeUnchanged: string[]
+  skipWorktree: string[]
+}
+
 const privateIndexes = new Map<string, { source: string; stamp: string | null }>()
 const privateCaptureQueues = new Map<string, Promise<void>>()
 
@@ -43,6 +48,29 @@ async function runGit(
   return result.stdoutText
 }
 
+export async function readIndexSuppressionFlags(
+  context: PluginContext,
+  workspacePath: string,
+  env?: Record<string, string | undefined>
+): Promise<IndexSuppressionFlags> {
+  const output = await runGit(
+    context,
+    workspacePath,
+    ['ls-files', '-v', '-z'],
+    env === undefined ? {} : { env }
+  )
+  const assumeUnchanged = new Set<string>()
+  const skipWorktree = new Set<string>()
+  for (const entry of output.split('\0')) {
+    if (entry.length < 3 || entry[1] !== ' ') continue
+    const tag = entry[0]
+    const path = entry.slice(2)
+    if (tag >= 'a' && tag <= 'z') assumeUnchanged.add(path)
+    if (tag === 'S' || tag === 's') skipWorktree.add(path)
+  }
+  return { assumeUnchanged: [...assumeUnchanged], skipWorktree: [...skipWorktree] }
+}
+
 async function ensurePrivateExclude(context: PluginContext, workspacePath: string): Promise<void> {
   const raw = (await runGit(context, workspacePath, ['rev-parse', '--git-path', 'info/exclude'])).trim()
   if (!raw) throw new Error('Git did not return a private exclude path')
@@ -64,6 +92,34 @@ function trackedPathIsPresent(workspacePath: string, path: string): boolean {
     if (code === 'ENOENT' || code === 'ENOTDIR') return false
     throw error
   }
+}
+
+async function sparseExcludedPaths(
+  context: PluginContext,
+  workspacePath: string,
+  paths: string[],
+  env: Record<string, string | undefined>
+): Promise<Set<string>> {
+  if (paths.length === 0) return new Set()
+  const options = { cwd: workspacePath, env }
+  const config = await context.process.run(['git', 'config', '--bool', '--get', 'core.sparseCheckout'], options)
+  const missingSetting = config.exitCode === 1
+    && config.signal === null
+    && config.stopped === undefined
+    && config.spawnError === undefined
+    && config.stderr.length === 0
+  if (missingSetting) return new Set()
+  if (runFailed(config)) throw new Error(`git config --bool --get core.sparseCheckout failed: ${config.stderr}`)
+  const enabled = config.stdoutText.trim()
+  if (enabled === 'false') return new Set()
+  if (enabled !== 'true') throw new Error('Git did not return a valid sparse-checkout setting')
+
+  const matches = (await runGit(context, workspacePath, ['sparse-checkout', 'check-rules', '-z'], {
+    env,
+    input: `${paths.join('\0')}\0`
+  })).split('\0')
+  const includedPaths = new Set(matches)
+  return new Set(paths.filter(path => !includedPaths.has(path)))
 }
 
 async function captureTreeOid(
@@ -94,28 +150,24 @@ async function captureTreeOid(
       cached.stamp = stamp
     }
     const env = { ...process.env, GIT_INDEX_FILE: index }
-    const assumeUnchangedPaths = new Set<string>()
-    const skipWorktreePaths = new Set<string>()
-    for (const entry of (await runGit(context, workspacePath, ['ls-files', '-v', '-z'], { env })).split('\0')) {
-      if (entry.length < 3 || entry[1] !== ' ') continue
-      const tag = entry[0]
-      const path = entry.slice(2)
-      if (tag >= 'a' && tag <= 'z') assumeUnchangedPaths.add(path)
-      if (tag === 'S' || tag === 's') skipWorktreePaths.add(path)
-    }
-    const suppressedPaths = new Set([...assumeUnchangedPaths, ...skipWorktreePaths])
+    const suppressionFlags = await readIndexSuppressionFlags(context, workspacePath, env)
+    const suppressedPaths = new Set([...suppressionFlags.assumeUnchanged, ...suppressionFlags.skipWorktree])
     const presentPaths = new Set([...suppressedPaths].filter(path => trackedPathIsPresent(workspacePath, path)))
-    const presentAssumePaths = [...assumeUnchangedPaths].filter(path => presentPaths.has(path))
-    const presentSkipPaths = [...skipWorktreePaths].filter(path => presentPaths.has(path))
-    if (presentAssumePaths.length > 0) {
+    const absentSkipPaths = suppressionFlags.skipWorktree.filter(path => !presentPaths.has(path))
+    const sparseExcluded = await sparseExcludedPaths(context, workspacePath, absentSkipPaths, env)
+    const assumePathsToClear = suppressionFlags.assumeUnchanged
+    const skipPathsToClear = suppressionFlags.skipWorktree.filter(path =>
+      presentPaths.has(path) || !sparseExcluded.has(path)
+    )
+    if (assumePathsToClear.length > 0) {
       await runGit(context, workspacePath, [
         'update-index', '--no-assume-unchanged', '-z', '--stdin'
-      ], { env, input: `${presentAssumePaths.join('\0')}\0` })
+      ], { env, input: `${assumePathsToClear.join('\0')}\0` })
     }
-    if (presentSkipPaths.length > 0) {
+    if (skipPathsToClear.length > 0) {
       await runGit(context, workspacePath, [
         'update-index', '--no-skip-worktree', '-z', '--stdin'
-      ], { env, input: `${presentSkipPaths.join('\0')}\0` })
+      ], { env, input: `${skipPathsToClear.join('\0')}\0` })
     }
     await runGit(context, workspacePath, ['add', '--sparse', '-A'], { env })
     const tree = (await runGit(context, workspacePath, ['write-tree'], { env })).trim()
