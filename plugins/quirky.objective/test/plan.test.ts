@@ -66,14 +66,14 @@ function expectPlannerProblem(name: string, value: unknown, includes?: string): 
   }
 }
 
-function expectImplementerProblem(name: string, value: unknown, assignedTask: PlanTask, territory: string[] = ['src/**']): void {
+function expectImplementerProblem(name: string, value: unknown, assignedTask: PlanTask, expected: string[], territory: string[] = ['src/**']): void {
   let problems: string[]
   try {
     problems = implementerReportProblems(value, assignedTask, territory)
   } catch (error) {
     throw new Error(`${name}: validator threw ${String(error)}`)
   }
-  if (problems.length === 0) throw new Error(`${name}: expected an implementer report problem`)
+  expect(problems, name).toEqual(expected)
 }
 
 function implementerReport(overrides: Partial<ImplementerReport> = {}): ImplementerReport {
@@ -225,38 +225,38 @@ test('accepts an implementer report only for its task with every criterion asses
   expect(implementerReportProblems(implementerReport({ filesModified: Array.from({ length: 1_024 }, () => 'src/a.ts') }), task(), ['src/**'])).toEqual([])
   expect(implementerReportProblems(implementerReport({ filesModified: [] }), task(), ['src/**'])).toEqual([])
 
-  const malformedReports: [string, unknown][] = [
-    ['non-object report', null],
-    ['missing task key', { ...validReport, taskKey: undefined }],
-    ['non-string summary', { ...validReport, summary: null }],
-    ['non-array files modified', { ...validReport, filesModified: 'src/a.ts' }],
-    ['non-string modified file', { ...validReport, filesModified: ['src/a.ts', null] }],
-    ['non-array criterion assessments', { ...validReport, criteriaSelfAssessment: null }],
-    ['non-object assessment', { ...validReport, criteriaSelfAssessment: [null] }],
-    ['missing criterion index', { ...validReport, criteriaSelfAssessment: [{ result: 'pass', note: 'ok' }, { criterionIndex: 1, result: 'pass', note: 'ok' }] }],
-    ['non-integer criterion index', { ...validReport, criteriaSelfAssessment: [{ criterionIndex: 0.5, result: 'pass', note: 'ok' }, { criterionIndex: 1, result: 'pass', note: 'ok' }] }],
-    ['missing assessment result', { ...validReport, criteriaSelfAssessment: [{ criterionIndex: 0, note: 'ok' }, { criterionIndex: 1, result: 'pass', note: 'ok' }] }],
-    ['non-string assessment note', { ...validReport, criteriaSelfAssessment: [{ criterionIndex: 0, result: 'pass', note: 1 }, { criterionIndex: 1, result: 'pass', note: 'ok' }] }]
+  const malformedReports: [string, unknown, string[]][] = [
+    ['non-object report', null, ['report must be an object']],
+    ['missing task key', { ...validReport, taskKey: undefined }, ['taskKey must be a string']],
+    ['non-string summary', { ...validReport, summary: null }, ['summary must be a string']],
+    ['non-array files modified', { ...validReport, filesModified: 'src/a.ts' }, ['filesModified must be an array of strings']],
+    ['non-string modified file', { ...validReport, filesModified: ['src/a.ts', null] }, ['filesModified must be an array of strings']],
+    ['non-array criterion assessments', { ...validReport, criteriaSelfAssessment: null }, ['criteriaSelfAssessment must be an array']],
+    ['non-object assessment', { ...validReport, criteriaSelfAssessment: [null] }, ['criteriaSelfAssessment[0] must be an object']],
+    ['missing criterion index', { ...validReport, criteriaSelfAssessment: [{ result: 'pass', note: 'ok' }, validReport.criteriaSelfAssessment[0]] }, ['criteriaSelfAssessment[0].criterionIndex must be a number']],
+    ['non-integer criterion index', { ...validReport, criteriaSelfAssessment: [{ criterionIndex: 0.5, result: 'pass', note: 'ok' }, validReport.criteriaSelfAssessment[0]] }, ['criterion index 0.5 is out of range', 'missing assessment for criterion 0']],
+    ['missing assessment result', { ...validReport, criteriaSelfAssessment: [{ criterionIndex: 0, note: 'ok' }, validReport.criteriaSelfAssessment[0]] }, ['criteriaSelfAssessment[0].result must be pass, fail, or unknown']],
+    ['non-string assessment note', { ...validReport, criteriaSelfAssessment: [{ criterionIndex: 0, result: 'pass', note: 1 }, validReport.criteriaSelfAssessment[0]] }, ['criteriaSelfAssessment[0].note must be a string']]
   ]
-  for (const [name, value] of malformedReports) expectImplementerProblem(name, value, assignedTask)
+  for (const [name, value, expected] of malformedReports) expectImplementerProblem(name, value, assignedTask, expected)
 
-  const invalidReports: [string, unknown][] = [
-    ['wrong task key', implementerReport({ taskKey: 'other' })],
-    ['empty summary', implementerReport({ summary: '' })],
-    ['summary longer than 16,384 characters', implementerReport({ summary: 'x'.repeat(16_385) })],
-    ['missing criterion assessment', implementerReport({ criteriaSelfAssessment: [{ criterionIndex: 0, result: 'pass', note: 'ok' }] })],
-    ['repeated criterion index', implementerReport({ criteriaSelfAssessment: [{ criterionIndex: 0, result: 'pass', note: 'first' }, { criterionIndex: 0, result: 'fail', note: 'second' }] })],
-    ['out-of-range criterion index', implementerReport({ criteriaSelfAssessment: [{ criterionIndex: 0, result: 'pass', note: 'ok' }, { criterionIndex: 2, result: 'pass', note: 'extra' }] })],
-    ['negative criterion index', implementerReport({ criteriaSelfAssessment: [{ criterionIndex: 0, result: 'pass', note: 'ok' }, { criterionIndex: -1, result: 'pass', note: 'extra' }] })],
-    ['unknown result', implementerReport({ criteriaSelfAssessment: [{ criterionIndex: 0, result: 'maybe' as 'pass', note: 'unsure' }, { criterionIndex: 1, result: 'pass', note: 'ok' }] })],
-    ['absolute modified path', implementerReport({ filesModified: ['/workspace/src/a.ts'] })],
-    ['Windows absolute modified path', implementerReport({ filesModified: ['C:/workspace/src/a.ts'] })],
-    ['parent segment modified path', implementerReport({ filesModified: ['src/../outside.ts'] })],
-    ['git metadata modified path', implementerReport({ filesModified: ['.git/config'] })],
-    ['quirky metadata modified path', implementerReport({ filesModified: ['.quirky/objective/report.json'] })],
-    ['backslash modified path', implementerReport({ filesModified: ['src\\a.ts'] })],
-    ['modified path outside the territory glob', implementerReport({ filesModified: ['docs/a.md'] })],
-    ['more than 1,024 modified files', implementerReport({ filesModified: Array.from({ length: 1_025 }, () => 'src/a.ts') })]
+  const invalidReports: [string, unknown, string[], string[]?][] = [
+    ['wrong task key', { ...validReport, taskKey: 'other' }, ['taskKey other does not match assigned task add']],
+    ['empty summary', { ...validReport, summary: '' }, ['summary must contain 1 to 16,384 characters']],
+    ['summary longer than 16,384 characters', { ...validReport, summary: 'x'.repeat(16_385) }, ['summary must contain 1 to 16,384 characters']],
+    ['missing criterion assessment', { ...validReport, criteriaSelfAssessment: [validReport.criteriaSelfAssessment[1]] }, ['missing assessment for criterion 1']],
+    ['repeated criterion index', { ...validReport, criteriaSelfAssessment: [validReport.criteriaSelfAssessment[1], validReport.criteriaSelfAssessment[1], validReport.criteriaSelfAssessment[0]] }, ['criterion index 0 is repeated']],
+    ['out-of-range criterion index', { ...validReport, criteriaSelfAssessment: [...validReport.criteriaSelfAssessment, { criterionIndex: 2, result: 'pass', note: 'extra' }] }, ['criterion index 2 is out of range']],
+    ['negative criterion index', { ...validReport, criteriaSelfAssessment: [...validReport.criteriaSelfAssessment, { criterionIndex: -1, result: 'pass', note: 'extra' }] }, ['criterion index -1 is out of range']],
+    ['unknown result', { ...validReport, criteriaSelfAssessment: [{ criterionIndex: 0, result: 'maybe', note: 'unsure' }, validReport.criteriaSelfAssessment[0]] }, ['criteriaSelfAssessment[0].result must be pass, fail, or unknown']],
+    ['modified path outside the territory glob', { ...validReport, filesModified: ['docs/a.md'] }, ['modified file path "docs/a.md" matches no write-territory glob']],
+    ['more than 1,024 modified files', { ...validReport, filesModified: Array.from({ length: 1_025 }, () => 'src/a.ts') }, ['filesModified must contain no more than 1,024 entries']]
   ]
-  for (const [name, value] of invalidReports) expectImplementerProblem(name, value, assignedTask)
+  for (const path of ['.git/config', '.quirky/objective/report.json', '/workspace/src/a.ts', 'C:/workspace/src/a.ts', 'src/../outside.ts', 'src\\a.ts']) {
+    invalidReports.push([
+      `unsafe modified path ${path}`, { ...validReport, filesModified: [path] },
+      [`modified file path ${JSON.stringify(path)} is not a safe relative path`], ['**']
+    ])
+  }
+  for (const [name, value, expected, territory] of invalidReports) expectImplementerProblem(name, value, assignedTask, expected, territory)
 })
