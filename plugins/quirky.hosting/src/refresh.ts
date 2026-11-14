@@ -146,6 +146,24 @@ function safeOutcome(value: unknown): Lookup | undefined {
   const mergeQueueRequired = source.mergeQueueRequired === null || typeof source.mergeQueueRequired === 'boolean' ? source.mergeQueueRequired : undefined
   const autoMergeAllowed = source.autoMergeAllowed === null || typeof source.autoMergeAllowed === 'boolean' ? source.autoMergeAllowed : undefined
   const mergeMetadataKnown = typeof source.mergeMetadataKnown === 'boolean' ? source.mergeMetadataKnown : undefined
+  const mergeQueueEntryValue = source.mergeQueueEntry
+  const mergeQueueEntryIsValid = mergeQueueEntryValue === null || isRecord(mergeQueueEntryValue)
+  const hasMergeQueueEntry = isRecord(mergeQueueEntryValue)
+  const mergeQueueEntry: Review['mergeQueueEntry'] = hasMergeQueueEntry
+    ? {
+      id: nonEmptyString(mergeQueueEntryValue.id) ?? null,
+      state: nonEmptyString(mergeQueueEntryValue.state) ?? null,
+      position: typeof mergeQueueEntryValue.position === 'number' && Number.isSafeInteger(mergeQueueEntryValue.position)
+        ? mergeQueueEntryValue.position
+        : null
+    }
+    : null
+  const inMergeQueue = hasMergeQueueEntry
+    ? true
+    : mergeQueueEntryIsValid && typeof source.inMergeQueue === 'boolean' ? source.inMergeQueue : false
+  const mergeQueueKnown = mergeQueueEntryIsValid && typeof source.mergeQueueKnown === 'boolean'
+    ? source.mergeQueueKnown
+    : hasMergeQueueEntry
   if (source.provider !== 'github' || !number || !url || title === undefined || body === undefined ||
     !state || !mergeable || !checksStatus || !headRefName || !headRefOid || !baseRefName || !baseRefOid ||
     !repository || reviewDecision === undefined || mergeStateStatus === undefined ||
@@ -177,6 +195,9 @@ function safeOutcome(value: unknown): Lookup | undefined {
     stack: source.stack,
     mergeMethods: source.mergeMethods,
     mergeQueueRequired,
+    inMergeQueue,
+    mergeQueueEntry,
+    mergeQueueKnown,
     autoMergeAllowed,
     mergeMetadataKnown
   }

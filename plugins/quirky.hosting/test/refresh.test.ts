@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { isRecord } from '../src/pr-data'
+import { refreshMethods } from '../src/refresh'
+import type { Handler, HostingEnv, Scope } from '../src/env'
 import { bootHosting, type HostingTest } from './helpers'
 
 const hosts: HostingTest[] = []
@@ -45,6 +47,62 @@ async function host(): Promise<HostingTest> {
 
 function candidate(testHost: HostingTest, branch = 'feature') {
   return { worktree: testHost.worktree, branch, active: true }
+}
+
+function cachedReviewRecord(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    provider: 'github',
+    repository: { host: 'github.com', owner: 'test-owner', repo: 'test-repo' },
+    number: 7,
+    url: 'https://github.com/test-owner/test-repo/pull/7',
+    title: 'Review 7',
+    body: 'fixture review',
+    updatedAt: null,
+    state: 'open',
+    headRefName: 'feature',
+    baseRefName: 'main',
+    headRefOid: 'a'.repeat(40),
+    baseRefOid: 'b'.repeat(40),
+    mergeable: 'MERGEABLE',
+    checksStatus: 'success',
+    reviewDecision: 'APPROVED',
+    mergeStateStatus: 'CLEAN',
+    autoMergeRequest: null,
+    stack: null,
+    mergeMethods: {},
+    mergeQueueRequired: null,
+    autoMergeAllowed: null,
+    mergeMetadataKnown: false,
+    requestedReviewers: null,
+    reviews: null,
+    assignees: null,
+    participantsTruncated: false,
+    ...overrides
+  }
+}
+
+function refreshHarness(lookup: unknown) {
+  const events: unknown[] = []
+  const identity = { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+  const scope = {
+    worktree: { id: 'wt-refresh', repoId: 'repo-refresh', kind: 'git', branch: 'feature' },
+    origin: identity,
+    candidates: [identity]
+  } as unknown as Scope
+  const env = {
+    context: { emit: (_type: string, event: unknown) => events.push(event) },
+    resolve: async () => scope,
+    cacheKey: (_scope: Scope, key: string) => key,
+    invalid: (reason: string, message: string) => Object.assign(new Error(message), { data: { reason } }),
+    onDispose: (_callback: () => void) => {}
+  } as unknown as HostingEnv
+  const forBranch: Handler = async () => lookup
+  const methods = refreshMethods(env, { forBranch })
+  const caller = {
+    role: 'client',
+    connection: { id: 'refresh-test', onClose: (_callback: () => void) => () => {} }
+  } as unknown as Parameters<Handler>[1]
+  return { methods, caller, events }
 }
 
 describe('quirky.hosting connection-owned refresh', () => {
@@ -179,4 +237,40 @@ describe('quirky.hosting connection-owned refresh', () => {
     expect(secondBudget).toMatchObject({ budgets: { activeStarts: 3 } })
     second.close()
   }, 20_000)
+  test('refresh treats old review snapshots without queue fields as unknown', async () => {
+    const harness = refreshHarness({
+      kind: 'found',
+      review: cachedReviewRecord(),
+      fetchedAt: Date.now()
+    })
+    const result = state(await harness.methods.refresh!({
+      candidate: { worktree: 'id:wt-refresh', branch: 'feature' },
+      reason: 'manual'
+    }, harness.caller))
+    expect(result).toMatchObject({
+      kind: 'found',
+      review: { inMergeQueue: false, mergeQueueEntry: null, mergeQueueKnown: false }
+    })
+  })
+
+  test('refresh preserves valid queue summaries in normalized review outcomes', async () => {
+    const mergeQueueEntry = { id: 'ENTRY_7', state: 'QUEUED', position: 2 }
+    const harness = refreshHarness({
+      kind: 'found',
+      review: cachedReviewRecord({
+        inMergeQueue: true,
+        mergeQueueEntry,
+        mergeQueueKnown: true
+      }),
+      fetchedAt: Date.now()
+    })
+    const result = state(await harness.methods.refresh!({
+      candidate: { worktree: 'id:wt-refresh', branch: 'feature' },
+      reason: 'manual'
+    }, harness.caller))
+    expect(result).toMatchObject({
+      kind: 'found',
+      review: { inMergeQueue: true, mergeQueueEntry, mergeQueueKnown: true }
+    })
+  })
 })
