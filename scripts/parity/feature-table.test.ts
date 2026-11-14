@@ -89,8 +89,14 @@ test('feature table exports the complete required inventory in document order wi
     if (row.disposition === 'delegated') expect(row.reason).toMatch(/Goal\s+\d+|g\d+-\d+/i)
   }
 
-  expect(result.rows.find((row) => row.id === 'linked-references')).toMatchObject({ disposition: 'gap' })
-  expect(fixtureRow(result, 'linked-references').reason).toMatch(/cross-workspace discovery|absent removal/i)
+  for (const id of ['linked-references', 'workspace-comments', 'non-code-files', 'watchers', 'diagnostics-memory']) {
+    expect(fixtureRow(result, id)).toMatchObject({ disposition: 'covered' })
+  }
+  const gaps = result.rows.filter((row) => row.disposition === 'gap')
+  expect(gaps.map((row) => row.id)).toEqual(['pr-sitter', 'objective-runner'])
+  for (const row of gaps) expect(row.reason).toMatch(/Follow-up: \*\*[^*]+\*\*/)
+  expect(result.rows).toHaveLength(39)
+  expect(result.rows.filter((row) => row.disposition === 'covered')).toHaveLength(24)
 })
 
 test('fixture export has the exact four-row schema and preserves every check', () => {
