@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, EmptyState, IconButton, ListRow, ToolPanelFrame } from '@quirky/ui'
+import { useEffect, useRef, useState } from 'react'
+import { Button, EmptyState, IconButton, InlineError, ListRow, NoticeLine, ToolPanelFrame } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 
 // inlined: plugins can't import each other
@@ -48,40 +48,52 @@ function statusFor(state: string): 'working' | 'needs-you' | 'done' | 'idle' {
  * destructive action asks through the window's own dialog and then calls with `yes`.
  */
 export function SessionsPanel({ context, report }: Props) {
-  const [rows, setRows] = useState<SessionRow[]>([])
-  const mounted = useRef(true)
+  const [rows, setRows] = useState<SessionRow[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const mounted = useRef(false)
+  const request = useRef(0)
+  const refreshRef = useRef<() => Promise<void>>(() => Promise.resolve())
 
-  const refresh = useCallback(async () => {
+  async function refresh() {
+    const attempt = ++request.current
+    setLoading(true)
+    setLoadError(null)
     try {
       const result = (await context.call('quirky.terminal/sessions', {})) as { sessions: SessionRow[] }
-      if (mounted.current) setRows(result.sessions)
+      if (mounted.current && attempt === request.current) setRows(result.sessions)
     } catch (error) {
-      context.toast('Could not load sessions', messageOf(error))
+      if (mounted.current && attempt === request.current) setLoadError(`Could not load sessions: ${messageOf(error)}`)
+    } finally {
+      if (mounted.current && attempt === request.current) setLoading(false)
     }
-  }, [context])
+  }
+  refreshRef.current = refresh
 
   useEffect(() => {
     mounted.current = true
-    void refresh()
+    void refreshRef.current()
     const unsubscribe = context.subscribe((event) => {
       if (
         event.type === 'quirky.session/changed' ||
         event.type === 'quirky.session/removed' ||
         event.type === 'quirky.terminal/layout'
-      ) void refresh()
+      ) void refreshRef.current()
     })
     return () => {
       mounted.current = false
+      request.current++
       unsubscribe()
     }
-  }, [context, refresh])
+  }, [context])
 
   useEffect(() => {
     report({
-      count: rows.length,
-      rows: rows.map(({ sessionId, workspace, state }) => ({ sessionId, workspace, state }))
+      count: rows?.length ?? 0,
+      rows: (rows ?? []).map(({ sessionId, workspace, state }) => ({ sessionId, workspace, state }))
     })
   }, [report, rows])
+
 
   const open = (row: SessionRow) => {
     if (row.worktreeId !== null) context.openView(SESSION_VIEW, { worktree: row.worktreeId, session: row.sessionId })
@@ -134,16 +146,16 @@ export function SessionsPanel({ context, report }: Props) {
   return (
     <div className="tt-tool-panel-fill tt-sessions-panel">
       <ToolPanelFrame
-        title={`Sessions (${rows.length})`}
+        title={`Sessions (${rows?.length ?? 0})`}
         actions={
           <span className="tt-panel-actions">
-            <IconButton label="Refresh" title="Refresh" onClick={() => void refresh()}>↻</IconButton>
+            <IconButton label="Refresh" title="Refresh" onClick={refresh}>↻</IconButton>
             <Button aria-label="Restart terminal host" title="Restart terminal host" onClick={() => void restart()}>Restart host</Button>
             <Button
               aria-label="Kill all sessions"
               title="Kill all sessions"
               variant="destructive"
-              disabled={rows.length === 0}
+              disabled={!rows || rows.length === 0}
               onClick={() => void killAll()}
             >
               Kill all
@@ -151,9 +163,12 @@ export function SessionsPanel({ context, report }: Props) {
           </span>
         }
       >
-        {rows.length === 0 ? (
-          <EmptyState message="No sessions." action={{ label: 'Refresh', onAction: () => void refresh() }} />
-        ) : (
+        {loading ? <div role="status"><NoticeLine>Loading sessions…</NoticeLine></div> : null}
+        {loadError ? <InlineError message={loadError} action={{ label: 'Retry', onAction: refresh }} /> : null}
+        {rows !== null && rows.length === 0 && !loadError ? (
+          <EmptyState message="No sessions." action={{ label: 'Refresh', onAction: refresh }} />
+        ) : null}
+        {rows !== null && rows.length > 0 ? (
           <ul className="tt-sessions-list">
             {rows.map((row) => (
               <li
@@ -191,7 +206,7 @@ export function SessionsPanel({ context, report }: Props) {
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
       </ToolPanelFrame>
     </div>
   )

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { QuickCommand } from '../../layout/types'
-import { Badge, ControlIcon, EmptyState, FormRow, IconButton, ListRow, ToolPanelFrame } from '@quirky/ui'
-import { QuickCommandDialog } from './QuickCommandDialog'
+import { Badge, ControlIcon, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, ToolPanelFrame } from '@quirky/ui'
+import { requestQuickCommandDialog } from './QuickCommandDialog'
 import { searchQuickCommands } from './search'
 import { PencilIcon, TrashIcon, confirmAndRemove, summaryOf, useQuickCommands } from './shared'
 
@@ -72,11 +72,29 @@ function useCurrentRepo(context: UiPluginContext, override: string | null | unde
  * where they are managed.
  */
 export function QuickCommandsPanel({ context, report, repo: repoOverride }: Props) {
-  const { commands, loaded, refresh } = useQuickCommands(context, 'all')
+  const { commands, loaded, error, refresh } = useQuickCommands(context, 'all')
   const repo = useCurrentRepo(context, repoOverride)
   const [filter, setFilter] = useState<ScopeFilter>('all')
   const [query, setQuery] = useState('')
-  const [dialog, setDialog] = useState<{ command: QuickCommand | null } | null>(null)
+
+  function addQuickCommand() {
+    void requestQuickCommandDialog(context, {
+      action: 'open',
+      ...(repo === null ? {} : { repo })
+    })
+  }
+
+  function editQuickCommand(command: QuickCommand) {
+    void requestQuickCommandDialog(context, {
+      action: 'open',
+      command: command.id,
+      ...(repo === null ? {} : { repo })
+    })
+  }
+
+  function retryQuickCommands() {
+    void refresh()
+  }
 
   const rows = useMemo(() => searchQuickCommands(commands.filter((entry) => filter === 'all' || entry.scope === filter), query), [commands, filter, query])
 
@@ -89,7 +107,7 @@ export function QuickCommandsPanel({ context, report, repo: repoOverride }: Prop
       <ToolPanelFrame
         title="Quick Commands"
         tools={
-          <IconButton label="Add Command" title="Add Command" onClick={() => setDialog({ command: null })}>
+          <IconButton label="Add Command" title="Add Command" onClick={addQuickCommand}>
             <ControlIcon name="plus" />
           </IconButton>
         }
@@ -123,11 +141,18 @@ export function QuickCommandsPanel({ context, report, repo: repoOverride }: Prop
               </select>
             </FormRow>
           </div>
-          {!loaded ? null : commands.length === 0 ? (
-            <EmptyState message={EMPTY_TEXT} />
-          ) : rows.length === 0 ? (
+          {!loaded && !error ? <div role="status"><NoticeLine>Loading quick commands…</NoticeLine></div> : null}
+          {error ? (
+            <InlineError
+              message={`Could not load quick commands: ${error}`}
+              action={{ label: 'Retry', onAction: retryQuickCommands }}
+            />
+          ) : null}
+          {loaded && !error && commands.length === 0 ? <EmptyState message={EMPTY_TEXT} /> : null}
+          {loaded && !error && commands.length > 0 && rows.length === 0 ? (
             <EmptyState message={query.trim() ? 'No commands match this search.' : 'No commands in the selected scopes.'} />
-          ) : (
+          ) : null}
+          {rows.length > 0 ? (
             <ul className="qc-list">
               {rows.map((row) => (
                 <li key={row.id} className="qc-row" data-command={row.id}>
@@ -146,7 +171,7 @@ export function QuickCommandsPanel({ context, report, repo: repoOverride }: Prop
                     description={<span className="qc-body">{row.command.trim() ? summaryOf(row) : 'No command text'}</span>}
                     trailing={
                       <span className="qc-actions">
-                        <IconButton label={`Edit ${row.label}`} title="Edit" onClick={() => setDialog({ command: row })}>
+                        <IconButton label={`Edit ${row.label}`} title="Edit" onClick={() => editQuickCommand(row)}>
                           <PencilIcon />
                         </IconButton>
                         <IconButton
@@ -163,10 +188,9 @@ export function QuickCommandsPanel({ context, report, repo: repoOverride }: Prop
                 </li>
               ))}
             </ul>
-          )}
+          ) : null}
         </div>
       </ToolPanelFrame>
-      {dialog ? <QuickCommandDialog key={dialog.command?.id ?? 'new'} context={context} command={dialog.command} repo={repo} onSaved={() => void refresh()} onClose={() => setDialog(null)} /> : null}
     </div>
   )
 }
