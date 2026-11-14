@@ -210,7 +210,7 @@ export class LspServer implements NavigationServer {
     clearTimeout(timer)
     if (!didStopGracefully) {
       this.failPending(new Error('LSP server shutdown timed out'))
-      if (!this.exitResult) await this.child.write(frame({ jsonrpc: '2.0', method: 'exit' }))
+      if (!this.exitResult) void this.child.write(frame({ jsonrpc: '2.0', method: 'exit' }))
       await this.child.stop()
     }
     await this.exited
@@ -262,7 +262,10 @@ export class LspServer implements NavigationServer {
       while (true) {
         const { done, value } = await reader.read()
         if (done) {
-          if (this.pending.size > 0 && !this.exitResult) await this.exited
+          if (!this.exitResult) {
+            this.fatalError = new Error('LSP server stdout closed')
+            void this.child.stop()
+          }
           return
         }
         for (const message of this.messageReader.push(value)) this.receive(message)

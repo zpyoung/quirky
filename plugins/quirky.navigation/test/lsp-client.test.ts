@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { ProcessSpawner } from '@quirky/protocol'
 import type { NavigationServer, ServerLocation } from '../src/servers'
 import { LspStartError, startLspServer } from '../src/lsp-client'
 import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
@@ -177,4 +178,67 @@ test('shuts down gracefully and force-stops an unresponsive server after its tim
   await stubborn.stop()
   expect(Date.now() - startedAt).toBeLessThan(3_000)
   expectProcessGone(stubbornPid)
+})
+
+test('force-stops even when stdin writes are backpressured', async () => {
+  const context = makeContext()
+  const blocked = Promise.withResolvers<boolean>()
+  let blockWrites = false
+  const spawner: ProcessSpawner = {
+    spawn(argv, options) {
+      const child = context.runner.spawn(argv, options)
+      return {
+        ...child,
+        write: (data) => blockWrites ? blocked.promise : child.write(data),
+        stop: async (options) => {
+          blocked.resolve(false)
+          return await child.stop(options)
+        },
+      }
+    },
+  }
+  const server = await startLspServer({
+    process: spawner, argv: [process.execPath, fakePath, 'normal'], root: context.root,
+    runtime: process.execPath, serverPath: fakePath, shutdownTimeoutMs: 20,
+  })
+  context.server = server
+  blockWrites = true
+  try {
+    // a real child and the shutdown clock must run together; fake timers cannot drive the pipe.
+    const stopped = await Promise.race([server.stop().then(() => true), Bun.sleep(3_000).then(() => false)])
+    expect(stopped).toBe(true)
+    expectProcessGone(server.pid!)
+  } finally {
+    blocked.resolve(false)
+    await server.stop()
+  }
+})
+
+test('rejects navigation when stdout closes without process exit', async () => {
+  const context = makeContext()
+  let closeOutput!: () => void
+  const spawner: ProcessSpawner = {
+    spawn(argv, options) {
+      const child = context.runner.spawn(argv, options)
+      const stdout = child.stdout.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+        start(controller) { closeOutput = () => controller.terminate() },
+        transform(chunk, controller) { controller.enqueue(chunk) },
+      }))
+      return { ...child, stdout }
+    },
+  }
+  const server = await startLspServer({
+    process: spawner, argv: [process.execPath, fakePath, 'normal'], root: context.root,
+    runtime: process.execPath, serverPath: fakePath,
+  })
+  context.server = server
+  closeOutput()
+  // stream cancellation and process termination run outside fake timer control.
+  await expect(Promise.race([
+    server.definition(join(context.root, 'source.py'), 1, 1),
+    Bun.sleep(3_000).then(() => { throw new Error('response timed out') }),
+  ])).rejects.toThrow(/exited|not accepting|stdout closed/)
+  await server.exited
+  expectProcessGone(server.pid!)
+  await expect(server.definition(join(context.root, 'source.py'), 1, 1)).rejects.toThrow()
 })
