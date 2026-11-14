@@ -1,6 +1,6 @@
 import * as ts from 'typescript'
 import { posix } from 'node:path'
-import type { Candidate, CandidateCategory, CoverageFile, Evidence, PluginInventory, Ref, Route } from './contracts'
+import type { Candidate, CandidateCategory, CoverageFile, Evidence, PluginInventory, Ref, Route, SourceFile } from './contracts'
 
 export type ResolvedRef = { file: string; source: ts.SourceFile; start: number; end: number; text: string }
 
@@ -247,6 +247,17 @@ function scriptKind(file: string): ts.ScriptKind {
   return ts.ScriptKind.TS
 }
 
+const parsedSnapshots = new WeakMap<SourceFile, { file: string; content: string; source: ts.SourceFile }>()
+
+/** Reuses unchanged snapshot parses while keeping in-memory mutation audits fresh. */
+function parsedSnapshot(snapshot: SourceFile): ts.SourceFile {
+  const cached = parsedSnapshots.get(snapshot)
+  if (cached?.file === snapshot.file && cached.content === snapshot.content) return cached.source
+  const source = ts.createSourceFile(snapshot.file, snapshot.content, ts.ScriptTarget.Latest, true, scriptKind(snapshot.file))
+  parsedSnapshots.set(snapshot, { file: snapshot.file, content: snapshot.content, source })
+  return source
+}
+
 function canonicalPluginFile(file: string, directory: string): boolean {
   if (file.length === 0 || file.includes('\\') || file.startsWith('/') || /^[A-Za-z]:/.test(file)) return false
   const segments = file.split('/')
@@ -277,7 +288,7 @@ export function resolveRef(plugin: PluginInventory, files: readonly string[], re
   }
   if (count === 0) return evidence('evidence-missing', `Evidence quote was not found in ${ref.file}: ${JSON.stringify(quote)}`)
 
-  const source = ts.createSourceFile(ref.file, sourceFile.content, ts.ScriptTarget.Latest, true, scriptKind(ref.file))
+  const source = parsedSnapshot(sourceFile)
   if (count > 1) {
     return evidence('evidence-ambiguous', `Evidence quote occurs more than once in ${ref.file}: ${JSON.stringify(quote)}`, ref.file, source, first)
   }
@@ -433,7 +444,7 @@ function namedImportSource(plugin: PluginInventory, files: readonly string[], so
     if (target === undefined) return undefined
     const captured = plugin.sources.find((entry) => entry.file === target)
     if (captured === undefined) return undefined
-    const imported = ts.createSourceFile(target, captured.content, ts.ScriptTarget.Latest, true, scriptKind(target))
+    const imported = parsedSnapshot(captured)
     return { source: imported, importedName: specifier.propertyName?.text ?? specifier.name.text }
   }
   return undefined
