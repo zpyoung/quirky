@@ -1,0 +1,2262 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.ledger/ledger": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "panel:quirky.ledger/ledger": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "sidebar-section:quirky.ledger/ledger": {
+      "loading": {
+        "applicable": false,
+        "reason": "This sidebar surface only opens the Ledger page; it has no asynchronous data or result state.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "return <div className=\"ledger-root\" style={ledgerStyles.root}><Button type=\"button\" className=\"ledger-nav-item\" onClick={() => context.openView(LEDGER_VIEW_ID)}>Ledger</Button></div>"
+          }
+        ]
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "This sidebar surface only opens the Ledger page; it has no asynchronous data or result state.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "return <div className=\"ledger-root\" style={ledgerStyles.root}><Button type=\"button\" className=\"ledger-nav-item\" onClick={() => context.openView(LEDGER_VIEW_ID)}>Ledger</Button></div>"
+          }
+        ]
+      },
+      "error": {
+        "applicable": false,
+        "reason": "This sidebar surface only opens the Ledger page; it has no asynchronous data or result state.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "return <div className=\"ledger-root\" style={ledgerStyles.root}><Button type=\"button\" className=\"ledger-nav-item\" onClick={() => context.openView(LEDGER_VIEW_ID)}>Ledger</Button></div>"
+          }
+        ]
+      }
+    }
+  },
+  "states": [
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "p>}\n      {catalogError && <InlineErr"
+      },
+      "anchor": "catalogError &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<InlineError message={`Ledger catalog could not be loaded: ${catalogError}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'catalog' }) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "{catalogLoading && "
+      },
+      "anchor": "catalogLoading &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<NoticeLine>Loading ledgers…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "!catalogLoading && !catalogError && (catalog?.ledgers?.length ?? 0) === 0 &&"
+      },
+      "anchor": "!catalogLoading && !catalogError && (catalog?.ledgers?.length ?? 0) === 0 &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<EmptyState message=\"No attached or detached ledgers yet. File an entry to create one.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "       {directory.error && <Inline"
+      },
+      "anchor": "directory.error &&",
+      "surface": "panel:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<InlineError message={`Owner catalog could not be loaded: ${directory.error}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'directory' }) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "{directory.loading && "
+      },
+      "anchor": "directory.loading &&",
+      "surface": "panel:quirky.ledger/ledger",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": ".loading && <NoticeLine>Loading ledger…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "!directory.loading && noWorkspace &&"
+      },
+      "anchor": "!directory.loading && noWorkspace &&",
+      "surface": "panel:quirky.ledger/ledger",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<EmptyState message=\"Open a workspace to see its ledger.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "!directory.loading && missingGroup &&"
+      },
+      "anchor": "!directory.loading && missingGroup &&",
+      "surface": "panel:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<InlineError message=\"This workspace has no group.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "       {error && <Inline"
+      },
+      "anchor": "error &&",
+      "surface": "panel:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<InlineError message={error} action={{ label: 'Retry', onAction: refreshEntries }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "       {actionMessage && <Inline"
+      },
+      "anchor": "actionMessage &&",
+      "surface": "panel:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "       {actionMessage && <InlineError message={actionMessage} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "!directory.loading && !noWorkspace && !missingGroup && loading &&"
+      },
+      "anchor": "!directory.loading && !noWorkspace && !missingGroup && loading &&",
+      "surface": "panel:quirky.ledger/ledger",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": " loading && <NoticeLine>Loading ledger…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 &&"
+      },
+      "anchor": "!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 &&",
+      "surface": "panel:quirky.ledger/ledger",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": " !loading && !error && visibleRows.length === 0 && <EmptyState message=\"No entries match this view.\" action={{ label: 'New entry', onAction: () => void runControl({ action: 'new' }) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "availableOwners.length === 0 &&"
+      },
+      "anchor": "availableOwners.length === 0 &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<EmptyState message=\"No unoccupied live owners are available.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "n>}\n      {catalogError && <InlineErr"
+      },
+      "anchor": "catalogError &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<InlineError message={`Owner catalog unavailable: ${catalogError}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'catalog' }) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "\n      {directory.error && <Inline"
+      },
+      "anchor": "directory.error &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<InlineError message={`Location bases could not be loaded: ${directory.error}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'directory' }) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "\n      {error && <Inline"
+      },
+      "anchor": "error &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<InlineError message={`Ledger could not be loaded: ${error}`} action={{ label: 'Retry', onAction: refreshEntries }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "\n      {actionMessage && <Inline"
+      },
+      "anchor": "actionMessage &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "\n      {actionMessage && <InlineError message={actionMessage} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "{loading && "
+      },
+      "anchor": "loading &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "{loading && <NoticeLine>Loading ledger…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "{!loading && !error && visibleRows.length === 0 && "
+      },
+      "anchor": "!loading && !error && visibleRows.length === 0 &&",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "{!loading && !error && visibleRows.length === 0 && <EmptyState message=\"No entries match this view.\" action={{ label: 'New entry', onAction: () => void runControl({ action: 'new' }) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "detailLoading ?"
+      },
+      "anchor": "detailLoading ?",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<NoticeLine>Loading entry…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": ": <InlineError m"
+      },
+      "anchor": "<InlineError",
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "<InlineError message={detailError} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'detail' }) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "  {mode === 'page' && <>"
+      },
+      "anchor": "mode === 'page' &&",
+      "reason": "Page-only filter fields and row selection controls are surface structure, not an asynchronous result."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "  {mode === 'page' && <l"
+      },
+      "anchor": "mode === 'page' &&",
+      "reason": "Page-only filter fields and row selection controls are surface structure, not an asynchronous result."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "entry.reviewed &&"
+      },
+      "anchor": "entry.reviewed &&",
+      "reason": "The reviewed badge is entry metadata, not a loading, empty or failure state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "mode === 'panel' && scope !== 'worktree' && workspaceId && entry.origin.workspaceId === workspaceId &&"
+      },
+      "anchor": "mode === 'panel' && scope !== 'worktree' && workspaceId && entry.origin.workspaceId === workspaceId &&",
+      "reason": "Filed-here provenance is row metadata, not a result-state message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": " {refreshSpinner ? '"
+      },
+      "anchor": "refreshSpinner ?",
+      "reason": "The delayed refresh icon is a control adornment; the corresponding request loading state uses NoticeLine."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "runtimeText &&"
+      },
+      "anchor": "runtimeText &&",
+      "reason": "Runtime and profile identity are explanatory metadata, not request status."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "response?.runtime.runtimeId ?? catalog?.runtime.runtimeId ??"
+      },
+      "anchor": "response?.runtime.runtimeId ?? catalog?.runtime.runtimeId ??",
+      "reason": "Runtime and profile identity are explanatory metadata, not request status."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": " {currentSummary && currentSummary.owner === null ? '"
+      },
+      "anchor": "currentSummary && currentSummary.owner === null ?",
+      "reason": "Attached versus detached owner identity is ledger metadata."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "scope === 'worktree' && workspace &&"
+      },
+      "anchor": "scope === 'worktree' && workspace &&",
+      "reason": "The current workspace name identifies entry provenance, not a result state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "workspace.name ??"
+      },
+      "anchor": "workspace.name ??",
+      "reason": "The current workspace name identifies entry provenance, not a result state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "       {(filtersOpen || filtering) && renderF"
+      },
+      "anchor": "(filtersOpen || filtering) &&",
+      "reason": "This discloses editable filter controls; filter disclosure is local presentation state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "!directory.loading && !error && !missingGroup &&"
+      },
+      "anchor": "!directory.loading && !error && !missingGroup &&",
+      "reason": "This guard hides stale result rows beside the separately classified shared loading/error messages."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "(effectiveTarget?.owner?.tier === 'project' || currentSummary?.owner?.tier === 'project') &&"
+      },
+      "anchor": "(effectiveTarget?.owner?.tier === 'project' || currentSummary?.owner?.tier === 'project') &&",
+      "reason": "The owner tier determines whether project settings navigation is available."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": " {currentSummary && <"
+      },
+      "anchor": "currentSummary &&",
+      "reason": "Authoritative loaded ledger metadata enables deletion preparation, not a loading or empty-result message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "pageTier === 'project' ?"
+      },
+      "anchor": "pageTier === 'project' ?",
+      "reason": "The ledger tier, revision and entry count are summary metadata, not result states."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "currentSummary ?"
+      },
+      "anchor": "currentSummary ?",
+      "reason": "The ledger tier, revision and entry count are summary metadata, not result states."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "response?.runtime &&"
+      },
+      "anchor": "response?.runtime &&",
+      "reason": "Runtime and profile identity are explanatory metadata, not request status."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": ">{currentSummary && currentSummary.owner === null ? `"
+      },
+      "anchor": "currentSummary && currentSummary.owner === null ?",
+      "reason": "Attached versus detached owner identity is ledger metadata."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "detached &&"
+      },
+      "anchor": "detached &&",
+      "reason": "This discloses the attachment editor for detached ledgers; its no-owner empty result is classified separately."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "\n      {(filtersOpen || filtering) && renderF"
+      },
+      "anchor": "(filtersOpen || filtering) &&",
+      "reason": "This discloses editable filter controls; filter disclosure is local presentation state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "{!error && "
+      },
+      "anchor": "!error &&",
+      "reason": "This guard hides stale result rows beside the separately classified shared loading/error messages."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "selected.length > 0 &&"
+      },
+      "anchor": "selected.length > 0 &&",
+      "reason": "Selection discloses bulk controls; it is local interaction state, not an empty request result."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "form &&"
+      },
+      "anchor": "form &&",
+      "reason": "This opens the local entry editor; the child owns its form result states."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "detailId && !detail &&"
+      },
+      "anchor": "detailId && !detail &&",
+      "reason": "This opens the pending-detail dialog; its request loading and failure renders have their own classifications."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "{detail && "
+      },
+      "anchor": "detail &&",
+      "reason": "This opens the loaded entry dialog; its child owns entry detail presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "triageOpen && !confirmation &&"
+      },
+      "anchor": "triageOpen && !confirmation &&",
+      "reason": "This switches dialog lifecycle between triage and confirmation; the child owns candidate result rendering."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "{confirmation && "
+      },
+      "anchor": "confirmation &&",
+      "reason": "This discloses an immutable confirmation snapshot and does not represent a request result."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "confirmation.kind === 'bulk-state' ?"
+      },
+      "anchor": "confirmation.kind === 'bulk-state' ?",
+      "reason": "Confirmation kind selects explanatory text and immutable entry/ledger snapshots, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "confirmation.kind === 'bulk-state' || confirmation.kind === 'delete-entries'\n              ?"
+      },
+      "anchor": "confirmation.kind === 'bulk-state' || confirmation.kind === 'delete-entries'\n              ?",
+      "reason": "Confirmation kind selects explanatory text and immutable entry/ledger snapshots, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "confirmation.kind === 'delete-ledger'\n                ?"
+      },
+      "anchor": "confirmation.kind === 'delete-ledger'\n                ?",
+      "reason": "Confirmation kind selects explanatory text and immutable entry/ledger snapshots, not a loading, empty or error state."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "    onChange={(e"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "pe ?? ''} onChange={(event) "
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "te ?? ''} onChange={(event) "
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "d)} onChange={(e"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "e)} onChange={(e"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "d ?? ''} onChange={(event)"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "h ?? ''} onChange={(event)"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "value={sort} onChange={(event)"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates only the local sort draft; sorting does not issue a control command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "x} onChange={("
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "This handler updates the local selected immutable entry revisions and cached titles only; selection is not a mutation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "ry.id}`} onClick={() => {"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "ry.id}`} onClick={() => v"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": " actionBusy} onClick={() => void "
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "perRowReview = async (entry: LedgerEntry) => approve([{ id: entry.id, revision: entry.revision }], setActionMessage)"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "approve = async (selections: LedgerSelection[], onConflict: (message: string) => void) => {\n    if (!pageLedgerTarget || selections.length === 0) return\n    onConflict('')\n    setCandidateError('')\n    setActionBusy(true)\n    setActionMessage('')\n    try {\n      await ledgerRequest(context, { operation: 'approve', target: pageLedgerTarget, selections })\n      setSelected([])\n      setSelectionTitles(new Map())\n      setTriageSelected([])\n      setTriageTitles(new Map())\n      await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])\n      if (detail) await openDetail(detail)\n    } catch (reason) {\n      if (isConflict(reason)) {\n        onConflict('Selected entry revisions changed. The latest rows and candidates have been reloaded; select them again.')\n        setSelected([])\n        setSelectionTitles(new Map())\n        setTriageSelected([])\n        setTriageTitles(new Map())\n        await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])\n        if (detail) await openDetail(detail)\n      } else {\n        setActionMessage(errorMessage(reason))\n        if (triageOpen) setCandidateError(errorMessage(reason))\n      }\n    } finally {\n      setActionBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "ry.id}`} onClick={() => b"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function beginDelete(entriesToDelete: LedgerEntry[]): void {\n    beginDeleteSelections(entriesToDelete.map((entry) => ({ id: entry.id, revision: entry.revision })))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function beginDeleteSelections(selections: LedgerSelection[]): void {\n    void runControl({ action: 'prepare', kind: 'delete-entries', selections: selections.map((item) => ({ id: item.id, revision: item.revision })) })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "'} onClick={r"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function refreshEntries(): void {\n    void runControl({ action: 'refresh', resource: 'entries' })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "  onClick={"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "l} onClick={("
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "g} onClick={("
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "d: ${catalogError}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', re"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "e}`} onClick={() "
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "    onChange={(n"
+      },
+      "anchor": "onChange",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "         <IconButton label=\"Triage\" title=\"Triage\" onClick={() => void runControl({ action: 'triage' })}><Con"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "g could not be loaded: ${directory.error}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'directory' }) "
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "r} action={{ label: 'Retry', onAction: refreshEntries }} />}\n     "
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function refreshEntries(): void {\n    void runControl({ action: 'refresh', resource: 'entries' })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": " entries match this view.\" action={{ label: 'New entry', onAction: () => void runControl({ action: 'new' }) }} />}\n       "
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": " <Button type=\"button\" onClick={() => void runControl"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "ructive\" onClick={() => v"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "\n        <IconButton label=\"Triage\" title=\"Triage\" onClick={() => void runControl({ action: 'triage' })}><Con"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "d}><Button type=\"button\" onClick={() => void runControl({"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "e} onChange={("
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "The attachment select edits only a local draft; Prepare carries the chosen owner into the public confirmation control."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "e} onClick={p"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function prepareAttach(): void {\n    const owner = availableOwners.find((candidate) => `${candidate.tier}:${candidate.id}` === attachChoice)\n    if (!owner) return\n    void runControl({ action: 'prepare', kind: 'attach', attachTo: { tier: owner.tier, id: owner.id } })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "e: ${catalogError}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', re"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "s could not be loaded: ${directory.error}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'directory' }) "
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "`} action={{ label: 'Retry', onAction: refreshEntries }} />}\n     "
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function refreshEntries(): void {\n    void runControl({ action: 'refresh', resource: 'entries' })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": " entries match this view.\" action={{ label: 'New entry', onAction: () => void runControl({ action: 'new' }) }} />}\n      {"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "{actionBusy} onClick={() => void "
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "approve = async (selections: LedgerSelection[], onConflict: (message: string) => void) => {\n    if (!pageLedgerTarget || selections.length === 0) return\n    onConflict('')\n    setCandidateError('')\n    setActionBusy(true)\n    setActionMessage('')\n    try {\n      await ledgerRequest(context, { operation: 'approve', target: pageLedgerTarget, selections })\n      setSelected([])\n      setSelectionTitles(new Map())\n      setTriageSelected([])\n      setTriageTitles(new Map())\n      await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])\n      if (detail) await openDetail(detail)\n    } catch (reason) {\n      if (isConflict(reason)) {\n        onConflict('Selected entry revisions changed. The latest rows and candidates have been reloaded; select them again.')\n        setSelected([])\n        setSelectionTitles(new Map())\n        setTriageSelected([])\n        setTriageTitles(new Map())\n        await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])\n        if (detail) await openDetail(detail)\n      } else {\n        setActionMessage(errorMessage(reason))\n        if (triageOpen) setCandidateError(errorMessage(reason))\n      }\n    } finally {\n      setActionBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "     <Button type=\"button\" onClick={() => requestBulkState('r"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function requestBulkState(state: Extract<LedgerState, 'resolved' | 'archived'>, selections: LedgerSelection[]): void {\n    void runControl({ action: 'prepare', kind: 'bulk-state', state, selections: selections.map((item) => ({ id: item.id, revision: item.revision })) })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "     <Button type=\"button\" onClick={() => requestBulkState('a"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function requestBulkState(state: Extract<LedgerState, 'resolved' | 'archived'>, selections: LedgerSelection[]): void {\n    void runControl({ action: 'prepare', kind: 'bulk-state', state, selections: selections.map((item) => ({ id: item.id, revision: item.revision })) })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "ructive\" onClick={() => b"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function beginDeleteSelections(selections: LedgerSelection[]): void {\n    void runControl({ action: 'prepare', kind: 'delete-entries', selections: selections.map((item) => ({ id: item.id, revision: item.revision })) })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onCancel"
+      },
+      "anchor": "onCancel",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onSave"
+      },
+      "anchor": "onSave",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "saveForm = async (type: LedgerType, content: Record<string, unknown>, entry?: LedgerEntry): Promise<LedgerResponse> => {\n    if (!pageLedgerTarget) throw new Error('Choose a ledger before filing an entry.')\n    try {\n      const result = await ledgerRequest(context, entry\n        ? { operation: 'edit', target: pageLedgerTarget, id: entry.id, ifRevision: entry.revision, content }\n        : { operation: 'file', target: pageLedgerTarget, type, content })\n      await loadEntries()\n      return result\n    } catch (reason) {\n      if (isConflict(reason)) await loadEntries()\n      throw reason\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "    closeOnBackdrop={false}\n        scrollBody\n        onClose={() => void runControl({ action: 'dismiss', dialog: 'd"
+      },
+      "anchor": "onClose",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "s}><Button type=\"button\" onClick={() => void runControl({"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "r} action={{ label: 'Retry', onAction: () => void runControl({ act"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onEdit"
+      },
+      "anchor": "onEdit",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onReview"
+      },
+      "anchor": "onReview",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "reviewDetail = (entry: LedgerEntry) => actOnDetail({ operation: 'approve', target: pageLedgerTarget ?? undefined, selections: [{ id: entry.id, revision: entry.revision }] })"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "actOnDetail = async (requestBody: Parameters<typeof ledgerRequest>[1]) => {\n    if (!detail || !pageLedgerTarget) return\n    const id = detail.id\n    setActionBusy(true)\n    setActionMessage('')\n    try {\n      await ledgerRequest(context, requestBody)\n      await loadEntries()\n      await openDetail({ ...detail, id })\n    } catch (reason) {\n      if (isConflict(reason)) {\n        const revision = currentRevisionOf(reason)\n        setActionMessage(revision === null ? 'The entry changed while you were acting. Its latest revision has been reloaded.' : `The entry changed to revision ${revision}; review the refreshed entry before trying again.`)\n        await loadEntries()\n        await openDetail({ ...detail, id })\n      } else {\n        setActionMessage(errorMessage(reason))\n      }\n    } finally {\n      setActionBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": " onState="
+      },
+      "anchor": "onState",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "setState = (entry: LedgerEntry, state: LedgerState) => actOnDetail({ operation: 'state', target: pageLedgerTarget ?? undefined, id: entry.id, state, ifRevision: entry.revision })"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "actOnDetail = async (requestBody: Parameters<typeof ledgerRequest>[1]) => {\n    if (!detail || !pageLedgerTarget) return\n    const id = detail.id\n    setActionBusy(true)\n    setActionMessage('')\n    try {\n      await ledgerRequest(context, requestBody)\n      await loadEntries()\n      await openDetail({ ...detail, id })\n    } catch (reason) {\n      if (isConflict(reason)) {\n        const revision = currentRevisionOf(reason)\n        setActionMessage(revision === null ? 'The entry changed while you were acting. Its latest revision has been reloaded.' : `The entry changed to revision ${revision}; review the refreshed entry before trying again.`)\n        await loadEntries()\n        await openDetail({ ...detail, id })\n      } else {\n        setActionMessage(errorMessage(reason))\n      }\n    } finally {\n      setActionBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onRevert"
+      },
+      "anchor": "onRevert",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "revertDetail = (entry: LedgerEntry, toRevision: number) => actOnDetail({ operation: 'revert', target: pageLedgerTarget ?? undefined, id: entry.id, toRevision, ifRevision: entry.revision })"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "actOnDetail = async (requestBody: Parameters<typeof ledgerRequest>[1]) => {\n    if (!detail || !pageLedgerTarget) return\n    const id = detail.id\n    setActionBusy(true)\n    setActionMessage('')\n    try {\n      await ledgerRequest(context, requestBody)\n      await loadEntries()\n      await openDetail({ ...detail, id })\n    } catch (reason) {\n      if (isConflict(reason)) {\n        const revision = currentRevisionOf(reason)\n        setActionMessage(revision === null ? 'The entry changed while you were acting. Its latest revision has been reloaded.' : `The entry changed to revision ${revision}; review the refreshed entry before trying again.`)\n        await loadEntries()\n        await openDetail({ ...detail, id })\n      } else {\n        setActionMessage(errorMessage(reason))\n      }\n    } finally {\n      setActionBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "n)}\n      onClose={() => vo"
+      },
+      "anchor": "onClose",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onToggle"
+      },
+      "anchor": "onToggle",
+      "transient": "draft",
+      "reason": "This handler updates the local triage selection of immutable entry revisions and cached titles only; selection is not a mutation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onApprove"
+      },
+      "anchor": "onApprove",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/api.ts",
+          "quote": "context.call('quirky.ledger/request', params)"
+        },
+        "target": "quirky.ledger/request",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "approveTriage = () => void approve(triageSelected, setTriageConflict)"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "approve = async (selections: LedgerSelection[], onConflict: (message: string) => void) => {\n    if (!pageLedgerTarget || selections.length === 0) return\n    onConflict('')\n    setCandidateError('')\n    setActionBusy(true)\n    setActionMessage('')\n    try {\n      await ledgerRequest(context, { operation: 'approve', target: pageLedgerTarget, selections })\n      setSelected([])\n      setSelectionTitles(new Map())\n      setTriageSelected([])\n      setTriageTitles(new Map())\n      await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])\n      if (detail) await openDetail(detail)\n    } catch (reason) {\n      if (isConflict(reason)) {\n        onConflict('Selected entry revisions changed. The latest rows and candidates have been reloaded; select them again.')\n        setSelected([])\n        setSelectionTitles(new Map())\n        setTriageSelected([])\n        setTriageTitles(new Map())\n        await Promise.all([loadEntries(), ...(triageOpen ? [loadCandidates()] : [])])\n        if (detail) await openDetail(detail)\n      } else {\n        setActionMessage(errorMessage(reason))\n        if (triageOpen) setCandidateError(errorMessage(reason))\n      }\n    } finally {\n      setActionBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/api.ts",
+            "quote": "export async function ledgerRequest(context: UiPluginContext, request: LedgerRequest, confirmed = false): Promise<LedgerResponse> {\n  const params: Record<string, unknown> = {\n    ...request,\n    ...(confirmed ? { yes: true, confirmed: true } : {})\n  }\n  const raw = await context.call('quirky.ledger/request', params)\n  if (typeof raw !== 'object' || raw === null) throw new Error('Ledger returned an invalid response.')\n  const value = raw as Record<string, unknown>\n  const runtime = value.runtime\n  if (value.schemaVersion !== 1 || !('ledger' in value) || typeof runtime !== 'object' || runtime === null || !('runtimeId' in runtime) || typeof runtime.runtimeId !== 'string' || !('profileId' in runtime) || typeof runtime.profileId !== 'string') {\n    throw new Error('Ledger returned an incompatible response.')\n  }\n  if (request.operation === 'list' && !Array.isArray(value.entries)) throw new Error('Ledger list response is missing entries.')\n  if (request.operation === 'show' && (typeof value.entry !== 'object' || value.entry === null)) throw new Error('Ledger show response is missing its entry.')\n  if (request.operation === 'review' && !Array.isArray(value.candidates)) throw new Error('Ledger review response is missing candidates.')\n  if (request.operation === 'catalog' && !Array.isArray(value.ledgers)) throw new Error('Ledger catalog response is missing ledgers.')\n  if (request.operation === 'removal-preview' && !Array.isArray(value.removalPreview)) throw new Error('Ledger removal preview response is missing snapshots.')\n  if (['file', 'edit', 'state', 'revert'].includes(request.operation) && (typeof value.entry !== 'object' || value.entry === null)) {\n    throw new Error(`Ledger ${request.operation} response is missing its entry.`)\n  }\n  return value as unknown as LedgerResponse\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onBulkState"
+      },
+      "anchor": "onBulkState",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function requestBulkState(state: Extract<LedgerState, 'resolved' | 'archived'>, selections: LedgerSelection[]): void {\n    void runControl({ action: 'prepare', kind: 'bulk-state', state, selections: selections.map((item) => ({ id: item.id, revision: item.revision })) })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "onRetry"
+      },
+      "anchor": "onRetry",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "})}\n      onClose={() => vo"
+      },
+      "anchor": "onClose",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "    closeOnBackdrop={false}\n        scrollBody\n        onClose={() => void runControl({ action: 'dismiss', dialog: 'c"
+      },
+      "anchor": "onClose",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "n\" disabled={confirmBusy} onClick={() => void runControl({ "
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "y\" disabled={confirmBusy} onClick={() => void runControl({ "
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
+        },
+        "target": "command:quirky.ledger/control",
+        "via": [
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
+          },
+          {
+            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+        "quote": "m\" onClick={("
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
+          "quote": "context.openView(LEDGER_VIEW_ID)"
+        },
+        "target": "view:quirky.ledger/ledger"
+      }
+    }
+  ]
+}
