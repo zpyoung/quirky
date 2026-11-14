@@ -236,8 +236,8 @@ describe('pane passthroughs', () => {
     await run(() => view.controller().paste('abc'))
     await run(() => view.controller().paste('def', 'pane-2'))
     expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
-      { session: 's-3', data: 'abc' },
-      { session: 's-2', data: 'def' }
+      { session: 's-3', data: 'abc', expectedIncarnation: 'fixture-s-3' },
+      { session: 's-2', data: 'def', expectedIncarnation: 'fixture-s-2' }
     ])
   })
 
