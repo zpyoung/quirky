@@ -105,6 +105,7 @@ each window's effective layout, so a shared change does not replace another wind
 ## Native folder and auxiliary-window bridges
 
 Supported shells expose public `desktop.folder.pick` and `desktop.window.open/list/close` routes. Folder cancellation returns no paths and does not overwrite the UI's typed draft; a missing native shell refuses rather than showing a browser prompt. Dashboard's open-as setting selects an in-window view or an owner-bound pop-out. Auxiliary route/filter updates retain that window identity, while workspace-card commands route to its owning main window.
+The CLI command `quirky desktop pick-folder` exposes the same focused-window folder picker.
 
 These bridges do not provide generic per-window workspace sleep/close routing. Notification permission, click and dismissal callbacks also remain unavailable in the pinned SDK; a void notification call is not delivery proof. Production signed helper/TCC/launchd/admission/upgrade integration still requires an authorized signing identity.
 

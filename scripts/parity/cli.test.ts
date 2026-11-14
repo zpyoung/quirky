@@ -40,13 +40,21 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     ]) {
       expect(rows.get(id), id).toMatchObject({ status: 'passed', executed: true })
     }
-    for (const id of ['serve-restore-resume', 'serve-service-install', 'serve-service-status', 'serve-service-uninstall', 'file-diff', 'file-open-changed', 'file-open-render', 'worktree-ps-summary', 'orchestration-worker-read']) {
+    const excludedIds = ['serve-restore-resume', 'serve-service-install', 'serve-service-status', 'serve-service-uninstall']
+    for (const id of excludedIds) {
+      expect(rows.get(id), id).toMatchObject({ status: 'excluded', executed: false, checks: [], catalogRefs: [] })
+      expect(rows.get(id)!.reason!.trim()).not.toBe('')
+      expect(rows.get(id)).not.toHaveProperty('followUp')
+    }
+    expect(report.receipts.filter(receipt => excludedIds.includes(receipt.id))).toEqual([])
+    const gapIds = ['file-diff', 'file-open-changed', 'file-open-render', 'worktree-ps-summary', 'orchestration-worker-read']
+    for (const id of gapIds) {
       expect(rows.get(id), id).toMatchObject({ status: 'gap', executed: false })
       expect(rows.get(id)!.reason).toBeTruthy()
     }
     expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(90)
     expect(report.rows.filter(row => row.status === 'mapped-only')).toHaveLength(0)
-    expect(report.rows.filter(row => row.status === 'gap')).toHaveLength(9)
+    expect(report.rows.filter(row => row.status === 'gap').map(row => row.id).sort()).toEqual([...gapIds].sort())
     expect(report.rows.some(row => row.status === 'delegated')).toBe(true)
     expect(report.rows.filter(row => row.status === 'failed' || row.status === 'not-run')).toEqual([])
     for (const row of report.rows.filter(row => row.status === 'passed')) {
