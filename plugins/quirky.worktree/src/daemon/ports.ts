@@ -130,6 +130,8 @@ export class WorktreePorts {
 
   /** The worktree's block, allocating the lowest free one on first use. Rejects when the row is gone, the range is invalid or full. */
   ensure(worktreeId: string): Promise<PortBlock> {
+    const stored = storedPortBlock(this.store, worktreeId)
+    if (stored) return Promise.resolve(stored)
     return this.queue.run('ports', async () => {
       if (!worktreeExists(this.store, worktreeId)) {
         throw new Error(`worktree ${worktreeId} no longer exists`)

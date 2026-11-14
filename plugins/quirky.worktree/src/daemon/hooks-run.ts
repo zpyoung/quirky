@@ -4,6 +4,8 @@ import { gitApi } from '@quirky/git'
 import type { ProcessRunner } from '@quirky/protocol'
 import { portEnvironment, type PortBlock } from './ports'
 
+const PORT_ENV_NAMES = ['PORT', 'WORKTREE_PORT', 'WORKTREE_PORT_COUNT', 'CONDUCTOR_PORT']
+
 export const HOOK_TIMEOUT_MS = 2 * 60 * 1000
 export const HOOK_KILL_GRACE_MS = 5000
 export const HOOK_OUTPUT_LIMIT = 10 * 1024 * 1024
@@ -59,7 +61,8 @@ export const dataRunnerPath = (dataDir: string, worktreeId: string, kind: HookKi
  */
 export async function writeRunner(runner: string, target: HookTarget, script: string): Promise<void> {
   const exports = Object.entries(hookEnvironment(target)).map(([key, value]) => `export ${key}=${shellQuote(value)}`)
-  const lines = ['#!/bin/bash', ...exports, `cd ${shellQuote(target.worktreePath)} || exit 1`, script.endsWith('\n') ? script : `${script}\n`]
+  const clearPorts = target.ports ? [] : [`unset ${PORT_ENV_NAMES.join(' ')}`]
+  const lines = ['#!/bin/bash', ...clearPorts, ...exports, `cd ${shellQuote(target.worktreePath)} || exit 1`, script.endsWith('\n') ? script : `${script}\n`]
   await mkdir(dirname(runner), { recursive: true })
   await writeFile(runner, lines.join('\n'))
   await chmod(runner, 0o755)
@@ -74,9 +77,13 @@ export const runnerCommand = (runner: string): string => `/bin/bash ${shellQuote
  * `maxOutputBytes` is discarded without interrupting the script.
  */
 export async function runHookInDaemon(processRunner: ProcessRunner, runner: string, target: HookTarget, options: HookRunOptions = {}): Promise<HookRunResult> {
+  const env = { ...process.env, ...hookEnvironment(target) }
+  if (!target.ports) {
+    for (const name of PORT_ENV_NAMES) delete env[name]
+  }
   const result = await processRunner.run(['/bin/bash', runner], {
     cwd: target.worktreePath,
-    env: { ...process.env, ...hookEnvironment(target) },
+    env,
     timeoutMs: options.timeoutMs ?? HOOK_TIMEOUT_MS,
     killGraceMs: options.killGraceMs ?? HOOK_KILL_GRACE_MS,
     maxOutputBytes: options.maxOutputBytes ?? HOOK_OUTPUT_LIMIT,

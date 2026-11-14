@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { RpcErrorCode, type Session, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
 import { call, failure, git, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
-import { hookEnvironment, shellQuote } from '../src/daemon/hooks-run'
+import { hookEnvironment, shellQuote, writeRunner } from '../src/daemon/hooks-run'
 import { WorktreePorts, isPortFree, migrateWorktreePorts, type PortBlock } from '../src/daemon/ports'
 import { makeProject, repoSet, setSetting, startWorld, type SessionMode, type World } from './fixtures/repos'
 import { startGithubWorld, type GithubWorld } from './github-fixtures/world'
@@ -229,4 +229,37 @@ test('launch hook leaves an unknown remote or VM worktree alone', async () => {
     })).toBeUndefined()
     expect(opened.store.all('SELECT * FROM worktree_ports')).toEqual([])
   } finally { opened.close() }
+})
+
+test('a standalone runner without a block unsets inherited port variables', async () => {
+  const { dir } = await start('none')
+  const runner = join(dir, 'runner.sh')
+  await writeRunner(runner, { rootPath: dir, worktreePath: dir },
+    'printf "%s|%s|%s|%s" "${PORT-unset}" "${WORKTREE_PORT-unset}" "${WORKTREE_PORT_COUNT-unset}" "${CONDUCTOR_PORT-unset}"')
+  const outcome = Bun.spawnSync(['/bin/bash', runner], {
+    env: { ...process.env, PORT: '12345', WORKTREE_PORT: '12345', WORKTREE_PORT_COUNT: '3', CONDUCTOR_PORT: '12345' },
+    stdin: 'ignore', stdout: 'pipe', stderr: 'pipe'
+  })
+  expect(outcome.exitCode).toBe(0)
+  expect(outcome.stdout.toString()).toBe('unset|unset|unset|unset')
+})
+
+test('daemon archive of an unallocated worktree does not inherit another worktree block', async () => {
+  const names = ['PORT', 'WORKTREE_PORT', 'WORKTREE_PORT_COUNT', 'CONDUCTOR_PORT']
+  const saved = names.map((name) => process.env[name])
+  try {
+    for (const name of names) process.env[name] = '12345'
+    const { dir } = await start('none')
+    const external = join(scratch(), 'external')
+    git(dir, 'worktree', 'add', '-q', '-b', 'external', external)
+    const archive = join(dir, 'archive.txt')
+    await repoSet(w!.client, 'api', { archiveScript: `printf "%s|%s|%s|%s" "\${PORT-unset}" "\${WORKTREE_PORT-unset}" "\${WORKTREE_PORT_COUNT-unset}" "\${CONDUCTOR_PORT-unset}" > ${shellQuote(archive)}` })
+    await call(w!.client, 'quirky.worktree/remove', { worktree: `path:${external}`, yes: true })
+    expect(readFileSync(archive, 'utf8')).toBe('unset|unset|unset|unset')
+  } finally {
+    names.forEach((name, index) => {
+      if (saved[index] === undefined) delete process.env[name]
+      else process.env[name] = saved[index]
+    })
+  }
 })

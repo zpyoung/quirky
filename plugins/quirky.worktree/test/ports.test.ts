@@ -281,3 +281,27 @@ test('persists an allocation and does not probe it again after reopening the sto
   expect(probes).toBe(0)
   expect(storedPortBlock(store, 'a')).toEqual({ base: 42000, count: 10 })
 })
+
+test('returns a held block without waiting for another worktree to finish probing', async () => {
+  const { store } = fixture()
+  addWorktrees(store, 'a', 'b')
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const ports = new WorktreePorts({
+    store, range: () => range(),
+    probe: async (port) => {
+      if (port >= 42010) { entered.resolve(); await release.promise }
+      return true
+    }
+  })
+  await ports.ensure('a')
+  const allocating = ports.ensure('b')
+  await entered.promise
+  const held = ports.ensure('a')
+  try {
+    expect(await Promise.race([held, Promise.resolve(null)])).toEqual({ base: 42000, count: 10 })
+  } finally {
+    release.resolve()
+    await Promise.all([held, allocating])
+  }
+})

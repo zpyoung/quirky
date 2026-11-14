@@ -18,8 +18,9 @@ checks TCP wildcard and loopback addresses for IPv4 and IPv6. Allocation failure
 without blocking creation or session launch.
 
 Removing a worktree or forgetting its stored row releases its block after any archive script.
-Archive scripts use an existing block and never allocate one. Listening processes are not stopped
-by releasing a block. Remote and VM workspaces do not receive local blocks.
+Archive scripts use an existing block and never allocate one. Scripts without a block clear
+inherited port variables. Listening processes are not stopped by releasing a block.
+Remote and VM workspaces do not receive local blocks.
 Daemons with separate homes do not coordinate: they can reserve the same ports when none
 are listening yet.
 
