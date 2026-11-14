@@ -2,8 +2,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { Ask, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { act } from 'react'
+import { createAskStore, type AskStore } from '../src/store'
 
 const PANEL = 'panel:quirky.ask/questions'
+const TOGGLE_PREVIEW_COMMAND = 'command:quirky.ask/toggle-preview'
 
 type Mount = (element: HTMLElement, props: { input?: unknown; report?(state: unknown): void }) => (() => void) | void
 type Module = { activate(context: UiPluginContext): void | Promise<void>; deactivate?(): void | Promise<void> }
@@ -43,6 +45,7 @@ type Fake = ReturnType<typeof fakeContext>
 function fakeContext(initial: Ask[]) {
   let asks = [...initial]
   const calls: { method: string; params?: Record<string, unknown> }[] = []
+  const executed: { id: string; args?: unknown }[] = []
   const badges: (number | null)[] = []
   const toasts: { title: string; body: string }[] = []
   const provided = new Map<string, unknown>()
@@ -56,6 +59,12 @@ function fakeContext(initial: Ask[]) {
     pluginId: 'quirky.ask',
     log() {},
     provide: (id: string, implementation: unknown) => void provided.set(id, implementation),
+    async executeCommand(id: string, args?: unknown) {
+      executed.push({ id, args })
+      const command = provided.get(id) as ((args?: unknown) => unknown) | undefined
+      if (!command) throw new Error(`unknown command ${id}`)
+      return await command(args)
+    },
     async call(method: string, params?: Record<string, unknown>) {
       calls.push({ method, params })
       if (failWith && method !== 'quirky.ask/list' && method !== 'quirky.ask/updatePartial') throw new Error(failWith)
@@ -96,6 +105,7 @@ function fakeContext(initial: Ask[]) {
     badges,
     toasts,
     provided,
+    executed,
     listeners,
     connection,
     holdLists() {
@@ -212,11 +222,46 @@ const deployAsk = (id = 'ask_d', overrides: Partial<Ask> = {}): Ask => ({
 })
 
 describe('the Questions panel module', () => {
+  test('shows loading while the initial ask list is pending', async () => {
+    const fake = fakeContext([selectAsk('ask_loading', 'Loading', 1)])
+    const release = fake.holdLists()
+    await activated(fake)
+    const { element } = await mount(fake)
+
+    expect(element.textContent).toContain('Loading questions…')
+    expect(element.textContent).not.toContain('No pending questions.')
+
+    release()
+    await settled()
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(1)
+  })
+
+  test('shows an initial list failure and retries into the ready state', async () => {
+    const fake = fakeContext([selectAsk('ask_retry', 'Retry me', 1)])
+    fake.failLists('temporary list failure')
+    await activated(fake)
+    const { element } = await mount(fake)
+
+    expect(element.textContent).toContain('Could not load questions: temporary list failure')
+    expect(buttonIn(element, 'Retry')).toBeDefined()
+
+    fake.failLists(null)
+    const release = fake.holdLists()
+    await click(buttonIn(element, 'Retry'))
+    expect(element.textContent).toContain('Loading questions…')
+    expect(element.textContent).not.toContain('Could not load questions:')
+    release()
+    await settled()
+
+    expect(element.querySelectorAll('[data-ask-card]')).toHaveLength(1)
+    expect(element.textContent).not.toContain('Could not load questions:')
+  })
+
   test('provides the panel and keeps the badge without the panel mounted', async () => {
     const fake = fakeContext([selectAsk('ask_1', 'First', 1), selectAsk('ask_2', 'Second', 2)])
     await activated(fake)
 
-    expect([...fake.provided.keys()]).toEqual([PANEL])
+    expect([...fake.provided.keys()]).toEqual([PANEL, TOGGLE_PREVIEW_COMMAND])
     expect(fake.badges.at(-1)).toBe(2)
 
     fake.add(selectAsk('ask_3', 'Third', 3))
@@ -628,9 +673,9 @@ describe('the Questions panel module', () => {
     await click(buttonIn(element, 'Submit'))
 
     expect(answers()).toHaveLength(0)
-    expect(fieldsetOf(element, 'env').textContent).toContain('This question is required.')
-    expect(fieldsetOf(element, 'replicas').textContent).toContain('Enter a number of at most 10.')
-    expect(fieldsetOf(element, 'email').textContent).toContain('Enter a valid email address.')
+    expect(fieldsetOf(element, 'env').querySelector('.ui-inline-error')?.textContent).toContain('This question is required.')
+    expect(fieldsetOf(element, 'replicas').querySelector('.ui-inline-error')?.textContent).toContain('Enter a number of at most 10.')
+    expect(fieldsetOf(element, 'email').querySelector('.ui-inline-error')?.textContent).toContain('Enter a valid email address.')
 
     const replicas = fieldsetOf(element, 'replicas').querySelector('input') as HTMLInputElement
     await type(replicas, '2.5')
@@ -759,6 +804,65 @@ describe('the Questions panel module', () => {
     await click(buttonIn(element, 'Hide preview'))
     expect(element.querySelector('iframe[title="Question preview"]')).toBeNull()
   })
+  test('routes option previews through a validated, idempotent preview command', async () => {
+    const ask: Ask = {
+      ...selectAsk('ask_preview', 'Preview', 1),
+      spec: {
+        questions: [{
+          id: 'framework',
+          type: 'select',
+          question: 'Framework?',
+          options: [{ value: 'react', label: 'React', preview: { format: 'markdown', content: 'Preview' } }]
+        }]
+      }
+    }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+    const togglePreview = fake.provided.get(TOGGLE_PREVIEW_COMMAND) as (args?: unknown) => { open: boolean }
+
+    await click(buttonIn(element, 'Show preview'))
+    await settled()
+    expect(fake.executed).toEqual([{
+      id: TOGGLE_PREVIEW_COMMAND,
+      args: { askId: 'ask_preview', questionId: 'framework', option: 'react' }
+    }])
+    expect(element.querySelector('iframe[title="Question preview"]')).not.toBeNull()
+
+    let open: { open: boolean } | undefined
+    await act(async () => {
+      open = togglePreview({ askId: 'ask_preview', questionId: 'framework', option: 'react', open: true })
+      expect(open).toEqual({ open: true })
+      open = togglePreview({ askId: 'ask_preview', questionId: 'framework', option: 'react', open: true })
+      expect(open).toEqual({ open: true })
+      open = togglePreview({ askId: 'ask_preview', questionId: 'framework', option: 'react', open: false })
+      expect(open).toEqual({ open: false })
+    })
+    expect(element.querySelector('iframe[title="Question preview"]')).toBeNull()
+    for (const input of [
+      null,
+      {},
+      { askId: '', questionId: 'framework', option: 'react' },
+      { askId: 'ask_preview', questionId: ' ', option: 'react' },
+      { askId: 'ask_preview', questionId: 'framework', option: '' },
+      { askId: 'ask_preview', questionId: 'framework', option: 'react', open: 'true' }
+    ]) {
+      expect(() => togglePreview(input)).toThrow()
+    }
+
+    const pruningContext = fakeContext([ask])
+    const pruningStore = createAskStore(pruningContext.context) as AskStore & {
+      previews(): ReadonlySet<string>
+      togglePreview(askId: string, questionId: string, option: string, open?: boolean): boolean
+    }
+    await settled()
+    pruningStore.togglePreview('ask_preview', 'framework', 'react', true)
+    expect(pruningStore.previews().has('ask_preview\0framework\0react')).toBe(true)
+    pruningStore.resolve('ask_preview', declined('ask_preview'))
+    expect(pruningStore.previews().has('ask_preview\0framework\0react')).toBe(false)
+    pruningStore.dispose()
+  })
+
   test('a mounted option preview follows the root theme while keeping links inert and the frame sandboxed', async () => {
     const originalTheme = document.documentElement.getAttribute('data-theme')
     await act(async () => {

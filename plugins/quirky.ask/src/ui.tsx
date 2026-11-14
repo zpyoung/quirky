@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { AskCards } from './AskCards'
-import { PANEL_ID, createAskStore, reportOf, type AskStore } from './store'
+import { PANEL_ID, createAskStore, reportOf, TOGGLE_PREVIEW_COMMAND, type AskStore } from './store'
 
 let store: AskStore | null = null
 
@@ -22,6 +22,24 @@ export function activate(context: UiPluginContext): void {
       root.unmount()
     }
   })
+  context.provide(TOGGLE_PREVIEW_COMMAND, (input: unknown) => {
+    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+      throw new Error('askId, questionId, and option are required.')
+    }
+    const { askId, questionId, option, open } = input as Record<string, unknown>
+    if (
+      typeof askId !== 'string' || !askId.trim() ||
+      typeof questionId !== 'string' || !questionId.trim() ||
+      typeof option !== 'string' || !option.trim()
+    ) {
+      throw new Error('askId, questionId, and option must be non-empty strings.')
+    }
+    if (open !== undefined && typeof open !== 'boolean') {
+      throw new Error('open must be a boolean.')
+    }
+    return { open: asks.togglePreview(askId, questionId, option, open) }
+  })
+
 }
 
 export function deactivate(): void {

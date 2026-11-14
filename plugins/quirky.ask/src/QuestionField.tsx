@@ -1,13 +1,17 @@
-import { useState, type CSSProperties } from 'react'
+import type { CSSProperties } from 'react'
 import { Button, TextArea, TextField } from '@quirky/ui'
-import type { AskOption, AskQuestion } from '@quirky/protocol'
+import type { AskOption, AskQuestion, UiPluginContext } from '@quirky/protocol'
 import type { QuestionDraft } from './core/submission'
 import { PreviewFrame } from './PreviewFrame'
+import { previewKeyOf, TOGGLE_PREVIEW_COMMAND } from './store'
 
 type Props = {
+  askId: string
   question: AskQuestion
   draft: QuestionDraft
   onChange: (draft: QuestionDraft) => void
+  context: UiPluginContext
+  previews: ReadonlySet<string>
 }
 
 const OWN_ANSWER = 'Add your own answer'
@@ -36,7 +40,7 @@ const OPTION_BUTTON_STYLE: CSSProperties = {
 }
 
 /** The controls for one question, edited through its `QuestionDraft`. */
-export function QuestionField({ question, draft, onChange }: Props) {
+export function QuestionField({ askId, question, draft, onChange, context, previews }: Props) {
   switch (question.type) {
     case 'select':
     case 'multiselect': {
@@ -52,7 +56,16 @@ export function QuestionField({ question, draft, onChange }: Props) {
       return (
         <div style={OPTIONS_STYLE}>
           {question.options.map((option) => (
-            <OptionRow key={option.value} option={option} pressed={draft.selected.includes(option.value)} onPress={() => toggle(option.value)} />
+            <OptionRow
+              key={option.value}
+              askId={askId}
+              context={context}
+              questionId={question.id}
+              previews={previews}
+              option={option}
+              pressed={draft.selected.includes(option.value)}
+              onPress={() => toggle(option.value)}
+            />
           ))}
           <TextField
             label={OWN_ANSWER}
@@ -122,8 +135,24 @@ export function QuestionField({ question, draft, onChange }: Props) {
   }
 }
 
-function OptionRow({ option, pressed, onPress }: { option: AskOption; pressed: boolean; onPress: () => void }) {
-  const [previewing, setPreviewing] = useState(false)
+function OptionRow({
+  askId,
+  context,
+  questionId,
+  previews,
+  option,
+  pressed,
+  onPress
+}: {
+  askId: string
+  context: UiPluginContext
+  questionId: string
+  previews: ReadonlySet<string>
+  option: AskOption
+  pressed: boolean
+  onPress: () => void
+}) {
+  const previewing = previews.has(previewKeyOf(askId, questionId, option.value))
   return (
     <div style={OPTIONS_STYLE}>
       <div style={OPTION_LINE_STYLE}>
@@ -138,7 +167,9 @@ function OptionRow({ option, pressed, onPress }: { option: AskOption; pressed: b
         {option.preview && (
           <Button
             aria-expanded={previewing}
-            onClick={() => setPreviewing(!previewing)}
+            onClick={() => {
+              void context.executeCommand(TOGGLE_PREVIEW_COMMAND, { askId, questionId, option: option.value })
+            }}
           >
             {previewing ? 'Hide preview' : 'Show preview'}
           </Button>

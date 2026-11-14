@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { Badge, Button, SectionHeader } from '@quirky/ui'
+import { Badge, Button, InlineError, SectionHeader } from '@quirky/ui'
 import type { Ask, AskEnvelope, UiPluginContext } from '@quirky/protocol'
 import { buildSubmission, draftsToPartial, initialDraftFor, type QuestionDraft } from './core/submission'
 import { QuestionField } from './QuestionField'
 import { ASK_FALLBACK_TITLE } from './store'
 
-type Props = { ask: Ask; context: UiPluginContext; onResolved(askId: string, envelope: AskEnvelope): void }
+type Props = {
+  ask: Ask
+  context: UiPluginContext
+  resolve(askId: string, envelope: AskEnvelope): void
+  previews: ReadonlySet<string>
+}
 type Drafts = Record<string, QuestionDraft>
 
 const SAVE_DELAY_MS = 500
@@ -51,7 +56,7 @@ const OPTION_LIST_STYLE: CSSProperties = {
 
 const QUESTION_TEXT_STYLE: CSSProperties = { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }
 
-export function AskCard({ ask, context, onResolved }: Props) {
+export function AskCard({ ask, context, resolve, previews }: Props) {
   const [drafts, setDrafts] = useState<Drafts>(() => Object.fromEntries(ask.spec.questions.map((q) => [q.id, initialDraftFor(ask.partial[q.id])])))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -84,12 +89,12 @@ export function AskCard({ ask, context, onResolved }: Props) {
     scheduleSave()
   }
 
-  const attempt = async (method: string, params: Record<string, unknown>, failure: string) => {
+  const attempt = async (run: () => Promise<AskEnvelope>, failure: string) => {
     const hadPendingSave = cancelSave()
     setBusy(true)
     try {
-      const envelope = (await context.call(method, params)) as AskEnvelope
-      onResolved(ask.id, envelope)
+      const envelope = await run()
+      resolve(ask.id, envelope)
     } catch (error) {
       if (hadPendingSave) scheduleSave()
       context.toast(failure, error instanceof Error ? error.message : String(error))
@@ -97,6 +102,7 @@ export function AskCard({ ask, context, onResolved }: Props) {
       setBusy(false)
     }
   }
+
   const openDelegatedQuestion = async () => {
     if (!ask.sessionId) {
       context.toast('Could not open delegated question', 'The exact delegated session is unavailable.')
@@ -127,10 +133,14 @@ export function AskCard({ ask, context, onResolved }: Props) {
       return
     }
     setErrors({})
-    return attempt('quirky.ask/answer', { askId: ask.id, answers: submission.answers, skipped: submission.skipped }, 'Could not answer')
+    return attempt(
+      () => context.call('quirky.ask/answer', { askId: ask.id, answers: submission.answers, skipped: submission.skipped }) as Promise<AskEnvelope>,
+      'Could not answer'
+    )
   }
 
-  const dismiss = () => attempt('quirky.ask/cancel', { askId: ask.id }, 'Could not dismiss')
+  const dismiss = () =>
+    attempt(() => context.call('quirky.ask/cancel', { askId: ask.id }) as Promise<AskEnvelope>, 'Could not dismiss')
 
   return (
     <article data-ask-card={ask.id} aria-label={ask.spec.title ?? 'Question'} style={CARD_STYLE}>
@@ -175,13 +185,16 @@ export function AskCard({ ask, context, onResolved }: Props) {
                 )}
                 {!question.required && <div style={{ alignSelf: 'flex-start' }}><Badge>(optional)</Badge></div>}
                 <div data-question-text={grouped ? undefined : true}>
-                  <QuestionField question={question} draft={drafts[question.id]!} onChange={(draft) => change(question.id, draft)} />
+                  <QuestionField
+                    askId={ask.id}
+                    question={question}
+                    draft={drafts[question.id]!}
+                    onChange={(draft) => change(question.id, draft)}
+                    context={context}
+                    previews={previews}
+                  />
                 </div>
-                {errors[question.id] && (
-                  <div role="alert">
-                    <Badge tone="failing">{errors[question.id]}</Badge>
-                  </div>
-                )}
+                {errors[question.id] && <InlineError message={errors[question.id]!} />}
               </fieldset>
             )
           })}
