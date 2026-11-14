@@ -247,6 +247,12 @@ async function mountExpanded(options: { state?: TasksState; handlers?: Record<st
     'quirky.tasks/issueChoices': (params) => params.kind === 'source' ? { source: 'origin', sources: [{ id: 'origin', label: 'Origin' }] } : params.kind === 'labels' ? { available: true, labels: ['bug'] } : { available: true, assignees: [{ login: 'alex', avatarUrl: null }] },
     'quirky.hosting/viewer': () => ({ login: 'zach' }),
     'ui.tool.open': () => ({}),
+    'ui.window.self': () => ({ connId: 7 }),
+    'ui.window.command.run': async (params) => {
+      const implementation = provided.get(String(params.id))
+      if (typeof implementation !== 'function') throw new Error('offline')
+      return { result: await (implementation as (args: unknown) => unknown)(params.args) }
+    },
     'quirky.reviews/open': () => ({ opened: true }),
     ...options.handlers
   }

@@ -3444,6 +3444,21 @@
           },
           "required": ["worktree", "kind", "number"]
         }
+      },
+      {
+        "id": "list-control",
+        "title": "Open or Close a Tasks List Popover",
+        "palette": false,
+        "description": "Open or close the repository picker or the Filters dialog in the Tasks list this window shows. Returns how many mounted lists applied it.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "control": { "type": "string", "enum": ["repositories", "filters"] },
+            "open": { "type": "boolean" }
+          },
+          "required": ["control", "open"]
+        }
       }
     ],
     "cli-command": [
