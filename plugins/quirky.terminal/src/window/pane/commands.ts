@@ -5,14 +5,20 @@ export type WindowCommandDescriptor = { command: string; args: Record<string, un
 type CachedConnection = number | Promise<number>
 
 const connections = new WeakMap<UiPluginContext, CachedConnection>()
+const watchedContexts = new WeakSet<UiPluginContext>()
 
 async function connectionId(context: UiPluginContext): Promise<number> {
+  if (!watchedContexts.has(context)) {
+    context.onConnection(() => connections.delete(context))
+    watchedContexts.add(context)
+  }
   const cached = connections.get(context)
   if (typeof cached === 'number') return cached
   if (cached) return cached
 
   let pending!: Promise<number>
   pending = context.call('ui.window.self', {}).then((value) => {
+    if (connections.get(context) !== pending) throw new Error('No live window connection is available.')
     const connId = (value as { connId?: unknown } | null)?.connId
     if (typeof connId !== 'number' || !Number.isSafeInteger(connId) || connId < 1) {
       throw new Error('No live window connection is available.')
@@ -30,6 +36,7 @@ async function connectionId(context: UiPluginContext): Promise<number> {
 /** Runs a command in this context's live window without replaying a failed action. */
 export async function requestWindowCommand(context: UiPluginContext, descriptor: WindowCommandDescriptor): Promise<unknown> {
   const connId = await connectionId(context)
+  if (connections.get(context) !== connId) throw new Error('No live window connection is available.')
   let reply: unknown
   try {
     reply = await context.call('ui.window.command.run', {
