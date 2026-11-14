@@ -463,8 +463,6 @@ const pluginReferences: Array<{ rowId: string; plugin: string; commandId: string
   { rowId: 'repo-set-base-ref', plugin: 'quirky.repo', commandId: 'set' },
   { rowId: 'repo-show', plugin: 'quirky.repo', commandId: 'show' },
   { rowId: 'repo-search-refs', plugin: 'quirky.repo', commandId: 'search-refs' },
-  { rowId: 'serve-restore-resume', plugin: 'quirky.session', commandId: 'restore' },
-  { rowId: 'serve-restore-resume', plugin: 'quirky.session', commandId: 'wake' },
   { rowId: 'terminal-close', plugin: 'quirky.terminal', commandId: 'tab-close' },
   { rowId: 'terminal-create', plugin: 'quirky.terminal', commandId: 'tab-new' },
   { rowId: 'terminal-create', plugin: 'quirky.terminal', commandId: 'layout' },
@@ -674,8 +672,7 @@ const KERNEL_MAPPINGS: CliCatalogMapping[] = [
   kernelMapping('serve', 'serve', ['status.get'], [
     flagBinding('port', 'integer', 'listen on this loopback port; refuse to start when it is in use'),
     flagBinding('disable-plugins', 'boolean', 'safe mode: installed plugins, stored disables and the distro layer are off for this run')
-  ]),
-  kernelMapping('serve-service-status', 'status', ['status.get'])
+  ])
 ]
 
 export const CLI_MAPPINGS: readonly CliCatalogMapping[] = [
