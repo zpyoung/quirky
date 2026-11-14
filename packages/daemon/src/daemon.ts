@@ -27,6 +27,7 @@ import { startServer } from './server'
 import { startSocketServer } from './socket-server'
 import { Core } from './service'
 import { describeSqliteRecovery } from './sqlite'
+import { createStartupGate } from './startup-gate'
 import { Store } from './store'
 import { migrateV1Settings } from './v1-settings'
 import { HostPowerService } from './host-power'
@@ -71,6 +72,8 @@ export type DaemonOptions = {
   socketPath?: string
   /** Called when `daemon.stop` asks the daemon to stop; defaults to stopping this daemon handle. */
   onStopRequested?: () => void
+  /** Publishes the listening handle before startup activation settles. */
+  onListening?: (handle: DaemonHandle) => void
   /** How long without input before a window stops counting as present; defaults to `$QUIRKY_DESKTOP_AWAY_MS` (a positive integer) or `DESKTOP_AWAY_MS`. */
   desktopAwayMs?: number
   /** Trusted embedded-host/test injection only; undefined selects the platform's real native source. */
@@ -206,7 +209,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     distroDisabled: () => lateRuntime?.distros.active()?.disable ?? [],
     deriveDiagnostics: (view) => buildUiModel({ ...view, chosenTheme: 'default' }).warnings,
     extension: {
-      create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, isRevoked),
+      create: (plugin, isRevoked) => lateRuntime!.extension.create(plugin, () => stopped || isRevoked()),
       revoke: (pluginId) => lateRuntime?.extension.revoke(pluginId)
     }
   })
@@ -243,10 +246,9 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   }
 
   plugins.load()
-  await plugins.activateStartup()
-  pluginRuntime.scheduler.start()
 
-  const rpcHandler = createRpcHandler({ dispatcher: pluginRuntime.dispatcher, rpcToken, log })
+  const gate = createStartupGate(log)
+  const rpcHandler = gate.rpc(createRpcHandler({ dispatcher: pluginRuntime.dispatcher, rpcToken, log }))
   const requestedPort = options.port ?? Number(process.env.QUIRKY_PORT ?? 0)
   const listen = (listenPort: number) =>
     startServer({
@@ -254,6 +256,15 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       handle: rpcHandler,
       pluginFile: (id) => plugins.pluginFiles(id),
       fileResources: pluginRuntime.fileResources,
+      modulePreloads: () => Object.values(pluginRuntime.ui.contributions().modules).map((module) => module.url),
+      deliverHook: (event, bodyBytes) => gate.hook(event, bodyBytes, (held) => {
+        if (stopped) return
+        try {
+          core.deliverToPlugins(held)
+        } catch (error) {
+          log(`hook.received delivery failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
+      }),
       port: listenPort,
       rpcToken,
       daemonVersion,
@@ -294,6 +305,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     ...(options.entryHash === undefined ? {} : { entryHash: options.entryHash })
   }
   writePrivateJson(runtimeFilePath(home), runtime)
+  const listenMs = Date.now() - startedAt
 
   let stopped = false
   handle = {
@@ -335,5 +347,10 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       store.close()
     }
   }
+  options.onListening?.(handle)
+  await plugins.activateStartup()
+  gate.open()
+  if (!stopped) pluginRuntime.scheduler.start()
+  log(`listening after ${listenMs} ms; startup plugins settled after ${Date.now() - startedAt} ms`)
   return handle
 }
