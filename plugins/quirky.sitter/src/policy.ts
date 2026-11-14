@@ -594,9 +594,11 @@ function isApprovalReady(world: SitterWorld): boolean {
 
 
 function prepareIsBlocked(attempts: Attempt[]): boolean {
-  return attempts.some((attempt) =>
-    attempt.state !== 'settled' || attempt.effect === 'indeterminate' || attempt.resolved === false
-  )
+  return attempts.some((attempt) => {
+    if (attempt.state === 'attempted' && attempt.effect === undefined &&
+      attempt.workerRequest === undefined && attempt.requestId === undefined && attempt.dispatchId === undefined) return false
+    return attempt.state !== 'settled' || attempt.effect === 'indeterminate' || attempt.resolved === false
+  })
 }
 function newActionHoldReason(action: KernelAction, journal: JournalEntry[]): string | null {
   const attempts = matchingNewAttempts(action, journal)
@@ -793,7 +795,10 @@ export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], e
       reason: world.lifecycle === 'merged' ? 'review merged' : 'review closed'
     }
   }
-  if (world.localPrepared && world.localPrepared.policyViolation !== null) {
+  const attempts = latestAttempts(journal)
+  if (world.localPrepared && world.localPrepared.sha !== world.headSha && world.localPrepared.policyViolation !== null &&
+    attempts.some((attempt) => (attempt.action.kind === 'prepare-fix' || attempt.action.kind === 'prepare-conflict-resolution') &&
+      attempt.action.expectedHeadSha === world.headSha && attempt.state === 'settled' && attempt.effect === 'landed')) {
     return park(
       world.localPrepared.policyViolation,
       'diff-policy-violation',
@@ -802,7 +807,6 @@ export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], e
     )
   }
 
-  const attempts = latestAttempts(journal)
   const prepareByIdentity = new Map<string, Attempt>()
   for (const attempt of attempts) {
     if (attempt.action.kind !== 'prepare-fix' && attempt.action.kind !== 'prepare-conflict-resolution') continue

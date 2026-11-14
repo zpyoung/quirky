@@ -1252,3 +1252,22 @@ test('dirty worktrees still select preparation so preflight can hold and retry',
   expect(decide(snapshot(world({ mergeable: 'CONFLICTING', localDirty: true })), [], enrollment(caps({ resolveConflicts: 'on' }))).action?.kind)
     .toBe('prepare-conflict-resolution')
 })
+
+test('worker diff restrictions do not reject the already-authored PR head', () => {
+  const current = world({
+    localHeadSha: H1,
+    localPrepared: preparedCommit({ sha: H1, attemptTrailer: null, policyViolation: 'CI workflow changed' })
+  })
+  expect(stop(snapshot(current), [], enrollment(caps({ fixChecks: 'off', resolveConflicts: 'off' })))).toBeNull()
+})
+
+test('an initial prepare attempt without persisted dispatch metadata remains selectable for kernel replay', () => {
+  const failed = check({ state: 'failed', observation: 'original', failureSignature: 'sha256:failure', failureExcerpt: 'compiler error' })
+  const rerun = attempt(actionFor(world({ checks: [failed] }))!)
+  const current = snapshot(world({ checks: [{ ...failed, observation: 'rerun-completed' }] }))
+  const prepare = decide(current, [rerun], enrollment()).action!
+  const interrupted = attempt(prepare, { seq: 2, state: 'attempted', effect: undefined, resolved: false })
+  expect(decide(current, [rerun, interrupted], enrollment()).action).toEqual(prepare)
+  const dispatched = { ...interrupted, workerRequest: { spec: 'Fix checks', worktree: 'id:w1' } }
+  expect(decide(current, [rerun, dispatched], enrollment()).action).toBeNull()
+})

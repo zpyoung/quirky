@@ -74,7 +74,7 @@ export function extractAttemptTrailer(commitMessage: string): string | null {
   if (footer.some((line) => line.length > 0 && !/^[A-Za-z0-9-]+:[ \t]+\S.*$/.test(line))) return null
   const matches = footer.filter((line) => line.startsWith(`${ATTEMPT_TRAILER_KEY}:`))
   if (matches.length !== 1) return null
-  const match = matches[0]!.match(new RegExp(`^${ATTEMPT_TRAILER_KEY}:[ \\t]+([^\\s]+)[ \\t]*$`))
+  const match = matches[0]!.match(new RegExp(`^${ATTEMPT_TRAILER_KEY}:[ \\t]+(\\S(?:.*\\S)?)[ \\t]*$`))
   return match?.[1] ?? null
 }
 
@@ -349,6 +349,8 @@ export async function preflightContention(
   }
 ): Promise<GateVerdict> {
   const kind = params.action.kind
+  if (kind !== 'prepare-fix' && kind !== 'prepare-conflict-resolution' &&
+    kind !== 'publish-fix' && kind !== 'publish-conflict-resolution') return { verdict: 'allow' }
   const worktreeId = params.enrollment.worktreeId
   if (typeof worktreeId !== 'string' || worktreeId.length === 0) return hold('worktree-unavailable', 'the enrolled worktree id is missing')
   try {

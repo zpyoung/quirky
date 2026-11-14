@@ -518,3 +518,21 @@ test('publication rechecks local HEAD after target validation before pushing', a
   expect(result.effect).toBe('not-landed')
   expect(calls.map(call => call.method)).toEqual(['quirky.git/pushTarget'])
 })
+
+test('attempt trailers preserve exact JSON fingerprints containing check-name whitespace', () => {
+  const fingerprint = JSON.stringify([HEAD, 'prepare-fix', 'Build and Test'])
+  expect(extractAttemptTrailer(`Fix checks\n\n${buildAttemptTrailer(fingerprint)}\n`)).toBe(fingerprint)
+})
+
+test('server-side actions do not require an idle or clean local worktree', async () => {
+  for (const kind of ['rerun-check', 'update-branch', 'merge']) {
+    const params = preflightParams(HEAD)
+    params.action = { ...params.action, kind } as typeof params.action
+    params.enrollment.worktreeId = null
+    const calls: RecordedCall[] = []
+    expect(await preflightContention(recordCalls({}, calls), async () => {
+      throw new Error('local git is unavailable')
+    }, params)).toEqual({ verdict: 'allow' })
+    expect(calls).toEqual([])
+  }
+})
