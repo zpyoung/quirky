@@ -10,6 +10,7 @@ import { FilesChanged } from '../src/detail/FilesChanged'
 import { ReviewPage } from '../src/detail/ReviewPage'
 import type { ReviewData, ReviewsState } from '../src/contracts'
 import { nextDraftTick } from '../src/draft-field'
+import { activate } from '../src/ui'
 
 GlobalRegistrator.register()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -161,6 +162,7 @@ function mount(renderNode: (props: RenderProps) => ReactNode, initialState = sta
   const refreshedWorktrees: Array<string | null> = []
   const held = new Map<string, Deferred<unknown>[]>()
   const replies = new Map<string, unknown[]>()
+  const provided = new Map<string, unknown>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
   let state = initialState
   let layout = {
@@ -168,6 +170,7 @@ function mount(renderNode: (props: RenderProps) => ReactNode, initialState = sta
     panel: null, sidebar: true, focus: 'view', tools: { open: {} }
   } as unknown as UiLayout
   const context = {
+    provide(id: string, implementation: unknown) { provided.set(id, implementation) },
     pluginId: 'quirky.reviews',
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
@@ -177,6 +180,12 @@ function mount(renderNode: (props: RenderProps) => ReactNode, initialState = sta
       if (request) return request.promise
       const responses = replies.get(method)
       if (responses?.length) return responses.shift()
+      if (method === 'ui.window.self') return { connId: 42 }
+      if (method === 'ui.window.command.run') {
+        const handler = provided.get(String(params.id))
+        if (typeof handler !== 'function') throw new Error(`Missing provided command: ${String(params.id)}`)
+        return { result: await handler(params.args) }
+      }
       return defaultReply(method, params)
     },
     getLayout: () => layout,
@@ -188,6 +197,7 @@ function mount(renderNode: (props: RenderProps) => ReactNode, initialState = sta
     confirm: async () => confirmResult,
     log() {}
   } as unknown as UiPluginContext
+  activate(context)
   const refresh = async () => {
     const worktree = state.creation.worktree ?? state.detail.target?.worktree ?? state.checks.worktree
     refreshedWorktrees.push(worktree)
@@ -956,3 +966,72 @@ for (const field of ['comment', 'body'] as const) {
     })
   }
 }
+
+test('a title-edit click held at window discovery cannot edit a replacement head', async () => {
+  const ui = mount((props) => <ChecksPanel {...props} />)
+  const self = ui.holdNext('ui.window.self')
+  await click(button(ui.element, 'Edit pull request title'))
+  const next = stateFor()
+  next.checks.review = { ...next.checks.review!, headRefOid: 'c'.repeat(40) }
+  ui.render(next)
+  await act(async () => self.resolve({ connId: 42 }))
+  await settle()
+  expect(callCount(ui, 'checksSetTitleDraft')).toBe(0)
+  expect(titleInput(ui.element)).toBeNull()
+})
+
+test('a title save waiting on its draft cannot mutate a replacement head', async () => {
+  const ui = mount((props) => <ChecksPanel {...props} />, stateFor({ titleDraft: 'first draft' }))
+  const write = ui.holdNext('quirky.reviews/checksSetTitleDraft')
+  changeValue(titleInput(ui.element), 'latest draft')
+  await click(button(ui.element, 'Save pull request title'))
+  expect(callCount(ui, 'checksSaveTitle')).toBe(0)
+  const next = stateFor({ titleDraft: 'new head draft' })
+  next.checks.review = { ...next.checks.review!, headRefOid: 'c'.repeat(40) }
+  ui.render(next)
+  await act(async () => write.resolve({ titleDraft: 'latest draft' }))
+  await settle()
+  expect(callCount(ui, 'checksSaveTitle')).toBe(0)
+})
+
+for (const [method, reply] of [
+  ['ui.window.self', { connId: 0 }],
+  ['ui.window.command.run', {}],
+  ['ui.window.command.run', { result: { delivered: false, reason: 'disabled' } }],
+] as const) {
+  test(`title edit reports rejected ${method} delivery without a local fallback: ${JSON.stringify(reply)}`, async () => {
+    const ui = mount((props) => <ChecksPanel {...props} />)
+    ui.replyNext(method, reply)
+    await click(button(ui.element, 'Edit pull request title'))
+    await settle()
+    expect(callCount(ui, 'checksSetTitleDraft')).toBe(0)
+    expect(titleInput(ui.element)).toBeNull()
+    expect(ui.element.querySelector('.ui-inline-error')?.textContent).toBeTruthy()
+  })
+}
+
+for (const method of ['ui.window.self', 'ui.window.command.run']) {
+  test(`title edit reports ${method} rejection without mutating its draft`, async () => {
+    const ui = mount((props) => <ChecksPanel {...props} />)
+    const pending = ui.holdNext(method)
+    await click(button(ui.element, 'Edit pull request title'))
+    await act(async () => pending.reject(new Error('window fixture failed')))
+    await settle()
+    expect(callCount(ui, 'checksSetTitleDraft')).toBe(0)
+    expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('window fixture failed')
+  })
+}
+
+test('cancelling a save that waits for its draft releases the editor for future snapshots', async () => {
+  const ui = mount((props) => <ChecksPanel {...props} />, stateFor({ titleDraft: 'before' }))
+  const write = ui.holdNext('quirky.reviews/checksSetTitleDraft')
+  changeValue(titleInput(ui.element), 'latest')
+  await click(button(ui.element, 'Save pull request title'))
+  await click(button(ui.element, 'Cancel title edit'))
+  await act(async () => write.resolve({ titleDraft: 'latest' }))
+  await settle()
+  expect(callCount(ui, 'checksSaveTitle')).toBe(0)
+  expect(titleInput(ui.element)).toBeNull()
+  ui.render(stateFor({ titleDraft: 'remote after cancellation' }), nextDraftTick())
+  expect(titleInput(ui.element)?.value).toBe('remote after cancellation')
+})

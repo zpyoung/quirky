@@ -405,6 +405,15 @@ The ratchet runs from `typecheck` and directly in the Tests workflow's Plan job,
 PRs. Non-enrolled debt stays visible in reports without blocking unrelated work.
 Screenshots/model review never run automatically from these static gates.
 
+`quirky.orchestration` covers all five static checks across settings, remote worker
+output and the floating setup card. Its hidden `copy-install-command` and `copy-prompt`
+commands are available through `quirky ui run`; `copy-prompt` takes an `example` id
+from its manifest enum. Remote read failures keep the last output visible.
+
+Plugin ratchet tests call `checkRatchet` with their own enrollment in-process.
+Run the repository-wide `bun run ui:scoreboard:check` separately: nesting that scan
+inside a plugin test makes its timeout depend on unrelated plugins and runner load.
+
 Full measurement uses the existing isolated headless renderer and installed reviewer prerequisites.
 It never installs browsers, resets usage or changes accounts. Native menus, window chrome and
 native-only surfaces cannot be certified by renderer screenshots; missing surfaces remain failures.
