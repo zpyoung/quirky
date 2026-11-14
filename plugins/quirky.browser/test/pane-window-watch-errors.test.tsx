@@ -4,6 +4,7 @@ import type { createRoot as CreateReactRoot, Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { PaneState, PaneTab } from '../src/pane-contract'
+import { PANE_UI_CONTROL_COMMAND, dispatchPaneUiControl } from '../src/ui-control'
 import { BrowserPaneWindow } from '../src/window/BrowserPaneWindow'
 
 let container: HTMLElement
@@ -12,6 +13,10 @@ let createRoot: typeof CreateReactRoot
 let listeners: ((event: QuirkyEvent) => void | Promise<void>)[]
 let paneState: PaneState
 const calls: { method: string; params?: Record<string, unknown> }[] = []
+const commandCalls: { id: string; args: unknown }[] = []
+const logs: string[] = []
+let executeCommandFailure: Error | null = null
+const PANE = PANE_UI_CONTROL_COMMAND
 
 const PREFERENCES_STATE = {
   profiles: [{ profile: { id: 'default', label: 'Default', scope: 'default' as const }, active: true }],
@@ -34,6 +39,9 @@ afterAll(async () => {
 beforeEach(() => {
   listeners = []
   calls.length = 0
+  commandCalls.length = 0
+  logs.length = 0
+  executeCommandFailure = null
   paneState = stateOf(pane('pane-1', ''))
   container = document.createElement('div')
   document.body.append(container)
@@ -73,7 +81,8 @@ function stateOf(...tabs: PaneTab[]): PaneState {
 }
 
 function makeContext(): UiPluginContext {
-  return {
+  let context: UiPluginContext
+  context = {
     nativeBrowser: {
       available: false,
       clearPartitionAvailable: false,
@@ -83,7 +92,7 @@ function makeContext(): UiPluginContext {
       defaultUserAgent: async () => null
     },
     pluginId: 'quirky.browser',
-    log: () => {},
+    log: (message) => { logs.push(message) },
     nativeDropPaths: async () => null,
     readClipboardText: async () => '',
     provide: () => {},
@@ -100,7 +109,11 @@ function makeContext(): UiPluginContext {
       return () => { listeners = listeners.filter((current) => current !== listener) }
     },
     getSetting: (name) => name === 'setting:quirky.browser/browserImportHintHidden' ? true : undefined,
-    executeCommand: async () => {},
+    executeCommand: async (id, args) => {
+      commandCalls.push({ id, args })
+      if (executeCommandFailure) throw executeCommandFailure
+      if (id === PANE) dispatchPaneUiControl(context, args)
+    },
     createCommandDrag: () => 'drag-token',
     consumeCommandDrag: () => null,
     cancelCommandDrag: () => {},
@@ -118,6 +131,7 @@ function makeContext(): UiPluginContext {
     setContext: () => {},
     mountView: () => () => {}
   }
+  return context
 }
 
 async function settleUI(): Promise<void> {
@@ -185,4 +199,27 @@ test('an ended Watch says so and states the reason once', async () => {
   const text = container.textContent ?? ''
   expect(text).toContain('Watch ended')
   expect(occurrences(text, 'frame was not acknowledged')).toBe(1)
+})
+
+test('a decoded-frame failure in a live Watch can be retried through the pane command', async () => {
+  const context = makeContext()
+  const live = watchPane({ error: null, watchEnded: false })
+  paneState = stateOf(live)
+  await mount(context, { pane: live.id })
+  await showFrame()
+  const image = container.querySelector<HTMLImageElement>('img.qbp-watch-image')
+  if (!image) throw new Error('the live Watch image was not rendered')
+  const watchCallsBeforeRetry = calls.filter((call) => call.method === 'quirky.browser/paneWatch').length
+
+  await act(async () => {
+    image.dispatchEvent(new Event('error'))
+    await settleUI()
+  })
+  const error = container.querySelector('.ui-inline-error')
+  expect(error?.textContent).toContain('could not be decoded')
+  const retry = [...(error?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((button) => button.textContent?.includes('Retry this Watch'))
+  if (!retry) throw new Error('the Watch decode error has no Retry this Watch button')
+  await act(async () => { retry.click(); await settleUI() })
+  expect(commandCalls).toContainEqual({ id: PANE, args: { action: 'retry-watch', pane: 'pane-1' } })
+  expect(calls.filter((call) => call.method === 'quirky.browser/paneWatch')).toHaveLength(watchCallsBeforeRetry + 1)
 })

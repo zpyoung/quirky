@@ -94,6 +94,11 @@ Use `quirky.worktree/projectMetadata({repo})`, `setProjectMetadata({repo,identit
 
 Results retain stale worktrees and explain missing or replaced folders and unregistered projects. Each worktree includes up to 20 matching links and 20 listed sessions, with totals and liveness evidence. Sessions have `linked:false`: being in a worktree does not record a session-to-reference link. Missing session or PTY evidence stays unknown, never proof that work has stopped. `--json` returns the method result unchanged. `quirky worktree unlink-reference <worktree> <reference-id-or-exact-url>` succeeds when the link is already gone and says it was not linked.
 
+The hidden `command:quirky.worktree/uiControl` command edits the open details dialog's reference
+draft with `add-reference` or `unlink-reference`, addressed by a worktree ID from `quirky worktree list`.
+It changes no stored references until Save. Cancel discards the draft, and commands cannot edit it
+while saving.
+
 `statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. Status labels, color metadata and safe text icons persist. The board and status-group lanes use shared semantic colors rather than arbitrary stored paint. More workspace tools opens the Workspace statuses editor; `quirky worktree status-set --statuses '<json>'` uses the same API.
 
 The board sits above the worktree tree in its own scroll area, capped at half the available sidebar height. Its fixed-width lanes stay in one top-aligned row; scroll horizontally to reach lanes outside the viewport. Each card shows its project below the worktree name, and the Open and Move to status controls include the project in their accessible names so same-named worktrees remain distinguishable.
@@ -187,6 +192,23 @@ quirky worktree remote-list --host <registered-host-id> --json
 quirky worktree remote-open <mirror-id> --window <conn-id>
 quirky worktree remote-call <mirror-id> --operation changes
 ```
+
+Remote workspace and VM row menus also have command routes. List their public IDs with
+`quirky worktree remote-list` or `quirky worktree vm-list`, then use:
+
+```sh
+quirky ui run command:quirky.worktree/uiControl --args '{"action":"open-workspace-menu","workspace":"<mirror-id>"}'
+quirky ui run command:quirky.worktree/uiControl --args '{"action":"open-vm-menu","vm":"<vm-id>"}'
+quirky ui run command:quirky.worktree/uiControl --args '{"action":"add-reference","worktree":"<worktree-id>","url":"https://example.com/task","label":"Task"}'
+```
+
+Use `close-workspace-menu`, `close-vm-menu` or `unlink-reference` to reverse those draft actions.
+Each command returns its normalized arguments and `delivered`, the number of mounted targets that
+acted. Unknown, unavailable or disabled targets return zero. UI clicks address their own window,
+including popped-out views; the CLI requires a single open window.
+
+Remote, VM, recipe and confirmation loads use shared loading and error components. Empty inventory
+appears only after a successful load, and a failed ledger retention check offers Retry.
 
 `quirky.cli/hostIdentity` issues a persisted host UUID and a fresh activation generation. `quirky.cli/runtimeCall` optionally accepts `expectedRuntime:{id,endpoint,grantId}` and `expectedHost:{hostId,generation}`. It checks the saved credential pin before connecting, then checks host identity on the same authenticated connection before forwarding. Registered workspace operations always supply both pins; a label, UI installation UUID or path cannot substitute for either.
 
