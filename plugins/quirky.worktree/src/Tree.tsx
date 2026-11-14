@@ -216,10 +216,11 @@ type HoverCardBodyProps = {
   statusLabel: string
   agent: string
   checks: ChecksState | null
+  showNotes: boolean
   now: number
 }
 
-function HoverCardBody({ worktree, tags, projectLabel, statusLabel, agent, checks, now }: HoverCardBodyProps) {
+function HoverCardBody({ worktree, tags, projectLabel, statusLabel, agent, checks, now, showNotes }: HoverCardBodyProps) {
   const review = worktree.linkedPR
     ? [`#${worktree.linkedPR.number} ${worktree.linkedPR.title}`, checks ? CHECKS_WORDS[checks] : null].filter(Boolean).join(' · ')
     : checks
@@ -236,6 +237,12 @@ function HoverCardBody({ worktree, tags, projectLabel, statusLabel, agent, check
         <dd>{worktree.archivedAt !== null ? `${statusLabel} · Archived` : statusLabel}</dd>
         <dt>Agent</dt>
         <dd>{agent}</dd>
+        {showNotes && worktree.comment.trim() !== '' && (
+          <>
+            <dt>Notes</dt>
+            <dd>{worktree.comment}</dd>
+          </>
+        )}
         {review !== null && (
           <>
             <dt>Review</dt>
@@ -273,6 +280,7 @@ type RowProps = {
   orchestrationWorkers: readonly OrchestrationWorkerRow[]
   loop?: LoopProjection
   now: number
+  showNotes: boolean
   automationExpanded: boolean
   automationAvailability: AutomationAvailabilitySnapshot | null
   onClick(event: MouseEvent<HTMLButtonElement>): void
@@ -303,6 +311,7 @@ function WorktreeRowView({
   orchestrationWorkers,
   loop,
   now,
+  showNotes,
   automationExpanded,
   automationAvailability,
   onClick,
@@ -498,6 +507,7 @@ function WorktreeRowView({
       <HoverCard anchor={rowElement} open={hovered && !suspendHover && !renaming}>
         <HoverCardBody
           worktree={worktree}
+          showNotes={showNotes}
           tags={tags}
           projectLabel={projectLabel}
           statusLabel={statusLabel}
@@ -652,6 +662,7 @@ export function Tree({
   loopsByWorktree = EMPTY_LOOP_PROJECTIONS
 }: TreeProps) {
   const orchestrationWorkers = useOrchestrationRows(context)
+  const showNotes = options.showComment && options.showProperties.includes('notes')
   const [menu, setMenu] = useState<OpenMenu | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [dropPreview, setDropPreview] = useState<MembershipTarget | null>(null)
@@ -1084,6 +1095,7 @@ export function Tree({
           orchestrationWorkers={orchestrationWorkers}
           loop={loopsByWorktree.get(worktree.id)}
           now={now}
+          showNotes={showNotes}
           automationExpanded={automationExpandedId === worktree.id}
           automationAvailability={automationAvailability?.worktreeId === worktree.id ? automationAvailability : null}
           onClick={(event) => click(worktree, event)}
