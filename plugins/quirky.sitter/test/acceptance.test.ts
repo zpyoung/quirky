@@ -410,6 +410,70 @@ test('gated publication approval is scoped to the prepared commit and a changed 
     await fixture.cleanup()
   }
 }, 60_000)
+test('gated preparation and publication require their exact approvals and publish the prepared commit', async () => {
+  const fixture = await startFixFixture()
+  try {
+    const headA = fixture.head
+    setCheckFailure(fixture, 9201, headA)
+    const watcherId = await enrollFixWatcher(fixture, { fixChecks: 'gated' })
+    await persistRerunFailure(fixture, watcherId, headA, 9202)
+
+    await reconcile(fixture, watcherId)
+    const prepareHeld = await waitFor(() => detail(fixture, watcherId), (value) =>
+      value.status?.state === 'held' && value.status.reason === 'awaiting-approval' &&
+      value.openEscalations.some((item) => item.approvalScope?.actionKind === 'prepare-fix'),
+    'the exact preparation approval')
+    const prepareApproval = prepareHeld.openEscalations.find((item) => item.approvalScope?.actionKind === 'prepare-fix')
+    if (!prepareApproval?.approvalScope) throw new Error('The gated preparation has no exact approval scope')
+    expect(prepareApproval.approvalScope).toMatchObject({
+      actionKind: 'prepare-fix',
+      contentIdentity: JSON.stringify([headA, fixture.baseHead])
+    })
+    expect(prepareApproval.approvalScope.evidenceKey).not.toBe('')
+    expect(attempt(prepareHeld, 'prepare-fix')?.effect).not.toBe('landed')
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(headA)
+    expect(fixture.forcePushes()).toEqual([])
+
+    const prepareApproved = await cli(fixture, ['approve', watcherId, prepareApproval.escalationId, '--json'])
+    expect(prepareApproved.code).toBe(0)
+    await reconcile(fixture, watcherId)
+    const prepared = await waitFor(() => detail(fixture, watcherId), (value) =>
+      attempt(value, 'prepare-fix')?.state === 'settled' && attempt(value, 'prepare-fix')?.effect === 'landed',
+    'the approved prepared fix')
+    expect(attempt(prepared, 'prepare-fix')).toMatchObject({ state: 'settled', effect: 'landed' })
+    const commitB = fixture.git(['rev-parse', 'HEAD'])
+    expect(fixture.git(['rev-parse', `${commitB}^`])).toBe(headA)
+
+    await reconcile(fixture, watcherId)
+    const publishHeld = await waitFor(() => detail(fixture, watcherId), (value) =>
+      value.status?.state === 'held' && value.status.reason === 'awaiting-approval' &&
+      value.openEscalations.some((item) => item.approvalScope?.actionKind === 'publish-fix'),
+    'the prepared-commit publication approval')
+    const publishApproval = publishHeld.openEscalations.find((item) => item.approvalScope?.actionKind === 'publish-fix')
+    if (!publishApproval?.approvalScope) throw new Error('The prepared publication has no exact approval scope')
+    expect(publishApproval.approvalScope.actionKind).toBe('publish-fix')
+    expect(publishApproval.approvalScope.preparedCommitSha).toBe(commitB)
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(headA)
+    expect(fixture.forcePushes()).toEqual([])
+
+    const publishApproved = await cli(fixture, ['approve', watcherId, publishApproval.escalationId, '--json'])
+    expect(publishApproved.code).toBe(0)
+    await reconcile(fixture, watcherId)
+    const published = await waitFor(() => detail(fixture, watcherId), (value) =>
+      attempt(value, 'publish-fix')?.state === 'settled' && attempt(value, 'publish-fix')?.effect === 'landed',
+    'the approved sitter publication')
+    expect(attempt(published, 'publish-fix')).toMatchObject({
+      state: 'settled',
+      effect: 'landed',
+      action: { kind: 'publish-fix', preparedCommitSha: commitB, expectedHeadSha: headA }
+    })
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(commitB)
+    expect(fixture.forcePushes()).toHaveLength(1)
+  } finally {
+    await fixture.cleanup()
+  }
+}, 60_000)
+
 
 test('a conflicting pull request is resolved locally as a two-parent commit and published', async () => {
   const fixture = await startFixFixture({ conflict: true })
@@ -539,6 +603,7 @@ type FixFixture = HostingTest & {
   workerRequests(): Record<string, unknown>[]
   forcePushes(): unknown[]
   dropNextPushReply(): void
+  injectConcurrentCommitAfterPublicationLookup(): void
   amendPreparedCommit(): void
   makeDirty(): void
   clearDirty(): void
@@ -553,7 +618,7 @@ const FIXTURE_ENV = [
   'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_TERMINAL_PROMPT', 'GIT_SSH', 'GIT_SSH_VARIANT',
   'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_FIXTURE_DIR', 'QUIRKY_TEST_GH_SOURCE', 'QUIRKY_TEST_GH_LOG',
-  'QUIRKY_TEST_BARE_REMOTE', 'QUIRKY_TEST_WORKTREE_PATH'
+  'QUIRKY_TEST_BARE_REMOTE', 'QUIRKY_TEST_WORKTREE_PATH', 'QUIRKY_TEST_ORIGINAL_PATH'
 ] as const
 
 async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixture> {
@@ -567,11 +632,13 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
   const ghLog = join(root, 'gh.jsonl')
   const ghSource = join(root, 'github-stand-in.mjs')
   const ghPath = join(fakebin, 'gh')
+  const gitPath = join(fakebin, 'git')
   const sshPath = join(fakebin, 'ssh')
   const workerStatePath = join(root, 'worker-state.json')
   const contentionPath = join(root, 'contention.json')
   const pushLog = join(root, 'pushes.jsonl')
   const dropReplyPath = join(root, 'drop-next-push-reply')
+  const armConcurrentCommitPath = join(root, 'arm-concurrent-commit-after-lookup')
   const gitConfig = join(home, '.gitconfig')
   const previousEnvironment = new Map<string, string | undefined>(FIXTURE_ENV.map((key) => [key, process.env[key]]))
   let harness: Harness | undefined
@@ -584,9 +651,11 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
   writeFileSync(pushLog, '')
   writeFileSync(ghSource, GITHUB_STAND_IN)
   writeFileSync(ghPath, GH_FIXTURE_WRAPPER)
+  writeFileSync(gitPath, GIT_FIXTURE_WRAPPER)
   writeFileSync(sshPath, SSH_FIXTURE_WRAPPER)
   writeFileSync(join(fakebin, 'claude'), '#!/bin/sh\nprintf "Claude fixture\\n"\n')
   chmodSync(ghPath, 0o755)
+  chmodSync(gitPath, 0o755)
   chmodSync(sshPath, 0o755)
   chmodSync(join(fakebin, 'claude'), 0o755)
 
@@ -613,7 +682,8 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
     process.env.GIT_CONFIG_NOSYSTEM = '1'
     for (const key of ['GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS', 'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE']) delete process.env[key]
     process.env.GIT_TERMINAL_PROMPT = '0'
-    process.env.PATH = `${fakebin}${delimiter}${previousEnvironment.get('PATH') ?? ''}`
+    process.env.QUIRKY_TEST_ORIGINAL_PATH = previousEnvironment.get('PATH') ?? ''
+    process.env.PATH = `${fakebin}${delimiter}${process.env.QUIRKY_TEST_ORIGINAL_PATH}`
     process.env.GIT_SSH = sshPath
     process.env.GIT_SSH_VARIANT = 'ssh'
     process.env.QUIRKY_AGENT_SEARCH_DIRS = fakebin
@@ -749,6 +819,7 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
         return readFileSync(pushLog, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line))
       },
       dropNextPushReply() { writeFileSync(dropReplyPath, 'drop') },
+      injectConcurrentCommitAfterPublicationLookup() { writeFileSync(armConcurrentCommitPath, 'armed') },
       amendPreparedCommit() {
         writeFileSync(join(repoPath, 'fix.txt'), 'amended worker change\n')
         runGit(repoPath, ['add', 'fix.txt'])
@@ -837,9 +908,10 @@ async function rerunThenPersistFailure(fixture: FixFixture, watcherId: string, h
   await reconcile(fixture, watcherId)
   const preparation = await waitFor(() => detail(fixture, watcherId), (value) => {
     const current = attempt(value, 'prepare-fix')
-    return current?.state === 'settled' && current.effect === 'landed' ||
-      value.status?.state === 'held' && value.status.reason === 'awaiting-approval' &&
+    const landed = current?.state === 'settled' && current.effect === 'landed'
+    const heldForPrepare = value.status?.state === 'held' && value.status.reason === 'awaiting-approval' &&
       value.openEscalations.some((item) => item.approvalScope?.actionKind === 'prepare-fix')
+    return landed || heldForPrepare
   }, 'the prepared check fix or its approval')
   const prepareAttempt = attempt(preparation, 'prepare-fix')
   if (prepareAttempt?.state !== 'settled' || prepareAttempt.effect !== 'landed') {
@@ -850,9 +922,10 @@ async function rerunThenPersistFailure(fixture: FixFixture, watcherId: string, h
     expect(approved.code).toBe(0)
     await reconcile(fixture, watcherId)
   }
-  await waitFor(() => detail(fixture, watcherId), (value) =>
+  const prepared = await waitFor(() => detail(fixture, watcherId), (value) =>
     attempt(value, 'prepare-fix')?.state === 'settled' && attempt(value, 'prepare-fix')?.effect === 'landed',
   'the prepared check fix')
+  expect(attempt(prepared, 'prepare-fix')).toMatchObject({ state: 'settled', effect: 'landed' })
 }
 
 function writeFixturePlugin(
@@ -917,7 +990,8 @@ function restoreFixtureEnvironment(previous: Map<string, string | undefined>): v
 const CLI_ENTRY = resolve(import.meta.dir, '../../../packages/cli/src/main.ts')
 
 const GH_FIXTURE_WRAPPER = String.raw`#!/usr/bin/env bun
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync, unlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 const input = await new Response(Bun.stdin.stream()).text()
 const args = process.argv.slice(2)
 const env = {}
@@ -929,7 +1003,38 @@ const child = Bun.spawn([process.execPath, process.env.QUIRKY_TEST_GH_SOURCE, ..
   cwd: process.cwd(), env: { ...process.env, QUIRKY_TEST_GH_INPUT: input },
   stdin: 'ignore', stdout: 'inherit', stderr: 'inherit'
 })
-process.exitCode = await child.exited
+const exitCode = await child.exited
+const branchLookup = args[0] === 'api' && args.some((value) =>
+  /^repos\/[^/]+\/[^/]+\/pulls\?head=/.test(value))
+const fixtureDir = process.env.QUIRKY_TEST_FIXTURE_DIR ?? ''
+const raceArmPath = join(fixtureDir, 'arm-concurrent-commit-after-lookup')
+if (exitCode === 0 && branchLookup && existsSync(raceArmPath)) {
+  unlinkSync(raceArmPath)
+  writeFileSync(join(fixtureDir, 'concurrent-commit-after-lookup'), 'armed')
+}
+process.exitCode = exitCode
+`
+
+const GIT_FIXTURE_WRAPPER = String.raw`#!/bin/sh
+REAL_GIT=$(PATH="$QUIRKY_TEST_ORIGINAL_PATH" command -v git)
+RACE_MARKER="$QUIRKY_TEST_FIXTURE_DIR/concurrent-commit-after-lookup"
+if [ -f "$RACE_MARKER" ] && [ "$1" = "diff" ]; then
+  case " $* " in
+    *" --numstat "*) ;;
+    *" --no-ext-diff "*)
+      rm -f "$RACE_MARKER"
+      "$REAL_GIT" "$@"
+      result=$?
+      if [ "$result" -eq 0 ]; then
+        printf 'concurrent user commit\n' > "$QUIRKY_TEST_WORKTREE_PATH/concurrent.txt"
+        "$REAL_GIT" -C "$QUIRKY_TEST_WORKTREE_PATH" add concurrent.txt
+        "$REAL_GIT" -C "$QUIRKY_TEST_WORKTREE_PATH" commit --quiet -m 'Concurrent user change'
+      fi
+      exit "$result"
+      ;;
+  esac
+fi
+exec "$REAL_GIT" "$@"
 `
 
 const SSH_FIXTURE_WRAPPER = String.raw`#!/usr/bin/env bun
@@ -944,6 +1049,10 @@ if (!kind) {
 }
 appendFileSync(join(process.env.QUIRKY_TEST_FIXTURE_DIR, 'pushes.jsonl'), JSON.stringify({ command, kind }) + '\n')
 const remote = process.env.QUIRKY_TEST_BARE_REMOTE
+const before = kind === 'receive-pack' ? Bun.spawnSync(['git', '--git-dir', remote, 'rev-parse', 'refs/heads/feature'], {
+  cwd: process.cwd(), env: process.env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe'
+}) : null
+const beforeHead = before?.exitCode === 0 ? new TextDecoder().decode(before.stdout).trim() : null
 const child = Bun.spawn(['git', kind, remote], {
   cwd: process.cwd(), env: process.env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit'
 })
@@ -958,7 +1067,7 @@ if (code === 0 && kind === 'receive-pack' && !dropReply) {
   const statePath = join(process.env.QUIRKY_TEST_FIXTURE_DIR, 'state.json')
   const state = JSON.parse(readFileSync(statePath, 'utf8'))
   const pull = state.prs?.find((item) => item.headRefName === 'feature')
-  if (head.exitCode === 0 && pull && /^[0-9a-f]{40,64}$/u.test(headSha)) {
+  if (head.exitCode === 0 && pull && headSha !== beforeHead && /^[0-9a-f]{40,64}$/u.test(headSha)) {
     pull.headRefOid = headSha
     pull.mergeable = 'MERGEABLE'
     pull.mergeStateStatus = 'CLEAN'
@@ -972,6 +1081,7 @@ if (code === 0 && kind === 'receive-pack' && !dropReply) {
 if (code === 0 && kind === 'receive-pack' && dropReply) unlinkSync(dropReplyPath)
 process.exitCode = code === 0 && kind === 'receive-pack' && dropReply ? 255 : code
 `
+
 
 const ORCHESTRATION_FIXTURE = String.raw`import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -1117,6 +1227,10 @@ test('force-push rejects a local commit that replaced the prepared publication S
     const held = await waitFor(() => detail(fixture, watcherId), value =>
       value.openEscalations.some(entry => entry.approvalScope?.actionKind === 'publish-fix' &&
         entry.approvalScope.preparedCommitSha === prepared), 'the prepared-SHA publication approval')
+    const publishApproval = held.openEscalations.find(entry =>
+      entry.approvalScope?.actionKind === 'publish-fix' && entry.approvalScope.preparedCommitSha === prepared)
+    if (!publishApproval) throw new Error('The prepared-SHA publication approval is missing')
+    expect(publishApproval.approvalScope).toMatchObject({ actionKind: 'publish-fix', preparedCommitSha: prepared })
     expect(held.openEscalations.some(entry => entry.approvalScope?.preparedCommitSha === prepared)).toBe(true)
     writeFileSync(join(fixture.repoPath, 'concurrent.txt'), 'concurrent user commit\n')
     fixture.git(['add', 'concurrent.txt'])
@@ -1128,6 +1242,74 @@ test('force-push rejects a local commit that replaced the prepared publication S
     })).rejects.toMatchObject({ data: { reason: 'stale-target' } })
     expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(fixture.head)
     expect(fixture.forcePushes()).toEqual([])
+
+    fixture.git(['reset', '--hard', prepared])
+    expect(fixture.git(['rev-parse', 'HEAD'])).toBe(prepared)
+    const approved = await cli(fixture, ['approve', watcherId, publishApproval.escalationId, '--json'])
+    expect(approved.code).toBe(0)
+    fixture.injectConcurrentCommitAfterPublicationLookup()
+    await reconcile(fixture, watcherId)
+    const publication = await waitFor(() => detail(fixture, watcherId), value =>
+      attempt(value, 'publish-fix')?.state === 'settled' && attempt(value, 'publish-fix')?.effect === 'not-landed',
+    'the sitter publication rejected after the concurrent local commit')
+    expect(attempt(publication, 'publish-fix')).toMatchObject({
+      state: 'settled',
+      effect: 'not-landed',
+      reason: 'head-moved',
+      action: { kind: 'publish-fix', preparedCommitSha: prepared, expectedHeadSha: fixture.head }
+    })
+    expect(fixture.git(['rev-parse', 'HEAD'])).not.toBe(prepared)
+    expect(fixture.git(['show', '-s', '--format=%s', 'HEAD'])).toBe('Concurrent user change')
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(fixture.head)
+    expect(fixture.forcePushes()).toEqual([])
+  } finally {
+    await fixture.cleanup()
+  }
+}, 60_000)
+
+test('sitter publication reports head-moved when the bare branch diverges from the hosting head', async () => {
+  const fixture = await startFixFixture()
+  try {
+    const headA = fixture.head
+    setCheckFailure(fixture, 9601, headA)
+    const watcherId = await enrollFixWatcher(fixture, { fixChecks: 'gated' })
+    await rerunThenPersistFailure(fixture, watcherId, headA, 9602)
+    const commitB = fixture.git(['rev-parse', 'HEAD'])
+    expect(fixture.git(['rev-parse', `${commitB}^`])).toBe(headA)
+
+    fixture.git(['checkout', '--quiet', '-b', 'remote-divergence', headA])
+    writeFileSync(join(fixture.repoPath, 'remote-only.txt'), 'remote divergence\n')
+    fixture.git(['add', 'remote-only.txt'])
+    fixture.git(['commit', '--quiet', '-m', 'Remote divergence X'])
+    const commitX = fixture.git(['rev-parse', 'HEAD'])
+    expect(fixture.git(['rev-parse', `${commitX}^`])).toBe(headA)
+    fixture.git(['checkout', '--quiet', 'feature'])
+    expect(fixture.git(['rev-parse', 'HEAD'])).toBe(commitB)
+    expect(fixture.git(['merge-base', commitB, commitX])).toBe(headA)
+
+    fixture.git(['push', '--quiet', fixture.bareRemote, `${commitX}:refs/heads/feature`])
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(commitX)
+    expect((fixture.readState() as StandInState).prs[0]?.headRefOid).toBe(headA)
+    const held = await waitFor(() => detail(fixture, watcherId), value =>
+      value.openEscalations.some(entry => entry.approvalScope?.actionKind === 'publish-fix' &&
+        entry.approvalScope.preparedCommitSha === commitB), 'the leased publication approval')
+    const approval = held.openEscalations.find(entry => entry.approvalScope?.actionKind === 'publish-fix' &&
+      entry.approvalScope.preparedCommitSha === commitB)!
+    expect((await cli(fixture, ['approve', watcherId, approval.escalationId, '--json'])).code).toBe(0)
+    await reconcile(fixture, watcherId)
+    const publication = await waitFor(() => detail(fixture, watcherId), value =>
+      attempt(value, 'publish-fix')?.state === 'settled' && attempt(value, 'publish-fix')?.effect === 'not-landed',
+    'the sitter publication rejected by the force-with-lease')
+    expect(attempt(publication, 'publish-fix')).toMatchObject({
+      state: 'settled',
+      effect: 'not-landed',
+      reason: 'head-moved',
+      action: { kind: 'publish-fix', preparedCommitSha: commitB, expectedHeadSha: headA }
+    })
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(commitX)
+    expect((fixture.readState() as StandInState).prs[0]?.headRefOid).toBe(headA)
+    expect(fixture.forcePushes()).toMatchObject([{ kind: 'receive-pack' }])
+    expect(fixture.forcePushes()).toHaveLength(1)
   } finally {
     await fixture.cleanup()
   }
