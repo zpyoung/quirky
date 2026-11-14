@@ -111,7 +111,13 @@ function tabById(workspace: PublicWorkspace, id: string): TabLocation | undefine
   return tabLocations(workspace).find(({ tab }) => tab.id === id)
 }
 
-export async function openHostedDiff(context: UiPluginContext, requested: DiffViewInput): Promise<DiffViewInput> {
+export async function openHostedDiff(
+  context: UiPluginContext,
+  requested: DiffViewInput,
+  options: { activate?: boolean; showWorktree?: boolean } = {}
+): Promise<DiffViewInput> {
+  const activate = options.activate ?? true
+  const showWorktree = options.showWorktree ?? true
   const workspace = await readWorkspace(context, requested.worktree)
   const groups = groupsIn(workspace.root)
   const groupId = requested.groupId ?? workspace.activeGroup
@@ -147,9 +153,8 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     title: titleOf(input, dirty),
     icon: DIFF_TAB_ICON,
     reuse: true,
-    activate: true,
     preview,
-    closeCommand: CLOSE_DIFF_COMMAND,
+    activate,
     closeMethod: 'quirky.git/diffCloseGuard',
     closeParams: { worktree: requested.worktree, dirty },
     closeContext: true,
@@ -186,28 +191,28 @@ export async function openHostedDiff(context: UiPluginContext, requested: DiffVi
     changes: [{ tab: opened.tab, key, input: finalApiInput, title: titleOf(finalInput, dirty), preview }],
     revision: openedWorkspace.revision
   })
-  setActiveHostedView(opened.tab)
-  if (shownWorktree(context) !== requested.worktree) {
+  if (activate) setActiveHostedView(opened.tab)
+  if (showWorktree && shownWorktree(context) !== requested.worktree) {
     context.openView(SESSIONS_VIEW_ID, { worktree: requested.worktree })
   }
   return finalInput
 }
-
-/**
- * Brings the already-open hosted diff tab for `input`'s key to the front of its group. A review
- * input also finds the worktree's Review tab when that is a restored legacy tab under another
- * key. Resolves to false when the workspace holds no such tab, so the caller can open one instead.
- */
-export async function activateHostedDiff(context: UiPluginContext, input: DiffViewInput): Promise<boolean> {
+export async function findHostedDiff(context: UiPluginContext, input: DiffViewInput): Promise<string | null> {
   const workspace = await readWorkspace(context, input.worktree)
   const key = diffViewKey(input)
   const owner = input.mode === 'review' ? reviewOwners.get(input.worktree) : undefined
   const tabs = tabLocations(workspace).filter(({ tab }) => tab.viewId === DIFF_VIEW_ID)
   const found = tabs.find(({ tab }) => tab.key === key) ?? tabs.find(({ tab }) => tab.id === owner)
-  if (!found) return false
-  await context.call('quirky.terminal/activateTab', { tab: found.tab.id })
-  setActiveHostedView(found.tab.id)
-  return true
+  return found?.tab.id ?? null
+}
+
+/** Activates the hosted diff tab for `input`, or returns null when none is open. */
+export async function activateHostedDiff(context: UiPluginContext, input: DiffViewInput): Promise<string | null> {
+  const tabId = await findHostedDiff(context, input)
+  if (tabId === null) return null
+  await context.call('quirky.terminal/activateTab', { tab: tabId })
+  setActiveHostedView(tabId)
+  return tabId
 }
 
 /**

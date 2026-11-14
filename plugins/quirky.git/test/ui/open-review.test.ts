@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, test } from 'bun:test'
 import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { QuirkyEvent, ReviewModel, UiPluginContext } from '@quirky/protocol'
+import { clearDeferredReview, takeDeferredReview } from '../../src/view/registry'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcErrorCode } from '@quirky/protocol'
 import { registerDom } from './register-dom'
@@ -18,20 +18,42 @@ afterAll(() => GlobalRegistrator.unregister())
 const unregisters: Array<() => void> = []
 afterEach(() => {
   for (const off of unregisters.splice(0)) off()
+  clearDeferredReview('feat')
 })
 
-function handleFor(worktree: string) {
+function handleFor(
+  worktree: string,
+  options: {
+    includeApplyScope?: boolean
+    outcome?: 'applied' | 'unchanged' | 'dirty' | 'busy' | 'cancelled' | (() => Promise<'applied' | 'unchanged' | 'dirty' | 'busy' | 'cancelled'>)
+    order?: string[]
+  } = {}
+) {
   const reveals: Array<[string, string | undefined]> = []
   const scopes: Array<string | null> = []
+  const appliedScopes: Array<[unknown, 'ask' | 'refuse']> = []
   const tops = { count: 0 }
   const handle = {
     worktree,
-    reveal: (path: string, noteId?: string) => void reveals.push([path, noteId]),
-    scrollToTop: () => void tops.count++,
-    setScope: (commit: string | null) => void scopes.push(commit)
+    reveal: (path: string, noteId?: string) => {
+      options.order?.push('reveal')
+      reveals.push([path, noteId])
+    },
+    scrollToTop: () => {
+      options.order?.push('scrollToTop')
+      tops.count++
+    },
+    setScope: (commit: string | null) => void scopes.push(commit),
+    ...(options.includeApplyScope === false ? {} : {
+      applyScope: async (scope: unknown, ifDirty: 'ask' | 'refuse') => {
+        options.order?.push('applyScope')
+        appliedScopes.push([scope, ifDirty])
+        return typeof options.outcome === 'function' ? options.outcome() : options.outcome ?? 'applied'
+      }
+    })
   }
   unregisters.push(registerReviewView(handle))
-  return { handle, reveals, scopes, tops }
+  return { handle, reveals, scopes, tops, appliedScopes }
 }
 
 describe('openReview without a mounted view', () => {
@@ -117,6 +139,310 @@ describe('openReview with a mounted view', () => {
   })
 })
 
+
+describe('openReview background routing and acknowledgment', () => {
+  test('opens a background Review without activating it or showing its worktree', async () => {
+    const fake = fakeContext(layoutFor('other'))
+
+    const result = await openReview(fake.context, {
+      worktree: 'feat',
+      reveal: 'src/a.ts',
+      focus: false,
+      acknowledge: true
+    })
+
+    expect(result).toEqual({
+      worktree: 'feat',
+      tabId: 'view-tab-1',
+      created: true,
+      focused: false,
+      source: null,
+      reveal: 'src/a.ts',
+      statusComplete: null
+    })
+    expect(fake.called('quirky.terminal/openViewTab')[0]!.params).toMatchObject({
+      activate: false,
+      input: { worktree: 'feat', mode: 'review', reveal: 'src/a.ts' }
+    })
+    expect(fake.called('quirky.terminal/activateTab')).toHaveLength(0)
+    expect(fake.views.filter((view) => view.id === 'view:quirky.session/worktree')).toHaveLength(0)
+  })
+
+  test('defers a background request for an existing unmounted tab without rewriting it', async () => {
+    const fake = fakeContext(layoutFor('feat'))
+    await openReview(fake.context, { worktree: 'feat' })
+    fake.calls.length = 0
+    const before = fake.views.length
+
+    const result = await openReview(fake.context, {
+      worktree: 'feat',
+      reveal: 'b.ts',
+      source: 'staged',
+      focus: false,
+      acknowledge: true
+    })
+
+    expect(result).toMatchObject({ created: false, focused: false, source: 'staged', reveal: 'b.ts' })
+    expect(fake.called('quirky.terminal/openViewTab')).toHaveLength(0)
+    expect(fake.called('quirky.terminal/rekeyViewTabs')).toHaveLength(0)
+    expect(fake.called('quirky.terminal/activateTab')).toHaveLength(0)
+    expect(fake.views).toHaveLength(before)
+    expect(takeDeferredReview('feat')).toEqual({ reveal: 'b.ts', source: 'staged' })
+    expect(takeDeferredReview('feat')).toBeUndefined()
+  })
+
+  test('does not call a mounted handle for a background request', async () => {
+    const fake = fakeContext(layoutFor('feat'))
+    await openReview(fake.context, { worktree: 'feat' })
+    fake.calls.length = 0
+    const { reveals, scopes, tops, appliedScopes } = handleFor('feat')
+
+    await openReview(fake.context, {
+      worktree: 'feat',
+      reveal: 'b.ts',
+      source: 'staged',
+      focus: false,
+      acknowledge: true
+    })
+
+    expect(reveals).toEqual([])
+    expect(scopes).toEqual([])
+    expect(tops.count).toBe(0)
+    expect(appliedScopes).toEqual([])
+    expect(fake.called('quirky.terminal/openViewTab')).toHaveLength(0)
+    expect(fake.called('quirky.terminal/rekeyViewTabs')).toHaveLength(0)
+    expect(fake.called('quirky.terminal/activateTab')).toHaveLength(0)
+    expect(takeDeferredReview('feat')).toEqual({ reveal: 'b.ts', source: 'staged' })
+  })
+
+  test('carries a source in a new Review input and reports capped status as incomplete', async () => {
+    const fake = fakeContext(layoutFor('feat'))
+    fake.status = { ...fake.status, capped: true }
+
+    const result = await openReview(fake.context, {
+      worktree: 'feat',
+      source: 'staged',
+      focus: false,
+      acknowledge: true
+    })
+
+    expect(result).toMatchObject({ source: 'staged', statusComplete: false })
+    expect(fake.called('quirky.terminal/openViewTab')[0]!.params.input).toMatchObject({ source: 'staged' })
+  })
+
+  test('a commit wins over a source and has no scoped status metadata', async () => {
+    const fake = fakeContext(layoutFor('feat'))
+
+    const result = await openReview(fake.context, {
+      worktree: 'feat',
+      commit: 'f5429a1',
+      source: 'staged',
+      focus: false,
+      acknowledge: true
+    })
+
+    expect(result).toMatchObject({ source: null, statusComplete: null })
+    expect(fake.called('quirky.git/status')).toHaveLength(0)
+    expect(fake.called('quirky.terminal/openViewTab')[0]!.params.input).toMatchObject({ commit: 'f5429a1' })
+    expect(fake.called('quirky.terminal/openViewTab')[0]!.params.input).not.toHaveProperty('source')
+  })
+
+  test('looks up its own window before opening and awaits acknowledged navigation', async () => {
+    const fake = fakeContext(layoutFor('other'))
+    fake.on('ui.window.self', () => ({ connId: 7 }))
+    fake.on('quirky.worktree/navigate', () => ({}))
+    const result = await openReview(fake.context, {
+      worktree: 'feat',
+      reveal: 'a.ts',
+      acknowledge: true
+    })
+
+    expect(result).toMatchObject({ created: true, focused: true, reveal: 'a.ts' })
+    const methods = fake.calls.map((call) => call.method)
+    expect(methods.indexOf('ui.window.self')).toBeLessThan(methods.indexOf('quirky.terminal/openViewTab'))
+    expect(fake.called('quirky.terminal/openViewTab')[0]!.params).toMatchObject({ activate: true })
+    expect(fake.called('quirky.worktree/navigate')).toHaveLength(1)
+    expect(fake.called('quirky.worktree/navigate')[0]!.params).toEqual({
+      worktree: 'id:feat',
+      target: 'terminal',
+      window: 7
+    })
+    expect(fake.views.filter((view) => view.id === 'view:quirky.session/worktree')).toHaveLength(0)
+  })
+
+  test('rejects a self lookup before opening any tab', async () => {
+    const fake = fakeContext(layoutFor('other'))
+    fake.on('ui.window.self', () => {
+      throw new Error('window lookup failed')
+    })
+
+    await expect(openReview(fake.context, { worktree: 'feat', acknowledge: true })).rejects.toThrow('window lookup failed')
+
+    expect(fake.called('quirky.terminal/openViewTab')).toHaveLength(0)
+    expect(fake.called('quirky.worktree/navigate')).toHaveLength(0)
+    expect(fake.views.filter((view) => view.id === 'view:quirky.session/worktree')).toHaveLength(0)
+  })
+
+  test('preserves a navigation error after opening and selecting the Review tab', async () => {
+    const fake = fakeContext(layoutFor('other'))
+    fake.on('ui.window.self', () => ({ connId: 7 }))
+    const error = Object.assign(new Error('UI window connection 7 is not open'), { code: RpcErrorCode.Conflict })
+    fake.on('quirky.worktree/navigate', () => {
+      throw error
+    })
+
+    await expect(openReview(fake.context, { worktree: 'feat', reveal: 'a.ts', acknowledge: true }))
+      .rejects.toBe(error)
+
+    expect(fake.called('quirky.terminal/openViewTab')).toHaveLength(1)
+    expect(fake.called('quirky.terminal/openViewTab')[0]!.params).toMatchObject({ activate: true })
+    expect(fake.called('quirky.worktree/navigate')).toHaveLength(1)
+    expect(fake.views.filter((view) => view.id === 'view:quirky.session/worktree')).toHaveLength(0)
+    const result = await fake.context.call('quirky.terminal/workspace', { workspace: 'id:feat' }) as {
+      workspace: { root: { activeTab?: string | null; tabs: Array<{ id: string }> } }
+    }
+    expect(result.workspace.root.activeTab).toBe(result.workspace.root.tabs[0]!.id)
+  })
+
+  test('applies scope, activates, navigates and reveals in order, clearing deferred work', async () => {
+    const fake = fakeContext(layoutFor('feat'))
+    await openReview(fake.context, { worktree: 'feat' })
+    const order: string[] = []
+    fake.on('ui.window.self', () => ({ connId: 7 }))
+    fake.on('quirky.terminal/activateTab', () => {
+      order.push('activateTab')
+      return {}
+    })
+    fake.on('quirky.worktree/navigate', () => {
+      order.push('navigate')
+      return {}
+    })
+    const { reveals, appliedScopes } = handleFor('feat', { order })
+
+    await openReview(fake.context, {
+      worktree: 'feat',
+      source: 'staged',
+      reveal: 'a.ts',
+      acknowledge: true,
+      focus: false
+    })
+    expect(takeDeferredReview('feat')).toEqual({ reveal: 'a.ts', source: 'staged' })
+
+    const result = await openReview(fake.context, {
+      worktree: 'feat',
+      source: 'staged',
+      reveal: 'a.ts',
+      acknowledge: true
+    })
+
+    expect(result).toMatchObject({ source: 'staged', focused: true })
+    expect(appliedScopes).toEqual([[{ source: 'staged' }, 'refuse']])
+    expect(order).toEqual(['applyScope', 'activateTab', 'navigate', 'reveal'])
+    expect(reveals).toEqual([['a.ts', undefined]])
+    expect(takeDeferredReview('feat')).toBeUndefined()
+  })
+
+  for (const [outcome, message] of [
+    ['dirty', 'The Review has unsaved edits; save or discard them before showing another scope.'],
+    ['busy', 'The Review is already asking about unsaved edits.'],
+    ['cancelled', "The unsaved edits were kept, so the Review's scope did not change."]
+  ] as const) {
+    test(`refuses an acknowledged scope change when applyScope returns ${outcome}`, async () => {
+      const fake = fakeContext(layoutFor('feat'))
+      fake.on('ui.window.self', () => ({ connId: 7 }))
+      await openReview(fake.context, { worktree: 'feat' })
+      fake.calls.length = 0
+      const { reveals, appliedScopes } = handleFor('feat', { outcome })
+
+      await expect(openReview(fake.context, {
+        worktree: 'feat',
+        source: 'staged',
+        reveal: 'a.ts',
+        acknowledge: true
+      })).rejects.toThrow(message)
+
+      expect(appliedScopes).toEqual([[{ source: 'staged' }, 'refuse']])
+      expect(fake.called('quirky.terminal/activateTab')).toHaveLength(0)
+      expect(fake.called('quirky.worktree/navigate')).toHaveLength(0)
+      expect(reveals).toEqual([])
+    })
+  }
+
+  test('preserves an applyScope error without activating, navigating or revealing', async () => {
+    const fake = fakeContext(layoutFor('feat'))
+    fake.on('ui.window.self', () => ({ connId: 7 }))
+    await openReview(fake.context, { worktree: 'feat' })
+    fake.calls.length = 0
+    const { reveals, appliedScopes } = handleFor('feat', {
+      outcome: () => Promise.reject(new Error('confirm failed'))
+    })
+
+    await expect(openReview(fake.context, {
+      worktree: 'feat',
+      source: 'staged',
+      reveal: 'a.ts',
+      acknowledge: true
+    })).rejects.toThrow('confirm failed')
+
+    expect(appliedScopes).toEqual([[{ source: 'staged' }, 'refuse']])
+    expect(fake.called('quirky.terminal/activateTab')).toHaveLength(0)
+    expect(fake.called('quirky.worktree/navigate')).toHaveLength(0)
+    expect(reveals).toEqual([])
+  })
+
+  test('treats a handle without applyScope as unmounted', async () => {
+    const fake = fakeContext(layoutFor('feat'))
+    await openReview(fake.context, { worktree: 'feat' })
+    const { reveals, scopes } = handleFor('feat', { includeApplyScope: false })
+    fake.on('ui.window.self', () => ({ connId: 7 }))
+    fake.on('quirky.worktree/navigate', () => ({}))
+
+    await openReview(fake.context, {
+      worktree: 'feat',
+      source: 'staged',
+      reveal: 'a.ts',
+      acknowledge: true
+    })
+
+    expect(reveals).toEqual([])
+    expect(scopes).toEqual([])
+    expect(fake.called('quirky.terminal/openViewTab')).toHaveLength(2)
+    expect(fake.called('quirky.terminal/openViewTab').at(-1)!.params.input).toMatchObject({ source: 'staged', reveal: 'a.ts' })
+  })
+})
+
+
+describe('openReview scope outcome acknowledgment', () => {
+  for (const outcome of ['applied', 'unchanged'] as const) {
+    test(`continues after applyScope returns ${outcome}`, async () => {
+      const fake = fakeContext(layoutFor('feat'))
+      await openReview(fake.context, { worktree: 'feat' })
+      const order: string[] = []
+      fake.on('ui.window.self', () => ({ connId: 7 }))
+      fake.on('quirky.terminal/activateTab', () => {
+        order.push('activateTab')
+        return {}
+      })
+      fake.on('quirky.worktree/navigate', () => {
+        order.push('navigate')
+        return {}
+      })
+      const { reveals, appliedScopes } = handleFor('feat', { outcome, order })
+
+      const result = await openReview(fake.context, {
+        worktree: 'feat',
+        source: 'staged',
+        reveal: 'a.ts',
+        acknowledge: true
+      })
+
+      expect(result).toMatchObject({ source: 'staged', focused: true })
+      expect(appliedScopes).toEqual([[{ source: 'staged' }, 'refuse']])
+      expect(order).toEqual(['applyScope', 'activateTab', 'navigate', 'reveal'])
+      expect(reveals).toEqual([['a.ts', undefined]])
+    })
+  }
+})
 describe('selection store', () => {
   test('notifies listeners with the origin and stops after unsubscribe', () => {
     const seen: Array<[string | null, string]> = []
