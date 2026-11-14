@@ -32,12 +32,15 @@ function fullCoverage(): CoverageFile {
 }
 
 type AuditFixture = { plugin: PluginInventory; inventory: Inventory; results: () => CheckResult[] }
-function fixture(content = fullSource, coverage: CoverageFile | string | undefined = fullCoverage(), extras: Record<string, string> = {}): AuditFixture {
+function fixture(content = fullSource, coverage: CoverageFile | string | undefined = fullCoverage(), extras: Record<string, string> = {}, fragments: Record<string, CoverageFile | string> = {}): AuditFixture {
   const plugin: PluginInventory = {
     id: 'acme.app', directory: 'plugins/acme.app', hasUi: true, targets: ['view:acme.app/main'],
     sources: [{ file, content }, ...Object.entries(extras).map(([file, content]) => ({ file, content }))],
     contributions: { methods: ['acme.app/save', 'acme.app/load'], commands: ['command:acme.app/refresh'], cliCommands: [{ id: 'save', words: 'save', methods: ['acme.app/save'] }] },
-    ...(coverage === undefined ? {} : { coverage: { file: 'plugins/acme.app/ui-scoreboard.json', content: typeof coverage === 'string' ? coverage : JSON.stringify(coverage) } })
+    ...(coverage === undefined ? {} : { coverage: { file: 'plugins/acme.app/ui-scoreboard.json', content: typeof coverage === 'string' ? coverage : JSON.stringify(coverage) } }),
+    coverageFragments: Object.entries(fragments).map(([name, content]) => ({
+      file: `plugins/acme.app/ui-scoreboard/${name}.json`, content: typeof content === 'string' ? content : JSON.stringify(content)
+    }))
   }
   const inventory: Inventory = { repoRoot: '/repo', commit: 'test', sourceDigest: 'test', dirty: false, plugins: [plugin], targets: [], sharedSources: [], exclusions: [], failures: [] }
   return { plugin, inventory, results: () => auditPlugin(inventory, plugin) }
@@ -436,5 +439,151 @@ describe('quote-bound source audit', () => {
     expect(codes(fixture(fullSource, coverage), 'loading')).toContain('coverage-duplicate')
     coverage.notState = [{ site: ref('export function Main'), reason: 'Not state' }]
     expect(codes(fixture(fullSource, coverage), 'loading')).toContain('site-not-candidate')
+  })
+})
+
+describe('coverage fragments', () => {
+  const rootFile = 'plugins/acme.app/ui-scoreboard.json'
+  const fragmentFile = (name: string) => `plugins/acme.app/ui-scoreboard/${name}.json`
+  function splitFixture(options: { root?: boolean; extra?: Record<string, CoverageFile | string>; coverage?: CoverageFile } = {}) {
+    const coverage = options.coverage ?? fullCoverage()
+    const root = { ...coverage, states: [], notState: [], actions: [] }
+    const states = { ...coverage, surfaces: {}, actions: [] }
+    const actions = { ...coverage, surfaces: {}, states: [], notState: [] }
+    const data = fixture(fullSource, root, {}, {
+      ...(options.root === false ? { a: root } : {}),
+      actions, states, ...options.extra
+    })
+    if (options.root === false) delete data.plugin.coverage
+    return data
+  }
+
+  test.each([true, false])('audits split coverage with root=%s', (root) => {
+    const data = splitFixture({ root })
+    expect(data.results().map(({ id, status, applicable }) => ({ id, status, applicable }))).toEqual(
+      (['loading', 'empty', 'error', 'commands'] as const).map((id) => ({ id, status: 'pass', applicable: true }))
+    )
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({
+      code: 'action-routed', coverageFile: fragmentFile('actions'), message: 'Action routes through acme.app/save'
+    }))
+  })
+
+  test('reports one duplicate action with both claiming files', () => {
+    const coverage = fullCoverage()
+    const data = splitFixture({ extra: { more: { ...coverage, surfaces: {}, states: [] } } })
+    expect(cell(data, 'commands')).toMatchObject({ status: 'fail', reason: 'coverage-duplicate' })
+    expect(cell(data, 'commands').evidence.filter((item) => item.code === 'coverage-duplicate')).toEqual([
+      expect.objectContaining({
+        coverageFile: fragmentFile('more'),
+        message: `Candidate jsx-handler is covered more than once [${fragmentFile('actions')}, ${fragmentFile('more')}]`
+      })
+    ])
+  })
+
+  test('rejects duplicate surfaces while evaluating the first declaration', () => {
+    const coverage = fullCoverage()
+    const duplicateDecisions = Object.fromEntries(['loading', 'empty', 'error'].map((state) => [
+      state, { applicable: false, reason: 'No asynchronous state', evidence: [ref(fullSource)] }
+    ])) as CoverageFile['surfaces'][string]
+    const data = splitFixture({ extra: { states: { ...coverage, surfaces: { 'view:acme.app/main': duplicateDecisions }, actions: [] } } })
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id)).toMatchObject({ status: 'fail', reason: 'coverage-surface-duplicate' })
+      expect(cell(data, id).evidence).toContainEqual(expect.objectContaining({
+        code: 'coverage-surface-duplicate', targetId: 'view:acme.app/main', coverageFile: fragmentFile('states'),
+        message: `Surface view:acme.app/main is also declared in ${rootFile} [${fragmentFile('states')}]`
+      }))
+      expect(codes(data, id)).toContain('state-covered')
+      expect(codes(data, id)).not.toContain('applicability-conflict')
+    }
+    expect(cell(data, 'commands').status).toBe('pass')
+  })
+
+  test('an invalid fragment fails all checks without hiding valid evidence', () => {
+    const data = splitFixture({ extra: { bad: JSON.stringify({ ...fullCoverage(), extra: true }) } })
+    for (const result of data.results()) {
+      expect(result).toMatchObject({ status: 'fail', reason: 'coverage-file-invalid' })
+      expect(result.evidence).toContainEqual(expect.objectContaining({
+        code: 'coverage-file-invalid', coverageFile: fragmentFile('bad'),
+        message: `Invalid coverage file: coverage file has unknown key extra [${fragmentFile('bad')}]`
+      }))
+    }
+    expect(codes(data, 'commands')).toContain('action-routed')
+  })
+
+  test('entry errors name the fragment while preserving source location', () => {
+    const coverage = fullCoverage()
+    const render = coverage.states[0]!.render
+    if (render.component === 'toast') throw new Error('Expected shared element')
+    render.element = ref('<EmptyState message="Loading things" />')
+    const data = splitFixture({ coverage })
+    expect(cell(data, 'loading')).toMatchObject({ status: 'fail', reason: 'evidence-missing' })
+    expect(cell(data, 'loading').evidence).toContainEqual(expect.objectContaining({
+      code: 'evidence-missing', coverageFile: fragmentFile('states'),
+      message: expect.stringContaining(` [${fragmentFile('states')}]`)
+    }))
+    expect(cell(data, 'commands').evidence.find((item) => item.code === 'action-routed')?.source?.file).toBe(file)
+  })
+
+  test('unmapped candidates have no coverage file', () => {
+    const coverage = fullCoverage()
+    coverage.actions = []
+    const data = splitFixture({ coverage })
+    expect(cell(data, 'commands')).toMatchObject({ status: 'fail', reason: 'coverage-missing' })
+    const missing = cell(data, 'commands').evidence.find((item) => item.code === 'coverage-missing')!
+    expect(missing.message).toBe('Unmapped action candidate jsx-handler: onClick')
+    expect(missing).not.toHaveProperty('coverageFile')
+  })
+
+  test('missing state evidence points to the surface declaration', () => {
+    const coverage = fullCoverage()
+    coverage.states = []
+    const data = splitFixture({ coverage })
+    for (const id of ['loading', 'empty', 'error']) {
+      expect(cell(data, id).evidence).toContainEqual(expect.objectContaining({
+        code: 'state-missing', coverageFile: rootFile,
+        message: expect.stringContaining(` [${rootFile}]`)
+      }))
+    }
+  })
+
+  test('inapplicable decisions keep their declaration provenance across files', () => {
+    const coverage = fullCoverage()
+    coverage.surfaces['view:acme.app/main']!.loading = {
+      applicable: false, reason: 'No loading state', evidence: [ref(fullSource)]
+    }
+    const data = splitFixture({ root: false, coverage })
+    expect(cell(data, 'loading').evidence).toContainEqual(expect.objectContaining({
+      code: 'applicability-conflict', coverageFile: fragmentFile('a'),
+      message: expect.stringContaining(` [${fragmentFile('a')}]`)
+    }))
+    expect(cell(data, 'loading').evidence).toContainEqual(expect.objectContaining({
+      code: 'state-not-applicable', coverageFile: fragmentFile('a'), message: 'No loading state'
+    }))
+  })
+
+  test('missing coverage points to both supported locations', () => {
+    const data = fixture()
+    delete data.plugin.coverage
+    for (const result of data.results()) {
+      expect(result).toMatchObject({ status: 'fail', reason: 'coverage-file-missing' })
+      expect(result.evidence).toContainEqual(expect.objectContaining({
+        code: 'coverage-file-missing',
+        message: 'Missing plugins/acme.app/ui-scoreboard.json or plugins/acme.app/ui-scoreboard/*.json'
+      }))
+    }
+  })
+
+  test('single-file passing evidence gains provenance without changing messages', () => {
+    const data = fixture()
+    expect(data.results().every((result) => result.status === 'pass')).toBe(true)
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({
+      code: 'action-routed', coverageFile: rootFile, message: 'Action routes through acme.app/save'
+    }))
+    for (const result of data.results()) {
+      for (const item of result.evidence) {
+        expect(item.coverageFile).toBe(rootFile)
+        expect(item.message).not.toContain(` [${rootFile}]`)
+      }
+    }
   })
 })

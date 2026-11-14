@@ -21,22 +21,29 @@ export type ScoreboardDependencies = {
   stdout?: (text: string) => void; stderr?: (text: string) => void
 }
 const HELP = `Usage:
-  bun run ui:scoreboard -- --author-family <openai|anthropic|google|xai> --output /absolute/fresh/directory [--reviewer <alias>] [--browser <executable>]
+  bun run ui:scoreboard -- --author-family <openai|anthropic|google|xai> --output /absolute/fresh/directory [--plugin <id>] [--reviewer <alias>] [--browser <executable>]
   bun run ui:scoreboard -- --static-only --output /absolute/fresh/directory
   bun run ui:scoreboard:check
   bun run ui:scoreboard -- --help
 
 Full mode builds and captures every surface in both themes and reviews every image at 85.
-Static-only never starts runtime and cannot certify screenshots. State/action checks are a syntactic source audit read from each plugin's ui-scoreboard.json.
+Plugin mode captures one plugin in both themes and never sets goalPassed: true.
+Static-only never starts runtime and cannot certify screenshots. State/action checks are a syntactic source audit read from each plugin's ui-scoreboard.json and ui-scoreboard/*.json fragments.
 --check-ratchet checks enrolled static results without artifacts or runtime.
 Output paths must not exist. No prerequisites are installed automatically.
 Exit: 0 complete passing full run (or valid passing ratchet); 1 measured failures; 2 operational/inventory/argument error; 130/143 after signal cleanup.
 `
-type Arguments = { mode: 'full' | 'static-only'; outputDir: string; authorFamily: ModelFamily; reviewerAlias: string; browserExecutable?: string } | { mode: 'help' } | { mode: 'ratchet' }
+type RuntimeArguments = { outputDir: string; authorFamily: ModelFamily; reviewerAlias: string; browserExecutable?: string }
+type Arguments =
+  | ({ mode: 'full' } & RuntimeArguments)
+  | ({ mode: 'plugin'; plugin: string } & RuntimeArguments)
+  | ({ mode: 'static-only' } & RuntimeArguments)
+  | { mode: 'help' }
+  | { mode: 'ratchet' }
 function parseArguments(argv: readonly string[]): Arguments {
   const args = argv[0] === '--' ? argv.slice(1) : argv
   const values = new Map<string, string>(); const flags = new Set<string>()
-  const booleans = ['--help', '--static-only', '--check-ratchet']; const options = ['--output', '--author-family', '--reviewer', '--browser']
+  const booleans = ['--help', '--static-only', '--check-ratchet']; const options = ['--output', '--author-family', '--reviewer', '--browser', '--plugin']
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!
     if (values.has(arg) || flags.has(arg)) throw new Error(`Duplicate option: ${arg}`)
@@ -59,7 +66,9 @@ function parseArguments(argv: readonly string[]): Arguments {
   }
   const authorFamily = values.get('--author-family') as ModelFamily
   if (!['openai', 'anthropic', 'google', 'xai'].includes(authorFamily)) throw new Error('--author-family requires openai, anthropic, google or xai')
-  return { mode: 'full', outputDir, authorFamily, reviewerAlias: values.get('--reviewer') ?? DEFAULT_REVIEWER_ALIAS, browserExecutable: values.get('--browser') }
+  const runtimeArguments = { outputDir, authorFamily, reviewerAlias: values.get('--reviewer') ?? DEFAULT_REVIEWER_ALIAS, browserExecutable: values.get('--browser') }
+  const plugin = values.get('--plugin')
+  return plugin === undefined ? { mode: 'full', ...runtimeArguments } : { mode: 'plugin', plugin, ...runtimeArguments }
 }
 
 /** Run developer-only measurement with owned runtime and injectable I/O. */
@@ -88,23 +97,28 @@ export async function runUiScoreboard(argv: readonly string[], dependencies: Sco
   try {
     await (dependencies.mkdir ?? mkdir)(args.outputDir)
     const inventory = inventoryCollector(repoRoot)
+    if (args.mode === 'plugin') {
+      const plugin = inventory.plugins.find((candidate) => candidate.id === args.plugin)
+      if (!plugin) throw new Error(`Unknown plugin: ${args.plugin}`)
+      if (plugin.targets.length === 0) throw new Error(`Plugin ${args.plugin} has no declared capture targets`)
+    }
     let visuals = notRunVisuals(inventory)
-    if (args.mode === 'full' && inventory.failures.length === 0) {
+    if ((args.mode === 'full' || args.mode === 'plugin') && inventory.failures.length === 0) {
       try {
-        visuals = await measureVisuals(inventory, { outputDir: args.outputDir, authorFamily: args.authorFamily, reviewerAlias: args.reviewerAlias, browserExecutable: args.browserExecutable, signal: controller.signal }, { capture: dependencies.captureApplication ?? captureApplication, review: dependencies.reviewManifest ?? reviewManifest })
+        visuals = await measureVisuals(inventory, { outputDir: args.outputDir, authorFamily: args.authorFamily, reviewerAlias: args.reviewerAlias, browserExecutable: args.browserExecutable, ...(args.mode === 'plugin' ? { plugin: args.plugin } : {}), signal: controller.signal }, { capture: dependencies.captureApplication ?? captureApplication, review: dependencies.reviewManifest ?? reviewManifest })
       } catch (error) {
         visuals = notRunVisuals(inventory, 'measurement-error'); visuals.operationalError = true
         visuals.failures.push({ code: 'measurement-error', message: String(error) })
       }
     }
-    const report = buildReport(inventory, visuals, args.mode)
+    const report = buildReport(inventory, visuals, args.mode, args.mode === 'plugin' ? args.plugin : undefined)
     const write = dependencies.writeFile ?? writeFile
     const jsonPath = join(args.outputDir, 'scoreboard.json'); const markdownPath = join(args.outputDir, 'scoreboard.md')
     await write(jsonPath, `${JSON.stringify(report, null, 2)}\n`)
     await write(markdownPath, formatMarkdown(report))
     const checks = [...report.plugins.flatMap((plugin) => plugin.checks), ...report.host.checks]
     stdout(`${report.status}: ${report.plugins.length} plugins; ${checks.filter((check) => check.applicable && check.status === 'pass').length} applicable passes, ${checks.filter((check) => check.status === 'fail').length} failures, ${checks.filter((check) => !check.applicable).length} non-applicable; ${report.cells.length} visual cells\n${jsonPath}\n${markdownPath}`)
-    return signalExit || (report.status === 'error' ? 2 : report.goalPassed ? 0 : 1)
+    return signalExit || (report.status === 'error' ? 2 : (args.mode === 'plugin' ? report.status === 'passed' : report.goalPassed) ? 0 : 1)
   } catch (error) { stderr(String(error)); return signalExit || 2 }
   finally { signals.off('SIGINT', onInt); signals.off('SIGTERM', onTerm) }
 }

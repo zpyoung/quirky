@@ -1,11 +1,12 @@
 import type { UiPluginContext } from '@quirky/protocol'
 import { captureElement } from '../capture'
 import { FEEDBACK_FULL, MAX_COMMENT_LENGTH, MAX_COMMENTS, type Capture, type Comment, type CommentIntent } from '../contract'
-import { formatCommentsAsMarkdown } from '../format'
 import { buildIssueDrafts, builtinRepository } from '../issue'
 import { resolveTarget, type Target } from './target'
 
 const ACTIVE = 'setting:quirky.feedback/active'
+const COMMAND_COPY = 'command:quirky.feedback/copy'
+const COMMAND_ANNOTATE = 'command:quirky.feedback/annotate'
 export const DISCARD_WARNING = 'Esc again discards this comment.'
 const LIMIT_TITLE = 'Feedback tray is full'
 const LIMIT_BODY = `The tray holds up to ${MAX_COMMENTS} comments. Delete or clear some to add more.`
@@ -25,7 +26,10 @@ export type Card = {
   saving: boolean
 }
 
+export type LoadPhase = 'loading' | 'ready' | 'failed'
 export type SessionState = {
+  phase: LoadPhase
+  loadError: string | null
   comments: Comment[]
   recovered: boolean
   owners: Record<string, string>
@@ -55,11 +59,11 @@ function pluginsOf(value: unknown): PluginInfo[] {
 }
 
 /**
- * The state and actions behind the tray and card. Every daemon failure leaves the state as it was
- * and shows a toast; nothing leaves the window except through an explicit copy or issue draft.
+ * Session state and actions for the tray; nothing leaves the window except through an explicit copy or issue draft.
+ * List failures preserve current rows for retry.
  */
 export function createSession(context: UiPluginContext, hooks: { suspend(suspended: boolean): void }) {
-  let state: SessionState = { comments: [], recovered: false, owners: {}, card: null, target: null, collapsed: true, notice: null }
+  let state: SessionState = { phase: 'loading', loadError: null, comments: [], recovered: false, owners: {}, card: null, target: null, collapsed: true, notice: null }
   let disposed = false
   let serial = 0
   let confirming = false
@@ -70,8 +74,8 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
     if (disposed) return
     const next: SessionState = { ...state, ...patch }
     if (patch.card === null || (patch.card !== undefined && patch.card.id !== null)) next.target = null
-    // these messages render inside the panel, so a closed panel would hide them
-    if (patch.recovered === true || typeof patch.notice === 'string') next.collapsed = false
+    // these states render inside the tray, so a collapsed panel would hide them
+    if (patch.recovered === true || typeof patch.notice === 'string' || patch.phase === 'failed') next.collapsed = false
     state = next
     for (const listener of [...listeners]) listener()
   }
@@ -81,7 +85,27 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
   const toastError = (title: string, cause: unknown) => context.toast(title, message(cause), { kind: 'error' })
   const toastFull = () => context.toast(LIMIT_TITLE, LIMIT_BODY, { kind: 'warning' })
 
-  const ownerNames = (plugins: PluginInfo[]) => Object.fromEntries(plugins.map((plugin) => [plugin.id, plugin.name ?? plugin.id]))
+  const saveCard = async (
+    write: (text: string) => Promise<Comment>,
+    updateComments: (comments: Comment[], saved: Comment) => Comment[]
+  ) => {
+    const card = state.card
+    const text = card?.text.trim() ?? ''
+    if (card === null || card.saving || text === '' || text.length > MAX_COMMENT_LENGTH) return
+    patchCard({ saving: true })
+    // the card can be cancelled and replaced while the save is in flight
+    const stillOpen = () => state.card?.serial === card.serial
+    const cardAfterSave = () => (stillOpen() ? null : state.card)
+    try {
+      const saved = await write(text)
+      saves++
+      commit({ comments: updateComments(state.comments, saved), card: cardAfterSave() })
+    } catch (cause) {
+      if (stillOpen()) patchCard({ saving: false })
+      if (message(cause).startsWith(FEEDBACK_FULL)) toastFull()
+      else toastError('Could not save the comment', cause)
+    }
+  }
 
   const self = {
     getState: () => state,
@@ -91,8 +115,9 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
     },
 
     async load() {
+      commit({ phase: 'loading', loadError: null })
       const owners = context.call('plugin.list').then(
-        (plugins) => commit({ owners: ownerNames(pluginsOf(plugins)) }),
+        (plugins) => commit({ owners: Object.fromEntries(pluginsOf(plugins).map((plugin) => [plugin.id, plugin.name ?? plugin.id])) }),
         () => {}
       )
       const comments = (async () => {
@@ -101,9 +126,12 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
         // selection is live before this answers, so a snapshot from before a save would drop it
         do {
           seen = saves
-          try { result = await context.call('quirky.feedback/list') as typeof result } catch (cause) { return toastError('Could not load feedback comments', cause) }
+          try { result = await context.call('quirky.feedback/list') as typeof result } catch (cause) {
+            commit({ phase: 'failed', loadError: message(cause) })
+            return
+          }
         } while (seen !== saves)
-        commit({ comments: Array.isArray(result.comments) ? result.comments : [], recovered: result.recovered === true })
+        commit({ phase: 'ready', loadError: null, comments: Array.isArray(result.comments) ? result.comments : [], recovered: result.recovered === true })
       })()
       await Promise.all([owners, comments])
     },
@@ -156,29 +184,22 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
       })
     },
 
-    async submit() {
+    async add() {
       const card = state.card
-      const text = card?.text.trim() ?? ''
-      if (card === null || card.saving || text === '' || text.length > MAX_COMMENT_LENGTH) return
-      patchCard({ saving: true })
-      // the card can be cancelled and replaced while the save is in flight
-      const stillOpen = () => state.card?.serial === card.serial
-      const cardAfterSave = () => (stillOpen() ? null : state.card)
-      try {
-        if (card.id === null) {
-          const added = await context.call('quirky.feedback/add', { intent: card.intent, comment: text, capture: card.capture }) as Comment
-          saves++
-          commit({ comments: [...state.comments.filter((entry) => entry.id !== added.id), added], card: cardAfterSave() })
-        } else {
-          const updated = await context.call('quirky.feedback/update', { id: card.id, comment: text, intent: card.intent }) as Comment
-          saves++
-          commit({ comments: state.comments.map((entry) => (entry.id === updated.id ? updated : entry)), card: cardAfterSave() })
-        }
-      } catch (cause) {
-        if (stillOpen()) patchCard({ saving: false })
-        if (message(cause).startsWith(FEEDBACK_FULL)) toastFull()
-        else toastError('Could not save the comment', cause)
-      }
+      if (card === null || card.id !== null) return
+      return saveCard(
+        (text) => context.call('quirky.feedback/add', { intent: card.intent, comment: text, capture: card.capture }) as Promise<Comment>,
+        (comments, added) => [...comments.filter((entry) => entry.id !== added.id), added]
+      )
+    },
+
+    async save() {
+      const card = state.card
+      if (card === null || card.id === null) return
+      return saveCard(
+        (text) => context.call('quirky.feedback/update', { id: card.id, comment: text, intent: card.intent }) as Promise<Comment>,
+        (comments, updated) => comments.map((entry) => (entry.id === updated.id ? updated : entry))
+      )
     },
 
     async remove(id: string) {
@@ -205,14 +226,12 @@ export function createSession(context: UiPluginContext, hooks: { suspend(suspend
       commit({ comments: [], card: state.card?.id === null ? state.card : null, notice: null })
     },
 
+    async annotate(pane: string) {
+      try { await context.executeCommand(COMMAND_ANNOTATE, { pane }) } catch (cause) { toastError('Could not start Annotate', cause) }
+    },
+
     async copy() {
-      if (state.comments.length === 0) return
-      const count = state.comments.length
-      try {
-        if (!navigator.clipboard?.writeText) throw new Error('The clipboard is not available in this window')
-        await navigator.clipboard.writeText(formatCommentsAsMarkdown(state.comments))
-      } catch (cause) { return toastError('Could not copy the comments', cause) }
-      context.toast('Copied', `${plural(count, 'comment')} copied as Markdown.`, { kind: 'success' })
+      try { await context.executeCommand(COMMAND_COPY) } catch (cause) { context.log(`feedback: copy failed: ${message(cause)}`) }
     },
 
     async fileIssue() {

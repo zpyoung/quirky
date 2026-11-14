@@ -13,7 +13,7 @@ function compareText(left: string, right: string): number {
 }
 
 function screenshotCheck(applicable: boolean, cells: VisualCell[]): CheckResult {
-  if (!applicable) return { id: 'screenshots', status: 'pass', applicable: false, reason: 'no-ui-surface', evidence: [{ code: 'no-ui-surface', message: 'No UI entry or render contributions.' }] }
+  if (!applicable) return { id: 'screenshots', status: 'pass', applicable: false, reason: 'no-ui-surface', evidence: [{ code: 'no-ui-surface', message: 'No declared capture surfaces.' }] }
   const passed = cells.length > 0 && cells.every((cell) => cell.status === 'pass')
   return {
     id: 'screenshots', status: passed ? 'pass' : 'fail', applicable: true,
@@ -23,25 +23,42 @@ function screenshotCheck(applicable: boolean, cells: VisualCell[]): CheckResult 
 }
 
 /** Retain every check and image in a deterministic, non-averaged goal verdict. */
-export function buildReport(inventory: Inventory, visuals: VisualResult, mode: ScoreboardReport['mode']): ScoreboardReport {
-  const cells = [...visuals.cells].sort((a, b) => compareText(a.targetId, b.targetId) || compareText(a.theme, b.theme))
-  const plugins = inventory.plugins.map((plugin) => ({
-    id: plugin.id,
-    checks: [...checkPlugin(inventory, plugin.id), screenshotCheck(plugin.hasUi || plugin.targets.length > 0, cells.filter((cell) => cell.plugin === plugin.id))].sort((a, b) => CHECK_IDS.indexOf(a.id) - CHECK_IDS.indexOf(b.id)),
-    targets: visuals.targets.filter((target) => target.plugin === plugin.id).map((target) => target.id).sort(),
-  })).sort((a, b) => compareText(a.id, b.id))
-  const host = { checks: [checkHostTokens(inventory), screenshotCheck(true, cells.filter((cell) => cell.plugin === null))], targets: visuals.targets.filter((target) => target.plugin === null).map((target) => target.id).sort() }
+export function buildReport(inventory: Inventory, visuals: VisualResult, mode: ScoreboardReport['mode'], pluginId?: string): ScoreboardReport {
+  const pluginMode = mode === 'plugin'
+  const reportPlugins = pluginMode ? inventory.plugins.filter((plugin) => plugin.id === pluginId) : inventory.plugins
+  const cells = [...visuals.cells]
+    .filter((cell) => !pluginMode || cell.plugin === pluginId)
+    .sort((a, b) => compareText(a.targetId, b.targetId) || compareText(a.theme, b.theme))
+  const plugins = reportPlugins.map((plugin) => {
+    const pluginCells = cells.filter((cell) => cell.plugin === plugin.id)
+    return {
+      id: plugin.id,
+      checks: [...checkPlugin(inventory, plugin.id), screenshotCheck(plugin.targets.length > 0 || pluginCells.length > 0, pluginCells)].sort((a, b) => CHECK_IDS.indexOf(a.id) - CHECK_IDS.indexOf(b.id)),
+      targets: visuals.targets.filter((target) => target.plugin === plugin.id).map((target) => target.id).sort(),
+    }
+  }).sort((a, b) => compareText(a.id, b.id))
+  const host = pluginMode
+    ? { checks: [], targets: [] }
+    : { checks: [checkHostTokens(inventory), screenshotCheck(true, cells.filter((cell) => cell.plugin === null))], targets: visuals.targets.filter((target) => target.plugin === null).map((target) => target.id).sort() }
   const failures = [...inventory.failures, ...visuals.failures].sort((a, b) => compareText(a.source?.file ?? '', b.source?.file ?? '') || (a.source?.line ?? 0) - (b.source?.line ?? 0) || (a.source?.column ?? 0) - (b.source?.column ?? 0) || compareText(a.code, b.code))
-  const goalPassed = mode === 'full' && failures.length === 0 && !visuals.operationalError && [...plugins.flatMap((plugin) => plugin.checks), ...host.checks].every((check) => check.status === 'pass')
-  return { schemaVersion: 1, mode, commit: inventory.commit, sourceDigest: inventory.sourceDigest, threshold: 85, status: inventory.failures.length || visuals.operationalError ? 'error' : goalPassed ? 'passed' : 'failed', goalPassed, plugins, host, cells, sharedTokenEvidence: sharedTokenEvidence(inventory), exclusions: inventory.exclusions, failures }
+  const checks = pluginMode ? plugins.flatMap((plugin) => plugin.checks) : [...plugins.flatMap((plugin) => plugin.checks), ...host.checks]
+  const checksPassed = (!pluginMode || plugins.length === 1) && failures.length === 0 && !visuals.operationalError && checks.every((check) => check.status === 'pass')
+  const goalPassed = mode === 'full' && checksPassed
+  const status = inventory.failures.length || visuals.operationalError ? 'error' : pluginMode ? checksPassed ? 'passed' : 'failed' : goalPassed ? 'passed' : 'failed'
+  return {
+    schemaVersion: 1, mode, ...(pluginMode && pluginId ? { plugin: pluginId } : {}),
+    commit: inventory.commit, sourceDigest: inventory.sourceDigest, threshold: 85, status, goalPassed,
+    plugins, host, cells, sharedTokenEvidence: sharedTokenEvidence(inventory), exclusions: inventory.exclusions, failures,
+  }
 }
 
 /** Expose missing and failed evidence without hiding cells behind percentages. */
 export function formatMarkdown(report: ScoreboardReport): string {
   const escape = (value: string) => value.replaceAll('|', '\\|').replaceAll(/[\r\n]+/g, ' ')
   const rows = report.plugins.map((plugin) => ({ id: plugin.id, checks: plugin.checks }))
-  rows.push({ id: 'host', checks: report.host.checks })
-  const lines = ['# UI scoreboard', '', `Mode: ${report.mode}. Status: ${report.status}. Goal passed: ${report.goalPassed}.`, `Commit: ${report.commit}. Source digest: ${report.sourceDigest}. Threshold: 85 per image.`, '', '| Plugin | ' + CHECK_IDS.join(' | ') + ' |', '| --- | ' + CHECK_IDS.map(() => '---').join(' | ') + ' |']
+  if (report.mode !== 'plugin') rows.push({ id: 'host', checks: report.host.checks })
+  const modeLabel = report.mode === 'plugin' && report.plugin ? `plugin (${escape(report.plugin)})` : report.mode
+  const lines = ['# UI scoreboard', '', `Mode: ${modeLabel}. Status: ${report.status}. Goal passed: ${report.goalPassed}.`, `Commit: ${report.commit}. Source digest: ${report.sourceDigest}. Threshold: 85 per image.`, '', '| Plugin | ' + CHECK_IDS.join(' | ') + ' |', '| --- | ' + CHECK_IDS.map(() => '---').join(' | ') + ' |']
   for (const row of rows) lines.push(`| ${escape(row.id)} | ${CHECK_IDS.map((id) => { const check = row.checks.find((candidate) => candidate.id === id); return check ? check.applicable ? check.status : 'N/A' : 'not rated' }).join(' | ')} |`)
   lines.push('', '## Failed-check evidence', '')
   for (const row of rows) for (const check of row.checks.filter((check) => check.status === 'fail')) {
@@ -62,3 +79,4 @@ export function formatMarkdown(report: ScoreboardReport): string {
   lines.push('', 'Loading, empty, error and command checks are a syntactic source audit. See the UI scoreboard section of apps/desktop/README.md for its limits.', '')
   return lines.join('\n')
 }
+

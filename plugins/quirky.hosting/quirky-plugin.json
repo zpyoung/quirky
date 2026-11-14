@@ -161,6 +161,12 @@
         "result": {"type": "object", "properties": {"number": {"type": "integer"}, "enabled": {"type": "boolean"}, "state": {"type": "string"}}}
       },
       {
+        "id": "updateBranch",
+        "description": "Request a merge-base update for an open pull request, pinned to its current head.",
+        "params": {"type": "object", "properties": {"prRepo": {"type": "object", "description": "Exact configured pull request repository, validated against trusted remotes.", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "expectedHead": {"type": "string", "description": "Must be a 40- or 64-character hexadecimal commit SHA; validated by the handler."}}, "required": ["number", "expectedHead"]},
+        "result": {"type": "object", "properties": {"state": {"type": "string", "enum": ["requested"]}, "number": {"type": "integer"}, "head": {"type": "string"}}, "required": ["state", "number", "head"]}
+      },
+      {
         "id": "updateReview",
         "description": "Edit, close, reopen, or mark a GitHub pull request ready for review.",
         "params": {"type": "object", "properties": {"prRepo": {"type": "object", "description": "Exact configured pull request repository, validated against trusted remotes.", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "action": {"type": "string", "enum": ["edit", "close", "reopen", "ready"]}, "title": {"type": "string"}, "body": {"type": "string"}}, "required": ["number", "action"]},
@@ -542,6 +548,7 @@
       {"id": "create", "method": "create", "summary": "create a GitHub pull request"},
       {"id": "create-stacked", "method": "createStacked", "summary": "create and register a stacked pull request"},
       {"id": "merge", "method": "merge", "summary": "head-guard and merge a pull request"},
+      {"id": "update-branch", "method": "updateBranch", "summary": "request a merge-base update for a pull request"},
       {"id": "auto-merge", "method": "autoMerge", "summary": "enable or disable pull request auto-merge"},
       {"id": "update-review", "method": "updateReview", "summary": "edit or update pull request state"},
       {"id": "reviewers", "method": "reviewers", "summary": "add or remove pull request reviewers"},

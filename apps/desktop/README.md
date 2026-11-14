@@ -191,7 +191,7 @@ rm -rf /tmp/qtest
 `bun run ui:review` starts the real daemon and desktop renderer against a fresh isolated
 home, registers a disposable local repository and two Git worktrees, and captures the live
 UI contribution inventory in dark and light. It does not open the foreground native window,
-load your profile, install hooks, or use provider accounts. Chromium and all app processes are
+load your profile, install hooks, or use your provider accounts. Chromium and all app processes are
 owned by the run and stopped before it returns.
 
 Install the development dependencies, then either install a Playwright browser with
@@ -230,6 +230,9 @@ theme metadata, PNGs, per-image reviewer responses/logs, `review-report.json` an
 Filtered runs identify their exact scope and do not certify the whole application. The command
 builds UI assets unless `--skip-build` is supplied; missing assets still fail.
 
+Reviewer output may contain one outer plain or `json` Markdown code fence. Assessment fields
+remain strictly validated; surrounding prose, nested fences and other non-JSON replies fail.
+
 Exit 0 means a complete requested capture-only inventory (**not reviewed**) or all requested
 reviews passed; exit 1 means capture/coverage/mount or score failure; exit 2 means invalid
 arguments, missing prerequisites, invalid evidence or reviewer/runtime failure. Signals await
@@ -254,25 +257,61 @@ bun run ui:scoreboard -- --author-family openai --output /tmp/quirky-ui-scoreboa
 # No browser, build, daemon or reviewer. Screenshots remain explicitly unmeasured.
 bun run ui:scoreboard -- --static-only --output /tmp/quirky-ui-static
 
+# Measure one plugin in both themes; this cannot certify the whole application's goal.
+bun run ui:scoreboard -- --plugin quirky.session --author-family openai \
+  --output /tmp/quirky-session-scoreboard
+
 # Enrolled static checks only; no runtime or artifact directory.
 bun run ui:scoreboard:check
 ```
 
-Both reporting modes write `scoreboard.json` and `scoreboard.md` to a fresh absolute directory,
-print their paths, and retain failures and non-applicable reasons. Full mode accepts `--reviewer`
-and `--browser` as above, but no filters, threshold override, skip-build or historical report.
+All reporting modes write `scoreboard.json` and `scoreboard.md` to a fresh absolute directory,
+print their paths, and retain failures and non-applicable reasons. Full and plugin modes accept
+`--reviewer` and `--browser` as above, but no threshold override, skip-build or historical report.
+`--plugin` requires a known plugin with declared capture targets. Its report contains only that
+plugin, omits host checks, and always records `goalPassed: false`; exit 0 means that plugin's
+checks passed. Plugins without declared capture targets receive `N/A` for screenshots even if
+they have a UI bundle; their source audits still run.
 Dirty production source blocks capture; source changes during measurement invalidate the run.
-Exit 0 certifies a complete passing full report (or passing ratchet), 1 means failed checks,
-2 means operational/inventory errors; cancellation awaits cleanup and exits 130/143.
+Exit 0 certifies a complete passing full report, passing plugin checks, or a passing ratchet;
+1 means failed checks, 2 means operational/inventory errors. Cancellation awaits cleanup and exits 130/143.
 An omitted reviewer theme is an operational failure: measured cells are retained, and no
 further target reviews are requested.
 
+Escaped compatibility tokens are checked in style contexts, including JSX style/class props,
+style objects, CSS templates and DOM style APIs. Escapes in CLI arguments or Markdown text do
+not count as styles. Browser page captures review the browser toolbar and view chrome, not
+native web content. Account captures use disposable provider executables and a local Keychain guard.
+
 ### State and action coverage
 
-The four UI checks read `plugins/<id>/ui-scoreboard.json`. A missing file fails
-all four checks. The file is strict JSON with `schemaVersion: 1`, a `surfaces`
-map and `states`, `notState` and `actions` arrays. Unknown keys, duplicate keys
+The four UI checks read `plugins/<id>/ui-scoreboard.json` and
+`plugins/<id>/ui-scoreboard/<name>.json` fragments. Either location is optional;
+at least one coverage file is required. Every file uses the same strict JSON
+format: `schemaVersion: 1`, a `surfaces` map and `states`, `notState` and
+`actions` arrays. Empty maps and arrays are valid. Unknown keys, duplicate keys
 and empty quotes are rejected.
+
+Fragment names must match `^[a-z0-9][a-z0-9-]*\.json$`. Dot-entries are ignored.
+Other entries, subdirectories and symlinks fail inventory. The fragment directory
+is not production UI source.
+
+Coverage is the union of all files, root first and then fragments in byte-order
+by name. The audit processes all `states`, then all `notState`, then all `actions`.
+Surface keys must be unique: `coverage-surface-duplicate` fails the three state
+checks and the first declaration is evaluated. Duplicate candidate claims still
+fail with `coverage-duplicate`, naming the claiming files. An invalid file fails
+all four checks without hiding evidence from valid files.
+
+Evidence from a coverage file carries its repository-relative `coverageFile`.
+Failing messages end with ` [<file>]`; duplicate claims list the distinct claiming
+files. Passing messages stay unchanged. Unmapped candidates have no coverage file.
+
+To repair a large plugin in separate PRs, give each PR its own fragments named
+after the part they cover, such as `sidebar.json`. Put a surface's three decisions
+in the fragment covering that surface's top-level component. No shared root or
+index file needs editing. The ratchet evaluates the plugin's combined coverage;
+enroll a plugin only when all its files pass together.
 
 A ref is `{ "file": "...", "quote": "..." }`. Its file path must be canonical,
 repository-relative and point into the plugin's UI import graph. The quote must
