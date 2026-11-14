@@ -445,16 +445,9 @@ async function runProjectChecks(context: CliCheckContext): Promise<void> {
   context.prove('worktree-set', { id: worktreeId, comment: 'cli-parity-comment' })
 }
 
-async function runActorChecks(context: CliCheckContext): Promise<void> {
+/** Proves an owned actor terminal is live and records its cleanup identity. */
+export async function startActorTerminal(context: CliCheckContext, worktreeId: string): Promise<{ tabId: string; sessionId: string }> {
   const { world } = context
-  const worktreeId = stateString(context, 'worktreeId')
-  const expectedActorIds = [
-    'ask-register', 'ask-cancel', 'ask-wait',
-    'actor-run-create', 'actor-run-current', 'actor-run-show',
-    'actor-task-create', 'actor-task-list', 'actor-task-update', 'actor-task-list-updated',
-    'actor-gate-create', 'actor-gate-list', 'actor-gate-resolve',
-    'actor-send', 'actor-check', 'actor-inbox'
-  ]
   const baselineValue = await productCall(context, 'terminal-layout-before-actor', ['terminal', 'layout', '--worktree', worktreeId])
   const baseline = terminalPanes(baselineValue, 'terminal layout before actor')
   const existingTabs = new Set(baseline.map((pane) => pane.tabId))
@@ -483,6 +476,20 @@ async function runActorChecks(context: CliCheckContext): Promise<void> {
     throw new Error(`fixture actor exited before the live hook: ${JSON.stringify(output).slice(-8192)}`)
   }
   context.prove('terminal-create', { worktreeId, tabId: actorTabId, sessionId: actorSessionId })
+  return { tabId: actorTabId, sessionId: actorSessionId }
+}
+
+async function runActorChecks(context: CliCheckContext): Promise<void> {
+  const { world } = context
+  const worktreeId = stateString(context, 'worktreeId')
+  const expectedActorIds = [
+    'ask-register', 'ask-cancel', 'ask-wait',
+    'actor-run-create', 'actor-run-current', 'actor-run-show',
+    'actor-task-create', 'actor-task-list', 'actor-task-update', 'actor-task-list-updated',
+    'actor-gate-create', 'actor-gate-list', 'actor-gate-resolve',
+    'actor-send', 'actor-check', 'actor-inbox'
+  ]
+  await startActorTerminal(context, worktreeId)
   if (context.onActorLive) await context.onActorLive()
 
   context.check('ask-register')
