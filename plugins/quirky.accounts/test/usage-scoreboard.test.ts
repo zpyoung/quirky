@@ -7,7 +7,7 @@ import { parseCoverage } from '../../../scripts/ui-scoreboard/audit-evidence'
 import { collectInventory } from '../../../scripts/ui-scoreboard/inventory'
 import { checkPlugin } from '../../../scripts/ui-scoreboard/tokens'
 import { checkRatchet, parseRatchetConfig } from '../../../scripts/ui-scoreboard/ratchet'
-import type { CoverageFile, Inventory, PluginInventory, StateKind, StaticRatchet } from '../../../scripts/ui-scoreboard/contracts'
+import type { CoverageFile, Inventory, PluginInventory, StateKind } from '../../../scripts/ui-scoreboard/contracts'
 
 const root = resolve(import.meta.dir, '../../..')
 const pluginId = 'quirky.accounts'
@@ -21,13 +21,12 @@ const dialogSurface = 'overlay:quirky.accounts/switch-dialog'
 const passCodes: Record<string, true> = { 'state-covered': true, 'state-not-applicable': true, 'not-state': true, 'action-routed': true, 'action-transient': true, 'action-not-user': true }
 let inventory: Inventory
 let plugin: PluginInventory
-let enrollment: StaticRatchet
+const enrollment = parseRatchetConfig(readFileSync(resolve(root, 'scripts/ui-scoreboard-ratchet.json'), 'utf8'))
 
 beforeAll(() => {
   inventory = collectInventory(root)
   plugin = inventory.plugins.find(({ id }) => id === pluginId)!
   expect(plugin).toBeDefined()
-  enrollment = parseRatchetConfig(readFileSync(resolve(root, 'scripts/ui-scoreboard-ratchet.json'), 'utf8'))
 })
 
 function fragment(target: PluginInventory = plugin): CoverageFile {
@@ -45,15 +44,18 @@ function mutatedCoverage(change: (coverage: CoverageFile) => void) {
   return { inventory: copy, plugin: target }
 }
 
-function expectRegression(copy: Inventory, check: StateKind | 'commands', code: string, evidenceFile: string) {
-  const result = checkPlugin(copy, pluginId).find(({ id }) => id === check)!
-  expect(result.status).toBe('fail')
-  expect(result.evidence.some((entry) => entry.code === code && (
-    entry.source?.file === evidenceFile || entry.coverageFile === evidenceFile
-  ))).toBe(true)
+function expectRegression(copy: Inventory, ids: readonly (StateKind | 'commands')[], code: string, evidenceFile: string) {
+  const checks = checkPlugin(copy, pluginId)
   const ratchet = checkRatchet(copy, { [pluginId]: enrollment[pluginId]! })
   expect(ratchet.exitCode).toBe(1)
-  expect(ratchet.failures.some((entry) => entry.code === code && entry.message.startsWith(`${pluginId} / ${check}:`))).toBe(true)
+  for (const check of ids) {
+    const result = checks.find(({ id }) => id === check)!
+    expect(result.status).toBe('fail')
+    expect(result.evidence.some((entry) => entry.code === code && (
+      entry.source?.file === evidenceFile || entry.coverageFile === evidenceFile
+    ))).toBe(true)
+    expect(ratchet.failures.some((entry) => entry.code === code && entry.message.startsWith(`${pluginId} / ${check}:`))).toBe(true)
+  }
 }
 
 test('the complete Accounts plugin passes all five static checks', () => {
@@ -138,16 +140,23 @@ test('combined fragments retain bounded UI discovery and state and route witness
   }
 })
 
-test('Accounts is enrolled in all five checks and the entire static ratchet passes', () => {
+test('Accounts is enrolled in all five checks', () => {
   expect(enrollment[pluginId]).toEqual(['commands', 'compatibility-tokens', 'empty', 'error', 'loading'])
-  expect(checkRatchet(inventory, enrollment)).toEqual({ exitCode: 0, failures: [] })
-}, 60_000)
+})
+
+test.each(Object.entries(enrollment).flatMap(([id, checks]) => checks.map((check) => [id, check] as const)))(
+  'the static ratchet passes for %s / %s',
+  (id, check) => {
+    expect(checkRatchet(inventory, { [id]: [check] })).toEqual({ exitCode: 0, failures: [] })
+  },
+  60_000,
+)
 
 test('a removed Usage state fails its state check and the ratchet', () => {
   const coverage = fragment()
   const removed = coverage.states[0]!
   const copy = mutatedCoverage((value) => { value.states.shift() })
-  expectRegression(copy.inventory, removed.state, 'coverage-missing', usagePath)
+  expectRegression(copy.inventory, [removed.state], 'coverage-missing', usagePath)
 }, 60_000)
 
 test('a removed decisive Usage action fails commands and the ratchet', () => {
@@ -156,7 +165,7 @@ test('a removed decisive Usage action fails commands and the ratchet', () => {
     expect(index).toBeGreaterThanOrEqual(0)
     coverage.actions.splice(index, 1)
   })
-  expectRegression(copy.inventory, 'commands', 'coverage-missing', usagePath)
+  expectRegression(copy.inventory, ['commands'], 'coverage-missing', usagePath)
 }, 60_000)
 
 test('replacing a witnessed shared render with raw markup fails the ratchet', () => {
@@ -167,7 +176,7 @@ test('replacing a witnessed shared render with raw markup fails the ratchet', ()
   const source = target.sources.find(({ file }) => file === usagePath)!
   expect(source.content).toContain(entry.render.element.quote)
   source.content = source.content.replace(entry.render.element.quote, '<p>Usage unavailable</p>')
-  expectRegression(copy, entry.state, 'evidence-missing', fragmentPath)
+  expectRegression(copy, [entry.state], 'evidence-missing', fragmentPath)
 }, 60_000)
 
 test('a broken public route witness fails commands and the ratchet', () => {
@@ -176,7 +185,7 @@ test('a broken public route witness fails commands and the ratchet', () => {
     if (!('route' in entry)) throw new Error('Expected a routed action')
     entry.route.invoke.quote += ' missing route witness'
   })
-  expectRegression(copy.inventory, 'commands', 'evidence-missing', fragmentPath)
+  expectRegression(copy.inventory, ['commands'], 'evidence-missing', fragmentPath)
 }, 60_000)
 
 test('redeclaring Settings in the Usage fragment fails every state ratchet', () => {
@@ -185,7 +194,5 @@ test('redeclaring Settings in the Usage fragment fails every state ratchet', () 
       loading: { applicable: true }, empty: { applicable: true }, error: { applicable: true },
     }
   })
-  for (const state of ['loading', 'empty', 'error'] as const) {
-    expectRegression(copy.inventory, state, 'coverage-surface-duplicate', fragmentPath)
-  }
+  expectRegression(copy.inventory, ['loading', 'empty', 'error'], 'coverage-surface-duplicate', fragmentPath)
 }, 60_000)
