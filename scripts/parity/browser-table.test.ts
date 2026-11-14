@@ -26,15 +26,15 @@ test('browser table rejects missing and duplicate captured commands', () => {
 test('browser table rejects unknown commands, empty reasons, and missing check IDs', () => {
   const rows = readBrowserTable()
   const first = rows[0]
-  const gap = rows.find((row) => row.disposition === 'gap')
+  const covered = rows.find((row) => row.disposition === 'covered')
   expect(first).toBeDefined()
-  expect(gap).toBeDefined()
+  expect(covered).toBeDefined()
 
   expect(() => validateBrowserTable([
     ...rows,
     { ...first!, id: 'invented-command', command: 'invented command', check: 'invented-command' }
   ])).toThrow('unknown-command')
-  expect(() => validateBrowserTable(rows.map((row) => row === gap ? { ...row, reason: '' } : row))).toThrow('missing-reason')
+  expect(() => validateBrowserTable(rows.map((row) => row === covered ? { ...row, reason: '' } : row))).toThrow('missing-reason')
   expect(() => validateBrowserTable(rows.map((row) => row === first ? { ...row, check: 'not-registered' } : row))).toThrow('missing-check')
 })
 
@@ -90,17 +90,6 @@ test('pane, restart, and identity rows are covered with manifest-resolved CLI me
       reason: expected.reason
     })
   }
-
-  const deferred = rows.filter((row) => row.deferred)
-  expect(deferred.map((row) => row.id).sort()).toEqual([
-    'native-profile-clear',
-    'native-profile-persistence'
-  ])
-  for (const row of deferred) {
-    expect(row.disposition).toBe('gap')
-    expect(row.check).toBeUndefined()
-    expect(row.reason).toContain('WKWebView')
-  }
 })
 
 test('an executable registry must match the table declared check IDs exactly', () => {
@@ -122,10 +111,7 @@ test('wait subordinate rows have distinct checks and reuse the primary CLI metad
   expect(rows).toHaveLength(93)
   expect(subordinates.map((row) => row?.check)).toEqual(ids)
   expect(subordinates.map((row) => row?.equivalent)).toEqual(ids.map(() => primary?.equivalent))
-  expect(subordinates.slice(0, 3).map((row) => row?.disposition)).toEqual(['covered', 'covered', 'covered'])
-  expect(subordinates[3]?.disposition).toBe('gap')
-  expect(subordinates[3]?.reason).toBe('a wait fulfilled by a navigation is rejected with browser_tab_changed. Follow-up: Let a pending browser wait finish when the navigation it waits for lands.')
-  expect(subordinates[4]?.disposition).toBe('covered')
+  expect(subordinates.map((row) => row?.disposition)).toEqual(ids.map(() => 'covered'))
 })
 
 test('browser table rejects a missing registered wait-url row', () => {
@@ -139,4 +125,61 @@ test('compiled browser checks implement every declared executable row exactly on
   const ids = browserChecks.map(check => check.id)
   validateBrowserTable(rows, ids)
   expect(() => validateBrowserTable(rows, ids.filter(id => id !== 'upload'))).toThrow('missing-check')
+})
+
+test('browser inventory covers every equivalent and names the four exclusions', () => {
+  const rows = readBrowserTable()
+  expect(rows).toHaveLength(93)
+  expect(rows.filter(row => row.disposition === 'gap' || row.deferred)).toEqual([])
+  expect(rows.filter(row => row.disposition === 'excluded').map(row => row.id).sort()).toEqual([
+    'exec-unrestricted', 'native-profile-clear', 'native-profile-persistence', 'tab-profile-create-imported'
+  ])
+  for (const id of ['intercept-enable', 'intercept-list', 'intercept-disable', 'open-url', 'tab-switch-focus', 'tab-profile-delete', 'wait-url']) {
+    expect(rows.find(row => row.id === id)).toMatchObject({ disposition: 'covered', check: id, deferred: false })
+  }
+  for (const id of ['native-profile-persistence', 'native-profile-clear']) {
+    const row = rows.find(row => row.id === id)!
+    expect(row).toMatchObject({ disposition: 'excluded', equivalent: '—', deferred: false })
+    expect(row.check).toBeUndefined()
+    expect(row.reason).toContain('WKWebView')
+    expect(row.reason).toContain('Not an Orca command')
+  }
+})
+
+test('browser validator rejects deferred Native storage observers', () => {
+  const rows = readBrowserTable().map(row => row.id === 'native-profile-clear'
+    ? { ...row, deferred: true, disposition: 'gap' as const, check: undefined }
+    : row)
+  expect(() => validateBrowserTable(rows)).toThrow('missing-check')
+})
+
+test('browser validator rejects the old gap forms of executable extra rows', () => {
+  for (const [id, reason] of [
+    ['tab-switch-focus', 'Managed selection works, but --focus is refused instead of revealing the selected page. Follow-up: Reveal the selected browser page and route browser URLs to the intended client.'],
+    ['wait-url', 'a wait fulfilled by a navigation is rejected with browser_tab_changed. Follow-up: Let a pending browser wait finish when the navigation it waits for lands.'],
+    ['wait-load', 'a wait fulfilled by a navigation is rejected with browser_tab_changed. Follow-up: Let a pending browser wait finish when the navigation it waits for lands.']
+  ]) {
+    const rows = readBrowserTable().map(row => row.id === id ? { ...row, disposition: 'gap' as const, reason } : row)
+    expect(() => validateBrowserTable(rows)).toThrow('missing-check')
+  }
+})
+
+test('covered equivalents validate with and without the compiled registry', () => {
+  const rows = readBrowserTable().map(row => {
+    if (['native-profile-clear', 'native-profile-persistence'].includes(row.id)) {
+      return { ...row, disposition: 'excluded' as const, deferred: false, check: undefined }
+    }
+    return { ...row, disposition: row.disposition === 'gap' ? 'covered' as const : row.disposition }
+  })
+  expect(() => validateBrowserTable(rows)).not.toThrow()
+  expect(() => validateBrowserTable(rows, browserChecks.map(check => check.id))).not.toThrow()
+})
+
+test('dash equivalents cannot claim executable coverage', () => {
+  for (const id of ['tab-profile-create-imported', 'exec-unrestricted', 'native-profile-persistence', 'native-profile-clear']) {
+    const rows = readBrowserTable().map(row => row.id === id
+      ? { ...row, disposition: 'covered' as const, deferred: false, check: id }
+      : row)
+    expect(() => validateBrowserTable(rows)).toThrow(/missing-check|manifest-mismatch/)
+  }
 })
