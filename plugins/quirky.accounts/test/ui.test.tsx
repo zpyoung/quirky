@@ -6,6 +6,7 @@ import { AccountsUiStore } from '../src/window/model'
 import { mapGrokUsage } from '../src/usage/mappers'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { Preferences } from '../src/types'
+import pluginManifest from '../quirky-plugin.json'
 
 const providers = ['claude', 'codex', 'gemini', 'antigravity', 'opencode-go', 'kimi', 'minimax', 'grok', 'cursor', 'zcode']
 const preferences = {
@@ -55,6 +56,10 @@ const emptyUsage = {
   inactive: {}, updatedAt: 0
 }
 
+let executeCommandCalls: { id: string; args?: unknown; options?: { activateOwner?: boolean } }[]
+let clipboardWrites: string[]
+let clipboardFailure: boolean
+let originalClipboard: Clipboard | undefined
 let unregister: (() => void) | undefined
 let container: HTMLElement
 let calls: { method: string; params?: Record<string, unknown> }[]
@@ -78,6 +83,7 @@ let openedViews: string[]
 beforeAll(() => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  originalClipboard = navigator.clipboard
 })
 
 afterAll(async () => {
@@ -90,6 +96,13 @@ beforeEach(() => {
   provided = new Map()
   listCalls = 0
   toastCalls = []
+  executeCommandCalls = []
+  clipboardWrites = []
+  clipboardFailure = false
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => {
+    clipboardWrites.push(value)
+    if (clipboardFailure) throw new Error('fixture clipboard failure')
+  } } })
   uiStateValue = { open: false, provider: null, expanded: null, settingsSection: null }
   usageValue = emptyUsage
   consumeFailures = 0
@@ -113,6 +126,7 @@ afterEach(async () => {
     deactivate()
   })
   unregister = undefined
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: originalClipboard })
   container.remove()
 })
 
@@ -123,6 +137,15 @@ function makeContext(): UiPluginContext {
     provide: (id: string, implementation: unknown) => provided.set(id, implementation),
     call: async (method: string, params?: Record<string, unknown>) => {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 7 }
+      if (method === 'ui.window.command.run') {
+        const id = params?.id
+        if (typeof id !== 'string') throw new Error('Missing routed command ID')
+        const handler = provided.get(id)
+        if (typeof handler !== 'function') throw new Error(`Missing routed command handler: ${id}`)
+        const result = await (handler as (args?: unknown) => unknown)(params?.args)
+        return { result: result === undefined ? null : result }
+      }
       if (method === 'quirky.agents/list') return agentListing
       if (method === 'quirky.agents/refresh') return refreshedAgentListing
       if (method === 'quirky.accounts/refresh') return usageValue
@@ -166,7 +189,11 @@ function makeContext(): UiPluginContext {
       return () => { listeners = listeners.filter((current) => current !== listener) }
     },
     getSetting: () => settingValue,
-    executeCommand: async () => {},
+    executeCommand: async (id: string, args?: unknown, options?: { activateOwner?: boolean }) => {
+      executeCommandCalls.push({ id, args, ...(options ? { options } : {}) })
+      const handler = provided.get(id)
+      return typeof handler === 'function' ? await (handler as (args?: unknown) => unknown)(args) : undefined
+    },
     openView: (id: string) => openedViews.push(id),
     closeView: () => {},
     togglePanel: () => {},
@@ -667,4 +694,501 @@ test('status-bar visibility gates absent CLI toggles and refreshes public detect
   expect(statusBar.querySelector('[aria-label=\"Claude Usage\"]')).not.toBeNull()
   expect(calls.some((call) => call.method === 'quirky.agents/refresh')).toBe(true)
   expect(calls.some((call) => call.method === 'quirky.accounts/setPreferences')).toBe(false)
+})
+const SELECT_ACCOUNT_COMMAND_ID = 'command:quirky.accounts/select-account'
+const COPY_LOGIN_LINK_COMMAND_ID = 'command:quirky.accounts/copy-login-link'
+const REFRESH_COMMAND_ID = 'command:quirky.accounts/refresh'
+const LOGIN_A_URL = 'https://auth.openai.com/oauth/authorize?login=a'
+
+function commandHandler(id: string): (args?: unknown) => unknown {
+  const handler = provided.get(id)
+  if (typeof handler !== 'function') throw new Error(`Missing command handler: ${id}`)
+  return handler as (args?: unknown) => unknown
+}
+async function mountSettingsRoot(context: UiPluginContext): Promise<void> {
+  await act(async () => {
+    activate(context)
+    const mountSettings = provided.get('view:quirky.accounts/settings')
+    if (typeof mountSettings !== 'function') throw new Error('Missing settings mount')
+    unregister = (mountSettings as (element: HTMLElement, props: { report?(state: unknown): void }) => (() => void) | void)(container, {}) as (() => void) | undefined
+  })
+}
+
+function pendingCodexState() {
+  const state = codexState(1, 'codex-a', 'Account A')
+  const account = state.accounts[0]!
+  return {
+    ...state,
+    accounts: [account, { ...account, id: 'codex-b', label: 'Account B', email: 'codex-b@example.test', active: false }],
+    pendingLogin: { id: 'login-a', provider: 'codex', accountId: 'codex-a', status: 'pending', url: LOGIN_A_URL, error: null, result: null }
+  }
+}
+
+test('select-account and refresh commands validate inputs and preserve provider scope', async () => {
+  const context = makeContext()
+  activate(context)
+  await settle()
+  const select = commandHandler(SELECT_ACCOUNT_COMMAND_ID)
+  const refresh = commandHandler(REFRESH_COMMAND_ID)
+
+  expect(await select()).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await select({ provider: 'other', accountId: null })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await select({ provider: 'claude', accountId: null, connId: 0 })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await refresh('grok')).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await refresh({ provider: 'other' })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await refresh({ provider: 'grok', connId: 1.25 })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+
+  await refresh({ provider: 'grok' })
+  expect(calls.filter((call) => call.method === 'quirky.accounts/refresh').map((call) => call.params)).toEqual([{ provider: 'grok', force: true }])
+  expect(calls.filter((call) => call.method === 'quirky.agents/refresh')).toEqual([])
+
+  calls = []
+  await refresh({})
+  expect(calls.filter((call) => call.method === 'quirky.accounts/refresh').map((call) => call.params)).toEqual([{ force: true }])
+  expect(calls.filter((call) => call.method === 'quirky.agents/refresh')).toHaveLength(1)
+  calls = []
+  await refresh()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/refresh').map((call) => call.params)).toEqual([{ force: true }])
+  expect(calls.filter((call) => call.method === 'quirky.agents/refresh')).toHaveLength(1)
+})
+
+test('select-account command and the Settings selection button share the scoped store operation', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  await mountSettingsRoot(context)
+  await settle()
+  await act(async () => { buttonByText('Codex').click() })
+
+  const select = commandHandler(SELECT_ACCOUNT_COMMAND_ID)
+  let commandResult: unknown
+  await act(async () => { commandResult = await select({ provider: 'codex', accountId: 'codex-b' }) })
+  expect(commandResult).toBeUndefined()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select').map((call) => call.params)).toEqual([{ provider: 'codex', accountId: 'codex-b' }])
+  await settle()
+
+  await act(async () => { buttonByLabel('Select Codex account Account B').click() })
+  await settle()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select').map((call) => call.params)).toEqual([
+    { provider: 'codex', accountId: 'codex-b' },
+    { provider: 'codex', accountId: 'codex-b' }
+  ])
+  expect(executeCommandCalls.at(-1)).toEqual({
+    id: SELECT_ACCOUNT_COMMAND_ID,
+    args: { provider: 'codex', accountId: 'codex-b', connId: 7 },
+    options: { activateOwner: false }
+  })
+
+  await act(async () => { await commandHandler(SELECT_ACCOUNT_COMMAND_ID)({ provider: 'claude', accountId: null }) })
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select').at(-1)?.params).toEqual({ provider: 'claude', accountId: null })
+})
+
+test('copy-login-link is identity-bound and reports clipboard refusal without losing login actions', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  await mountSettingsRoot(context)
+  await settle()
+  await act(async () => { buttonByText('Codex').click() })
+
+  const copy = commandHandler(COPY_LOGIN_LINK_COMMAND_ID)
+  expect(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL })).toEqual({ ok: true })
+  expect(clipboardWrites).toEqual([LOGIN_A_URL])
+  expect(await copy()).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await copy({ id: 'old-login', provider: 'codex', url: LOGIN_A_URL })).toEqual({ ok: false, reason: 'login-changed' })
+  expect(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL, connId: 0 })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(clipboardWrites).toEqual([LOGIN_A_URL])
+
+  await act(async () => { buttonByText('Copy link').click() })
+  await settle()
+  expect(executeCommandCalls.at(-1)).toEqual({
+    id: COPY_LOGIN_LINK_COMMAND_ID,
+    args: { id: 'login-a', provider: 'codex', url: LOGIN_A_URL, connId: 7 },
+    options: { activateOwner: false }
+  })
+  expect(clipboardWrites).toEqual([LOGIN_A_URL, LOGIN_A_URL])
+  expect(toastCalls).toContainEqual(['Sign-in link copied', 'Open it in a private window or another browser profile.'])
+
+  clipboardFailure = true
+  expect(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL })).toEqual({ ok: false, reason: 'clipboard-failed' })
+  expect(toastCalls).toContainEqual(['Could not copy the link', 'Use the Open link to continue sign-in in your browser.'])
+  expect(container.textContent).toContain('Account A')
+  expect(buttonByText('Cancel').disabled).toBe(false)
+  expect(await copy({ id: 'login-a', provider: 'codex', url: 'https://auth.openai.com/oauth/authorize?login=other' })).toEqual({ ok: false, reason: 'login-changed' })
+  expect(JSON.stringify(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL }))).not.toContain(LOGIN_A_URL)
+})
+test('copy refuses a provider mismatch without calling Accounts or provider RPCs', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  activate(context)
+  await settle()
+  calls = []
+
+  const result = await commandHandler(COPY_LOGIN_LINK_COMMAND_ID)({
+    id: 'login-a',
+    provider: 'claude',
+    url: LOGIN_A_URL
+  })
+
+  expect(result).toEqual({ ok: false, reason: 'login-changed' })
+  expect(clipboardWrites).toEqual([])
+  expect(calls).toEqual([])
+})
+
+const activationIdentityCases = [
+  {
+    name: 'copy-login-link',
+    id: COPY_LOGIN_LINK_COMMAND_ID,
+    args: { id: 'login-a', provider: 'codex', url: LOGIN_A_URL, connId: 7 },
+    refusal: { ok: false, reason: 'login-changed' }
+  },
+  {
+    name: 'select-account',
+    id: SELECT_ACCOUNT_COMMAND_ID,
+    args: { provider: 'codex', accountId: 'codex-b', connId: 7 },
+    refusal: { ok: false, reason: 'owner-unavailable' }
+  },
+  {
+    name: 'refresh',
+    id: REFRESH_COMMAND_ID,
+    args: { provider: 'grok', connId: 7 },
+    refusal: { ok: false, reason: 'owner-unavailable' }
+  }
+] as const
+
+for (const lifecycle of ['deactivation', 'replacement'] as const) {
+  for (const scenario of activationIdentityCases) {
+    test(`${scenario.name} refuses local work after ${lifecycle} during identity lookup`, async () => {
+      listResponse = () => pendingCodexState()
+      const context = makeContext()
+      activate(context)
+      await settle()
+      const handler = commandHandler(scenario.id)
+      const identity = Promise.withResolvers<unknown>()
+      const originalCall = context.call.bind(context)
+      context.call = (method, params) => method === 'ui.window.self' ? identity.promise : originalCall(method, params)
+      calls = []
+
+      const pending = handler(scenario.args)
+      if (lifecycle === 'deactivation') {
+        deactivate()
+      } else {
+        const replacement = makeContext()
+        activate(replacement)
+        await settle()
+        calls = []
+      }
+      identity.resolve({ connId: 7 })
+
+      expect(await pending).toEqual(scenario.refusal)
+      expect(clipboardWrites).toEqual([])
+      expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+    })
+  }
+}
+
+for (const scenario of activationIdentityCases) {
+  test(`${scenario.name} does not forward after activation is lost during identity lookup`, async () => {
+    listResponse = () => pendingCodexState()
+    const context = makeContext()
+    activate(context)
+    await settle()
+    const handler = commandHandler(scenario.id)
+    const identity = Promise.withResolvers<unknown>()
+    const originalCall = context.call.bind(context)
+    const forwarded: string[] = []
+    context.call = (method, params) => {
+      if (method === 'ui.window.self') return identity.promise
+      if (method === 'ui.window.command.run') {
+        forwarded.push(String(params?.id))
+        return Promise.resolve({ result: null })
+      }
+      return originalCall(method, params)
+    }
+    calls = []
+
+    const pending = handler({ ...scenario.args, connId: 8 })
+    deactivate()
+    identity.resolve({ connId: 7 })
+
+    expect(await pending).toEqual(scenario.refusal)
+    expect(forwarded).toEqual([])
+    expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+    expect(clipboardWrites).toEqual([])
+  })
+}
+
+for (const scenario of activationIdentityCases) {
+  test(`${scenario.name} refuses stale local work on the no-connId async-yield path`, async () => {
+    listResponse = () => pendingCodexState()
+    const context = makeContext()
+    activate(context)
+    await settle()
+    const handler = commandHandler(scenario.id)
+    const args: Record<string, unknown> = { ...scenario.args }
+    delete args.connId
+    calls = []
+
+    const pending = handler(args)
+    deactivate()
+
+    expect(await pending).toEqual(scenario.refusal)
+    expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+    expect(clipboardWrites).toEqual([])
+  })
+}
+
+test('forwarding already in flight settles without local work after deactivation', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  activate(context)
+  await settle()
+  const originalCall = context.call.bind(context)
+  const forwarded = new Map<string, { resolve(value: unknown): void }>()
+  const allForwarded = Promise.withResolvers<void>()
+  let forwardCount = 0
+  context.call = (method, params) => {
+    if (method === 'ui.window.self') return Promise.resolve({ connId: 7 })
+    if (method === 'ui.window.command.run') {
+      const id = String(params?.id)
+      const result = Promise.withResolvers<unknown>()
+      forwarded.set(id, result)
+      forwardCount += 1
+      if (forwardCount === activationIdentityCases.length) allForwarded.resolve()
+      return result.promise
+    }
+    return originalCall(method, params)
+  }
+  calls = []
+
+  const pending = Promise.all(activationIdentityCases.map((scenario) =>
+    commandHandler(scenario.id)({ ...scenario.args, connId: 8 })
+  ))
+  await allForwarded.promise
+  deactivate()
+  forwarded.get(COPY_LOGIN_LINK_COMMAND_ID)?.resolve({ result: { ok: true } })
+  forwarded.get(SELECT_ACCOUNT_COMMAND_ID)?.resolve({ result: null })
+  forwarded.get(REFRESH_COMMAND_ID)?.resolve({ result: null })
+
+  expect(await pending).toEqual([{ ok: true }, undefined, undefined])
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+  expect(clipboardWrites).toEqual([])
+})
+
+for (const outcome of ['success', 'failure'] as const) {
+  test(`copy preserves an already-started clipboard ${outcome} after activation replacement`, async () => {
+    listResponse = () => pendingCodexState()
+    const started = Promise.withResolvers<void>()
+    const writing = Promise.withResolvers<void>()
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (value: string) => {
+          clipboardWrites.push(value)
+          started.resolve()
+          return writing.promise
+        }
+      }
+    })
+    const context = makeContext()
+    activate(context)
+    await settle()
+    const copy = commandHandler(COPY_LOGIN_LINK_COMMAND_ID)
+    const pending = copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL, connId: 7 })
+    await started.promise
+
+    const replacement = makeContext()
+    activate(replacement)
+    await settle()
+    toastCalls = []
+    if (outcome === 'success') writing.resolve()
+    else writing.reject(new Error('fixture clipboard failure'))
+
+    expect(await pending).toEqual(outcome === 'success'
+      ? { ok: true }
+      : { ok: false, reason: 'clipboard-failed' })
+    expect(clipboardWrites).toEqual([LOGIN_A_URL])
+    expect(toastCalls).toEqual([])
+  })
+}
+
+test('Settings refresh controls invoke the global and provider-scoped refresh commands', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  await mountSettingsRoot(context)
+  await settle()
+
+  await act(async () => { buttonByText('Refresh usage').click() })
+  await settle()
+  expect(executeCommandCalls.at(-1)).toEqual({
+    id: REFRESH_COMMAND_ID,
+    args: { connId: 7 },
+    options: { activateOwner: false }
+  })
+  expect(calls.some((call) => call.method === 'quirky.accounts/refresh' && call.params?.provider === undefined)).toBe(true)
+  expect(calls.some((call) => call.method === 'quirky.agents/refresh')).toBe(true)
+
+  await act(async () => { buttonByText('Grok (xAI)').click() })
+  await settle()
+  await act(async () => { buttonByLabel('Refresh Grok (xAI) usage').click() })
+  await settle()
+  expect(executeCommandCalls.at(-1)).toEqual({
+    id: REFRESH_COMMAND_ID,
+    args: { provider: 'grok', connId: 7 },
+    options: { activateOwner: false }
+  })
+  expect(calls).toContainEqual({ method: 'quirky.accounts/refresh', params: { provider: 'grok', force: true } })
+})
+test('select-account and copy-login-link are declared with their public command titles', () => {
+  expect(pluginManifest.contributes.command).toContainEqual({ id: 'select-account', title: 'Select Accounts account' })
+  expect(pluginManifest.contributes.command).toContainEqual({ id: 'copy-login-link', title: 'Copy account sign-in link' })
+  expect(pluginManifest.apiVersion).toBe('1.15.0')
+})
+test('origin-routed void commands remain successful after daemon null-result normalization', async () => {
+  const context = makeContext()
+  activate(context)
+  await settle()
+
+  const selectResult = await commandHandler(SELECT_ACCOUNT_COMMAND_ID)({
+    provider: 'claude', accountId: null, connId: 8
+  })
+  expect(selectResult).toBeUndefined()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select').map((call) => call.params)).toEqual([
+    { provider: 'claude', accountId: null }
+  ])
+
+  calls = []
+  const refreshResult = await commandHandler(REFRESH_COMMAND_ID)({ provider: 'grok', connId: 8 })
+  expect(refreshResult).toBeUndefined()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/refresh').map((call) => call.params)).toEqual([
+    { provider: 'grok', force: true }
+  ])
+  expect(await commandHandler(SELECT_ACCOUNT_COMMAND_ID)({ provider: 'other', accountId: null, connId: 8 }))
+    .toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await commandHandler(REFRESH_COMMAND_ID)({ provider: 'grok', connId: 0 }))
+    .toEqual({ ok: false, reason: 'invalid-args' })
+})
+
+const lifecycleCommands = [
+  { name: 'copy', id: COPY_LOGIN_LINK_COMMAND_ID, args: { id: 'login-a', provider: 'codex', url: LOGIN_A_URL } },
+  { name: 'select', id: SELECT_ACCOUNT_COMMAND_ID, args: { provider: 'claude', accountId: null } },
+  { name: 'refresh', id: REFRESH_COMMAND_ID, args: { provider: 'grok' } }
+] as const
+
+for (const transition of ['deactivated', 'replaced'] as const) {
+  for (const connId of [undefined, 7, 8] as const) {
+    for (const command of lifecycleCommands) {
+      test(`${command.name} refuses a ${transition} activation before routing to ${connId ?? 'local'}`, async () => {
+        listResponse = () => pendingCodexState()
+        const context = makeContext()
+        activate(context)
+        await settle()
+        const handler = commandHandler(command.id)
+        const identity = Promise.withResolvers<unknown>()
+        const identityStarted = Promise.withResolvers<void>()
+        const effects: string[] = []
+        const originalCall = context.call.bind(context)
+        context.call = (method, params) => {
+          if (method === 'ui.window.self') {
+            identityStarted.resolve()
+            return identity.promise
+          }
+          effects.push(method)
+          return originalCall(method, params)
+        }
+        const running = handler({ ...command.args, ...(connId === undefined ? {} : { connId }) })
+        if (connId !== undefined) await identityStarted.promise
+        deactivate()
+        if (transition === 'replaced') {
+          activate(makeContext())
+          await settle()
+        }
+        identity.resolve({ connId: 7 })
+        const result = await running
+        expect(effects).toEqual([])
+        expect(clipboardWrites).toEqual([])
+        expect(result).toMatchObject({ ok: false })
+      })
+    }
+  }
+}
+
+for (const transition of ['deactivated', 'replaced'] as const) {
+  for (const command of lifecycleCommands) {
+    test(`${command.name} preserves already-started forwarding after its activation is ${transition}`, async () => {
+      listResponse = () => pendingCodexState()
+      const context = makeContext()
+      activate(context)
+      await settle()
+      const handler = commandHandler(command.id)
+      const started = Promise.withResolvers<void>()
+      const completion = Promise.withResolvers<unknown>()
+      const effects: string[] = []
+      const originalCall = context.call.bind(context)
+      context.call = (method, params) => {
+        if (method === 'ui.window.command.run') {
+          effects.push(method)
+          started.resolve()
+          return completion.promise
+        }
+        if (method !== 'ui.window.self') effects.push(method)
+        return originalCall(method, params)
+      }
+      const running = handler({ ...command.args, connId: 8 })
+      await started.promise
+      deactivate()
+      if (transition === 'replaced') {
+        activate(makeContext())
+        await settle()
+      }
+      completion.resolve({ result: command.name === 'copy' ? { ok: true } : null })
+      const result = await running
+      if (command.name === 'copy') expect(result).toEqual({ ok: true })
+      else expect(result).toBeUndefined()
+      expect(effects).toEqual(['ui.window.command.run'])
+      expect(clipboardWrites).toEqual([])
+    })
+  }
+}
+
+for (const transition of ['deactivated', 'replaced'] as const) {
+  for (const outcome of ['success', 'failure'] as const) {
+    test(`already-started clipboard ${outcome} retains its result without notifying a ${transition} activation`, async () => {
+      listResponse = () => pendingCodexState()
+      const context = makeContext()
+      activate(context)
+      await settle()
+      const started = Promise.withResolvers<void>()
+      const completion = Promise.withResolvers<void>()
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: async (url: string) => {
+          clipboardWrites.push(url)
+          started.resolve()
+          await completion.promise
+        }
+      } })
+      const running = commandHandler(COPY_LOGIN_LINK_COMMAND_ID)({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL })
+      await started.promise
+      deactivate()
+      if (transition === 'replaced') {
+        activate(makeContext())
+        await settle()
+      }
+      if (outcome === 'success') completion.resolve()
+      else completion.reject(new Error('fixture clipboard refusal'))
+      expect(await running).toEqual(outcome === 'success' ? { ok: true } : { ok: false, reason: 'clipboard-failed' })
+      expect(clipboardWrites).toEqual([LOGIN_A_URL])
+      expect(toastCalls).toEqual([])
+    })
+  }
+}
+
+test('copy provider mismatch refuses the same current ID and URL without clipboard or Accounts RPC', async () => {
+  listResponse = () => pendingCodexState()
+  activate(makeContext())
+  await settle()
+  calls = []
+  const result = await commandHandler(COPY_LOGIN_LINK_COMMAND_ID)({ id: 'login-a', provider: 'claude', url: LOGIN_A_URL })
+  expect(result).toEqual({ ok: false, reason: 'login-changed' })
+  expect(clipboardWrites).toEqual([])
+  expect(calls).toEqual([])
 })

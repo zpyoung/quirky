@@ -1,0 +1,1515 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.accounts/settings": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/model.ts",
+        "quote": "{\n      this.context.toast(title, errorCopy?.(error) ?? 'The request could not be completed. Please try again.')\n      return null\n    }"
+      },
+      "anchor": "this.context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "(error) {\n      this.context.toast(title, errorCopy?.(error) ?? 'The request could not be completed. Please try again.')\n      return nu"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/model.ts",
+        "quote": "{\n      if (scope.kind === 'remote') {\n        this.markRemoteUnavailable(\n          { kind: 'remote', mirrorId: scope.mirrorId },\n          scopeGeneration,\n          scope.hostName,\n          scope.owner,\n          scope.workspace\n        )\n      }\n      this.context.toast(title, errorCopy?.(error) ?? 'The request could not be completed. Please try again.')\n      return null\n    }"
+      },
+      "anchor": "this.context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": ")\n      }\n      this.context.toast(title, errorCopy?.(error) ?? 'The request could not be completed. Please try again.')\n      return nu"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/model.ts",
+        "quote": "this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')"
+      },
+      "anchor": "this.context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/model.ts",
+        "quote": "{\n      this.commit({ refreshing: false })\n      if (detectionFailed) this.context.toast('Could not re-detect agents', 'Agent detection could not be refreshed.')\n      return\n    }"
+      },
+      "anchor": "this.context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "etectionFailed) this.context.toast('Could not re-detect agents', 'Agent detection could not be refreshed.')\n      return\n  "
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/model.ts",
+        "quote": "this.context.toast('Could not refresh usage', 'The request could not be completed. Please try again.')"
+      },
+      "anchor": "this.context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.toast('Could not refresh usage', 'The request could not be completed. Please try again.')"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/model.ts",
+        "quote": "    }\n    if (detectionFailed) this.context.toast('Could not re-detect agents', 'Agent detection could not be refreshed.')"
+      },
+      "anchor": "this.context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "etectionFailed) this.context.toast('Could not re-detect agents', 'Agent detection could not be refreshed.')\n    this.commit"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/model.ts",
+        "quote": "this.context.toast('Could not reset Codex limits', 'The accounts service returned an unrecognized reset outcome.')"
+      },
+      "anchor": "this.context.toast(",
+      "surface": "status-bar:quirky.accounts/usage",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.toast('Could not reset Codex limits', 'The accounts service returned an unrecognized reset outcome.')"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/ui.tsx",
+        "quote": "context.toast("
+      },
+      "anchor": "context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/ui.tsx",
+          "quote": "context.toast('Could not copy the link', 'Use the Open link to continue sign-in in your browser.')"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "context.toast('Could not open provider help', 'Try again or open the provider help page in your browser.')"
+      },
+      "anchor": "context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "context.toast('Could not open provider help', 'Try again or open the provider help page in your browser.')"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "context.toast('Could not update Gemini CLI access', 'The setting could not be saved.')"
+      },
+      "anchor": "context.toast(",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "context.toast('Could not update Gemini CLI access', 'The setting could not be saved.')"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "pending.status === 'pending' && <NoticeLine>{isCodex ? 'Codex opened this sign-in link in your browser.' : 'Waiting for Claude sign-in.'}</NoticeLine>"
+      },
+      "anchor": "pending.status === 'pending' &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>{isCodex ? 'Codex opened this sign-in link in your browser.' : 'Waiting for Claude sign-in.'}</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "pending.status === 'error' &&"
+      },
+      "anchor": "pending.status === 'error' &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<InlineError message=\"Sign-in failed. Check the provider CLI and try again.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "opening &&"
+      },
+      "anchor": "opening &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>Opening…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "loginCancelling &&"
+      },
+      "anchor": "loginCancelling &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>Cancelling…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "openError &&"
+      },
+      "anchor": "openError &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<InlineError message=\"Could not open the sign-in link. Try again or use Copy link to open it in your browser.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "account.needsSignIn && <InlineError message=\"Sign in again to use this account.\" />"
+      },
+      "anchor": "account.needsSignIn &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<InlineError message=\"Sign in again to use this account.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "removing &&"
+      },
+      "anchor": "removing &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>Removing…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "accounts.length ?"
+      },
+      "anchor": "accounts.length ?",
+      "surface": "view:quirky.accounts/settings",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<EmptyState message={`No managed ${providerName} accounts yet.`} />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "configWarnings.length > 0 &&"
+      },
+      "anchor": "configWarnings.length > 0 &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<InlineError key={`${warning.accountId ?? 'system'}-${warning.kind}-${index}`} message={warning.message} />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "snapshot.loginStarting &&"
+      },
+      "anchor": "snapshot.loginStarting &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>Signing in…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "!usage ?"
+      },
+      "anchor": "!usage ?",
+      "surface": "view:quirky.accounts/settings",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<EmptyState message={provider === 'grok' ? 'No Grok usage reported yet.' : 'No Cursor usage reported yet.'} />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "status?.signedOut ?"
+      },
+      "anchor": "status?.signedOut ?",
+      "surface": "view:quirky.accounts/settings",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<EmptyState message={statusText} />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "usage.status === 'idle' || usage.status === 'fetching' ?"
+      },
+      "anchor": "usage.status === 'idle' || usage.status === 'fetching' ?",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>{status?.label}</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "usage.status === 'error' || usage.status === 'unavailable' ?"
+      },
+      "anchor": "usage.status === 'error' || usage.status === 'unavailable' ?",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<InlineError message={status?.label ?? 'Usage unavailable'} />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<div className=\"credential-row\">\n    <div className=\"account-row-main\"><small role=\"status\">{status?.configured ? status.readable ? 'Configured · Readable' : 'Configured · Not readable' : 'Not configured'}</small></div>\n    <form className=\"credential-entry\" onSubmit={save}>\n      <FormRow label={`${provider} ${credentialLabel(kind)}`} htmlFor={`credential-${provider}-${kind}`} error={actionError ?? undefined}>\n        <input className=\"ui-text-field__input\" type={inputType} autoComplete=\"off\" spellCheck={false} disabled={busy} value={value} onChange={(event) => setValue(event.currentTarget.value)} />\n      </FormRow>\n      <Button type=\"submit\" disabled={!value || busy}>{saving ? 'Saving…' : 'Set'}</Button>\n      {status?.configured && <Button type=\"button\" variant=\"destructive\" disabled={busy} onClick={() => void clear()}>{clearing ? 'Clearing…' : 'Clear'}</Button>}\n    </form>\n    {saving && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n    {clearing && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Clearing…</NoticeLine></div>}\n  </div>"
+      },
+      "anchor": "saving &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "a-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n    {cle"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "clearing &&"
+      },
+      "anchor": "clearing &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>Clearing…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<section className=\"section-card\">\n    <SectionHeader title=\"Gemini CLI (legacy)\" />\n    <p className=\"settings-description\">Gemini CLI OAuth credential refresh is opt-in. When enabled, Quirky may let Gemini CLI refresh its local OAuth credentials for quota checks. It is off until you explicitly enable it.</p>\n    <p className=\"settings-description\">Usage checks do not send prompts, run models, sign you in, or change the active Gemini account.</p>\n    <FormRow label=\"Allow Gemini CLI OAuth credential refresh\" htmlFor=\"gemini-cli-oauth-enabled\">\n      <input id=\"gemini-cli-oauth-enabled\" type=\"checkbox\" checked={enabled} disabled={saving} onChange={(event) => void update(event.currentTarget.checked)} />\n    </FormRow>\n    {saving && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n  </section>"
+      },
+      "anchor": "saving &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "a-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n  </sect"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "snapshot.refreshing &&"
+      },
+      "anchor": "snapshot.refreshing &&",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>Refreshing…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "accountLoading ?"
+      },
+      "anchor": "accountLoading ?",
+      "surface": "view:quirky.accounts/settings",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<NoticeLine>{loadingText}</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "accountError ?"
+      },
+      "anchor": "accountError ?",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<InlineError message={accountError} />"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<FormRow label={`${provider} ${credentialLabel(kind)}`} htmlFor={`credential-${provider}-${kind}`} error={actionError ?? undefined}>"
+      },
+      "anchor": "<FormRow",
+      "surface": "view:quirky.accounts/settings",
+      "state": "error",
+      "render": {
+        "component": "FormRow",
+        "element": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "<FormRow label={`${provider} ${credentialLabel(kind)}`} htmlFor={`credential-${provider}-${kind}`} error={actionError ?? undefined}>\n        <input className=\"ui-text-field__input\" type={inputType} autoComplete=\"off\" spellCheck={false} disabled={busy} value={value} onChange={(event) => setValue(event.currentTarget.value)} />\n      </FormRow>"
+        },
+        "import": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/model.ts",
+        "quote": "this.context.toast(title, body)"
+      },
+      "anchor": "this.context.toast(",
+      "reason": "Success-only sign-in-link confirmation; errors use the command failure toast."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "className=\"login-notice\" role=\"status\" aria-live=\"polite\""
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<div role=\"status\" aria-live=\"polite\"><NoticeLine>Removing…</NoticeLine></div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "className=\"section-card\" role=\"status\" aria-label=\"Codex configuration warnings\""
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<div role=\"status\" aria-live=\"polite\"><NoticeLine>Signing in…</NoticeLine></div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<div role=\"status\" aria-live=\"polite\"><NoticeLine>{status?.label}</NoticeLine></div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<small role=\"status\">"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Accessible configured/readable credential status label; field failures belong to FormRow and request progress to NoticeLine."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "    </form>\n    {saving && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Accessible configured/readable credential status label; field failures belong to FormRow and request progress to NoticeLine."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<div role=\"status\" aria-live=\"polite\"><NoticeLine>Clearing…</NoticeLine></div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Accessible configured/readable credential status label; field failures belong to FormRow and request progress to NoticeLine."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<section className=\"section-card\">\n    <SectionHeader title=\"Gemini CLI (legacy)\" />\n    <p className=\"settings-description\">Gemini CLI OAuth credential refresh is opt-in. When enabled, Quirky may let Gemini CLI refresh its local OAuth credentials for quota checks. It is off until you explicitly enable it.</p>\n    <p className=\"settings-description\">Usage checks do not send prompts, run models, sign you in, or change the active Gemini account.</p>\n    <FormRow label=\"Allow Gemini CLI OAuth credential refresh\" htmlFor=\"gemini-cli-oauth-enabled\">\n      <input id=\"gemini-cli-oauth-enabled\" type=\"checkbox\" checked={enabled} disabled={saving} onChange={(event) => void update(event.currentTarget.checked)} />\n    </FormRow>\n    {saving && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n  </section>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<div role=\"status\" aria-live=\"polite\"><NoticeLine>Refreshing…</NoticeLine></div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<div role=\"status\" aria-live=\"polite\"><NoticeLine>{loadingText}</NoticeLine></div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "if (!pending || pending.provider !== provider)"
+      },
+      "anchor": "if (!pending || pending.provider !== provider)",
+      "reason": "Login identity eligibility; no notice is mounted for another provider or an absent login."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "isCodex ?"
+      },
+      "anchor": "isCodex ?",
+      "reason": "Provider-specific pending-login wording inside the separately witnessed shared NoticeLine."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "pending.status !== 'pending' && pending.status !== 'error' &&"
+      },
+      "anchor": "pending.status !== 'pending' && pending.status !== 'error' &&",
+      "reason": "Completed and cancelled sign-in confirmations; pending progress and failure use separate shared components."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "pending.status === 'complete' ?"
+      },
+      "anchor": "pending.status === 'complete' ?",
+      "reason": "Success versus cancellation confirmation, neither a loading, empty, nor error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "isCodex && pending.status === 'pending' &&"
+      },
+      "anchor": "isCodex && pending.status === 'pending' &&",
+      "reason": "Provider-specific instructions for using the existing pending link; pending progress is separately witnessed by NoticeLine."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "loginUrl &&"
+      },
+      "anchor": "loginUrl &&",
+      "reason": "Only expose link operations when the parsed login has a URL."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "isCodex && <Button type=\"button\" disabled={remoteOwner || opening} onClick={async () => {\n        setOpening(true)\n        setOpenError(false)\n        try {\n          await context.call('quirky.terminal/openExternal', { target: loginUrl })\n        } catch {\n          setOpenError(true)\n        } finally {\n          setOpening(false)\n        }\n      }}>{opening ? 'Opening…' : 'Open'}</Button>"
+      },
+      "anchor": "isCodex &&",
+      "reason": "The explicit Open link action is offered for Codex; this selects a provider-specific control."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "opening ?"
+      },
+      "anchor": "opening ?",
+      "reason": "Busy Open button label; the same opening operation has a shared NoticeLine progress witness."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "pending.status === 'pending' && <Button type=\"button\" disabled={remoteOwner || loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</Button>"
+      },
+      "anchor": "pending.status === 'pending' &&",
+      "reason": "Cancel is eligible only for a pending login; cancellation progress has separate shared NoticeLine evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "loginCancelling ?"
+      },
+      "anchor": "loginCancelling ?",
+      "reason": "Busy Cancel button label; the same cancellation operation has a shared NoticeLine progress witness."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "[account.email, account.organization, account.lastAuthenticatedAt ? `Last signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') ||"
+      },
+      "anchor": "[account.email, account.organization, account.lastAuthenticatedAt ? `Last signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') ||",
+      "reason": "Account identity metadata falls back to a device description, not loading or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "account.needsSignIn\n          ?"
+      },
+      "anchor": "account.needsSignIn\n          ?",
+      "reason": "Authentication eligibility chooses reauthentication versus selection; the sign-in-required error has a separate shared InlineError."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'claude' ? 'Sign in again' : 'Re-authenticate'"
+      },
+      "anchor": "provider === 'claude' ?",
+      "reason": "Provider-specific sign-in control or action wording; operation progress and failures have separate shared state evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "state.active[provider] === account.id ?"
+      },
+      "anchor": "state.active[provider] === account.id ?",
+      "reason": "Active versus Select is a selection label, not a loading/empty/error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "removing ?"
+      },
+      "anchor": "removing ?",
+      "reason": "Busy Remove button label; the same removal operation has shared NoticeLine progress evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "account.needsSignIn && provider === 'claude' &&"
+      },
+      "anchor": "account.needsSignIn && provider === 'claude' &&",
+      "reason": "Authentication eligibility reveals the alternative Claude link operation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<p className=\"settings-description\">Optional. Quirky can use your normal {providerName} login; add accounts only if you want quick switching without moving chat sessions. Managed sign-ins remain separate {snapshot.scope.kind === 'remote' ? `on ${snapshot.scope.hostName ?? 'the remote owner'}` : 'on this device'}.</p>"
+      },
+      "anchor": "snapshot.scope.kind === 'remote' ?",
+      "reason": "Names the device owning these accounts; initial owner loading and unavailability have separate shared state evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<p className=\"settings-description\">Account changes apply to future {providerName} launches {snapshot.scope.kind === 'remote' ? `on ${snapshot.scope.hostName ?? 'the remote owner'}` : 'on this device'}. Running sessions keep the account they started with.</p>"
+      },
+      "anchor": "snapshot.scope.kind === 'remote' ?",
+      "reason": "Names the device owning these accounts; initial owner loading and unavailability have separate shared state evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "snapshot.scope.kind === 'remote' ? `Showing saved accounts on ${snapshot.scope.hostName ?? 'the remote owner'}.` : 'Showing accounts for this device. New accounts are added there.'"
+      },
+      "anchor": "snapshot.scope.kind === 'remote' ?",
+      "reason": "Names the device owning these accounts; initial owner loading and unavailability have separate shared state evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "system?.email ?"
+      },
+      "anchor": "system?.email ?",
+      "reason": "System default identity label uses email when known."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "state?.active[provider] === null &&"
+      },
+      "anchor": "state?.active[provider] === null &&",
+      "reason": "Active badge identifies the selected System default row."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'codex' && system && !system.hasAuth &&"
+      },
+      "anchor": "provider === 'codex' && system && !system.hasAuth &&",
+      "reason": "System-default authentication badge describes selection eligibility rather than account-list loading or emptiness."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'claude' && <span>Use the system default Claude login.</span>"
+      },
+      "anchor": "provider === 'claude' &&",
+      "reason": "Claude-only system-account guidance or running-session switch preference; not loading, emptiness, or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'codex' && !system?.hasAuth &&"
+      },
+      "anchor": "provider === 'codex' && !system?.hasAuth &&",
+      "reason": "System-default authentication detail; the managed-account collection has its own shared empty state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "system?.hasAuth && <Badge>{system.authKind === 'api-key' ? 'API key' : 'Signed in'}</Badge>"
+      },
+      "anchor": "system?.hasAuth &&",
+      "reason": "Authentication-kind badge reports an already loaded system account."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "system.authKind === 'api-key' ?"
+      },
+      "anchor": "system.authKind === 'api-key' ?",
+      "reason": "Selects API-key versus signed-in identity wording for the system account."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "state?.active[provider] === null ?"
+      },
+      "anchor": "state?.active[provider] === null ?",
+      "reason": "System default selection label; not asynchronous state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'claude' ? <div className=\"details-actions\">\n        <Button type=\"button\" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>\n        <details><summary aria-label=\"More sign-in options\">More sign-in options</summary><Button type=\"button\" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('claude', { copyLink: true })}>Copy sign-in link instead</Button></details>\n      </div> : <Button type=\"button\" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>"
+      },
+      "anchor": "provider === 'claude' ?",
+      "reason": "Provider-specific sign-in control or action wording; operation progress and failures have separate shared state evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<Button type=\"button\" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>"
+      },
+      "anchor": "anyPending ?",
+      "reason": "Busy Add Account button label; the same sign-in start has shared NoticeLine progress evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<Button type=\"button\" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>"
+      },
+      "anchor": "anyPending ?",
+      "reason": "Busy Add Account button label; the same sign-in start has shared NoticeLine progress evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "pending?.provider === provider &&"
+      },
+      "anchor": "pending?.provider === provider &&",
+      "reason": "Mounts the notice only for the matching login identity and remounts it by ID; its actual states have shared witnesses."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'claude' && <section className=\"section-card\">\n      <SectionHeader title=\"When you switch accounts while Claude is running\" />\n      <p className=\"settings-description\">Restarting continues each running conversation on the new account.</p>\n      {remoteOwner && <small className=\"muted\">This switch policy applies to accounts on this device; it does not configure the remote owner.</small>}\n      <SelectField label=\"Claude running-session switch policy\" id=\"claude-switch-policy\" value={state?.preferences.claudeSwitchPolicy ?? 'ask'} onChange={(event) => {\n        const value = event.currentTarget.value\n        if (value === 'ask' || value === 'always' || value === 'never') void store.setPreferences({ claudeSwitchPolicy: value })\n      }}>\n        <option value=\"ask\">Ask</option><option value=\"always\">Always restart</option><option value=\"never\">Never restart</option>\n      </SelectField>\n    </section>"
+      },
+      "anchor": "provider === 'claude' &&",
+      "reason": "Claude-only system-account guidance or running-session switch preference; not loading, emptiness, or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "remoteOwner &&"
+      },
+      "anchor": "remoteOwner &&",
+      "reason": "Explains the local scope of an editable preference; unavailable-owner failures use shared InlineError."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'grok' ? 'Shows weekly credit usage from your existing Grok CLI sign-in. Quirky never refreshes or changes Grok credentials.' : 'Shows monthly Cursor plan usage from the sign-in already on this computer. Quirky only reads it — it never changes your Cursor login.'"
+      },
+      "anchor": "provider === 'grok' ?",
+      "reason": "Selects provider-specific documentation, title, or sign-in explanation; read-only provider status has separate shared state evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "!status?.signedOut && <p className=\"settings-description\">{statusText}</p>"
+      },
+      "anchor": "!status?.signedOut &&",
+      "reason": "Provider sign-in explanation; signed-out guidance itself is covered by shared EmptyState."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "source &&"
+      },
+      "anchor": "source &&",
+      "reason": "Credential-source provenance for an already parsed provider snapshot."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "usage ? ageLabel(usage.updatedAt) : 'Not refreshed yet'"
+      },
+      "anchor": "usage ?",
+      "reason": "Snapshot age metadata; missing usage is separately rendered with shared EmptyState."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'grok' ? 'Grok CLI docs' : 'Cursor dashboard'"
+      },
+      "anchor": "provider === 'grok' ?",
+      "reason": "Selects provider-specific documentation, title, or sign-in explanation; read-only provider status has separate shared state evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "usage && <>\n      <div className=\"usage-window-list\">{windows.map(({ name, window }) => <div key={name} className=\"usage-window\">\n        <div className=\"usage-window-heading\"><strong>{provider === 'grok' ? name === '7d' ? 'Weekly credits' : name === '30d' ? 'Monthly usage' : name : provider === 'cursor' ? name === '30d' ? 'Monthly plan usage' : name : name}</strong><span>{Math.round(window.usedPercent)}% used</span></div>\n        <div className=\"meter\" role=\"meter\" aria-label={`${name} usage`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(window.usedPercent)}><span style={{ width: `${window.usedPercent}%`, backgroundColor: meterColor(window.usedPercent) }} /></div>\n        <small>Resets {formatReset(window)}</small>\n      </div>)}</div>\n      <SnapshotLine snapshot={usage} />\n    </>"
+      },
+      "anchor": "usage &&",
+      "reason": "Displays loaded numeric meter details; absent usage has separate shared EmptyState evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "provider === 'grok' ? name === '7d' ? 'Weekly credits' : name === '30d' ? 'Monthly usage' : name : provider === 'cursor' ? name === '30d' ? 'Monthly plan usage' : name : name"
+      },
+      "anchor": "provider === 'grok' ?",
+      "reason": "Selects provider-specific documentation, title, or sign-in explanation; read-only provider status has separate shared state evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "status?.configured ?"
+      },
+      "anchor": "status?.configured ?",
+      "reason": "Configured versus Not configured is a loaded credential identity/status label, not a request failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "saving ?"
+      },
+      "anchor": "saving ?",
+      "reason": "Busy Save button label; the same credential save has a shared NoticeLine progress witness."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "status?.configured &&"
+      },
+      "anchor": "status?.configured &&",
+      "reason": "Clear is offered only for configured credentials; request progress and failures have shared witnesses."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "clearing ?"
+      },
+      "anchor": "clearing ?",
+      "reason": "Busy Clear button label; the same credential clear has a shared NoticeLine progress witness."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "remoteOwner ? ' Edit meter credentials on this device, not through the remote Accounts view.' : ''"
+      },
+      "anchor": "remoteOwner ?",
+      "reason": "Credential-scope explanation selects local editability versus remote read-only guidance."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "if (id === 'claude' || id === 'codex')"
+      },
+      "anchor": "if (id === 'claude' || id === 'codex')",
+      "reason": "Settings-section dispatch selects a managed provider, not asynchronous state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "if (id === 'gemini')"
+      },
+      "anchor": "if (id === 'gemini')",
+      "reason": "Settings-section dispatch selects Gemini consent controls."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "if (id === 'grok' || id === 'cursor')"
+      },
+      "anchor": "if (id === 'grok' || id === 'cursor')",
+      "reason": "Settings-section dispatch selects read-only provider controls."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "if (id === 'credentials')"
+      },
+      "anchor": "if (id === 'credentials')",
+      "reason": "Settings-section dispatch selects credential controls."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "snapshot.scope.kind === 'remote' && snapshot.scope.status === 'ready' &&"
+      },
+      "anchor": "snapshot.scope.kind === 'remote' && snapshot.scope.status === 'ready' &&",
+      "reason": "Loaded remote-owner provenance and sign-in limitations; loading and unavailable-owner failure have separate shared witnesses."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "<p className=\"settings-description\">Accounts on {snapshot.scope.hostName ?? 'the remote owner'}. Remote sign-in and reauthentication are unavailable.</p>"
+      },
+      "anchor": "snapshot.scope.hostName ??",
+      "reason": "Remote-owner display name fallback, not unavailable-owner recovery."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.copyLoginLink({ id: pending.id, provider: pending.provider, url: loginUrl })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.accounts/copy-login-link",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.executeCommand(\n      COPY_LOGIN_LINK_COMMAND_ID,\n      { ...pending, connId: originConnId },\n      { activateOwner: false }\n    )"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async copyLoginLink(pending: Pick<PendingLogin, 'id' | 'provider' | 'url'>, connId?: number): Promise<void> {\n    const originConnId = await this.resolveCommandConnId(connId)\n    if (originConnId === null) return\n    return this.context.executeCommand(\n      COPY_LOGIN_LINK_COMMAND_ID,\n      { ...pending, connId: originConnId },\n      { activateOwner: false }\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={async () => {\n        setOpening(true)\n        setOpenError(false)\n        try {\n          await context.call('quirky.terminal/openExternal', { target: loginUrl })\n        } catch {\n          setOpenError(true)\n        } finally {\n          setOpening(false)\n        }\n      }}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.terminal/openExternal",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "context.call('quirky.terminal/openExternal', { target: loginUrl })"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.cancelLogin()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.accounts/cancelLogin",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/cancelLogin', { id: pending.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async cancelLogin(): Promise<void> {\n    if (this.snapshot.scope.kind === 'remote') return\n    const pending = this.snapshot.login\n    if (!pending || this.loginCancelling) return\n    this.loginCancelling = true\n    this.commit({ loginCancelling: true })\n    const generation = this.loginGeneration\n    clearTimeout(this.loginTimer ?? undefined)\n    this.loginTimer = null\n    try {\n      const result = await this.act('Could not cancel sign-in', () => this.context.call('quirky.accounts/cancelLogin', { id: pending.id }))\n      if (result !== null && generation === this.loginGeneration && this.snapshot.login?.id === pending.id) {\n        this.loginGeneration += 1\n        clearTimeout(this.loginTimer ?? undefined)\n        this.loginTimer = null\n        this.commit({ login: null })\n        void this.loadAccounts()\n      } else if (result === null && generation === this.loginGeneration) {\n        const current = this.snapshot.login\n        if (current?.id === pending.id && current.status === 'pending') this.scheduleLoginPoll(current, generation)\n      }\n    } finally {\n      this.loginCancelling = false\n      this.commit({ loginCancelling: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.beginLogin(provider, { accountId: account.id })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.accounts/beginLogin",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/beginLogin', params)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async beginLogin(provider: ManagedProvider, options: { label?: string; accountId?: string; copyLink?: boolean } = {}): Promise<void> {\n    if (this.snapshot.scope.kind === 'remote' || this.loginStarting || this.snapshot.login?.status === 'pending') return\n    this.loginStarting = true\n    this.commit({ loginStarting: true })\n    try {\n      this.loginGeneration += 1\n      const generation = this.loginGeneration\n      const params = { provider, ...options }\n      const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, () => this.context.call('quirky.accounts/beginLogin', params))\n      if (result === null || generation !== this.loginGeneration) return\n      const id = isRecord(result) && typeof result.id === 'string' ? result.id : typeof result === 'string' ? result : null\n      if (!id) {\n        this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')\n        return\n      }\n      const accountId = options.accountId ?? null\n      const pending: PendingLogin = { id, provider, accountId, status: 'pending', url: null, error: null, result: null }\n      this.commit({ login: pending })\n      void this.pollLogin(pending, generation)\n    } finally {\n      this.loginStarting = false\n      this.commit({ loginStarting: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.selectAccountCommand(provider, account.id)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.accounts/select-account",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.executeCommand(\n      SELECT_ACCOUNT_COMMAND_ID,\n      { provider, accountId, connId: originConnId },\n      { activateOwner: false }\n    )"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async selectAccountCommand(provider: ManagedProvider, accountId: string | null, connId?: number): Promise<void> {\n    const originConnId = await this.resolveCommandConnId(connId)\n    if (originConnId === null) return\n    return this.context.executeCommand(\n      SELECT_ACCOUNT_COMMAND_ID,\n      { provider, accountId, connId: originConnId },\n      { activateOwner: false }\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void remove()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.accounts/remove",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/remove', { provider, accountId, yes: true })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+            "quote": "const remove = async () => {\n    if (removalLock.current) return\n    removalLock.current = true\n    setRemoving(true)\n    try {\n      await store.removeAccount(provider, account.id)\n    } finally {\n      removalLock.current = false\n      setRemoving(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async removeAccount(provider: ManagedProvider, accountId: string): Promise<void> {\n    if (this.snapshot.scope.kind === 'remote') return\n    const account = this.snapshot.accounts?.accounts.find((candidate) => candidate.provider === provider && candidate.id === accountId)\n    const providerName = provider === 'claude' ? 'Claude' : 'Codex'\n    const body = provider === 'claude'\n      ? \"Quirky deletes this account's Claude folder and its sign-in from this computer. Chat history shared with System default stays. If it is selected, the next Claude you start uses System default.\"\n      : 'Removing this account permanently deletes its managed Codex home, including all Codex session history and MCP logins stored inside. This cannot be undone. If the account is currently active, Quirky falls back to the system default Codex login.'\n    const confirmed = await this.context.confirm({ title: `Remove ${providerName} Account?`, body, confirmLabel: 'Remove Account' })\n    if (!confirmed || !account) return\n    const generation = ++this.accountGeneration\n    const result = await this.act(`Could not remove ${providerName} account`, () => this.context.call('quirky.accounts/remove', { provider, accountId, yes: true }))\n    if (result !== null) {\n      this.applyAccountResult(result, generation)\n      void this.loadUsage()\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.beginLogin('claude', { accountId: account.id, copyLink: true })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.accounts/beginLogin",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/beginLogin', params)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async beginLogin(provider: ManagedProvider, options: { label?: string; accountId?: string; copyLink?: boolean } = {}): Promise<void> {\n    if (this.snapshot.scope.kind === 'remote' || this.loginStarting || this.snapshot.login?.status === 'pending') return\n    this.loginStarting = true\n    this.commit({ loginStarting: true })\n    try {\n      this.loginGeneration += 1\n      const generation = this.loginGeneration\n      const params = { provider, ...options }\n      const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, () => this.context.call('quirky.accounts/beginLogin', params))\n      if (result === null || generation !== this.loginGeneration) return\n      const id = isRecord(result) && typeof result.id === 'string' ? result.id : typeof result === 'string' ? result : null\n      if (!id) {\n        this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')\n        return\n      }\n      const accountId = options.accountId ?? null\n      const pending: PendingLogin = { id, provider, accountId, status: 'pending', url: null, error: null, result: null }\n      this.commit({ login: pending })\n      void this.pollLogin(pending, generation)\n    } finally {\n      this.loginStarting = false\n      this.commit({ loginStarting: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.selectAccountCommand(provider, null)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.accounts/select-account",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.executeCommand(\n      SELECT_ACCOUNT_COMMAND_ID,\n      { provider, accountId, connId: originConnId },\n      { activateOwner: false }\n    )"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async selectAccountCommand(provider: ManagedProvider, accountId: string | null, connId?: number): Promise<void> {\n    const originConnId = await this.resolveCommandConnId(connId)\n    if (originConnId === null) return\n    return this.context.executeCommand(\n      SELECT_ACCOUNT_COMMAND_ID,\n      { provider, accountId, connId: originConnId },\n      { activateOwner: false }\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.beginLogin('claude')}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.accounts/beginLogin",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/beginLogin', params)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async beginLogin(provider: ManagedProvider, options: { label?: string; accountId?: string; copyLink?: boolean } = {}): Promise<void> {\n    if (this.snapshot.scope.kind === 'remote' || this.loginStarting || this.snapshot.login?.status === 'pending') return\n    this.loginStarting = true\n    this.commit({ loginStarting: true })\n    try {\n      this.loginGeneration += 1\n      const generation = this.loginGeneration\n      const params = { provider, ...options }\n      const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, () => this.context.call('quirky.accounts/beginLogin', params))\n      if (result === null || generation !== this.loginGeneration) return\n      const id = isRecord(result) && typeof result.id === 'string' ? result.id : typeof result === 'string' ? result : null\n      if (!id) {\n        this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')\n        return\n      }\n      const accountId = options.accountId ?? null\n      const pending: PendingLogin = { id, provider, accountId, status: 'pending', url: null, error: null, result: null }\n      this.commit({ login: pending })\n      void this.pollLogin(pending, generation)\n    } finally {\n      this.loginStarting = false\n      this.commit({ loginStarting: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.beginLogin('claude', { copyLink: true })}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.accounts/beginLogin",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/beginLogin', params)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async beginLogin(provider: ManagedProvider, options: { label?: string; accountId?: string; copyLink?: boolean } = {}): Promise<void> {\n    if (this.snapshot.scope.kind === 'remote' || this.loginStarting || this.snapshot.login?.status === 'pending') return\n    this.loginStarting = true\n    this.commit({ loginStarting: true })\n    try {\n      this.loginGeneration += 1\n      const generation = this.loginGeneration\n      const params = { provider, ...options }\n      const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, () => this.context.call('quirky.accounts/beginLogin', params))\n      if (result === null || generation !== this.loginGeneration) return\n      const id = isRecord(result) && typeof result.id === 'string' ? result.id : typeof result === 'string' ? result : null\n      if (!id) {\n        this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')\n        return\n      }\n      const accountId = options.accountId ?? null\n      const pending: PendingLogin = { id, provider, accountId, status: 'pending', url: null, error: null, result: null }\n      this.commit({ login: pending })\n      void this.pollLogin(pending, generation)\n    } finally {\n      this.loginStarting = false\n      this.commit({ loginStarting: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.beginLogin('codex')}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.accounts/beginLogin",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/beginLogin', params)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async beginLogin(provider: ManagedProvider, options: { label?: string; accountId?: string; copyLink?: boolean } = {}): Promise<void> {\n    if (this.snapshot.scope.kind === 'remote' || this.loginStarting || this.snapshot.login?.status === 'pending') return\n    this.loginStarting = true\n    this.commit({ loginStarting: true })\n    try {\n      this.loginGeneration += 1\n      const generation = this.loginGeneration\n      const params = { provider, ...options }\n      const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, () => this.context.call('quirky.accounts/beginLogin', params))\n      if (result === null || generation !== this.loginGeneration) return\n      const id = isRecord(result) && typeof result.id === 'string' ? result.id : typeof result === 'string' ? result : null\n      if (!id) {\n        this.context.toast('Could not start sign-in', 'The sign-in request did not return a session ID.')\n        return\n      }\n      const accountId = options.accountId ?? null\n      const pending: PendingLogin = { id, provider, accountId, status: 'pending', url: null, error: null, result: null }\n      this.commit({ login: pending })\n      void this.pollLogin(pending, generation)\n    } finally {\n      this.loginStarting = false\n      this.commit({ loginStarting: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onChange={(event) => {\n        const value = event.currentTarget.value\n        if (value === 'ask' || value === 'always' || value === 'never') void store.setPreferences({ claudeSwitchPolicy: value })\n      }}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "quirky.accounts/setPreferences",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/setPreferences', { ...patch })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async setPreferences(patch: Partial<Preferences>): Promise<void> {\n    this.preferencesQueue = this.preferencesQueue.then(async () => {\n      if (this.stopped) return\n      const generation = ++this.accountGeneration\n      const result = await this.act('Could not save account preferences', () => this.context.call('quirky.accounts/setPreferences', { ...patch }))\n      if (result === null) return\n      const state = parseAccountState(result)\n      if (state) {\n        this.localPreferences = state.preferences\n        if (this.snapshot.scope.kind === 'remote') {\n          if (this.snapshot.accounts) {\n            this.commit({ accounts: { ...this.snapshot.accounts, preferences: state.preferences } })\n          } else void this.loadAccounts()\n        } else if (generation === this.accountGeneration) this.applyAccountResult(state, generation)\n        else void this.loadAccounts()\n        return\n      }\n      if (generation !== this.accountGeneration) {\n        void this.loadAccounts()\n        return\n      }\n      const preferences = parsePreferences(isRecord(result) && 'preferences' in result ? result.preferences : result)\n      if (preferences) {\n        this.localPreferences = preferences\n        if (this.snapshot.accounts) this.commit({ accounts: { ...this.snapshot.accounts, preferences } })\n        else void this.loadAccounts()\n      } else void this.loadAccounts()\n    })\n    await this.preferencesQueue\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.refreshCommand(provider)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.accounts/refresh",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.executeCommand(\n      REFRESH_COMMAND_ID,\n      { ...(provider === undefined ? {} : { provider }), connId: originConnId },\n      { activateOwner: false }\n    )"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async refreshCommand(provider?: string, connId?: number): Promise<void> {\n    const originConnId = await this.resolveCommandConnId(connId)\n    if (originConnId === null) return\n    return this.context.executeCommand(\n      REFRESH_COMMAND_ID,\n      { ...(provider === undefined ? {} : { provider }), connId: originConnId },\n      { activateOwner: false }\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void openHelp()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.terminal/openExternal",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "context.call('quirky.terminal/openExternal', { target: helpUrl })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+            "quote": "const openHelp = async () => {\n    try {\n      await context.call('quirky.terminal/openExternal', { target: helpUrl })\n    } catch {\n      context.toast('Could not open provider help', 'Try again or open the provider help page in your browser.')\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onSubmit"
+      },
+      "anchor": "onSubmit",
+      "route": {
+        "target": "quirky.accounts/setCredential",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/setCredential', { provider, kind, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+            "quote": "const save = async (event: FormEvent<HTMLFormElement>) => {\n    event.preventDefault()\n    if (!value || disabled || actionLock.current) return\n    actionLock.current = true\n    setSaving(true)\n    setActionError(null)\n    try {\n      if (await store.setCredential(provider, kind, value)) setValue('')\n      else setActionError('Could not confirm saving this credential. Check its status before retrying.')\n    } finally {\n      actionLock.current = false\n      setSaving(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async setCredential(provider: string, kind: string, value: string): Promise<boolean> {\n    if (this.snapshot.scope.kind === 'remote') return false\n    if (!value) return false\n    const result = await this.act('Could not save provider credential', () => this.context.call('quirky.accounts/setCredential', { provider, kind, value }))\n    if (result === null) return false\n    const status = parseCredentialStatus(result)\n    if (status) this.updateCredential(status)\n    else void this.loadCredentials()\n    await this.refresh(provider)\n    return true\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onChange={(event) => setValue(event.currentTarget.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only the unsaved credential draft; submission has the protected credential API route."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void clear()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.accounts/clearCredential",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/clearCredential', { provider, kind })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+            "quote": "const clear = async () => {\n    if (disabled || actionLock.current) return\n    actionLock.current = true\n    setClearing(true)\n    setActionError(null)\n    try {\n      if (!await store.clearCredential(provider, kind)) setActionError('Could not confirm clearing this credential. Check its status before retrying.')\n    } finally {\n      actionLock.current = false\n      setClearing(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async clearCredential(provider: string, kind: string): Promise<boolean> {\n    if (this.snapshot.scope.kind === 'remote') return false\n    const result = await this.act('Could not clear provider credential', () => this.context.call('quirky.accounts/clearCredential', { provider, kind }))\n    if (result === null) return false\n    const status = parseCredentialStatus(result)\n    if (status) this.updateCredential(status)\n    else void this.loadCredentials()\n    await this.refresh(provider)\n    return true\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onChange={(event) => void update(event.currentTarget.checked)}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "context.call('setting.set', { id: GEMINI_CLI_OAUTH_SETTING_ID, value })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+            "quote": "const update = async (value: boolean) => {\n    setSaving(true)\n    try {\n      await context.call('setting.set', { id: GEMINI_CLI_OAUTH_SETTING_ID, value })\n      setEnabled(value)\n    } catch {\n      context.toast('Could not update Gemini CLI access', 'The setting could not be saved.')\n    } finally {\n      setSaving(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => void store.refreshCommand()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.accounts/refresh",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.executeCommand(\n      REFRESH_COMMAND_ID,\n      { ...(provider === undefined ? {} : { provider }), connId: originConnId },\n      { activateOwner: false }\n    )"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async refreshCommand(provider?: string, connId?: number): Promise<void> {\n    const originConnId = await this.resolveCommandConnId(connId)\n    if (originConnId === null) return\n    return this.context.executeCommand(\n      REFRESH_COMMAND_ID,\n      { ...(provider === undefined ? {} : { provider }), connId: originConnId },\n      { activateOwner: false }\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onClick={() => context.closeView()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "ui.view.close",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+          "quote": "context.closeView()"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
+        "quote": "onChange={(id) => void store.setUiState({ settingsSection: id })}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "quirky.accounts/setUiState",
+        "invoke": {
+          "file": "plugins/quirky.accounts/src/window/model.ts",
+          "quote": "this.context.call('quirky.accounts/setUiState', { ...patch })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.accounts/src/window/model.ts",
+            "quote": "async setUiState(patch: Partial<AccountUiState>): Promise<void> {\n    this.uiQueue = this.uiQueue.then(async () => {\n      if (this.stopped) return\n      const result = await this.act('Could not update Usage', () => this.context.call('quirky.accounts/setUiState', { ...patch }))\n      if (result === null) return\n      const ui = parseUiState(result)\n      if (ui) this.commit({ ui })\n      else this.commit({ ui: { ...this.snapshot.ui, ...patch } })\n    })\n    await this.uiQueue\n  }"
+          }
+        ]
+      }
+    }
+  ]
+}

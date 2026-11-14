@@ -1,6 +1,6 @@
 {
   "id": "quirky.accounts",
-  "apiVersion": "1.12.0",
+  "apiVersion": "1.15.0",
   "name": "Accounts and Usage",
   "version": "0.1.0",
   "description": "Read provider usage and manage isolated Claude and Codex accounts.",
@@ -342,7 +342,9 @@
     ],
     "command": [
       { "id": "open", "title": "Open Accounts and Usage" },
-      { "id": "refresh", "title": "Refresh usage" }
+      { "id": "refresh", "title": "Refresh usage" },
+      { "id": "select-account", "title": "Select Accounts account" },
+      { "id": "copy-login-link", "title": "Copy account sign-in link" }
     ],
     "cli-command": [
       { "id": "list", "words": "list", "summary": "list managed accounts and System default identities", "flags": { "provider": { "type": "string", "description": "Limit managed account rows to claude or codex." } }, "methods": ["quirky.accounts/list"] },
