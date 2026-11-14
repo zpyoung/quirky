@@ -1,11 +1,12 @@
 import { afterEach, expect, test } from 'bun:test'
+import { RpcErrorCode } from '@quirky/protocol'
 import { EditorView } from '@codemirror/view'
 import { Buffer } from 'node:buffer'
 import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isolateGitConfig } from '../../../quirky.repo/test/git-fixtures'
 import { diffViewKey } from '../../src/shared/view-input'
-import { boot, shutdown, viewTabs, DIFF_VIEW, type World } from './world'
+import { boot, openView, shutdown, viewTabs, DIFF_VIEW, type World } from './world'
 import { buttonText, byLabel, click, modifiedEditor, modS, q, qa, text, toasts } from './dom'
 
 const { scratch } = isolateGitConfig()
@@ -282,6 +283,72 @@ async function dirtyReviewTab(world: World): Promise<{ id: string; editor: Edito
 
 const closeChoice = (label: string) => buttonText(label, q('[role="dialog"]') ?? document)
 const reviewTabOpen = async (world: World, id: string) => (await viewTabs(world, DIFF_VIEW)).some((tab) => tab.id === id)
+
+async function runOn<T>(world: World, id: string, args: Record<string, unknown> = {}): Promise<T> {
+  const connId = (await world.state()).windows[0]?.connId
+  if (typeof connId !== 'number') throw new Error('The headless window has no connection ID')
+  const response = await world.agent.callAny('ui.window.command.run', {
+    connId,
+    id: `command:quirky.git/${id}`,
+    args
+  }) as { result: T }
+  return response.result
+}
+
+test('background opens preserve a dirty Review and its close guard', async () => {
+  const world = await boot(scratch, { published: false })
+  const { id, editor } = await dirtyReviewTab(world)
+  const connId = (await world.state()).windows[0]!.connId
+  const layout = (await world.agent.callAny('ui.window.state', { connId }) as { layout: unknown }).layout
+  const history = await world.agent.callAny('quirky.worktree/navigationState', { window: connId })
+  const tab = (await viewTabs(world, DIFF_VIEW))[0]!
+  const storedInput = structuredClone(tab.input)
+
+  const backgroundDiff = await runOn<{ tabId: string; focused: boolean; source: string | null; reveal: string | null }>(
+    world,
+    'open-diff',
+    { path: 'README.md', focus: false }
+  )
+  expect(backgroundDiff).toMatchObject({ tabId: id, focused: false, source: null, reveal: 'README.md' })
+  const backgroundScope = await runOn<{ review: { tabId: string }; focused: boolean; source: string | null }>(
+    world,
+    'open-changes',
+    { area: 'staged', focus: false }
+  )
+  expect(backgroundScope).toMatchObject({ review: { tabId: id }, focused: false, source: 'staged' })
+  expect(qa('[role="dialog"]')).toHaveLength(0)
+  expect(text(header('math.ts'))).toContain('Unsaved')
+  expect(text(q(`[data-tab="${id}"] .qt-tab-title`))).toMatch(/• Unsaved$/)
+  expect((await viewTabs(world, DIFF_VIEW)).map(({ id: tabId }) => tabId)).toEqual([id])
+  expect((await viewTabs(world, DIFF_VIEW))[0]!.input).toEqual(storedInput)
+  expect(modifiedEditor(EditorView, card('math.ts')!)).toBe(editor)
+  expect(editor.state.sliceDoc()).toContain('unsaved draft')
+  expect(await openView(world)).toMatchObject({ id: DIFF_VIEW, input: { tabId: id } })
+
+  const closeFailure = await world.agent.callAny('quirky.terminal/closeTab', { tab: id }).then(
+    () => null,
+    (error: unknown) => error
+  )
+  expect(closeFailure).toMatchObject({ code: RpcErrorCode.Conflict })
+  expect(String((closeFailure as Error).message)).toContain('refused to close')
+  expect(await reviewTabOpen(world, id)).toBe(true)
+
+  await expect(runOn(world, 'open-changes', { area: 'staged' })).rejects.toMatchObject({
+    code: RpcErrorCode.Conflict,
+    message: 'The Review has unsaved edits; save or discard them before showing another scope.'
+  })
+  expect(qa('[role="dialog"]')).toHaveLength(0)
+  expect((await viewTabs(world, DIFF_VIEW))[0]!.input).toEqual(storedInput)
+  expect(await openView(world)).toMatchObject({ id: DIFF_VIEW, input: { tabId: id } })
+  expect(card('math.ts')?.hasAttribute('data-active')).toBe(true)
+  expect(text(header('math.ts'))).toContain('Unsaved')
+  expect(modifiedEditor(EditorView, card('math.ts')!)).toBe(editor)
+  expect(editor.state.sliceDoc()).toContain('unsaved draft')
+  expect(q('[data-git-view-root] .ui-scope-chip')).toBeNull()
+  expect((await world.agent.callAny('ui.window.state', { connId }) as { layout: unknown }).layout).toEqual(layout)
+  expect(await world.agent.callAny('quirky.worktree/navigationState', { window: connId })).toEqual(history)
+  expect(world.problems()).toEqual([])
+}, SLOW)
 
 test('a Review tab with unsaved edits refuses a plain close, and the dialog can keep, save or drop them', async () => {
   const world = await boot(scratch, { published: false })
