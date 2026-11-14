@@ -56,14 +56,26 @@ const allCards: DashboardCard[] = [
   { bucket: 'done', thread: thread('s-done', 'done', 'Completed', false) },
   { bucket: 'idle', thread: thread('s-idle', 'idle', 'No recent update', false) }
 ]
+type DashboardCall = (
+  params: Record<string, unknown>,
+  attempt: number,
+  fallback: DashboardSnapshot
+) => DashboardSnapshot | Promise<DashboardSnapshot>
 
-function setup(enabled = true, openAs: 'in-window' | 'pop-out' = 'in-window') {
+type SetupOptions = {
+  dashboardCall?: DashboardCall
+}
+
+function setup(enabled = true, openAs: 'in-window' | 'pop-out' = 'in-window', options: SetupOptions = {}) {
   const calls: { method: string; params: Record<string, unknown> }[] = []
   const windows: Record<string, unknown>[] = []
   const opened: { id: string; input?: unknown }[] = []
   const provided = new Map<string, unknown>()
   const listeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
+  const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const layout: { view: { id: string; input?: unknown } | null } = { view: null }
+  let latestDashboardCall: Promise<DashboardSnapshot> | undefined
+  const dashboardCalls = new Set<Promise<DashboardSnapshot>>()
   const snapshotFor = (query: Record<string, unknown>): DashboardSnapshot => {
     const showIdle = query.showIdle === true
     const cards = showIdle ? allCards : allCards.filter(({ bucket }) => bucket !== 'idle')
@@ -82,7 +94,20 @@ function setup(enabled = true, openAs: 'in-window' | 'pop-out' = 'in-window') {
     },
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
-      if (method === 'quirky.agent-status/dashboard') return snapshotFor(params)
+      if (method === 'quirky.agent-status/dashboard') {
+        const attempt = calls.filter((call) => call.method === method).length
+        const fallback = snapshotFor(params)
+        const dashboardCall = Promise.resolve().then(() =>
+          options.dashboardCall ? options.dashboardCall(params, attempt, fallback) : fallback
+        )
+        latestDashboardCall = dashboardCall
+        dashboardCalls.add(dashboardCall)
+        void dashboardCall.then(
+          () => dashboardCalls.delete(dashboardCall),
+          () => dashboardCalls.delete(dashboardCall)
+        )
+        return dashboardCall
+      }
       if (method === 'desktop.window.open') {
         windows.push(params)
         return { windowId: `window-${windows.length}` }
@@ -116,7 +141,10 @@ function setup(enabled = true, openAs: 'in-window' | 'pop-out' = 'in-window') {
     getLayout: () => ({ ...layout, panel: null, sidebar: true, focus: null }),
     onLayout: () => () => {},
     onStream: () => () => {},
-    onConnection: () => () => {},
+    onConnection(listener: (status: 'connected' | 'reconnecting') => void) {
+      connectionListeners.add(listener)
+      return () => connectionListeners.delete(listener)
+    },
     confirm: async () => true,
     toast() {},
     setPanelBadge() {},
@@ -135,18 +163,30 @@ function setup(enabled = true, openAs: 'in-window' | 'pop-out' = 'in-window') {
   activate(context)
   return {
     calls,
+    emit(event: QuirkyEvent) {
+      for (const listener of listeners) void listener(event)
+    },
+    emitConnection(status: 'connected' | 'reconnecting') {
+      for (const listener of connectionListeners) listener(status)
+    },
+    async settleDashboardCalls() {
+      await Promise.all([...dashboardCalls].map((dashboardCall) => dashboardCall.then(() => undefined, () => undefined)))
+    },
+    async settleLatestDashboardCall() {
+      await latestDashboardCall?.then(() => undefined, () => undefined)
+    },
     opened,
     provided,
     windows,
     layout,
-    async mount(id: string, input?: unknown) {
+    async mount(id: string, input?: unknown, waitForColumns = true) {
       let cleanup = () => {}
       await act(async () => {
         const implementation = provided.get(id) as ((element: HTMLElement, props: { input?: unknown }) => () => void) | undefined
         if (!implementation) throw new Error(`no UI mount for ${id}`)
         cleanup = implementation(host, { input })
       })
-      if (id === VIEW) await act(async () => waitForRenderedElement('[data-dashboard-column="attention"]'))
+      if (id === VIEW && waitForColumns) await act(async () => waitForRenderedElement('[data-dashboard-column="attention"]'))
       return () => act(async () => cleanup())
     }
   }
@@ -177,6 +217,149 @@ const selectValue = (select: HTMLSelectElement, value: string) =>
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, value)
     select.dispatchEvent(new Event('change', { bubbles: true }))
   })
+
+test('Dashboard renders EmptyState while the initial load is pending', async () => {
+  const pending = Promise.withResolvers<DashboardSnapshot>()
+  const h = setup(true, 'in-window', { dashboardCall: () => pending.promise })
+  const cleanup = await h.mount(VIEW, undefined, false)
+
+  try {
+    expect(host.querySelector('.ui-empty-state')?.textContent).toContain('Loading Agent Dashboard…')
+    expect(host.querySelector('.ui-text-muted')).toBeNull()
+  } finally {
+    pending.resolve({ cards: [], total: 0, hiddenIdle: 0, unavailable: [] })
+    await cleanup()
+  }
+})
+
+test('Dashboard initial load failure offers Retry and restores columns', async () => {
+  const h = setup(true, 'in-window', {
+    dashboardCall: (_params, attempt, fallback) => {
+      if (attempt === 1) throw new Error('dashboard query failed')
+      return fallback
+    }
+  })
+  const cleanup = await h.mount(VIEW, undefined, false)
+
+  try {
+    await act(async () => h.settleDashboardCalls())
+    const error = host.querySelector<HTMLElement>('.ui-inline-error[role="alert"]')
+    const retry = error?.querySelector<HTMLButtonElement>('.ui-inline-error__action')
+    expect(error?.textContent).toContain('dashboard query failed')
+    expect(error?.querySelector('.ui-inline-error__dismiss')).toBeNull()
+    expect(retry?.textContent).toBe('Retry')
+
+    if (retry) await click(retry)
+    expect(host.querySelector('[data-dashboard-column="attention"]')).not.toBeNull()
+    expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(2)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('Dashboard refresh failure keeps fetched columns visible and offers Retry', async () => {
+  const h = setup(true, 'in-window', {
+    dashboardCall: (_params, attempt, fallback) => {
+      if (attempt === 2) throw new Error('dashboard query failed')
+      return fallback
+    }
+  })
+  const cleanup = await h.mount(VIEW)
+
+  try {
+    expect(host.querySelector('[data-dashboard-column="attention"]')).not.toBeNull()
+    await act(async () => {
+      h.emit({ type: 'quirky.agent-status/changed', data: {} })
+      await h.settleDashboardCalls()
+    })
+
+    const error = host.querySelector<HTMLElement>('.ui-inline-error[role="alert"]')
+    const retry = error?.querySelector<HTMLButtonElement>('.ui-inline-error__action')
+    expect(error?.textContent).toContain('dashboard query failed')
+    expect(error?.querySelector('.ui-inline-error__dismiss')).toBeNull()
+    expect(retry?.textContent).toBe('Retry')
+    expect(host.querySelector('[data-dashboard-column="attention"]')).not.toBeNull()
+
+    if (retry) await click(retry)
+    expect(host.querySelector('[data-dashboard-column="attention"]')).not.toBeNull()
+    expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(3)
+  } finally {
+    await cleanup()
+  }
+})
+test('Dashboard ignores an older query result when newer filters finish first', async () => {
+  const pending = Promise.withResolvers<DashboardSnapshot>()
+  const h = setup(true, 'in-window', {
+    dashboardCall: (_params, attempt, fallback) => {
+      if (attempt === 1) return pending.promise
+      const card = fallback.cards[0]!
+      return {
+        ...fallback,
+        cards: [{ ...card, thread: { ...card.thread, sessionId: 's-current-filter', sessionName: 'Filtered result' } }],
+        total: 1,
+        hiddenIdle: 0
+      }
+    }
+  })
+  const cleanup = await h.mount(VIEW, { text: 'old' }, false)
+
+  try {
+    await typeInto(host.querySelector<HTMLInputElement>('input[aria-label="Search dashboard"]')!, 'new')
+    await click(host.querySelector<HTMLButtonElement>('button[aria-label="Apply dashboard filters"]')!)
+    await act(async () => h.settleLatestDashboardCall())
+    expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(2)
+    expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard').at(-1)?.params).toEqual({ text: 'new' })
+
+    pending.resolve({ cards: allCards, total: 99, hiddenIdle: 0, unavailable: [] })
+    await act(async () => h.settleDashboardCalls())
+    expect(host.querySelector('[data-session-id="s-current-filter"]')).not.toBeNull()
+    expect(host.querySelector('[data-session-id="s-wait"]')).toBeNull()
+    expect(host.textContent).toContain('1 total')
+  } finally {
+    pending.resolve({ cards: allCards, total: 99, hiddenIdle: 0, unavailable: [] })
+    await cleanup()
+  }
+})
+
+test('Dashboard reloads when the connection is restored', async () => {
+  const h = setup()
+  const cleanup = await h.mount(VIEW)
+
+  try {
+    expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(1)
+    await act(async () => {
+      h.emitConnection('reconnecting')
+      await h.settleDashboardCalls()
+    })
+    expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(1)
+    await act(async () => {
+      h.emitConnection('connected')
+      await h.settleDashboardCalls()
+    })
+    expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(2)
+  } finally {
+    await cleanup()
+  }
+})
+
+test('Dashboard unavailable notice offers Retry through the dashboard query', async () => {
+  const h = setup()
+  const cleanup = await h.mount(VIEW, { reviewStatus: 'open' })
+
+  try {
+    const unavailable = host.querySelector<HTMLElement>('.ui-inline-error[role="alert"]')
+    const retry = unavailable?.querySelector<HTMLButtonElement>('.ui-inline-error__action')
+    expect(unavailable?.textContent).toContain(`Unavailable: ${REVIEW_UNAVAILABLE}`)
+    expect(unavailable?.querySelector('.ui-inline-error__dismiss')).toBeNull()
+    expect(retry?.textContent).toBe('Retry')
+
+    const previousCalls = h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard').length
+    if (retry) await click(retry)
+    expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard')).toHaveLength(previousCalls + 1)
+  } finally {
+    await cleanup()
+  }
+})
 
 
 test('Dashboard navigation is setting-gated and the public open/toggle commands preserve view input', async () => {
@@ -264,11 +447,16 @@ test('Dashboard filter controls follow scriptable input, report unavailable revi
   await typeInto(host.querySelector<HTMLInputElement>('input[aria-label="Project"]')!, 'repo-b')
   await selectValue(host.querySelector<HTMLSelectElement>('select[aria-label="Workspace status"]')!, 'todo')
   await selectValue(host.querySelector<HTMLSelectElement>('select[aria-label="GitHub review status"]')!, 'no-review')
+
   await click(host.querySelector<HTMLButtonElement>('button[aria-label="Apply dashboard filters"]')!)
   expect(h.calls.filter((call) => call.method === 'quirky.agent-status/dashboard').at(-1)?.params).toEqual({
     text: 'alpha', project: 'repo-b', workspaceStatus: 'todo', reviewStatus: 'no-review', showIdle: true
   })
   expect(h.opened.at(-1)).toEqual({ id: VIEW, input: { text: 'alpha', project: 'repo-b', workspaceStatus: 'todo', reviewStatus: 'no-review', showIdle: true } })
+  await typeInto(host.querySelector<HTMLInputElement>('input[aria-label="Search dashboard"]')!, 'unsaved search')
+  await typeInto(host.querySelector<HTMLInputElement>('input[aria-label="Project"]')!, 'unsaved project')
+  await selectValue(host.querySelector<HTMLSelectElement>('select[aria-label="Workspace status"]')!, 'done')
+  await selectValue(host.querySelector<HTMLSelectElement>('select[aria-label="GitHub review status"]')!, 'merged')
 
   await click(host.querySelector<HTMLButtonElement>('button[aria-label="Clear dashboard filters"]')!)
   expect(h.opened.at(-1)).toEqual({ id: VIEW, input: { showIdle: true } })

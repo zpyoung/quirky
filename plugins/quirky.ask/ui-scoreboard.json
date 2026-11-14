@@ -1,0 +1,491 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "panel:quirky.ask/questions": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "if (loadState.status === 'loading') return <NoticeLine>Loading questions…</NoticeLine>"
+      },
+      "anchor": "if (loadState.status === 'loading')",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "<NoticeLine>Loading questions…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "import { Badge, EmptyState, InlineError, NoticeLine, SectionHeader, StatusDot, type UiStatus, type UiTone } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "if (asks.length === 0) return <EmptyState message=\"No pending questions.\" />"
+      },
+      "anchor": "if (asks.length === 0)",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "<EmptyState message=\"No pending questions.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "import { Badge, EmptyState, InlineError, NoticeLine, SectionHeader, StatusDot, type UiStatus, type UiTone } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "if (loadState.status === 'failed') {\n      return <InlineError message={`Could not load questions: ${loadState.message}`} action={{ label: 'Retry', onAction: store.retry }} />\n    }"
+      },
+      "anchor": "if (loadState.status === 'failed')",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "<InlineError message={`Could not load questions: ${loadState.message}`} action={{ label: 'Retry', onAction: store.retry }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/AskCards.tsx",
+          "quote": "import { Badge, EmptyState, InlineError, NoticeLine, SectionHeader, StatusDot, type UiStatus, type UiTone } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "{errors[question.id] && <InlineError message={errors[question.id]!} />}"
+      },
+      "anchor": "errors[question.id] &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "<InlineError message={errors[question.id]!} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "import { Badge, Button, InlineError, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "context.toast(failure, error instanceof Error ? error.message : String(error))"
+      },
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.toast(failure, error instanceof Error ? error.message : String(error))"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "context.toast('Could not open delegated question', 'The exact delegated session is unavailable.')"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.toast('Could not open delegated question', 'The exact delegated session is unavailable.')"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.ask/questions",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "context.toast('Could not open delegated question', error instanceof Error ? error.message : String(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.toast('Could not open delegated question', error instanceof Error ? error.message : String(error))"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "role=\"status\""
+      },
+      "reason": "A result flash announces its terminal status rather than a pending-list state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "ask.envelope.summary && ("
+      },
+      "reason": "A terminal summary is optional content on a result flash."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "ask.envelope.status === 'unavailable' && <p>{ask.envelope.reason}</p>"
+      },
+      "reason": "An unavailable reason is optional result detail."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "ask.handoff ? ("
+      },
+      "reason": "Delegated questions use a read-only presentation variant."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "question.header ?? ("
+      },
+      "reason": "The question header selects a display fallback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "question.header && ("
+      },
+      "reason": "An explicit header enables supplementary display text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "(question.type === 'select' || question.type === 'multiselect') && ("
+      },
+      "reason": "Delegated choice questions display their available options."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "(grouped || question.header) && ("
+      },
+      "reason": "Grouping and headers control question legend layout."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "question.header && <><strong>{question.header}</strong>{grouped && <br />}</>"
+      },
+      "anchor": "question.header &&",
+      "reason": "An explicit question header is formatted for display."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "grouped && <br />"
+      },
+      "reason": "Grouped headers use a visual line break."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "grouped && <span data-question-text style={QUESTION_TEXT_STYLE}>{question.question}</span>"
+      },
+      "reason": "Grouped questions show the prompt in their legend."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "!question.required && <div style={{ alignSelf: 'flex-start' }}><Badge>(optional)</Badge></div>"
+      },
+      "reason": "Optional questions carry a non-state label."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'multiselect':"
+      },
+      "reason": "Multiselect selects its input-control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'text':"
+      },
+      "reason": "Text selects its input-control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "question.multiline ? ("
+      },
+      "reason": "Multiline text selects a textarea control."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'number':"
+      },
+      "reason": "Number selects its input-control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'date':"
+      },
+      "reason": "Date selects its input-control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "case 'confirm':"
+      },
+      "reason": "Confirm selects its yes/no control renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "value ? 'Yes' : 'No'"
+      },
+      "reason": "The confirmation option value selects its button label."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "option.description && <span> {option.description}</span>"
+      },
+      "reason": "Option descriptions are supplemental content."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "option.preview && ("
+      },
+      "reason": "Preview availability controls whether a preview action is shown."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "previewing ? 'Hide preview' : 'Show preview'"
+      },
+      "reason": "The preview button label reflects its current visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "option.preview && previewing && <PreviewFrame preview={option.preview} />"
+      },
+      "reason": "An open option preview renders its content without changing panel state."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCards.tsx",
+        "quote": "onAction: store.retry"
+      },
+      "route": {
+        "target": "quirky.ask/list",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/store.ts",
+          "quote": "context.call('quirky.ask/list', { pendingOnly: true })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/store.ts",
+            "quote": "const retry = () => {\n    if (disposed || loadState.status === 'ready') return\n    loadState = { status: 'loading' }\n    publish(asks)\n    void refresh()\n  }"
+          },
+          {
+            "file": "plugins/quirky.ask/src/store.ts",
+            "quote": "const refresh = async (eventSeq = 0) => {\n    const mine = ++generation\n    const removed = new Set<string>()\n    removedDuringRefresh.add(removed)\n    try {\n      const list = (await context.call('quirky.ask/list', { pendingOnly: true })) as Ask[]\n      if (disposed || mine < appliedGeneration) return\n      appliedGeneration = mine\n      watermark = Math.max(watermark, eventSeq)\n      for (const ask of list) watermark = Math.max(watermark, ask.seq)\n      const live = list.filter((ask) => !removed.has(ask.id) && !resolvedIds.has(ask.id))\n      prunePreviewsForList(new Set(live.map((ask) => ask.id)))\n      if (loadState.status !== 'ready') loadState = { status: 'ready' }\n      publish(\n        live.filter((ask) => !ask.queued).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)),\n        live.filter((ask) => ask.queued).length\n      )\n    } catch (error) {\n      const message = error instanceof Error ? error.message : String(error)\n      context.log(`could not list asks: ${message}`)\n      if (!disposed && mine === generation && mine >= appliedGeneration && loadState.status !== 'ready') {\n        loadState = { status: 'failed', message }\n        publish(asks)\n      }\n    } finally {\n      removedDuringRefresh.delete(removed)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "onClick={() => void openDelegatedQuestion()}"
+      },
+      "route": {
+        "target": "view:quirky.session/worktree",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.openView('view:quirky.session/worktree', { worktree: worktreeId, session: ask.sessionId })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const openDelegatedQuestion = async () => {\n    if (!ask.sessionId) {\n      context.toast('Could not open delegated question', 'The exact delegated session is unavailable.')\n      return\n    }\n    setBusy(true)\n    try {\n      let worktreeId = ask.worktreeId\n      if (!worktreeId) {\n        const session = await context.call('quirky.session/get', { session: ask.sessionId })\n        if (typeof session !== 'object' || session === null || !('worktreeId' in session) || typeof session.worktreeId !== 'string') {\n          throw new Error('The delegated session has no worktree view.')\n        }\n        worktreeId = session.worktreeId\n      }\n      context.openView('view:quirky.session/worktree', { worktree: worktreeId, session: ask.sessionId })\n    } catch (error) {\n      context.toast('Could not open delegated question', error instanceof Error ? error.message : String(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "onChange={(draft) => change(question.id, draft)}"
+      },
+      "route": {
+        "target": "quirky.ask/updatePartial",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context\n        .call('quirky.ask/updatePartial', { askId: ask.id, partial: draftsToPartial(latest.current, ask.spec) })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const change = (questionId: string, draft: QuestionDraft) => {\n    latest.current = { ...latest.current, [questionId]: draft }\n    setDrafts(latest.current)\n    setErrors(({ [questionId]: _cleared, ...rest }) => rest)\n    scheduleSave()\n  }"
+          },
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const scheduleSave = () => {\n    cancelSave()\n    saveTimer.current = setTimeout(() => {\n      saveTimer.current = null\n      context\n        .call('quirky.ask/updatePartial', { askId: ask.id, partial: draftsToPartial(latest.current, ask.spec) })\n        .catch((error: unknown) => context.log(`could not save draft: ${error instanceof Error ? error.message : String(error)}`))\n    }, SAVE_DELAY_MS)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "onClick={() => void dismiss()}"
+      },
+      "route": {
+        "target": "quirky.ask/cancel",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.call('quirky.ask/cancel', { askId: ask.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const dismiss = () =>\n    attempt(() => context.call('quirky.ask/cancel', { askId: ask.id }) as Promise<AskEnvelope>, 'Could not dismiss')"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/AskCard.tsx",
+        "quote": "onClick={() => void submit()}"
+      },
+      "route": {
+        "target": "quirky.ask/answer",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/AskCard.tsx",
+          "quote": "context.call('quirky.ask/answer', { askId: ask.id, answers: submission.answers, skipped: submission.skipped })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.ask/src/AskCard.tsx",
+            "quote": "const submit = () => {\n    const submission = buildSubmission(ask.spec, drafts)\n    if (!submission.ok) {\n      setErrors(submission.errors)\n      return\n    }\n    setErrors({})\n    return attempt(\n      () => context.call('quirky.ask/answer', { askId: ask.id, answers: submission.answers, skipped: submission.skipped }) as Promise<AskEnvelope>,\n      'Could not answer'\n    )\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onClick={() => {\n              void context.executeCommand(TOGGLE_PREVIEW_COMMAND, { askId, questionId, option: option.value })\n            }}"
+      },
+      "route": {
+        "target": "command:quirky.ask/toggle-preview",
+        "invoke": {
+          "file": "plugins/quirky.ask/src/QuestionField.tsx",
+          "quote": "context.executeCommand(TOGGLE_PREVIEW_COMMAND, { askId, questionId, option: option.value })"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onPress={() => toggle(option.value)}"
+      },
+      "transient": "draft",
+      "reason": "Changes only the local selection draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onClick={onPress}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onChange={(event) => onChange({ ...draft, freeText: event.target.value })}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "<TextArea\n          rows={3}\n          label={question.question}\n          value={draft.text}\n          aria-label={question.question}\n          onChange={"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "<TextField\n          label={question.question}\n          value={draft.text}\n          aria-label={question.question}\n          onChange={"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "<TextField\n          type=\"number\"\n          step={question.integer ? '1' : 'any'}\n          min={question.min}\n          max={question.max}\n          label={question.question}\n          value={draft.text}\n          aria-label={question.question}\n          onChange={"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "<TextField\n          type=\"date\"\n          label={question.question}\n          value={draft.text}\n          aria-label={question.question}\n          onChange={"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ask/src/QuestionField.tsx",
+        "quote": "onClick={() => onChange({ ...draft, confirm: value })}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the control action to its owning QuestionField handler."
+    }
+  ]
+}
