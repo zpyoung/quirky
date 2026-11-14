@@ -606,7 +606,7 @@ function terminalReadLines(value: unknown): string[] | null {
   return lines
 }
 
-async function loadTerminalArchiveTail(runtime: WorkerRuntime, sessionId: string): Promise<TerminalCapture | null> {
+async function loadTerminalCapture(runtime: WorkerRuntime, sessionId: string): Promise<TerminalCapture | null> {
   let raw: unknown
   try {
     raw = await runtime.context.pty.read(sessionId, 0)
@@ -783,14 +783,13 @@ async function loadTerminal(
   dispatchId: DispatchId,
   record: WorkerRecord | null,
   resource: TerminalResource | null,
-  identity: SessionIdentity | null,
-  loadTail: typeof loadTerminalTail = loadTerminalTail
+  identity: SessionIdentity | null
 ): Promise<SourceSnapshot> {
   if (!record || !resource || !identity) {
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: false })
     return { source: 'terminal', sessionId: resource?.sessionId ?? null, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['terminal_lease_unavailable'] }
   }
-  const capture = await loadTail(runtime, identity.sessionId)
+  const capture = await loadTerminalCapture(runtime, identity.sessionId)
   if (!capture) {
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: false })
     return { source: 'terminal', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['terminal_history_unreadable'] }
@@ -1072,7 +1071,7 @@ export function createWorkerOutput(core: WorkerCore, repo: WorkerRepository, run
     if (transcript.kind === 'ready') {
       return makeArchive(dispatchId, resource, 'transcript', transcript.snapshot.content, transcript.metadata, 'captured')
     }
-    const terminal = await loadTerminal(runtime, dispatch, dispatchId, record, resource, identity, loadTerminalArchiveTail)
+    const terminal = await loadTerminal(runtime, dispatch, dispatchId, record, resource, identity)
     const content = terminal.sourceExact ? terminal.content : ''
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: terminal.sourceExact, truncated: terminal.clipped, fallbackReason: transcript.reason })
     const status = !terminal.sourceExact ? 'unavailable' : content.length === 0 ? 'empty' : 'captured'

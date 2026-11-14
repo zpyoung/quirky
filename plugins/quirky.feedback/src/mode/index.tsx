@@ -9,8 +9,6 @@ import { OVERLAY_ATTRIBUTE } from './target'
 
 const FEEDBACK_CONTAINER_Z_INDEX = '2147483646'
 
-type Options = { annotate(pane: string): Promise<void> }
-
 function fixedLayer(doc: Document): HTMLElement {
   const layer = doc.createElement('div')
   Object.assign(layer.style, { position: 'fixed', inset: '0', zIndex: MAX_Z_INDEX, pointerEvents: 'none' })
@@ -23,7 +21,7 @@ function fixedLayer(doc: Document): HTMLElement {
  * directly. The returned function removes every node, listener and frame the mode created, and
  * calling it again does nothing.
  */
-export function mountFeedbackMode(context: UiPluginContext, options: Options): () => void {
+export function mountFeedbackMode(context: UiPluginContext): () => void {
   const doc = document
   const bannerSlot = doc.querySelector<HTMLElement>('[data-feedback-banner-slot]')
   if (bannerSlot === null) throw new Error('Feedback mode requires a data-feedback-banner-slot host element')
@@ -63,7 +61,7 @@ export function mountFeedbackMode(context: UiPluginContext, options: Options): (
   picker.focus()
 
   const root = createRoot(rootElement)
-  root.render(<App session={session} layout={layout} bannerSlot={bannerSlot} annotate={(pane) => { void options.annotate(pane).catch((cause) => context.log(`feedback: annotate failed: ${cause instanceof Error ? cause.message : String(cause)}`)) }} />)
+  root.render(<App session={session} layout={layout} bannerSlot={bannerSlot} />)
   void session.load()
 
   let mounted = true

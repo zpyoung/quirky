@@ -76,7 +76,7 @@ export function activate(context: UiPluginContext): void {
     }
     if (mine !== ticket) return
     loading = false
-    stop = module.mountFeedbackMode(context, { annotate })
+    stop = module.mountFeedbackMode(context)
     context.setContext(MODE_KEY, true)
   }
 
@@ -91,7 +91,9 @@ export function activate(context: UiPluginContext): void {
     if (event.type !== 'setting.changed' || (event.id !== ACTIVE && event.id !== ENABLED)) return
     const name = event.id === ACTIVE ? 'active' : 'enabled'
     const value = (event as { value?: unknown }).value
-    values[name] = typeof value === 'boolean' ? value : readSetting(name, values[name])
+    const next = typeof value === 'boolean' ? value : readSetting(name, name === 'active' ? values.active : values.enabled)
+    if (name === 'active') values.active = next
+    else values.enabled = next
     if (name === 'enabled' && !values.enabled && values.active) {
       values.active = false
       void setActive(false).catch((cause) => context.log(`feedback: could not turn the mode off: ${message(cause)}`))
@@ -128,6 +130,30 @@ export function activate(context: UiPluginContext): void {
       throw cause
     }
     return { active: next }
+  })
+  context.provide('command:quirky.feedback/copy', async () => {
+    try {
+      const result = await context.call('quirky.feedback/list')
+      const comments = result !== null && typeof result === 'object' && 'comments' in result && Array.isArray(result.comments) ? result.comments : []
+      if (comments.length === 0) throw new Error('There are no feedback comments to copy')
+      const clipboard = navigator.clipboard
+      if (typeof clipboard?.writeText !== 'function') throw new Error('The clipboard is not available in this window')
+      // keep formatting out of the window stub until someone uses copy
+      const { formatCommentsAsMarkdown } = await import('./format')
+      await clipboard.writeText(formatCommentsAsMarkdown(comments))
+      context.toast('Copied', `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'} copied as Markdown.`, { kind: 'success' })
+      return { copied: comments.length }
+    } catch (cause) {
+      context.toast('Could not copy the comments', message(cause), { kind: 'error' })
+      throw cause
+    }
+  })
+
+  context.provide('command:quirky.feedback/annotate', async (args?: unknown) => {
+    let pane: unknown
+    if (args !== null && typeof args === 'object' && 'pane' in args) pane = args.pane
+    if (typeof pane !== 'string' || pane === '') throw new Error('Annotate needs the id of a browser pane')
+    await annotate(pane)
   })
 
   current = { dispose: unmountMode }
