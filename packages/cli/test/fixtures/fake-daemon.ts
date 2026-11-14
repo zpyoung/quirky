@@ -105,6 +105,7 @@ export class FakeDaemon {
   private readonly outcomes = new Map<string, Outcome>()
   private readonly drops = new Map<string, number>()
   private readonly withheldReplies = new Map<string, number>()
+  private readonly keybindingDefaults = new Map<string, string>()
   private readonly connectedClients = new Map<object, { role: ClientRole; name?: string }>()
 
   get port(): number {
@@ -340,6 +341,7 @@ export class FakeDaemon {
   addKeybinding(plugin: string, name: string, key: string, command: string, overrides: Partial<UiKeybinding> = {}): UiKeybinding {
     const entry: UiKeybinding = { id: `keybinding:${plugin}/${name}`, plugin, key, command, status: 'active', ...overrides }
     this.ui.keybindings.push(entry)
+    this.keybindingDefaults.set(entry.id, key)
     return entry
   }
 
@@ -416,6 +418,12 @@ export class FakeDaemon {
 
   private themeList() {
     return { ...this.ui.theme, themes: this.ui.themes }
+  }
+
+  private requireKeybinding(id: string): UiKeybinding {
+    const binding = this.ui.keybindings.find((candidate) => candidate.id === id)
+    if (!binding) throw new FakeRpcError(RpcErrorCode.NotFound, `no keybinding ${id}`)
+    return binding
   }
 
   private requireSetting(id: string): SettingInfo {
@@ -533,6 +541,23 @@ export class FakeDaemon {
           throw new FakeRpcError(RpcErrorCode.NotFound, `unknown job ${params.id}`)
         }
         return this.jobRuns.get(params.id) ?? { startedAt: 1_000, finishedAt: 1_042, status: 'ok' }
+      }
+      case 'keybinding.list':
+        return this.ui.keybindings
+      case 'keybinding.set': {
+        const binding = this.requireKeybinding(params.id)
+        if (params.key !== null) binding.key = params.key
+        binding.status = params.key === null ? 'unbound' : 'active'
+        delete binding.shadowedBy
+        return this.ui.keybindings
+      }
+      case 'keybinding.reset': {
+        const binding = this.requireKeybinding(params.id)
+        const key = this.keybindingDefaults.get(binding.id)
+        if (key !== undefined) binding.key = key
+        binding.status = 'active'
+        delete binding.shadowedBy
+        return this.ui.keybindings
       }
       case 'ui.contributions':
         return this.ui

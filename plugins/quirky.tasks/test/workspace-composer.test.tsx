@@ -3,7 +3,7 @@ import { act, createElement } from 'react'
 import { WorkspaceComposer } from '../src/list/WorkspaceComposer'
 import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
-import type { ItemTarget, TasksState, WorkspaceComposerRequest } from '../src/contracts'
+import type { ItemTarget, WorkspaceComposerRequest } from '../src/contracts'
 import { registerUiDom, unregisterUiDom } from '../../quirky.loops/test/ui-dom'
 
 type RecordValue = Record<string, unknown>
@@ -131,7 +131,7 @@ function mount(options: {
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
-  act(() => root?.render(createElement(WorkspaceComposer, { context, state: {} as TasksState, refresh })))
+  act(() => root?.render(createElement(WorkspaceComposer, { context, refresh })))
   return {
     calls,
     toasts,

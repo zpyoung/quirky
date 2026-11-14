@@ -1,5 +1,5 @@
-import { Badge, Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'
-import { useEffect, useRef, useState } from 'react'
+import { Badge, Button, EmptyState, ListRow, SectionHeader, ToolPanelFrame } from '@quirky/ui'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { DispatchId } from '../contracts'
 import type { WorkerReadParams, WorkerReadResult } from '../worker-contracts'
@@ -89,20 +89,13 @@ function parseRemoteOutputInput(value: unknown): DispatchId | null {
   }
   return value.dispatchId as DispatchId
 }
-async function readRemotePage(context: UiPluginContext, dispatchId: DispatchId, cursor?: string): Promise<WorkerReadResult> {
-  const params: WorkerReadParams & Record<string, unknown> = { dispatchId, source: 'auto', limit: PAGE_LIMIT }
-  if (cursor !== undefined) params.cursor = cursor
-  return parseRemoteRead(await context.call('quirky.orchestration/workerRead', params), dispatchId)
-}
-
 
 type Props = { context: UiPluginContext; input: unknown }
 
 export function RemoteWorkerOutputView({ context, input }: Props) {
   const dispatchId = parseRemoteOutputInput(input)
   const [pages, setPages] = useState<WorkerReadResult[]>([])
-  const [loading, setLoading] = useState(() => dispatchId !== null)
-  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const inFlight = useRef(false)
   const mounted = useRef(false)
@@ -111,36 +104,44 @@ export function RemoteWorkerOutputView({ context, input }: Props) {
 
   useEffect(() => { pageCount.current = pages.length }, [pages])
 
-  async function refresh(): Promise<void> {
+  const readPage = useCallback(async (cursor?: string): Promise<WorkerReadResult> => {
+    if (!dispatchId) throw new Error('Remote output view requires a home Dispatch ID.')
+    const params: WorkerReadParams & Record<string, unknown> = { dispatchId, source: 'auto', limit: PAGE_LIMIT }
+    if (cursor !== undefined) params.cursor = cursor
+    return parseRemoteRead(await context.call('quirky.orchestration/workerRead', params), dispatchId)
+  }, [context, dispatchId])
+
+  const refresh = useCallback(async (): Promise<void> => {
     if (!dispatchId || inFlight.current) return
     inFlight.current = true
     const request = ++generation.current
     setLoading(true)
     setError(null)
     try {
-      const page = await readRemotePage(context, dispatchId)
+      const page = await readPage()
       if (!mounted.current || generation.current !== request) return
       setPages([page])
       pageCount.current = 1
     } catch (cause) {
       if (!mounted.current || generation.current !== request) return
+      setPages([])
+      pageCount.current = 0
       setError(errorText(cause))
     } finally {
       inFlight.current = false
       if (mounted.current && generation.current === request) setLoading(false)
     }
-  }
+  }, [dispatchId, readPage])
 
-  async function loadMore(): Promise<void> {
+  const loadMore = useCallback(async (): Promise<void> => {
     const cursor = pages.at(-1)?.nextCursor
-    if (!dispatchId || !cursor || inFlight.current) return
+    if (!cursor || inFlight.current) return
     inFlight.current = true
     const request = generation.current
     setLoading(true)
-    setLoadingOlder(true)
     setError(null)
     try {
-      const page = await readRemotePage(context, dispatchId, cursor)
+      const page = await readPage(cursor)
       if (!mounted.current || generation.current !== request) return
       if (page.sourceIdentity !== pages[0]?.sourceIdentity) throw new Error('The pinned remote output source changed; refresh to restart reading.')
       setPages((current) => [...current, page])
@@ -149,12 +150,9 @@ export function RemoteWorkerOutputView({ context, input }: Props) {
       if (mounted.current && generation.current === request) setError(errorText(cause))
     } finally {
       inFlight.current = false
-      if (mounted.current && generation.current === request) {
-        setLoading(false)
-        setLoadingOlder(false)
-      }
+      if (mounted.current && generation.current === request) setLoading(false)
     }
-  }
+  }, [pages, readPage])
 
   useEffect(() => {
     mounted.current = true
@@ -167,20 +165,19 @@ export function RemoteWorkerOutputView({ context, input }: Props) {
       generation.current += 1
       clearInterval(timer)
     }
-  }, [context, dispatchId])
+  }, [refresh])
 
   if (!dispatchId) {
     return (
-      <section aria-label="Remote worker output" className="ui-stack">
+      <section role="alert">
         <ToolPanelFrame title="Remote worker output">
-          <InlineError message="Remote output view requires a home Dispatch ID." />
+          <EmptyState message="Remote output view requires a home Dispatch ID." />
         </ToolPanelFrame>
       </section>
     )
   }
 
   const first = pages[0]
-  const hasOutput = pages.some((page) => page.content.length > 0)
   return (
     <section aria-label="Remote worker output" className="ui-stack" style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, overflow: 'auto' }}>
       <ToolPanelFrame
@@ -192,7 +189,7 @@ export function RemoteWorkerOutputView({ context, input }: Props) {
           </div>
         }
       >
-        {error ? <InlineError message={error} /> : null}
+        {error && <div role="alert" className="ui-error-text">{error}</div>}
         {first ? (
           <div className="ui-stack">
             <div className="ui-stack">
@@ -216,17 +213,16 @@ export function RemoteWorkerOutputView({ context, input }: Props) {
             {first.fallbackReason && <p className="ui-text-muted">Output fallback: {first.fallbackReason}</p>}
             {first.warnings.map((warning, index) => <ListRow key={`${warning}-${index}`} title="Warning" status="needs-you" description={warning} />)}
             <SectionHeader title="Output" />
-            {hasOutput ? (
-              <div className="ui-stack">
-                {pages.map((page, index) => <pre key={`${page.sourceIdentity}-${index}`} className="ui-readout">{page.content}</pre>)}
-              </div>
-            ) : <EmptyState message="No output is currently available." />}
-            {loadingOlder ? <NoticeLine>Loading older output…</NoticeLine> : null}
+            <div className="ui-stack">
+              {pages.map((page, index) => <pre key={`${page.sourceIdentity}-${index}`} className="ui-readout">{page.content}</pre>)}
+            </div>
             {first.clipping.clipped && <p className="ui-text-muted">Output page clipped at {first.clipping.maxBytes} bytes.</p>}
           </div>
         ) : loading ? (
           <EmptyState message="Reading output from the paired host…" />
-        ) : null}
+        ) : error ? null : (
+          <EmptyState message="No output is currently available." />
+        )}
       </ToolPanelFrame>
     </section>
   )

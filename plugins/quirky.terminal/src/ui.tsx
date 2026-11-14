@@ -5,6 +5,8 @@ import { SessionsPanel, type SessionsReport } from './window/SessionsPanel'
 import { paneMenuContributions, paneMenuQuickCommands, reportQuickCommandsMenu, sessionCommands, tabMenuContributions, terminalCommands, watchMenuContributions, watchQuickCommands, type MenuContributionSource, type QuickCommandSource } from './window/commands'
 import { mountFloatingOverlay } from './window/floating'
 import { QuickCommandsStripButton, mountQuickCommandsPanel } from './window/quick-commands'
+import { QUICK_COMMAND_DIALOG_COMMAND, disposeQuickCommandDialog, quickCommandDialogCommand } from './window/quick-commands/QuickCommandDialog'
+import { COPY_QUICK_COMMAND_COMMAND, copyQuickCommand } from './window/quick-commands/shared'
 import { mountWorkspace, type WorkspaceOptions } from './window/workspace'
 import { terminalSettingName } from './window/workspace/model'
 import { FLOATING_WORKSPACE, type Group } from './layout/types'
@@ -15,8 +17,15 @@ const PANEL_ID = 'panel:quirky.terminal/sessions'
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
 const QUICK_COMMANDS_PANEL = 'panel:quirky.terminal/quick-commands'
 const FLOATING_OVERLAY = 'overlay:quirky.terminal/floating'
+let dialogContext: UiPluginContext | null = null
 
 type MountProps = { input?: unknown; report?(state: unknown): void }
+
+/** Opens a group's quick-commands menu through its public command; closing also works after unmount. */
+export function setStripMenu(context: UiPluginContext, source: Pick<QuickCommandSource, 'closeMenu'>, group: string, open: boolean): Promise<void> | void {
+  if (open) return context.executeCommand('command:quirky.terminal/open-menu', { kind: 'quick-commands', target: group })
+  source.closeMenu(group)
+}
 
 function StripQuickCommands({ context, workspace, group, source }: { context: UiPluginContext; workspace: string; group: Group; source: QuickCommandSource }) {
   const repo = useSyncExternalStore(source.subscribe, source.repo)
@@ -28,7 +37,7 @@ function StripQuickCommands({ context, workspace, group, source }: { context: Ui
       group={group}
       repo={repo}
       menuOpen={menu === group.id}
-      onMenuOpenChange={(open) => (open ? source.openMenu(group.id) : source.closeMenu(group.id))}
+      onMenuOpenChange={(open) => void setStripMenu(context, source, group.id, open)}
     />
   )
 }
@@ -60,6 +69,8 @@ function worktreeOf(input: unknown): string | null {
  * this plugin overrides. Keeps the `terminalKeysFirst` context key in step with the shortcut policy.
  */
 export function activate(context: UiPluginContext): void {
+  deactivate()
+  dialogContext = context
   const menuContributions = watchMenuContributions(context)
   context.provide('settings-section:quirky.terminal/shortcuts', (element: HTMLElement, props: MountProps) => {
     const root = createRoot(element)
@@ -94,6 +105,8 @@ export function activate(context: UiPluginContext): void {
   })
 
   context.provide(QUICK_COMMANDS_PANEL, (element: HTMLElement, props: MountProps) => mountQuickCommandsPanel(context, element, { report: props.report }))
+  context.provide(QUICK_COMMAND_DIALOG_COMMAND, (args: unknown) => quickCommandDialogCommand(context, args))
+  context.provide(COPY_QUICK_COMMAND_COMMAND, (args: unknown) => copyQuickCommand(context, args))
 
   context.provide(FLOATING_OVERLAY, (element: HTMLElement, props: MountProps) => {
     const source = watchQuickCommands(context, FLOATING_WORKSPACE)
@@ -116,4 +129,10 @@ export function activate(context: UiPluginContext): void {
   context.subscribe((event) => {
     if (event.type === 'setting.changed' && terminalSettingName(event.id) === 'shortcut-policy') keysFirst(event.value)
   })
+}
+
+/** Closes modal roots owned by this activation before the host revokes its context. */
+export function deactivate(): void {
+  if (dialogContext !== null) disposeQuickCommandDialog(dialogContext)
+  dialogContext = null
 }

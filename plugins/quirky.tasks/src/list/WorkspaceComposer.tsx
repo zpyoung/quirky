@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Dialog, FormRow, TextField } from '@quirky/ui'
+import { Button, Dialog, FormRow, InlineError, TextField } from '@quirky/ui'
 import type { TasksSurfaceProps, ItemTarget, WorkspaceComposerRequest } from '../contracts'
 
 type WorkspaceComposerState = { open: boolean; request: WorkspaceComposerRequest | null; busy: boolean; error: string | null }
-type WorkspaceComposerProps = TasksSurfaceProps & { report?(state: WorkspaceComposerState): void }
+export type WorkspaceComposerProps = Omit<TasksSurfaceProps, 'state'> & { report?(state: WorkspaceComposerState): void }
 type SetupChoice = WorkspaceComposerRequest['setup']
 type IssueCommandChoice = NonNullable<WorkspaceComposerRequest['issueCommand']>
 type AgentOption = { id: string; label: string }
@@ -168,7 +168,7 @@ export function WorkspaceComposer({ context, refresh, report }: WorkspaceCompose
     void context.call('quirky.tasks/workspaceComposerState', {}).then((value) => {
       if (live && !eventSeen) accept(parseRequest(value))
     }).catch((cause) => {
-      if (live && !eventSeen) setError(messageOf(cause))
+      if (live && !eventSeen) context.toast('Could not read the workspace request', messageOf(cause))
     })
     void loadAgents(context).then((selection) => live && setAgentSelection(selection))
     return () => {
@@ -345,7 +345,7 @@ export function WorkspaceComposer({ context, refresh, report }: WorkspaceCompose
               <pre className="tasks-composer__trust-script">{request.trustScript}</pre>
             </details>
           ) : null}
-          {error ? <p role="alert" className="tasks-composer__error">{error}</p> : null}
+          {error ? <InlineError message={error} /> : null}
           <footer className="tasks-composer__actions">
             <Button type="button" onClick={() => void cancel()} disabled={busy}>Cancel</Button>
             {trustRequired && trustKind ? (

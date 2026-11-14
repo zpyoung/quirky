@@ -1,4 +1,4 @@
-import { Button, Dialog, FormRow, TextField } from '@quirky/ui'
+import { Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine, TextField } from '@quirky/ui'
 import { useEffect, useRef, useState } from 'react'
 import type { IssueDraft, TaskRepo, TasksSurfaceProps } from '../contracts'
 import { MarkdownComposer } from './Markdown'
@@ -48,7 +48,9 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
   const [sourceChoices, setSourceChoices] = useState<ChoiceEnvelope>(defaultChoices('source'))
   const [labels, setLabels] = useState<ChoiceEnvelope>(defaultChoices('labels'))
   const [assignees, setAssignees] = useState<ChoiceEnvelope>(defaultChoices('assignees'))
-  const [loadingOptions, setLoadingOptions] = useState(true)
+  const [loadingRepositories, setLoadingRepositories] = useState(true)
+  const [repositoriesError, setRepositoriesError] = useState('')
+  const [choicesLoading, setChoicesLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [draftError, setDraftError] = useState('')
@@ -70,9 +72,13 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
   }, [open])
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setLoadingRepositories(false)
+      return
+    }
     let active = true
-    setLoadingOptions(true)
+    setLoadingRepositories(true)
+    setRepositoriesError('')
     setError('')
     void props.context.call('quirky.tasks/issueChoices', { kind: 'repositories' }).then((value) => {
       if (!active) return
@@ -93,25 +99,26 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
       const current = draftRef.current
       const chosen = current.repoId && repos.some((repo) => repo.id === current.repoId) ? current.repoId : text(raw?.defaultRepoId)
       if (current.repoId !== chosen) updateDraft({ repoId: chosen })
-      if (repos.length === 0) setError('No registered Git repository is selected for issue creation.')
     }).catch((reason: unknown) => {
-      if (active) setError(errorText(reason))
+      if (active) setRepositoriesError(errorText(reason))
     }).finally(() => {
-      if (active) setLoadingOptions(false)
+      if (active) setLoadingRepositories(false)
     })
     return () => { active = false }
   }, [open, props.context])
 
   useEffect(() => {
-    if (!open || !draft.repoId) {
+    if (!open || !draft.repoId || loadingRepositories || repositoriesError || !repositories.some((repo) => repo.id === draft.repoId)) {
       setSourceChoices(defaultChoices('source'))
       setLabels(defaultChoices('labels'))
       setAssignees(defaultChoices('assignees'))
+      setChoicesLoading(false)
       return
     }
     let active = true
     const request = ++sourceLoad.current
-    setError((current) => current.startsWith('Issue source') ? '' : current)
+    setError('')
+    setChoicesLoading(true)
     void props.context.call('quirky.tasks/issueChoices', { kind: 'source', repoId: draft.repoId }).then((value) => {
       if (!active || request !== sourceLoad.current) return
       const raw = record(value)
@@ -161,12 +168,14 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
       })
     }).catch((reason: unknown) => {
       if (active && optionRequest === optionLoad.current) setError(`Issue choices could not be loaded: ${errorText(reason)}`)
+    }).finally(() => {
+      if (active && optionRequest === optionLoad.current) setChoicesLoading(false)
     })
     return () => { active = false }
-  }, [open, props.context, draft.repoId])
+  }, [open, props.context, draft.repoId, loadingRepositories, repositories, repositoriesError])
+
 
   const selectedRepo = repositories.find((repo) => repo.id === draft.repoId) ?? null
-  const choicesAvailable = labels.available && assignees.available
   const selectedSourceLabel = sourceChoices.sources.find((source) => source.id === sourceChoices.source)?.label
 
   function updateDraft(patch: Partial<IssueDraft>) {
@@ -204,6 +213,7 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
     const optionRequest = ++optionLoad.current
     let sourceSaved = false
     setError('')
+    setChoicesLoading(true)
     try {
       await saveQueue.current
       if (draftFailure.current) throw new Error(`The issue draft was not saved: ${errorText(draftFailure.current)}`)
@@ -239,11 +249,13 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
         }).slice(0, 100),
         message: text(assigneeResult?.message)
       }))
+      setChoicesLoading(false)
     } catch (reason: unknown) {
       if (request === sourceLoad.current && optionRequest === optionLoad.current && draftRef.current.repoId === repoId) {
         setError(sourceSaved
           ? `Issue source changed, but its repository choices could not be refreshed: ${errorText(reason)}`
           : `Issue source could not be changed: ${errorText(reason)}`)
+        setChoicesLoading(false)
       }
     }
   }
@@ -305,7 +317,9 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
     }}>
       <p className="quirky-tasks-new-issue__destination">Filing in {selectedSourceLabel ?? selectedRepo?.displayName ?? selectedRepo?.name ?? 'a selected repository'}</p>
 
-      {loadingOptions && <p className="quirky-tasks-new-issue__status" role="status">Loading selected repositories…</p>}
+      {loadingRepositories && <div role="status" className="quirky-tasks-new-issue__status"><NoticeLine>Loading selected repositories…</NoticeLine></div>}
+      {repositoriesError && <InlineError message={repositoriesError} />}
+      {!loadingRepositories && !repositoriesError && repositories.length === 0 && <div role="status"><EmptyState message="No registered Git repository is selected for issue creation." /></div>}
       {repositories.length > 1 && <FormRow label="Project" htmlFor="new-issue-repo">
         <select id="new-issue-repo" aria-label="Issue repository" value={draft.repoId ?? ''} onChange={(event) => updateDraft({ repoId: event.currentTarget.value || null })} disabled={submitting} className="quirky-tasks-control">
           {repositories.map((repo) => <option key={repo.id} value={repo.id}>{repo.displayName ?? repo.name}</option>)}
@@ -320,7 +334,7 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
           {sourceChoices.sources.map((source) => <option key={source.id} value={source.id}>{source.label}</option>)}
         </select>
       </FormRow>}
-      {sourceChoices.message && <p className="quirky-tasks-new-issue__status">{sourceChoices.message}</p>}
+      {sourceChoices.message && <div role="status" className="quirky-tasks-new-issue__status"><NoticeLine>{sourceChoices.message}</NoticeLine></div>}
 
       <TextField
         label="Title"
@@ -346,7 +360,8 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
       <div className="quirky-tasks-new-issue__collections">
         <fieldset className="quirky-tasks-new-issue__fieldset">
           <legend>Labels</legend>
-          {!choicesAvailable && <p className="quirky-tasks-new-issue__status">{labels.message ?? 'Loading repository labels…'}</p>}
+          {selectedRepo && choicesLoading && <div role="status" className="quirky-tasks-new-issue__status"><NoticeLine>Loading repository labels…</NoticeLine></div>}
+          {selectedRepo && !choicesLoading && labels.message && <div role="status" className="quirky-tasks-new-issue__status"><NoticeLine>{labels.message}</NoticeLine></div>}
           <div className="quirky-tasks-new-issue__choices">
             {labels.labels.map((label) => <label key={label} className="quirky-tasks-new-issue__choice">
               <input type="checkbox" checked={labelSet.has(label)} disabled={submitting} onChange={(event) => updateDraft({ labels: event.currentTarget.checked ? [...new Set([...draft.labels, label])] : draft.labels.filter((value) => value !== label) })} />
@@ -363,7 +378,8 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
 
         <fieldset className="quirky-tasks-new-issue__fieldset">
           <legend>Assignees</legend>
-          {!choicesAvailable && <p className="quirky-tasks-new-issue__status">{assignees.message ?? 'Loading assignable users…'}</p>}
+          {selectedRepo && choicesLoading && <div role="status" className="quirky-tasks-new-issue__status"><NoticeLine>Loading assignable users…</NoticeLine></div>}
+          {selectedRepo && !choicesLoading && assignees.message && <div role="status" className="quirky-tasks-new-issue__status"><NoticeLine>{assignees.message}</NoticeLine></div>}
           <div className="quirky-tasks-new-issue__choices">
             {assignees.assignees.map((user) => <label key={user.login} className="quirky-tasks-new-issue__choice">
               <input type="checkbox" checked={assigneeSet.has(user.login)} disabled={submitting} onChange={(event) => updateDraft({ assignees: event.currentTarget.checked ? [...new Set([...draft.assignees, user.login])] : draft.assignees.filter((value) => value !== user.login) })} />
@@ -379,8 +395,8 @@ export function NewIssueDialog(props: TasksSurfaceProps) {
         </fieldset>
       </div>
 
-      {draftError && <p className="quirky-tasks-new-issue__error" role="alert">Draft could not be saved: {draftError}</p>}
-      {error && <p className="quirky-tasks-new-issue__error" role="alert">{error}</p>}
+      {draftError && <InlineError message={`Draft could not be saved: ${draftError}`} />}
+      {error && <InlineError message={error} />}
     </div>
   </Dialog>
 }
