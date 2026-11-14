@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { builtinsDir, makeTempHome, waitForAsync } from '../../../packages/daemon/test/helpers'
 import { fixtureId, installControlFixture } from '../../quirky.heimdall/test/control-fixture'
@@ -14,7 +14,10 @@ beforeAll(async () => {
   mkdirSync(builtins)
   for (const item of readdirSync(builtinsDir(), { withFileTypes: true })) {
     const pluginDir = join(builtinsDir(), item.name)
-    if (item.isDirectory() && existsSync(join(pluginDir, 'quirky-plugin.json'))) symlinkSync(pluginDir, join(builtins, item.name))
+    if (!item.isDirectory() || !existsSync(join(pluginDir, 'quirky-plugin.json'))) continue
+    const manifest = JSON.parse(readFileSync(join(pluginDir, 'quirky-plugin.json'), 'utf8'))
+    if (Array.isArray(manifest.dependencies) && manifest.dependencies.includes('quirky.heimdall')) continue
+    symlinkSync(pluginDir, join(builtins, item.name))
   }
   installControlFixture(builtins)
   rig = await Rig.start({ home, builtinPluginsDir: builtins })
