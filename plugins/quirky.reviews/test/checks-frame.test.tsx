@@ -1,10 +1,12 @@
 import { afterAll, afterEach, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { act } from 'react'
+import { act, useLayoutEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { ToolPanelFrame } from '@quirky/ui'
 import { ChecksPanel } from '../src/checks/ChecksPanel'
+import { activate } from '../src/ui'
+import { REVIEWS_UI_CONTROL, listReviewsUiControls } from '../src/checks/data'
 import { CHECKS_PANEL, type ChecksState, type ReviewData, type ReviewsState } from '../src/contracts'
 
 GlobalRegistrator.register()
@@ -31,7 +33,7 @@ const review: ReviewData = {
 
 function stateWith(titleDraft: string | null = null, worktree: string | null = WORKTREE): ReviewsState {
   const checks: ChecksState = {
-    worktree, generation: 1, loading: false, error: null, lookup: null, eligibility: null, review,
+    worktree, generation: 1, loading: false, error: null, lookup: null, eligibility: null, review: { ...review },
     checks: { checks: [] }, comments: { threads: [] }, conflicts: null, audience: 'all', grouping: 'grouped',
     expandedChecks: [], queuedComments: [], checksCollapsed: false, commentDraft: '', titleDraft, height: 320, fetchedAt: 0,
     agentDialog: null
@@ -51,18 +53,40 @@ interface MountOptions {
   refreshResult?: unknown | ((worktree: string) => unknown)
 }
 
+function CommitProbe({ run }: { run(): void }) {
+  useLayoutEffect(run)
+  return null
+}
+
 function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult = { ok: true } }: MountOptions = {}) {
   const calls: { method: string; params: Record<string, unknown> }[] = []
+  const provided = new Map<string, (...args: unknown[]) => unknown>()
+  let connectionId = 42
+  let beforeSelf: (() => Promise<unknown>) | null = null
+  let beforeCommand: (() => Promise<void>) | null = null
+  let onCommit: (() => void) | null = null
   let layoutListener: (layout: UiLayout) => void = () => {}
-  const makeLayout = (worktree: string) => ({
+  const methods = new Map<string, (params: Record<string, unknown>) => unknown>()
+  let refreshState = async () => {}
+  const makeLayout = (worktree: string | null) => ({
     worktree, view: { id: 'view:x' }, panel: null, sidebar: true, focus: 'view',
     ...(panelOpen ? { tools: { open: { right: CHECKS_PANEL } } } : {})
   }) as unknown as UiLayout
   let layout = makeLayout(WORKTREE)
   const context = {
     pluginId: 'quirky.reviews',
+    provide: (id: string, handler: (...args: unknown[]) => unknown) => { provided.set(id, handler) },
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
+      const override = methods.get(method)
+      if (override) return override(params)
+      if (method === 'ui.window.self') return beforeSelf ? beforeSelf() : { connId: connectionId }
+      if (method === 'ui.window.command.run') {
+        await beforeCommand?.()
+        const handler = provided.get(String(params.id))
+        if (!handler) throw new Error(`No provided UI command: ${String(params.id)}`)
+        return { result: await handler(params.args) }
+      }
       if (method === 'quirky.reviews/checksSaveTitle') return { updated: true }
       if (method === 'quirky.reviews/checksRefresh') {
         return typeof refreshResult === 'function' ? (refreshResult as (worktree: string) => unknown)(String(params.worktree)) : refreshResult
@@ -75,8 +99,10 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
     subscribe: () => () => {},
     getSetting: () => undefined,
     toast() {},
+    executeCommand: (...args: unknown[]) => { calls.push({ method: 'executeCommand', params: { args } }) },
     log() {}
   } as unknown as UiPluginContext
+  activate(context)
   const element = document.createElement('div')
   document.body.appendChild(element)
   const root = createRoot(element)
@@ -84,19 +110,65 @@ function mountPanel({ panelOpen = false, stateWorktree = WORKTREE, refreshResult
   let state = stateWith(null, stateWorktree)
   const render = () => act(() => root.render(
     <ToolPanelFrame title="Checks">
-      <ChecksPanel context={context} state={state} refresh={async () => {}} />
+      <ChecksPanel context={context} state={state} refresh={() => refreshState()} />
+      <CommitProbe run={() => { const pending = onCommit; onCommit = null; pending?.() }} />
     </ToolPanelFrame>
   ))
   render()
   return {
-    element, calls,
+    element, calls, context,
     setState(next: ReviewsState) { state = next; render() },
-    switchWorktree(worktree: string) { layout = makeLayout(worktree); act(() => layoutListener(layout)) }
+    switchWorktree(worktree: string | null) { layout = makeLayout(worktree); act(() => layoutListener(layout)) },
+    setConnectionId(value: number) { connectionId = value },
+    setBeforeSelf(value: (() => Promise<unknown>) | null) { beforeSelf = value },
+    setBeforeCommand(value: (() => Promise<void>) | null) { beforeCommand = value },
+    respond(method: string, implementation: (params: Record<string, unknown>) => unknown) { methods.set(method, implementation) },
+    onRefresh(callback: () => Promise<void>) { refreshState = callback },
+    onNextCommit(run: () => void) { onCommit = run },
+    runControl(request: unknown) { return provided.get(REVIEWS_UI_CONTROL)!(request) },
+    unmount() {
+      const index = roots.indexOf(root)
+      if (index >= 0) roots.splice(index, 1)
+      act(() => root.unmount())
+    }
   }
 }
 
 const byLabel = (root: ParentNode, label: string) => root.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
-const click = (button: HTMLButtonElement) => act(async () => { button.click() })
+function descriptorFor(context: UiPluginContext, slot: string, action: string) {
+  const descriptor = listReviewsUiControls(context, CHECKS_PANEL).find((item) => item.slot === slot)
+  if (!descriptor) throw new Error(`No mounted Reviews control slot: ${slot}`)
+  return {
+    target: descriptor.target,
+    generation: descriptor.generation,
+    action,
+  }
+}
+
+async function dispatchControl(context: UiPluginContext, slot: string, action: string, value?: Record<string, unknown>) {
+  const request = { ...descriptorFor(context, slot, action), ...(value === undefined ? {} : { value }) }
+  return context.call('ui.window.command.run', { connId: 42, id: REVIEWS_UI_CONTROL, args: request })
+}
+
+function commandActions(calls: { method: string; params: Record<string, unknown> }[]) {
+  return calls.flatMap((call) => {
+    if (call.method !== 'ui.window.command.run') return []
+    const args = call.params.args
+    if (args === null || typeof args !== 'object' || Array.isArray(args) || !('action' in args) || typeof args.action !== 'string') return []
+    return [args.action]
+  })
+}
+function deferred<T>() {
+  const { promise, resolve } = Promise.withResolvers<T>()
+  return { promise, resolve }
+}
+const click = (button: HTMLButtonElement) => act(async () => {
+  button.click()
+  await Promise.resolve()
+  await Promise.resolve()
+})
+const byText = (root: ParentNode, text: string) =>
+  [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === text)
 const rail = (root: ParentNode) => root.querySelector<HTMLElement>('.ui-tool-panel-frame__rail')!
 const header = (root: ParentNode) => root.querySelector<HTMLElement>('.ui-tool-panel-frame__header')!
 const body = (root: ParentNode) => root.querySelector<HTMLElement>('.ui-tool-panel-frame__body')!
@@ -117,16 +189,123 @@ test('panel-wide buttons sit on the frame and the pull request header content st
   expect(element.querySelectorAll('.ui-tool-panel-frame__header')).toHaveLength(1)
 })
 
-test('the rail refresh button still refreshes and the actions menu still lists its items', async () => {
+test('Checks publishes a canonical control target on its mounted root', async () => {
+  const { element, context } = mountPanel()
+  await act(async () => {})
+
+  const controls = listReviewsUiControls(context, CHECKS_PANEL)
+  const checks = controls.find((item) => item.slot === 'checks')!
+  expect(checks.target).toBe(JSON.stringify([
+    CHECKS_PANEL, 'checks', WORKTREE,
+    { host: 'github.com', owner: 'test-owner', repo: 'test-repo' },
+    12, 'a'.repeat(40), null
+  ]))
+  expect(checks.actions.map((item) => item.action)).toEqual([
+    'refresh', 'unlink', 'relink', 'link-open', 'title-edit', 'create',
+    'blocker', 'open-link', 'copy-link', 'agent-open', 'height-set'
+  ])
+  const checksRoot = [...element.querySelectorAll<HTMLElement>('[data-review-control-target]')]
+    .find((node) => node.dataset.reviewControlTarget === checks.target)
+  expect(checksRoot?.dataset.reviewControlGeneration).toBe(String(checks.generation))
+})
+test('Checks renders pending, empty, failed lookup and retained review as distinct shared states', () => {
+  const { element, setState, switchWorktree } = mountPanel()
+  const pending = stateWith()
+  pending.checks.loading = true
+  pending.checks.review = null
+  setState(pending)
+  expect(element.querySelector('.ui-notice-line')?.textContent).toContain('Checking pull request status…')
+
+  pending.checks.error = 'initial read failed'
+  setState(pending)
+  expect(element.querySelector('.ui-inline-error')?.textContent).toContain('initial read failed')
+  expect(element.querySelector('.ui-notice-line')).toBeNull()
+
+  switchWorktree(null)
+  setState(stateWith(null, null))
+  expect(element.querySelector('.ui-empty-state')?.textContent).toContain('Select a workspace to view checks.')
+
+  const noReview = stateWith()
+  noReview.checks.review = null
+  noReview.checks.lookup = {
+    kind: 'no-review',
+    gitStatus: { branch: 'feature', head: 'a'.repeat(40) },
+    fetchedAt: Date.now()
+  }
+  noReview.checks.eligibility = {
+    eligible: true, worktree: WORKTREE, head: 'feature', headOid: 'a'.repeat(40), confirmedAt: Date.now()
+  }
+  switchWorktree(WORKTREE)
+  setState(noReview)
+  expect(element.querySelector('.ui-empty-state')?.textContent).toContain('No pull request found')
+  expect(byText(element, 'Create PR')?.disabled).toBe(false)
+
+  noReview.checks.lookup = { kind: 'unavailable', reason: 'lookup_unavailable', message: 'lookup fixture failed', fetchedAt: Date.now() }
+  noReview.checks.eligibility = null
+  setState(noReview)
+  expect(element.querySelector('.ui-inline-error')?.textContent).toContain('lookup fixture failed')
+  expect(element.querySelector('.ui-empty-state')).toBeNull()
+  expect(byText(element, 'Create PR')).toBeUndefined()
+
+  const retained = stateWith()
+  retained.checks.error = 'retained fixture failed'
+  setState(retained)
+  expect(element.querySelector('.ui-inline-error')?.textContent).toContain('retained fixture failed')
+  expect(element.querySelector('.ui-inline-error')?.textContent).toContain('Showing the last known review status.')
+  expect(byLabel(element, 'Edit pull request title')).not.toBeNull()
+})
+test('stack failures use InlineError while a structured pending stack and conflict preview use NoticeLine', () => {
+  const { element, setState } = mountPanel()
+  const failed = stateWith()
+  failed.checks.review!.stack = {
+    available: false, reason: 'stack_unavailable', message: 'Stack is still loading words but unavailable.'
+  }
+  setState(failed)
+  expect(element.querySelector('[aria-label="Pull request stack"] .ui-inline-error')?.textContent)
+    .toContain('Stack is still loading words but unavailable.')
+  expect(element.querySelector('[aria-label="Pull request stack"] .ui-notice-line')).toBeNull()
+
+  failed.checks.review!.stack = { available: false, reason: 'stack_mismatch' }
+  setState(failed)
+  expect(element.querySelector('[aria-label="Pull request stack"] .ui-inline-error')?.textContent)
+    .toContain('The provider stack did not match the selected pull request.')
+
+  failed.checks.review!.stack = { available: true, number: 12, position: 1, entries: [] }
+  setState(failed)
+  expect(element.querySelector('[aria-label="Pull request stack"] .ui-inline-error')?.textContent)
+    .toContain('The canonical stack response is incomplete.')
+
+  failed.checks.review!.stack = { available: false, status: 'loading', message: 'Reading canonical stack members…' }
+  setState(failed)
+  expect(element.querySelector('[aria-label="Pull request stack"] .ui-notice-line')?.textContent)
+    .toContain('Reading canonical stack members…')
+
+  failed.checks.review!.stack = null
+  failed.checks.review!.mergeable = 'CONFLICTING'
+  failed.checks.conflicts = { status: 'loading' }
+  setState(failed)
+  expect(element.querySelector('[aria-label="Merge conflicts"] .ui-notice-line')?.textContent)
+    .toContain('Loading conflict paths…')
+})
+test('the rail refresh button uses its provided exact-window route and the actions menu still lists its items', async () => {
   const { element, calls } = mountPanel()
 
   await click(byLabel(element, 'Refresh checks')!)
   expect(calls.map((call) => call.method)).toContain('quirky.hosting/refresh')
   expect(calls.some((call) => call.method === 'quirky.reviews/checksRefresh' && call.params.worktree === WORKTREE)).toBe(true)
+  expect(calls.some((call) => call.method === 'ui.window.self')).toBe(true)
+  expect(calls.find((call) => call.method === 'ui.window.command.run')?.params).toMatchObject({
+    connId: 42,
+    id: REVIEWS_UI_CONTROL,
+    args: { action: 'refresh' }
+  })
+  expect(calls.some((call) => call.method === 'executeCommand')).toBe(false)
 
   await click(byLabel(element, 'More PR actions')!)
   const items = [...element.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent)
   expect(items).toEqual(['Unlink PR from workspace', 'Link another PR'])
+  await click(byText(element, 'Unlink PR from workspace')!)
+  expect(calls.some((call) => call.method === 'quirky.reviews/checksUnlink' && call.params.worktree === WORKTREE)).toBe(true)
 })
 
 test('editing the title in the body saves and cancels', async () => {
@@ -204,4 +383,306 @@ test('a late failed entry refresh for the previous worktree does not show on the
 
   await act(async () => { pending.get('/next/tree')!({ ok: false, error: 'new worktree failed' }) })
   expect(element.textContent).toContain('new worktree failed')
+})
+test('link form commands validate the local number and keep cancel local', async () => {
+  const { element, calls, context } = mountPanel()
+  await click(byLabel(element, 'More PR actions')!)
+  await click(byText(element, 'Link another PR')!)
+
+  const linkControls = listReviewsUiControls(context, CHECKS_PANEL).find((item) => item.slot === 'link')
+  expect(linkControls?.actions.map((item) => item.action)).toEqual(['link-submit', 'link-cancel'])
+  const input = element.querySelector<HTMLInputElement>('input[aria-label="Pull request number"]')!
+  const propsKey = Object.getOwnPropertyNames(input).find((key) => key.startsWith('__reactProps$'))!
+  const props = (input as unknown as Record<string, { onChange(event: { target: HTMLInputElement }): void }>)[propsKey]!
+  const form = element.querySelector('form')!
+  await act(async () => {
+    input.value = '0'
+    props.onChange({ target: input })
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+  })
+  expect(element.querySelector('.ui-inline-error')?.textContent).toContain('Enter a positive pull request number.')
+  expect(calls.some((call) => call.method === 'quirky.reviews/checksLink')).toBe(false)
+
+  await act(async () => {
+    input.value = '27'
+    props.onChange({ target: input })
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+  })
+  expect(calls.find((call) => call.method === 'quirky.reviews/checksLink')?.params)
+    .toMatchObject({ worktree: WORKTREE, number: 27 })
+
+  await click(byText(element, 'Cancel')!)
+  expect(element.querySelector('input[aria-label="Pull request number"]')).toBeNull()
+  expect(commandActions(calls)).toEqual(['link-open', 'link-submit', 'link-submit', 'link-cancel'])
+})
+test('create and blocker routes use only current eligibility and the offered blocker', async () => {
+  const { element, calls, context, setState } = mountPanel()
+  await act(async () => {})
+  expect(await dispatchControl(context, 'checks', 'create')).toEqual({ result: { delivered: false, reason: 'disabled' } })
+  expect(calls.some((call) => call.method === 'quirky.reviews/createOpen')).toBe(false)
+
+  const eligible = stateWith()
+  eligible.checks.review = null
+  eligible.checks.lookup = { kind: 'no-review', gitStatus: { branch: 'feature', head: 'a'.repeat(40) }, fetchedAt: Date.now() }
+  eligible.checks.eligibility = {
+    eligible: true, worktree: WORKTREE, head: 'feature', headOid: 'a'.repeat(40), confirmedAt: Date.now()
+  }
+  setState(eligible)
+  await click(byText(element, 'Create PR')!)
+  expect(calls.some((call) => call.method === 'quirky.reviews/createOpen' && call.params.worktree === WORKTREE)).toBe(true)
+
+  const blocked = stateWith()
+  blocked.checks.review = null
+  blocked.checks.lookup = { kind: 'no-review', gitStatus: { branch: 'feature', head: 'a'.repeat(40) }, fetchedAt: Date.now() }
+  blocked.checks.eligibility = {
+    eligible: false, worktree: WORKTREE, head: 'feature', headOid: 'a'.repeat(40), confirmedAt: Date.now(),
+    blockers: [{ reason: 'no_upstream', message: 'Publish this branch first.' }]
+  }
+  setState(blocked)
+  await click(byText(element, 'Publish Branch')!)
+  expect(calls.find((call) => call.method === 'quirky.reviews/checksGitAction')?.params)
+    .toMatchObject({ worktree: WORKTREE, action: 'publish' })
+  const gitActionCount = calls.filter((call) => call.method === 'quirky.reviews/checksGitAction').length
+  await dispatchControl(context, 'checks', 'blocker', { action: 'push' })
+  expect(calls.filter((call) => call.method === 'quirky.reviews/checksGitAction')).toHaveLength(gitActionCount)
+  const needsPush = stateWith()
+  needsPush.checks.review = null
+  needsPush.checks.lookup = { kind: 'no-review', gitStatus: { branch: 'feature', head: 'a'.repeat(40) }, fetchedAt: Date.now() }
+  needsPush.checks.eligibility = {
+    eligible: false, worktree: WORKTREE, head: 'feature', headOid: 'a'.repeat(40), confirmedAt: Date.now(),
+    blockers: [{ reason: 'needs_push', message: 'Push this branch first.' }]
+  }
+  const beforePush = calls.length
+  setState(needsPush)
+  await click(byText(element, 'Push & Create PR')!)
+  const pushIndex = calls.findIndex((call, index) => index >= beforePush && call.method === 'quirky.reviews/checksGitAction')
+  const createIndex = calls.findIndex((call, index) => index > pushIndex && call.method === 'quirky.reviews/createOpen')
+  expect(pushIndex).toBeGreaterThanOrEqual(0)
+  expect(createIndex).toBeGreaterThan(pushIndex)
+})
+
+test('PR links open through the control route and copy uses the local clipboard helper', async () => {
+  const { element, calls } = mountPanel()
+  const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const copied: string[] = []
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async (text: string) => { copied.push(text) } }
+  })
+  try {
+    const prLink = byText(element, '#12')!
+    await click(prLink)
+    expect(calls.find((call) => call.method === 'quirky.reviews/openLink')?.params)
+      .toMatchObject({ url: review.url, worktree: WORKTREE })
+
+    await click(byLabel(element, 'Copy PR link')!)
+    await act(async () => {})
+    expect(copied).toEqual([review.url])
+    expect(calls.some((call) => call.method === 'quirky.reviews/copyText')).toBe(false)
+  } finally {
+    if (clipboardDescriptor) Object.defineProperty(navigator, 'clipboard', clipboardDescriptor)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+test('resize previews without persistence, commits through commands and cleans listeners', async () => {
+  const panel = mountPanel()
+  const separator = panel.element.querySelector<HTMLElement>('[aria-label="Resize Checks panel"]')!
+  await act(async () => {
+    separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }))
+    await Promise.resolve()
+  })
+  expect(panel.calls.find((call) => call.method === 'quirky.reviews/checksSetHeight')?.params.height).toBe(344)
+  await act(async () => {
+    separator.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+    await Promise.resolve()
+  })
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/checksSetHeight').at(-1)?.params.height).toBe(296)
+
+  await act(async () => {
+    separator.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientY: 100 }))
+    window.dispatchEvent(new MouseEvent('mousemove', { clientY: 76 }))
+  })
+  const preview = [...panel.element.querySelectorAll<HTMLElement>('.ui-stack')].find((node) => node.style.height === '344px')
+  expect(preview).toBeDefined()
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/checksSetHeight')).toHaveLength(2)
+  await act(async () => {
+    window.dispatchEvent(new MouseEvent('mouseup'))
+    await Promise.resolve()
+  })
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/checksSetHeight')).toHaveLength(3)
+  expect(commandActions(panel.calls).slice(-3)).toEqual(['height-set', 'height-set', 'height-set'])
+  await act(async () => {
+    await dispatchControl(panel.context, 'checks', 'height-set', { height: 999 })
+    await dispatchControl(panel.context, 'checks', 'height-set', { height: 159.6 })
+  })
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/checksSetHeight').map((call) => call.params.height).slice(-2))
+    .toEqual([800, 160])
+
+  const dragging = mountPanel()
+  const nextSeparator = dragging.element.querySelector<HTMLElement>('[aria-label="Resize Checks panel"]')!
+  await act(async () => { nextSeparator.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientY: 100 })) })
+  dragging.unmount()
+  await act(async () => { window.dispatchEvent(new MouseEvent('mouseup')) })
+  expect(dragging.calls.some((call) => call.method === 'quirky.reviews/checksSetHeight')).toBe(false)
+})
+
+test('a delayed exact-window self lookup cannot refresh a replacement worktree', async () => {
+  const panel = mountPanel()
+  const capturedRequest = descriptorFor(panel.context, 'checks', 'refresh')
+  const self = deferred<unknown>()
+  panel.setBeforeSelf(() => self.promise)
+  await click(byLabel(panel.element, 'Refresh checks')!)
+
+  panel.switchWorktree('/next/tree')
+  panel.setState(stateWith(null, '/next/tree'))
+  self.resolve({ connId: 42 })
+  await act(async () => { await self.promise; await Promise.resolve(); await Promise.resolve() })
+
+  expect(checksRefreshCalls(panel.calls)).toHaveLength(0)
+  expect(panel.calls.find((call) => call.method === 'ui.window.command.run')?.params)
+    .toEqual({ connId: 42, id: REVIEWS_UI_CONTROL, args: capturedRequest })
+})
+test('the offered relink action keeps its suppression-aware daemon call', async () => {
+  const state = stateWith()
+  state.checks.review = null
+  state.checks.lookup = { kind: 'suppressed', number: 12 }
+  const { element, calls, setState } = mountPanel()
+  setState(state)
+  await click(byText(element, 'Link PR #12')!)
+  expect(calls.find((call) => call.method === 'quirky.reviews/checksRelink')?.params).toMatchObject({ worktree: WORKTREE })
+})
+
+test('a replacement layout commit invalidates the old command before passive effects', async () => {
+  const panel = mountPanel()
+  const stale = descriptorFor(panel.context, 'checks', 'unlink')
+  let delivery!: Promise<unknown>
+  panel.onNextCommit(() => { delivery = Promise.resolve(panel.runControl(stale)) })
+  const next = stateWith()
+  next.checks.review = { ...next.checks.review!, number: 13, url: 'https://github.com/test-owner/test-repo/pull/13' }
+  panel.setState(next)
+  expect(await delivery).toEqual({ delivered: false, reason: 'target-unavailable' })
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/checksUnlink')).toEqual([])
+})
+
+test('create rechecks eligibility expiration when a command arrives without another render', async () => {
+  const originalNow = Date.now
+  let now = originalNow()
+  Date.now = () => now
+  try {
+    const panel = mountPanel()
+    const state = stateWith()
+    state.checks.review = null
+    state.checks.lookup = { kind: 'no-review', gitStatus: { branch: 'feature', head: review.headRefOid } }
+    state.checks.eligibility = { eligible: true, worktree: WORKTREE, head: 'feature', headOid: review.headRefOid, confirmedAt: now }
+    panel.setState(state)
+    expect(listReviewsUiControls(panel.context, CHECKS_PANEL).find((control) => control.slot === 'checks')?.actions.find((action) => action.action === 'create')?.enabled).toBe(true)
+    now += 300_001
+    expect(await dispatchControl(panel.context, 'checks', 'create')).toEqual({ result: { delivered: false, reason: 'disabled' } })
+    expect(panel.calls.filter((call) => call.method === 'quirky.reviews/createOpen')).toEqual([])
+  } finally {
+    Date.now = originalNow
+  }
+})
+
+test('enabled stack member links remain usable while refresh retains the review', async () => {
+  const panel = mountPanel()
+  const state = stateWith()
+  state.checks.loading = true
+  const memberUrl = 'https://github.com/test-owner/test-repo/pull/13'
+  state.checks.review = { ...state.checks.review!, stack: { available: true, number: 1, position: 1, size: 2, entries: [{ number: 13, title: 'Member', url: memberUrl }] } }
+  panel.setState(state)
+  const member = [...panel.element.querySelectorAll<HTMLButtonElement>('[aria-label="Pull request stack"] button')].find((button) => button.textContent?.includes('#13'))!
+  expect(member.disabled).toBe(false)
+  await click(member)
+  expect(panel.calls.find((call) => call.method === 'quirky.reviews/openLink')?.params).toMatchObject({ url: memberUrl, worktree: WORKTREE })
+})
+
+function pushRequiredState(): ReviewsState {
+  const state = stateWith()
+  state.checks.review = null
+  state.checks.lookup = { kind: 'no-review', gitStatus: { branch: 'feature', head: review.headRefOid } }
+  state.checks.eligibility = {
+    eligible: false, worktree: WORKTREE, head: 'feature', headOid: review.headRefOid, confirmedAt: Date.now(),
+    blockers: [{ reason: 'needs_push', message: 'Push this branch first.' }]
+  }
+  return state
+}
+
+test('a long push acknowledges delivery before completion and renders its late failure', async () => {
+  const panel = mountPanel()
+  panel.setState(pushRequiredState())
+  const operation = Promise.withResolvers<unknown>()
+  panel.respond('quirky.reviews/checksGitAction', () => operation.promise)
+  const reply = dispatchControl(panel.context, 'checks', 'blocker', { action: 'push' })
+  try {
+    const firstTurn = await Promise.race([reply, Bun.sleep(0).then(() => 'still waiting')])
+    expect(firstTurn).toEqual({ result: { delivered: true } })
+    expect(panel.calls.filter((call) => call.method === 'quirky.reviews/checksGitAction')).toHaveLength(1)
+    expect(panel.element.querySelector('.ui-inline-error')).toBeNull()
+  } finally {
+    await act(async () => { operation.reject(new Error('late push fixture failed')); await reply })
+  }
+  expect(panel.element.querySelector('.ui-inline-error')?.textContent).toContain('late push fixture failed')
+  expect(panel.element.textContent).not.toContain('the window did not answer')
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/createOpen')).toEqual([])
+})
+
+test('a push that completes after its acknowledged target is replaced cannot open the composer', async () => {
+  const panel = mountPanel()
+  panel.setState(pushRequiredState())
+  const operation = Promise.withResolvers<unknown>()
+  panel.respond('quirky.reviews/checksGitAction', () => operation.promise)
+  const reply = dispatchControl(panel.context, 'checks', 'blocker', { action: 'push' })
+  try {
+    expect(await Promise.race([reply, Bun.sleep(0).then(() => 'still waiting')]))
+      .toEqual({ result: { delivered: true } })
+    panel.switchWorktree('/replacement/tree')
+    panel.setState(stateWith(null, '/replacement/tree'))
+  } finally {
+    await act(async () => { operation.resolve({ ok: true }); await reply })
+  }
+  expect(panel.calls.filter((call) => call.method === 'quirky.reviews/createOpen')).toEqual([])
+})
+
+test('authentication failure is a shared error rather than a neutral prerequisite', async () => {
+  const panel = mountPanel()
+  const state = stateWith()
+  state.checks.review = null
+  state.checks.lookup = { kind: 'no-review', reason: 'authentication_required' }
+  state.checks.eligibility = { eligible: false, reason: 'authentication_required' }
+  panel.setState(state)
+  expect(panel.element.querySelector('.ui-inline-error')?.textContent).toContain('GitHub authentication failed')
+  expect(panel.element.querySelector('.ui-section-header')?.textContent ?? '').not.toContain('GitHub authentication failed')
+})
+
+test('a refresh failure stays visible when that refresh brings the first review head', async () => {
+  const panel = mountPanel({ refreshResult: { ok: false, error: 'first head fixture failed' } })
+  const state = stateWith()
+  state.checks.review = null
+  state.checks.lookup = { kind: 'folder' }
+  panel.setState(state)
+  panel.onRefresh(async () => { panel.setState(stateWith()) })
+  await click(byText(panel.element, 'Retry')!)
+  expect(panel.element.textContent).toContain('Review 12')
+  expect(panel.element.querySelector('.ui-inline-error')?.textContent).toContain('first head fixture failed')
+})
+
+test('missing origin hides leftover local-action and retained provider errors', async () => {
+  const panel = mountPanel({ refreshResult: { ok: false, error: 'leftover action fixture' } })
+  const initial = stateWith()
+  initial.checks.review = null
+  initial.checks.lookup = { kind: 'folder' }
+  panel.setState(initial)
+  await click(byText(panel.element, 'Retry')!)
+  const missingOrigin = stateWith()
+  missingOrigin.checks.review = null
+  missingOrigin.checks.lookup = { kind: 'unsupported', reason: 'missing_origin' }
+  missingOrigin.checks.error = 'leftover provider fixture'
+  panel.setState(missingOrigin)
+  expect(panel.element.textContent).toContain('GitHub origin required')
+  expect(panel.element.textContent).not.toContain('leftover action fixture')
+  expect(panel.element.textContent).not.toContain('leftover provider fixture')
 })

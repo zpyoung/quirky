@@ -1,4 +1,4 @@
-import { Button, ToolPanelFrame } from '@quirky/ui'
+import { Button, InlineError, ToolPanelFrame } from '@quirky/ui'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
@@ -6,12 +6,14 @@ import type { OrchestrationSkillStatus } from './ui-contracts'
 import { OrchestrationSettings } from './window/OrchestrationSettings'
 import { RemoteWorkerOutputView } from './window/RemoteWorkerOutputView'
 import {
-  announceSetupDismissed,
+  copyText,
   createLatestRequestGuard,
+  createSetupSignals,
   dismissSetup,
+  examplePrompt,
   isSetupDismissed,
-  SETUP_DISMISSED_EVENT,
-  SETUP_STATUS_CHANGED_EVENT
+  ORCHESTRATION_INSTALL_COMMAND,
+  type SetupSignals
 } from './window/setup-state'
 import { placeSetupCard, type PlacementRect, type SetupPlacement } from './setup-placement'
 
@@ -20,6 +22,8 @@ const REMOTE_WORKER_OUTPUT_VIEW_ID = 'view:quirky.orchestration/remote-worker-ou
 const SETUP_OVERLAY_ID = 'overlay:quirky.orchestration/floating-setup'
 const OPEN_SETTINGS_COMMAND_ID = 'command:quirky.orchestration/open-settings'
 const DISMISS_SETUP_COMMAND_ID = 'command:quirky.orchestration/dismiss-setup'
+const COPY_INSTALL_COMMAND_ID = 'command:quirky.orchestration/copy-install-command'
+const COPY_PROMPT_COMMAND_ID = 'command:quirky.orchestration/copy-prompt'
 
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -40,7 +44,7 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-type FloatingSetupProps = { context: UiPluginContext; report?: (state: unknown) => void }
+type FloatingSetupProps = { context: UiPluginContext; signals: SetupSignals; report?: (state: unknown) => void }
 function useSetupPlacement(cardRef: { current: HTMLElement | null }, enabled: boolean): SetupPlacement {
   const [placement, setPlacement] = useState<SetupPlacement>({ left: 16, top: 16, maxHeight: window.innerHeight })
 
@@ -129,7 +133,7 @@ function useSetupPlacement(cardRef: { current: HTMLElement | null }, enabled: bo
 }
 
 
-function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
+function FloatingSetupOverlay({ context, signals, report }: FloatingSetupProps) {
   const guard = useMemo(() => createLatestRequestGuard(), [])
   const cardRef = useRef<HTMLElement>(null)
   const [floating, setFloating] = useState<{ enabled: boolean; open: boolean } | null>(null)
@@ -159,17 +163,15 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
       if (event.type === 'quirky.terminal/floating') void refresh()
     })
-    const onSetupStatus = () => { void refresh() }
-    const onSetupDismissed = () => { setDismissed(true) }
-    window.addEventListener(SETUP_STATUS_CHANGED_EVENT, onSetupStatus)
-    window.addEventListener(SETUP_DISMISSED_EVENT, onSetupDismissed)
+    const stopStatus = signals.statusChanged.subscribe(() => { void refresh() })
+    const stopDismissed = signals.dismissed.subscribe(() => { setDismissed(true) })
     return () => {
       guard.stop()
       unsubscribe()
-      window.removeEventListener(SETUP_STATUS_CHANGED_EVENT, onSetupStatus)
-      window.removeEventListener(SETUP_DISMISSED_EVENT, onSetupDismissed)
+      stopStatus()
+      stopDismissed()
     }
-  }, [context, guard, refresh])
+  }, [context, guard, refresh, signals])
 
   const hasReadySkill = status?.agents.some((agent) => agent.state === 'ready') === true
   const shown = floating?.enabled === true && floating.open && !dismissed && !hasReadySkill
@@ -210,7 +212,7 @@ function FloatingSetupOverlay({ context, report }: FloatingSetupProps) {
     >
       <ToolPanelFrame title="Enable orchestration">
         <p className="ui-text-muted">Set up the skill so agents can coordinate supervised work through Quirky.</p>
-        {error && <p className="ui-error-text" role="alert">{error}</p>}
+        {error ? <InlineError message={error} /> : null}
         <div className="ui-cluster">
           <Button onClick={() => void dismiss()}>Dismiss</Button>
           <Button variant="primary" onClick={() => void openSettings()}>Enable</Button>
@@ -225,10 +227,11 @@ function setViewStyle(element: HTMLElement): void {
 }
 
 export function activate(context: UiPluginContext): void {
+  const signals = createSetupSignals()
   const mountSettings: MountFunction = (element) => {
     setViewStyle(element)
     const root = createRoot(element)
-    root.render(<OrchestrationSettings context={context} />)
+    root.render(<OrchestrationSettings context={context} signals={signals} />)
     return () => root.unmount()
   }
   context.provide(SETTINGS_VIEW_ID, mountSettings)
@@ -243,13 +246,15 @@ export function activate(context: UiPluginContext): void {
   context.provide(SETUP_OVERLAY_ID, (element: HTMLElement, props: { report?: (state: unknown) => void }) => {
     element.style.display = 'contents'
     const root = createRoot(element)
-    root.render(<FloatingSetupOverlay context={context} report={props.report} />)
+    root.render(<FloatingSetupOverlay context={context} signals={signals} report={props.report} />)
     return () => root.unmount()
   })
 
   context.provide(OPEN_SETTINGS_COMMAND_ID, () => context.openView(SETTINGS_VIEW_ID))
   context.provide(DISMISS_SETUP_COMMAND_ID, () => {
     dismissSetup()
-    announceSetupDismissed()
+    signals.dismissed.emit()
   })
+  context.provide(COPY_INSTALL_COMMAND_ID, () => copyText(ORCHESTRATION_INSTALL_COMMAND))
+  context.provide(COPY_PROMPT_COMMAND_ID, (args?: unknown) => copyText(examplePrompt(args)))
 }
