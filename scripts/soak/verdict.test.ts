@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test'
-import type { EventRecord, ProcessRow, Sample, SoakConfig, SoakReport, WindowBeat, WorkerBeat } from './contracts'
+import type { EventRecord, PanelRefreshRecord, ProcessRow, Sample, SoakConfig, SoakReport, WindowBeat, WorkerBeat } from './contracts'
 import type { SoakEvidence } from './verdict'
-import { countDaemonLog, judge, windowAlive } from './verdict'
+import { countDaemonLog, isPanelRefreshRequest, judge, windowAlive } from './verdict'
 
 type ConfigOverrides = {
   minutes?: number
   out?: string
+  windows?: number
   limits?: Partial<SoakConfig['limits']>
   fault?: SoakConfig['fault']
 }
@@ -14,7 +15,7 @@ function config(overrides: ConfigOverrides = {}): SoakConfig {
   return {
     minutes: overrides.minutes ?? 30,
     out: overrides.out ?? '/tmp/soak-verdict-test',
-    windows: 3,
+    windows: overrides.windows ?? 3,
     limits: {
       maxChildren: 60,
       maxGrowth: 5,
@@ -38,17 +39,28 @@ function healthyWorkers(): WorkerBeat[] {
     lastBeatAgeSeconds: 30,
   }))
 }
+function healthyPanelRefreshes(windowBeats: WindowBeat[]): PanelRefreshRecord[] {
+  return windowBeats.flatMap((beat, index) => windowAlive(beat)
+    ? [{ at: 0, index, worktree: beat.worktree, method: 'quirky.git/status' }]
+    : [])
+}
+
+function panelRefresh(index: number, worktree: string, at: number, method = 'quirky.git/status'): PanelRefreshRecord {
+  return { at, index, worktree, method }
+}
 
 function evidence(overrides: Partial<SoakEvidence> = {}): SoakEvidence {
+  const windowBeats = overrides.windowBeats ?? []
   return {
     durationSeconds: 1800,
     windows: 2,
-    windowBeats: [],
+    windowBeats,
     samples: [],
     events: [],
     probes: [],
     workers: healthyWorkers(),
     daemonExited: false,
+    panelRefreshes: healthyPanelRefreshes(windowBeats),
     ...overrides,
   }
 }
@@ -375,6 +387,7 @@ function expectOnlyCheckFails(
   expect(result.checks.events.ok).toBe(failed !== 'events')
   expect(result.checks.stalls.ok).toBe(failed !== 'stalls')
   expect(result.checks.workers.ok).toBe(failed !== 'workers')
+  expect(result.checks.refreshes.ok).toBe(failed !== 'refreshes')
   expect(result.verdict).toBe('fail')
 }
 
@@ -819,4 +832,173 @@ test('unanswered calls from third-party plugins fail the calls check', () => {
     gitTimeouts: 0
   })
   expect(result.verdict).toBe('fail')
+})
+test('refresh scenario 1: rejects seventeen refreshes shared across two windows without fault disqualification', () => {
+  const windowBeats = [windowBeat('a'), windowBeat('b')]
+  const panelRefreshes = Array.from({ length: 17 }, (_, index) => {
+    const owner = index % 2
+    return panelRefresh(owner, owner === 0 ? 'a' : 'b', 10 + 4.9 * index / 16)
+  })
+  const events = eventsWithin('feedback.changed', 17, 10, 4.9)
+  const result = judge(evidence({ windows: 2, windowBeats, panelRefreshes, events }), config({ windows: 2 }))
+
+  expect(result.checks.refreshes).toEqual({
+    ok: false,
+    total: 17,
+    limitPer5s: 8,
+    peakPer5s: 9,
+    peakAt: 10,
+    peakWindow: 0,
+    peakWorktree: 'a',
+    missingWindows: [],
+    byWindow: [
+      { index: 0, worktree: 'a', total: 9, peakPer5s: 9 },
+      { index: 1, worktree: 'b', total: 8, peakPer5s: 8 },
+    ],
+  })
+  expect(result.checks.events).toMatchObject({ ok: true, peakPer5s: 17 })
+  expect(result.verdict).toBe('fail')
+  expect(result.qualifies).toBe(true)
+  expect(result.disqualified).toEqual([])
+})
+
+test('refresh scenario 2: compares rounded milliseconds over an inclusive sliding five-second window', () => {
+  const windowBeats = [windowBeat('a'), windowBeat('b')]
+  const recordsAcross = (start: number, span: number) => Array.from({ length: 17 }, (_, index) => {
+    const owner = index % 2
+    return panelRefresh(owner, owner === 0 ? 'a' : 'b', start + span * index / 16)
+  })
+  const judgeRefreshes = (records: PanelRefreshRecord[]) => judge(
+    evidence({ windowBeats, panelRefreshes: records }),
+    config({ windows: 2 }),
+  ).checks.refreshes
+
+  expect(judgeRefreshes(recordsAcross(10, 5))).toMatchObject({ ok: false, peakPer5s: 9, peakAt: 10 })
+  expect(judgeRefreshes(recordsAcross(14.3, 5))).toMatchObject({ ok: false, peakPer5s: 9, peakAt: 14.3 })
+  expect(judgeRefreshes(recordsAcross(10, 5.001))).toMatchObject({ ok: true, peakPer5s: 8 })
+  const shuffled = recordsAcross(10, 4.9).reverse()
+  expect(judgeRefreshes(shuffled)).toMatchObject({ ok: false, peakPer5s: 9, peakAt: 10 })
+})
+
+test('refresh scenario 3: budgets are independent by stable window index', () => {
+  const windowBeats = Array.from({ length: 7 }, (_, index) => windowBeat(`w${index}`))
+  const eightEach = windowBeats.flatMap((beat, index) =>
+    Array.from({ length: 8 }, (_, offset) => panelRefresh(index, beat.worktree, 1 + offset * 0.01)))
+  const boundedEvents = eventsWithin('bounded.event', 30, 1, 4.9)
+  const sevenWindowResult = judge(
+    evidence({ windows: 7, windowBeats, panelRefreshes: eightEach, events: boundedEvents }),
+    config({ windows: 7 }),
+  )
+  expect(sevenWindowResult.checks.refreshes).toMatchObject({
+    ok: true, total: 56, peakPer5s: 8, missingWindows: [],
+  })
+  expect(sevenWindowResult.checks.events).toMatchObject({ ok: true, peakPer5s: 30 })
+  expect(sevenWindowResult.checks.refreshes.byWindow).toHaveLength(7)
+  expect(sevenWindowResult.checks.refreshes.byWindow).toEqual(windowBeats.map((beat, index) => ({
+    index, worktree: beat.worktree, total: 8, peakPer5s: 8,
+  })))
+
+  const threeBeats = windowBeats.slice(0, 3)
+  const distributed = [6, 6, 5].flatMap((count, index) =>
+    Array.from({ length: count }, (_, offset) => panelRefresh(index, threeBeats[index]!.worktree, 2 + offset * 0.01)))
+  const distributedResult = judge(evidence({
+    windows: 3,
+    windowBeats: threeBeats,
+    panelRefreshes: distributed,
+    events: eventsWithin('distributed.event', 17, 2, 4.9),
+  }), config({ windows: 3 }))
+  expect(distributedResult.checks.refreshes)
+    .toMatchObject({ ok: true, total: 17, peakPer5s: 6, missingWindows: [] })
+  expect(distributedResult.checks.events).toMatchObject({ ok: true, peakPer5s: 17 })
+
+  const twoBeats = threeBeats.slice(0, 2)
+  const sixteen = Array.from({ length: 16 }, (_, index) => {
+    const owner = index % 2
+    return panelRefresh(owner, twoBeats[owner]!.worktree, 3 + index * 0.01)
+  })
+  const sixteenResult = judge(evidence({
+    windows: 2,
+    windowBeats: twoBeats,
+    panelRefreshes: sixteen,
+    events: eventsWithin('sixteen.event', 16, 3, 4.9),
+  }), config({ windows: 2 }))
+  expect(sixteenResult.checks.refreshes).toMatchObject({ ok: true, total: 16, peakPer5s: 8 })
+  expect(sixteenResult.checks.events).toMatchObject({ ok: true, peakPer5s: 16 })
+
+})
+
+test('refresh scenario 4: counted methods combine under the assigned window regardless of params', () => {
+  const methods = [
+    'quirky.git/status',
+    'quirky.reviews/checksRefresh',
+    'soak.faults/feedbackRefresh',
+  ]
+  const windowBeats = [windowBeat('assigned')]
+  const panelRefreshes = Array.from({ length: 9 }, (_, index) =>
+    panelRefresh(0, 'assigned', index * 0.1, methods[index % methods.length]!))
+
+  expect(judge(evidence({ windowBeats, panelRefreshes }), config({ windows: 1 })).checks.refreshes)
+    .toMatchObject({ ok: false, total: 9, peakPer5s: 9, peakWindow: 0, peakWorktree: 'assigned' })
+  expect(isPanelRefreshRequest('quirky.git/status', { worktree: 'other' })).toBe(true)
+  expect(isPanelRefreshRequest('quirky.reviews/checksRefresh', { force: true })).toBe(true)
+  expect(isPanelRefreshRequest('quirky.reviews/checksRefresh', { force: 1 })).toBe(false)
+  expect(isPanelRefreshRequest('quirky.reviews/checksRefresh', {})).toBe(false)
+  expect(isPanelRefreshRequest('soak.faults/feedbackRefresh', null)).toBe(true)
+  expect(isPanelRefreshRequest('quirky.reviews/state', {})).toBe(false)
+  expect(isPanelRefreshRequest('quirky.worktree/list', {})).toBe(false)
+  expect(isPanelRefreshRequest('ui.report', {})).toBe(false)
+})
+
+test('refresh scenario 6: missing coverage fails, while empty window evidence has a zero peak', () => {
+  const windowBeats = [windowBeat('missing')]
+  const missing = judge(evidence({ windowBeats, panelRefreshes: [] }), config({ windows: 1 }))
+  expect(missing.checks.refreshes).toMatchObject({
+    ok: false, total: 0, peakPer5s: 0, peakAt: null, peakWindow: null,
+    peakWorktree: null, missingWindows: ['missing'],
+  })
+
+  const empty = judge(evidence({ windows: 0, windowBeats: [], panelRefreshes: [] }), config({ windows: 0 }))
+  expect(empty.checks.refreshes).toEqual({
+    ok: true, total: 0, limitPer5s: 8, peakPer5s: 0, peakAt: null,
+    peakWindow: null, peakWorktree: null, missingWindows: [], byWindow: [],
+  })
+  expect(empty.qualifies).toBe(false)
+
+  const absent = { ...evidence({ windowBeats }), panelRefreshes: undefined } as unknown as SoakEvidence
+  expect(judge(absent, config({ windows: 1 })).checks.refreshes)
+    .toMatchObject({ ok: false, missingWindows: ['missing'] })
+})
+
+test('refresh attribution cannot supply coverage or split an index budget', () => {
+  const windowBeats = [windowBeat('assigned')]
+  const panelRefreshes = Array.from({ length: 9 }, (_, index) =>
+    panelRefresh(0, 'unassigned', index * 0.1))
+  const check = judge(evidence({ windowBeats, panelRefreshes }), config({ windows: 1 })).checks.refreshes
+
+  expect(check).toMatchObject({
+    ok: false, total: 9, peakPer5s: 9, peakWindow: 0, peakWorktree: 'assigned',
+    missingWindows: ['assigned'],
+    byWindow: [{ index: 0, worktree: 'assigned', total: 9, peakPer5s: 9 }],
+  })
+})
+
+test('refresh peak ties prefer earliest span then the lowest window index', () => {
+  const windowBeats = [windowBeat('a'), windowBeat('b')]
+  const records = [
+    ...Array.from({ length: 9 }, (_, index) => panelRefresh(1, 'b', 2 + index * 0.1)),
+    ...Array.from({ length: 9 }, (_, index) => panelRefresh(0, 'a', 2 + index * 0.1)),
+    ...Array.from({ length: 9 }, (_, index) => panelRefresh(0, 'a', 9 + index * 0.1)),
+  ]
+  const check = judge(evidence({ windowBeats, panelRefreshes: records }), config({ windows: 2 })).checks.refreshes
+  expect(check).toMatchObject({ peakPer5s: 9, peakAt: 2, peakWindow: 0, peakWorktree: 'a' })
+})
+test('refresh diagnostics sort by stable index and missing worktree name', () => {
+  const windowBeats = [windowBeat('z'), windowBeat('a')]
+  const check = judge(
+    evidence({ windows: 2, windowBeats, panelRefreshes: [] }),
+    config({ windows: 2 }),
+  ).checks.refreshes
+
+  expect(check.missingWindows).toEqual(['a', 'z'])
+  expect(check.byWindow.map(({ index }) => index)).toEqual([0, 1])
 })

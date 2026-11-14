@@ -7,15 +7,16 @@ export type SoakLimits = {
   maxUnanswered: number
 }
 
-export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git'] as const
+export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback'] as const
 export type FaultKind = (typeof FAULT_KINDS)[number]
-export type FaultCheck = 'children' | 'zombies' | 'events' | 'stalls' | 'calls'
+export type FaultCheck = 'children' | 'zombies' | 'events' | 'stalls' | 'calls' | 'refreshes'
 export const FAULT_CHECK: Record<FaultKind, FaultCheck> = {
   leak: 'children',
   zombies: 'zombies',
   storm: 'events',
   block: 'stalls',
   'slow-git': 'calls',
+  feedback: 'refreshes',
 }
 export const FAULT_MIN_MINUTES = 0.25
 export const DEFAULT_WINDOWS = 3
@@ -23,7 +24,7 @@ export const MAX_WINDOWS = 7
 export const WINDOW_SILENCE_SECONDS = 30
 
 /** `pids` is leaked children, zombie holders, or slow-git process groups; empty otherwise. */
-export type FaultDetail = { pids: number[]; refreshes: number; blockedMs: number | null }
+export type FaultDetail = { pids: number[]; refreshes: number; blockedMs: number | null; worktrees?: [string, string] }
 export type FaultRecord = { kind: FaultKind; check: FaultCheck; at: number; detail: FaultDetail }
 
 export const DEFAULT_LIMITS: SoakLimits = { maxChildren: 60, maxGrowth: 5, maxZombies: 0, maxEventsPer5s: 30, maxStallMs: 1000, maxUnanswered: 0 }
@@ -35,6 +36,20 @@ export type ProcessRow = { pid: number; ppid: number; state: string; rssKb: numb
 /** Excludes the daemon and PTY host themselves from owned processes. */
 export type Sample = { at: number; owned: ProcessRow[]; daemonRssKb: number | null }
 export type EventRecord = { at: number; type: string }
+export const MAX_PANEL_REFRESHES_PER5S = 8
+export type PanelRefreshRecord = {
+  at: number
+  index: number
+  worktree: string
+  method: string
+}
+export type WindowRequestObservation = {
+  at: number
+  index: number
+  worktree: string
+  method: string
+  params: unknown
+}
 export type ProbeRecord = { at: number; ms: number; ownLagMs: number; timedOut: boolean }
 export type WorkerBeat = { worktree: string; lastBeatAgeSeconds: number | null }
 
@@ -70,11 +85,23 @@ export type SoakReport = {
     }
     zombies: { ok: boolean; peak: number; persistent: number; examples: { pid: number; ppid: number; command: string; seconds: number }[] }
     events: { ok: boolean; total: number; peakPer5s: number; peakType: string | null; peakAt: number | null; byType: { type: string; total: number; peakPer5s: number }[] }
+    refreshes: {
+      ok: boolean
+      total: number
+      limitPer5s: 8
+      peakPer5s: number
+      peakAt: number | null
+      peakWindow: number | null
+      peakWorktree: string | null
+      missingWindows: string[]
+      byWindow: { index: number; worktree: string; total: number; peakPer5s: number }[]
+    }
     stalls: { ok: boolean; probes: number; stalls: number; hostBusy: number; p50Ms: number; p95Ms: number; maxMs: number; worst: { at: number; ms: number }[]; daemonExited: boolean }
     calls: { ok: boolean; unanswered: number; byMethod: { method: string; count: number }[]; gitTimeouts: number }
     workers: { ok: boolean; expected: number; alive: number; stale: string[] }
     windows: { ok: boolean; expected: number; alive: number; lost: string[] }
   }
+  panelRefreshes: PanelRefreshRecord[]
   windows: WindowRecord[]
   windowRequests: { method: string; total: number }[]
   fault: FaultRecord | null
