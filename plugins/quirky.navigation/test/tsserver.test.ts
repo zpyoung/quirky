@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { ProcessSpawner, SpawnExit, SpawnedProcess } from '@quirky/protocol'
 import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import { TsServer } from '../src/tsserver'
 import type { ServerLocation } from '../src/servers'
@@ -66,7 +67,7 @@ test('answers definitions and references and follows disk changes', async () => 
     location(worktreePath, 'src/greet.ts', 3, 17, 3, 22),
   ])
   writeFileSync(greetPath, `\n\n${readFileSync(greetPath, 'utf8')}`)
-  // Poll the real filesystem watcher; fake timers cannot advance OS file notifications.
+  // fake timers cannot advance tsserver's filesystem watcher in another process.
   const deadline = Date.now() + 10_000
   let movedDefinition: ServerLocation[] = []
   while (Date.now() < deadline) {
@@ -78,3 +79,56 @@ test('answers definitions and references and follows disk changes', async () => 
     location(worktreePath, 'src/greet.ts', 5, 17, 5, 22),
   ])
 }, 60_000)
+
+test('refreshes dependencies retained as open files before navigating a caller', async () => {
+  const { worktreePath, server } = await startServer()
+  const greetPath = join(worktreePath, 'src/greet.ts')
+  await server.definition(greetPath, 3, 17)
+  writeFileSync(greetPath, `\n\n${readFileSync(greetPath, 'utf8')}`)
+  expect(await server.definition(join(worktreePath, 'src/use.ts'), 4, 27)).toEqual([
+    location(worktreePath, 'src/greet.ts', 5, 17, 5, 22),
+  ])
+}, 60_000)
+
+test('closing a deleted retained file does not poison navigation in the worktree', async () => {
+  const { worktreePath, server } = await startServer()
+  const extraPath = join(worktreePath, 'src/extra.ts')
+  writeFileSync(extraPath, 'function extra() {}\nextra()\n')
+  await server.definition(extraPath, 2, 1)
+  rmSync(extraPath)
+  expect(await server.definition(join(worktreePath, 'src/use.ts'), 4, 27)).toEqual([
+    location(worktreePath, 'src/greet.ts', 3, 17, 3, 22),
+  ])
+}, 60_000)
+
+test('stops the child without waiting for an in-flight stdin write', async () => {
+  let stopCalled = false
+  const { promise: exited, resolve: resolveExited } = Promise.withResolvers<SpawnExit>()
+  const exit = { exitCode: 0, signal: null, durationMs: 0 } satisfies SpawnExit
+  const child: SpawnedProcess = {
+    pid: 1,
+    stdout: new ReadableStream<Uint8Array>({ start: (controller) => controller.close() }),
+    stderr: new ReadableStream<Uint8Array>({ start: (controller) => controller.close() }),
+    stderrTail: () => '',
+    write: () => new Promise<boolean>(() => {}),
+    closeInput: async () => {},
+    exited,
+    stop: async () => {
+      stopCalled = true
+      resolveExited(exit)
+      return exit
+    },
+  }
+  const spawner: ProcessSpawner = { spawn: () => child }
+  const server = new TsServer({
+    process: spawner,
+    worktreePath: fixturePath,
+    serverPath: 'unused',
+    runtime: process.execPath,
+  })
+
+  const stopping = server.stop()
+  expect(stopCalled).toBe(true)
+  await stopping
+  expect(await server.exited).toEqual({ exitCode: 0, stderrTail: '' })
+})

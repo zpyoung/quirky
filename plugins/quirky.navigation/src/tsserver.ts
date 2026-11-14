@@ -100,7 +100,7 @@ export class TsServer implements NavigationServer {
     if (!this.stopPromise) {
       this.stopping = true
       this.stopPromise = (async () => {
-        await this.child.write(this.encodeRequest(this.sequence++, 'exit'))
+        void this.child.write(this.encodeRequest(this.sequence++, 'exit'))
         await this.child.stop()
       })()
     }
@@ -118,11 +118,18 @@ export class TsServer implements NavigationServer {
       this.closeLeastRecentlyUsed()
     } else {
       open.used = ++this.useSequence
-      if (open.mtimeMs !== stats.mtimeMs || open.size !== stats.size) {
-        open.mtimeMs = stats.mtimeMs
-        open.size = stats.size
-        this.sendWithoutResponse('reload', { file, tmpfile: file })
+    }
+    for (const [openPath, openFile] of this.openFiles) {
+      const openStats = openPath === file ? stats : statSync(openPath, { throwIfNoEntry: false })
+      if (!openStats?.isFile()) {
+        this.openFiles.delete(openPath)
+        this.sendWithoutResponse('close', { file: openPath })
+        continue
       }
+      if (openFile.mtimeMs === openStats.mtimeMs && openFile.size === openStats.size) continue
+      openFile.mtimeMs = openStats.mtimeMs
+      openFile.size = openStats.size
+      this.sendWithoutResponse('reload', { file: openPath, tmpfile: openPath })
     }
     return file
   }
