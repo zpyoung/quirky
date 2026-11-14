@@ -69,7 +69,9 @@ Right-click a file row for its Source Control actions. Blank Changes areas follo
 
 For Markdown files, **Preview** shows only the rendered modified content and hides both source diff sides. **Source** restores the diff.
 
-Combined-diff navigation and Git open commands use the same hosted-tab route. Opening a diff selects its workspace view if another top-level view was showing. The `open-changes` and `open-commit` commands await the hosted-tab operation before replying.
+`open-diff` and `open-changes` reuse the worktree's one Review tab; `open-commit` uses the same hosted-tab route. Both Review commands focus by default. Pass `focus: false` to open in the background without moving the window, selecting a tab, or changing the active card. A background reveal or scope waits until that Review tab is next shown. `open-diff`'s `source` and `open-changes`'s `area` accept `staged` or `unstaged` to scope the Review; omit them to show the whole review.
+
+`open-changes` defaults to `mode: 'diff'`. `edit` opens changed files in editor tabs; `both` opens those files and the Review. Edit and both skip deleted files and refuse a capped Git status. A diff result reports `statusComplete: false` when status is capped. Both commands return structured results describing focus and scope; `open-changes` also lists opened and skipped files, and `statusComplete` says whether the status was complete. Focused commands wait for their Review or editor action and any worktree navigation to be acknowledged before replying. `open-commit` also waits for its hosted-tab operation. A dirty Review refuses a command's scope change without opening a discard dialog.
 
 Conflict review's **Open** opens the file in a normal worktree tab. Switching between review and file tabs keeps the original review snapshot and any unsaved resolution. After the merge, rebase, or cherry-pick finishes, the file tab shows “Git operation ended” instead of a load error. File-read failures remain visible alongside a retained draft until a successful refresh.
 
