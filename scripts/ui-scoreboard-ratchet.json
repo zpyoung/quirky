@@ -1,6 +1,7 @@
 {
   "host": ["compatibility-tokens"],
   "quirky.agents": ["commands", "empty", "error", "loading"],
+  "quirky.cli": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.palette": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.session": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.sidebar-extras": ["commands", "compatibility-tokens", "empty", "error", "loading"]

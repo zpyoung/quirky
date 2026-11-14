@@ -298,7 +298,7 @@ describe('SC-40: expanding a row edits that agent', () => {
     expect(fake.callsTo('quirky.agents/setPermissions').at(-1)!.params).toEqual({ mode: 'auto', agent: 'codex' })
   })
 
-  test('only installed rows can be expanded, and expansion is routed through agent-details', async () => {
+  test('only installed rows can be expanded, and the chevron toggles', async () => {
     const v = await open()
     expect(v.button('Expand agent settings', v.row('aider')!)).toBeNull()
     const chevron = v.button('Expand agent settings', v.row('claude')!)!
@@ -412,7 +412,7 @@ describe('keeping the listing current', () => {
     await settle()
   })
 
-  test('a failed first load shows InlineError without Dismiss and can be retried', async () => {
+  test('a failed first load says so and can be retried', async () => {
     agents = new FakeAgents()
     agents.failNextList = new Error('daemon unavailable')
     fake = fakeAgentsContext(agents)

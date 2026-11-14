@@ -21,7 +21,7 @@ describe('the Agents UI declarations', () => {
     expect(COMMANDS.find((command) => command.id === 'new-claude-tab')!.title).toBe('New Claude tab')
   })
 
-  test('the settings, default-agent, and agent-details commands are declared', () => {
+  test('the settings command and the default-agent command are declared with their titles', () => {
     expect(COMMANDS.find((command) => command.id === 'open-settings')!.title).toBe('Open agent settings')
     expect(COMMANDS.find((command) => command.id === 'new-agent-tab')!.title).toBe('New agent tab (default agent)')
     expect(COMMANDS.length).toBe(48)
