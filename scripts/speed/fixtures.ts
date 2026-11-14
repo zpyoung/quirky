@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { open } from 'node:fs/promises'
+import type { FloodSleepCapture } from './contracts'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { FixtureWorktree, RegisteredCaptureFixtures } from '../ui-review/fixtures'
@@ -46,6 +48,7 @@ export type FloodStats = {
   firstCounter: number
   lastCounter: number
   elapsedMs: number
+  sleepTiming: FloodSleepCapture
 }
 
 export type SpeedFixture = {
@@ -60,6 +63,45 @@ export type SpeedFixture = {
 
 type RpcClient = Pick<SoakWorld['control'], 'callAny'>
 type Options = { signal?: AbortSignal; timeoutMs?: number; echoDelayMs?: number }
+
+/** Reads only this flood run's bounded sleep evidence; diagnostic failures do not fail flood cleanup. */
+export async function readFloodSleepCapture(path: string, expected: { workerId: string; sessionId: string; runId: string }): Promise<FloodSleepCapture> {
+  const unavailable = (reason: string): FloodSleepCapture => ({
+    version: 1, ...expected, status: 'unavailable', reason, intervals: []
+  })
+  try {
+    const file = await open(path, 'r')
+    let text: string
+    try {
+      const size = (await file.stat()).size
+      if (size > 2 * 1024 * 1024) return unavailable('sleep-capture-too-large')
+      const buffer = Buffer.alloc(size + 1)
+      const { bytesRead } = await file.read(buffer, 0, buffer.length, 0)
+      if (bytesRead > size) return unavailable('sleep-capture-changed')
+      text = buffer.toString('utf8', 0, bytesRead)
+    } finally {
+      await file.close()
+    }
+    const value = JSON.parse(text) as FloodSleepCapture
+    if (!value || value.version !== 1 || value.workerId !== expected.workerId || value.sessionId !== expected.sessionId || value.runId !== expected.runId
+      || !Array.isArray(value.intervals) || value.intervals.length > 8192) return unavailable('invalid-sleep-capture')
+    if (value.status === 'unavailable' && typeof value.reason === 'string' && value.reason.length > 0 && value.reason.length <= 256 && value.intervals.length === 0) return value
+    if (value.status !== 'complete' || value.reason !== null) return unavailable('invalid-sleep-capture')
+    let previousWake = Number.NEGATIVE_INFINITY
+    for (const interval of value.intervals) {
+      if (!interval || Object.keys(interval).length !== 4
+        || ![interval.requestedEpochMs, interval.dueEpochMs, interval.wokeEpochMs, interval.lateMs].every(v => typeof v === 'number' && Number.isFinite(v))
+        || interval.requestedEpochMs < previousWake || interval.requestedEpochMs < 0
+        || Math.abs(interval.dueEpochMs - interval.requestedEpochMs - FLOOD_INTERVAL_MS) > 0.001
+        || interval.wokeEpochMs < interval.dueEpochMs || interval.lateMs < 0
+        || Math.abs(interval.wokeEpochMs - interval.dueEpochMs - interval.lateMs) > 0.001) return unavailable('invalid-sleep-clock')
+      previousWake = interval.wokeEpochMs
+    }
+    return value
+  } catch {
+    return unavailable('sleep-capture-unreadable')
+  }
+}
 type WorkerRecord = { sessionId: string; workerId: string }
 type FloodActive = { sessionId: string; workerId: string; runId: string }
 
@@ -237,7 +279,8 @@ export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' 
             firstCounter: Number(match[1]),
             lastCounter: Number(match[2]),
             bytesWritten: Number(match[3]),
-            elapsedMs: Number(match[4])
+            elapsedMs: Number(match[4]),
+            sleepTiming: await readFloodSleepCapture(join(world.home, `speed-sleep-${current.workerId}.json`), current)
           }
           if (Object.values(stats).some((value) => typeof value === 'number' && !Number.isFinite(value))) {
             throw new Error('the speed flood worker returned invalid statistics')
@@ -340,7 +383,7 @@ export async function prepareSpeedFixture(world: Pick<SoakWorld, 'home' | 'env' 
       const echoDelayArgs = index === 0 && options.echoDelayMs !== undefined
         ? ` ${shellQuote('--echo-delay-ms')} ${shellQuote(String(options.echoDelayMs))}`
         : ''
-      const command = (workerId: string) => `${shellQuote(process.execPath)} ${shellQuote(workerScript)} ${shellQuote(workerId)}${echoDelayArgs}`
+      const command = (workerId: string) => `${shellQuote(process.execPath)} ${shellQuote(workerScript)} ${shellQuote(workerId)}${echoDelayArgs} --timing-file ${shellQuote(join(world.home, `speed-sleep-${workerId}.json`))}`
       const opened = record(await callRpc(rpc, 'quirky.terminal/newTab', {
         workspace: worktree.id,
         cwd: worktree.path,

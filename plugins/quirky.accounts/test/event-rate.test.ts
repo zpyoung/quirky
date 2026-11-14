@@ -103,6 +103,6 @@ describe('quirky.accounts event rates', () => {
     }
 
     const plugins = await call<{ id: string; apiVersion?: string }[]>(h, 'plugin.list')
-    expect(plugins.find((plugin) => plugin.id === 'quirky.accounts')?.apiVersion).toBe('1.12.0')
+    expect(plugins.find((plugin) => plugin.id === 'quirky.accounts')?.apiVersion).toBe('1.15.0')
   })
 })
