@@ -106,6 +106,81 @@ function mobileCall(method: string, params: Record<string, unknown>) {
 }
 
 describe('Mobile desktop UI behavior', () => {
+  test('generates one pairing offer per Continue and Pair another device click', async () => {
+    let devices: MobileState['devices'] = []
+    const pairs: Record<string, unknown>[] = []
+    let changed!: Parameters<UiPluginContext['subscribe']>[0]
+    const context = pluginContext((method, params) => {
+      if (method === 'quirky.mobile/state') return { ...mobileState, devices }
+      if (method === 'quirky.mobile/devices') return devices
+      if (method === 'quirky.mobile/configure') return { ...mobileState, ...params, devices }
+      if (method === 'quirky.mobile/pair') pairs.push(params)
+      return mobileCall(method, params)
+    })
+    context.subscribe = (listener) => { changed = listener; return () => {} }
+    await render(<MobilePage context={context} input={{ stage: 'intro' }} />)
+    await act(async () => {
+      const getStarted = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Get started')
+      getStarted!.click()
+    })
+    expect(container.textContent).toContain('Step 1 of 2')
+    expect(pairs).toEqual([])
+    await act(async () => {
+      const next = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Continue')
+      next!.click()
+    })
+    await flushEffects()
+    expect(pairs).toEqual([{ address: '192.168.1.20' }])
+    expect(container.textContent).toContain('Step 2 of 2')
+    expect(container.querySelector<HTMLInputElement>('input[readonly]')?.value).toBe(pairingUrl)
+
+    devices = [{ deviceId: 'phone-1', name: 'Phone', pairedAt: 1, lastSeenAt: 1 }]
+    await act(async () => { await changed({ type: 'quirky.mobile/changed', data: {} }) })
+    expect(container.textContent).toContain('Your phone is paired.')
+    await act(async () => {
+      const pairAnother = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Pair another device')
+      pairAnother!.click()
+    })
+    await flushEffects()
+    expect(pairs).toEqual([{ address: '192.168.1.20' }, { address: '192.168.1.20' }])
+    expect(container.textContent).toContain('Step 2 of 2')
+    expect(container.querySelector<HTMLInputElement>('input[readonly]')?.value).toBe(pairingUrl)
+  })
+
+  test.each(['page', 'settings'] as const)('clears stale %s action errors after removing a custom address', async (view) => {
+    let state = { ...mobileState, customAddresses: ['phone.local'] }
+    const changes: Record<string, unknown>[] = []
+    const context = pluginContext((method, params) => {
+      if (method === 'quirky.mobile/state') return state
+      if (method === 'quirky.mobile/pair') throw new Error('listener offline')
+      if (method === 'quirky.mobile/configure') {
+        changes.push(params)
+        state = { ...state, ...params }
+        return state
+      }
+      return mobileCall(method, params)
+    })
+    await render(view === 'page'
+      ? <MobilePage context={context} input={{ stage: 'pair', address: 'phone.local' }} />
+      : <MobileSettings context={context} />)
+    if (view === 'settings') await act(async () => {
+      const address = container.querySelector<HTMLSelectElement>('select[aria-label="Network address"]')!
+      address.value = 'phone.local'
+      address.dispatchEvent(new Event('change', { bubbles: true }))
+      const generate = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Generate QR code')
+      generate!.click()
+    })
+    await flushEffects()
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('listener offline')
+    await act(async () => {
+      const remove = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Remove selected custom address')
+      remove!.click()
+    })
+    expect(changes).toEqual([{ customAddresses: [] }])
+    expect(container.querySelector<HTMLSelectElement>('select[aria-label="Network address"]')?.value).toBe('192.168.1.20')
+    expect(container.querySelector('.ui-inline-error')).toBeNull()
+  })
+
   test('shows shared page loading, load retry and refresh errors', async () => {
     const { promise, reject: rejectLoad } = Promise.withResolvers<MobileState>()
     let calls = 0

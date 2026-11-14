@@ -73,8 +73,6 @@ function BackButton({ onBack }: { onBack(): void }) {
   return <div className="ui-cluster"><Button onClick={onBack}>Back</Button></div>
 }
 
-
-
 export function MobilePage({ context, input, report }: { context: UiPluginContext; input?: unknown; report?(state: unknown): void }) {
   const mobile = useMobileState(context)
   const [initial] = useState(() => pageInput(input))
@@ -107,7 +105,6 @@ export function MobilePage({ context, input, report }: { context: UiPluginContex
     if (!mobile.state || selectedAddress) return
     setSelectedAddress(mobile.state.interfaces[0]?.address ?? mobile.state.customAddresses[0] ?? '')
   }, [mobile.state, selectedAddress])
-
 
   useEffect(() => {
     if (!offerVisible) return
@@ -247,7 +244,7 @@ export function MobilePage({ context, input, report }: { context: UiPluginContex
                 customAddresses={mobile.state.customAddresses}
                 selectedAddress={selectedAddress}
                 busy={busy}
-                onAddressChange={setSelectedAddress}
+                onAddressChange={(address) => { setActionError(null); setSelectedAddress(address) }}
               />
             </div>
           </ToolPanelFrame>

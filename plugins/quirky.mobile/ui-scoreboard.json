@@ -1099,7 +1099,7 @@
     {
       "site": {
         "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
-        "quote": "onAddressChange={setSelectedAddress}"
+        "quote": "onAddressChange={(address) => { setActionError(null); setSelectedAddress(address) }}"
       },
       "transient": "draft",
       "reason": "Changes only local draft input or wizard/preview visibility."
@@ -1115,7 +1115,7 @@
     {
       "site": {
         "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
-        "quote": "onAddressChange={setSelectedAddress}"
+        "quote": "onAddressChange={(address) => { setActionError(null); setSelectedAddress(address) }}"
       },
       "transient": "draft",
       "reason": "Changes only local draft input or wizard/preview visibility."

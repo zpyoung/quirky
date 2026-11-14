@@ -105,7 +105,6 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
     }
   }
 
-
   if (mobile.loading && mobile.state === null) {
     return <main className="ui-stack"><NoticeLine>Loading Mobile settings…</NoticeLine></main>
   }
@@ -166,7 +165,7 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
             customAddresses={mobile.state.customAddresses}
             selectedAddress={selectedAddress}
             busy={busy}
-            onAddressChange={setSelectedAddress}
+            onAddressChange={(address) => { setActionError(null); setSelectedAddress(address) }}
           />
           <PairingPanel context={context} offer={offer} busy={busy} buttonLabel="Generate QR code" onGenerate={generate} />
           <SelectField
