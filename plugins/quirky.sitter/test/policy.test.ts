@@ -66,6 +66,7 @@ function check(overrides: Partial<CheckFixture> = {}): CheckFixture {
     rerunTarget: 'workflow:41',
     workflowRunId: 41,
     checkRunId: 9001,
+    required: true,
     failureSignature: null,
     failureExcerpt: null,
     ...overrides
@@ -87,9 +88,14 @@ function world(overrides: Partial<WorldFixture> = {}): WorldFixture {
     reviewDecision: 'APPROVED',
     mergeQueueRequired: false,
     mergeMetadataKnown: true,
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: true,
     defaultMergeMethod: 'squash',
     allowedMergeMethods: ['squash', 'merge', 'rebase'],
     checksComplete: true,
+    checkScope: 'all',
+    requiredMetadataComplete: true,
     checks: [check()],
     localHeadSha: H1,
     localDirty: false,
@@ -222,12 +228,15 @@ function review(overrides: Record<string, unknown> = {}): Record<string, unknown
     reviewDecision: 'APPROVED',
     mergeQueueRequired: false,
     mergeMetadataKnown: true,
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: true,
     mergeMethods: { default: 'squash', allowed: ['squash', 'merge', 'rebase'] },
     ...overrides
   }
 }
 
-function hostingChecks(checks: Record<string, unknown>[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function hostingChecks(checks: readonly Record<string, unknown>[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return { headSha: H1, partial: false, checks, ...overrides }
 }
 
@@ -309,10 +318,10 @@ function expectGate(value: Partial<SitterWorld>, detail: string, capabilities = 
 
 test('maps hosting results to a world and its content identity', () => {
   const open = worldFromHosting(review(), hostingChecks([
-    { kind: 'check_run', name: 'build', status: 'completed', conclusion: 'success', checkRunId: 9001, workflowRunId: 41 },
-    { kind: 'check_run', name: 'lint', status: 'completed', conclusion: 'failure', checkRunId: 9002, workflowRunId: null },
-    { kind: 'status', name: 'deploy', status: 'success', conclusion: 'success', checkRunId: null, workflowRunId: null },
-    { kind: 'approval', name: 'review gate', status: 'action_required', conclusion: 'action_required', checkRunId: null, workflowRunId: null }
+    { kind: 'check_run', name: 'build', status: 'completed', conclusion: 'success', checkRunId: 9001, workflowRunId: 41, required: true },
+    { kind: 'check_run', name: 'lint', status: 'completed', conclusion: 'failure', checkRunId: 9002, workflowRunId: null, required: false },
+    { kind: 'status', name: 'deploy', status: 'success', conclusion: 'success', checkRunId: null, workflowRunId: null, required: true },
+    { kind: 'approval', name: 'review gate', status: 'action_required', conclusion: 'action_required', checkRunId: null, workflowRunId: null, required: null }
   ]), payload)
   expect(open).toMatchObject({
     lifecycle: 'open',
@@ -325,6 +334,11 @@ test('maps hosting results to a world and its content identity', () => {
     mergeable: 'MERGEABLE',
     mergeQueueRequired: false,
     mergeMetadataKnown: true,
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: true,
+    requiredMetadataComplete: false,
+    checkScope: 'all',
     defaultMergeMethod: 'squash',
     allowedMergeMethods: ['squash', 'merge', 'rebase'],
     checksComplete: true
@@ -332,19 +346,19 @@ test('maps hosting results to a world and its content identity', () => {
   expect(open.checks).toEqual([
     {
       name: 'build', kind: 'check_run', state: 'passed', observation: 'check_run:9001:41:completed:success',
-      rerunTarget: 'workflow:41', workflowRunId: 41, checkRunId: 9001, failureSignature: null, failureExcerpt: null
+      rerunTarget: 'workflow:41', workflowRunId: 41, checkRunId: 9001, required: true, failureSignature: null, failureExcerpt: null
     },
     {
       name: 'lint', kind: 'check_run', state: 'failed', observation: 'check_run:9002::completed:failure',
-      rerunTarget: 'check:9002', workflowRunId: null, checkRunId: 9002, failureSignature: null, failureExcerpt: null
+      rerunTarget: 'check:9002', workflowRunId: null, checkRunId: 9002, required: false, failureSignature: null, failureExcerpt: null
     },
     {
       name: 'deploy', kind: 'status', state: 'passed', observation: 'status:::success:success',
-      rerunTarget: null, workflowRunId: null, checkRunId: null, failureSignature: null, failureExcerpt: null
+      rerunTarget: null, workflowRunId: null, checkRunId: null, required: true, failureSignature: null, failureExcerpt: null
     },
     {
       name: 'review gate', kind: 'approval', state: 'pending', observation: 'approval:::action_required:action_required',
-      rerunTarget: null, workflowRunId: null, checkRunId: null, failureSignature: null, failureExcerpt: null
+      rerunTarget: null, workflowRunId: null, checkRunId: null, required: null, failureSignature: null, failureExcerpt: null
     }
   ])
   expect(contentIdentity(open)).toBe(JSON.stringify([H1, B1]))
@@ -625,7 +639,8 @@ test('merge gates are listed in a fixed order and all must hold', () => {
     expectGate({ mergeStateStatus }, 'readiness')
   }
   expectGate({ mergeStateStatus: 'BEHIND' }, 'readiness', caps({ updateBranch: 'off' }))
-  expectGate({ mergeQueueRequired: true }, 'merge-queue')
+  expect(actionFor(world({ mergeQueueRequired: true, mergeQueueKnown: true }))).toMatchObject({ kind: 'enqueue' })
+  expectGate({ mergeQueueRequired: true, mergeQueueKnown: false }, 'merge-queue')
   expectGate({ mergeQueueRequired: null }, 'merge-queue')
   expectGate({ mergeMetadataKnown: false }, 'merge-queue')
   expectGate({ defaultMergeMethod: null }, 'merge-method')
@@ -1571,4 +1586,278 @@ test('an initial prepare attempt without persisted dispatch metadata remains sel
   expect(decide(current, [rerun, interrupted], enrollment()).action).toEqual(prepare)
   const dispatched = { ...interrupted, workerRequest: { spec: 'Fix checks', worktree: 'id:w1' } }
   expect(decide(current, [rerun, dispatched], enrollment()).action).toBeNull()
+})
+test('required-check scope ignores optional failures and pending checks across merge and queue gates', () => {
+  const requiredPayload = { ...payload, mergeCheckScope: 'required' as const }
+  const mapped = worldFromHosting(
+    review({ mergeStateStatus: 'UNSTABLE' }),
+    hostingChecks([
+      { kind: 'check_run', name: 'required', status: 'completed', conclusion: 'success', checkRunId: 1, workflowRunId: 1, required: true },
+      { kind: 'check_run', name: 'optional-build', status: 'completed', conclusion: 'failure', checkRunId: 2, workflowRunId: 2, required: false },
+      { kind: 'status', name: 'optional-deploy', status: 'pending', conclusion: 'pending', checkRunId: null, workflowRunId: null, required: false }
+    ]),
+    requiredPayload
+  )
+  expect(mapped).toMatchObject({ checkScope: 'required', requiredMetadataComplete: true })
+
+  const initialOptionalFailure = check({
+    name: 'optional-build',
+    state: 'failed',
+    required: false,
+    observation: 'check_run:2:2:completed:failure',
+    failureSignature: 'sha256:initial'
+  })
+  const rerun = actionFor(world({ checks: [initialOptionalFailure] }))
+  if (!rerun || rerun.kind !== 'rerun-check') throw new Error('expected an optional failure rerun fixture')
+  const landedRerun = attempt(rerun, { effect: 'landed' })
+  const persistedOptionalFailure = {
+    ...initialOptionalFailure,
+    observation: 'check_run:3:3:completed:failure',
+    failureSignature: 'sha256:persisted'
+  }
+  const optionalPending = check({
+    name: 'optional-deploy',
+    kind: 'status',
+    state: 'pending',
+    required: false,
+    observation: 'status:::pending:pending',
+    rerunTarget: null,
+    workflowRunId: null,
+    checkRunId: null
+  })
+
+  for (const mergeQueueRequired of [false, true]) {
+    const current = world({
+      ...mapped,
+      mergeStateStatus: 'UNSTABLE',
+      mergeQueueRequired,
+      mergeQueueKnown: true,
+      inMergeQueue: false,
+      checks: [check({ name: 'required' }), persistedOptionalFailure, optionalPending]
+    })
+    const currentEnrollment = { ...enrollment(caps({ fixChecks: 'off' })), kindPayload: requiredPayload }
+    const decision = decide(snapshot(current), [landedRerun], currentEnrollment)
+    expect(decision.action).toMatchObject({ kind: mergeQueueRequired ? 'enqueue' : 'merge' })
+    expect(pace(snapshot(current), [landedRerun])).toBe('idle')
+    expect(stop(snapshot(current), [landedRerun], currentEnrollment)).toBeNull()
+  }
+})
+
+test('required-check scope fails closed on partial or missing required metadata', () => {
+  const requiredPayload = { ...payload, mergeCheckScope: 'required' as const }
+  const optionalFailure = {
+    kind: 'check_run',
+    name: 'optional-build',
+    status: 'completed',
+    conclusion: 'failure',
+    checkRunId: 2,
+    workflowRunId: 2,
+    required: false
+  }
+  const cases = [
+    {
+      partial: true,
+      checks: [optionalFailure],
+      decisionReason: 'rerun-check'
+    },
+    {
+      partial: false,
+      checks: [
+        optionalFailure,
+        { kind: 'status', name: 'unknown-requiredness', status: 'success', conclusion: 'success', required: null }
+      ],
+      decisionReason: 'rerun-check'
+    }
+  ] as const
+
+  for (const fixture of cases) {
+    const current = worldFromHosting(
+      review(),
+      hostingChecks(fixture.checks, { partial: fixture.partial }),
+      requiredPayload
+    )
+    expect(current).toMatchObject({ checkScope: 'all', requiredMetadataComplete: false })
+    expect(current.checksComplete).toBe(!fixture.partial)
+    const decision = decide(snapshot(current), [], {
+      ...enrollment(),
+      kindPayload: requiredPayload
+    })
+    if (fixture.decisionReason === 'rerun-check') {
+      expect(decision.action).toMatchObject({ kind: 'rerun-check', checkNames: ['optional-build'] })
+    } else {
+      expect(decision).toMatchObject({ action: null, reason: 'checks-incomplete' })
+    }
+    expect(pace(snapshot(current), [])).toBe('active')
+  }
+  const defaultScope = worldFromHosting(review(), hostingChecks([optionalFailure], { partial: true }), payload)
+  expect(decide(snapshot(defaultScope), [], enrollment())).toMatchObject({ action: null, reason: 'checks-incomplete' })
+})
+
+test('rebase updates carry their base ref and same-head/base conflicts hand off or park', () => {
+  const rebasePayload = { ...payload, branchUpdateMode: 'rebase' as const }
+  const rebaseEnrollment = { ...enrollment(), kindPayload: rebasePayload }
+  const behind = world({ mergeStateStatus: 'BEHIND' })
+  const update = decide(snapshot(behind), [], rebaseEnrollment).action
+  expect(update).toEqual({
+    kind: 'update-branch',
+    capability: 'updateBranch',
+    visibility: 'external',
+    contentIdentity: JSON.stringify([H1, B1]),
+    evidenceKey: JSON.stringify(['update-branch', H1, B1, 1]),
+    expectedState: { target: `${REVIEW_URL}#head`, before: H1 },
+    head: H1,
+    base: B1,
+    ordinal: 1,
+    mode: 'rebase',
+    baseRefName: 'main'
+  })
+  if (!update || update.kind !== 'update-branch') throw new Error('expected a rebase update action')
+
+  const conflict = attempt(update, { effect: 'not-landed', reason: 'rebase-conflicts' })
+  const sameTuple = snapshot(world({ mergeStateStatus: 'BEHIND' }))
+  expect(decide(sameTuple, [conflict], {
+    ...rebaseEnrollment,
+    capabilities: caps({ resolveConflicts: 'gated' })
+  })).toMatchObject({
+    action: { kind: 'prepare-conflict-resolution', expectedHeadSha: H1, baseSha: B1, baseRefName: 'main' }
+  })
+  expectParked(
+    stop(sameTuple, [conflict], rebaseEnrollment),
+    'rebase-conflicts',
+    'landing-failed',
+    `rebase-conflicts:${H1}`
+  )
+
+  for (const changed of [
+    world({ headSha: H2, mergeStateStatus: 'BEHIND' }),
+    world({ baseSha: B2, mergeStateStatus: 'BEHIND' })
+  ]) {
+    const current = snapshot(changed)
+    expect(decide(current, [conflict], rebaseEnrollment).action).toMatchObject({ kind: 'update-branch' })
+    expect(stop(current, [conflict], rebaseEnrollment)).toBeNull()
+  }
+})
+
+test('enqueue settles only on merge or the same head entering the queue and parks on ejection', () => {
+  const queuedReview = world({
+    mergeQueueRequired: true,
+    mergeQueueKnown: true,
+    inMergeQueue: false
+  })
+  const queuedEnrollment = enrollment()
+  const enqueue = decide(snapshot(queuedReview), [], queuedEnrollment).action
+  expect(enqueue).toEqual({
+    kind: 'enqueue',
+    capability: 'merge',
+    visibility: 'external',
+    contentIdentity: JSON.stringify([H1, B1]),
+    evidenceKey: JSON.stringify(['enqueue', H1, 'squash', 1]),
+    expectedState: { target: REVIEW_URL, before: H1 },
+    head: H1,
+    method: 'squash',
+    ordinal: 1
+  })
+  if (!enqueue || enqueue.kind !== 'enqueue') throw new Error('expected a queue enqueue action')
+
+  const enqueueAttempt = attempt(enqueue)
+  const inQueue = snapshot(world({
+    mergeQueueRequired: true,
+    mergeQueueKnown: true,
+    inMergeQueue: true
+  }))
+  expect(resolveOutcome(enqueueAttempt, inQueue)).toEqual({ effect: 'landed' })
+  expect(decide(inQueue, [enqueueAttempt], queuedEnrollment)).toMatchObject({
+    action: null,
+    reason: 'awaiting-merge-queue'
+  })
+  expect(pace(inQueue, [enqueueAttempt])).toBe('rapid')
+
+  const queueNotYetKnown = snapshot(world({
+    mergeQueueRequired: true,
+    mergeQueueKnown: false,
+    inMergeQueue: false
+  }))
+  expect(decide(queueNotYetKnown, [enqueueAttempt], queuedEnrollment)).toMatchObject({
+    action: null,
+    reason: 'awaiting-merge-queue'
+  })
+
+  expect(resolveOutcome(
+    enqueueAttempt,
+    snapshot(world({ lifecycle: 'merged', headSha: H2, mergeQueueRequired: true }))
+  )).toEqual({ effect: 'landed' })
+  expect(resolveOutcome(
+    enqueueAttempt,
+    snapshot(world({ headSha: H2, mergeQueueRequired: true }))
+  )).toEqual({ effect: 'not-landed', reason: 'head-moved' })
+
+  const ejected = snapshot(world({
+    mergeQueueRequired: true,
+    mergeQueueKnown: true,
+    inMergeQueue: false
+  }))
+  expect(decide(ejected, [enqueueAttempt], queuedEnrollment)).toMatchObject({
+    action: null,
+    reason: 'merge-queue-ejected'
+  })
+  expectParked(
+    stop(ejected, [enqueueAttempt], queuedEnrollment),
+    'merge-queue-ejected',
+    'landing-failed',
+    `merge-queue-ejected:${H1}`
+  )
+  expect(decide(
+    snapshot(world({ headSha: H2, mergeQueueRequired: true, mergeQueueKnown: true })),
+    [enqueueAttempt],
+    queuedEnrollment
+  ).action).toMatchObject({ kind: 'enqueue', head: H2 })
+})
+
+test('enqueue timeout requires known queue absence while conclusive outcomes remain usable', () => {
+  const queuedReview = world({ mergeQueueRequired: true, mergeQueueKnown: true, inMergeQueue: false })
+  const enqueue = decide(snapshot(queuedReview), [], enrollment()).action
+  if (!enqueue || enqueue.kind !== 'enqueue') throw new Error('expected a queue enqueue action')
+  const pending = attempt(enqueue, { effect: 'indeterminate', resolved: false })
+  const unknown = { ...queuedReview, mergeQueueKnown: false }
+  for (const age of [UNOBSERVED_EFFECT_MS, UNOBSERVED_EFFECT_MS + RETRY_DELAY_MS, 10 * UNOBSERVED_EFFECT_MS]) {
+    expect(resolveOutcome(pending, snapshot(unknown, T + age))).toBeNull()
+  }
+  expect(resolveOutcome(pending, snapshot(queuedReview, T + UNOBSERVED_EFFECT_MS)))
+    .toEqual({ effect: 'not-landed', reason: 'no-enqueue-observed' })
+  expect(resolveOutcome(pending, snapshot({ ...unknown, lifecycle: 'merged' }, T + UNOBSERVED_EFFECT_MS)))
+    .toEqual({ effect: 'landed' })
+  expect(resolveOutcome(pending, snapshot({ ...unknown, headSha: H2 }, T + UNOBSERVED_EFFECT_MS)))
+    .toEqual({ effect: 'not-landed', reason: 'head-moved' })
+})
+
+test('a prolonged queue lookup outage retains enqueue authority through queue entry and ejection without another mutation', () => {
+  const ready = world({ mergeQueueRequired: true, mergeQueueKnown: true, inMergeQueue: false })
+  const enrolled = enrollment()
+  const enqueue = decide(snapshot(ready), [], enrolled).action
+  if (!enqueue || enqueue.kind !== 'enqueue') throw new Error('expected a queue enqueue action')
+  let pending = attempt(enqueue, { effect: 'indeterminate', resolved: false })
+  const afterTimeout = T + UNOBSERVED_EFFECT_MS + RETRY_DELAY_MS + 1
+  const observations = [
+    snapshot({ ...ready, mergeQueueKnown: false }, afterTimeout),
+    snapshot({ ...ready, inMergeQueue: true }, afterTimeout + 1)
+  ]
+  for (const observation of observations) {
+    if (pending.effect === 'indeterminate') {
+      const outcome = resolveOutcome(pending, observation)
+      if (outcome) pending = { ...pending, ...outcome, resolved: true }
+    }
+    expect(decide(observation, [pending], enrolled).action).toBeNull()
+  }
+  const ejected = snapshot(ready, afterTimeout + RETRY_DELAY_MS + 2)
+  expect({
+    decision: decide(ejected, [pending], enrolled),
+    stopped: stop(ejected, [pending], enrolled)
+  }).toMatchObject({
+    decision: { action: null, reason: 'merge-queue-ejected' },
+    stopped: {
+      kind: 'park',
+      reason: 'stop-predicate',
+      deviation: { kind: 'landing-failed', naturalKey: `merge-queue-ejected:${H1}` }
+    }
+  })
 })

@@ -45,6 +45,7 @@ function defaultProcessRun(argv: readonly string[]): ProcessResult {
   if (args[0] === 'rev-parse' && args.includes('HEAD')) return processResult(H1)
   if (args[0] === 'rev-list' && args.includes('-n')) return processResult(`${H1} ${B1}`)
   if (args[0] === 'log' && args.includes('%B')) return processResult('')
+  if (args[0] === 'symbolic-ref') return processResult('feature')
   return processResult('')
 }
 
@@ -433,11 +434,11 @@ test("authorization takes the pull request's identity from GitHub and refuses wh
     invalidInputs.push([{ ...enrollmentInput(), owner: { agent: 'claude' } }, 'The PR sitter does not accept an owner agent.'])
     invalidInputs.push([{ ...enrollmentInput(), ownerInterventionCapability: 'gated' }, 'The PR sitter does not accept owner interventions.'])
     const rebase = enrollmentInput()
-    ;(rebase.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
-    invalidInputs.push([rebase, 'The PR sitter updates a branch by merging its base; rebase is not supported.'])
+    ;(rebase.kindPayload as Record<string, unknown>).branchUpdateMode = 'bogus'
+    invalidInputs.push([rebase, 'branchUpdateMode must be merge-base-update or rebase.'])
     const required = enrollmentInput()
-    ;(required.kindPayload as Record<string, unknown>).mergeCheckScope = 'required'
-    invalidInputs.push([required, 'The PR sitter supports only the all-checks merge scope.'])
+    ;(required.kindPayload as Record<string, unknown>).mergeCheckScope = 'bogus'
+    invalidInputs.push([required, 'mergeCheckScope must be all or required.'])
     const invalidMethod = enrollmentInput()
     ;(invalidMethod.kindPayload as Record<string, unknown>).mergeMethod = 'fast-forward'
     invalidInputs.push([invalidMethod, 'mergeMethod must be null, merge, squash or rebase.'])
@@ -898,4 +899,182 @@ test('conflict publication verifies the selected base as its second parent', asy
     expect(result).toMatchObject({ effect: secondParent === B1 ? 'landed' : 'not-landed' })
     expect(runtime.calls.some(call => call.method === 'quirky.git/forcePush')).toBe(secondParent === B1)
   }
+})
+
+test('authorization accepts rebase updates and required-only check scope', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-sitter-options-'))
+  try {
+    const input = enrollmentInput()
+    Object.assign(input.kindPayload as object, { branchUpdateMode: 'rebase', mergeCheckScope: 'required' })
+    await expect(authorizationCalls(directory, input).result).resolves.toMatchObject({
+      kindPayload: { branchUpdateMode: 'rebase', mergeCheckScope: 'required' }
+    })
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('enqueue uses the guarded queue mutation and preserves uncertain completion', async () => {
+  for (const state of ['enqueued', 'merged', 'pending']) {
+    const run = directCall(async () => ({ state }))
+    const result = await execute(run.call, action('enqueue', { method: 'squash' }) as never, enrollment() as never)
+    expect(result).toMatchObject({ effect: state === 'pending' ? 'indeterminate' : 'landed' })
+    expect(run.calls).toEqual([{
+      method: 'quirky.hosting/merge',
+      params: { worktree: 'id:w1', number: 7, prRepo: REPOSITORY, expectedHead: H1, method: 'squash', action: 'queue', yes: true }
+    }])
+  }
+})
+
+test('rebase updates check both heads, select the base remote, and lease-push only a changed HEAD', async () => {
+  for (const changed of [true, false]) {
+    let rebased = false
+    const runtime = await startRuntime(async method => {
+      if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1, localHead: H1, localBranch: 'feature', remote: 'fork', repository: { ...REPOSITORY, owner: 'fork-owner' } }
+      if (method === 'quirky.git/rebaseFromBase') { rebased = true; return { ok: true, base: 'upstream/main' } }
+      if (method === 'quirky.git/forcePush') return { remote: 'fork', branch: 'feature', upstream: 'fork/feature' }
+      throw new Error(`unexpected call: ${method}`)
+    }, async argv => {
+      if (argv[1] === 'remote') return processResult('fork\tgit@github.com:fork-owner/test-repo.git (fetch)\nupstream\thttps://github.com/test-owner/test-repo.git (fetch)\n')
+      if (argv[1] === 'rev-parse' && argv.includes('HEAD')) return processResult(rebased && changed ? H2 : H1)
+      if (argv[1] === 'rev-list') return processResult(`${argv.at(-1)} ${B1}`)
+      return defaultProcessRun(argv)
+    })
+    const enrolled = enrollment()
+    ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+    const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+      action: action('update-branch', { mode: 'rebase', base: B1, baseRefName: 'main' }), enrollment: enrolled
+    }, HEIMDALL_CALLER)
+    expect(result).toMatchObject({ effect: 'landed', ...(changed ? {} : { detail: 'already-up-to-date' }) })
+    expect(runtime.calls.find(call => call.method === 'quirky.git/rebaseFromBase')?.params).toEqual({ worktree: 'id:w1', base: 'upstream/main' })
+    expect(runtime.calls.filter(call => call.method === 'quirky.git/forcePush')).toEqual(changed ? [{
+      method: 'quirky.git/forcePush',
+      params: { worktree: 'id:w1', purpose: 'review', expected: H1, expectedLocalHead: H2, yes: true }
+    }] : [])
+  }
+})
+
+test('rebase conflicts are aborted and stale remote leases report head-moved', async () => {
+  for (const reason of ['conflicts', 'stale-target', 'stale-lease']) {
+    const runtime = await startRuntime(async method => {
+      if (method === 'quirky.git/pushTarget') {
+        if (reason === 'stale-target') throw failure('remote changed', reason)
+        return { ready: true, headOid: H1, localHead: H1, localBranch: 'feature', remote: 'origin', repository: REPOSITORY }
+      }
+      if (method === 'quirky.git/rebaseFromBase') {
+        if (reason === 'conflicts') throw failure('conflicted', reason)
+        return { ok: true }
+      }
+      if (method === 'quirky.git/forcePush') throw failure('lease changed', reason)
+      if (method === 'quirky.git/abort') return { ok: true }
+      throw new Error(`unexpected call: ${method}`)
+    }, async argv => {
+      if (argv[1] === 'remote') return processResult('origin\thttps://github.com/test-owner/test-repo.git (fetch)\n')
+      if (argv[1] === 'rev-parse' && argv.includes('HEAD')) {
+        return processResult(runtime.calls.some(call => call.method === 'quirky.git/rebaseFromBase') && reason !== 'conflicts' ? H2 : H1)
+      }
+      if (argv[1] === 'rev-list') return processResult(`${argv.at(-1)} ${B1}`)
+      return defaultProcessRun(argv)
+    })
+    const enrolled = enrollment()
+    ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+    const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+      action: action('update-branch', { mode: 'rebase', base: B1, baseRefName: 'main' }), enrollment: enrolled
+    }, HEIMDALL_CALLER)
+    expect(result).toMatchObject({ effect: 'not-landed', reason: reason === 'conflicts' ? 'rebase-conflicts' : 'head-moved' })
+    expect(runtime.calls.filter(call => call.method === 'quirky.git/abort')).toEqual(reason === 'conflicts' ? [{
+      method: 'quirky.git/abort', params: { worktree: 'id:w1', yes: true }
+    }] : [])
+  }
+})
+
+test('rebase preflight holds dirty, occupied, and locally moved worktrees', async () => {
+  for (const blocker of ['dirty', 'terminal', 'agent', 'head']) {
+    const runtime = await startRuntime(async method => {
+      if (method === 'quirky.terminal/sessions') return { sessions: blocker === 'terminal' ? [{ sessionId: 's1', worktreeId: 'w1', alive: true, state: 'running' }] : [] }
+      if (method === 'quirky.agent-status/list') return blocker === 'agent' ? [{ sessionId: 'a1', state: 'running' }] : []
+      throw new Error(`unexpected call: ${method}`)
+    }, async argv => {
+      if (argv[1] === 'status') return processResult(blocker === 'dirty' ? '?? user.txt' : '')
+      if (argv[1] === 'rev-parse' && argv.includes('HEAD')) return processResult(blocker === 'head' ? H2 : H1)
+      if (argv[1] === 'rev-list') return processResult(`${argv.at(-1)} ${B1}`)
+      return defaultProcessRun(argv)
+    })
+    const enrolled = enrollment()
+    ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+    const result = await runtime.methods.get('method:quirky.sitter/preflight')!({
+      action: action('update-branch', { mode: 'rebase', base: B1, baseRefName: 'main' }), snapshot: snapshot(), journal: [], enrollment: enrolled
+    }, HEIMDALL_CALLER)
+    expect(result).toMatchObject({ verdict: 'hold', reason: blocker === 'head' ? 'local-head-moved' : 'worktree-busy' })
+  }
+})
+
+test('rebase refuses changed review heads and an unverifiable base remote before touching Git history', async () => {
+  for (const blocker of ['remote-head', 'local-head', 'base-remote']) {
+    const runtime = await startRuntime(async method => {
+      if (method === 'quirky.git/pushTarget') return {
+        ready: true, headOid: blocker === 'remote-head' ? H2 : H1,
+        localHead: blocker === 'local-head' ? H2 : H1, localBranch: 'feature', remote: 'fork'
+      }
+      throw new Error(`unexpected mutation: ${method}`)
+    }, async argv => {
+      if (argv[1] === 'remote') return processResult('fork\tgit@github.com:someone-else/test-repo.git (fetch)\n')
+      return defaultProcessRun(argv)
+    })
+    const enrolled = enrollment()
+    ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+    const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+      action: action('update-branch', { mode: 'rebase', base: B1, baseRefName: 'main' }), enrollment: enrolled
+    }, HEIMDALL_CALLER)
+    expect(result).toMatchObject({ effect: 'not-landed', reason: blocker === 'base-remote' ? 'invalid-base' : 'head-moved' })
+    expect(runtime.calls.some(call => call.method === 'quirky.git/rebaseFromBase' || call.method === 'quirky.git/forcePush')).toBe(false)
+  }
+})
+
+test('rebase refuses a different local branch even when it points at the enrolled head', async () => {
+  const runtime = await startRuntime(async method => {
+    if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1, localHead: H1, localBranch: 'other', remote: 'origin' }
+    throw new Error(`unexpected mutation: ${method}`)
+  }, async argv => argv[1] === 'symbolic-ref' ? processResult('other') : defaultProcessRun(argv))
+  const enrolled = enrollment()
+  ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+  const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+    action: action('update-branch', { mode: 'rebase', base: B1 }), enrollment: enrolled
+  }, HEIMDALL_CALLER)
+  expect(result).toMatchObject({ effect: 'not-landed', reason: 'head-moved' })
+  expect(runtime.calls.some(call => call.method === 'quirky.git/rebaseFromBase')).toBe(false)
+})
+
+test('a force-push error after the remote may have changed remains indeterminate for live settlement', async () => {
+  let rebased = false
+  const runtime = await startRuntime(async method => {
+    if (method === 'quirky.git/pushTarget') return { ready: true, headOid: H1, localHead: H1, localBranch: 'feature', remote: 'origin' }
+    if (method === 'quirky.git/rebaseFromBase') { rebased = true; return { ok: true } }
+    if (method === 'quirky.git/forcePush') throw failure('Push succeeded, but the local upstream could not be recorded.', 'failed')
+    throw new Error(`unexpected call: ${method}`)
+  }, async argv => {
+    if (argv[1] === 'rev-parse' && argv.includes('HEAD')) return processResult(rebased ? H2 : H1)
+    if (argv[1] === 'rev-list') return processResult(`${argv.at(-1)} ${B1}`)
+    return defaultProcessRun(argv)
+  })
+  const enrolled = enrollment()
+  ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+  const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+    action: action('update-branch', { mode: 'rebase', base: B1 }), enrollment: enrolled
+  }, HEIMDALL_CALLER)
+  expect(result).toMatchObject({ effect: 'indeterminate', reason: 'push-uncertain' })
+})
+
+test('required-scope recovery opts into rerunning observed failed checks from a partial read', async () => {
+  const enrolled = enrollment()
+  ;(enrolled.kindPayload as Record<string, unknown>).mergeCheckScope = 'required'
+  const run = directCall(async (method, params) => {
+    if (method === 'quirky.hosting/review') return foundReview()
+    if (method === 'quirky.hosting/rerunChecks') {
+      if (params.allowPartial !== true) throw failure('The check list is incomplete.', 'checks_incomplete')
+      return { started: 1, targetCount: 1, partial: true }
+    }
+    throw new Error(`unexpected call: ${method}`)
+  })
+  await expect(execute(run.call, action('rerun-check') as never, enrolled as never)).resolves.toMatchObject({ effect: 'landed' })
 })
