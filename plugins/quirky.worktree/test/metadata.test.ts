@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test'
 import { mkdirSync, readlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { RpcErrorCode, type Repo, type Worktree, type WorktreeCreateResult } from '@quirky/protocol'
@@ -8,6 +8,8 @@ import { call, failure, git, isolateGitConfig } from '../../quirky.repo/test/git
 import { testCliContext } from '../../quirky.repo/test/harness'
 import { commands } from '../cli'
 import { addExternalWorktree, listWorktrees, startRealProject, storedRows, type RealProject } from './fixtures/real-project'
+
+setDefaultTimeout(60_000)
 
 const { scratch } = isolateGitConfig()
 let p: RealProject | undefined

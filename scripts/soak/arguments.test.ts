@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 
 import { parseArguments, UsageError } from './arguments.ts'
 
-const faultKinds = ['leak', 'zombies', 'storm', 'block'] as const
+const faultKinds = ['leak', 'zombies', 'storm', 'block', 'slow-git'] as const
 
 const scratch: string[] = []
 const defaultLimits = {
@@ -13,7 +13,8 @@ const defaultLimits = {
   maxGrowth: 5,
   maxZombies: 0,
   maxEventsPer5s: 30,
-  maxStallMs: 1000
+  maxStallMs: 1000,
+  maxUnanswered: 0
 }
 
 function makeTempDir(): string {
@@ -174,7 +175,7 @@ for (const argv of [
 
     expect(caught).toBeInstanceOf(UsageError)
     if (caught instanceof UsageError) {
-      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block')
+      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block, slow-git')
     }
   })
 }
@@ -184,7 +185,8 @@ const validLimits = [
   ['--max-growth', '8', 'maxGrowth', 8],
   ['--max-zombies', '2', 'maxZombies', 2],
   ['--max-events-per-5s', '45', 'maxEventsPer5s', 45],
-  ['--max-stall-ms', '1500', 'maxStallMs', 1500]
+  ['--max-stall-ms', '1500', 'maxStallMs', 1500],
+  ['--max-unanswered', '3', 'maxUnanswered', 3]
 ] as const
 
 for (const [flag, value, field, expected] of validLimits) {
@@ -205,7 +207,7 @@ test('rejects an unknown flag as a usage error', () => {
   expectUsageError(['--out', out, '--not-a-soak-option'], '--not-a-soak-option')
 })
 
-for (const flag of ['--minutes', '--out', '--windows', ...validLimits.map(([name]) => name)]) {
+for (const flag of ['--minutes', '--out', '--windows', '--slow-git', ...validLimits.map(([name]) => name)]) {
   test(`rejects ${flag} when its value is missing`, () => {
     const argv = flag === '--out' ? [flag] : ['--out', makeTempDir(), flag]
     expectUsageError(argv, flag)
@@ -236,4 +238,30 @@ test('rejects --out when the directory already contains a file', () => {
   writeFileSync(join(out, 'occupied.txt'), 'occupied')
 
   expectUsageError(['--out', out], '--out')
+})
+
+test('parses --slow-git as a positive integer', () => {
+  const out = makeTempDir()
+  const config = parseConfig(['--out', out, '--slow-git', '5000'])
+
+  expect(config.slowGitMs).toBe(5000)
+})
+
+test('does not include slowGitMs when --slow-git is omitted', () => {
+  const out = makeTempDir()
+  const config = parseConfig(['--out', out])
+
+  expect(Object.hasOwn(config, 'slowGitMs')).toBe(false)
+})
+
+for (const value of ['0', '-1', '1.5', 'abc']) {
+  test(`rejects ${value} for --slow-git`, () => {
+    const out = makeTempDir()
+    expectUsageError(['--out', out, '--slow-git', value], '--slow-git')
+  })
+}
+
+test('rejects a fractional --max-unanswered limit', () => {
+  const out = makeTempDir()
+  expectUsageError(['--out', out, '--max-unanswered=1.5'], 'whole number')
 })

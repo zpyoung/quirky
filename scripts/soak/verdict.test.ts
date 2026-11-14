@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import type { EventRecord, ProcessRow, Sample, SoakConfig, SoakReport, WindowBeat, WorkerBeat } from './contracts'
 import type { SoakEvidence } from './verdict'
-import { judge, windowAlive } from './verdict'
+import { countDaemonLog, judge, windowAlive } from './verdict'
 
 type ConfigOverrides = {
   minutes?: number
@@ -21,6 +21,7 @@ function config(overrides: ConfigOverrides = {}): SoakConfig {
       maxZombies: 0,
       maxEventsPer5s: 30,
       maxStallMs: 1000,
+      maxUnanswered: 0,
       ...overrides.limits,
     },
     ...(overrides.fault === undefined ? {} : { fault: overrides.fault }),
@@ -307,10 +308,9 @@ test('scenario 28: a worker heartbeat older than thirty seconds is stale', () =>
   expect(result.checks.workers).toEqual({ ok: false, expected: 7, alive: 6, stale: ['worktree-6'] })
 })
 
-test('window scenario 22: the verdict passes only when all six checks pass', () => {
+test('window scenario 22: the verdict passes only when every check passes', () => {
   const pass = judge(evidence(), config())
   expect(pass.verdict).toBe('pass')
-  expect(Object.keys(pass.checks)).toEqual(['children', 'zombies', 'events', 'stalls', 'workers', 'windows'])
   expect(Object.values(pass.checks).every((check) => check.ok)).toBe(true)
 
   const fail = judge(evidence({ windowBeats: [windowBeat('lost-window', { open: false })] }), config())
@@ -750,4 +750,73 @@ test('window scenario 23: qualification keeps using the alive-window evidence co
 
   const oneAlive = judge(evidence({ windows: 1, windowBeats: beats }), config())
   expect(oneAlive.disqualified).toContain('1 windows connected, needs 2')
+})
+const judgeDaemonLog = [
+  '[quirkyd] quirky.notifications: could not mark worktree wt_f7e2309c73f1: quirky.worktree/set did not answer within 2000ms',
+  '[quirkyd] quirky.notifications: could not mark worktree wt_37d2a04e4041: quirky.worktree/set did not answer within 2000ms',
+  '[quirkyd] quirky.notifications: quirky.worktree/resolve failed: quirky.worktree/resolve did not answer within 2000ms',
+  '[quirkyd] quirky.notifications: could not mark worktree wt_f7e2309c73f1: quirky.worktree/set did not answer within 2000ms',
+  '[quirkyd] quirky.notifications: quirky.worktree/list failed: quirky.worktree/list did not answer within 2000ms',
+].join('\n')
+
+test('scenario 15: counts unanswered calls by method and git timeout lines', () => {
+  expect(countDaemonLog(judgeDaemonLog)).toEqual({
+    unanswered: 5,
+    byMethod: [
+      { method: 'quirky.worktree/set', count: 3 },
+      { method: 'quirky.worktree/list', count: 1 },
+      { method: 'quirky.worktree/resolve', count: 1 },
+    ],
+    gitTimeouts: 0,
+  })
+  expect(countDaemonLog('[quirkyd] quirky.worktree: could not list the workspaces of harbor-api: git worktree timed out after 30000ms').gitTimeouts).toBe(1)
+})
+
+test('scenario 15: counts dispatcher timeout lines under their method', () => {
+  expect(countDaemonLog('method quirky.x/y in quirky.x did not answer within 300000 ms')).toMatchObject({
+    unanswered: 1,
+    byMethod: [{ method: 'quirky.x/y', count: 1 }],
+  })
+})
+
+test('scenario 16: calls fails above the default unanswered limit', () => {
+  const result = judge(evidence({ daemonLog: judgeDaemonLog }), config())
+
+  expect(result.checks.calls).toEqual({
+    ok: false,
+    unanswered: 5,
+    byMethod: [
+      { method: 'quirky.worktree/set', count: 3 },
+      { method: 'quirky.worktree/list', count: 1 },
+      { method: 'quirky.worktree/resolve', count: 1 },
+    ],
+    gitTimeouts: 0,
+  })
+  expect(result.verdict).toBe('fail')
+})
+
+test('scenario 16: empty and omitted daemon logs pass calls', () => {
+  expect(judge(evidence({ daemonLog: '' }), config()).checks.calls.ok).toBe(true)
+  expect(judge(evidence(), config()).checks.calls.ok).toBe(true)
+})
+
+test('scenario 16: loosening maxUnanswered disqualifies the run', () => {
+  const result = judge(
+    evidence({ daemonLog: judgeDaemonLog }),
+    config({ limits: { maxUnanswered: 3 } }),
+  )
+
+  expect(result.disqualified).toContain('limit loosened: maxUnanswered 3 > 0')
+})
+
+test('unanswered calls from third-party plugins fail the calls check', () => {
+  const daemonLog = '[quirkyd] method acme.tools/read in acme.tools did not answer within 1000 ms (1 unanswered)'
+  const result = judge(evidence({ daemonLog }), config())
+  expect(result.checks.calls).toEqual({
+    ok: false,
+    unanswered: 1,
+    byMethod: [{ method: 'acme.tools/read', count: 1 }],
+    gitTimeouts: 0
+  })
+  expect(result.verdict).toBe('fail')
 })
