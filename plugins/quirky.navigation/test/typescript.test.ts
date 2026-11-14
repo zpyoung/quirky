@@ -170,7 +170,7 @@ test('reuses servers, recovers after crashes, and stops the process group', asyn
   expect(positions(await navigate(client, 'definition', 4, 27))).toEqual([['src/greet.ts', 3, 17, 3, 22]])
   const replacement = (await status(client)).servers[0]!
   expect(replacement.pid).not.toBe(first.pid)
-  expect(await call(client, 'stop')).toEqual({ stopped: 1 })
+  expect(await call<{ stopped: number }>(client, 'stop')).toEqual({ stopped: 1 })
   expect((await status(client)).servers).toEqual([])
   await waitFor(() => !exists(replacement.pid!) || undefined, 5000)
 }, 60000)
