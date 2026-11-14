@@ -11,7 +11,8 @@ export type ReviewSnapshot = { entries: Array<{ path: string; kind: GitConflictK
  * What the `diff` view is opened with. `file` shows one file's diff from `source`; `combined` lists
  * a section's files (`area`, or `commit` for one commit); `conflicts` is the conflict review and
  * `conflict-file` one conflicted file; `review` is the worktree's single Review tab, which scrolls
- * to `reveal` and shows `commit` as its scope. `worktree` keeps the panel on the same worktree.
+ * to `reveal` and shows `commit` or a staged/unstaged `source` as its scope. `worktree` keeps the
+ * panel on the same worktree.
  */
 export type DiffViewInput = {
   worktree: string

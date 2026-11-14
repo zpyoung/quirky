@@ -1,5 +1,6 @@
-import type { GitChange, ReviewFile, ReviewMarkState } from '@quirky/protocol'
+import type { GitChange, GitStatusEntry, ReviewFile, ReviewMarkState } from '@quirky/protocol'
 import { reviewOrder } from '../review/order'
+import type { ReviewSource } from '../review/open'
 import { AUTO_LOAD_MAX_LINES } from './entries'
 
 /** The width, in CSS pixels, from which the Review tab lays diffs out side by side. */
@@ -16,7 +17,7 @@ export function layoutFor(width: number | null, override: DiffLayout | null): Di
   return width !== null && width >= SIDE_BY_SIDE_MIN_WIDTH ? 'side-by-side' : 'inline'
 }
 
-/** One card of the tab: a file of the worktree review, or of the commit the tab is scoped to. */
+/** One changed file in the tab: from the worktree review, staged/unstaged status, or a commit. */
 export type ReviewItem = {
   /** Unique within the tab and scope: the same path in another scope is another card. */
   key: string
@@ -49,6 +50,48 @@ export function itemFromFile(file: ReviewFile): ReviewItem {
     notes: file.notes
   }
   return { ...item, signature: signatureOf(item, file.status) }
+}
+
+/** A card for one staged or working-tree status entry. */
+export function itemFromEntry(entry: GitStatusEntry, source: ReviewSource, notes = 0): ReviewItem {
+  const item = {
+    key: `${source}:${entry.path}`,
+    path: entry.path,
+    ...(entry.oldPath ? { oldPath: entry.oldPath } : {}),
+    added: entry.added ?? null,
+    removed: entry.removed ?? null,
+    binary: entry.binary === true,
+    submodule: entry.submodule !== undefined,
+    mark: 'none' as const,
+    notes
+  }
+  return { ...item, signature: signatureOf(item, entry.status) }
+}
+
+/** The selected source's status entries in the same list or tree order as the Review. */
+export function itemsFromEntries(
+  entries: readonly GitStatusEntry[],
+  source: ReviewSource,
+  mode: 'list' | 'tree',
+  noteCounts: ReadonlyMap<string, number>
+): ReviewItem[] {
+  const items = entries
+    .filter((entry) => entry.area === source || (source === 'unstaged' && entry.area === 'untracked'))
+    .map((entry) => itemFromEntry(entry, source, noteCounts.get(entry.path) ?? 0))
+  const byPath = new Map<string, ReviewItem>()
+  for (const item of items) byPath.set(item.path, item)
+  const files: ReviewFile[] = items.map((item) => ({
+    path: item.path,
+    status: 'M',
+    added: item.added,
+    removed: item.removed,
+    binary: item.binary,
+    uncommitted: true,
+    staged: source === 'staged',
+    mark: 'none',
+    notes: item.notes
+  }))
+  return reviewOrder(files, mode).map((file) => byPath.get(file.path)!)
 }
 
 /** The changes of a commit in the order the panel lists files for `mode`, so a commit scope stacks like the worktree review. */

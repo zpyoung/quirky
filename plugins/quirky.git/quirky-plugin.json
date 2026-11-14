@@ -3186,7 +3186,7 @@
             },
             "source": {
               "type": "string",
-              "description": "Which sides to show; conflict opens the conflict file view.",
+              "description": "Staged and unstaged pick the Review's scope; other values show the whole review, while conflict opens the conflict file view.",
               "enum": [
                 "unstaged",
                 "staged",
@@ -3194,6 +3194,10 @@
                 "commit",
                 "conflict"
               ]
+            },
+            "focus": {
+              "type": "boolean",
+              "description": "Focus the Review and its worktree; defaults to true."
             },
             "area": {
               "type": "string",
@@ -3265,7 +3269,7 @@
           "properties": {
             "area": {
               "type": "string",
-              "description": "Section to show; all shows uncommitted then branch changes.",
+              "description": "Staged and unstaged pick the Review's scope; other values show the whole review.",
               "enum": [
                 "staged",
                 "unstaged",
@@ -3273,6 +3277,15 @@
                 "branch",
                 "all"
               ]
+            },
+            "focus": {
+              "type": "boolean",
+              "description": "Focus the Review or first opened editor file; defaults to true."
+            },
+            "mode": {
+              "type": "string",
+              "description": "Open changed files in the editor, show the Review, or do both.",
+              "enum": ["edit", "diff", "both"]
             },
             "worktree": {
               "type": "string",

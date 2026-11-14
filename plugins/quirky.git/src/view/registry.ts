@@ -1,3 +1,4 @@
+import type { ReviewSource } from '../review/open'
 import type { DiffViewInput } from '../shared/view-input'
 
 /** What the window's commands can do to the mounted diff view; a mode ignores what it has no control for. */
@@ -58,15 +59,22 @@ export function activeView(): ViewHandle {
   return current
 }
 
-/** What a mounted Review tab offers `openReview`, so a second open reuses the tab instead of remounting it. */
+export type ReviewScope = { commit: string } | { source: ReviewSource } | null
+export type ScopeOutcome = 'applied' | 'unchanged' | 'dirty' | 'busy' | 'cancelled'
+
+/** What a Review applies the next time it mounts in this renderer. */
+export type DeferredReview = { reveal?: string; noteId?: string; commit?: string; source?: ReviewSource }
+
+/** What a mounted Review tab offers `openReview`, so a second open reuses it instead of remounting it. */
 export type ReviewViewHandle = {
   worktree: string
   /** Scrolls the card for `path` into view, expands it and makes it the active card. */
   reveal(path: string, noteId?: string): void
   /** Scrolls the stack to its first card. */
   scrollToTop(): void
-  /** Shows one commit's files (a commit sha) or returns to the worktree review (null). */
+  /** Shows a commit or staged/unstaged scope, or returns to the worktree review (null). */
   setScope(commit: string | null): void
+  applyScope?(scope: ReviewScope, ifDirty: 'ask' | 'refuse'): Promise<ScopeOutcome>
   /**
    * The disk-side hash of the diff the card for `path` currently shows, for `setReviewMark`'s
    * `expected`: `null` when it shows the file deleted, `undefined` when no diff is loaded for it.
@@ -74,6 +82,7 @@ export type ReviewViewHandle = {
   loadedHash?(path: string): string | null | undefined
 }
 
+const deferredReviews = new Map<string, DeferredReview>()
 const reviewHandles = new Map<string, ReviewViewHandle>()
 
 /** Makes `handle` the Review tab for its worktree until the returned function runs. */
@@ -87,4 +96,21 @@ export function registerReviewView(handle: ReviewViewHandle): () => void {
 /** The mounted Review tab of `worktree`, or null when none is mounted. */
 export function reviewViewFor(worktree: string): ReviewViewHandle | null {
   return reviewHandles.get(worktree) ?? null
+}
+
+/** Stores the last background request for a Review in this renderer. */
+export function deferReview(worktree: string, request: DeferredReview): void {
+  deferredReviews.set(worktree, request)
+}
+
+/** Removes and returns the pending Review request for this renderer, if any. */
+export function takeDeferredReview(worktree: string): DeferredReview | undefined {
+  const request = deferredReviews.get(worktree)
+  deferredReviews.delete(worktree)
+  return request
+}
+
+/** Clears a pending background Review request. */
+export function clearDeferredReview(worktree: string): void {
+  deferredReviews.delete(worktree)
 }

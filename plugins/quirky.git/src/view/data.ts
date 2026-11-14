@@ -35,10 +35,10 @@ export function isTextDiff(diff: GitDiff): boolean {
 
 /**
  * Whether a Review card can take edits: its diff is text and its modified side is a file on disk
- * with a known hash. A commit scope shows a commit's content, which is not the disk.
+ * with a known hash. Staged and commit scopes show content that is not the disk.
  */
-export function isEditableCard(scoped: boolean, diff: GitDiff): boolean {
-  return !scoped && isTextDiff(diff) && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
+export function isEditableCard(diskSide: boolean, diff: GitDiff): boolean {
+  return diskSide && isTextDiff(diff) && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
 }
 
 /**
