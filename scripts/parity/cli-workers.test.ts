@@ -11,6 +11,7 @@ import {
   assertWorkerCompletion,
   assertWorkerListEvidence,
   assertWorkerReadArchived,
+  assertWorkerReadLive,
   assertWorkerReleaseEvidence,
   assertWorkerRetain,
   assertWorkerStartEvidence,
@@ -207,6 +208,7 @@ test('worktree summary rejects task mismatches and matching-looking tasks from a
   }
 })
 
+
 function expectRejected(assertion: () => void): void {
   expect(assertion).toThrow()
 }
@@ -348,6 +350,110 @@ test('archived worker read preserves the completion marker', () => {
   assertWorkerReadArchived({ archived: true, content: 'CLI-PARITY-WORKER-DONE:ctx_complete\n' }, 'ctx_complete')
   expectRejected(() => assertWorkerReadArchived({ archived: true, content: 'other output' }, 'ctx_complete'))
   expectRejected(() => assertWorkerReadArchived({ archived: false, content: 'CLI-PARITY-WORKER-DONE:ctx_complete' }, 'ctx_complete'))
+})
+
+type WorkerReadLiveInput = {
+  dispatchId: string
+  sessionId: string
+  viewport: { lines: string[]; cols: number; rows: number; alt: boolean }
+  history: { lines: string[]; cursor: string | null }
+  automatic: {
+    dispatchId: string
+    sessionId: string | null
+    source: string
+    archived: boolean
+    sourceExact: boolean
+    fallbackReason: string | null
+    content: unknown
+    contentComplete: boolean
+    clipping: { clipped: boolean; maxBytes: number }
+    nextCursor: string | null
+    warnings: string[]
+  }
+  terminal: WorkerReadLiveInput['automatic']
+}
+
+function workerReadLiveFixture(): WorkerReadLiveInput {
+  const dispatchId = 'ctx_live'
+  const sessionId = 'session-live'
+  const marker = `CLI-PARITY-WORKER-DONE:${dispatchId}`
+  const splitAt = marker.length - 4
+  const content = `${marker.slice(0, splitAt)}\r\n${marker.slice(splitAt)}`
+  const result = (fallbackReason: string | null, contentComplete: boolean) => ({
+    dispatchId,
+    sessionId,
+    source: 'terminal',
+    archived: false,
+    sourceExact: true,
+    fallbackReason,
+    content,
+    contentComplete,
+    clipping: { clipped: false, maxBytes: 524288 },
+    nextCursor: null,
+    warnings: []
+  })
+  return {
+    dispatchId,
+    sessionId,
+    viewport: {
+      lines: [marker.slice(0, splitAt), marker.slice(splitAt)],
+      cols: 80,
+      rows: 24,
+      alt: false
+    },
+    history: { lines: ['recent history without the completion marker'], cursor: null },
+    automatic: result('session_not_reported', false),
+    terminal: result(null, true)
+  }
+}
+
+
+test('worker live-read comparator proves the viewport, newest history page and both read results', () => {
+  expect(() => assertWorkerReadLive(workerReadLiveFixture())).not.toThrow()
+})
+
+const workerReadLiveMutations: [string, (value: WorkerReadLiveInput) => void][] = [
+  ['missing viewport marker', value => { value.viewport.lines = ['ordinary visible output'] }],
+  ['wrong viewport marker', value => { value.viewport.lines = ['CLI-PARITY-WORKER-DONE:other-dispatch'] }],
+  ['completion marker in newest history page', value => { value.history.lines = ['CLI-PARITY-WORKER-DONE:ctx_live'] }],
+  ['missing automatic-read marker', value => { value.automatic.content = 'ordinary worker output' }],
+  ['wrong automatic-read marker', value => { value.automatic.content = 'CLI-PARITY-WORKER-DONE:other-dispatch' }],
+  ['missing terminal-read marker', value => { value.terminal.content = 'ordinary worker output' }],
+  ['wrong terminal-read marker', value => { value.terminal.content = 'CLI-PARITY-WORKER-DONE:other-dispatch' }],
+  ['non-string automatic-read content', value => { value.automatic.content = 42 }],
+  ['non-string terminal-read content', value => { value.terminal.content = null }],
+  ['wrong dispatch identity', value => { value.automatic.dispatchId = 'other-dispatch' }],
+  ['wrong session identity', value => { value.terminal.sessionId = 'other-session' }],
+  ['wrong automatic-read source', value => { value.automatic.source = 'transcript' }],
+  ['wrong terminal-read source', value => { value.terminal.source = 'structured' }],
+  ['archived automatic read', value => { value.automatic.archived = true }],
+  ['archived terminal read', value => { value.terminal.archived = true }],
+  ['inexact automatic read', value => { value.automatic.sourceExact = false }],
+  ['inexact terminal read', value => { value.terminal.sourceExact = false }],
+  ['wrong automatic fallback reason', value => { value.automatic.fallbackReason = 'transcript_empty' }],
+  ['wrong terminal fallback reason', value => { value.terminal.fallbackReason = 'session_not_reported' }],
+  ['wrong automatic completeness', value => { value.automatic.contentComplete = true }],
+  ['wrong terminal completeness', value => { value.terminal.contentComplete = false }],
+  ['automatic-read warnings', value => { value.automatic.warnings = ['terminal_tail_limited'] }],
+  ['terminal-read warnings', value => { value.terminal.warnings = ['unexpected_warning'] }],
+  ['clipped automatic read', value => { value.automatic.clipping.clipped = true }],
+  ['wrong terminal clipping limit', value => { value.terminal.clipping.maxBytes = 1024 }],
+  ['automatic-read continuation', value => { value.automatic.nextCursor = 'next-page' }],
+  ['terminal-read continuation', value => { value.terminal.nextCursor = 'next-page' }]
+]
+
+for (const [label, mutate] of workerReadLiveMutations) {
+  test(`worker live-read comparator rejects ${label}`, () => {
+    const value = workerReadLiveFixture()
+    mutate(value)
+    expectRejected(() => assertWorkerReadLive(value))
+  })
+}
+
+test('worker live, terminal and archived read receipts are registered', () => {
+  for (const id of ['workers-read-live', 'workers-read-terminal', 'workers-read-archived']) {
+    expect(WORKER_CHECK_IDS.filter(registered => registered === id)).toHaveLength(1)
+  }
 })
 
 test('release closes only settled output and keeps the archive', () => {

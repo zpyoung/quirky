@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcError, RpcErrorCode, type Session } from '@quirky/protocol'
-import { fakeAgentsContext, FakeAgents, SESSION_VIEW_ID, VIEW_ID, type FakeContext } from './fake'
+import { fakeAgentsContext, FakeAgents, mountSettings, SESSION_VIEW_ID, VIEW_ID, type FakeContext } from './fake'
 
 let activate: (context: FakeContext['context']) => void
 let agents: FakeAgents
@@ -140,5 +140,51 @@ describe('SC-43: the agent commands', () => {
     start()
     await fake.command('open-settings')
     expect(fake.opened).toEqual([{ id: VIEW_ID, input: undefined }])
+  })
+})
+describe('agent-details command', () => {
+  test('rejects an empty agent ID', async () => {
+    start(['claude'])
+    await expect(fake.command('agent-details', { agent: '', expanded: true })).rejects.toThrow('agent must be a non-empty string')
+  })
+
+  test('rejects a non-boolean expanded value', async () => {
+    start(['claude'])
+    await expect(fake.command('agent-details', { agent: 'claude', expanded: 'yes' })).rejects.toThrow('expanded must be a boolean')
+  })
+
+  test('rejects an unknown agent', async () => {
+    start(['claude'])
+    await expect(fake.command('agent-details', { agent: 'unknown', expanded: true })).rejects.toThrow('unknown agent: unknown')
+  })
+
+  test('rejects an agent that is not installed', async () => {
+    start(['claude'])
+    await expect(fake.command('agent-details', { agent: 'aider', expanded: true })).rejects.toThrow('agent aider is not installed')
+  })
+
+  test('invalid details commands do not change an installed agent expansion', async () => {
+    start(['claude'])
+    await expect(fake.command('agent-details', { agent: 'claude', expanded: 'yes' })).rejects.toThrow()
+    const view = await mountSettings(fake)
+    try {
+      expect(view.button('Expand agent settings', view.row('claude')!)!.getAttribute('aria-expanded')).toBe('false')
+    } finally {
+      await view.unmount()
+      view.element.remove()
+    }
+  })
+
+  test('expands an installed agent in the activation state', async () => {
+    start(['claude'])
+    await fake.command('agent-details', { agent: 'claude', expanded: true })
+    const view = await mountSettings(fake)
+    try {
+      expect(view.button('Collapse agent settings', view.row('claude')!)!.getAttribute('aria-expanded')).toBe('true')
+      expect(view.row('claude')!.querySelector('[aria-label="Arguments"]')).not.toBeNull()
+    } finally {
+      await view.unmount()
+      view.element.remove()
+    }
   })
 })

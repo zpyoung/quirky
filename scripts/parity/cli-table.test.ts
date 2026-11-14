@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { checkIds } from './cli-checks'
 import { buildCliReport, reduceCliRows } from './cli-run'
+import type { CliReceipt } from './cli-run'
 import {
   CLI_MAPPINGS,
   CliTableError,
@@ -180,6 +181,33 @@ test('service and host-restore exclusions preserve an unrelated catalog transpor
   expect(report.rows).toEqual(rows.map(row => ({
     id: row.id, status: 'excluded', executed: false, checks: [], catalogRefs: [], reason: row.reason
   })))
+})
+
+test('worker-read requires live, explicit terminal and archived proof before passing', () => {
+  const rows = loadCliTable()
+  const row = rows.find(row => row.id === 'orchestration-worker-read')!
+  const checks = ['workers-read-live', 'workers-read-terminal', 'workers-read-archived']
+  expect(row).toMatchObject({ disposition: 'covered', checks })
+  expect(row).not.toHaveProperty('followUp')
+  expect(row).not.toHaveProperty('missingBehavior')
+  const refs = new Map(validateCatalog(syntheticCatalog(), rows).map(entry => [entry.rowId, entry.refs]))
+  expect(refs.get(row.id)!.length).toBeGreaterThan(0)
+  const receipts: CliReceipt[] = checks.map(id => ({
+    id, command: 'orchestration worker-read', argv: ['orchestration', 'worker-read', '--json'],
+    exitCode: 0, format: 'json', stdoutBytes: 1, elapsedMs: 0, evidence: {}
+  }))
+  const reduce = (observed = receipts, proven = new Set(checks)) => reduceCliRows([row], observed, proven, refs)[0]
+  expect(reduce()).toMatchObject({ status: 'passed', executed: true, checks })
+  for (const id of checks) {
+    expect(reduce(receipts.filter(receipt => receipt.id !== id)).status, id).not.toBe('passed')
+    expect(reduce(receipts, new Set(checks.filter(check => check !== id))).status, id).not.toBe('passed')
+    expect(reduce(receipts.map(receipt => receipt.id === id ? { ...receipt, exitCode: 1 } : receipt)).status, id).not.toBe('passed')
+    const failure = { checkId: id, kind: 'assertion', message: 'read evidence mismatch' }
+    expect(reduceCliRows([row], receipts, new Set(checks), refs, failure)[0]).toMatchObject({
+      status: 'failed', executed: true, error: failure
+    })
+  }
+  expect(reduceCliRows([row], receipts, new Set(checks), new Map())[0].status).not.toBe('passed')
 })
 
 test('the frozen inventory and human table cover all required commands and delegate every other root', () => {
