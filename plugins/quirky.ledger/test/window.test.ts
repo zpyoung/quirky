@@ -416,7 +416,10 @@ test('SC-17: triage snapshots conflict cleanly, then approval and confirmed stat
 
   const refreshed = await world.win.waitFor(() => refreshedTriage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
   await click(refreshed)
-  await click(button(refreshedTriage, 'Approve review (1)')!)
+  await click(await world.win.waitFor(() => {
+    const action = button(refreshedTriage, 'Approve review (1)')
+    return action && !action.disabled ? action : undefined
+  }))
   await world.win.waitFor(async () => {
     const result = await request(world, { operation: 'show', target: { owner: owner(world) }, id })
     return result.entry.reviewed && result.entry.revision === 3
@@ -425,7 +428,10 @@ test('SC-17: triage snapshots conflict cleanly, then approval and confirmed stat
   await world.win.waitFor(() => refreshedTriage.textContent?.includes('revision 3'))
   const approved = await world.win.waitFor(() => refreshedTriage.querySelector<HTMLInputElement>('input[type="checkbox"]'))
   await click(approved)
-  await click(button(refreshedTriage, 'Resolve')!)
+  await click(await world.win.waitFor(() => {
+    const action = button(refreshedTriage, 'Resolve')
+    return action && !action.disabled ? action : undefined
+  }))
   const refreshedConfirm = await world.win.waitFor(() => dialogNamed('Confirm ledger action'))
   expect(refreshedConfirm.textContent).toContain(`${id} · revision 3 · Triage snapshot record`)
   await click(button(refreshedConfirm, 'Confirm')!)
