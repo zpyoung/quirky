@@ -35,8 +35,10 @@ export type ReviewCardProps = {
   collapsed: boolean
   /** The user asked a changed card for its whole diff. */
   full: boolean
-  /** A commit scope has no review state, so the card shows no review controls. */
+  /** A scope has no review state, so the card shows no review controls. */
   scoped: boolean
+  /** The diff's modified side is on disk and may be edited or reverted. */
+  diskSide: boolean
   active: boolean
   marking: boolean
   /** The card's pane holds edits that are not saved. */
@@ -62,11 +64,12 @@ export type ReviewCardProps = {
 /**
  * One file of the Review tab: a sticky header with the path, counts, notes, review mark and its
  * button over the file's diff. The diff loads when the card is told to (`onVisible`, `onLoad`).
- * Outside a commit scope the disk side of a text diff takes edits and each change can be reverted;
- * a Markdown file can be shown rendered instead of as a diff, the diff staying mounted beneath.
+ * A text diff whose modified side is on disk can be edited and reverted; staged and commit scopes
+ * are read-only. A Markdown file can be shown rendered instead of as a diff, the diff stays mounted
+ * beneath.
  */
 export function ReviewCard(props: ReviewCardProps) {
-  const { context, worktree, item, data, collapsed, full, scoped, active, marking, dirty, root, settings, notes, onToggle, onVisible } = props
+  const { context, worktree, item, data, collapsed, full, scoped, diskSide, active, marking, dirty, root, settings, notes, onToggle, onVisible } = props
   const { key } = item
   const element = useRef<HTMLElement | null>(null)
   const visible = useRef(false)
@@ -112,7 +115,7 @@ export function ReviewCard(props: ReviewCardProps) {
   const mode = loadModeOf(item)
   const since = !scoped && item.mark === 'changed' && !full
   const diff = data.status === 'loaded' ? data.diff : undefined
-  const editable = diff !== undefined && isEditableCard(scoped, diff)
+  const editable = diff !== undefined && isEditableCard(diskSide, diff)
   const previewable = diff !== undefined && isMarkdown(item.path) && isTextDiff(diff) && diff.modifiedDeleted !== true
   const previewing = previewable && preview
 
@@ -188,7 +191,7 @@ export function ReviewCard(props: ReviewCardProps) {
                 onState={onPaneState}
                 bind={onPaneHandle}
                 onSaved={onSaved}
-                revertOnDisk={!scoped}
+                revertOnDisk={diskSide}
                 onReload={onReload}
                 onFocus={() => props.onActivate(key)}
                 notes={binding}

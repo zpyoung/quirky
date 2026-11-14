@@ -1,5 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
+import { InlineError } from '@quirky/ui'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from './ui-control'
 import { createRequests } from './actions'
 import { startAttentionBadge } from './attention-badge'
 import { WorktreesSection } from './WorktreesSection'
@@ -41,7 +43,7 @@ export function activate(context: UiPluginContext): void {
     const root = createRoot(element)
     root.render(typeof workspace === 'string' && workspace !== ''
       ? <RemoteWorkspace context={context} workspace={workspace} />
-      : <p role="alert">Select an owner-bound remote workspace.</p>)
+      : <InlineError message="Select an owner-bound remote workspace." />)
     return () => root.unmount()
   }
   context.provide('view:quirky.worktree/remote', mountRemote)
@@ -57,6 +59,8 @@ export function activate(context: UiPluginContext): void {
     root.render(<RemoteWorkspacesSection context={context} />)
     return () => root.unmount()
   })
+
+  context.provide(UI_CONTROL_COMMAND, (args: unknown) => dispatchUiControl(context, args))
 
   context.provide('command:quirky.worktree/new-worktree', async (args?: unknown) => {
     const selector = (args as { repo?: unknown } | undefined)?.repo
