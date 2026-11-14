@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Badge, Button, FormRow } from '@quirky/ui'
+import { Badge, Button, EmptyState, FormRow, InlineError, NoticeLine } from '@quirky/ui'
 import { Markdown } from '../issue/Markdown'
 import { nonnegativeInteger, object, optionalLogins, relativeTime, reviewAuthors, reviewState, type ListItem, type MergeMetadata } from './model'
 import type { PrDescription } from './usePrDescription'
@@ -130,9 +130,8 @@ export function PrDetail({ item, onPage, description, metadata, metadataLoading,
   if (!onPage && !metadata) {
     return (
       <article className="tasks-pr" aria-label={`Pull request #${item.number}`}>
-        {metadataError
-          ? <p role="status" className="tasks-pr__notice">Could not load pull request #{item.number}: {metadataError} <Button type="button" onClick={onRetryMetadata}>Retry</Button></p>
-          : <p role="status" className="tasks-pr__notice">Loading pull request…</p>}
+        {metadataError && <InlineError message={`Could not load pull request #${item.number}: ${metadataError}`} action={{ label: 'Retry', onAction: onRetryMetadata }} />}
+        {!metadataError && <div role="status" className="tasks-pr__notice"><NoticeLine>Loading pull request…</NoticeLine></div>}
       </article>
     )
   }
@@ -153,8 +152,8 @@ export function PrDetail({ item, onPage, description, metadata, metadataLoading,
           <div className="tasks-pr__anchor" ref={mergeAnchor}>
             <Button type="button" aria-haspopup="menu" aria-expanded={merge.open} aria-label={metadataError ? `Merge metadata unavailable for PR #${item.number}` : `Merge actions for PR #${item.number}`} onClick={merge.onToggle} disabled={busy}>{metadataError ? 'Merge metadata unavailable' : displayState === 'merged' ? 'Merged' : metadata?.queueEligible ? 'Merge when ready' : metadata?.mergeEligible ? 'Merge' : 'Check merge safety'} ▾</Button>
             {merge.open ? <div role="menu" aria-label={`Merge PR #${item.number}`} className="tasks-pr__popover">
-              {metadataLoading ? <span role="status">Loading merge metadata…</span> : null}
-              {!metadataLoading && !metadata && !metadataError ? <span role="status">Review metadata has not loaded.</span> : null}
+              {metadataLoading ? <div role="status"><NoticeLine>Loading merge metadata…</NoticeLine></div> : null}
+              {!metadataLoading && !metadata && !metadataError ? <div role="status"><NoticeLine>Review metadata has not loaded.</NoticeLine></div> : null}
               {metadata?.mergeQueueRequired === true && metadata.queueEligible ? metadata.queueMethods.map((method) => <Button key={method} type="button" role="menuitem" disabled={busy} onClick={() => merge.onMerge(method, 'queue')}>{`Merge when ready (${method})`}</Button>) : null}
               {metadata?.mergeQueueRequired === false && metadata.mergeEligible ? metadata.directMethods.map((method) => <Button key={method} type="button" role="menuitem" disabled={busy} onClick={() => merge.onMerge(method, 'direct')}>{method === 'squash' ? 'Squash and merge' : method === 'merge' ? 'Create merge commit' : 'Rebase and merge'}</Button>) : null}
               {metadata && !metadata.mergeMetadataKnown ? <span>GitHub has not confirmed merge-queue safety metadata.</span> : null}
@@ -169,7 +168,7 @@ export function PrDetail({ item, onPage, description, metadata, metadataLoading,
           <Button type="button" aria-label={`Open pull request #${item.number} on GitHub`} onClick={() => onOpenLink(url)}>↗ GitHub</Button>
           <Button type="button" onClick={() => onCopyLink(url)}>Copy link</Button>
         </div>
-        {metadataError ? <span role="status" className="tasks-pr__notice">Review metadata unavailable: {metadataError} <Button type="button" onClick={onRetryMetadata}>Retry</Button></span> : null}
+        {metadataError ? <InlineError message={`Review metadata unavailable: ${metadataError}`} action={{ label: 'Retry', onAction: onRetryMetadata }} /> : null}
       </header>
 
       <div className="tasks-pr__layout">
@@ -179,9 +178,9 @@ export function PrDetail({ item, onPage, description, metadata, metadataLoading,
               {description.body !== ''
                 ? <Markdown source={description.body} />
                 : description.loading
-                  ? <span role="status">Loading pull-request description…</span>
+                  ? <div role="status"><NoticeLine>Loading pull-request description…</NoticeLine></div>
                   : description.error
-                    ? <span role="status">Could not load pull-request description: {description.error} <Button type="button" onClick={description.retry}>Retry</Button></span>
+                    ? <InlineError message={`Could not load pull-request description: ${description.error}`} action={{ label: 'Retry', onAction: description.retry }} />
                     : null}
             </div>
           ) : null}
@@ -204,14 +203,14 @@ export function PrDetail({ item, onPage, description, metadata, metadataLoading,
             <div className="tasks-pr__anchor" ref={reviewersAnchor}>
               <Button type="button" aria-haspopup="dialog" aria-expanded={reviewers.open} onClick={reviewers.onToggle}>{reviewerLabel}</Button>
               {reviewers.open ? <div role="dialog" aria-label={`Reviewers for PR #${item.number}`} className="tasks-pr__popover">
-                {requestedReviewers === null ? <span role="status">Requested reviewers are unavailable.</span> : requestedReviewers?.length ? <span>Currently requested: {requestedReviewers.join(', ')}</span> : null}
-                {review?.reviews === null ? <span role="status">Review history is unavailable.</span> : null}
-                {review?.assignees === null ? <span role="status">Pull-request assignees are unavailable.</span> : null}
-                {review?.participantsTruncated === true ? <span role="status">Recent reviewer activity is incomplete.</span> : null}
-                {!reviewers.options ? <span role="status">Loading reviewer suggestions…</span> : null}
+                {requestedReviewers === null ? <div role="status"><NoticeLine>Requested reviewers are unavailable.</NoticeLine></div> : requestedReviewers?.length ? <span>Currently requested: {requestedReviewers.join(', ')}</span> : null}
+                {review?.reviews === null ? <div role="status"><NoticeLine>Review history is unavailable.</NoticeLine></div> : null}
+                {review?.assignees === null ? <div role="status"><NoticeLine>Pull-request assignees are unavailable.</NoticeLine></div> : null}
+                {review?.participantsTruncated === true ? <div role="status"><NoticeLine>Recent reviewer activity is incomplete.</NoticeLine></div> : null}
+                {!reviewers.options ? <div role="status"><NoticeLine>Loading reviewer suggestions…</NoticeLine></div> : null}
                 {recentReviewers.length > 0 ? <fieldset><legend>Recently active in this pull request</legend>{recentReviewers.map((login) => <Button key={login} type="button" onClick={() => reviewers.onAddOption(login)}>{login}</Button>)}</fieldset> : null}
                 {suggestedReviewers.length > 0 ? <fieldset><legend>Suggestions</legend>{suggestedReviewers.map((login) => <Button key={login} type="button" onClick={() => reviewers.onAddOption(login)}>{login}</Button>)}</fieldset> : null}
-                {reviewers.options && recentReviewers.length === 0 && suggestedReviewers.length === 0 && !reviewerInfoUnknown ? <span role="status">No matching reviewers.</span> : null}
+                {reviewers.options && recentReviewers.length === 0 && suggestedReviewers.length === 0 && !reviewerInfoUnknown ? <div role="status"><EmptyState message="No matching reviewers." /></div> : null}
                 <FormRow label="Everyone else" htmlFor={`tasks-list-reviewer-text-${item.number}`}>
                   <textarea id={`tasks-list-reviewer-text-${item.number}`} className="ui-text-field__input tasks-pr__reviewer-input" aria-label="Type or choose a reviewer" value={reviewers.text} onChange={(event) => reviewers.onTextChange(event.currentTarget.value)} placeholder="Type or choose a user" />
                 </FormRow>
