@@ -9,6 +9,7 @@ import {
   type Worktree
 } from '@quirky/protocol'
 import { Cooldown } from './cooldown'
+import { WorktreeRefresh } from './worktree-refresh'
 import { playSound } from './player'
 import { SOUND_IDS, deliverySound, type SoundId } from './sounds'
 import {
@@ -77,6 +78,8 @@ export type ServiceOptions = {
   clearTimeout?: (handle: unknown) => void
   /** How long a call to another plugin may take before it is given up on. */
   lookupTimeoutMs?: number
+  /** Monotonic clock for background-refresh timing tests. */
+  monotonicNow?: () => number
 }
 
 export const BELL_HOLD_MS = 250
@@ -135,6 +138,9 @@ export class NotificationsService {
   private readonly now: () => number
   private readonly bellHoldMs: number
   private readonly lookupTimeoutMs: number
+  private readonly worktreeRefresh: WorktreeRefresh
+  private worktreeGeneration = 0
+  private snapshotGeneration = -1
   private tail: Promise<void> = Promise.resolve()
   private syncQueued = false
   private lastStatus: string | null = null
@@ -159,11 +165,25 @@ export class NotificationsService {
       ...(options.cooldownMs === undefined ? {} : { windowMs: options.cooldownMs }),
       now: this.now
     })
+    this.worktreeRefresh = new WorktreeRefresh({
+      read: () => this.rawCall('quirky.worktree/list', {}) as Promise<Worktree[]>,
+      onSnapshot: () => {
+        if (this.stopped) return
+        this.snapshotGeneration = this.worktreeGeneration
+        this.queueSync()
+      },
+      log: (line) => this.context.log(line),
+      now: () => new Date(this.now()),
+      ...(options.monotonicNow === undefined ? {} : { monotonicNow: options.monotonicNow }),
+      setTimeout: this.setTimer,
+      clearTimeout: this.clearTimer
+    })
   }
 
   /** Stops timers and ignores later events. */
   shutdown(): void {
     this.stopped = true
+    this.worktreeRefresh.stop()
     for (const timer of this.timers) this.clearTimer(timer)
     this.timers.clear()
     this.askHeads.clear()
@@ -215,12 +235,19 @@ export class NotificationsService {
         return
       }
       case 'plugin.changed':
+        this.requestAskReconcile()
+        this.requestSync(true)
+        return
       case 'ui.window.changed':
       case 'ui.state.changed':
       case 'quirky.session/changed':
       case 'quirky.session/removed':
         this.requestAskReconcile()
         this.requestSync()
+        return
+      case 'quirky.repo/changed':
+      case 'quirky.worktree/projectMetadataChanged':
+        this.requestSync(true)
         return
       case 'ui.report.changed':
         if (event.slot === WORKTREE_VIEW_ID || event.slot === FLOATING_OVERLAY_ID) {
@@ -241,7 +268,14 @@ export class NotificationsService {
 
   /** The current status, computed fresh. */
   async status(): Promise<StatusResult> {
-    return this.computeStatus(await this.listWorktrees())
+    let worktrees: Worktree[]
+    try {
+      worktrees = (await this.bounded('quirky.worktree/list', {})) as Worktree[]
+    } catch (error) {
+      if (!isMissing(error)) this.context.log(`quirky.worktree/list failed: ${errorText(error)}`)
+      throw this.context.error('conflict', 'worktree status is temporarily unavailable')
+    }
+    return this.computeStatus(worktrees)
   }
 
   /** Sends a program notification; the result names the gate that stopped it. */
@@ -312,7 +346,9 @@ export class NotificationsService {
   }
 
   private fire(task: () => Promise<unknown>): void {
-    void this.enqueue(task).catch((error) => this.context.log(`event handling failed: ${errorText(error)}`))
+    void this.enqueue(task).catch((error) => {
+      if (!this.stopped) this.context.log(`event handling failed: ${errorText(error)}`)
+    })
   }
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
@@ -324,11 +360,19 @@ export class NotificationsService {
     return run
   }
 
-  private requestSync(): void {
-    if (this.syncQueued) return
+  private requestSync(invalidateWorktrees = false): void {
+    if (this.stopped) return
+    if (invalidateWorktrees) this.worktreeGeneration++
+    this.worktreeRefresh.request(invalidateWorktrees)
+    this.queueSync()
+  }
+
+  private queueSync(): void {
+    if (this.stopped || this.syncQueued) return
     this.syncQueued = true
     this.fire(async () => {
       this.syncQueued = false
+      if (this.stopped) return
       await this.sync()
     })
   }
@@ -429,7 +473,27 @@ export class NotificationsService {
     if (result !== 'dropped' && this.askHeads.get(head.key) === head) head.escalated = true
   }
 
-  /** Shares identical calls still in flight, with a separate lookup deadline for each caller. */
+  /** Shares the raw method/params call between background and bounded callers. */
+  private rawCall(method: string, params: Record<string, unknown>): Promise<unknown> {
+    const key = JSON.stringify([method, params])
+    let call = this.inFlight.get(key)
+    if (!call) {
+      try {
+        call = Promise.resolve(this.context.call(method, params))
+      } catch (error) {
+        call = Promise.reject(error)
+      }
+      this.inFlight.set(key, call)
+      const shared = call
+      const forget = () => {
+        if (this.inFlight.get(key) === shared) this.inFlight.delete(key)
+      }
+      void call.then(forget, forget)
+    }
+    return call
+  }
+
+  /** Gives each bounded caller its own timeout around the shared raw call. */
   private async bounded(method: string, params: Record<string, unknown>): Promise<unknown> {
     const { promise: timeout, reject } = Promise.withResolvers<never>()
     const timer = this.setTimer(() => {
@@ -438,18 +502,7 @@ export class NotificationsService {
     }, this.lookupTimeoutMs)
     this.timers.add(timer)
     try {
-      const key = JSON.stringify([method, params])
-      let call = this.inFlight.get(key)
-      if (!call) {
-        call = this.context.call(method, params)
-        this.inFlight.set(key, call)
-        const shared = call
-        const forget = () => {
-          if (this.inFlight.get(key) === shared) this.inFlight.delete(key)
-        }
-        void call.then(forget, forget)
-      }
-      return await Promise.race([call, timeout])
+      return await Promise.race([this.rawCall(method, params), timeout])
     } finally {
       this.clearTimer(timer)
       this.timers.delete(timer)
@@ -484,9 +537,6 @@ export class NotificationsService {
     return status?.clients.some((client) => client.role === 'desktop') ?? true
   }
 
-  private async listWorktrees(): Promise<Worktree[]> {
-    return (await this.lookup<Worktree[]>('quirky.worktree/list')) ?? []
-  }
 
   private async listSessions(): Promise<Session[]> {
     return (await this.lookup<Session[]>('quirky.session/list')) ?? []
@@ -517,7 +567,7 @@ export class NotificationsService {
 
   /** A set that asked for unread=false is Mark Read unless it came from this notifications service. */
   private worktreeChanged(data: { worktreeId?: string; unread?: boolean; unreadSource?: string }): void {
-    this.requestSync()
+    this.requestSync(true)
     if (typeof data.worktreeId !== 'string' || typeof data.unread !== 'boolean') return
     if (data.unreadSource === 'notifications' || data.unread) return
     const worktreeId = data.worktreeId
@@ -531,25 +581,38 @@ export class NotificationsService {
   // viewing and status
 
   private async sync(): Promise<void> {
-    const worktrees = await this.listWorktrees()
-    await this.autoRead(worktrees)
+    const generation = this.worktreeGeneration
+    const worktrees = this.worktreeRefresh.snapshot
+    if (worktrees === undefined || this.snapshotGeneration !== generation) return
+    await this.autoRead(worktrees, generation)
+    if (!this.reconciliationIsCurrent(generation)) return
     const status = await this.computeStatus(worktrees)
+    if (!this.reconciliationIsCurrent(generation)) return
     const text = JSON.stringify(status)
     const previous = this.lastStatus
     this.lastStatus = text
-    if (previous !== null && previous !== text) this.context.emit('changed', { badge: status.badge })
+    if ((previous !== null && previous !== text) || (previous === null && status.badge > 0)) {
+      this.context.emit('changed', { badge: status.badge })
+    }
+  }
+
+  private reconciliationIsCurrent(generation: number): boolean {
+    return !this.stopped && this.worktreeGeneration === generation && this.snapshotGeneration === generation
   }
 
   /** Clears the markers of what an attended window shows. */
-  private async autoRead(worktrees: Worktree[]): Promise<void> {
+  private async autoRead(worktrees: Worktree[], generation: number): Promise<void> {
     const viewing = await this.viewing()
-    if (!viewing.attended) return
+    if (!this.reconciliationIsCurrent(generation) || !viewing.attended) return
     if (viewing.visibleSessions.size > 0) {
-      for (const session of await this.listSessions()) {
+      const sessions = await this.listSessions()
+      if (!this.reconciliationIsCurrent(generation)) return
+      for (const session of sessions) {
+        if (!this.reconciliationIsCurrent(generation)) return
         if (session.unread && sessionViewed(viewing, session.id)) await this.setSessionUnread(session.id, null)
       }
     }
-    if (viewing.shownWorktree === null) return
+    if (!this.reconciliationIsCurrent(generation) || viewing.shownWorktree === null) return
     const shown = worktrees.find((worktree) => worktree.id === viewing.shownWorktree)
     if (shown?.unread) {
       shown.unread = false
