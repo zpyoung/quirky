@@ -183,7 +183,7 @@ Cookie and storage CRUD share the same scoped API/CLI. Dialog accept/dismiss use
 
 ## Running browser tests
 
-Run the single-file browser CLI parity acceptance with `bun test scripts/parity/browser.test.ts`; see the [Orca browser parity table](../../docs/parity/orca-browser.md) for the 80-command inventory and declared gaps. The acceptance uses real owned browser processes and requires macOS with installed Chrome, as listed in `scripts/test-on-macos.txt`; the remote Linux host does not provide Chrome.
+Run the single-file browser CLI parity acceptance with `bun test scripts/parity/browser.test.ts`; see the [Orca browser parity table](../../docs/parity/orca-browser.md) for the 80-command inventory and the reasons rows are left out. The acceptance uses real owned browser processes and requires macOS with installed Chrome, as listed in `scripts/test-on-macos.txt`; the remote Linux host does not provide Chrome.
 
 The browser harness installs the public dependencies of its real plugins, including the Worktrees dependency on `quirky.cli`. It uses temporary process homes and synthetic cookie source files and cleans up the owned browser and daemon. UI import tests verify explicit discovery, file recovery, captured destination confirmation and command execution without pinning explanatory copy or button punctuation.
 
