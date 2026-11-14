@@ -23,6 +23,7 @@ import type { WorkerReadResult } from './src/worker-contracts'
 import { workerCommands } from './src/workers/cli'
 import { peerCommands } from './src/peers-cli'
 import type { OrchestrationPolicy, OrchestrationSkillStatus } from './src/ui-contracts'
+import type { SummaryResult } from './src/summary-contracts'
 
 type ObjectValue = Record<string, unknown>
 type ResponseGuard<M extends OrchestrationMethod> = (value: unknown) => value is OrchestrationMethodResult<M>
@@ -46,6 +47,10 @@ function hasDurableMutationRequest(method: OrchestrationMethod, params: ObjectVa
   return true
 }
 const PROVIDER_IDS = ['claude', 'openclaude', 'codex', 'opencode', 'mimo', 'gemini', 'droid', 'grok', 'cursor'] as const
+const SESSION_KINDS = ['terminal', 'structured'] as const
+const SESSION_STATUSES = ['starting', 'running', 'working', 'waiting', 'done', 'exited'] as const
+const DISPLAY_STATES = ['working', 'monitoring', 'waiting', 'permission', 'blocked', 'failed', 'interrupted', 'done', 'unverifiable', 'idle', 'unconfirmed'] as const
+const TERMINAL_STATES = ['active', 'reclaimable', 'retained', 'release_pending', 'release_unknown', 'released'] as const
 
 function isObject(value: unknown): value is ObjectValue {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -73,6 +78,43 @@ function isStringOrNull(value: unknown): value is string | null {
 
 function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every(isString)
+}
+function hasExactKeys(value: ObjectValue, keys: readonly string[]): boolean {
+  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
+}
+
+function isSummaryResult(value: unknown): value is SummaryResult {
+  if (!isObject(value) || !hasExactKeys(value, ['scope', 'rows', 'total', 'limit', 'truncated', 'unavailable']) ||
+    value.scope !== 'local' || !Array.isArray(value.rows) || !isSafeInteger(value.total) || value.total < 0 ||
+    !isSafeInteger(value.limit) || value.limit < 1 || value.limit > 100 || !isBoolean(value.truncated) ||
+    !isStringArray(value.unavailable) || value.rows.length > value.limit || value.total < value.rows.length ||
+    value.truncated !== (value.total > value.rows.length)) return false
+  return value.rows.every((row) => {
+    if (!isObject(row) || !hasExactKeys(row, ['worktree', 'sessions', 'runIds', 'dispatches']) ||
+      !isObject(row.worktree) || !hasExactKeys(row.worktree, ['id', 'name', 'path', 'repoId']) ||
+      !hasString(row.worktree, 'id') || !hasString(row.worktree, 'name') || !hasString(row.worktree, 'path') ||
+      !hasString(row.worktree, 'repoId') || !Array.isArray(row.sessions) || !isStringArray(row.runIds) ||
+      !Array.isArray(row.dispatches)) return false
+    const validSessions = row.sessions.every((session) =>
+      isObject(session) && hasExactKeys(session, ['id', 'agent', 'kind', 'status', 'display', 'live']) &&
+      hasString(session, 'id') && hasString(session, 'agent') &&
+      isOneOf(session.kind, SESSION_KINDS) && isOneOf(session.status, SESSION_STATUSES) &&
+      (session.display === null || isOneOf(session.display, DISPLAY_STATES)) &&
+      isBoolean(session.live) && session.live === (session.status !== 'exited'))
+    const validDispatches = row.dispatches.every((dispatch) =>
+      isObject(dispatch) && hasExactKeys(dispatch, [
+        'id', 'runId', 'task', 'status', 'creatorSessionId', 'assigneeSessionId', 'workerSessionId',
+        'currentAssignment', 'workerState', 'terminalState'
+      ]) && hasString(dispatch, 'id') && hasString(dispatch, 'runId') &&
+      isObject(dispatch.task) && hasExactKeys(dispatch.task, ['id', 'title', 'status']) &&
+      hasString(dispatch.task, 'id') && hasString(dispatch.task, 'title') &&
+      isOneOf(dispatch.task.status, TASK_STATUSES) && isOneOf(dispatch.status, DISPATCH_STATUSES) &&
+      isStringOrNull(dispatch.creatorSessionId) && isStringOrNull(dispatch.assigneeSessionId) &&
+      isStringOrNull(dispatch.workerSessionId) && isBoolean(dispatch.currentAssignment) &&
+      (dispatch.workerState === null || isOneOf(dispatch.workerState, WORKER_STATES)) &&
+      isOneOf(dispatch.terminalState, TERMINAL_STATES))
+    return validSessions && validDispatches
+  })
 }
 
 function isJsonValue(value: unknown): value is JsonValue {
@@ -489,6 +531,45 @@ async function call<M extends OrchestrationMethod>(
 function output<T>(context: CliContext, value: T, text: string): void {
   context.out.result(value, () => text)
 }
+function safeSummaryText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, (character) => {
+    if (character === '\t') return '\\t'
+    if (character === '\n') return '\\n'
+    if (character === '\r') return '\\r'
+    const code = character.charCodeAt(0)
+    return `\\x${code.toString(16).padStart(2, '0').toUpperCase()}`
+  })
+}
+
+function summaryText(result: SummaryResult, context: CliContext): string {
+  const headers = ['Worktree', 'Path', 'Repo', 'Sessions', 'Orchestration']
+  const rows = result.rows.map(({ worktree, sessions, runIds, dispatches }) => [
+    `${safeSummaryText(worktree.id)} ${safeSummaryText(worktree.name)}`,
+    safeSummaryText(worktree.path),
+    safeSummaryText(worktree.repoId),
+    sessions.length === 0
+      ? 'No sessions'
+      : sessions.map((session) =>
+        `${safeSummaryText(session.id)} (${safeSummaryText(session.agent)}; ${safeSummaryText(session.display ?? 'unknown')}; ${session.live ? 'live' : 'exited'})`
+      ).join('; '),
+    [
+      `Runs: ${runIds.map(safeSummaryText).join(', ') || 'none'}`,
+      ...dispatches.map((dispatch) => [
+        `Run ${safeSummaryText(dispatch.runId)}`,
+        `Task ${safeSummaryText(dispatch.task.id)} title=${safeSummaryText(dispatch.task.title)} [${dispatch.task.status}]`,
+        `Dispatch ${safeSummaryText(dispatch.id)} [${dispatch.status}]`,
+        `worker ${dispatch.workerState === null ? 'unsupervised' : safeSummaryText(dispatch.workerState)}`,
+        `terminal ${safeSummaryText(dispatch.terminalState)}`,
+        ...(dispatch.creatorSessionId === null ? [] : [`creator ${safeSummaryText(dispatch.creatorSessionId)}`]),
+        ...(dispatch.assigneeSessionId === null ? [] : [`assignee ${safeSummaryText(dispatch.assigneeSessionId)}`]),
+        ...(dispatch.workerSessionId === null ? [] : [`worker session ${safeSummaryText(dispatch.workerSessionId)}`])
+      ].join('; '))
+    ].join(' | ')
+  ])
+  const table = context.format.table(headers, rows)
+  const footer = `scope: local; showing ${result.rows.length} of ${result.total} worktrees${result.unavailable.length === 0 ? '' : `; unavailable: ${result.unavailable.map(safeSummaryText).join(', ')}`}`
+  return result.rows.length === 0 ? `No local worktree activity.\n${footer}` : `${table}\n${footer}`
+}
 function skillStatusText(status: OrchestrationSkillStatus): string {
   return [
     status.text,
@@ -580,6 +661,18 @@ function keepalive<T>(context: CliContext, timeoutMs: number, operation: () => P
 export const commands: CliModule['commands'] = {
   ...workerCommands,
   ...peerCommands,
+  ps: async (args, context) => {
+    const requestedLimit = integerFlag(args, context, 'limit')
+    const limit = requestedLimit ?? 100
+    if (limit < 1 || limit > 100 || !Number.isSafeInteger(limit)) {
+      throw context.usage('--limit must be between 1 and 100')
+    }
+    const response = await context.call('quirky.orchestration/summary', { limit })
+    if (!isSummaryResult(response)) {
+      throw context.fail('The runtime returned a response that does not match quirky.orchestration/summary.')
+    }
+    context.out.result(response, () => summaryText(response, context))
+  },
   'run-create': async (args, context) => {
     const params: ObjectValue = { objective: stringFlag(args, context, 'objective') }
     addCallerAliases(params, args, context)
