@@ -1044,16 +1044,20 @@ export function nextStep(world: ObjectiveWorld, journal: ObjectiveJournalEntry[]
 
   const commits = commitAttempts(attempts, revision.number, identity, branch, headSha)
   if (commits.some(unresolved)) return { action: null, reason: 'landing-in-flight' }
-  if (commits.filter((entry) => entry.state === 'settled' && entry.effect === 'not-landed').length >= MAX_ATTEMPTS) {
+  const failedCommitCount = commits.filter((entry) =>
+    entry.state === 'settled' && entry.effect === 'not-landed'
+  ).length
+  if (failedCommitCount >= MAX_ATTEMPTS) {
     return { action: null, reason: 'landing-retry-exhausted' }
   }
+  const retrySuffix = failedCommitCount === 0 ? '' : `#retry-${failedCommitCount}`
   return {
     action: {
       kind: 'commit-local-branch',
       capability: 'land',
       visibility: 'local',
       recovery: 'replay-safe',
-      evidenceKey: `committed-local-branch:${identity}:${branch}:${headSha}`,
+      evidenceKey: `committed-local-branch:${identity}:${branch}:${headSha}${retrySuffix}`,
       revision: revision.number,
       contentIdentity: identity,
       branch,

@@ -7,6 +7,12 @@ import {
   stopObjective,
   type ObjectiveWorld
 } from '../src/decide'
+import { actionFingerprint, gateAction } from '../../quirky.heimdall/src/gate'
+import type {
+  Enrollment as GateEnrollment,
+  JournalEntry as GateJournalEntry,
+  KernelAction
+} from '../../quirky.heimdall/src/contracts'
 
 type Journal = Parameters<typeof nextStep>[1]
 type JournalRow = Journal[number]
@@ -1021,20 +1027,88 @@ describe('objective decisions', () => {
         headSha: 'head-1'
       }
     })
-    const failedCommits = [1, 2, 3].map((ordinal) => attempt(`commit-${ordinal}`, ordinal, 'commit-local-branch', {
-      state: 'settled',
-      effect: 'not-landed',
-      revision: 1,
+    const gateEnrollment: GateEnrollment = {
+      watcherId: 'watcher',
+      kind: 'objective',
+      workspaceKey: 'local::/workspace',
+      workspacePath: '/workspace',
+      executionHostId: 'local',
+      schedulerOwner: 'local',
+      kindPayload: null,
+      enabled: true,
+      paused: false,
+      commandRevision: 0,
+      capabilities: { land: 'on' },
+      budget: { wallClockActiveMs: null, turns: null },
+      coordinator: { handle: 'coordinator', paneKey: 'pane' },
+      orchestrationRunId: null,
+      createdAtMs: 0,
+      terminalAtMs: null,
+      parkReason: null,
+      haltReason: null
+    }
+    const gateSnapshot = {
+      freshness: 'live' as const,
       contentIdentity: identity,
-      evidenceKey: `committed-local-branch:${identity}:main:head-1`,
-      branch: 'main',
-      headSha: 'head-1'
-    }))
-    expect(nextStep(attached, [...completedJournal(), ...failedCommits])).toEqual({
+      observedAtMs: 1,
+      world: null
+    }
+    const gateJournal: GateJournalEntry[] = []
+    const objectiveJournal: JournalRow[] = []
+    const evidenceKeys: string[] = []
+    const evidenceBase = `committed-local-branch:${identity}:main:head-1`
+    for (const ordinal of [1, 2, 3]) {
+      const step = nextStep(attached, [...completedJournal(), ...objectiveJournal])
+      if (!step.action || step.action.kind !== 'commit-local-branch') {
+        throw new Error('Expected a local branch commit retry action')
+      }
+      const action = step.action as unknown as KernelAction
+      evidenceKeys.push(action.evidenceKey)
+      expect(gateAction({
+        action,
+        snapshot: gateSnapshot,
+        enrollment: gateEnrollment,
+        journal: gateJournal,
+        budget: { activeMs: 0, turns: 0, exhausted: null }
+      })).toEqual({ verdict: 'allow' })
+
+      const attemptId = `commit-${ordinal}`
+      objectiveJournal.push(attempt(attemptId, ordinal, 'commit-local-branch', {
+        state: 'settled',
+        effect: 'not-landed',
+        revision: 1,
+        contentIdentity: identity,
+        evidenceKey: action.evidenceKey,
+        branch: 'main',
+        headSha: 'head-1'
+      }))
+      gateJournal.push({
+        seq: ordinal,
+        eventId: `commit-event-${ordinal}`,
+        watcherId: gateEnrollment.watcherId,
+        atMs: ordinal,
+        class: 'fact',
+        origin: 'owner',
+        kind: 'attempt',
+        resolved: false,
+        attemptId,
+        fingerprint: actionFingerprint(action),
+        action,
+        state: 'settled',
+        effect: 'not-landed'
+      })
+    }
+    expect(evidenceKeys).toEqual([
+      evidenceBase,
+      `${evidenceBase}#retry-1`,
+      `${evidenceBase}#retry-2`
+    ])
+    const failedCommitJournal = [...completedJournal(), ...objectiveJournal]
+    expect(nextStep(attached, failedCommitJournal)).toEqual({
       action: null,
       reason: 'landing-retry-exhausted'
     })
-    expect(stopObjective(snapshot(attached), [...completedJournal(), ...failedCommits])).toEqual({
+    expect(stopObjective(snapshot(attached), failedCommitJournal)).toEqual({
       kind: 'park',
       reason: 'stop-predicate',
       detail: 'Local branch commit failed 3 times for the current workspace state.',
