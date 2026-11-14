@@ -133,7 +133,7 @@ function parseWorktrees(context: PluginContext, value: unknown): WorktreeIdentit
   const worktrees: WorktreeIdentity[] = []
   const ids = new Set<string>()
   for (const candidate of value) {
-    if (!isRecord(candidate) || !isNonEmptyString(candidate.id) || !isNonEmptyString(candidate.name) ||
+    if (!isRecord(candidate) || !isNonEmptyString(candidate.id) || typeof candidate.name !== 'string' ||
       !isNonEmptyString(candidate.path) || !isNonEmptyString(candidate.repoId) || ids.has(candidate.id)) {
       invalidSource(context, WORKTREE_LIST)
     }

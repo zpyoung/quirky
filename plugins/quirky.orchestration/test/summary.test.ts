@@ -317,6 +317,21 @@ function expectReadOnlyCalls(harness: SummaryHarness) {
   expect(harness.forwarded).toBe(0)
 }
 
+test('accepts the empty public name of a root folder workspace', async () => {
+  const harness = createHarness({
+    worktrees: [makeWorktree('wt_root', '/', '', 'repo_root')],
+    sessions: [makeSession('s_root', 'wt_root')]
+  })
+  try {
+    const result = await harness.summary.query({})
+    expect(rowFor(result, 'wt_root').worktree).toEqual({
+      id: 'wt_root', name: '', path: '/', repoId: 'repo_root'
+    })
+  } finally {
+    harness.close()
+  }
+})
+
 test('groups listed sessions and a supervised dispatch by exact worktree identity', async () => {
   const harness = createHarness({
     worktrees: [makeWorktree('wt_a', '/fixture/a', 'Alpha', 'repo_a'), makeWorktree('wt_b', '/fixture/b', 'Beta', 'repo_b'), makeWorktree('wt_empty', '/fixture/empty')],
