@@ -2,6 +2,8 @@
   "host": ["compatibility-tokens"],
   "quirky.feedback": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.handoff": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.ask": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.notifications": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.session": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.agent-status": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.cli": ["commands", "compatibility-tokens", "empty", "error", "loading"],
