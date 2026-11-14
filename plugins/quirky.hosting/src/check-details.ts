@@ -24,6 +24,7 @@ export type CheckRecord = {
   checkRunId: number | null;
   workflowRunId: number | null;
   suiteId: number | null;
+  required: boolean | null;
 };
 
 type ChecksResult = {
@@ -57,8 +58,8 @@ const CHECKS_QUERY = `query HostingChecksRollup($owner: String!, $name: String!,
               contexts(first: 100) {
                 nodes {
                   __typename
-                  ... on CheckRun { databaseId name status conclusion detailsUrl }
-                  ... on StatusContext { context state targetUrl }
+                  ... on CheckRun { databaseId name status conclusion detailsUrl isRequired(pullRequestNumber: $number) }
+                  ... on StatusContext { context state targetUrl isRequired(pullRequestNumber: $number) }
                 }
                 pageInfo { hasNextPage }
               }
@@ -269,6 +270,7 @@ function mapCheckRun(value: unknown): CheckRecord | null {
     checkRunId: positiveOrNull(item.databaseId) ?? positiveOrNull(item.checkRunId) ?? positiveOrNull(item.id),
     workflowRunId: runId,
     suiteId: positiveOrNull(asRecord(item.check_suite)?.id) ?? positiveOrNull(item.checkSuiteId),
+    required: typeof item.isRequired === 'boolean' ? item.isRequired : null,
   };
 }
 
@@ -287,6 +289,7 @@ function mapStatus(value: unknown): CheckRecord | null {
     checkRunId: null,
     workflowRunId: null,
     suiteId: null,
+    required: typeof item.isRequired === 'boolean' ? item.isRequired : null,
   };
 }
 
@@ -303,6 +306,7 @@ function mapPorcelainCheck(value: DetailRecord): CheckRecord | null {
     checkRunId: null,
     workflowRunId: null,
     suiteId: null,
+    required: null,
   };
 }
 
@@ -324,6 +328,7 @@ function appendApprovalSuites(checks: CheckRecord[], suites: DetailRecord[]): vo
       checkRunId: null,
       workflowRunId: null,
       suiteId,
+      required: null,
     });
   }
 }

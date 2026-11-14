@@ -176,7 +176,7 @@ function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.
   };
 }
 
-function checkRun(id: number, name: string, conclusion: string, workflowRunId?: number): unknown {
+function checkRun(id: number, name: string, conclusion: string, workflowRunId?: number, required?: boolean): unknown {
   const url = workflowRunId === undefined
     ? 'https://github.com/test-owner/test-repo/checks/check-' + id
     : 'https://github.com/test-owner/test-repo/actions/runs/' + workflowRunId;
@@ -189,6 +189,7 @@ function checkRun(id: number, name: string, conclusion: string, workflowRunId?: 
     detailsUrl: url,
     checkRunId: id,
     workflowRunId: workflowRunId ?? null,
+    isRequired: required,
   };
 }
 
@@ -210,14 +211,16 @@ describe('hosting detail API', () => {
   test('rolls up check runs, legacy statuses and approval suites without conflating them', async () => {
     const response = graphRollup(
       [
-        checkRun(10, 'build', 'SUCCESS', 41),
-        { __typename: 'StatusContext', context: 'lint', state: 'PENDING', targetUrl: 'https://checks.test/lint' },
+        checkRun(10, 'build', 'SUCCESS', 41, true),
+        { __typename: 'StatusContext', context: 'lint', state: 'PENDING', isRequired: false, targetUrl: 'https://checks.test/lint' },
         { __typename: 'StatusContext', context: 'build', state: 'FAILURE', targetUrl: 'https://checks.test/duplicate' },
       ],
       [{ databaseId: 7, conclusion: 'ACTION_REQUIRED', app: { name: 'Review approval' }, checkRuns: { totalCount: 0 } }],
     );
     await withHosting({ graphqlResponses: { HostingChecksRollup: response } }, async (host) => {
       const result = await host.call('checks', { number: 1 });
+      const graphqlInvocation = host.invocations().find((entry) => entry.args.includes('graphql'));
+      expect(JSON.parse(graphqlInvocation?.input ?? '{}').query).toContain('isRequired(pullRequestNumber: $number)');
       expect(result).toHaveProperty('checks.length', 3);
       expect(result).toMatchObject({
         rollup: 'failure',
@@ -230,6 +233,7 @@ describe('hosting detail API', () => {
             checkRunId: 10,
             workflowRunId: 41,
             suiteId: null,
+            required: true,
           }),
           expect.objectContaining({
             kind: 'status',
@@ -238,6 +242,7 @@ describe('hosting detail API', () => {
             conclusion: null,
             workflowRunId: null,
             suiteId: null,
+            required: false,
           }),
           expect.objectContaining({
             kind: 'approval',
@@ -245,6 +250,7 @@ describe('hosting detail API', () => {
             status: 'action_required',
             conclusion: 'action_required',
             suiteId: 7,
+            required: null,
           }),
         ]),
         partial: false,
@@ -298,9 +304,9 @@ describe('hosting detail API', () => {
         rollup: 'failure',
         partial: true,
         checks: expect.arrayContaining([
-          expect.objectContaining({ kind: 'check_run', workflowRunId: 41 }),
-          expect.objectContaining({ kind: 'status', name: 'legacy' }),
-          expect.objectContaining({ kind: 'approval', suiteId: 7 }),
+          expect.objectContaining({ kind: 'check_run', workflowRunId: 41, required: null }),
+          expect.objectContaining({ kind: 'status', name: 'legacy', required: null }),
+          expect.objectContaining({ kind: 'approval', suiteId: 7, required: null }),
         ]),
       });
     });
@@ -325,6 +331,25 @@ describe('hosting detail API', () => {
     }, async (host) => {
       const result = await host.call('checks', { number: 1 });
       expect(result).toHaveProperty('rollup', 'unknown');
+    });
+  }, 20_000);
+
+  test('marks porcelain fallback requiredness unavailable', async () => {
+    const sha = 'a'.repeat(40);
+    await withHosting({
+      failures: {
+        'graphql HostingChecksRollup': 'GraphQL unavailable',
+        ['GET repos/test-owner/test-repo/commits/' + sha + '/check-runs?per_page=100']: 'REST unavailable',
+        ['GET repos/test-owner/test-repo/commits/' + sha + '/status?per_page=100']: 'REST unavailable',
+        ['GET repos/test-owner/test-repo/commits/' + sha + '/check-suites?per_page=100']: 'REST unavailable',
+      },
+      responses: { 'GET repos/test-owner/test-repo/pulls/1': { head: { sha } } },
+      porcelainChecks: [{ name: 'lint', state: 'failure', link: 'https://checks.test/lint' }],
+    }, async (host) => {
+      const result = await host.call('checks', { number: 1 });
+      expect(result).toMatchObject({
+        checks: [expect.objectContaining({ kind: 'status', name: 'lint', required: null })],
+      });
     });
   }, 20_000);
 
