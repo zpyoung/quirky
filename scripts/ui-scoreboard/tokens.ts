@@ -469,7 +469,7 @@ function styleObjectProperty(property: ts.PropertyAssignment): boolean {
   return name !== null && (Object.hasOwn(STYLE_OBJECT_PROPERTIES, name) || name.startsWith('--'))
 }
 
-function createElementStyleCall(expression: ts.Expression | undefined): expression is ts.CallExpression {
+function createElementStyleCall(expression: ts.Expression | undefined): boolean {
   if (!expression || !ts.isCallExpression(expression) || callMethodName(expression) !== 'createElement') return false
   const tag = expression.arguments[0]
   return tag !== undefined && staticString(tag) === 'style'
