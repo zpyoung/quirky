@@ -22,7 +22,7 @@ const GROUP_HEIGHT = 32
 const EXPANDED_HEIGHT = 360
 const OVERSCAN = 7
 
-type HistoryPanelProps = { context: UiPluginContext; report?(state: unknown): void }
+type HistoryPanelProps = { context: UiPluginContext; controller: HistoryPanelController; report?(state: unknown): void }
 type RenderEntry = { kind: 'group'; id: string; label: string; count: number; collapsed: boolean } | { kind: 'session'; id: string; row: VaultRow; group: string }
 type GroupedRows = {
   entries: RenderEntry[]
@@ -34,9 +34,92 @@ type GroupedRows = {
 type DetailState = { session: HostedSession | null; sessionLoaded: boolean; firstPrompt: string | null; firstPromptLoaded: boolean; subagents: HostedSession[]; subagentsLoaded: boolean; errors: string[] }
 type RemoteResumeChoice = { reference: OwnerSessionWorkspaceRef; label: string }
 type RemoteResumeState = { row: VaultRow; choices: RemoteResumeChoice[]; selectedMirrorId: string; loading: boolean; error: string | null }
+type HistoryControlField = 'session-id' | 'log-path' | 'first-prompt'
+type HistoryControlCommand =
+  | { action: 'set-options'; open?: boolean }
+  | { action: 'toggle-group'; id: string }
+  | { action: 'menu'; id: string; open?: boolean }
+  | { action: 'select'; id: string }
+  | { action: 'toggle-details'; id: string }
+  | { action: 'retry-details'; id: string }
+  | { action: 'cancel-remote-resume' }
+  | { action: 'copy'; id: string; field: HistoryControlField }
+export type HistoryControlResult =
+  | { ok: true }
+  | { ok: false; reason: 'no-panel' }
+  | { ok: false; reason: 'unknown-instance'; instance: string }
+  | { ok: false; reason: 'unknown-row' | 'unknown-group'; id: string }
+  | { ok: false; reason: 'field-unavailable'; field: 'first-prompt' }
+type HistoryPanelController = {
+  instance: string
+  handle: ((command: HistoryControlCommand) => Promise<HistoryControlResult>) | null
+}
+type HistoryControllerRegistry = { nextInstance: number; panels: Map<string, HistoryPanelController> }
+const historyControllerRegistries = new WeakMap<UiPluginContext, HistoryControllerRegistry>()
+
+function controllerRegistry(context: UiPluginContext): HistoryControllerRegistry {
+  let registry = historyControllerRegistries.get(context)
+  if (!registry) {
+    registry = { nextInstance: 0, panels: new Map() }
+    historyControllerRegistries.set(context, registry)
+  }
+  return registry
+}
 
 function recordOf(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null
+}
+function parseHistoryControlCommand(value: unknown): HistoryControlCommand {
+  const args = recordOf(value) ?? {}
+  const requireSessionId = (action: 'select' | 'toggle-details' | 'retry-details' | 'menu' | 'copy'): string => {
+    if (typeof args.id !== 'string' || args.id.length === 0) throw new Error(`history-control ${action} requires a session id.`)
+    return args.id
+  }
+  const optionalOpen = (action: 'set-options' | 'menu'): { open?: boolean } => {
+    if (!Object.hasOwn(args, 'open')) return {}
+    if (typeof args.open !== 'boolean') throw new Error(`history-control ${action} open must be true or false.`)
+    return { open: args.open }
+  }
+  switch (args.action) {
+    case 'set-options':
+      return { action: 'set-options', ...optionalOpen('set-options') }
+    case 'toggle-group':
+      if (typeof args.id !== 'string' || args.id.length === 0) throw new Error('history-control toggle-group requires a group id.')
+      return { action: 'toggle-group', id: args.id }
+    case 'menu':
+      return { action: 'menu', id: requireSessionId('menu'), ...optionalOpen('menu') }
+    case 'select':
+      return { action: 'select', id: requireSessionId('select') }
+    case 'toggle-details':
+      return { action: 'toggle-details', id: requireSessionId('toggle-details') }
+    case 'retry-details':
+      return { action: 'retry-details', id: requireSessionId('retry-details') }
+    case 'cancel-remote-resume':
+      return { action: 'cancel-remote-resume' }
+    case 'copy': {
+      const id = requireSessionId('copy')
+      if (args.field !== 'session-id' && args.field !== 'log-path' && args.field !== 'first-prompt') {
+        throw new Error('history-control copy field must be session-id, log-path, or first-prompt.')
+      }
+      return { action: 'copy', id, field: args.field }
+    }
+    default:
+      throw new Error(`Unknown history-control action: ${JSON.stringify(args.action)}`)
+  }
+}
+
+export async function runHistoryControl(context: UiPluginContext, value: unknown): Promise<HistoryControlResult> {
+  const args = recordOf(value)
+  const command = parseHistoryControlCommand(value)
+  const registry = historyControllerRegistries.get(context)
+  if (!registry || registry.panels.size === 0) return { ok: false, reason: 'no-panel' }
+  if (typeof args?.instance === 'string') {
+    const panel = registry.panels.get(args.instance)
+    if (!panel) return { ok: false, reason: 'unknown-instance', instance: args.instance }
+    return panel.handle ? panel.handle(command) : { ok: false, reason: 'no-panel' }
+  }
+  const panel = [...registry.panels.values()].at(-1)
+  return panel?.handle ? panel.handle(command) : { ok: false, reason: 'no-panel' }
 }
 
 function remoteResumeChoices(hostsValue: unknown, mirrorsValue: unknown, hostId: string): RemoteResumeChoice[] {
@@ -275,6 +358,8 @@ function SessionDetails({
   context,
   row,
   expanded,
+  retryAttempt,
+  onRetry,
   onError,
   onResume,
   onHandoff,
@@ -286,6 +371,8 @@ function SessionDetails({
   context: UiPluginContext
   row: VaultRow
   expanded: boolean
+  retryAttempt: number
+  onRetry(): void
   onError(error: string): void
   onResume(): void
   onResumeWorktree(): void
@@ -303,7 +390,6 @@ function SessionDetails({
     subagentsLoaded: false,
     errors: []
   })
-  const [attempt, setAttempt] = useState(0)
   useEffect(() => {
     if (!expanded) return
     let active = true
@@ -355,7 +441,7 @@ function SessionDetails({
       }))
     }).catch((error: unknown) => failed('subagents', error))
     return () => { active = false }
-  }, [context, expanded, row.id, attempt])
+  }, [context, expanded, row.id, retryAttempt])
 
   const previewMessages = detail.session?.previewMessages ?? row.previewMessages ?? []
   const available = isResumable(row)
@@ -381,13 +467,13 @@ function SessionDetails({
           throw new Error(reason)
         }
       }).catch((error: unknown) => onError(messageOf(error)))} />
-      <Button className="qvh-action-button" data-vault-retry-details onClick={() => setAttempt((value) => value + 1)}>Retry source details</Button>
+      <Button className="qvh-action-button" data-vault-retry-details onClick={onRetry}>Retry source details</Button>
       <Button className="qvh-action-button" onClick={onClose}>Hide details</Button>
     </div>
     {!detail.firstPromptLoaded ? <div className="qvh-muted" role="status">Loading first prompt…</div> : null}
     {!detail.sessionLoaded && previewMessages.length === 0 ? <div className="qvh-muted" role="status">Loading latest turns…</div> : null}
     {!detail.subagentsLoaded && (row.subagentTranscriptCount ?? 0) > 0 ? <div className="qvh-muted" role="status">Loading subagents…</div> : null}
-    {detail.errors.length ? <div className="qvh-error" role="alert">Could not inspect this source. {detail.errors.join('; ')} <Button className="qvh-action-button" onClick={() => setAttempt((value) => value + 1)}>Retry</Button></div> : null}
+    {detail.errors.length ? <div className="qvh-error" role="alert">Could not inspect this source. {detail.errors.join('; ')} <Button className="qvh-action-button" onClick={onRetry}>Retry</Button></div> : null}
     {row.presence !== 'present' ? <div className="qvh-error" role="status">{row.presence === 'missing' ? 'The source transcript is no longer available.' : 'The source transcript availability could not be verified.'} Resume and file actions are unavailable.</div> : null}
     {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><Button className="qvh-action-button" onClick={() => void copyFirstPrompt()}>Copy first prompt</Button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
     <section className="qvh-detail-section"><span className="qvh-detail-label">Latest turns</span>
@@ -406,10 +492,12 @@ function SessionRow({
   view,
   selected,
   expanded,
+  retryAttempt,
   menuOpen,
   tabStop,
   onSelect,
   onExpand,
+  onRetryDetails,
   onMenu,
   onCloseMenu,
   onError,
@@ -426,10 +514,12 @@ function SessionRow({
   view: ViewState
   selected: boolean
   expanded: boolean
+  retryAttempt: number
   menuOpen: boolean
   tabStop: boolean
   onSelect(): void
   onExpand(): void
+  onRetryDetails(): void
   onMenu(): void
   onCloseMenu(): void
   onError(error: string): void
@@ -668,6 +758,8 @@ function SessionRow({
       context={context}
       row={row}
       expanded={expanded}
+      retryAttempt={retryAttempt}
+      onRetry={onRetryDetails}
       onError={onError}
       onResume={onResume}
       onResumeWorktree={onResumeWorktree}
@@ -707,10 +799,11 @@ function emptyListText(snapshot: VaultSnapshot, noAgents: boolean, rows: VaultRo
   return 'No sessions match the current filters.'
 }
 
-function HistoryPanel({ context, report }: HistoryPanelProps) {
+function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
   const model = useMemo(() => new VaultWindowModel(context), [context])
   const snapshot = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot)
   const [optionsOpen, setOptionsOpen] = useState(false)
+  const [detailRetries, setDetailRetries] = useState<Record<string, number>>({})
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [menuId, setMenuId] = useState<string | null>(null)
   const [remoteResume, setRemoteResume] = useState<RemoteResumeState | null>(null)
@@ -722,7 +815,8 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
   const searchInput = useRef<HTMLInputElement>(null)
   const listRequestKey = useRef('')
   const noAgents = model.selectedAgents().length === 0
-  const allRows = model.rows().filter((row) => !snapshot.view.hideEmptySessions || row.messageCount > 0 || (row.queuedMessageCount ?? 0) > 0 || (row.subagentTranscriptCount ?? 0) > 0)
+  const loadedRows = model.rows()
+  const allRows = loadedRows.filter((row) => !snapshot.view.hideEmptySessions || row.messageCount > 0 || (row.queuedMessageCount ?? 0) > 0 || (row.subagentTranscriptCount ?? 0) > 0)
   const grouped = useMemo(() => groupedRows(model, snapshot.view, allRows, collapsed), [model, snapshot.view, allRows, collapsed])
 
   useEffect(() => { model.start(); return () => model.stop() }, [model])
@@ -932,6 +1026,110 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
   const copy = async (text: string) => {
     await localClipboard(text)
   }
+  const copyHistoryField = async (row: VaultRow, field: HistoryControlField): Promise<HistoryControlResult> => {
+    setMenuId(null)
+    if (field === 'session-id') {
+      try {
+        await copy(row.sessionId)
+        context.toast('Session ID copied', '')
+      } catch (error) {
+        setError(messageOf(error))
+      }
+      return { ok: true }
+    }
+    if (field === 'log-path') {
+      if (!row.filePath) {
+        setError('This source file is not available for local file actions.')
+        return { ok: true }
+      }
+      try {
+        await copy(row.filePath)
+        context.toast('Log path copied', '')
+      } catch (error) {
+        setError(messageOf(error))
+      }
+      return { ok: true }
+    }
+    try {
+      const response = await context.call('quirky.vault/firstPrompt', { id: row.id })
+      if (!response || typeof response !== 'object' || Array.isArray(response) || !('prompt' in response)) {
+        throw new Error('The vault returned an invalid first-prompt response.')
+      }
+      if (response.prompt === null) {
+        setError('This source does not contain a first prompt.')
+        return { ok: false, reason: 'field-unavailable', field: 'first-prompt' }
+      }
+      if (typeof response.prompt !== 'string') throw new Error('The vault returned an invalid first-prompt response.')
+      await copy(response.prompt)
+      context.toast('First prompt copied', 'The complete selected prompt is on the clipboard.')
+    } catch (error) {
+      setError(messageOf(error))
+    }
+    return { ok: true }
+  }
+
+  const handleHistoryControl = async (command: HistoryControlCommand): Promise<HistoryControlResult> => {
+    switch (command.action) {
+      case 'set-options':
+        setOptionsOpen((open) => command.open === undefined ? !open : command.open)
+        return { ok: true }
+      case 'toggle-group':
+        if (!grouped.entries.some((entry) => entry.kind === 'group' && entry.id === command.id)) {
+          return { ok: false, reason: 'unknown-group', id: command.id }
+        }
+        setCollapsed((current) => {
+          const next = new Set(current)
+          if (next.has(command.id)) next.delete(command.id)
+          else next.add(command.id)
+          return next
+        })
+        return { ok: true }
+      case 'menu': {
+        const row = loadedRows.find((candidate) => candidate.id === command.id)
+        if (!row) return { ok: false, reason: 'unknown-row', id: command.id }
+        selectRow(command.id)
+        setMenuId((current) => {
+          if (command.open === true) return command.id
+          if (command.open === false) return current === command.id ? null : current
+          return current === command.id ? null : command.id
+        })
+        return { ok: true }
+      }
+      case 'select': {
+        if (!loadedRows.some((row) => row.id === command.id)) return { ok: false, reason: 'unknown-row', id: command.id }
+        selectRow(command.id)
+        setMenuId(null)
+        return { ok: true }
+      }
+      case 'toggle-details': {
+        if (!loadedRows.some((row) => row.id === command.id)) return { ok: false, reason: 'unknown-row', id: command.id }
+        selectRow(command.id)
+        toggleExpanded(command.id)
+        return { ok: true }
+      }
+      case 'retry-details': {
+        if (!loadedRows.some((row) => row.id === command.id)) return { ok: false, reason: 'unknown-row', id: command.id }
+        setDetailRetries((current) => ({ ...current, [command.id]: (current[command.id] ?? 0) + 1 }))
+        return { ok: true }
+      }
+      case 'cancel-remote-resume':
+        cancelRemoteResume()
+        return { ok: true }
+      case 'copy': {
+        const row = loadedRows.find((candidate) => candidate.id === command.id)
+        if (!row) return { ok: false, reason: 'unknown-row', id: command.id }
+        return copyHistoryField(row, command.field)
+      }
+    }
+  }
+
+  useLayoutEffect(() => {
+    controller.handle = handleHistoryControl
+    return () => {
+      if (controller.handle === handleHistoryControl) controller.handle = null
+    }
+  })
+
 
   const keyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target instanceof HTMLElement && (event.target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName) || event.target.closest('button, [role=\"menu\"]'))) return
@@ -972,7 +1170,7 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
     : snapshot.list.result?.hasMore === true
   const totalLimit = snapshot.view.sessionLimit
 
-  return <div className="qvh-root" data-vault-history onKeyDown={keyDown}>
+  return <div className="qvh-root" data-vault-history data-vault-history-instance={controller.instance} onKeyDown={keyDown}>
     <ToolPanelTabs>
       <Tabs
         label="History scope"
@@ -1076,9 +1274,11 @@ function HistoryPanel({ context, report }: HistoryPanelProps) {
             selected={snapshot.view.selectedId === row.id}
             tabStop={tabStopId === row.id}
             expanded={expanded}
+            retryAttempt={detailRetries[row.id] ?? 0}
             menuOpen={menuId === row.id}
             onSelect={() => { selectRow(row.id); setMenuId(null) }}
             onExpand={() => { selectRow(row.id); toggleExpanded(row.id) }}
+            onRetryDetails={() => setDetailRetries((current) => ({ ...current, [row.id]: (current[row.id] ?? 0) + 1 }))}
             onMenu={() => { selectRow(row.id); setMenuId((current) => current === row.id ? null : row.id) }}
             onCloseMenu={() => setMenuId(null)}
             onError={setError}
@@ -1153,10 +1353,19 @@ function ViewOptions({ model, snapshot, onClose }: { model: VaultWindowModel; sn
 
 export function mountHistoryPanel(context: UiPluginContext, element: HTMLElement, props: { report?(state: unknown): void }): () => void {
   Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0', minWidth: '0', position: 'relative' })
+  const registry = controllerRegistry(context)
+  const controller: HistoryPanelController = { instance: `history-${++registry.nextInstance}`, handle: null }
+  registry.panels.set(controller.instance, controller)
   const root = createRoot(element)
-  const panel = <HistoryPanel context={context} report={props.report} />
+  const panel = <HistoryPanel context={context} controller={controller} report={props.report} />
   // a frame that finds a host above it after first paint would remount the panel and its model
   const hosted = element.closest('[data-ui-tool-panel-frame]') !== null
   root.render(hosted ? panel : <ToolPanelFrame title="Agent Session History">{panel}</ToolPanelFrame>)
-  return () => root.unmount()
+  return () => {
+    try {
+      root.unmount()
+    } finally {
+      registry.panels.delete(controller.instance)
+    }
+  }
 }

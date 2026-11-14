@@ -1140,6 +1140,23 @@
           },
           "required": ["id"]
         }
+      },
+      {
+        "id": "history-control",
+        "title": "History Panel Control",
+        "palette": false,
+        "description": "Route Session History panel options, groups, menus, selection, details, retries and copies to a mounted History panel.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["set-options", "toggle-group", "menu", "select", "toggle-details", "retry-details", "cancel-remote-resume", "copy"] },
+            "instance": { "type": "string" },
+            "id": { "type": "string" },
+            "open": { "type": "boolean" },
+            "field": { "type": "string", "enum": ["session-id", "log-path", "first-prompt"] }
+          },
+          "required": ["action"]
+        }
       }
     ],
     "cli-command": [

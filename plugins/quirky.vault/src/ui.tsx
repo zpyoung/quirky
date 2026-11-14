@@ -1,7 +1,7 @@
 import type { Session, UiPluginContext } from '@quirky/protocol'
 import { HISTORY_AGENTS } from './agents'
 import type { PublicListResult, ViewState } from './types'
-import { mountHistoryPanel } from './window/HistoryPanel'
+import { mountHistoryPanel, runHistoryControl } from './window/HistoryPanel'
 import { HISTORY_PANEL_ID, SETTINGS_SECTION_ID, SETTINGS_VIEW_ID } from './window/model'
 import { mountSearchSettings, mountSearchSettingsView } from './window/SearchSettings'
 
@@ -95,4 +95,5 @@ export function activate(context: UiPluginContext): void {
   context.provide('command:quirky.vault/open', (args?: unknown) => openHistory(context, args))
   context.provide('command:quirky.vault/settings', () => context.openView(SETTINGS_VIEW_ID))
   context.provide('command:quirky.vault/resume', (args?: unknown) => resumeCommand(context, args))
+  context.provide('command:quirky.vault/history-control', (args?: unknown) => runHistoryControl(context, args))
 }
