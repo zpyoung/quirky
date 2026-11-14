@@ -12,9 +12,11 @@ import {
   coordinateStartupAttempt,
   pairSides,
   floodBlocks,
-  joinFloodSleepTiming
+  joinFloodSleepTiming,
+  shouldRunDiagnostic
 } from './measure.ts'
 import { createTimerProbe } from './runner-latency.ts'
+import { BUDGETS, METRICS } from './contracts.ts'
 
 type EventHandler = (event: { target: FakeElement; key?: string }) => void
 
@@ -1586,4 +1588,14 @@ test('simultaneous observers isolate partial markers by session and stream and d
   controller.abort(new Error('aborted socket observation'))
   await expect(aborted.result).rejects.toThrow('aborted socket observation')
   expect(observerIsPresent('socket-abort')).toBe(false)
+})
+
+test('retains separate diagnostic trials at the inclusive 80 percent budget boundary for all metrics', () => {
+  for (const metric of METRICS) {
+    const threshold = 0.8 * BUDGETS[metric]
+    for (const [value, expected] of [[threshold - 0.001, false], [threshold, true],
+      [BUDGETS[metric], true], [BUDGETS[metric] + 0.001, true], [null, false]] as const) {
+      expect(shouldRunDiagnostic(metric, value)).toBe(expected)
+    }
+  }
 })

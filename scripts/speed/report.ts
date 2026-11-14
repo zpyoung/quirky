@@ -117,7 +117,8 @@ function validEchoTimingShape(value: unknown): value is EchoTiming {
     || typeof value.workerToPageMs !== 'number' || !Number.isFinite(value.workerToPageMs) || value.workerToPageMs < 0
     || typeof value.pageToPaintMs !== 'number' || !Number.isFinite(value.pageToPaintMs) || value.pageToPaintMs < 0) return false
   const arrivalEpochMs = value.pageTimeOriginMs + value.receivedAt
-  return Number.isFinite(arrivalEpochMs)
+  const startedAt = value.workerReadEpochMs - value.pageTimeOriginMs - value.keystrokeToWorkerMs
+  return Number.isFinite(startedAt) && startedAt >= 0 && Number.isFinite(arrivalEpochMs)
     && value.workerReadEpochMs <= arrivalEpochMs
     && approximatelyEqual(value.workerToPageMs, arrivalEpochMs - value.workerReadEpochMs)
 }

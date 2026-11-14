@@ -23,6 +23,11 @@ const CHANGES_PANEL = 'panel:quirky.git/source-control'
 const DIFF_VIEW = 'view:quirky.git/diff'
 const ECHO_KEYS = 'abcdefghijklmnopqrst'
 
+/** Retains a separate diagnostic trial for misses and thin passes without changing measured samples. */
+export function shouldRunDiagnostic(metric: Metric, value: number | null): boolean {
+  return value !== null && Number.isFinite(value) && value >= 0.8 * BUDGETS[metric]
+}
+
 export function pairSides(index: number): readonly [PairSide, PairSide] {
   return index % 2 === 1 ? ['head', 'base'] : ['base', 'head']
 }
@@ -3105,7 +3110,7 @@ export async function measureSpeed(options: {
 
       for (const metric of METRICS) {
         const value = median(sampleValues[metric])
-        if (value !== null && value > BUDGETS[metric]) {
+        if (shouldRunDiagnostic(metric, value)) {
           await diagnosticTrial(context, metric, contexts, signal, diagnostics, diagnosticErrors)
         }
       }

@@ -976,6 +976,11 @@ describe('v4 report evidence', () => {
         samples[0]!.pageToPaintMs = 13
       },
       (candidate) => {
+        const sample = (mutateV4(candidate, 'echo', 'echoTiming').samples as Array<Record<string, unknown>>)[0]!
+        sample.keystrokeToWorkerMs = 13
+        sample.pageToPaintMs = 1
+      },
+      (candidate) => {
         const samples = mutateV4(candidate, 'echo', 'echoTiming').samples as Array<Record<string, unknown>>
         samples[0]!.keystrokeToWorkerMs = -1
       },
