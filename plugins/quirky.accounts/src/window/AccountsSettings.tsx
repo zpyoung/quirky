@@ -40,14 +40,7 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
     {isCodex && pending.status === 'pending' && <p>Copy it to finish signing in somewhere else — a private window, or another profile.</p>}
     {pending.status === 'error' && <p className="status-error">Sign-in failed. Check the provider CLI and try again.</p>}
     {loginUrl && <div className="login-actions">
-      <Button type="button" disabled={remoteOwner} onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(loginUrl)
-          store.notify('Sign-in link copied', isCodex ? 'Open it in a private window or another browser profile.' : 'Open it in a private window to sign in with a different account.')
-        } catch {
-          store.notify('Could not copy the link', 'Use the Open link to continue sign-in in your browser.')
-        }
-      }}>Copy link</Button>
+      <Button type="button" disabled={remoteOwner} onClick={() => void store.copyLoginLink({ id: pending.id, provider: pending.provider, url: loginUrl })}>Copy link</Button>
       {isCodex && <Button type="button" disabled={remoteOwner || opening} onClick={async () => {
         setOpening(true)
         setOpenError(false)
@@ -97,7 +90,7 @@ function AccountRow({ store, provider, account, state }: { store: AccountsUiStor
       trailing={<span className="account-actions">
         {account.needsSignIn
           ? <Button type="button" disabled={remoteOwner || loginBusy} onClick={() => void store.beginLogin(provider, { accountId: account.id })}>{provider === 'claude' ? 'Sign in again' : 'Re-authenticate'}</Button>
-          : <Button type="button" aria-label={`Select ${providerName} account ${account.label}`} disabled={scopeUnavailable || state.active[provider] === account.id} onClick={() => void store.selectAccount(provider, account.id)}>{state.active[provider] === account.id ? 'Active' : 'Select'}</Button>}
+          : <Button type="button" aria-label={`Select ${providerName} account ${account.label}`} disabled={scopeUnavailable || state.active[provider] === account.id} onClick={() => void store.selectAccountCommand(provider, account.id)}>{state.active[provider] === account.id ? 'Active' : 'Select'}</Button>}
         <Button type="button" variant="destructive" aria-label={`Remove ${providerName} account ${account.label}`} title={remoteOwner ? 'Account removal is available on this device only.' : undefined} disabled={remoteOwner || removing} onClick={() => void remove()}>{removing ? 'Removing…' : 'Remove'}</Button>
       </span>}
     />
@@ -138,7 +131,7 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
           selected={state?.active[provider] === null}
           trailing={<span className="account-actions">
             {system?.hasAuth && <Badge>{system.authKind === 'api-key' ? 'API key' : 'Signed in'}</Badge>}
-            <Button type="button" aria-label={`Select ${providerName} System default`} disabled={!state || state.active[provider] === null || scopeUnavailable} onClick={() => void store.selectAccount(provider, null)}>{state?.active[provider] === null ? 'Active' : 'Select'}</Button>
+            <Button type="button" aria-label={`Select ${providerName} System default`} disabled={!state || state.active[provider] === null || scopeUnavailable} onClick={() => void store.selectAccountCommand(provider, null)}>{state?.active[provider] === null ? 'Active' : 'Select'}</Button>
           </span>}
         />
         {accounts.length ? accounts.map((account) => <AccountRow key={account.id} store={store} provider={provider} account={account} state={state!} />) : <EmptyState message={`No managed ${providerName} accounts yet.`} />}
@@ -180,7 +173,7 @@ function ProviderReadOnlySettings({ store, provider }: { store: AccountsUiStore;
     : signedIn ? status?.label === 'Sign-in expired' ? 'Sign-in expired — run cursor-agent login on this computer, then refresh usage.' : `Signed in${source ? ` · ${sourceName(source)}` : ''}. Quirky only reads the existing Cursor sign-in.` : 'No Cursor sign-in found on this computer.'
   const windows = usage ? windowEntries(usage) : []
   return <section className="section-card">
-    <SectionHeader title={title} actions={<Button type="button" aria-label={`Refresh ${title} usage`} disabled={snapshot.refreshing} onClick={() => void store.refresh(provider)}>Refresh usage</Button>} />
+    <SectionHeader title={title} actions={<Button type="button" aria-label={`Refresh ${title} usage`} disabled={snapshot.refreshing} onClick={() => void store.refreshCommand(provider)}>Refresh usage</Button>} />
     <p className="settings-description">{provider === 'grok' ? 'Shows weekly credit usage from your existing Grok CLI sign-in. Quirky never refreshes or changes Grok credentials.' : 'Shows monthly Cursor plan usage from the sign-in already on this computer. Quirky only reads it — it never changes your Cursor login.'}</p>
     <p className={status?.kind === 'warning' ? 'status-error' : ''} role="status">{statusText}</p>
     {source && <p className="muted">Credential source: {sourceName(source)} · {usage ? ageLabel(usage.updatedAt) : 'Not refreshed yet'}</p>}
@@ -341,7 +334,7 @@ export function AccountsSettings({ context, store, report }: { context: UiPlugin
   return <div className="accounts-ui settings-shell">
     <nav className="settings-nav" aria-label="AI Provider Accounts settings">
       <SectionHeader title="AI Provider Accounts" actions={<span className="settings-nav-actions">
-        <Button type="button" disabled={snapshot.refreshing || (snapshot.scope.kind === 'remote' && snapshot.scope.status === 'loading')} onClick={() => void store.refresh()}>Refresh usage</Button>
+        <Button type="button" disabled={snapshot.refreshing || (snapshot.scope.kind === 'remote' && snapshot.scope.status === 'loading')} onClick={() => void store.refreshCommand()}>Refresh usage</Button>
         <Button type="button" onClick={() => context.closeView()}>Close settings</Button>
       </span>} />
       <Tabs label="AI Provider Accounts settings" items={SETTINGS_TABS} value={section} onChange={(id) => void store.setUiState({ settingsSection: id })} />

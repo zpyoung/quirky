@@ -6,6 +6,9 @@ export type { AccountState, AccountSummary, AccountUiState, ConfigWarning, Manag
 export type { CredentialStatus }
 
 export const SETTINGS_VIEW_ID = 'view:quirky.accounts/settings'
+export const SELECT_ACCOUNT_COMMAND_ID = 'command:quirky.accounts/select-account'
+export const COPY_LOGIN_LINK_COMMAND_ID = 'command:quirky.accounts/copy-login-link'
+export const REFRESH_COMMAND_ID = 'command:quirky.accounts/refresh'
 export const MANAGED_PROVIDERS: readonly ManagedProvider[] = ['claude', 'codex']
 export const PROVIDERS: readonly UsageProvider[] = ['claude', 'codex', 'gemini', 'antigravity', 'opencode-go', 'kimi', 'minimax', 'grok', 'cursor', 'zcode']
 
@@ -848,6 +851,46 @@ export class AccountsUiStore {
 
   notify(title: string, body: string): void {
     this.context.toast(title, body)
+  }
+  private async resolveCommandConnId(connId?: number): Promise<number | null> {
+    if (connId !== undefined) return Number.isSafeInteger(connId) && connId > 0 ? connId : null
+    try {
+      const identity = await this.context.call('ui.window.self', {})
+      if (!isRecord(identity) || !isFiniteNumber(identity.connId) || !Number.isSafeInteger(identity.connId) || identity.connId <= 0) return null
+      return identity.connId
+    } catch {
+      return null
+    }
+  }
+
+  async selectAccountCommand(provider: ManagedProvider, accountId: string | null, connId?: number): Promise<void> {
+    const originConnId = await this.resolveCommandConnId(connId)
+    if (originConnId === null) return
+    return this.context.executeCommand(
+      SELECT_ACCOUNT_COMMAND_ID,
+      { provider, accountId, connId: originConnId },
+      { activateOwner: false }
+    )
+  }
+
+  async refreshCommand(provider?: string, connId?: number): Promise<void> {
+    const originConnId = await this.resolveCommandConnId(connId)
+    if (originConnId === null) return
+    return this.context.executeCommand(
+      REFRESH_COMMAND_ID,
+      { ...(provider === undefined ? {} : { provider }), connId: originConnId },
+      { activateOwner: false }
+    )
+  }
+
+  async copyLoginLink(pending: Pick<PendingLogin, 'id' | 'provider' | 'url'>, connId?: number): Promise<void> {
+    const originConnId = await this.resolveCommandConnId(connId)
+    if (originConnId === null) return
+    return this.context.executeCommand(
+      COPY_LOGIN_LINK_COMMAND_ID,
+      { ...pending, connId: originConnId },
+      { activateOwner: false }
+    )
   }
 
   private async act(title: string, request: () => Promise<unknown>, errorCopy?: (error: unknown) => string | null): Promise<unknown | null> {

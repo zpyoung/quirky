@@ -6,6 +6,7 @@ import { AccountsUiStore } from '../src/window/model'
 import { mapGrokUsage } from '../src/usage/mappers'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { Preferences } from '../src/types'
+import pluginManifest from '../quirky-plugin.json'
 
 const providers = ['claude', 'codex', 'gemini', 'antigravity', 'opencode-go', 'kimi', 'minimax', 'grok', 'cursor', 'zcode']
 const preferences = {
@@ -55,6 +56,10 @@ const emptyUsage = {
   inactive: {}, updatedAt: 0
 }
 
+let executeCommandCalls: { id: string; args?: unknown; options?: { activateOwner?: boolean } }[]
+let clipboardWrites: string[]
+let clipboardFailure: boolean
+let originalClipboard: Clipboard | undefined
 let unregister: (() => void) | undefined
 let container: HTMLElement
 let calls: { method: string; params?: Record<string, unknown> }[]
@@ -78,6 +83,7 @@ let openedViews: string[]
 beforeAll(() => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  originalClipboard = navigator.clipboard
 })
 
 afterAll(async () => {
@@ -90,6 +96,13 @@ beforeEach(() => {
   provided = new Map()
   listCalls = 0
   toastCalls = []
+  executeCommandCalls = []
+  clipboardWrites = []
+  clipboardFailure = false
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => {
+    clipboardWrites.push(value)
+    if (clipboardFailure) throw new Error('fixture clipboard failure')
+  } } })
   uiStateValue = { open: false, provider: null, expanded: null, settingsSection: null }
   usageValue = emptyUsage
   consumeFailures = 0
@@ -113,6 +126,7 @@ afterEach(async () => {
     deactivate()
   })
   unregister = undefined
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: originalClipboard })
   container.remove()
 })
 
@@ -123,6 +137,14 @@ function makeContext(): UiPluginContext {
     provide: (id: string, implementation: unknown) => provided.set(id, implementation),
     call: async (method: string, params?: Record<string, unknown>) => {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 7 }
+      if (method === 'ui.window.command.run') {
+        const id = params?.id
+        if (typeof id !== 'string') throw new Error('Missing routed command ID')
+        const handler = provided.get(id)
+        if (typeof handler !== 'function') throw new Error(`Missing routed command handler: ${id}`)
+        return { result: await (handler as (args?: unknown) => unknown)(params?.args) }
+      }
       if (method === 'quirky.agents/list') return agentListing
       if (method === 'quirky.agents/refresh') return refreshedAgentListing
       if (method === 'quirky.accounts/refresh') return usageValue
@@ -166,7 +188,11 @@ function makeContext(): UiPluginContext {
       return () => { listeners = listeners.filter((current) => current !== listener) }
     },
     getSetting: () => settingValue,
-    executeCommand: async () => {},
+    executeCommand: async (id: string, args?: unknown, options?: { activateOwner?: boolean }) => {
+      executeCommandCalls.push({ id, args, ...(options ? { options } : {}) })
+      const handler = provided.get(id)
+      return typeof handler === 'function' ? await (handler as (args?: unknown) => unknown)(args) : undefined
+    },
     openView: (id: string) => openedViews.push(id),
     closeView: () => {},
     togglePanel: () => {},
@@ -667,4 +693,157 @@ test('status-bar visibility gates absent CLI toggles and refreshes public detect
   expect(statusBar.querySelector('[aria-label=\"Claude Usage\"]')).not.toBeNull()
   expect(calls.some((call) => call.method === 'quirky.agents/refresh')).toBe(true)
   expect(calls.some((call) => call.method === 'quirky.accounts/setPreferences')).toBe(false)
+})
+const SELECT_ACCOUNT_COMMAND_ID = 'command:quirky.accounts/select-account'
+const COPY_LOGIN_LINK_COMMAND_ID = 'command:quirky.accounts/copy-login-link'
+const REFRESH_COMMAND_ID = 'command:quirky.accounts/refresh'
+const LOGIN_A_URL = 'https://auth.openai.com/oauth/authorize?login=a'
+
+function commandHandler(id: string): (args?: unknown) => unknown {
+  const handler = provided.get(id)
+  if (typeof handler !== 'function') throw new Error(`Missing command handler: ${id}`)
+  return handler as (args?: unknown) => unknown
+}
+async function mountSettingsRoot(context: UiPluginContext): Promise<void> {
+  await act(async () => {
+    activate(context)
+    const mountSettings = provided.get('view:quirky.accounts/settings')
+    if (typeof mountSettings !== 'function') throw new Error('Missing settings mount')
+    unregister = (mountSettings as (element: HTMLElement, props: { report?(state: unknown): void }) => (() => void) | void)(container, {}) as (() => void) | undefined
+  })
+}
+
+function pendingCodexState() {
+  const state = codexState(1, 'codex-a', 'Account A')
+  const account = state.accounts[0]!
+  return {
+    ...state,
+    accounts: [account, { ...account, id: 'codex-b', label: 'Account B', email: 'codex-b@example.test', active: false }],
+    pendingLogin: { id: 'login-a', provider: 'codex', accountId: 'codex-a', status: 'pending', url: LOGIN_A_URL, error: null, result: null }
+  }
+}
+
+test('select-account and refresh commands validate inputs and preserve provider scope', async () => {
+  const context = makeContext()
+  activate(context)
+  await settle()
+  const select = commandHandler(SELECT_ACCOUNT_COMMAND_ID)
+  const refresh = commandHandler(REFRESH_COMMAND_ID)
+
+  expect(await select()).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await select({ provider: 'other', accountId: null })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await select({ provider: 'claude', accountId: null, connId: 0 })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await refresh('grok')).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await refresh({ provider: 'other' })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await refresh({ provider: 'grok', connId: 1.25 })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select' || call.method === 'quirky.accounts/refresh')).toEqual([])
+
+  await refresh({ provider: 'grok' })
+  expect(calls.filter((call) => call.method === 'quirky.accounts/refresh').map((call) => call.params)).toEqual([{ provider: 'grok', force: true }])
+  expect(calls.filter((call) => call.method === 'quirky.agents/refresh')).toEqual([])
+
+  calls = []
+  await refresh({})
+  expect(calls.filter((call) => call.method === 'quirky.accounts/refresh').map((call) => call.params)).toEqual([{ force: true }])
+  expect(calls.filter((call) => call.method === 'quirky.agents/refresh')).toHaveLength(1)
+  calls = []
+  await refresh()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/refresh').map((call) => call.params)).toEqual([{ force: true }])
+  expect(calls.filter((call) => call.method === 'quirky.agents/refresh')).toHaveLength(1)
+})
+
+test('select-account command and the Settings selection button share the scoped store operation', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  await mountSettingsRoot(context)
+  await settle()
+  await act(async () => { buttonByText('Codex').click() })
+
+  const select = commandHandler(SELECT_ACCOUNT_COMMAND_ID)
+  let commandResult: unknown
+  await act(async () => { commandResult = await select({ provider: 'codex', accountId: 'codex-b' }) })
+  expect(commandResult).toBeUndefined()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select').map((call) => call.params)).toEqual([{ provider: 'codex', accountId: 'codex-b' }])
+  await settle()
+
+  await act(async () => { buttonByLabel('Select Codex account Account B').click() })
+  await settle()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select').map((call) => call.params)).toEqual([
+    { provider: 'codex', accountId: 'codex-b' },
+    { provider: 'codex', accountId: 'codex-b' }
+  ])
+  expect(executeCommandCalls.at(-1)).toEqual({
+    id: SELECT_ACCOUNT_COMMAND_ID,
+    args: { provider: 'codex', accountId: 'codex-b', connId: 7 },
+    options: { activateOwner: false }
+  })
+
+  await act(async () => { await commandHandler(SELECT_ACCOUNT_COMMAND_ID)({ provider: 'claude', accountId: null }) })
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select').at(-1)?.params).toEqual({ provider: 'claude', accountId: null })
+})
+
+test('copy-login-link is identity-bound and reports clipboard refusal without losing login actions', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  await mountSettingsRoot(context)
+  await settle()
+  await act(async () => { buttonByText('Codex').click() })
+
+  const copy = commandHandler(COPY_LOGIN_LINK_COMMAND_ID)
+  expect(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL })).toEqual({ ok: true })
+  expect(clipboardWrites).toEqual([LOGIN_A_URL])
+  expect(await copy()).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await copy({ id: 'old-login', provider: 'codex', url: LOGIN_A_URL })).toEqual({ ok: false, reason: 'login-changed' })
+  expect(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL, connId: 0 })).toEqual({ ok: false, reason: 'invalid-args' })
+  expect(clipboardWrites).toEqual([LOGIN_A_URL])
+
+  await act(async () => { buttonByText('Copy link').click() })
+  await settle()
+  expect(executeCommandCalls.at(-1)).toEqual({
+    id: COPY_LOGIN_LINK_COMMAND_ID,
+    args: { id: 'login-a', provider: 'codex', url: LOGIN_A_URL, connId: 7 },
+    options: { activateOwner: false }
+  })
+  expect(clipboardWrites).toEqual([LOGIN_A_URL, LOGIN_A_URL])
+  expect(toastCalls).toContainEqual(['Sign-in link copied', 'Open it in a private window or another browser profile.'])
+
+  clipboardFailure = true
+  expect(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL })).toEqual({ ok: false, reason: 'clipboard-failed' })
+  expect(toastCalls).toContainEqual(['Could not copy the link', 'Use the Open link to continue sign-in in your browser.'])
+  expect(container.textContent).toContain('Account A')
+  expect(buttonByText('Cancel').disabled).toBe(false)
+  expect(await copy({ id: 'login-a', provider: 'codex', url: 'https://auth.openai.com/oauth/authorize?login=other' })).toEqual({ ok: false, reason: 'login-changed' })
+  expect(JSON.stringify(await copy({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL }))).not.toContain(LOGIN_A_URL)
+})
+test('Settings refresh controls invoke the global and provider-scoped refresh commands', async () => {
+  listResponse = () => pendingCodexState()
+  const context = makeContext()
+  await mountSettingsRoot(context)
+  await settle()
+
+  await act(async () => { buttonByText('Refresh usage').click() })
+  await settle()
+  expect(executeCommandCalls.at(-1)).toEqual({
+    id: REFRESH_COMMAND_ID,
+    args: { connId: 7 },
+    options: { activateOwner: false }
+  })
+  expect(calls.some((call) => call.method === 'quirky.accounts/refresh' && call.params?.provider === undefined)).toBe(true)
+  expect(calls.some((call) => call.method === 'quirky.agents/refresh')).toBe(true)
+
+  await act(async () => { buttonByText('Grok (xAI)').click() })
+  await settle()
+  await act(async () => { buttonByLabel('Refresh Grok (xAI) usage').click() })
+  await settle()
+  expect(executeCommandCalls.at(-1)).toEqual({
+    id: REFRESH_COMMAND_ID,
+    args: { provider: 'grok', connId: 7 },
+    options: { activateOwner: false }
+  })
+  expect(calls).toContainEqual({ method: 'quirky.accounts/refresh', params: { provider: 'grok', force: true } })
+})
+test('select-account and copy-login-link are declared with their public command titles', () => {
+  expect(pluginManifest.contributes.command).toContainEqual({ id: 'select-account', title: 'Select Accounts account' })
+  expect(pluginManifest.contributes.command).toContainEqual({ id: 'copy-login-link', title: 'Copy account sign-in link' })
+  expect(pluginManifest.apiVersion).toBe('1.15.0')
 })

@@ -66,6 +66,10 @@ function usageFor(state: AccountState, scope: ResetScope = { accountId: state.ac
   }
 }
 
+let executeCommandCalls: { id: string; args?: unknown; options?: { activateOwner?: boolean } }[]
+let clipboardWrites: string[]
+let clipboardGate: Promise<void> | null
+let originalClipboard: Clipboard | undefined
 let container: HTMLElement
 let unregister: (() => void) | undefined
 let stateValue: AccountState
@@ -99,6 +103,7 @@ let accountsUi: typeof AccountsUiModule
 beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  originalClipboard = navigator.clipboard
   accountsUi = await import('../src/ui')
 })
 
@@ -131,6 +136,13 @@ beforeEach(() => {
   loginStartCount = 0
   credentialSaveFailure = false
   credentialClearFailure = false
+  executeCommandCalls = []
+  clipboardWrites = []
+  clipboardGate = null
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (value: string) => {
+    clipboardWrites.push(value)
+    return clipboardGate ?? Promise.resolve()
+  } } })
   toastCalls = []
   container = document.createElement('div')
   document.body.append(container)
@@ -142,6 +154,7 @@ afterEach(async () => {
     accountsUi.deactivate()
   })
   unregister = undefined
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: originalClipboard })
   container.remove()
 })
 
@@ -151,6 +164,14 @@ function makeContext(): UiPluginContext {
     pluginId: 'quirky.accounts', log: () => {}, provide: (id: string, implementation: unknown) => provided.set(id, implementation),
     call: async (method: string, params?: Record<string, unknown>) => {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 7 }
+      if (method === 'ui.window.command.run') {
+        const id = params?.id
+        if (typeof id !== 'string') throw new Error('Missing routed command ID')
+        const handler = provided.get(id)
+        if (typeof handler !== 'function') throw new Error(`Missing routed command handler: ${id}`)
+        return { result: await (handler as (args?: unknown) => unknown)(params?.args) }
+      }
       if (method === 'quirky.accounts/list') return stateValue
       if (method === 'quirky.accounts/uiState') return { ...uiState }
       if (method === 'quirky.accounts/usage' || method === 'quirky.accounts/refresh') return usageValue
@@ -279,7 +300,15 @@ function makeContext(): UiPluginContext {
       return undefined
     },
     subscribe: (listener: (event: QuirkyEvent) => void | Promise<void>) => { listeners.push(listener); return () => { listeners = listeners.filter((item) => item !== listener) } },
-    getSetting: () => false, executeCommand: async () => {}, openView: () => {}, closeView: () => {}, togglePanel: () => {},
+    getSetting: () => false, executeCommand: async (id: string, args?: unknown, options?: { activateOwner?: boolean }) => {
+      executeCommandCalls.push({ id, args, ...(options ? { options } : {}) })
+      const handler = provided.get(id)
+      if (typeof handler !== 'function') return undefined
+      if (id !== 'command:quirky.accounts/select-account' && id !== 'command:quirky.accounts/refresh') return await (handler as (args?: unknown) => unknown)(args)
+      let result: unknown
+      await act(async () => { result = await (handler as (args?: unknown) => unknown)(args) })
+      return result
+    }, openView: () => {}, closeView: () => {}, togglePanel: () => {},
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }), onLayout: () => () => {}, onStream: () => () => {}, onConnection: () => () => {},
     confirm: async (confirmation: unknown) => {
       confirmCalls.push(confirmation)
@@ -1247,7 +1276,7 @@ test('a failed cancel and delayed status response keep one polling chain', async
   await settle()
   const wait = Promise.withResolvers<void>()
   setTimeout(wait.resolve, 950)
-  await wait.promise
+  await act(async () => { await wait.promise })
   expect(calls.filter((call) => call.method === 'quirky.accounts/loginStatus')).toHaveLength(2)
   expect(buttonByText('Cancel').disabled).toBe(false)
 })
@@ -1336,3 +1365,49 @@ test('Ask restart closes its modal when a busy Claude session queues and leaves 
   if (!accessory) throw new Error('Missing queued Claude pane accessory')
   expect(accessory.querySelector('.status-loading')?.textContent).toContain('Waiting for this Claude session to finish before restarting on Account B.')
 })
+const COPY_LOGIN_LINK_COMMAND_ID = 'command:quirky.accounts/copy-login-link'
+const LOGIN_A_URL = 'https://auth.openai.com/oauth/authorize?login=a'
+const LOGIN_B_URL = 'https://auth.openai.com/oauth/authorize?login=b'
+
+for (const outcome of ['resolved', 'rejected'] as const) {
+  test(`a ${outcome} clipboard write for a superseded login does not notify for the new login`, async () => {
+    const loginA = { id: 'login-a', provider: 'codex' as const, accountId: 'codex-a', status: 'pending' as const, url: LOGIN_A_URL, error: null, result: null }
+    const loginB = { ...loginA, id: 'login-b', url: LOGIN_B_URL }
+    stateValue = { ...stateValue, pendingLogin: loginA }
+    const gate = Promise.withResolvers<void>()
+    clipboardGate = gate.promise
+    await mount('view:quirky.accounts/settings')
+    await act(async () => { buttonByText('Codex').click() })
+    await act(async () => { buttonByText('Copy link').click() })
+    expect(clipboardWrites).toEqual([LOGIN_A_URL])
+
+    stateValue = { ...stateValue, pendingLogin: loginB, revision: stateValue.revision + 1 }
+    await act(async () => {
+      await emit({ type: 'quirky.accounts/changed', data: { revision: stateValue.revision } } as QuirkyEvent)
+      await Bun.sleep(40)
+    })
+    await settle()
+    await act(async () => {
+      if (outcome === 'resolved') gate.resolve()
+      else gate.reject(new Error('fixture clipboard refusal'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    clipboardGate = null
+    await settle()
+    expect(toastCalls.filter(({ title }) => title === 'Sign-in link copied' || title === 'Could not copy the link')).toEqual([])
+
+    await act(async () => { buttonByText('Copy link').click() })
+    await settle()
+    expect(clipboardWrites).toEqual([LOGIN_A_URL, LOGIN_B_URL])
+    expect(executeCommandCalls.at(-1)).toEqual({
+      id: COPY_LOGIN_LINK_COMMAND_ID,
+      args: { id: 'login-b', provider: 'codex', url: LOGIN_B_URL, connId: 7 },
+      options: { activateOwner: false }
+    })
+    expect(buttonByText('Cancel').disabled).toBe(false)
+    await act(async () => { buttonByText('Cancel').click() })
+    await settle()
+    expect(calls.filter((call) => call.method === 'quirky.accounts/cancelLogin').at(-1)?.params).toEqual({ id: 'login-b' })
+  })
+}

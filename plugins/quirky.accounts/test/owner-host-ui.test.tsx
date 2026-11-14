@@ -1,9 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
-import { rmSync } from 'node:fs'
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { OwnerSessionHostRef, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
+import type { AccountState } from '../src/types'
 import { makeRepo, isolateGitConfig } from '../../quirky.repo/test/git-fixtures'
 import { activate, deactivate } from '../src/ui'
 import { cleanupAll, startAccounts, waitForAsync, type AccountsHarness } from './support/index'
@@ -43,9 +45,11 @@ type OwnerWorld = {
   localWorktree: Worktree
 }
 type Call = { method: string; params?: Record<string, unknown> }
+type CommandInvocation = { id: string; args?: unknown; options?: { activateOwner?: boolean } }
 type ContextFixture = {
   context: UiPluginContext
   calls: Call[]
+  commandInvocations: CommandInvocation[]
   provided: Map<string, unknown>
   events: ((event: QuirkyEvent) => void | Promise<void>)[]
   emitLayout(layout: UiLayout): void
@@ -53,6 +57,8 @@ type ContextFixture = {
   resolveFirstRemoteList(): void
   whenIdle(): Promise<void>
   firstRemoteListStarted(): boolean
+  remoteResolutionStarted(): boolean
+  releaseRemoteResolution(): void
   getLayoutCalls(): number
   getLayout(): UiLayout
 }
@@ -67,6 +73,7 @@ let statusContainer: HTMLElement
 let unregister: (() => void)[]
 let waitForActiveCalls: (() => Promise<void>) | null = null
 let releaseHeldOwnerList: (() => void) | null = null
+let releaseHeldRemoteResolution: (() => void) | null = null
 
 const call = <T,>(h: AccountsHarness, method: string, params: Record<string, unknown> = {}) =>
   h.client.callAny(method, params) as Promise<T>
@@ -206,8 +213,9 @@ async function prepareScopeAccounts(world: OwnerWorld): Promise<void> {
   await addAccount(world.remote, 'claude', 'Remote Claude active', 'scope-remote@example.test')
 }
 
-function makeContext(world: OwnerWorld, options: { layout: UiLayout; holdFirstRemoteList?: boolean }): ContextFixture {
+function makeContext(world: OwnerWorld, options: { layout: UiLayout; holdFirstRemoteList?: boolean; holdRemoteResolution?: boolean; connId?: number; windows?: Map<number, ContextFixture> }): ContextFixture {
   let layout = options.layout
+  const connId = options.connId ?? 1
   let layoutReads = 0
   let remoteListCalls = 0
   let heldResult: unknown
@@ -225,7 +233,10 @@ function makeContext(world: OwnerWorld, options: { layout: UiLayout; holdFirstRe
     }
   }
   const deferredRemoteList = Promise.withResolvers<unknown>()
+  const deferredRemoteResolution = Promise.withResolvers<void>()
+  let remoteResolutionCalls = 0
   const calls: Call[] = []
+  const commandInvocations: CommandInvocation[] = []
   const provided = new Map<string, unknown>()
   const events: ((event: QuirkyEvent) => void | Promise<void>)[] = []
   const layoutListeners: ((next: UiLayout) => void)[] = []
@@ -238,7 +249,24 @@ function makeContext(world: OwnerWorld, options: { layout: UiLayout; holdFirstRe
       calls.push({ method, params })
       inFlightCalls += 1
       try {
+        if (method === 'ui.window.self') return { connId }
+        if (method === 'ui.window.command.run') {
+          const targetConnId = Number(params.connId)
+          const targetProviders = options.windows?.get(targetConnId)?.provided ?? (targetConnId === connId ? provided : undefined)
+          const id = params.id
+          if (typeof id !== 'string' || !targetProviders) throw new Error('The originating window is unavailable.')
+          const handler = targetProviders.get(id)
+          if (typeof handler !== 'function') throw new Error(`Unknown window command: ${id}`)
+          return { result: await (handler as (args?: unknown) => unknown)(params.args) }
+        }
         const result = await world.local.client.callAny(method, params)
+        if (method === 'quirky.worktree/remoteShow') {
+          remoteResolutionCalls += 1
+          if (options.holdRemoteResolution) {
+            releaseHeldRemoteResolution = deferredRemoteResolution.resolve
+            await deferredRemoteResolution.promise
+          }
+        }
         if (method === 'quirky.accounts/ownerCall' && params.operation === 'list') {
           remoteListCalls += 1
           if (options.holdFirstRemoteList && remoteListCalls === 1) {
@@ -262,8 +290,11 @@ function makeContext(world: OwnerWorld, options: { layout: UiLayout; holdFirstRe
         if (index !== -1) events.splice(index, 1)
       }
     },
-    getSetting: () => false,
-    executeCommand: async () => {},
+    executeCommand: async (id: string, args?: unknown, commandOptions?: { activateOwner?: boolean }) => {
+      commandInvocations.push({ id, args, ...(commandOptions ? { options: commandOptions } : {}) })
+      const handler = provided.get(id)
+      return typeof handler === 'function' ? await (handler as (args?: unknown) => unknown)(args) : undefined
+    },
     openView: () => {},
     closeView: () => {},
     togglePanel: () => {},
@@ -291,6 +322,7 @@ function makeContext(world: OwnerWorld, options: { layout: UiLayout; holdFirstRe
   return {
     context: context as unknown as UiPluginContext,
     calls,
+    commandInvocations,
     provided,
     events,
     emitLayout(next) {
@@ -304,6 +336,10 @@ function makeContext(world: OwnerWorld, options: { layout: UiLayout; holdFirstRe
       deferredRemoteList.resolve(heldResult)
     },
     firstRemoteListStarted,
+    remoteResolutionStarted: () => remoteResolutionCalls > 0,
+    releaseRemoteResolution() {
+      deferredRemoteResolution.resolve()
+    },
     whenIdle,
     getLayoutCalls: () => layoutReads,
     getLayout: () => layout
@@ -338,6 +374,7 @@ beforeEach(() => {
 afterEach(async () => {
   try {
     releaseHeldOwnerList?.()
+    releaseHeldRemoteResolution?.()
     if (waitForActiveCalls) await act(async () => { await waitForActiveCalls?.() })
     await act(async () => {
       for (const cleanup of unregister.splice(0)) cleanup()
@@ -351,6 +388,7 @@ afterEach(async () => {
     } finally {
       waitForActiveCalls = null
       releaseHeldOwnerList = null
+      releaseHeldRemoteResolution = null
       if (previousMobilePort === undefined) delete process.env.QUIRKY_MOBILE_PORT
       else process.env.QUIRKY_MOBILE_PORT = previousMobilePort
       if (previousMobileHost === undefined) delete process.env.QUIRKY_MOBILE_HOST
@@ -445,7 +483,35 @@ test('the window layout keeps the remote workspace owner through Accounts settin
       params: { provider: 'claude', accountId: accounts.remoteNext.id }
     })
   }))
-  expect(container.textContent).not.toContain('Local Claude account')
+  await act(async () => {
+    await fixture.context.executeCommand('command:quirky.accounts/select-account', { provider: 'claude', accountId: accounts.remoteActive.id })
+    await fixture.whenIdle()
+  })
+  expect(fixture.commandInvocations.at(-1)).toEqual({
+    id: 'command:quirky.accounts/select-account',
+    args: { provider: 'claude', accountId: accounts.remoteActive.id }
+  })
+  expect(fixture.calls).toContainEqual(expect.objectContaining({
+    method: 'quirky.accounts/ownerCall',
+    params: expect.objectContaining({ owner, operation: 'select', params: { provider: 'claude', accountId: accounts.remoteActive.id } })
+  }))
+  expect(fixture.calls.some((item) => item.method === 'quirky.accounts/select')).toBe(false)
+  await act(async () => {
+    await fixture.context.executeCommand('command:quirky.accounts/refresh', { provider: 'grok' })
+    await fixture.whenIdle()
+  })
+  expect(fixture.commandInvocations.at(-1)).toEqual({
+    id: 'command:quirky.accounts/refresh',
+    args: { provider: 'grok' }
+  })
+  expect(fixture.calls).toContainEqual(expect.objectContaining({
+    method: 'quirky.accounts/ownerCall',
+    params: expect.objectContaining({ owner, operation: 'refresh', params: { provider: 'grok', force: true } })
+  }))
+  const copyCommand = fixture.provided.get('command:quirky.accounts/copy-login-link')
+  if (typeof copyCommand !== 'function') throw new Error('Missing copy-login-link command')
+  expect(await (copyCommand as (args?: unknown) => unknown)({ id: 'login-a', provider: 'codex', url: 'https://auth.openai.com/oauth/authorize?login=a' }))
+    .toEqual({ ok: false, reason: 'remote-owner' })
 
   await act(async () => { fixture.emitLayout(localLayout(world.localWorktree.id)) })
   await waitUntil(() => container.textContent?.includes('Local Claude account') === true, 'Switching to a local workspace view did not restore local Accounts state.')
@@ -504,12 +570,23 @@ test('a stale remote response and owner event cannot replace the new local scope
   const world = await makeOwnerWorld('accounts-ui-stale-scope')
   await prepareScopeAccounts(world)
   const owner = hostRef(world.host)
-  const fixture = makeContext(world, { layout: remoteLayout(world.mirror.id), holdFirstRemoteList: true })
+  const fixture = makeContext(world, { layout: remoteLayout(world.mirror.id), holdFirstRemoteList: true, holdRemoteResolution: true })
   await act(async () => {
     activate(fixture.context)
     mount(fixture, 'view:quirky.accounts/settings', container)
   })
+  await waitUntil(() => fixture.remoteResolutionStarted(), 'Remote owner resolution did not reach its held response.')
+  const handler = fixture.provided.get('command:quirky.accounts/select-account')
+  if (typeof handler !== 'function') throw new Error('Missing select-account command')
+  let loadingRefusal: Promise<unknown> | undefined
+  await act(() => {
+    loadingRefusal = (handler as (args?: unknown) => Promise<unknown>)({ provider: 'claude', accountId: 'remote-account' })
+  })
+  if (!loadingRefusal) throw new Error('Missing loading-owner selection result')
+  expect(await loadingRefusal).toEqual({ ok: false, reason: 'owner-unavailable' })
+  fixture.releaseRemoteResolution()
   await waitUntil(() => fixture.firstRemoteListStarted(), 'Remote Accounts request did not start for the focused mirror.')
+  expect(fixture.calls.filter((item) => item.method === 'quirky.accounts/ownerCall' && item.params?.operation === 'select')).toEqual([])
 
   await act(async () => { fixture.emitLayout(localLayout(world.localWorktree.id)) })
   await waitUntil(() => container.textContent?.includes('Local Claude account') === true, 'The new local workspace scope did not load.')
@@ -543,4 +620,212 @@ test('a stale remote response and owner event cannot replace the new local scope
   })
   expect(container.textContent).not.toContain('Remote Claude active')
   expect(container.textContent).not.toContain('Local Claude account')
-})
+  const unavailableHandler = fixture.provided.get('command:quirky.accounts/select-account')
+  if (typeof unavailableHandler !== 'function') throw new Error('Missing select-account command')
+  const unavailableRefusal = await (unavailableHandler as (args?: unknown) => unknown)({ provider: 'claude', accountId: 'remote-account' })
+  expect(unavailableRefusal).toEqual({ ok: false, reason: 'owner-unavailable' })
+  expect(fixture.calls.filter((item) => item.method === 'quirky.accounts/ownerCall' && item.params?.operation === 'select')).toEqual([])
+  const refreshCommand = fixture.provided.get('command:quirky.accounts/refresh')
+  if (typeof refreshCommand !== 'function') throw new Error('Missing refresh command')
+  await act(async () => {
+    await (refreshCommand as (args?: unknown) => unknown)({ provider: 'grok' })
+    await fixture.whenIdle()
+  })
+  expect(fixture.calls.some((item) => item.method === 'quirky.accounts/refresh')).toBe(false)
+}, 15_000)
+type IsolatedAccountsUi = { activate: typeof activate; deactivate: typeof deactivate }
+
+async function buildWindowUiModules(): Promise<{ main: IsolatedAccountsUi; auxiliary: IsolatedAccountsUi; remove(): void }> {
+  const directory = mkdtempSync(join(import.meta.dir, '.accounts-ui-windows-'))
+  const mainPath = join(directory, 'main.mjs')
+  const auxiliaryPath = join(directory, 'auxiliary.mjs')
+  try {
+    const bundle = await Bun.build({
+      entrypoints: [join(import.meta.dir, '../src/ui.tsx')],
+      target: 'bun',
+      packages: 'external'
+    })
+    if (!bundle.success) throw new Error(bundle.logs.map((entry) => entry.message).join('\n'))
+    await Bun.write(mainPath, bundle.outputs[0]!)
+    copyFileSync(mainPath, auxiliaryPath)
+    return {
+      main: await import(pathToFileURL(mainPath).href) as IsolatedAccountsUi,
+      auxiliary: await import(pathToFileURL(auxiliaryPath).href) as IsolatedAccountsUi,
+      remove: () => rmSync(directory, { recursive: true, force: true })
+    }
+  } catch (error) {
+    rmSync(directory, { recursive: true, force: true })
+    throw error
+  }
+}
+
+function usageForAccounts(state: AccountState) {
+  return {
+    providers: (['claude', 'codex'] as const).map((provider) => ({
+      provider, accountId: state.active[provider], status: 'ok', error: null, updatedAt: 1, session: null, weekly: null
+    })),
+    inactive: {},
+    updatedAt: 1
+  }
+}
+
+test('auxiliary Settings routes commands to its own local Accounts store when main is remote', async () => {
+  const world = await makeOwnerWorld('accounts-ui-origin-window')
+  await prepareScopeAccounts(world)
+  await addAccount(world.local, 'claude', 'Auxiliary Claude target', 'auxiliary-target@example.test')
+  const localState = await call<AccountState>(world.local, 'quirky.accounts/list')
+  const remoteState = await call<AccountState>(world.remote, 'quirky.accounts/list')
+  const target = localState.accounts.find((account) => account.provider === 'claude' && account.id !== localState.active.claude)
+  if (!target) throw new Error('Missing auxiliary local Claude selection target')
+  const auxiliaryLoginUrl = 'https://auth.openai.com/oauth/authorize?state=auxiliary-window'
+  let auxiliaryAccounts: AccountState = {
+    ...localState,
+    pendingLogin: {
+      id: 'auxiliary-login', provider: 'codex', accountId: null, status: 'pending',
+      url: auxiliaryLoginUrl, error: null, result: null
+    }
+  }
+  let auxiliaryUsage = usageForAccounts(localState)
+  const windows = new Map<number, ContextFixture>()
+  const main = makeContext(world, { layout: remoteLayout(world.mirror.id), connId: 101, windows })
+  const auxiliary = makeContext(world, { layout: localLayout(world.localWorktree.id), connId: 202, windows })
+  windows.set(101, main)
+  windows.set(202, auxiliary)
+  const originalAuxiliaryCall = auxiliary.context.call.bind(auxiliary.context)
+  auxiliary.context.call = async (method, params = {}) => {
+    if (method === 'quirky.accounts/list') {
+      auxiliary.calls.push({ method, params })
+      return auxiliaryAccounts
+    }
+    if (method === 'quirky.accounts/usage' || method === 'quirky.accounts/refresh') {
+      auxiliary.calls.push({ method, params })
+      return auxiliaryUsage
+    }
+    return originalAuxiliaryCall(method, params)
+  }
+  auxiliary.context.executeCommand = async (id, args, options) => {
+    auxiliary.commandInvocations.push({ id, args, ...(options ? { options } : {}) })
+    const handler = main.provided.get(id)
+    if (typeof handler === 'function') await (handler as (args?: unknown) => unknown)(args)
+  }
+
+  const modules = await buildWindowUiModules()
+  const { main: mainUi, auxiliary: auxiliaryUi } = modules
+  const originalClipboard = navigator.clipboard
+  const clipboardWrites: string[] = []
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async (value: string) => { clipboardWrites.push(value) } }
+  })
+  try {
+    await act(async () => {
+      mainUi.activate(main.context)
+      mount(main, 'view:quirky.accounts/settings', container)
+      auxiliaryUi.activate(auxiliary.context)
+      mount(auxiliary, 'view:quirky.accounts/settings', statusContainer)
+    })
+    await waitUntil(
+      () => container.textContent?.includes('Remote Claude active') === true,
+      `The main window did not load its remote Accounts owner. Text: ${container.textContent}; calls: ${JSON.stringify(main.calls)}`
+    )
+    await waitUntil(() => statusContainer.textContent?.includes('Auxiliary Claude target') === true, 'The auxiliary window did not load its local Accounts state.')
+
+    const codexTab = buttonsByText(statusContainer, 'Codex')[0]
+    if (!codexTab) throw new Error('Missing auxiliary Codex settings tab')
+    await act(async () => { codexTab.click() })
+    await waitUntil(() => buttonsByText(statusContainer, 'Copy link').length > 0, 'The auxiliary pending login did not render its Copy link action.')
+    await act(async () => { buttonsByText(statusContainer, 'Copy link')[0]!.click() })
+    await auxiliary.whenIdle()
+    await main.whenIdle()
+    expect(auxiliary.calls.some((item) => item.method === 'ui.window.self')).toBe(true)
+    expect(main.calls.some((item) => item.method === 'ui.window.self')).toBe(true)
+    expect(clipboardWrites).toEqual([auxiliaryLoginUrl])
+    expect(auxiliary.commandInvocations.at(-1)).toEqual({
+      id: 'command:quirky.accounts/copy-login-link',
+      args: { id: 'auxiliary-login', provider: 'codex', url: auxiliaryLoginUrl, connId: 202 },
+      options: { activateOwner: false }
+    })
+    expect(main.calls.filter((item) => item.method === 'ui.window.command.run').at(-1)?.params).toEqual({
+      connId: 202,
+      id: 'command:quirky.accounts/copy-login-link',
+      args: { id: 'auxiliary-login', provider: 'codex', url: auxiliaryLoginUrl }
+    })
+
+    const claudeTab = buttonsByText(statusContainer, 'Claude')[0]
+    if (!claudeTab) throw new Error('Missing auxiliary Claude settings tab')
+    await act(async () => { claudeTab.click() })
+    await act(async () => { await auxiliary.whenIdle() })
+    await waitUntil(
+      () => Boolean(statusContainer.querySelector(`[aria-label="Select Claude account ${target.label}"]`)),
+      'The auxiliary Claude account selection did not render.'
+    )
+    const select = buttonByLabel(statusContainer, `Select Claude account ${target.label}`)
+    await act(async () => { select.click() })
+    await act(async () => {
+      await auxiliary.whenIdle()
+      await main.whenIdle()
+    })
+    const localAfterSelection = await call<AccountState>(world.local, 'quirky.accounts/list')
+    auxiliaryAccounts = localAfterSelection
+    auxiliaryUsage = usageForAccounts(localAfterSelection)
+    expect(localAfterSelection.active.claude).toBe(target.id)
+    expect((await call<AccountState>(world.remote, 'quirky.accounts/list')).active.claude).toBe(remoteState.active.claude)
+    expect(auxiliary.calls.filter((item) => item.method === 'quirky.accounts/select').at(-1)?.params)
+      .toEqual({ provider: 'claude', accountId: target.id })
+    expect(main.calls.some((item) => item.method === 'quirky.accounts/ownerCall' && item.params?.operation === 'select')).toBe(false)
+    expect(auxiliary.commandInvocations.at(-1)).toEqual({
+      id: 'command:quirky.accounts/select-account',
+      args: { provider: 'claude', accountId: target.id, connId: 202 },
+      options: { activateOwner: false }
+    })
+    expect(main.calls.filter((item) => item.method === 'ui.window.command.run').at(-1)?.params).toEqual({
+      connId: 202,
+      id: 'command:quirky.accounts/select-account',
+      args: { provider: 'claude', accountId: target.id }
+    })
+
+    const grokTab = buttonsByText(statusContainer, 'Grok (xAI)')[0]
+    if (!grokTab) throw new Error('Missing auxiliary Grok settings tab')
+    await act(async () => { grokTab.click() })
+    await act(async () => { await auxiliary.whenIdle() })
+    await waitUntil(
+      () => Boolean(statusContainer.querySelector('[aria-label="Refresh Grok (xAI) usage"]')),
+      'The auxiliary Grok refresh action did not render.'
+    )
+    await act(async () => { buttonByLabel(statusContainer, 'Refresh Grok (xAI) usage').click() })
+    await act(async () => {
+      await auxiliary.whenIdle()
+      await main.whenIdle()
+    })
+    expect(auxiliary.calls.filter((item) => item.method === 'quirky.accounts/refresh').at(-1)?.params)
+      .toEqual({ provider: 'grok', force: true })
+    expect(main.calls.some((item) => item.method === 'quirky.accounts/ownerCall' && item.params?.operation === 'refresh')).toBe(false)
+    expect(auxiliary.commandInvocations.at(-1)).toEqual({
+      id: 'command:quirky.accounts/refresh',
+      args: { provider: 'grok', connId: 202 },
+      options: { activateOwner: false }
+    })
+    expect(main.calls.filter((item) => item.method === 'ui.window.command.run').at(-1)?.params).toEqual({
+      connId: 202,
+      id: 'command:quirky.accounts/refresh',
+      args: { provider: 'grok' }
+    })
+
+    const selectCommand = main.provided.get('command:quirky.accounts/select-account')
+    if (typeof selectCommand !== 'function') throw new Error('Missing owner select-account command')
+    const staleResult = await (selectCommand as (args?: unknown) => unknown)({
+      provider: 'claude', accountId: target.id, connId: 999
+    })
+    expect(staleResult).toEqual({ ok: false, reason: 'owner-unavailable' })
+    expect(JSON.stringify(staleResult)).not.toContain(auxiliaryLoginUrl)
+    expect(auxiliary.calls.filter((item) => item.method === 'quirky.accounts/select')).toHaveLength(1)
+  } finally {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: originalClipboard })
+    await act(async () => {
+      for (const cleanup of unregister.splice(0)) cleanup()
+      mainUi.deactivate()
+      auxiliaryUi.deactivate()
+      modules.remove()
+    })
+  }
+}, 30_000)
