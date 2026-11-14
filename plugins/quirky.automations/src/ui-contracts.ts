@@ -18,6 +18,10 @@ export type AutomationNavigation = {
   direction: 'asc' | 'desc'
   runQuery: string
   runStatus: 'all' | 'successful' | 'failed' | 'progress' | 'skipped'
+  promptExpanded: boolean
+  historyStarts: number[]
+  runLimit: number
+  settingsNotice: boolean
 }
 export type AutomationDraft = {
   name: string
