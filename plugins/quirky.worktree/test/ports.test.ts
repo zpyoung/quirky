@@ -131,6 +131,7 @@ for (const host of PORT_LOOPBACK_HOSTS) {
     } catch (error) {
       if (host !== '::' && host !== '::1') throw error
       const code = (error as NodeJS.ErrnoException).code
+      if (code === undefined) throw error
       expect(['EADDRNOTAVAIL', 'EAFNOSUPPORT', 'EPROTONOSUPPORT']).toContain(code)
       expect(await isPortFree(await unusedPort())).toBe(true)
       return
