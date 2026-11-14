@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto'
+import { basename } from 'node:path'
 import {
   formatContributionId,
   RpcErrorCode,
   type PluginCaller,
+  type LaunchHook,
+  type PluginStore,
   type EffectiveHooks,
   type PluginContext,
   type PluginActivationDisposer,
@@ -17,6 +20,7 @@ import { BranchCleaner } from './src/daemon/branches'
 import { createRemoteWorkspace, createWorkspace, prefetchWorktreeCreateBase, suggestName, type CreateEnv, type CreateParams, type PendingStart, type RemoteCreateParams } from './src/daemon/create'
 import { findOwned, groupRepoId, knownWorktree, listEverything, listGroup, listProject, type ListEnv } from './src/daemon/list'
 import { KeyedQueue } from './src/daemon/queue'
+import { WorktreePorts, portBlocks, portEnvironment } from './src/daemon/ports'
 import { deleteBranch, describeRemove, removeWorktree, type DeleteBranchParams, type InFlightRemove, type RemoveEnv, type RemoveParams } from './src/daemon/remove'
 import { createGroupForWorktree, setWorktree, showWorktree, type CreateGroupParams, type SetEnv, type SetParams } from './src/daemon/set'
 import { filesystemIdentitySource } from './src/daemon/identity'
@@ -101,6 +105,14 @@ function originCreatorOf(caller: PluginCaller): WorktreeOriginCreator {
   }
   return { creatorKind: 'client', creatorId: null, creatorRole: caller.role }
 }
+/** Adds the local worktree's persistent block to every session launch. */
+export function portsLaunchHook(store: PluginStore, ports: WorktreePorts): LaunchHook {
+  return async ({ worktreeId }) => {
+    if (!store.get('SELECT id FROM worktrees WHERE id = ?', worktreeId)) return
+    return { env: portEnvironment(await ports.ensure(worktreeId)) }
+  }
+}
+
 
 
 export async function activate(context: PluginContext): Promise<PluginActivationDisposer> {
@@ -110,6 +122,15 @@ export async function activate(context: PluginContext): Promise<PluginActivation
   let preparedExpiryTask: Promise<void> | undefined
   let preparedExpiryActive = true
   const store = openWorktreeStore(context)
+  const ports = new WorktreePorts({
+    store,
+    range: () => ({
+      start: Number(context.getSetting('portRangeStart')),
+      end: Number(context.getSetting('portRangeEnd')),
+      size: Number(context.getSetting('portBlockSize'))
+    })
+  })
+  context.provide('launch-hook:quirky.worktree/ports', portsLaunchHook(store, ports))
   registerRemoteWorkspaces(context, store)
   const releaseVm = registerVmEnvironments(context, store)
   const preparationOwnerId = randomUUID()
@@ -258,6 +279,7 @@ export async function activate(context: PluginContext): Promise<PluginActivation
   const createEnv: CreateEnv = {
     ...listEnv,
     process: context.process,
+    ports,
     fail,
     changed: (data) => void context.emit('changed', data),
     call: (method, params) => context.call(method, params),
@@ -468,6 +490,27 @@ export async function activate(context: PluginContext): Promise<PluginActivation
 
   const handlers: Record<string, Handler> = {
     ownedIds,
+    async ports(params, caller) {
+      let worktreeId: string | undefined
+      if (params.worktree !== undefined) {
+        const { worktree } = await findWorktree(String(params.worktree), identityOf(caller))
+        worktreeId = worktree.id
+        try {
+          await ports.ensure(worktreeId)
+        } catch (error) {
+          throw fail('conflict', errorMessage(error))
+        }
+      }
+      const blocks = portBlocks(store)
+        .filter((block) => worktreeId === undefined || block.worktreeId === worktreeId)
+        .map((block) => {
+          const row = store.get<{ display_name: string | null; path: string | null }>(
+            'SELECT display_name, path FROM worktrees WHERE id = ?', block.worktreeId
+          )!
+          return { ...block, name: row.display_name ?? basename(row.path ?? ''), path: row.path, last: block.base + block.count - 1 }
+        })
+      return { blocks }
+    },
     async list(params) {
       await reconcileDeletedGroups()
       const repos = await listRepos()

@@ -3,12 +3,47 @@ import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, Menu, SectionHeader, StatusDot, TextField, ToolPanelFrame } from '@quirky/ui'
 import { CHECKS_PANEL, type JsonRecord, type ReviewData, type ReviewsSurfaceProps } from '../contracts'
 import { isRecord } from './data'
+import { SitterRow, SitterSafetyStrip } from './SitterRow'
+import type { ChecksSitterState, SitterDetail, SitterFleetRow } from './data'
 import { reviewContext } from '../detail/data'
 import { useDraftField, type DraftAction } from '../draft-field'
 import { ReviewActions } from '../detail/Actions'
 import { ChecksList } from '../detail/ChecksList'
 import { Comments } from '../detail/Comments'
 import { useReviewLinkRouting } from '../link-routing'
+
+const UNAVAILABLE_CHECKS_SITTER_STATE: ChecksSitterState = {
+  available: false,
+  sitter: null,
+  detail: null,
+  activeCount: 0,
+  otherActiveCount: 0,
+}
+
+function isSitterFleetRow(value: unknown): value is SitterFleetRow {
+  if (!isRecord(value) || !isRecord(value.target) || typeof value.target.watcherId !== 'string') return false
+  if (!isRecord(value.enrollment) || value.enrollment.kind !== 'hosted-review') return false
+  if (!isRecord(value.enrollment.capabilities) || !isRecord(value.enrollment.budget) || !isRecord(value.enrollment.kindPayload)) return false
+  if (value.enrollment.worktreeId !== undefined && value.enrollment.worktreeId !== null && typeof value.enrollment.worktreeId !== 'string') return false
+  return isRecord(value.status) && typeof value.status.state === 'string' && Array.isArray(value.openEscalations)
+}
+
+function checksSitterState(value: unknown): ChecksSitterState {
+  if (!isRecord(value) || value.available !== true) return UNAVAILABLE_CHECKS_SITTER_STATE
+  if (typeof value.activeCount !== 'number' || !Number.isFinite(value.activeCount)) return UNAVAILABLE_CHECKS_SITTER_STATE
+  if (typeof value.otherActiveCount !== 'number' || !Number.isFinite(value.otherActiveCount)) return UNAVAILABLE_CHECKS_SITTER_STATE
+  if (value.sitter !== null && !isSitterFleetRow(value.sitter)) return UNAVAILABLE_CHECKS_SITTER_STATE
+  const detail = value.detail !== null && isRecord(value.detail) && Array.isArray(value.detail.journal) && Array.isArray(value.detail.openEscalations)
+    ? value.detail as unknown as SitterDetail
+    : null
+  return {
+    available: true,
+    sitter: value.sitter as SitterFleetRow | null,
+    detail,
+    activeCount: value.activeCount,
+    otherActiveCount: value.otherActiveCount,
+  }
+}
 
 const REFRESH_ENTRY_AGE_MS = 15_000
 const REFRESH_COOLDOWN_MS = 10_000
@@ -758,6 +793,8 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const [layout, setLayout] = useState<UiLayout>(() => context.getLayout())
   const [windowVisible, setWindowVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible')
   const [actionError, setActionError] = useState<string | null>(null)
+  const [sitterState, setSitterState] = useState<ChecksSitterState | null>(null)
+  const [sitterDetailLoading, setSitterDetailLoading] = useState(false)
   const [authDiagnostics, setAuthDiagnostics] = useState<JsonRecord | null>(null)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkNumber, setLinkNumber] = useState('')
@@ -776,7 +813,38 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const activeWorktree = useMemo(() => layoutWorktree(layout), [layout])
   const activeWorktreeRef = useRef(activeWorktree)
   activeWorktreeRef.current = activeWorktree
+  const sitterRequestEpoch = useRef(0)
+  const sitterIncludeDetail = useRef(false)
   const active = state.checks.worktree === activeWorktree ? state.checks : null
+  const refreshSitter = useCallback(async (includeDetail = sitterIncludeDetail.current) => {
+    const worktree = activeWorktreeRef.current
+    const epoch = ++sitterRequestEpoch.current
+    sitterIncludeDetail.current = includeDetail
+    setSitterDetailLoading(includeDetail)
+    const params = worktree === null ? { includeDetail } : { worktree, includeDetail }
+    try {
+      const result = checksSitterState(await context.call('quirky.reviews/checksSitterGet', params))
+      if (epoch !== sitterRequestEpoch.current || activeWorktreeRef.current !== worktree || !mounted.current) return
+      setSitterState(result)
+    } catch {
+      if (epoch === sitterRequestEpoch.current && activeWorktreeRef.current === worktree && mounted.current) {
+        setSitterState(UNAVAILABLE_CHECKS_SITTER_STATE)
+      }
+    } finally {
+      if (epoch === sitterRequestEpoch.current && activeWorktreeRef.current === worktree && mounted.current) {
+        setSitterDetailLoading(false)
+      }
+    }
+  }, [context])
+
+  useEffect(() => {
+    void refreshSitter(false)
+    return () => { sitterRequestEpoch.current += 1 }
+  }, [activeWorktree, refreshSitter])
+
+  useEffect(() => context.subscribe((event) => {
+    if (event.type === 'quirky.heimdall/fleetChanged') void refreshSitter()
+  }), [context, refreshSitter])
   const currentReview = active?.review ?? null
   const titleOwner = active === null ? null : reviewContext(state, 'checks')
   const titleIdentity = titleOwner === null
@@ -804,6 +872,20 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const titleInput = titleField.value ?? ''
   const titleSaveAction = useRef<DraftAction<string | null> | null>(null)
   const lookup = active && isRecord(active.lookup) ? active.lookup : null
+  const sitterSafetyStrip = sitterState?.available ? <SitterSafetyStrip
+    context={context}
+    sitterState={sitterState}
+    onStoppedAll={() => refreshSitter(sitterIncludeDetail.current)}
+  /> : null
+  const sitterRow = sitterState?.available ? <SitterRow
+    context={context}
+    activeWorktree={activeWorktree}
+    review={currentReview}
+    lookup={lookup}
+    sitterState={sitterState}
+    loadingDetail={sitterDetailLoading}
+    onRefreshSitter={refreshSitter}
+  /> : null
   const missingOrigin = lookup?.kind === 'unsupported' && lookup.reason === 'missing_origin'
   const eligibility = active && isRecord(active.eligibility) ? active.eligibility : null
   const currentTarget = useMemo(() => pollTarget(state, activeWorktree), [state.checks, activeWorktree])
@@ -1112,12 +1194,16 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
 
   if (!activeWorktree) {
     return <section className="ui-stack">
+      {sitterSafetyStrip}
+      {sitterRow}
       <SectionHeader title="No workspace selected" />
       <EmptyState message="Select a workspace to view checks." />
     </section>
   }
   if (!active || active.loading && !active.lookup && !active.review) {
     return <section className="ui-stack" aria-busy="true">
+      {sitterSafetyStrip}
+      {sitterRow}
       <p role="status" className="ui-text-muted">Checking pull request status…</p>
       {actionError && <p role="alert"><Badge tone="failing">{actionError}</Badge></p>}
     </section>
@@ -1136,6 +1222,8 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     const busy = Boolean(active.loading)
     return (
       <section className="ui-stack" style={{ minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
+        {sitterSafetyStrip}
+        {sitterRow}
         {!missingOrigin && actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
         {!missingOrigin && active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}</p>}
         <div className="ui-stack" style={{ padding: 'var(--ui-space-12)', overflow: 'auto' }}>
@@ -1218,6 +1306,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       actions={<Menu label="More PR actions" trigger={<ControlIcon name="dots-three" />} items={actionItems} />}
     >
     <section className="ui-stack" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
+      {sitterSafetyStrip}
       {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}{currentReview ? ' Showing the last known review status.' : ''}</p>}
       {actionError ?? titleField.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError ?? titleField.error}</p> : null}
       <div className="ui-stack" style={{ padding: 'var(--ui-space-12)' }}>
@@ -1282,6 +1371,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       <div className="ui-stack" style={{ padding: 'var(--ui-space-8) var(--ui-space-12)' }}>
         <ReviewActions {...props} surface="checks" />
       </div>
+      {sitterRow}
 
       {(hostConflict || localConflict) && <section className="ui-stack" aria-label="Merge conflicts">
         <SectionHeader title="Conflicts block this PR" />

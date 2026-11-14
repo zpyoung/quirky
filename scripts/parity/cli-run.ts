@@ -25,6 +25,11 @@ export type CliParityRow = {
   executed: boolean
   checks: string[]
   catalogRefs: string[]
+  observations?: {
+    checks: string[]
+    command: 'bun scripts/parity/cli-files.ts --json'
+    executed: false
+  }
   followUp?: string
   reason?: string
   error?: CliCheckFailure
@@ -149,7 +154,14 @@ export function reduceCliRows(
     const result: CliParityRow = {
       id: row.id, status: row.disposition === 'covered' ? 'not-run' : row.disposition,
       executed: false, checks: row.checks, catalogRefs: catalogRefs.get(row.id) ?? [],
-      ...(row.reason ? { reason: row.reason } : {}), ...(row.followUp ? { followUp: row.followUp } : {})
+      ...(row.reason ? { reason: row.reason } : {}), ...(row.followUp ? { followUp: row.followUp } : {}),
+      ...(row.observations !== undefined ? {
+        observations: {
+          checks: [...row.observations],
+          command: 'bun scripts/parity/cli-files.ts --json' as const,
+          executed: false as const
+        }
+      } : {})
     }
     if (row.disposition === 'mapped-only' && result.catalogRefs.length === 0) result.status = 'not-run'
     if (row.disposition !== 'covered') return result

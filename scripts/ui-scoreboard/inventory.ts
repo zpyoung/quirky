@@ -13,6 +13,7 @@ const SLOT_KINDS: readonly UiSlotEntry['kind'][] = ['view', 'panel', 'sidebar-se
 const LEGACY_COMPATIBILITY_DEFINITION = 'packages/ui/src/design-system/compatibility-tokens.css'
 const AVATAR_EXCLUSION: Exclusion = { plugin: 'quirky.avatar', reason: 'paused-unmerged', branch: 'zpyoung/avatar-plugin', pr: 305, steerDate: '2026-11-13' }
 const PLUGIN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+const COVERAGE_FRAGMENT_NAME = /^[a-z0-9][a-z0-9-]*\.json$/
 
 function compareText(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0
@@ -103,7 +104,7 @@ function readProductionTree(
 
     for (const entry of entries) {
       const childRelative = relativeDirectory ? join(relativeDirectory, entry.name) : entry.name
-      if (relativeDirectory.length === 0 && entry.name === 'ui-scoreboard.json') continue
+      if (relativeDirectory.length === 0 && (entry.name === 'ui-scoreboard.json' || entry.name === 'ui-scoreboard')) continue
       if (shouldSkipPath(childRelative)) continue
       const absolute = join(directory, entry.name)
       const file = pathFromRoot(repoRoot, absolute)
@@ -184,6 +185,87 @@ function readCoverageFile(
   }
 }
 
+function readCoverageFragments(
+  repoRoot: string,
+  directory: string,
+  hasUi: boolean,
+  targets: readonly string[],
+  snapshots: Map<string, string>,
+  failures: Evidence[]
+): SourceFile[] | undefined {
+  const absolute = join(repoRoot, 'plugins', directory, 'ui-scoreboard')
+  const file = pathFromRoot(repoRoot, absolute)
+  let stat: Stats
+  try {
+    stat = lstatSync(absolute)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    failures.push(evidence('plugin-coverage-unreadable', `Cannot inspect plugin coverage directory ${file}: ${errorMessage(error)}`))
+    snapshots.set(file, '[unreadable]')
+    return undefined
+  }
+
+  if (!hasUi && targets.length === 0) {
+    failures.push(evidence('unexpected-coverage-file', `Coverage directory has no UI entry or targets in ${file}`))
+  }
+  if (stat.isSymbolicLink()) {
+    failures.push(evidence('source-symlink', `Plugin coverage directory is a symlink: ${file}`))
+    snapshots.set(file, '[symlink]')
+    return undefined
+  }
+  if (!stat.isDirectory()) {
+    failures.push(evidence('invalid-coverage-file', `Plugin coverage path is not a directory: ${file}`))
+    snapshots.set(file, '[unreadable]')
+    return undefined
+  }
+
+  let entries: Dirent[]
+  try {
+    entries = readdirSync(absolute, { withFileTypes: true }).sort((left, right) => compareText(left.name, right.name))
+  } catch (error) {
+    failures.push(evidence('plugin-coverage-unreadable', `Cannot read plugin coverage directory ${file}: ${errorMessage(error)}`))
+    snapshots.set(file, '[unreadable]')
+    return []
+  }
+
+  const fragments: SourceFile[] = []
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue
+    const entryAbsolute = join(absolute, entry.name)
+    const entryFile = pathFromRoot(repoRoot, entryAbsolute)
+    let entryStat: Stats
+    try {
+      entryStat = lstatSync(entryAbsolute)
+    } catch (error) {
+      failures.push(evidence('plugin-coverage-unreadable', `Cannot inspect plugin coverage entry ${entryFile}: ${errorMessage(error)}`))
+      snapshots.set(entryFile, '[unreadable]')
+      continue
+    }
+
+    if (entryStat.isSymbolicLink()) {
+      failures.push(evidence('source-symlink', `Plugin coverage entry is a symlink: ${entryFile}`))
+      snapshots.set(entryFile, '[symlink]')
+      continue
+    }
+    if (!entryStat.isFile() || !COVERAGE_FRAGMENT_NAME.test(entry.name)) {
+      failures.push(evidence('invalid-coverage-file', `Plugin coverage entry must be a regular lowercase .json fragment file: ${entryFile}`))
+      snapshots.set(entryFile, '[unreadable]')
+      continue
+    }
+
+    try {
+      const content = readFileSync(entryAbsolute, 'utf8')
+      snapshots.set(entryFile, content)
+      fragments.push({ file: entryFile, content })
+    } catch (error) {
+      failures.push(evidence('plugin-coverage-unreadable', `Cannot read plugin coverage fragment ${entryFile}: ${errorMessage(error)}`))
+      snapshots.set(entryFile, '[unreadable]')
+    }
+  }
+  return fragments
+}
+
+
 function fullMethodId(pluginId: string, methodId: string): string {
   return methodId.includes('/') ? methodId : `${pluginId}/${methodId}`
 }
@@ -263,6 +345,7 @@ function productionPath(path: string): boolean {
   const normalized = path.replaceAll('\\', '/')
   const parts = normalized.split('/')
   if (parts[0] === 'plugins' && parts.length >= 3) {
+    if (parts[2] === 'ui-scoreboard') return true
     if (parts.length === 3 && (parts[2] === 'quirky-plugin.json' || parts[2] === 'ui-scoreboard.json')) return true
     return isProductionSource(parts.slice(2).join('/'))
   }
@@ -326,13 +409,15 @@ function parseManifest(
   }
   if (manifest === undefined) {
     const coverage = readCoverageFile(repoRoot, directory, false, [], snapshots, failures)
+    const coverageFragments = readCoverageFragments(repoRoot, directory, false, [], snapshots, failures)
     return {
       id: directory,
       directory: `plugins/${directory}`,
       hasUi: false,
       targets: [],
       sources: [],
-      ...(coverage === undefined ? {} : { coverage })
+      ...(coverage === undefined ? {} : { coverage }),
+      ...(coverageFragments === undefined ? {} : { coverageFragments })
     }
   }
 
@@ -385,6 +470,7 @@ function parseManifest(
   const pluginTargets = targetIds.get(id) ?? []
   const pluginContributions = parsePluginContributions(id, contributionRecord)
   const coverage = readCoverageFile(repoRoot, directory, hasUi, pluginTargets, snapshots, failures)
+  const coverageFragments = readCoverageFragments(repoRoot, directory, hasUi, pluginTargets, snapshots, failures)
   return {
     id,
     directory: `plugins/${directory}`,
@@ -392,7 +478,8 @@ function parseManifest(
     targets: pluginTargets,
     sources: [],
     contributions: pluginContributions,
-    ...(coverage === undefined ? {} : { coverage })
+    ...(coverage === undefined ? {} : { coverage }),
+    ...(coverageFragments === undefined ? {} : { coverageFragments })
   }
 }
 

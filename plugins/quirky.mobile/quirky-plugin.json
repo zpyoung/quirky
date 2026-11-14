@@ -668,7 +668,17 @@
     ],
     "command": [
       { "id": "open", "title": "Open Mobile" },
-      { "id": "open-settings", "title": "Open Mobile Settings" }
+      { "id": "open-settings", "title": "Open Mobile Settings" },
+      {
+        "id": "copy-pairing-code",
+        "title": "Copy Mobile Pairing Code",
+        "description": "Copy the given pairing code URL, or the one shown in this window's Mobile pairing panel, to the clipboard without printing it.",
+        "args": {
+          "type": "object",
+          "properties": { "pairingUrl": { "type": "string" } },
+          "additionalProperties": false
+        }
+      }
     ],
     "cli-command": [
       { "id": "info", "summary": "read this desktop's mobile identity", "methods": ["quirky.mobile/info"] },

@@ -10,6 +10,7 @@ import { gitRunnerPath, runHookScript } from './hooks-run'
 import { birthtimeOf, joinMetadata, listEverything, type ListEnv } from './list'
 import { filesystemIdentitySource, instanceIdFor } from './identity'
 import { forgetWorktreeOrigins, rowOf, type WorktreeRow } from './store'
+import { storedPortBlock } from './ports'
 
 /** What `quirky.worktree/remove` and `describeRemove` accept. */
 export type RemoveParams = {
@@ -506,7 +507,7 @@ async function runArchive(env: RemoveEnv, repo: Repo, target: Worktree, hooks: E
     )
   }
   const runner = await gitRunnerPath(target.path, 'archive')
-  const outcome = await runHookScript(env.process, runner, { rootPath: repo.path, worktreePath: target.path }, archive.text)
+  const outcome = await runHookScript(env.process, runner, { rootPath: repo.path, worktreePath: target.path, ports: storedPortBlock(env.store, target.id) }, archive.text)
   if (outcome.exitCode === 0 && !outcome.timedOut) return
   const what = outcome.timedOut ? 'timed out' : `exited with ${outcome.exitCode ?? 'a signal'}`
   if (options.allowFailedArchiveHook) {

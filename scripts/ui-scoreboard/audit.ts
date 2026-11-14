@@ -195,7 +195,14 @@ function publicRoute(inventory: Inventory, target: string, operation: string, at
 export function auditPlugin(inventory: Inventory, plugin: PluginInventory): CheckResult[] {
   const evidence: Record<AuditId, Evidence[]> = { loading: [], empty: [], error: [], commands: [] }
   const applicable: Record<AuditId, boolean> = { loading: true, empty: true, error: true, commands: true }
-  const add = (ids: readonly AuditId[], item: Evidence) => { for (const id of ids) evidence[id].push(item) }
+  let coverageFile: string | undefined
+  const add = (ids: readonly AuditId[], item: Evidence) => {
+    if (coverageFile) item = {
+      ...item, coverageFile,
+      message: !PASS_CODES[item.code] && item.code !== 'coverage-duplicate' ? `${item.message} [${coverageFile}]` : item.message,
+    }
+    for (const id of ids) evidence[id].push(item)
+  }
   const finish = () => IDS.map((id): CheckResult => {
     const failure = evidence[id].find((item) => !PASS_CODES[item.code])
     return { id, status: failure ? 'fail' : 'pass', applicable: applicable[id], reason: failure?.code ?? (applicable[id] ? 'source-audit' : 'state-not-applicable'), evidence: evidence[id] }
@@ -210,12 +217,15 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       return [file, ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, kind)] as const
     }))
     const nodeOf = (candidate: Candidate) => candidateNode(candidate, sources.get(candidate.file)!)
-    const owners = new Map<Candidate, AuditId[][]>()
+    const owners = new Map<Candidate, Array<{ ids: AuditId[]; file: string }>>()
     const staleWitnessRegions: Array<LocatedNode & { state: StateKind }> = []
     const claim = (candidate: Candidate, ids: AuditId[]) => {
       const previous = owners.get(candidate) ?? []
-      if (previous.length) add([...new Set([...previous.flat(), ...ids])], issue('coverage-duplicate', `Candidate ${candidate.kind} is covered more than once`, { file: candidate.file, node: nodeOf(candidate)! }))
-      previous.push(ids)
+      if (previous.length) {
+        const files = [...new Set([...previous.map((claim) => claim.file), coverageFile!])]
+        add([...new Set([...previous.flatMap((claim) => claim.ids), ...ids])], issue('coverage-duplicate', `Candidate ${candidate.kind} is covered more than once [${files.join(', ')}]`, { file: candidate.file, node: nodeOf(candidate)! }))
+      }
+      previous.push({ ids, file: coverageFile! })
       owners.set(candidate, previous)
     }
     const resolve = (reference: Ref, ids: readonly AuditId[]) => {
@@ -354,42 +364,67 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
         } else add(ids, issue('transient' in entry ? 'action-transient' : 'action-not-user', entry.reason, located))
       }
     }
-    let coverage: CoverageFile | undefined
-    if (!plugin.coverage) add(IDS, issue('coverage-file-missing', `Missing ${plugin.directory}/ui-scoreboard.json`))
-    else {
-      try { coverage = parseCoverage(plugin.coverage.content) }
-      catch (error) { add(IDS, issue('coverage-file-invalid', error instanceof Error ? error.message : String(error))) }
+    const files = [
+      ...(plugin.coverage ? [plugin.coverage] : []),
+      ...(plugin.coverageFragments ?? []).toSorted((left, right) => left.file < right.file ? -1 : left.file > right.file ? 1 : 0),
+    ]
+    const coverages: Array<{ file: string; coverage: CoverageFile }> = []
+    const declarations = new Map<string, { file: string; decisions: CoverageFile['surfaces'][string] }>()
+    const surfaces = plugin.targets.length ? plugin.targets : ['ui']
+    if (!files.length) add(IDS, issue('coverage-file-missing', `Missing ${plugin.directory}/ui-scoreboard.json or ${plugin.directory}/ui-scoreboard/*.json`))
+    for (const file of files) {
+      coverageFile = file.file
+      let coverage: CoverageFile
+      try { coverage = parseCoverage(file.content) }
+      catch (error) { add(IDS, issue('coverage-file-invalid', error instanceof Error ? error.message : String(error))); continue }
+      coverages.push({ file: file.file, coverage })
+      for (const [surface, decisions] of Object.entries(coverage.surfaces)) {
+        const previous = declarations.get(surface)
+        if (previous) add(STATE_IDS, { ...issue('coverage-surface-duplicate', `Surface ${surface} is also declared in ${previous.file}`), targetId: surface })
+        else declarations.set(surface, { file: file.file, decisions })
+        if (!surfaces.includes(surface)) add(STATE_IDS, { ...issue('surface-unknown', `Unknown surface ${surface}`), targetId: surface })
+      }
     }
-    if (coverage) {
-      const surfaces = plugin.targets.length ? plugin.targets : ['ui']
-      for (const surface of Object.keys(coverage.surfaces)) if (!surfaces.includes(surface)) add(STATE_IDS, { ...issue('surface-unknown', `Unknown surface ${surface}`), targetId: surface })
+    if (coverages.length) {
       for (const state of STATE_IDS) {
         applicable[state] = false
         for (const surface of surfaces) {
-          const decision = coverage.surfaces[surface]?.[state]
-          const entries = coverage.states.filter((entry) => entry.surface === surface && entry.state === state)
+          const declaration = declarations.get(surface)
+          coverageFile = declaration?.file
+          const decision = declaration?.decisions[state]
+          const hasEntries = coverages.some(({ coverage }) => coverage.states.some((entry) => entry.surface === surface && entry.state === state))
           if (!decision) { applicable[state] = true; add([state], { ...issue('surface-decision-missing', `${surface} needs a ${state} decision`), targetId: surface }); continue }
           if (decision.applicable) {
             applicable[state] = true
-            if (!entries.length) add([state], { ...issue('state-missing', `${surface} requires ${state} evidence`), targetId: surface })
+            if (!hasEntries) add([state], { ...issue('state-missing', `${surface} requires ${state} evidence`), targetId: surface })
           } else {
             for (const reference of decision.evidence) resolve(reference, [state])
-            if (entries.length) add([state], { ...issue('applicability-conflict', `${surface} marks ${state} inapplicable but classifies it`), targetId: surface })
+            if (hasEntries) add([state], { ...issue('applicability-conflict', `${surface} marks ${state} inapplicable but classifies it`), targetId: surface })
             add([state], { ...issue('state-not-applicable', decision.reason), targetId: surface })
           }
         }
       }
-      for (const entry of coverage.states) {
-        if (!surfaces.includes(entry.surface)) add([entry.state], { ...issue('surface-unknown', `Unknown state surface ${entry.surface}`), targetId: entry.surface })
-        const candidate = mapSite(entry.site, entry.anchor, 'state', [entry.state])
-        render(entry, candidate)
+      for (const { file, coverage } of coverages) {
+        coverageFile = file
+        for (const entry of coverage.states) {
+          if (!surfaces.includes(entry.surface)) add([entry.state], { ...issue('surface-unknown', `Unknown state surface ${entry.surface}`), targetId: entry.surface })
+          const candidate = mapSite(entry.site, entry.anchor, 'state', [entry.state])
+          render(entry, candidate)
+        }
       }
-      for (const entry of coverage.notState) {
-        const candidate = mapSite(entry.site, entry.anchor, 'state', [...STATE_IDS])
-        if (candidate) add(STATE_IDS, issue('not-state', entry.reason, { file: candidate.file, node: nodeOf(candidate)! }))
+      for (const { file, coverage } of coverages) {
+        coverageFile = file
+        for (const entry of coverage.notState) {
+          const candidate = mapSite(entry.site, entry.anchor, 'state', [...STATE_IDS])
+          if (candidate) add(STATE_IDS, issue('not-state', entry.reason, { file: candidate.file, node: nodeOf(candidate)! }))
+        }
       }
-      for (const entry of coverage.actions) action(entry)
+      for (const { file, coverage } of coverages) {
+        coverageFile = file
+        for (const entry of coverage.actions) action(entry)
+      }
     }
+    coverageFile = undefined
     for (const candidate of candidates) {
       const node = nodeOf(candidate)
       const at = node ? { file: candidate.file, node } : undefined

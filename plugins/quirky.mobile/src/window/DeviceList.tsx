@@ -1,4 +1,4 @@
-import { Button, EmptyState, ListRow, ToolPanelFrame } from '@quirky/ui'
+import { Button, EmptyState, InlineError, ListRow, ToolPanelFrame } from '@quirky/ui'
 import { useState } from 'react'
 import type { MobileDevice, UiPluginContext } from '@quirky/protocol'
 import { revokeMobileDevice } from './api'
@@ -12,23 +12,27 @@ type Props = {
 
 export function DeviceList({ context, devices, onChanged }: Props) {
   const [busyDevice, setBusyDevice] = useState<string | null>(null)
-  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const revoke = async (device: MobileDevice) => {
     setBusyDevice(device.deviceId)
-    setFeedback(null)
+    setNotice(null)
+    setError(null)
     try {
       await revokeMobileDevice(context, device.deviceId)
-      setFeedback({ kind: 'success', message: 'Device revoked.' })
+      setNotice('Device revoked.')
       try {
         await onChanged()
       } catch (reason) {
         const message = reason instanceof Error ? reason.message : String(reason)
-        setFeedback({ kind: 'error', message: `Device revoked, but the paired-device list could not refresh: ${message}` })
+        setNotice(null)
+        setError(`Device revoked, but the paired-device list could not refresh: ${message}`)
       }
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : String(reason)
-      setFeedback({ kind: 'error', message: `Failed to revoke device: ${message}` })
+      setNotice(null)
+      setError(`Failed to revoke device: ${message}`)
     } finally {
       setBusyDevice(null)
     }
@@ -61,11 +65,8 @@ export function DeviceList({ context, devices, onChanged }: Props) {
             ))}
           </div>
         )}
-        {feedback && (
-          <p className={feedback.kind === 'error' ? 'ui-error-text' : 'ui-text-muted'} role={feedback.kind === 'error' ? 'alert' : 'status'}>
-            {feedback.message}
-          </p>
-        )}
+        {error && <InlineError message={error} />}
+        {notice && <p className="ui-text-muted" role="status">{notice}</p>}
         <p className="ui-text-muted">Revoking a device disconnects it immediately.</p>
       </div>
     </ToolPanelFrame>

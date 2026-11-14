@@ -2,6 +2,9 @@ import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { gitApi } from '@quirky/git'
 import type { ProcessRunner } from '@quirky/protocol'
+import { portEnvironment, type PortBlock } from './ports'
+
+const PORT_ENV_NAMES = ['PORT', 'WORKTREE_PORT', 'WORKTREE_PORT_COUNT', 'CONDUCTOR_PORT']
 
 export const HOOK_TIMEOUT_MS = 2 * 60 * 1000
 export const HOOK_KILL_GRACE_MS = 5000
@@ -10,7 +13,7 @@ export const HOOK_OUTPUT_LIMIT = 10 * 1024 * 1024
 export type HookKind = 'setup' | 'archive' | 'issue'
 
 /** The checkout a hook runs against: the project's primary folder and the workspace it acts on. */
-export type HookTarget = { rootPath: string; worktreePath: string }
+export type HookTarget = { rootPath: string; worktreePath: string; ports?: PortBlock | null }
 
 export type HookRunResult = {
   /** The script's exit status; null when it was killed by a signal. */
@@ -41,7 +44,8 @@ export function hookEnvironment(target: HookTarget): Record<string, string> {
     CONDUCTOR_ROOT_PATH: target.rootPath,
     CONDUCTOR_WORKSPACE_PATH: target.worktreePath,
     CONDUCTOR_WORKSPACE_NAME: name,
-    GHOSTX_ROOT_PATH: target.rootPath
+    GHOSTX_ROOT_PATH: target.rootPath,
+    ...(target.ports ? { ...portEnvironment(target.ports), CONDUCTOR_PORT: String(target.ports.base) } : {})
   }
 }
 
@@ -57,7 +61,8 @@ export const dataRunnerPath = (dataDir: string, worktreeId: string, kind: HookKi
  */
 export async function writeRunner(runner: string, target: HookTarget, script: string): Promise<void> {
   const exports = Object.entries(hookEnvironment(target)).map(([key, value]) => `export ${key}=${shellQuote(value)}`)
-  const lines = ['#!/bin/bash', ...exports, `cd ${shellQuote(target.worktreePath)} || exit 1`, script.endsWith('\n') ? script : `${script}\n`]
+  const clearPorts = target.ports ? [] : [`unset ${PORT_ENV_NAMES.join(' ')}`]
+  const lines = ['#!/bin/bash', ...clearPorts, ...exports, `cd ${shellQuote(target.worktreePath)} || exit 1`, script.endsWith('\n') ? script : `${script}\n`]
   await mkdir(dirname(runner), { recursive: true })
   await writeFile(runner, lines.join('\n'))
   await chmod(runner, 0o755)
@@ -72,9 +77,13 @@ export const runnerCommand = (runner: string): string => `/bin/bash ${shellQuote
  * `maxOutputBytes` is discarded without interrupting the script.
  */
 export async function runHookInDaemon(processRunner: ProcessRunner, runner: string, target: HookTarget, options: HookRunOptions = {}): Promise<HookRunResult> {
+  const env = { ...process.env, ...hookEnvironment(target) }
+  if (!target.ports) {
+    for (const name of PORT_ENV_NAMES) delete env[name]
+  }
   const result = await processRunner.run(['/bin/bash', runner], {
     cwd: target.worktreePath,
-    env: { ...process.env, ...hookEnvironment(target) },
+    env,
     timeoutMs: options.timeoutMs ?? HOOK_TIMEOUT_MS,
     killGraceMs: options.killGraceMs ?? HOOK_KILL_GRACE_MS,
     maxOutputBytes: options.maxOutputBytes ?? HOOK_OUTPUT_LIMIT,

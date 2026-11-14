@@ -55,6 +55,15 @@ injection. The editor fits between the window bar and status bar, keeping its ti
 close button, and Cancel/Create actions visible while the form scrolls internally.
 On narrow windows, the form stacks into one column.
 
+The shell's **Retry** rereads the daemon state and clears its alert after recovery.
+Catalog loading and an empty project catalog use shared loading and empty states.
+Saved-target, model, option, and skipped-setup advisories keep polite announcements;
+read, write, and save failures use shared alerts.
+
+`ui-scoreboard/editor.json` declares the sidebar, settings, and Automations surfaces
+and covers the shell, editor, and Markdown renderer. List-page coverage and plugin
+ratchet enrollment are separate from this fragment.
+
 Saved definitions and background-run evidence refresh without replacing the mounted page or losing search focus. Details show schedule/target/prompt, truthful usage coverage, and paged run history. The Runs dashboard excludes future occurrences from its 24-hour and seven-day counts. Run details prefer saved output, then precheck output, error, and usage diagnostics. **View run** explicitly selects the recorded structured session, including a background session not yet adopted into a tab; it never creates a replacement shell. Missing or wrong-worktree selections show an error rather than silently falling back. Native startup failures retain bounded child stderr so an external interpreter or library failure remains diagnosable.
 
 Native and OpenClaw row action menus close on Escape and explicit Refresh. Escape returns focus to the same row's trigger without running an action or changing navigation. The mounted page report includes `openMenuKey`.

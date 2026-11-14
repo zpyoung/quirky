@@ -373,5 +373,25 @@ export function createPRMutationMethods(env: HostingEnv, lookup: PRLookup): Reco
     return { number, updated: true }
   }
 
-  return { merge, autoMerge, updateReview, reviewers }
+  const updateBranch: Handler = async (params, caller) => {
+    const number = numberParam(env, params)
+    const expectedHead = expectedHeadParam(env, params.expectedHead)!
+    const read = await freshRead(env, lookup, { ...params, number }, caller)
+    verifyHead(env, read, expectedHead)
+    if (read.review.state !== 'open') invalid(env, 'review_not_open', 'Only an open pull request can have its branch updated.')
+    try {
+      await env.rest(read.scope, `repos/${read.repository.owner}/${read.repository.repo}/pulls/${number}/update-branch`, 'PUT',
+        { expected_head_sha: expectedHead }, { idempotent: false, timeoutMs: 60_000 })
+    } catch (error) {
+      if (isHeadMismatch(error)) invalid(env, 'head_changed', 'The pull request head changed. Refresh and review the new commit before trying again.')
+      const failure = safeProviderFailure(env, error)
+      if (failure) throw failure
+      recordUnknownCompletion(lookup, read.scope, number)
+      throw env.invalid('unknown_completion', 'GitHub may still be processing this branch update. Refresh the pull request state before retrying.')
+    }
+    lookup.invalidate(read.scope, { type: 'pr', number, state: 'requested', head: expectedHead })
+    return { state: 'requested', number, head: expectedHead }
+  }
+
+  return { merge, autoMerge, updateBranch, updateReview, reviewers }
 }

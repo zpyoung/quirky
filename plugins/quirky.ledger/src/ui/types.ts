@@ -138,11 +138,21 @@ export type LedgerRequest = {
 }
 export type LedgerControl = {
   action: 'scope' | 'filters' | 'sort' | 'selection' | 'detail' | 'new' | 'edit' | 'triage' | 'settings'
+    | 'choose' | 'chooser' | 'refresh' | 'filters-open' | 'prepare' | 'confirm' | 'dismiss'
   target?: LedgerTarget
   id?: string
   scope?: 'worktree' | 'project' | 'group'
   filters?: LedgerFilters
   sort?: 'activity' | 'sequence' | 'title'
   selections?: LedgerSelection[]
+  instance?: string
+  resource?: 'entries' | 'catalog' | 'directory' | 'candidates' | 'detail'
+  open?: boolean
+  replace?: boolean
+  selectionScope?: 'entries' | 'triage'
+  kind?: 'bulk-state' | 'delete-entries' | 'delete-ledger' | 'attach'
+  state?: Extract<LedgerState, 'resolved' | 'archived'>
+  attachTo?: LedgerOwner
+  dialog?: 'confirmation' | 'detail' | 'form' | 'triage'
 }
 

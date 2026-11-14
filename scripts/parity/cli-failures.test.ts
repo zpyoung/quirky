@@ -5,14 +5,16 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { delimiter, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SUPPRESSION_PROMPT } from '../../plugins/quirky.ask/src/core/claude-flags'
-import { createCliEnvironment, createCliWorld } from './cli-world'
+import { createCliEnvironment, createCliWorld, type CliFilesWorld } from './cli-world'
 import { createCliFixtures, installCliFixtureTools } from './cli-fixtures'
 import { createActorReceiptStore, parseActorReceipt, quotePosixShellLiteral } from './cli-actor'
 import { collectBracketedPaste, parseWorkerPreamble } from './cli-worker-actor'
 import * as runner from './cli-run'
-import type { CliTableRow } from './cli-table'
+import * as files from './cli-files'
+import { CLI_FILE_OBSERVATION_BINDINGS, loadCliTable, type CliTableRow } from './cli-table'
 import * as probes from './cli-checks'
 import { captureCliChild } from './cli-world'
+import * as cliWorldModule from './cli-world'
 
 import { createProcessScope } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
@@ -745,3 +747,1156 @@ test('bounded CLI capture drains a large stderr stream without truncating JSON s
     expect(captured.stdoutBytes).toBe(Buffer.byteLength(captured.stdout))
   } finally { await scope.cleanup() }
 }, 20_000)
+
+type CliFilesTestWorld = {
+  home: string
+  env: Record<string, string>
+  daemonPid: number
+  cliEntry: string
+  pages: readonly { isClosed(): boolean }[]
+  records: readonly { index: number; connId: number; worktree: string; open: boolean }[]
+  worktrees: readonly { id: string; path: string; repoId: string; isMain: boolean }[]
+  tools: { fixtureBin: string; fetchPreload: string }
+  buildElapsedMs: number
+  execute(argv: string[], options?: { signal?: AbortSignal; timeoutMs?: number; cwd?: string }): Promise<{
+    stdout: string; stderr: string; exitCode: number; stdoutBytes: number; elapsedMs: number
+  }>
+  prepare(argv: string[], cwd: string): Promise<unknown>
+  cleanup(): Promise<void>
+  cleanupEvidence: { identities: Array<{ kind: string; pid: number; gone: boolean }>; homeRemoved: boolean }
+}
+type CliFilesFactory = (options?: { signal?: AbortSignal }, dependencies?: Record<string, unknown>) => Promise<CliFilesTestWorld>
+const cliFilesFactory = (cliWorldModule as unknown as { createCliFilesWorld?: CliFilesFactory }).createCliFilesWorld
+
+function requireCliFilesFactory(): CliFilesFactory {
+  if (typeof cliFilesFactory !== 'function') throw new Error('createCliFilesWorld is not exported')
+  return cliFilesFactory
+}
+
+function cliFilesStandIns(overrides: {
+  startupFailure?: Error
+  buildFailure?: Error
+  browserFailure?: Error
+  browserStopFailure?: Error
+  worldStopFailure?: Error
+  chromeMissing?: boolean
+  runResult?: { stdout: string; stderr: string; exitCode: number; stdoutBytes: number; elapsedMs: number }
+  runCli?: (argv: string[], options?: { signal?: AbortSignal }) => Promise<{ stdout: string; stderr: string; exitCode: number; stdoutBytes: number; elapsedMs: number }>
+} = {}) {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-cli-files-world-')))
+  const uiDir = join(home, 'ui-dist')
+  const repoRoot = realpathSync(resolve(import.meta.dir, '../..'))
+  const fixtureBin = join(home, 'fixture-bin')
+  const fetchPreload = join(home, 'fetch-preload.cjs')
+  const tools = { fixtureBin, fetchPreload }
+  const events: string[] = []
+  const state = {
+    connIds: [41, 42],
+    runtimePid: 701,
+    pageClosed: [false, false],
+    records: [
+      { index: 0, connId: 41, worktree: 'wt-a', open: true, shown: true, lastRequestAgeSeconds: 0, requests: 1, sockets: 1, pageErrors: 0, pageErrorExamples: [] },
+      { index: 1, connId: 42, worktree: 'wt-b', open: true, shown: true, lastRequestAgeSeconds: 0, requests: 1, sockets: 1, pageErrors: 0, pageErrorExamples: [] }
+    ],
+    livePids: new Set<number>()
+  }
+  const worktrees = [
+    { id: 'wt-a', path: join(home, 'repos', 'a'), repoId: 'repo-a', name: 'a', isMain: false, status: 'idle' },
+    { id: 'wt-b', path: join(home, 'repos', 'b'), repoId: 'repo-b', name: 'b', isMain: false, status: 'idle' }
+  ]
+  mkdirSync(worktrees[0]!.path, { recursive: true })
+  mkdirSync(worktrees[1]!.path, { recursive: true })
+  const scope = {
+    home,
+    env: { QUIRKY_HOME: home, QUIRKY_TEST_SCOPE: 'owned-test-scope' },
+    spawn: () => { throw new Error('stand-in must not spawn an arbitrary process') },
+    track: () => {},
+    cleanup: async () => { events.push('scope.cleanup') },
+    killNow: () => {}
+  }
+  const control = {
+    callAny: async (method: string) => {
+      if (method === 'ui.state') return { windows: state.connIds.map((connId) => ({ connId })) }
+      throw new Error(`unexpected soak RPC ${method}`)
+    },
+    close: () => {}
+  }
+  const soakWorld = {
+    home,
+    runtime: { pid: 701, port: 43123, token: 'fixture-token', hookToken: 'fixture-hook-token', entryHash: 'fixture-entry' },
+    get daemonPid() { return state.runtimePid },
+    env: {},
+    workers: [],
+    ptyHostPid: () => null,
+    updatePtyHostPid: () => {},
+    fixtures: { worktrees },
+    control,
+    track: () => {},
+    stop: async () => {
+      events.push('world.stop')
+      if (overrides.worldStopFailure) throw overrides.worldStopFailure
+      state.livePids.delete(701)
+    }
+  }
+  const pages = [
+    { isClosed: () => state.pageClosed[0]! },
+    { isClosed: () => state.pageClosed[1]! }
+  ]
+  const windows = {
+    pages,
+    browserPid: 801,
+    finish: async () => ({ records: state.records.map((record) => ({ ...record })), requests: [] }),
+    stop: async () => {
+      events.push('browser.stop')
+      if (overrides.browserStopFailure) throw overrides.browserStopFailure
+      state.livePids.delete(801)
+    }
+  }
+  const cliCalls: string[][] = []
+  const dependencies: Record<string, unknown> = {
+    repoRoot,
+    createScope: () => {
+      events.push('scope.create')
+      return scope
+    },
+    installCliFixtureTools: (ownedHome: string) => {
+      events.push('tools.install')
+      if (ownedHome !== home) throw new Error('fixture tools installed outside the owned home')
+      return tools
+    },
+    createCliEnvironment: (ownedHome: string, checkout: string, installedBin: string, installedPreload: string) => {
+      events.push('environment.create')
+      if (ownedHome !== home || checkout !== repoRoot || installedBin !== fixtureBin || installedPreload !== fetchPreload) throw new Error('incorrect environment inputs')
+      return {
+        HOME: home, QUIRKY_HOME: home, QUIRKY_PORT: '0', QUIRKY_AGENT_SEARCH_DIRS: '',
+        PATH: `${fixtureBin}:/usr/bin:/bin`, BUN_OPTIONS: `--preload=${fetchPreload}`,
+        QUIRKY_CLI_ENTRY: join(repoRoot, 'packages/cli/src/main.ts')
+      }
+    },
+    verifyEgressGuard: async (options: { env: Record<string, string>; tools: typeof tools; repoRoot: string }) => {
+      events.push('egress.verify')
+      if (options.env.QUIRKY_HOME !== home || options.tools !== tools || options.repoRoot !== repoRoot) {
+        throw new Error('egress verification did not use the owned environment and tools')
+      }
+    },
+    startWorld: async (options: Record<string, unknown>, dependenciesForWorld: Record<string, unknown>) => {
+      events.push('soak.start')
+      if (options.workers !== false || options.windows !== 2) throw new Error('soak world must be worker-free with two windows')
+      const createScope = dependenciesForWorld.createScope as (() => unknown) | undefined
+      if (!createScope) throw new Error('startWorld did not receive the owned createScope callback')
+      createScope()
+      if (overrides.startupFailure) {
+        await scope.cleanup()
+        throw overrides.startupFailure
+      }
+      const prepare = dependenciesForWorld.prepareCaptureFixtureHome as ((home: string, options: { env: Record<string, string> }) => Promise<unknown>) | undefined
+      if (!prepare) throw new Error('startWorld did not receive the fixture preparation callback')
+      const helperEnv = {
+        HOME: '/poison/home', QUIRKY_HOME: home, QUIRKY_UI_DIR: uiDir,
+        QUIRKY_PORT: '1234', QUIRKY_AGENT_SEARCH_DIRS: '/poison/agents',
+        PATH: '/poison/bin', HTTP_PROXY: 'http://proxy.invalid', OPENAI_API_KEY: 'poison',
+        QUIRKY_SESSION_TOKEN: 'poison', GIT_CONFIG_GLOBAL: '/poison/gitconfig', NODE_OPTIONS: '--require=poison'
+      }
+      await prepare(home, { env: helperEnv })
+      events.push('ui.build')
+      if (overrides.buildFailure) {
+        await scope.cleanup()
+        throw overrides.buildFailure
+      }
+      mkdirSync(uiDir, { recursive: true })
+      if (helperEnv.QUIRKY_UI_DIR !== uiDir) throw new Error('safe environment replacement lost the owned UI output')
+      events.push('daemon.spawn')
+      state.livePids.add(701)
+      soakWorld.env = helperEnv
+      return soakWorld
+    },
+    prepareCaptureFixtureHome: async (_home: string, options: { env: Record<string, string> }) => {
+      events.push('fixtures.prepare')
+      const env = options.env
+      if (env.QUIRKY_HOME !== home || env.QUIRKY_PORT !== '0' || env.QUIRKY_AGENT_SEARCH_DIRS !== ''
+        || env.QUIRKY_UI_DIR !== uiDir || env.HTTP_PROXY !== undefined || env.OPENAI_API_KEY !== undefined
+        || env.QUIRKY_SESSION_TOKEN !== undefined || env.GIT_CONFIG_GLOBAL !== undefined || env.NODE_OPTIONS !== undefined
+        || env.HOME !== home || !env.PATH?.startsWith(`${fixtureBin}:`)) {
+        throw new Error('fixture preparation did not receive the restricted CLI environment')
+      }
+      return { ready: true }
+    },
+    registerCaptureFixtures: async () => ({ worktrees }),
+    openWindows: async (options: Record<string, unknown>) => {
+      events.push('windows.open')
+      if (options.count !== 2 || options.world !== soakWorld || typeof options.executable !== 'string') {
+        throw new Error('openWindows did not receive the owned two-window world and installed browser')
+      }
+      if (overrides.browserFailure) throw overrides.browserFailure
+      state.livePids.add(801)
+      return windows
+    },
+    findChrome: () => overrides.chromeMissing ? undefined : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    readRuntime: () => ({ pid: state.runtimePid, home, port: 43123, token: 'fixture-token', hookToken: 'fixture-hook-token', entryHash: 'fixture-entry' }),
+    isDaemonAlive: async () => state.livePids.has(701),
+    processSnapshot: () => new Map([...state.livePids].map((pid) => [pid, {
+      pid, ppid: process.pid, pgid: process.pid, started: `owned-${pid}`, state: 'S', command: pid === 701 ? 'quirky-daemon' : 'chromium'
+    }])),
+    runCli: async (argv: string[], options?: { signal?: AbortSignal }) => {
+      cliCalls.push([...argv])
+      if (overrides.runCli) return overrides.runCli(argv, options)
+      return overrides.runResult ?? { stdout: '{"ok":true}', stderr: '', exitCode: 0, stdoutBytes: 11, elapsedMs: 1 }
+    },
+    runPreparation: async (argv: string[]) => {
+      cliCalls.push([...argv])
+      return { stdout: '', stderr: '', exitCode: 0, stdoutBytes: 0, elapsedMs: 1 }
+    }
+  }
+  return { home, uiDir, repoRoot, fixtureBin, fetchPreload, tools, events, state, worktrees, scope, soakWorld, windows, cliCalls, dependencies }
+}
+
+
+test('CLI files world installs the owned environment before soak preparation and preserves real window identities', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const world = await createWorld({}, fixture.dependencies)
+  try {
+    expect(fixture.events.indexOf('tools.install')).toBeLessThan(fixture.events.indexOf('fixtures.prepare'))
+    expect(fixture.events.indexOf('environment.create')).toBeLessThan(fixture.events.indexOf('fixtures.prepare'))
+    expect(fixture.events).toContain('egress.verify')
+    expect(fixture.events.indexOf('egress.verify')).toBeLessThan(fixture.events.indexOf('soak.start'))
+    expect(fixture.events.indexOf('egress.verify')).toBeLessThan(fixture.events.indexOf('fixtures.prepare'))
+    expect(fixture.events.indexOf('fixtures.prepare')).toBeLessThan(fixture.events.indexOf('ui.build'))
+    expect(fixture.events.indexOf('ui.build')).toBeLessThan(fixture.events.indexOf('daemon.spawn'))
+    expect(world.home).toBe(fixture.home)
+    expect(JSON.parse(readFileSync(join(world.home, '.claude', '.credentials.json'), 'utf8')))
+      .toEqual({ claudeAiOauth: { refreshToken: 'cli-parity-fixture-refresh' } })
+    expect(world.daemonPid).toBe(701)
+    expect(world.buildElapsedMs).toBeGreaterThanOrEqual(0)
+    expect(world.tools).toEqual(fixture.tools)
+    expect(world.pages).toHaveLength(2)
+    expect(world.records.map(({ index, connId, worktree }) => ({ index, connId, worktree }))).toEqual([
+      { index: 0, connId: 41, worktree: 'wt-a' },
+      { index: 1, connId: 42, worktree: 'wt-b' }
+    ])
+    expect(world.worktrees.map(({ id }) => id)).toEqual(world.records.map(({ worktree }) => worktree))
+    expect(new Set(world.worktrees.map(({ id }) => id)).size).toBe(2)
+
+    const argv = [process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json']
+    await expect(world.execute(argv)).resolves.toMatchObject({ stdout: '{"ok":true}', exitCode: 0 })
+    expect(fixture.cliCalls).toEqual([argv])
+    await expect(world.prepare(['/usr/bin/git', 'status', '--short'], fixture.worktrees[0]!.path)).resolves.toMatchObject({ exitCode: 0 })
+    await expect(world.prepare(['/bin/sh', '-c', 'touch pwned'], fixture.home)).rejects.toThrow()
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files world refuses a lost renderer, stale connection, or mismatched daemon before executing', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const world = await createWorld({}, fixture.dependencies)
+  const argv = [process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json']
+  try {
+    fixture.state.pageClosed[1] = true
+    await expect(world.execute(argv)).rejects.toThrow()
+    fixture.state.pageClosed[1] = false
+    fixture.state.connIds = [41]
+    await expect(world.execute(argv)).rejects.toThrow()
+    fixture.state.connIds = [41, 42]
+    fixture.state.runtimePid = 999
+    await expect(world.execute(argv)).rejects.toThrow()
+    expect(fixture.cliCalls).toEqual([])
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files world preserves startup and browser failures while stopping any acquired browser before the world', async () => {
+  for (const fault of ['startup', 'browser'] as const) {
+    const createWorld = requireCliFilesFactory()
+    const failure = new Error(`${fault} stand-in failure`)
+    const fixture = cliFilesStandIns(fault === 'startup' ? { startupFailure: failure } : { browserFailure: failure })
+    await expect(createWorld({}, fixture.dependencies)).rejects.toThrow(`${fault} stand-in failure`)
+    expect(fixture.events.indexOf('browser.stop') < 0 || fixture.events.indexOf('browser.stop') < fixture.events.indexOf('world.stop')).toBe(true)
+    if (fault === 'startup') expect(fixture.events).toContain('scope.cleanup')
+    else expect(fixture.events).toContain('world.stop')
+    expect(existsSync(fixture.home)).toBe(false)
+  }
+})
+
+test('CLI files world rejects oversized and malformed child output instead of accepting it as a receipt', async () => {
+  const createWorld = requireCliFilesFactory()
+  for (const result of [
+    { stdout: 'x'.repeat(16 * 1024 * 1024 + 1), stderr: '', exitCode: 0, stdoutBytes: 16 * 1024 * 1024 + 1, elapsedMs: 1 },
+    { stdout: '{', stderr: '', exitCode: 0, stdoutBytes: 1, elapsedMs: 1 },
+    { stdout: '{"error":{"message":"denied"}}', stderr: '', exitCode: 0, stdoutBytes: 30, elapsedMs: 1 },
+    { stdout: '{}', stderr: 'failure', exitCode: 1, stdoutBytes: 2, elapsedMs: 1 }
+  ]) {
+    const fixture = cliFilesStandIns({ runResult: result })
+    const world = await createWorld({}, fixture.dependencies)
+    try {
+      await expect((async () => {
+        const raw = await world.execute([process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json'])
+        runner.parseCliOutput(raw.stdout, 'json', raw.exitCode)
+      })()).rejects.toThrow()
+    } finally {
+      await world.cleanup()
+    }
+  }
+})
+
+test('CLI files world cleanup is idempotent, verifies process disappearance, and preserves cleanup errors', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const world = await createWorld({}, fixture.dependencies)
+  const sentinel = Bun.spawn([process.execPath, '-e', 'process.stdin.resume()'], {
+    stdin: 'pipe', env: { ...world.env, BUN_OPTIONS: '' }, stdout: 'ignore', stderr: 'ignore'
+  })
+  try {
+    await world.cleanup()
+    await world.cleanup()
+    expect(fixture.events.filter((event) => event === 'browser.stop')).toHaveLength(1)
+    expect(fixture.events.filter((event) => event === 'world.stop')).toHaveLength(1)
+    expect(fixture.events.indexOf('browser.stop')).toBeLessThan(fixture.events.indexOf('world.stop'))
+    expect(world.cleanupEvidence).toMatchObject({
+      identities: [
+        { kind: 'daemon', pid: 701, gone: true },
+        { kind: 'browser', pid: 801, gone: true }
+      ],
+      homeRemoved: true
+    })
+    expect(existsSync(fixture.home)).toBe(false)
+    expect(sentinel.exitCode).toBeNull()
+  } finally {
+    sentinel.kill('SIGKILL')
+    await sentinel.exited
+  }
+})
+
+test('CLI files world reports a missing installed browser and cleans the owned startup world', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns({ chromeMissing: true })
+  await expect(createWorld({}, fixture.dependencies)).rejects.toThrow(/chrome/i)
+  expect(fixture.events).toContain('world.stop')
+  expect(fixture.events).not.toContain('windows.open')
+  expect(existsSync(fixture.home)).toBe(false)
+})
+
+test('CLI files world cleans a browser that resolves after interruption', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const controller = new AbortController()
+  const { promise: started, resolve: markStarted } = Promise.withResolvers<void>()
+  const { promise: stopped, resolve: markStopped } = Promise.withResolvers<void>()
+  const { promise: lateWindows, resolve: resolveWindows } = Promise.withResolvers<typeof fixture.windows>()
+  const stop = fixture.windows.stop
+  fixture.windows.stop = async () => {
+    await stop()
+    markStopped()
+  }
+  fixture.dependencies.openWindows = async () => {
+    markStarted()
+    return lateWindows
+  }
+
+  const opening = createWorld({ signal: controller.signal }, fixture.dependencies)
+  await started
+  controller.abort(new Error('renderer startup interrupted'))
+  resolveWindows(fixture.windows)
+  await expect(opening).rejects.toThrow(/interrupt/i)
+  await stopped
+  expect(fixture.events.indexOf('browser.stop')).toBeLessThan(fixture.events.indexOf('world.stop'))
+  expect(existsSync(fixture.home)).toBe(false)
+})
+
+test('CLI files world passes interruption to a running CLI child and refuses its result', async () => {
+  const createWorld = requireCliFilesFactory()
+  const { promise: started, resolve: markStarted } = Promise.withResolvers<void>()
+  const fixture = cliFilesStandIns({
+    runCli: (_argv, options) => new Promise((_resolve, reject) => {
+      markStarted()
+      options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), { once: true })
+    })
+  })
+  const world = await createWorld({}, fixture.dependencies)
+  const controller = new AbortController()
+  const execution = world.execute([process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json'], { signal: controller.signal })
+  const refused = execution.then(
+    () => { throw new Error('interrupted child unexpectedly succeeded') },
+    error => error as Error
+  )
+  try {
+    const begun = await Promise.race([started.then(() => ({ started: true })), refused.then(error => ({ error }))])
+    if ('error' in begun) throw begun.error
+    controller.abort(new Error('child interrupted'))
+    const error = await refused
+    expect(error).toBeInstanceOf(Error)
+    expect(error.message).toBe('child interrupted')
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files world cleanup attempts both stops and preserves browser and world cleanup failures', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns({
+    browserStopFailure: new Error('browser stop failed'),
+    worldStopFailure: new Error('world stop failed')
+  })
+  const world = await createWorld({}, fixture.dependencies)
+  await expect(world.cleanup()).rejects.toThrow(/browser stop failed.*world stop failed|world stop failed.*browser stop failed/)
+  await expect(world.cleanup()).rejects.toThrow(/browser stop failed.*world stop failed|world stop failed.*browser stop failed/)
+  expect(fixture.events.indexOf('browser.stop')).toBeLessThan(fixture.events.indexOf('world.stop'))
+  expect(existsSync(fixture.home)).toBe(true)
+})
+
+test('CLI files world cleans an owned UI build failure after preserving the startup error', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns({ buildFailure: new Error('UI build stand-in failure') })
+  await expect(createWorld({}, fixture.dependencies)).rejects.toThrow('UI build stand-in failure')
+  expect(fixture.events).toContain('fixtures.prepare')
+  expect(fixture.events).toContain('ui.build')
+  expect(fixture.events).not.toContain('windows.open')
+  expect(existsSync(fixture.home)).toBe(false)
+})
+
+test('CLI files world refuses mismatched page connection and fixture worktree correlation', async () => {
+  for (const fault of ['connection', 'worktree', 'duplicate'] as const) {
+    const fixture = cliFilesStandIns()
+    if (fault === 'connection') fixture.state.records[1].connId = 404
+    else if (fault === 'worktree') fixture.state.records[1].worktree = 'not-owned'
+    else fixture.state.records[1].worktree = fixture.state.records[0].worktree
+    try {
+      await expect(requireCliFilesFactory()({}, fixture.dependencies)).rejects.toThrow()
+    } finally {
+      rmSync(fixture.home, { recursive: true, force: true })
+    }
+  }
+})
+
+test('CLI files world cannot certify cleanup without a process table or with a surviving identity', async () => {
+  const createWorld = requireCliFilesFactory()
+  for (const fault of ['missing-table', 'survivor'] as const) {
+    const fixture = cliFilesStandIns()
+    const snapshot = fixture.dependencies.processSnapshot as () => Map<number, unknown>
+    let unavailable = false
+    fixture.dependencies.processSnapshot = () => {
+      if (unavailable) throw new Error('process table unavailable')
+      return snapshot()
+    }
+    if (fault === 'survivor') fixture.soakWorld.stop = async () => { fixture.events.push('world.stop') }
+    const world = await createWorld({}, fixture.dependencies)
+    unavailable = fault === 'missing-table'
+    try {
+      await expect(world.cleanup()).rejects.toThrow()
+      expect(world.cleanupEvidence.homeRemoved).toBe(false)
+    } finally {
+      rmSync(fixture.home, { recursive: true, force: true })
+    }
+  }
+})
+
+test('CLI files world refuses an inactive egress guard before fixture preparation or daemon startup', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  fixture.dependencies.verifyEgressGuard = async () => { throw new Error('egress guard self-test failed') }
+  await expect(createWorld({}, fixture.dependencies)).rejects.toThrow('egress guard self-test failed')
+  expect(fixture.events).not.toContain('fixtures.prepare')
+  expect(fixture.events).not.toContain('daemon.spawn')
+  expect(existsSync(fixture.home)).toBe(false)
+})
+
+test('CLI files world keeps both connections live when the first window navigates to the second worktree', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const world = await createWorld({}, fixture.dependencies)
+  fixture.state.records[0].shown = false
+  try {
+    await expect(world.execute([process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json'])).resolves.toMatchObject({ exitCode: 0 })
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files world permits bounded owned-tab teardown with a separate signal after work aborts', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const work = new AbortController()
+  const teardown = new AbortController()
+  const world = await createWorld({ signal: work.signal }, fixture.dependencies)
+  const argv = [process.execPath, world.cliEntry, 'editor', 'close', '--buffer-id', 'owned-buffer', '--runtime', 'local', '--json']
+  work.abort(new Error('work interrupted'))
+  try {
+    await expect(world.execute(argv)).rejects.toThrow('work interrupted')
+    expect(fixture.cliCalls).toEqual([])
+    await expect(world.execute(argv, { signal: teardown.signal, timeoutMs: 1000 })).resolves.toMatchObject({ exitCode: 0 })
+    expect(fixture.cliCalls).toEqual([argv])
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files world aborts renderer acquisition when startup times out before stopping the world', async () => {
+  const fixture = cliFilesStandIns()
+  const late = Promise.withResolvers<typeof fixture.windows>()
+  const expired = Promise.withResolvers<void>()
+  const waitingForLate = Promise.withResolvers<void>()
+  const setTimer = globalThis.setTimeout
+  let rendererSignal: AbortSignal | undefined
+  let abortedBeforeWorldStop = false
+  let abortedBeforeLateWait = false
+  const stopWorld = fixture.soakWorld.stop
+  fixture.soakWorld.stop = async () => {
+    abortedBeforeWorldStop = rendererSignal?.aborted === true
+    await stopWorld()
+  }
+  fixture.dependencies.openWindows = async (options: { signal: AbortSignal }) => {
+    rendererSignal = options.signal
+    return late.promise
+  }
+  globalThis.setTimeout = ((callback: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
+    if (ms === 25_000) {
+      abortedBeforeLateWait = rendererSignal?.aborted === true
+      waitingForLate.resolve()
+    }
+    return setTimer(() => {
+      callback(...args)
+      if (ms === 30_000) expired.resolve()
+    }, ms === 30_000 ? 0 : ms)
+  }) as typeof setTimeout
+  try {
+    const opening = requireCliFilesFactory()({}, fixture.dependencies).then(
+      () => { throw new Error('timed-out renderer startup unexpectedly succeeded') },
+      error => error as Error
+    )
+    await expired.promise
+    fixture.state.livePids.add(801)
+    await waitingForLate.promise
+    late.resolve(fixture.windows)
+    expect((await opening).message).toContain('renderer startup')
+    expect(abortedBeforeWorldStop).toBe(true)
+    expect(abortedBeforeLateWait).toBe(true)
+    expect(fixture.events.indexOf('browser.stop')).toBeLessThan(fixture.events.indexOf('world.stop'))
+    expect(existsSync(fixture.home)).toBe(false)
+  } finally {
+    globalThis.setTimeout = setTimer
+    late.resolve(fixture.windows)
+  }
+})
+
+type FixtureTab = {
+  kind: string; id: string; viewId: string; title: string; key: string; input: Record<string, unknown>
+}
+type FixtureBuffer = {
+  id: string; worktreeId: string; root: string; path: string; mode: string; tabId: string
+  view?: { byTabId: Record<string, { cursor?: { line: number; column: number }; line?: number; column?: number }> }
+}
+type FixturePublicWindow = {
+  connId: number
+  receiptIds: { window: string; workspace: string; editor: string }
+  windowState: { connId: number; layout: { worktree: string; view: { id: string } } }
+  workspace: { workspace: { id: string; activeGroup: string; root: { kind: string; id: string; activeTab: string; tabs: FixtureTab[] } } }
+  editor: { buffers: FixtureBuffer[]; tabs: Array<{ tabId: string; bufferId: string; mode: string }> }
+}
+type EditorFixtureEvidence = {
+  request: { worktreeId: string; relativePath: string; absolutePath: string; content: string; mode: string; focus: boolean; line: number; column: number }
+  public: { before: FixturePublicWindow[]; after: FixturePublicWindow[] }
+  dom: { before: files.CliFileDomWindow[]; after: files.CliFileDomWindow[] }
+  background: { public: FixturePublicWindow[]; dom: files.CliFileDomWindow[] }
+}
+type EditorEvidenceFixture = {
+  receipts: CliReceipt[]
+  observation: Omit<files.CliFileObservation, 'evidence'> & { evidence: EditorFixtureEvidence }
+}
+
+function editorEvidenceFixture(): EditorEvidenceFixture {
+  const root = '/tmp/cli-fixture/worktrees'
+  const receipts: CliReceipt[] = []
+  const receipt = (id: string, argv: string[], result: unknown, exitCode = 0) => {
+    receipts.push({ id, command: argv.slice(0, 2).join(' '), argv: [...argv, '--runtime', 'local', '--json'], exitCode, format: 'json', stdoutBytes: JSON.stringify(result).length, elapsedMs: 1, evidence: { result: structuredClone(result) } })
+  }
+  const makeSample = (phase: string, focused: boolean, background = false) => {
+    const publicWindows: FixturePublicWindow[] = []
+    const dom: files.CliFileDomWindow[] = []
+    const snapshots: files.CliFileSnapshot[] = []
+    for (const [index, label] of ['A', 'B'].entries()) {
+      const connId = 11 + index
+      const workspaceId = `wt-${label}`
+      const groupId = `grp-${label}`
+      const sentinel = `sentinel-${label}`
+      const hasTarget = label === 'A' && (focused || background)
+      const selected = label === 'A' && focused ? 'tab-A' : sentinel
+      const path = `${root}/${label.toLowerCase()}/${selected === 'tab-A' ? 'src/app.ts' : 'docs/review-notes.md'}`
+      const sentinelBuffer = { id: `buf-s-${label}`, worktreeId: workspaceId, root: `${root}/${label.toLowerCase()}`, path: `${root}/${label.toLowerCase()}/docs/review-notes.md`, mode: 'source', tabId: sentinel }
+      const targetBuffer = { id: 'buf-A', worktreeId: 'wt-A', root: `${root}/a`, path: `${root}/a/src/app.ts`, mode: 'source', tabId: 'tab-A', view: { byTabId: { 'tab-A': focused ? { cursor: { line: 2, column: 3 } } : { line: 2, column: 3 } } } }
+      const tabs: FixtureTab[] = [{ kind: 'view', id: sentinel, viewId: 'view:quirky.editor/document', title: 'Review notes', key: `buf-s-${label}`, input: { bufferId: `buf-s-${label}`, mode: 'source' } }]
+      if (hasTarget) tabs.push({ kind: 'view', id: 'tab-A', viewId: 'view:quirky.editor/document', title: 'app.ts', key: 'buf-A', input: { bufferId: 'buf-A', mode: 'source' } })
+      const windowState = { connId, layout: { worktree: workspaceId, view: { id: 'view:quirky.session/worktree' } } }
+      const workspace = { workspace: { id: workspaceId, activeGroup: groupId, root: { kind: 'group', id: groupId, activeTab: selected, tabs } } }
+      const editor: FixturePublicWindow['editor'] = { buffers: [sentinelBuffer, ...(hasTarget ? [targetBuffer] : [])], tabs: [{ tabId: sentinel, bufferId: sentinelBuffer.id, mode: 'edit' }, ...(hasTarget ? [{ tabId: 'tab-A', bufferId: 'buf-A', mode: 'edit' }] : [])] }
+      const ids = { window: `${phase}-${label}-window`, workspace: `${phase}-${label}-workspace`, editor: `${phase}-${label}-editor` }
+      receipt(ids.window, ['api', 'call', 'ui.window.state', '--conn-id', String(connId)], windowState)
+      receipt(ids.workspace, ['api', 'call', 'quirky.terminal/workspace', '--workspace', workspaceId], workspace)
+      receipt(ids.editor, ['editor', 'state', '--worktree', workspaceId], editor)
+      publicWindows.push({ connId, receiptIds: ids, windowState, workspace, editor })
+      const sample: files.CliFileDomWindow = { connId, workspaceId, groupId, selectedTabId: selected, renderedTabId: selected, path, documentHasFocus: label === 'A', activeElement: { tag: 'DIV', role: 'textbox', inDocument: true }, activeElementHostedTabId: selected, activeElementIsSource: true, reviewTabMounted: false, caret: selected === 'tab-A' ? { line: 2, column: 3 } : null, lines: selected === 'tab-A' ? ['first A', 'second A', ''] : [`notes ${label}`, ''], reviewCards: [] }
+      dom.push(sample)
+      const { lines, reviewCards, activeElementHostedTabId, activeElementIsSource, reviewTabMounted, ...snapshot } = sample
+      snapshots.push({ ...snapshot, windowWorktree: workspaceId, windowViewId: 'view:quirky.session/worktree' })
+    }
+    return { public: publicWindows, dom, snapshots }
+  }
+  const before = makeSample('before', false)
+  const background = makeSample('background', false, true)
+  const after = makeSample('after', true)
+  const open = { id: 'buf-A', worktreeId: 'wt-A', root: `${root}/a`, path: `${root}/a/src/app.ts`, openedTabId: 'tab-A' }
+  const argv = ['editor', 'open', 'src/app.ts', '--worktree', 'wt-A', '--mode', 'source', '--line', '2', '--column', '3']
+  receipt('open-a-bg', argv, open)
+  receipt('open-a-focus', [...argv, '--focus'], open)
+  receipt('read-a', ['editor', 'read', '--buffer-id', 'buf-A', '--action', 'buffer'], { buffer: { id: 'buf-A', worktreeId: 'wt-A', path: open.path, content: 'first A\nsecond A\n' }, eof: true, size: Buffer.byteLength('first A\nsecond A\n') })
+  return {
+    receipts,
+    observation: {
+      id: 'files-editor-local', status: 'observed', receiptIds: receipts.map(entry => entry.id),
+      before: before.snapshots, after: after.snapshots,
+      evidence: {
+        request: { worktreeId: 'wt-A', relativePath: 'src/app.ts', absolutePath: open.path, content: 'first A\nsecond A\n', mode: 'source', focus: true, line: 2, column: 3 },
+        public: { before: before.public, after: after.public },
+        dom: { before: before.dom, after: after.dom },
+        background: { public: background.public, dom: background.dom }
+      }
+    }
+  }
+}
+
+test('file evidence rejects independent identity, content, focus, and visible-caret corruption', async () => {
+  const fixture = editorEvidenceFixture()
+  expect(() => files.assertCliFileObservation(fixture.observation as never, fixture.receipts as never)).not.toThrow()
+  const mutations: Array<(value: EditorEvidenceFixture) => void> = [
+    value => { value.observation.after[0].windowWorktree = 'wt-B' },
+    value => { value.observation.after[0].connId = 99 },
+    value => { value.observation.after[0].groupId = 'grp-wrong' },
+    value => { value.observation.after[0].renderedTabId = 'another-tab' },
+    value => { value.observation.evidence.public.after[0].workspace.workspace.root.tabs[1].viewId = 'view:quirky.git/diff' },
+    value => { value.observation.evidence.public.after[0].workspace.workspace.root.tabs[1].input.bufferId = 'another-buffer' },
+    value => { value.observation.evidence.dom.after[0].path = '/tmp/cli-fixture/worktrees/b/src/app.ts' },
+    value => { value.observation.evidence.dom.after[0].selectedTabId = 'sentinel-A' },
+    value => { value.observation.evidence.background.dom[0].activeElement.inDocument = false },
+    value => { value.observation.evidence.background.dom[0].activeElementHostedTabId = 'tab-A' },
+    value => { value.observation.evidence.dom.after[0].lines[1] = 'second B' },
+    value => { value.observation.evidence.request.line = 3 },
+    value => { value.observation.evidence.dom.after[0].caret = null },
+    value => { value.observation.evidence.dom.after[0].caret = { line: 2, column: 1 } },
+    value => {
+      value.observation.evidence.dom.after[0].caret = null
+      value.observation.after[0].caret = null
+      const window = value.observation.evidence.public.after[0]
+      window.editor.buffers[1].view!.byTabId['tab-A'] = { line: 2, column: 3 }
+      value.receipts.find(entry => entry.id === window.receiptIds.editor)!.evidence.result = structuredClone(window.editor)
+    },
+    value => {
+      value.observation.evidence.dom.after[0].renderedTabId = 'wrong-tab-with-correct-text'
+      value.observation.after[0].renderedTabId = 'wrong-tab-with-correct-text'
+    },
+    value => {
+      value.observation.evidence.dom.after[0].path = '/tmp/cli-fixture/worktrees/b/src/app.ts'
+      value.observation.after[0].path = '/tmp/cli-fixture/worktrees/b/src/app.ts'
+    },
+    value => { value.observation.evidence.dom.after[0] = { ...value.observation.evidence.dom.after[1], lines: ['first A', 'second A', ''] } },
+    value => { value.receipts[0].exitCode = 1 },
+    value => { value.receipts.push(structuredClone(value.receipts[0])) },
+    value => { value.receipts.splice(value.receipts.findIndex(entry => entry.id === 'read-a'), 1) },
+    value => { value.observation.receiptIds.push(value.observation.receiptIds[0]) },
+    value => { value.observation.evidence = { observed: true } as never }
+  ]
+  for (const [index, mutate] of mutations.entries()) {
+    const corrupted = structuredClone(fixture)
+    mutate(corrupted)
+    expect(() => files.assertCliFileObservation(corrupted.observation as never, corrupted.receipts as never), `corruption ${index}`).toThrow()
+  }
+})
+
+test('file evidence script rejects caller runtimes and refuses receipt-only certification', async () => {
+  expect(files.parseCliFilesArgs(['--json'])).toEqual({ json: true, help: false })
+  for (const argv of [['--home', '/tmp/other'], ['--runtime', 'remote'], ['--out', '/tmp/out'], ['--command', 'echo secret'], ['extra'], ['--json', '--json'], ['--help', '--json']]) expect(() => files.parseCliFilesArgs(argv)).toThrow()
+  expect(() => files.assertCliFileObservation({ id: 'files-editor-local', status: 'observed', receiptIds: [], before: [], after: [], evidence: { observed: true } } as never, [])).toThrow()
+})
+
+test('file evidence reduction cannot promote no observations or an observed-only claim', async () => {
+  const rows = loadCliTable()
+  const expectedRows = rows.filter(row => Object.hasOwn(CLI_FILE_OBSERVATION_BINDINGS, row.id))
+  const absent = files.reduceCliFilesRows(rows, [], [])
+  expect(absent.map(row => row.id)).toEqual(expectedRows.map(row => row.id))
+  expect(absent.every(row => row.status === 'not-run' && row.executed === false)).toBe(true)
+  const claimed = files.reduceCliFilesRows(rows, [{
+    id: 'files-editor-local', status: 'observed', receiptIds: [], before: [], after: [], evidence: { observed: true }
+  } as never], [])
+  expect(claimed.some(row => row.status === 'failed')).toBe(true)
+  expect(claimed.every(row => row.status !== 'observed')).toBe(true)
+})
+
+test('file Git path readback preserves literal Unicode and shell-looking bytes in NUL framing', () => {
+  const literal = "cli-parity/open '$(touch cli-injected); λ.txt"
+  expect(files.parseCliFilesGitPaths(`?? ${literal}\0 M src/app.ts\0`)).toEqual([literal, 'src/app.ts'])
+  expect(files.parseCliFilesGitPaths('R  new name\0old name\0')).toEqual(['new name'])
+  for (const malformed of [' M missing terminator', 'bad\0', 'R  new\0']) expect(() => files.parseCliFilesGitPaths(malformed)).toThrow()
+})
+
+function reviewEvidenceFixture(id: 'files-review-diff' | 'files-review-reuse' | 'files-review-changed') {
+  const editor = editorEvidenceFixture()
+  const receipts: CliReceipt[] = []
+  const worktree = 'wt-B'
+  const tabId = 'review-B'
+  const key = `git-diff:${JSON.stringify([worktree, 'review'])}`
+  const path = id === 'files-review-diff' ? 'src/app.ts' : id === 'files-review-reuse' ? 'docs/review-notes.md' : null
+  const receipt = (name: string, argv: string[], result: unknown) => {
+    receipts.push({ id: name, command: argv.slice(0, 2).join(' '), argv: [...argv, '--runtime', 'local', '--json'], exitCode: 0, format: 'json', stdoutBytes: JSON.stringify(result).length, elapsedMs: 1, evidence: { result: structuredClone(result) } })
+  }
+  const reviewWindow = (connId: number): FixturePublicWindow => {
+    const window = structuredClone(editor.observation.evidence.public.before[1])
+    window.connId = connId
+    window.windowState.connId = connId
+    window.workspace.workspace.root.activeTab = tabId
+    window.workspace.workspace.root.tabs.push({
+      kind: 'view', id: tabId, viewId: 'view:quirky.git/diff', title: 'Review', key,
+      input: { mode: 'review', worktree, reveal: 'src/app.ts' }
+    })
+    return window
+  }
+  const reviewDom = (connId: number): files.CliFileDomWindow => ({
+    ...structuredClone(editor.observation.evidence.dom.before[1]), connId, selectedTabId: tabId, renderedTabId: tabId,
+    path: null, caret: null, lines: [], activeElement: { tag: 'DIV', role: null, inDocument: false },
+    activeElementHostedTabId: null, activeElementIsSource: false, reviewTabMounted: true,
+    reviewCards: [
+      { path: 'src/app.ts', expanded: true, loaded: true, text: 'first\nsecond λ\n' },
+      { path: 'docs/review-notes.md', expanded: true, loaded: true, text: 'review notes B changed\n' }
+    ]
+  })
+  const sample = (phase: string, windows: FixturePublicWindow[], dom: files.CliFileDomWindow[]): files.CliFileSnapshot[] =>
+    windows.map((window, index) => {
+      const ids = { window: `${id}-${phase}-${index}-window`, workspace: `${id}-${phase}-${index}-workspace`, editor: `${id}-${phase}-${index}-editor` }
+      window.receiptIds = ids
+      receipt(ids.window, ['api', 'call', 'ui.window.state', '--conn-id', String(window.connId)], window.windowState)
+      receipt(ids.workspace, ['api', 'call', 'quirky.terminal/workspace', '--workspace', window.windowState.layout.worktree], window.workspace)
+      receipt(ids.editor, ['editor', 'state', '--worktree', window.windowState.layout.worktree], window.editor)
+      const { lines, reviewCards, activeElementHostedTabId, activeElementIsSource, reviewTabMounted, ...snapshot } = dom[index]
+      return { ...snapshot, windowWorktree: window.windowState.layout.worktree, windowViewId: window.windowState.layout.view.id }
+    })
+  const beforePublic = id === 'files-review-reuse' ? [reviewWindow(11), reviewWindow(12)] : structuredClone(editor.observation.evidence.public.before)
+  const beforeDom = id === 'files-review-reuse' ? [reviewDom(11), reviewDom(12)] : structuredClone(editor.observation.evidence.dom.before)
+  const publicAfter = [reviewWindow(11), reviewWindow(12)]
+  const domAfter = [reviewDom(11), reviewDom(12)]
+  const before = sample('before', beforePublic, beforeDom)
+  const after = sample('after', publicAfter, domAfter)
+  const command = id === 'files-review-changed' ? 'command:quirky.git/open-changes' : 'command:quirky.git/open-diff'
+  const args = { worktree, ...(path === null ? {} : { path }) }
+  receipt(`${id}-command`, ['api', 'call', 'ui.window.command.run', '--conn-id', '11', '--id', command, '--args', JSON.stringify(args)], {})
+  const review: Record<string, unknown> = { worktreeId: worktree, path, targetConnectionId: 11, reviewKey: key, tabId }
+  const evidence: files.CliFileObservationEvidence = {
+    request: { worktreeId: worktree, path, absolutePath: `/tmp/cli-fixture/worktrees/b${path === null ? '' : `/${path}`}`, content: path === 'docs/review-notes.md' ? 'review notes B changed\n' : 'first\nsecond λ\n', targetConnectionId: 11, mode: 'review' },
+    public: { before: beforePublic, after: publicAfter }, dom: { before: beforeDom, after: domAfter }, review
+  }
+  let repeat: FixturePublicWindow | undefined
+  if (id === 'files-review-changed') {
+    repeat = reviewWindow(11)
+    const repeatDom = reviewDom(11)
+    sample('repeat', [repeat], [repeatDom])
+    review.repeatBefore = { public: repeat, dom: repeatDom }
+    review.tabBeforeRepeat = tabId
+    review.changedPaths = ['src/app.ts', 'docs/review-notes.md']
+    review.supportingReceiptIds = []
+    const status = { entries: [{ path: 'src/app.ts' }, { path: 'docs/review-notes.md' }] }
+    receipt(`${id}-git-before`, ['api', 'call', 'quirky.git/status', '--worktree', worktree], status)
+    receipt(`${id}-git-after`, ['api', 'call', 'quirky.git/status', '--worktree', worktree], status)
+    evidence.git = { beforeReceiptId: `${id}-git-before`, afterReceiptId: `${id}-git-after`, before: status, after: status }
+    receipt(`${id}-repeat-command`, ['api', 'call', 'ui.window.command.run', '--conn-id', '11', '--id', command, '--args', JSON.stringify(args)], {})
+  }
+  const observation: files.CliFileObservation = { id, status: 'observed', receiptIds: receipts.map(entry => entry.id), before, after, evidence }
+  return { receipts, observation, publicAfter, repeat }
+}
+
+for (const id of ['files-review-diff', 'files-review-reuse', 'files-review-changed'] as const) {
+  test(`file Review evidence rejects extra non-Review tabs from ${id}`, () => {
+    const fixture = reviewEvidenceFixture(id)
+    expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).not.toThrow()
+    for (const window of [...fixture.publicAfter, ...(fixture.repeat ? [fixture.repeat] : [])]) {
+      window.workspace.workspace.root.tabs.push({
+        kind: 'view', id: 'unrequested-editor', viewId: 'view:quirky.editor/document', title: 'Unrequested', key: 'extra', input: { bufferId: 'extra' }
+      })
+      fixture.receipts.find(entry => entry.id === window.receiptIds.workspace)!.evidence.result = structuredClone(window.workspace)
+    }
+    expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).toThrow()
+  })
+}
+
+test('file Review reuse proves the loaded revealed card even when stored reveal stays unchanged', () => {
+  const fixture = reviewEvidenceFixture('files-review-reuse')
+  expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).not.toThrow()
+  for (const dom of fixture.observation.evidence.dom.after) {
+    dom.reviewCards = dom.reviewCards.filter(card => card.path !== 'docs/review-notes.md')
+  }
+  expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).toThrow()
+})
+
+test('file runner retains startup and cleanup failures without certifying any observation', async () => {
+  const failure = new cliWorldModule.CliWorldError('owned-startup', 'owned startup failed')
+  failure.cleanupError = 'owned teardown failed'
+  const report = await files.runCliFilesParity({ createWorld: async () => { throw failure } })
+  expect(report).toMatchObject({
+    ok: false, parityComplete: false,
+    error: { stage: 'setup', kind: 'owned-startup', message: 'owned startup failed' },
+    cleanup: { ok: false, error: expect.stringContaining('owned teardown failed') }
+  })
+  expect(report.observations.every(observation => observation.status === 'not-run')).toBe(true)
+  expect(report.rows.every(row => !row.executed)).toBe(true)
+})
+
+test('file runner validates script arguments before constructing an owned world', async () => {
+  let allocations = 0
+  const createWorld = async (): Promise<never> => {
+    allocations++
+    throw new Error('world allocation must not run')
+  }
+  const diagnostic = console.error
+  console.error = () => {}
+  try {
+    for (const args of [['--home', '/tmp/not-owned'], ['--runtime', 'remote'], ['--out', '/tmp/out'], ['extra']]) {
+      expect(await files.main(args, { createWorld })).toBe(2)
+    }
+    expect(allocations).toBe(0)
+  } finally {
+    console.error = diagnostic
+  }
+})
+
+test('renderer evidence reads stop on interruption and retain late rejection handling', async () => {
+  const controller = new AbortController()
+  const pending = Promise.withResolvers<string>()
+  const started = Promise.withResolvers<void>()
+  const result = files.captureCliFilesRenderer(() => {
+    started.resolve()
+    return pending.promise
+  }, controller.signal, 15_000).then(value => ({ value }), error => ({ error }))
+  await started.promise
+  controller.abort(new files.CliFilesFailure('interrupted', 'stop renderer read'))
+  expect(await result).toMatchObject({ error: { kind: 'interrupted', message: 'stop renderer read' } })
+  pending.reject(new Error('late renderer failure'))
+})
+
+function installCliFilesHealthClock(fixture: { dependencies: Record<string, unknown> }) {
+  let currentTime = 0
+  const sleeps: number[] = []
+  fixture.dependencies.now = () => currentTime
+  fixture.dependencies.sleep = async (milliseconds: number) => {
+    sleeps.push(milliseconds)
+    currentTime += milliseconds
+  }
+  return { sleeps, now: () => currentTime }
+}
+
+test('CLI files health retries transient failures during startup', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const clock = installCliFilesHealthClock(fixture)
+  let probes = 0
+  fixture.dependencies.isDaemonAlive = async () => ++probes >= 3
+
+  const world = await createWorld({}, fixture.dependencies)
+  try {
+    expect(probes).toBe(3)
+    expect(clock.sleeps).toEqual([50, 50])
+    expect(fixture.events).toContain('windows.open')
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files health retries transient failures before executing', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const clock = installCliFilesHealthClock(fixture)
+  let probes = 0
+  fixture.dependencies.isDaemonAlive = async () => {
+    probes++
+    return probes === 1 || probes === 4
+  }
+  const world = await createWorld({}, fixture.dependencies)
+  const argv = [process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json']
+  try {
+    await expect(world.execute(argv)).resolves.toMatchObject({ stdout: '{"ok":true}', exitCode: 0 })
+    expect(probes).toBe(4)
+    expect(clock.sleeps).toEqual([50, 50])
+    expect(fixture.cliCalls).toEqual([argv])
+    expect(fixture.events.filter((event) => event === 'windows.open')).toHaveLength(1)
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files health exhausts five seconds of false probes without launching renderers or a child', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const clock = installCliFilesHealthClock(fixture)
+  const probeTimeouts: number[] = []
+  fixture.dependencies.isDaemonAlive = async (_runtime: unknown, timeoutMs: number) => {
+    probeTimeouts.push(timeoutMs)
+    return false
+  }
+
+  await expect(createWorld({}, fixture.dependencies)).rejects.toThrow('did not remain healthy')
+  expect(clock.now()).toBe(5_000)
+  expect(clock.sleeps).toHaveLength(100)
+  expect(probeTimeouts).toHaveLength(100)
+  expect(probeTimeouts.every((timeoutMs) => timeoutMs > 0 && timeoutMs <= 300)).toBe(true)
+  expect(fixture.events).not.toContain('windows.open')
+  expect(fixture.cliCalls).toEqual([])
+  expect(existsSync(fixture.home)).toBe(false)
+})
+
+test('CLI files health rejects a positive probe if daemon or runtime identity changes during it', async () => {
+  const createWorld = requireCliFilesFactory()
+  for (const mutation of ['daemon-pid', 'runtime', 'process'] as const) {
+    const fixture = cliFilesStandIns()
+    installCliFilesHealthClock(fixture)
+    let runtimePort = 43123
+    let changedProcessIdentity = false
+    const snapshot = fixture.dependencies.processSnapshot as () => Map<number, {
+      pid: number; ppid: number; pgid: number; started: string; state: string; command: string
+    }>
+    fixture.dependencies.readRuntime = () => ({
+      pid: fixture.state.runtimePid, home: fixture.home, port: runtimePort,
+      token: 'fixture-token', hookToken: 'fixture-hook-token', entryHash: 'fixture-entry'
+    })
+    fixture.dependencies.processSnapshot = () => new Map([...fixture.state.livePids].map((pid) => {
+      const identity = snapshot().get(pid)!
+      return [pid, {
+        ...identity,
+        started: changedProcessIdentity && pid === 701 ? 'reused-701' : identity.started
+      }] as const
+    }))
+    let probes = 0
+    fixture.dependencies.isDaemonAlive = async () => {
+      probes++
+      if (probes === 2) {
+        if (mutation === 'daemon-pid') fixture.state.runtimePid = 702
+        else if (mutation === 'runtime') runtimePort++
+        else changedProcessIdentity = true
+      }
+      return true
+    }
+    const world = await createWorld({}, fixture.dependencies)
+    const argv = [process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json']
+    try {
+      await expect(world.execute(argv)).rejects.toThrow()
+      expect(probes).toBe(2)
+      expect(fixture.cliCalls).toEqual([])
+    } finally {
+      await world.cleanup()
+    }
+  }
+})
+
+test('CLI files health stops after interruption while a daemon probe is pending', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  installCliFilesHealthClock(fixture)
+  const controller = new AbortController()
+  const pendingProbe = Promise.withResolvers<boolean>()
+  const probeStarted = Promise.withResolvers<void>()
+  let probes = 0
+  fixture.dependencies.isDaemonAlive = async () => {
+    probes++
+    probeStarted.resolve()
+    return pendingProbe.promise
+  }
+
+  const opening = createWorld({ signal: controller.signal }, fixture.dependencies)
+  await probeStarted.promise
+  controller.abort(new Error('owned daemon health interrupted'))
+  await expect(opening).rejects.toThrow('owned daemon health interrupted')
+  pendingProbe.resolve(true)
+  expect(probes).toBe(1)
+  expect(fixture.events).not.toContain('windows.open')
+  expect(fixture.cliCalls).toEqual([])
+  expect(existsSync(fixture.home)).toBe(false)
+})
+
+function fileRunnerControlFixture() {
+  const subject = new files.CliFilesRunner({})
+  const fixture = cliFilesStandIns()
+  const tools = installCliFixtureTools(fixture.home)
+  writeFileSync(tools.egressLog, 'https://cli-parity-guard.invalid/self-test\n')
+  const calls: string[][] = []
+  const state = { unavailable: false, closeRequested: false, publicReview: true, domReview: true }
+  const domChecked = Promise.withResolvers<void>()
+  const tabId = 'owned-review-tab'
+  const workspace = (id: string, review: boolean) => ({
+    workspace: { id, activeGroup: 'group', root: { kind: 'group', id: 'group', activeTab: review ? tabId : null, tabs: review ? [
+      { kind: 'view', id: tabId, viewId: 'view:quirky.git/diff', key: `git-diff:${JSON.stringify([id, 'review'])}`, title: 'Review', input: { mode: 'review', worktree: id } }
+    ] : [] } }
+  })
+  const pages = fixture.windows.pages.map(page => ({
+    isClosed: page.isClosed,
+    async evaluate(_read: unknown, argument?: unknown) {
+      if (argument === tabId) {
+        if (!state.publicReview) domChecked.resolve()
+        return !state.domReview
+      }
+      return true
+    }
+  }))
+  // recording pages implement only the DOM operations used by these daemon-free control cases.
+  const ownedPages = pages as unknown as CliFilesWorld['pages']
+  const world: CliFilesWorld = {
+    home: fixture.home, env: { QUIRKY_HOME: fixture.home }, daemonPid: 701,
+    cliEntry: join(repoRoot, 'packages/cli/src/main.ts'), pages: ownedPages, records: fixture.state.records,
+    worktrees: fixture.worktrees.map(worktree => ({ ...worktree, status: 'idle' as const })), tools, buildElapsedMs: 1,
+    async assertLive() {
+      if (state.unavailable || fixture.state.pageClosed.some(Boolean)) throw new files.CliFilesFailure('renderer-disconnected', 'owned renderer unavailable')
+    },
+    async execute(argv) {
+      calls.push(argv.slice(2))
+      if (state.unavailable) throw new files.CliFilesFailure('daemon-exited', 'owned daemon unavailable')
+      const args = argv.slice(2)
+      let result: unknown = {}
+      if (args[0] === 'api' && args[2] === 'ui.window.state') result = { connId: Number(args[args.indexOf('--conn-id') + 1]) }
+      else if (args[0] === 'api' && args[2] === 'quirky.terminal/workspace') {
+        const id = args[args.indexOf('--workspace') + 1]
+        result = workspace(id, state.closeRequested && state.publicReview)
+        if (state.closeRequested) state.publicReview = false
+      } else if (args[0] === 'api' && args[2] === 'ui.window.command.run') {
+        state.closeRequested = true
+      } else if (args[0] === 'editor' && args[1] === 'state') result = { buffers: [], tabs: [] }
+      else if (args[0] === 'editor' && args[1] === 'close') result = { closed: true }
+      const stdout = JSON.stringify(result)
+      return { stdout, stderr: '', exitCode: 0, stdoutBytes: Buffer.byteLength(stdout), elapsedMs: 1 }
+    },
+    async prepare() { throw new Error('control tests must not prepare Git fixtures') },
+    async cleanup() { rmSync(fixture.home, { recursive: true, force: true }) },
+    cleanupEvidence: {
+      processIdentitiesGone: true, homeRemoved: true, identities: [],
+      trackedIdentities: [
+        { kind: 'daemon', pid: 701, ppid: 1, pgid: 701, started: 'owned', command: '/fixture/packages/daemon/src/main.ts', gone: true },
+        { kind: 'browser', pid: 801, ppid: 1, pgid: 801, started: 'owned', command: '/fixture/Chrome', gone: true }
+      ]
+    }
+  }
+  subject.world = world
+  subject.home = fixture.home
+  subject.windows = world.worktrees.map((worktree, index) => ({ page: ownedPages[index], record: fixture.state.records[index], worktree, connId: fixture.state.records[index].connId }))
+  subject.assertRuntimeIdentity = async () => {
+    if (state.unavailable) throw new files.CliFilesFailure('daemon-exited', 'owned daemon unavailable')
+  }
+  subject.ensureWorld = async () => {
+    subject.sentinelHome = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-runner-control-sentinel-')))
+    const env = createIsolatedRuntimeEnvironment(subject.sentinelHome, { repoRoot })
+    subject.sentinelChild = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)'], {
+      cwd: subject.sentinelHome, env, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore'
+    })
+  }
+  subject.editorScenarios = async () => {}
+  subject.prepareRoutingAndReview = async () => {}
+  return {
+    subject, fixture, tools, calls, state, domChecked, tabId,
+    dispose() {
+      clearTimeout(subject.workTimer)
+      clearTimeout(subject.cleanupTimer)
+      rmSync(fixture.home, { recursive: true, force: true })
+    }
+  }
+}
+
+test('file runner mutation preflight checks the renderer without spawning window-state CLI reads', async () => {
+  const fixture = fileRunnerControlFixture()
+  try {
+    await fixture.subject.assertLive()
+    expect(fixture.calls).toEqual([])
+  } finally { fixture.dispose() }
+})
+
+for (const failure of ['daemon', 'renderer'] as const) {
+  test(`file runner preserves ${failure} loss as primary failure without tab-cleanup CLI errors`, async () => {
+    const fixture = fileRunnerControlFixture()
+    fixture.subject.editorScenarios = async () => {
+      if (failure === 'daemon') fixture.state.unavailable = true
+      else fixture.fixture.state.pageClosed[1] = true
+      throw new files.CliFilesFailure(`${failure}-lost`, `primary ${failure} loss`)
+    }
+    try {
+      const report = await fixture.subject.run()
+      expect(report.error).toMatchObject({ kind: `${failure}-lost`, message: `primary ${failure} loss` })
+      expect(report.cleanup).toMatchObject({ ok: true })
+      expect(report.cleanup.error).toBeUndefined()
+      expect(fixture.calls).toEqual([])
+    } finally { fixture.dispose() }
+  })
+}
+
+test('file runner reports a guard failure once without reclassifying it as failed cleanup', async () => {
+  const fixture = fileRunnerControlFixture()
+  writeFileSync(fixture.tools.orcaLog, 'unexpected command\n')
+  try {
+    const report = await fixture.subject.run()
+    expect(report.error).toMatchObject({ kind: 'guard-evidence' })
+    expect(report.cleanup).toMatchObject({ ok: true })
+    expect(report.cleanup.error).toBeUndefined()
+    expect(report.guards?.denied).toEqual(['unexpected command'])
+  } finally { fixture.dispose() }
+})
+
+test('file runner waits for Review workspace removal and DOM detachment before returning', async () => {
+  const fixture = fileRunnerControlFixture()
+  fixture.subject.reviewTabs.set('wt-b', { worktreeId: 'wt-b', tabId: fixture.tabId, connId: 42 })
+  const closing = fixture.subject.closeReview('wt-b', 'close-owned-review')
+  try {
+    const early = await Promise.race([fixture.domChecked.promise.then(() => false), closing.then(() => true)])
+    expect(early).toBe(false)
+    expect(fixture.subject.reviewTabs.has('wt-b')).toBe(true)
+    fixture.state.domReview = false
+    await closing
+    expect(fixture.state.publicReview).toBe(false)
+    expect(fixture.subject.reviewTabs.has('wt-b')).toBe(false)
+  } finally {
+    fixture.state.domReview = false
+    await closing.catch(() => {})
+    fixture.dispose()
+  }
+})
+
+test('file runner treats a newly lost teardown connection as a primary error while still stopping the world', async () => {
+  const fixture = fileRunnerControlFixture()
+  fixture.subject.world!.assertLive = async () => {
+    throw new files.CliFilesFailure('renderer-disconnected', 'connection lost before teardown')
+  }
+  try {
+    const report = await fixture.subject.run()
+    expect(report.error).toMatchObject({ kind: 'renderer-disconnected', message: 'connection lost before teardown' })
+    expect(report.cleanup).toMatchObject({ ok: true })
+    expect(fixture.calls).toEqual([])
+  } finally { fixture.dispose() }
+})
+
+test('file evidence accepts measured zero milliseconds but rejects invalid durations', () => {
+  const fixture = editorEvidenceFixture()
+  for (const receipt of fixture.receipts) receipt.elapsedMs = 0
+  expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).not.toThrow()
+  for (const duration of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    fixture.receipts[0].elapsedMs = duration
+    expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).toThrow()
+  }
+})
+
+test('CLI files health refuses a runtime that disappears during a successful probe', async () => {
+  const fixture = cliFilesStandIns()
+  const read = fixture.dependencies.readRuntime as () => unknown
+  let vanished = false
+  let ready = false
+  fixture.dependencies.readRuntime = () => vanished ? null : read()
+  fixture.dependencies.isDaemonAlive = async () => {
+    if (ready) vanished = true
+    return true
+  }
+  const world = await requireCliFilesFactory()({}, fixture.dependencies)
+  ready = true
+  try {
+    await expect(world.execute([process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json']))
+      .rejects.toMatchObject({ kind: 'daemon-exited' })
+    expect(fixture.cliCalls).toEqual([])
+  } finally { await world.cleanup() }
+})

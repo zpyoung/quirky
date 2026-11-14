@@ -38,10 +38,27 @@ export type CliTableRow = {
   provenance: string
   equivalent: string
   checks: string[]
+  observations?: string[]
   disposition: CliDisposition
   reason: string
   followUp?: string
   missingBehavior?: string
+}
+
+export const CLI_FILE_OBSERVATION_BINDINGS: Readonly<Record<string, readonly string[]>> = {
+  'file-open': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path'],
+  'file-open-render': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path'],
+  'file-diff': ['files-review-diff', 'files-review-reuse', 'files-window-routing'],
+  'file-open-changed': ['files-review-changed', 'files-window-routing']
+}
+
+const observationRowsById = new Map<string, Set<string>>()
+for (const [rowId, ids] of Object.entries(CLI_FILE_OBSERVATION_BINDINGS)) {
+  for (const id of ids) {
+    const rows = observationRowsById.get(id) ?? new Set<string>()
+    rows.add(rowId)
+    observationRowsById.set(id, rows)
+  }
 }
 
 export type CliCatalogMapping = {
@@ -188,16 +205,45 @@ function splitTableRow(line: string): string[] | undefined {
   return trimmed.slice(1, -1).split('|').map((cell) => cell.trim())
 }
 
-function parseCheckCell(cell: string, rowId: string): string[] {
-  if (cell === 'none') return []
-  if (!cell.startsWith('check:')) return fail('missing-check', `row ${rowId} must use check:<id,...> or none`)
-  const acceptance = '; `bun test scripts/parity/cli.test.ts`'
-  if (!cell.endsWith(acceptance)) return fail('missing-check', `row ${rowId} must name its subprocess acceptance command`)
-  const checks = cell.slice('check:'.length, -acceptance.length).split(',').map((check) => check.trim())
-  if (checks.length === 0 || checks.some((check) => check.length === 0) || new Set(checks).size !== checks.length) {
-    return fail('missing-check', `row ${rowId} has an empty or duplicate check reference`)
+type ParsedCheckCell = { checks: string[]; observations?: string[] }
+
+const checkAcceptance = '; `bun test scripts/parity/cli.test.ts`'
+const observationAcceptance = '; `bun test scripts/parity/cli-files.test.ts`'
+
+function parseReferences(value: string, rowId: string, label: 'check' | 'observation'): string[] {
+  const references = value.split(',').map(reference => reference.trim())
+  if (references.length === 0 || references.some(reference => reference.length === 0) ||
+    new Set(references).size !== references.length) {
+    return fail('missing-check', `row ${rowId} has an empty or duplicate ${label} reference`)
   }
-  return checks
+  return references
+}
+
+function parseObservationClause(cell: string, rowId: string): string[] {
+  if (!cell.startsWith('observe:') || !cell.endsWith(observationAcceptance)) {
+    return fail('missing-check', `row ${rowId} must name its file-observation acceptance command`)
+  }
+  return parseReferences(
+    cell.slice('observe:'.length, -observationAcceptance.length),
+    rowId,
+    'observation'
+  )
+}
+
+function parseCheckCell(cell: string, rowId: string): ParsedCheckCell {
+  if (cell === 'none') return { checks: [] }
+  if (cell.startsWith('observe:')) {
+    return { checks: [], observations: parseObservationClause(cell, rowId) }
+  }
+  if (!cell.startsWith('check:')) return fail('missing-check', `row ${rowId} must use check:<id,...>, observe:<id,...> or none`)
+
+  const acceptanceAt = cell.indexOf(checkAcceptance)
+  if (acceptanceAt < 0) return fail('missing-check', `row ${rowId} must name its subprocess acceptance command`)
+  const checks = parseReferences(cell.slice('check:'.length, acceptanceAt), rowId, 'check')
+  const trailing = cell.slice(acceptanceAt + checkAcceptance.length)
+  if (!trailing) return { checks }
+  if (!trailing.startsWith('; ')) return fail('missing-check', `row ${rowId} has an invalid check/observation clause order`)
+  return { checks, observations: parseObservationClause(trailing.slice(2), rowId) }
 }
 
 export function parseCliTable(source: string): CliTableRow[] {
@@ -232,11 +278,13 @@ export function parseCliTable(source: string): CliTableRow[] {
     const missingBehavior = disposition === 'gap'
       ? reason.split(/\s+Follow-up:/i)[0].trim()
       : undefined
+    const parsedCheckCell = parseCheckCell(checkCell, id)
     const row: CliTableRow = {
       id,
       provenance,
       equivalent,
-      checks: parseCheckCell(checkCell, id),
+      checks: parsedCheckCell.checks,
+      ...(parsedCheckCell.observations !== undefined ? { observations: parsedCheckCell.observations } : {}),
       disposition,
       reason,
       ...(commandMatch ? { command: commandMatch[1] } : {}),
@@ -357,12 +405,36 @@ export function validateInventory(
       return fail('unknown-row', `row ${row.id} is not a declared command, scope or delegation row`)
     }
 
+    const expectedObservations = CLI_FILE_OBSERVATION_BINDINGS[row.id]
+    if (row.observations !== undefined) {
+      if (!Array.isArray(row.observations) || row.observations.length === 0 ||
+        row.disposition === 'excluded' || row.disposition === 'delegated' || !expectedObservations) {
+        return fail('invalid-table', `row ${row.id} cannot carry file observations`)
+      }
+      if (row.observations.some(id => typeof id !== 'string' || id.length === 0) ||
+        new Set(row.observations).size !== row.observations.length) {
+        return fail('invalid-table', `row ${row.id} has an empty or duplicate observation ID`)
+      }
+      for (const id of row.observations) {
+        const boundRows = observationRowsById.get(id)
+        if (!boundRows) return fail('invalid-table', `row ${row.id} names unknown observation ${id}`)
+        if (!boundRows.has(row.id)) return fail('invalid-table', `observation ${id} is not bound to row ${row.id}`)
+      }
+    }
+    if (expectedObservations &&
+      (!row.observations || row.observations.length !== expectedObservations.length ||
+        row.observations.some((id, index) => id !== expectedObservations[index]))) {
+      return fail('missing-check', `row ${row.id} is missing its required file-observation binding`)
+    }
     if (row.disposition === 'covered') {
       if (row.checks.length === 0) return fail('missing-check', `covered row ${row.id} has no behavioral check`)
     } else if (row.checks.length !== 0) {
       return fail('missing-check', `${row.disposition} row ${row.id} cannot claim behavioral checks`)
     }
     for (const check of row.checks) {
+      if (observationRowsById.has(check)) {
+        return fail('missing-check', `table observation ${check} cannot be claimed as a behavioral check`)
+      }
       if (!registeredChecks.has(check)) return fail('missing-check', `table check ${check} is absent from the executable registry`)
       declaredChecks.add(check)
     }
@@ -652,10 +724,20 @@ const KERNEL_MAPPINGS: CliCatalogMapping[] = [
   ], [positionalBinding('command', 'the command contribution ID', true)], {
     kind: 'ui-run', uiCommand: 'command:quirky.git/open-diff'
   }),
+  kernelMapping('file-diff', 'api call', ['api.describe'], [], [
+    positionalBinding('method', 'the method to call, e.g. git.status or acme.notes/add', true)
+  ], {
+    kind: 'api-call', methodTarget: 'ui.window.command.run'
+  }),
   kernelMapping('file-open-changed', 'ui run', ['ui.command.run'], [
     flagBinding('args', 'json', 'the command arguments, as JSON')
   ], [positionalBinding('command', 'the command contribution ID', true)], {
     kind: 'ui-run', uiCommand: 'command:quirky.git/open-changes'
+  }),
+  kernelMapping('file-open-changed', 'api call', ['api.describe'], [], [
+    positionalBinding('method', 'the method to call, e.g. git.status or acme.notes/add', true)
+  ], {
+    kind: 'api-call', methodTarget: 'ui.window.command.run'
   }),
   kernelMapping('skills-get', 'skill show', ['api.describe']),
   kernelMapping('skills-install', 'skill install', ['api.describe'], [
@@ -773,12 +855,28 @@ function resolvePluginCommand(catalog: ApiCatalog, mapping: CliCatalogMapping): 
   return entry
 }
 
+function verifyWindowCommandRunSchema(params: Record<string, unknown>): void {
+  const properties = params.properties
+  const required = params.required
+  if (params.type !== 'object' || !isRecord(properties) || !Array.isArray(required)) {
+    return fail('invalid-method-schema', 'ui.window.command.run has an invalid parameter object schema')
+  }
+  if (!isRecord(properties.connId) || properties.connId.type !== 'integer' ||
+    !isRecord(properties.id) || properties.id.type !== 'string' || !isRecord(properties.args)) {
+    return fail('invalid-method-schema', 'ui.window.command.run must declare integer connId, string id and args parameters')
+  }
+  if (required.length !== 2 || !required.includes('connId') || !required.includes('id')) {
+    return fail('invalid-method-schema', 'ui.window.command.run must require only connId and id')
+  }
+}
+
 function verifyMethod(catalog: ApiCatalog, methodName: string): ApiMethodEntry {
   const method = catalog.methods.find((entry) => entry.name === methodName)
   if (!method) return fail('missing-method', `catalog has no method ${methodName}`)
   if (!isRecord(method.params) || !isRecord(method.result)) {
     return fail('invalid-method-schema', `${methodName} is missing parameter or result schema`)
   }
+  if (methodName === 'ui.window.command.run') verifyWindowCommandRunSchema(method.params)
   return method
 }
 

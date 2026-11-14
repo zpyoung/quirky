@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import type { UiPluginContext } from '@quirky/protocol'
 import { act } from 'react'
 import type { Root, createRoot as CreateRoot } from 'react-dom/client'
+import type { LedgerControl } from '../src/ui/types'
 import type { LedgerCandidate, LedgerEntry, LedgerOwner, LedgerRequest, LedgerResponse, LedgerSummary } from '../src/types'
 
 type LedgerModule = typeof import('../src/ui/LedgerApp')
@@ -41,8 +42,10 @@ type Operation = LedgerRequest['operation']
 type Call = { method: string; params: Record<string, unknown> }
 type Responder = (params: Record<string, unknown>) => LedgerResponse | Promise<LedgerResponse>
 type CallWaiter = { operation: Operation; after: number; resolve(): void }
+type RegisterControl = (handler: (control: LedgerControl) => Promise<void>, mode: 'page' | 'panel', instance: string) => () => void
+type TestContext = UiPluginContext & { registerControl: RegisterControl }
 type Fake = {
-  context: UiPluginContext
+  context: TestContext
   calls: Call[]
   on: Partial<Record<Operation, Responder>>
   emit(type: string): void
@@ -88,6 +91,7 @@ function fake(): Fake {
   const listeners = new Set<Listener>()
   const waiters = new Set<CallWaiter>()
   const pending = new Set<Promise<void>>()
+  const controllers = new Map<string, (control: LedgerControl) => Promise<void>>()
   const on: Fake['on'] = {
     catalog: () => response(null, { ledgers: [projectSummary], owners: [] }),
     list: () => response(projectSummary, { entries: [entryAt(1)] }),
@@ -98,6 +102,14 @@ function fake(): Fake {
   const context = {
     call: async (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 23 }
+      if (method === 'ui.window.command.run') {
+        if (params.connId !== 23 || params.id !== 'command:quirky.ledger/control') throw new Error('Unexpected exact-window command route.')
+        const command = params.args as LedgerControl
+        const handler = controllers.get(command.instance ?? '')
+        if (!handler) throw new Error('The addressed ledger controller is not mounted.')
+        return handler(command)
+      }
       if (method === 'quirky.repo/list') return [{ id: 'repo-1', name: 'quirky', kind: 'git' }]
       if (method === 'quirky.repo/groupList') return []
       if (method === 'quirky.worktree/list') return [{ id: 'wt-1', repoId: 'repo-1', name: 'main', kind: 'git' }]
@@ -127,8 +139,12 @@ function fake(): Fake {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    openView: () => {}
-  } as unknown as UiPluginContext
+    openView: () => {},
+    registerControl: (handler: (command: LedgerControl) => Promise<void>, _mode: 'page' | 'panel', instance: string) => {
+      controllers.set(instance, handler)
+      return () => { controllers.delete(instance) }
+    }
+  } as unknown as TestContext
 
   return {
     context,
@@ -156,14 +172,15 @@ async function flushRequests(world: Fake): Promise<void> {
   })
 }
 
-async function mountPage(context: UiPluginContext, input?: unknown): Promise<HTMLElement> {
+async function mountPage(context: TestContext, input?: unknown): Promise<HTMLElement> {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
   roots.push(root)
-  await act(async () => root.render(<LedgerApp context={context} mode="page" input={input} />))
+  await act(async () => root.render(<LedgerApp context={context} mode="page" input={input} registerControl={context.registerControl} />))
   return host
 }
+
 
 const namedButton = (root: ParentNode, name: string) =>
   [...root.querySelectorAll<HTMLButtonElement>('button')].find((item) => (item.getAttribute('aria-label') ?? item.textContent?.trim()) === name)

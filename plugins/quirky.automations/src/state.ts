@@ -1,6 +1,14 @@
 import { UI_TOOL_SLOTS, type PluginContext, type Schema, type UiLayout, type UiToolSlot } from '@quirky/protocol'
 import type { AutomationService } from '../service'
-import { AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationMethods, type AutomationNavigation, type AutomationUiEnv, type AutomationUiState } from './ui-contracts'
+import { AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationMethods, type AutomationNavigation, type AutomationUiState } from './ui-contracts'
+
+export type AutomationUiEnv = {
+  context: PluginContext
+  service: AutomationService
+  read(): AutomationUiState
+  update(change: (state: AutomationUiState) => void): AutomationUiState
+  navigate(patch: Partial<AutomationNavigation>): Promise<AutomationUiState>
+}
 
 export const navigationSchema: Schema = {
   type: 'object',

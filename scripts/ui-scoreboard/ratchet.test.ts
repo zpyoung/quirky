@@ -125,6 +125,26 @@ test('ratchet accepts all static checks and enforces the enrolled source audit',
     'acme.app': ['screenshots' as unknown as StaticCheckId],
   }).exitCode).toBe(2)
 })
+
+test.each([false, true])('ratchet evaluates fragment coverage with regression=%s', (regression) => {
+  const plugin = passingAuditPlugin()
+  const coverage = JSON.parse(plugin.coverage!.content)
+  plugin.coverage!.content = JSON.stringify({ ...coverage, actions: [] })
+  if (regression) coverage.actions[0].route.invoke.quote = "context.call('acme.app/load', {})"
+  const fragmentFile = 'plugins/acme.app/ui-scoreboard/actions.json'
+  plugin.coverageFragments = [{
+    file: fragmentFile,
+    content: JSON.stringify({ ...coverage, surfaces: {}, states: [], notState: [] }),
+  }]
+  const result = checkRatchet(inventory({ plugins: [plugin] }), { 'acme.app': [...allStaticChecks] })
+  if (regression) {
+    expect(result.exitCode).toBe(1)
+    expect(result.failures).toContainEqual(expect.objectContaining({
+      code: 'evidence-missing',
+      message: expect.stringMatching(/^acme\.app \/ commands: .* \[plugins\/acme\.app\/ui-scoreboard\/actions\.json\]$/),
+    }))
+  } else expect(result).toEqual({ exitCode: 0, failures: [] })
+})
 const valid = ['compatibility-tokens'] as const
 
 test('parses empty and valid ratchets while rejecting malformed or duplicate config entries', () => {
