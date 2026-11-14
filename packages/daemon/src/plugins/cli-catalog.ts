@@ -19,6 +19,7 @@ import { cliGroupWord, effectiveCliWords } from './kinds'
 export const KERNEL_CLI_GROUPS = [
   'api',
   'daemon',
+  'diagnostics',
   'distro',
   'help',
   'job',

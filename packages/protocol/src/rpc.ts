@@ -39,8 +39,30 @@ import type { UiToolPlacement, UiToolResize, UiToolSlot } from './tool-slots'
 export const PROTOCOL_VERSION = 2
 
 export type ClientRole = 'desktop' | 'ui' | 'cli' | 'mobile'
-
 type Ok = { ok: true }
+
+
+export type MemoryProcess = { pid: number; ppid: number; rssBytes: number; name: string }
+export type MemoryTree = { processCount: number; rssBytes: number; processes: MemoryProcess[]; omitted: number }
+export type DiagnosticsMemoryReport = {
+  schemaVersion: 1
+  takenAt: number
+  daemon: {
+    pid: number
+    rssBytes: number | null
+    heapUsedBytes: number
+    heapTotalBytes: number
+    externalBytes: number
+    /** Descendants outside the PTY host subtree and without the report's own reader; null without a process table. */
+    descendants: MemoryTree | null
+  }
+  ptyHost: { pid: number | null; alive: boolean; rssBytes: number | null }
+  /** One row per running PTY session with a live pid; tree covers the session root and its descendants. */
+  sessions: { sessionId: string; pid: number; title: string | null; cwd: string; tree: MemoryTree | null }[]
+  /** Each process counted once across daemon, descendants, host and sessions; null without a process table. */
+  totals: { processCount: number; rssBytes: number } | null
+  unavailable: { part: 'process-table' | 'pty-host' | 'pty-sessions'; reason: string }[]
+}
 
 /** Params a destructive method also accepts: `yes` skips the confirmation, `confirmation` names an answered ask. */
 export type Confirmable = { yes?: boolean; confirmation?: string }
@@ -78,6 +100,7 @@ export type Methods = {
       socket: string | null
     }
   }
+  'diagnostics.memory': { params: Record<string, never>; result: DiagnosticsMemoryReport }
   /** Replies, then stops the daemon (not the PTY host). */
   'daemon.stop': { params: Record<string, never>; result: Ok }
 

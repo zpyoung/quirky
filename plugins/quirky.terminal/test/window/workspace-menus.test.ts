@@ -333,7 +333,9 @@ describe('SC-39: the pane menu', () => {
     await contextMenu(view, '[data-pane="pane-3"]')
     await click(row(view, 'Paste'))
     await settle()
-    expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([{ session: 's-3', data: 'hello' }])
+    expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's-3', data: 'hello', expectedIncarnation: 'fixture-s-3' }
+    ])
   })
 
   test('with right-click paste on, right-click pastes and Ctrl-click opens the menu', async () => {
@@ -342,7 +344,9 @@ describe('SC-39: the pane menu', () => {
     await fire(view.q('[data-pane="pane-3"] [data-terminal-pane]'), mouse('contextmenu'))
     await settle()
     expect(view.last().menu).toBeNull()
-    expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params.data)).toEqual(['pasted'])
+    expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's-3', data: 'pasted', expectedIncarnation: 'fixture-s-3' }
+    ])
     await fire(view.q('[data-pane="pane-3"] [data-terminal-pane]'), mouse('contextmenu', { ctrlKey: true }))
     expect(view.last().menu).toMatchObject({ kind: 'pane', target: 'pane-3' })
   })

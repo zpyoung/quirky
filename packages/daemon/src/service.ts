@@ -1,7 +1,9 @@
-import type { ClientRole, PluginNotification, QuirkyEvent } from '@quirky/protocol'
+import type { ClientRole, DiagnosticsMemoryReport, PluginNotification, QuirkyEvent } from '@quirky/protocol'
 import { sendNotification, type Notifier } from './notify'
 import type { PtyClient } from './pty-client'
 import type { ClientConn } from './types'
+import { collectMemorySnapshot, readMemoryProcessTable } from './memory'
+import { kernelProcess } from './kernel-process'
 
 export type CoreOptions = {
   home: string
@@ -100,6 +102,28 @@ export class Core {
       safeMode: this.options.safeMode ?? false,
       socket: this.options.socketPath ?? null
     }
+  }
+
+  memory(): Promise<DiagnosticsMemoryReport> {
+    const pty = this.options.pty
+    return collectMemorySnapshot({
+      daemonPid: process.pid,
+      memoryUsage: () => {
+        const { heapUsed, heapTotal, external } = process.memoryUsage()
+        return { heapUsed, heapTotal, external }
+      },
+      pty: {
+        get hostPid() {
+          return pty.hostPid
+        },
+        get connected() {
+          return pty.connected
+        },
+        list: () => pty.request('list', {}, { timeoutMs: 2000 })
+      },
+      readProcessTable: () => readMemoryProcessTable(kernelProcess),
+      now: Date.now
+    })
   }
 
   /**
