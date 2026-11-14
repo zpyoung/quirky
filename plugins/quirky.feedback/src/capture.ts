@@ -143,19 +143,19 @@ function allowedAttribute(name: string): boolean {
 }
 
 function readAttributes(element: Element): Record<string, string> {
-  const result: Record<string, string> = {}
+  const entries: [string, string][] = []
   const base = element.ownerDocument.baseURI
   for (const attribute of Array.from(element.attributes)) {
     const name = attribute.name.toLowerCase()
     if (!allowedAttribute(name)) continue
     if (Object.hasOwn(URL_ATTRIBUTES, name)) {
       const clean = sanitizedUrl(attribute.value, base)
-      if (clean !== null) result[name] = clean
+      if (clean !== null) entries.push([name, clean])
     } else {
-      result[name] = safeString(attribute.value, name === 'class' ? LIMIT.classAttribute : LIMIT.attribute)
+      entries.push([name, safeString(attribute.value, name === 'class' ? LIMIT.classAttribute : LIMIT.attribute)])
     }
   }
-  return result
+  return Object.fromEntries(entries)
 }
 
 function ownerOf(element: Element): string {
@@ -295,12 +295,12 @@ function nearbyTextOf(element: Element): string[] {
     walk(element.nextElementSibling, (from) => from.nextElementSibling)
   ]
   const entries: string[] = []
-  const exhausted = [false, false]
-  for (let turn = 0; entries.length < LIMIT.nearbyTextEntries && !(exhausted[0] && exhausted[1]); turn++) {
+  const exhausted = new Set<number>()
+  for (let turn = 0; entries.length < LIMIT.nearbyTextEntries && exhausted.size < sides.length; turn++) {
     const side = turn % 2
-    if (exhausted[side]) continue
+    if (exhausted.has(side)) continue
     const text = sides[side]!()
-    if (text === null) exhausted[side] = true
+    if (text === null) exhausted.add(side)
     else entries.push(text)
   }
   return entries
@@ -313,13 +313,13 @@ function rectOf(element: Element): Capture['rect'] {
 }
 
 function computedStylesOf(element: Element): Record<string, string> {
-  const result: Record<string, string> = {}
+  const entries: [string, string][] = []
   const style = getComputedStyle(element) as unknown as Record<string, unknown>
   for (const name of COMPUTED_STYLE_NAMES) {
     const value = style[name]
-    if (typeof value === 'string' && value !== '') result[name] = safeString(value, LIMIT.computedStyle)
+    if (typeof value === 'string' && value !== '') entries.push([name, safeString(value, LIMIT.computedStyle)])
   }
-  return result
+  return Object.fromEntries(entries)
 }
 
 function sourceAttribute(element: Element): string {

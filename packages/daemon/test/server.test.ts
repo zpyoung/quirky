@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { encodeTerminalLagged, encodeTerminalOutput, HOOK_TOKEN_HEADER, PROTOCOL_VERSION, RPC_PATH, RpcError, RpcErrorCode } from '@quirky/protocol'
 import { readRuntime } from '@quirky/protocol/node'
@@ -9,7 +9,9 @@ import { startServer } from '../src/server'
 import type { Core } from '../src/service'
 import { WebSocketOutput, type WebSocketOutputSocket } from '../src/websocket-output'
 import type { ClientConn } from '../src/types'
-import { startHarness, writeUiFixture, type Harness } from './helpers'
+import { makeTempHome, startHarness, writeUiFixture, type Harness } from './helpers'
+import { writeModulePlugin } from './plugins/fixtures'
+import type { ServerOptions } from '../src/server'
 
 let harness: Harness
 beforeAll(async () => {
@@ -615,6 +617,211 @@ describe('hook endpoint auth', () => {
     })
     expect(right.status).toBe(200)
   })
+})
+
+describe('server hook delivery override', () => {
+  test('passes the authenticated request body UTF-8 byte length to deliverHook', async () => {
+    const received: { event: unknown; bodyBytes: number }[] = []
+    const defaultDelivery: unknown[] = []
+    const core = {
+      hookToken: 'hook-token',
+      deliverToPlugins(event: unknown) {
+        defaultDelivery.push(event)
+      }
+    } as unknown as Core
+    const server = startServer({
+      core,
+      handle: async () => {},
+      port: 0,
+      rpcToken: 'rpc-token',
+      daemonVersion: 'test',
+      uiDir: '/nonexistent',
+      pluginFile: () => null,
+      fileResources: { serve: () => new Response(null, { status: 404 }) } as unknown as FileResourceRegistry,
+      log: () => {},
+      deliverHook: (event, bodyBytes) => received.push({ event, bodyBytes })
+    })
+    const body = JSON.stringify({ text: 'é🪶' })
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/hook/claude?session=s_1`, {
+        method: 'POST',
+        headers: { [HOOK_TOKEN_HEADER]: 'hook-token' },
+        body
+      })
+      expect(response.status).toBe(200)
+      expect(received).toEqual([{
+        event: { type: 'hook.received', agent: 'claude', sessionId: 's_1', payload: { text: 'é🪶' } },
+        bodyBytes: new TextEncoder().encode(body).byteLength
+      }])
+      expect(defaultDelivery).toEqual([])
+    } finally {
+      await server.stop(true)
+    }
+  })
+  test('uses core delivery when no hook override is configured', async () => {
+    const delivered: unknown[] = []
+    const core = {
+      hookToken: 'hook-token',
+      deliverToPlugins(event: unknown) {
+        delivered.push(event)
+      }
+    } as unknown as Core
+    const server = startServer({
+      core,
+      handle: async () => {},
+      port: 0,
+      rpcToken: 'rpc-token',
+      daemonVersion: 'test',
+      uiDir: '/nonexistent',
+      pluginFile: () => null,
+      fileResources: { serve: () => new Response(null, { status: 404 }) } as unknown as FileResourceRegistry,
+      log: () => {}
+    } satisfies ServerOptions)
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/hook/claude?session=s_1`, {
+        method: 'POST',
+        headers: { [HOOK_TOKEN_HEADER]: 'hook-token' },
+        body: '{"n":1}'
+      })
+      expect(response.status).toBe(200)
+      expect(delivered).toEqual([{
+        type: 'hook.received',
+        agent: 'claude',
+        sessionId: 's_1',
+        payload: { n: 1 }
+      }])
+    } finally {
+      await server.stop(true)
+    }
+  })
+
+})
+
+describe('index module preloads', () => {
+  async function startPreloadHarness() {
+    const home = makeTempHome('qd-preload-')
+    const uiDir = join(home, 'ui')
+    writeUiFixture(uiDir)
+    writeFileSync(join(uiDir, 'index.html'),
+      '<!doctype html><body><script type="importmap">{"imports":{}}</script><script type="module" src="./main.js"></script></body>')
+    writeFileSync(join(uiDir, 'gallery.html'), '<!doctype html><script type="importmap">{}</script><body>gallery</body>')
+    mkdirSync(join(uiDir, 'katex', 'fonts'), { recursive: true })
+    writeFileSync(join(uiDir, 'katex', 'fonts', 'KaTeX_Main-Regular.ttf'), 'font')
+    const marker = join(home, 'plugin.log')
+    writeModulePlugin(join(home, 'plugins'), marker, {
+      id: 'acme.ui',
+      ui: 'dist/ui.js',
+      contributes: { view: [{ id: 'panel', title: 'Panel' }] }
+    })
+    writeModulePlugin(join(home, 'plugins'), marker, {
+      id: 'acme.escaped',
+      ui: 'dist/a "<&>.js',
+      contributes: { view: [{ id: 'escaped', title: 'Escaped' }] }
+    })
+    return startHarness({ home, uiDir, builtinPluginsDir: null })
+  }
+
+  test('injects encoded plugin preloads in index and SPA fallback, and leaves other files alone', async () => {
+    const isolated = await startPreloadHarness()
+    try {
+      for (const path of ['/', '/worktrees/abc']) {
+        const response = await fetch(url(isolated, path))
+        const html = await response.text()
+        const importMapEnd = html.indexOf('</script>')
+        const mainScriptEnd = html.indexOf('<script type="module" src="./main.js"></script>') +
+          '<script type="module" src="./main.js"></script>'.length
+        const preloadStart = html.indexOf('<link rel="modulepreload" href="/plugins/acme.ui/dist/ui.js">')
+        expect(response.headers.get('cache-control')).toBe('no-store')
+        expect(importMapEnd).toBeGreaterThanOrEqual(0)
+        expect(preloadStart).toBeGreaterThan(importMapEnd)
+        expect(preloadStart).toBeGreaterThan(mainScriptEnd)
+        expect(html.indexOf('</body>')).toBeGreaterThan(preloadStart)
+
+        const escaped = html.match(/<link rel="modulepreload" href="([^"]*acme\.escaped[^"]*)">/)
+        expect(escaped?.[1]).toBe('/plugins/acme.escaped/dist/a%20%22%3C%26%3E.js')
+        expect(escaped?.[1]).not.toMatch(/["<>]/)
+      }
+
+      const head = await fetch(url(isolated, '/'), { method: 'HEAD' })
+      expect(head.status).toBe(200)
+      expect(head.headers.get('content-type')).toContain('text/html')
+      expect(await head.text()).toBe('')
+
+      const gallery = await fetch(url(isolated, '/gallery.html'))
+      expect(await gallery.text()).toBe(readFileSync(join(isolated.home, 'ui', 'gallery.html'), 'utf8'))
+
+      const font = await fetch(url(isolated, '/katex/fonts/KaTeX_Main-Regular.ttf'))
+      expect(font.headers.get('content-type')).toBe('font/ttf')
+    } finally {
+      await isolated.cleanup()
+    }
+  })
+
+  test('serves index unchanged when module preload computation throws', async () => {
+    const home = makeTempHome('qd-preload-failure-')
+    const uiDir = join(home, 'ui')
+    writeUiFixture(uiDir)
+    const html = '<!doctype html><body><script type="importmap">{}</script></body>'
+    writeFileSync(join(uiDir, 'index.html'), html)
+    let computations = 0
+    const core = { hookToken: 'hook-token' } as unknown as Core
+    const server = startServer({
+      core,
+      handle: async () => {},
+      port: 0,
+      rpcToken: 'rpc-token',
+      daemonVersion: 'test',
+      uiDir,
+      pluginFile: () => null,
+      fileResources: { serve: () => new Response(null, { status: 404 }) } as unknown as FileResourceRegistry,
+      log: () => {},
+      modulePreloads: () => {
+        computations++
+        throw new Error('plugin model unavailable')
+      }
+    } satisfies ServerOptions)
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/`)
+      expect(await response.text()).toBe(html)
+      expect(computations).toBe(1)
+    } finally {
+      await server.stop(true)
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+  test('preserves the original index bytes when preload injection is inapplicable', async () => {
+    const home = makeTempHome('qd-preload-bytes-')
+    const uiDir = join(home, 'ui')
+    mkdirSync(uiDir, { recursive: true })
+    const fixture = Uint8Array.from([
+      ...new TextEncoder().encode('<!doctype html><body><!--'),
+      0xff,
+      ...new TextEncoder().encode('--></body>')
+    ])
+    writeFileSync(join(uiDir, 'index.html'), fixture)
+    const core = { hookToken: 'hook-token' } as unknown as Core
+    const server = startServer({
+      core,
+      handle: async () => {},
+      port: 0,
+      rpcToken: 'rpc-token',
+      daemonVersion: 'test',
+      uiDir,
+      pluginFile: () => null,
+      fileResources: { serve: () => new Response(null, { status: 404 }) } as unknown as FileResourceRegistry,
+      log: () => {},
+      modulePreloads: () => ['/plugins/acme.ui/dist/ui.js']
+    } satisfies ServerOptions)
+    try {
+      const response = await fetch(`http://127.0.0.1:${server.port}/`)
+      expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([...fixture])
+      expect(response.headers.get('cache-control')).toBeNull()
+    } finally {
+      await server.stop(true)
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
 })
 describe('static ui', () => {
   test('serves files with content types and falls back to index.html', async () => {

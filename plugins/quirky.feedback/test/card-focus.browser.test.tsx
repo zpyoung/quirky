@@ -12,7 +12,7 @@ test.skipIf(!existsSync(executable))('comment focus ring stays inside the card s
     const page = await browser.newPage()
     const tokens = await Bun.file(new URL('../../../packages/ui/src/design-system/tokens.css', import.meta.url)).text()
     const components = await Bun.file(new URL('../../../packages/ui/src/design-system/components.css', import.meta.url)).text()
-    const actions = { setText() {}, setIntent() {}, submit() {}, cancel() {} }
+    const actions = { onText() {}, onIntent() {}, onAdd() {}, onSave() {}, onCancel() {} }
     for (const theme of ['dark', 'light']) {
       for (const width of [800, 360]) {
         await page.setViewportSize({ width, height: 600 })
@@ -20,7 +20,11 @@ test.skipIf(!existsSync(executable))('comment focus ring stays inside the card s
           const markup = renderToStaticMarkup(<Card
             card={{ serial: 1, id: null, capture: null, label: 'Worktrees', intent: 'change', text: warned ? 'Draft comment' : '', initialText: '', initialIntent: 'change', warned, saving: false }}
             number={null}
-            actions={actions}
+            onText={actions.onText}
+            onIntent={actions.onIntent}
+            onAdd={actions.onAdd}
+            onSave={actions.onSave}
+            onCancel={actions.onCancel}
           />)
           await page.setContent(`<style>${tokens}\n${components}\n* { box-sizing: border-box; }</style><main data-theme="${theme}">${markup}</main>`)
           const comment = page.getByRole('textbox', { name: 'Comment', exact: true })
