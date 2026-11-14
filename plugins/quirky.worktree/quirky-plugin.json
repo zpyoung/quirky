@@ -15,7 +15,43 @@
     "quirky.cli"
   ],
   "contributes": {
+    "launch-hook": [
+      {
+        "id": "ports",
+        "description": "Gives every session in a worktree its port block as PORT, WORKTREE_PORT and WORKTREE_PORT_COUNT."
+      }
+    ],
     "method": [
+      {
+        "id": "ports",
+        "description": "List reserved local port blocks, or allocate and report one selected worktree's block.",
+        "params": {
+          "type": "object",
+          "properties": { "worktree": { "type": "string" } },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "required": ["blocks"],
+          "properties": {
+            "blocks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["worktreeId", "name", "path", "base", "count", "last"],
+                "properties": {
+                  "worktreeId": { "type": "string" },
+                  "name": { "type": "string" },
+                  "path": { "description": "Absolute path, or null." },
+                  "base": { "type": "integer" },
+                  "count": { "type": "integer" },
+                  "last": { "type": "integer" }
+                }
+              }
+            }
+          }
+        }
+      },
       {
         "id": "list",
         "description": "Worktrees (workspaces), optionally only those of one project or one group's parent folder.",
@@ -672,6 +708,11 @@
                 "sparsePaths": { "type": "array", "items": { "type": "string" } },
                 "sharedDirectories": { "type": "array", "items": { "type": "string" }, "description": "Paths successfully linked into the created worktree by the existing carry owner." },
                 "preparedCheckout": { "type": "boolean", "description": "True only when canonical create claimed the exact prepared repo/base checkout." },
+                "ports": {
+                  "type": "object",
+                  "properties": { "base": { "type": "integer" }, "count": { "type": "integer" } },
+                  "required": ["base", "count"]
+                },
                 "defaultTabs": {
                   "type": "array",
                   "items": {
@@ -3415,6 +3456,33 @@
     ],
     "setting": [
       {
+        "id": "portRangeStart",
+        "type": "number",
+        "title": "Worktree port range start",
+        "description": "First TCP port available for worktree blocks.",
+        "default": 41000,
+        "minimum": 1024,
+        "maximum": 65535
+      },
+      {
+        "id": "portRangeEnd",
+        "type": "number",
+        "title": "Worktree port range end",
+        "description": "Last TCP port available for worktree blocks, inclusive.",
+        "default": 48999,
+        "minimum": 1024,
+        "maximum": 65535
+      },
+      {
+        "id": "portBlockSize",
+        "type": "number",
+        "title": "Worktree port block size",
+        "description": "Number of TCP ports reserved for each worktree.",
+        "default": 10,
+        "minimum": 1,
+        "maximum": 100
+      },
+      {
         "id": "worktreesRoot",
         "type": "string",
         "title": "Worktrees folder",
@@ -3503,6 +3571,12 @@
       }
     ],
     "cli-command": [
+      {
+        "id": "ports",
+        "summary": "show worktree port blocks",
+        "flags": { "worktree": { "type": "string", "description": "allocate and show one selected worktree's block" } },
+        "methods": ["quirky.worktree/ports"]
+      },
       {
         "id": "list",
         "summary": "list worktrees",

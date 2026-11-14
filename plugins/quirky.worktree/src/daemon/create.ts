@@ -35,6 +35,7 @@ import { openWindowView, preflightCreateWindow, type SelectedWindow } from './wi
 import { requireAvailableHost } from './hosts'
 import { pickGeneratedName } from './names'
 import type { KeyedQueue } from './queue'
+import type { PortBlock, WorktreePorts } from './ports'
 import { filesystemIdentitySource, instanceIdFor } from './identity'
 import { forgetWorktreeOrigins, insertRow, recordWorktreeOrigin, type WorktreeOriginCreator } from './store'
 import {
@@ -127,6 +128,7 @@ export type CreateEnv = FolderEnv & {
   suggestions: Map<string, string>
   /** Agent starts waiting for a Setup session to exit. */
   pending: Set<PendingStart>
+  ports?: WorktreePorts
 }
 
 const SESSION_VIEW = 'view:quirky.session/worktree'
@@ -150,6 +152,7 @@ type CreateReceipt = {
   sharedDirectories: string[]
   main: MainUpdateReceipt
   preparedCheckout: boolean
+  ports?: PortBlock
   defaultTabs?: Array<{ title: string; tab: string; session: string }>
   agentLaunch?: { sessionId: string; launchSettings: LaunchSettings | null }
   vm?: VmEnvironment
@@ -841,6 +844,7 @@ type Created = {
   runDefaultTabCommands: boolean
   preparedCheckout: boolean
   mainUpdate: MainUpdateReceipt
+  ports?: PortBlock
   baseFallback?: ResolvedBase['fallback']
 }
 
@@ -1494,7 +1498,7 @@ async function runIssueCommand(
   setupSession: string | undefined
 ): Promise<NonNullable<WorktreeCreateResult['issueCommand']>> {
   const { worktree } = created
-  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path }
+  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path, ports: created.ports }
   const expanded = script
     .replaceAll('{{issue}}', String(source.item.number))
     .replaceAll('{{artifact_url}}', source.item.url)
@@ -1557,6 +1561,13 @@ async function runIssueCommand(
 /** Steps 12 to 14: setup, the agent, and opening the view. */
 async function finish(env: CreateEnv, created: Created, params: CreateParams, selectedWindow: SelectedWindow | null): Promise<CreateResult> {
   const { worktree, hooks, warnings } = created
+  if (env.ports) {
+    try {
+      created.ports = await env.ports.ensure(worktree.id)
+    } catch (error) {
+      warnings.push(`could not reserve ports for ${worktree.path}: ${messageOf(error)}`)
+    }
+  }
   const result: CreateResult = {
     worktree,
     warnings,
@@ -1565,7 +1576,8 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams, se
       sparsePaths: created.sparsePaths,
       sharedDirectories: created.sharedDirectories,
       preparedCheckout: created.preparedCheckout,
-      main: created.mainUpdate
+      main: created.mainUpdate,
+      ...(created.ports ? { ports: created.ports } : {})
     },
     ...(created.baseFallback ? { baseFallback: created.baseFallback } : {})
   }
@@ -1632,7 +1644,7 @@ async function finish(env: CreateEnv, created: Created, params: CreateParams, se
 /** Step 12: setup in a "Setup" terminal, or in the daemon when sessions are off. */
 async function runSetup(env: CreateEnv, created: Created, script: string, warnings: string[], onSession?: (session: SessionLike) => void): Promise<WorktreeCreateResult['setup']> {
   const { worktree } = created
-  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path }
+  const target: HookTarget = { rootPath: created.rootPath, worktreePath: worktree.path, ports: created.ports }
   let runner: string
   try {
     runner = worktree.kind === 'git' ? await gitRunnerPath(worktree.path, 'setup') : dataRunnerPath(env.dataDir, worktree.id, 'setup')
