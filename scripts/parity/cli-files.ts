@@ -2130,7 +2130,7 @@ class CliFilesRunner {
       const text = readFileSync(path, 'utf8')
       return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => sanitizeText(line, this.home, this.tokenValues))
     }
-    const denied = readLines(world.tools.securityLog)
+    const denied = [...readLines(world.tools.securityLog), ...readLines(world.tools.orcaLog)]
     const egress = readLines(world.tools.egressLog)
     const injectionPresent = this.windows.some((entry) => existsSync(join(entry.worktree.path, 'cli-injected'))) ||
       existsSync(join(world.home, 'cli-injected')) || existsSync(join(resolve(import.meta.dir, '../..'), 'cli-injected'))
