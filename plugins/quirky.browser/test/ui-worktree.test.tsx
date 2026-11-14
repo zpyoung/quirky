@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
+import { registerPaneUiController } from '../src/ui-control'
 
 let activate: (context: UiPluginContext) => void
 let deactivate: () => void
@@ -67,7 +68,7 @@ function browserUi(worktree: string | null, viewWorktree?: string) {
     if (!isCommandHandler(handler)) throw new Error('Browser new-tab command was not provided')
     return handler(args)
   }
-  return { provided, calls, opened, toasts, run }
+  return { context, provided, calls, opened, toasts, run }
 }
 
 describe('Browser new tab workspace selection', () => {
@@ -101,5 +102,24 @@ describe('Browser new tab workspace selection', () => {
     ])
     expect(ui.calls.filter((call) => call.method === 'quirky.terminal/setFloating').map((call) => call.params)).toEqual([{ open: true }])
     expect(ui.opened).toEqual([{ id: 'view:quirky.session/worktree', input: { worktree: 'wt-resolved' } }])
+  })
+
+  test('drops empty and non-string new-tab arguments', async () => {
+    const ui = browserUi('wt-selected')
+    await ui.run({ url: '', page: 7, mode: 'watch', profile: 'p1' })
+    expect(ui.calls.filter(call => call.method === 'quirky.browser/paneOpen')).toEqual([
+      { method: 'quirky.browser/paneOpen', params: { worktree: 'wt-selected', mode: 'watch', profile: 'p1' } }
+    ])
+  })
+
+  test('provides the pane control command and returns its delivery result', async () => {
+    const ui = browserUi('wt-selected')
+    const handler = ui.provided.get('command:quirky.browser/paneUiControl')
+    expect(typeof handler).toBe('function')
+    const calls: unknown[] = []
+    registerPaneUiController(ui.context, 'pane-1', args => calls.push(args))
+    const args = { action: 'open-find', pane: 'pane-1' }
+    expect(await (handler as (args: unknown) => unknown)(args)).toEqual({ ...args, delivered: 1 })
+    expect(calls).toEqual([args])
   })
 })

@@ -20,18 +20,20 @@ export const BROWSER_SETTING_IDS = {
 
 export const BROWSER_SETTINGS_COMMAND = 'command:quirky.browser/browserSettings'
 export const PREFERENCES_CONTROL_COMMAND = 'command:quirky.browser/preferencesControl'
-export type PreferencesControlAction = 'open-create-profile' | 'close-create-profile' | 'toggle-import' | 'open-file-import' | 'close-file-import'
+export type PreferencesControlAction = 'open-create-profile' | 'close-create-profile' | 'toggle-import' | 'open-file-import' | 'close-file-import' | 'toggle-profile-menu' | 'toggle-import-hint'
 export type PreferencesControlArgs = { action: PreferencesControlAction; instance: string; profile?: string }
 
 type PreferencesController = (args: PreferencesControlArgs) => void
-type PreferencesControllerRegistration = { token: symbol; handler: PreferencesController }
-const preferencesControllers = new WeakMap<UiPluginContext, Map<string, PreferencesControllerRegistration>>()
+type PreferencesControllerRegistration = { handler: PreferencesController }
+const preferencesControllers = new WeakMap<UiPluginContext, Map<string, Set<PreferencesControllerRegistration>>>()
 const PREFERENCES_CONTROL_ACTIONS: Readonly<Record<PreferencesControlAction, true>> = {
   'open-create-profile': true,
   'close-create-profile': true,
   'toggle-import': true,
   'open-file-import': true,
-  'close-file-import': true
+  'close-file-import': true,
+  'toggle-profile-menu': true,
+  'toggle-import-hint': true
 }
 
 export function registerPreferencesController(
@@ -45,16 +47,27 @@ export function registerPreferencesController(
     preferencesControllers.set(context, controllers)
   }
   const registrations = controllers
-  const token = Symbol()
-  registrations.set(instance, { token, handler })
+  let handlers = registrations.get(instance)
+  if (!handlers) {
+    handlers = new Set()
+    registrations.set(instance, handlers)
+  }
+  const registration = { handler }
+  handlers.add(registration)
+  let active = true
   return () => {
-    if (registrations.get(instance)?.token !== token) return
-    registrations.delete(instance)
+    if (!active) return
+    active = false
+    handlers.delete(registration)
+    if (handlers.size === 0) registrations.delete(instance)
     if (registrations.size === 0) preferencesControllers.delete(context)
   }
 }
 
-export function dispatchPreferencesControl(context: UiPluginContext, args: unknown): void {
+export function dispatchPreferencesControl(
+  context: UiPluginContext,
+  args: unknown
+): { instance: string; action: PreferencesControlAction; delivered: number } {
   if (!isRecord(args) || Array.isArray(args)) {
     throw new Error('Browser preferences control needs a known action and a non-empty instance.')
   }
@@ -78,8 +91,17 @@ export function dispatchPreferencesControl(context: UiPluginContext, args: unkno
   } else {
     normalizedArgs = { action: normalizedAction, instance }
   }
-  preferencesControllers.get(context)?.get(instance)?.handler(normalizedArgs)
+  const handlers = preferencesControllers.get(context)?.get(instance)
+  let delivered = 0
+  if (handlers) {
+    for (const { handler } of handlers) {
+      handler(normalizedArgs)
+      delivered++
+    }
+  }
+  return { instance, action: normalizedAction, delivered }
 }
+
 const PROFILE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   chrome: 'Google Chrome',
   edge: 'Microsoft Edge',
