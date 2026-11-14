@@ -86,6 +86,7 @@ async function mountProjects(options: { state?: ProjectFixtureState; viewId?: st
     },
     async executeCommand() { return undefined },
     toast(title: string, message?: string) { mounted.toasts.push({ title, ...(message === undefined ? {} : { message }) }) },
+    onConnection() { return () => {} },
     log() {}
   } as unknown as UiPluginContext
   await act(async () => mounted.root.render(<ProjectsSurface context={context} state={state} refresh={async () => {}} />))

@@ -24,6 +24,7 @@ type Harness = {
   logs: string[]
   handlers: Map<string, Handler>
   provided: Map<string, (input: unknown) => unknown>
+  connections: Set<(status: 'connected' | 'reconnecting') => void>
 }
 
 let createRoot: (element: HTMLElement) => Root
@@ -77,7 +78,7 @@ function tasksState(project: ProjectTarget | null = PROJECT, savedView: string |
 }
 
 function harness(): Harness {
-  const h: Harness = { context: {}, calls: [], commands: [], toasts: [], logs: [], handlers: new Map(), provided: new Map() }
+  const h: Harness = { context: {}, calls: [], commands: [], toasts: [], logs: [], handlers: new Map(), provided: new Map(), connections: new Set() }
   h.context = {
     async call(method: string, params: Record<string, unknown> = {}) {
       h.calls.push({ method, params })
@@ -88,6 +89,10 @@ function harness(): Harness {
     async executeCommand(id: string, args?: unknown) { h.commands.push({ id, args }) },
     toast(title: string, detail?: string) { h.toasts.push({ title, ...(detail === undefined ? {} : { detail }) }) },
     log(message: string) { h.logs.push(message) },
+    onConnection(listener: (status: 'connected' | 'reconnecting') => void) {
+      h.connections.add(listener)
+      return () => { h.connections.delete(listener) }
+    },
     provide(id: string, implementation: (input: unknown) => unknown) { h.provided.set(id, implementation) }
   }
   return h
@@ -317,9 +322,11 @@ test('13. an empty partial browse uses EmptyState and advisory NoticeLine, then 
   await click(button(container, 'Browse all'))
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!
   expect([...dialog.querySelectorAll('.ui-empty-state__message')].map((node) => node.textContent)).toEqual(['No additional projects were found. Add a project URL or owner/number below.'])
+  expect(dialog.querySelector('.ui-empty-state')?.closest('[role="status"]')).not.toBeNull()
   expect([...dialog.querySelectorAll('.ui-notice-line__text')].map((node) => node.textContent)).toContain('Some organization projects could not be listed. Paste a project URL below to reach missing ones.')
   await changeInput(dialog.querySelector<HTMLInputElement>('input[placeholder="Search projects"]')!, 'zzz')
   expect(dialog.querySelector('.ui-empty-state__message')?.textContent).toBe('No projects match this search.')
+  expect(dialog.querySelector('.ui-empty-state')?.closest('[role="status"]')).not.toBeNull()
 })
 
 test('14. Start work is busy from the click and guards duplicate repository matching', async () => {
@@ -333,6 +340,52 @@ test('14. Start work is busy from the click and guards duplicate repository matc
   expect(start.disabled).toBe(true)
   expect(start.textContent).toBe('Starting…')
   expect(count(h, 'quirky.repo/list')).toBe(1)
+})
+
+test('14b. interleaved row starts stay busy independently through workspace completion', async () => {
+  const h = harness()
+  const second = { ...ITEM, id: 'PVTI_2', content: { ...ITEM.content, number: 8, title: 'Second project item', url: 'https://github.com/acme/quirky/issues/8' } }
+  h.handlers.set('quirky.tasks/projectView', projectView({
+    list: () => ({ views: [VIEW] }),
+    load: () => ({ result: { ...TABLE.result, items: [ITEM, second], totalCount: 2 } })
+  }))
+  const matching = [Promise.withResolvers<unknown>(), Promise.withResolvers<unknown>()]
+  const workspaces = [Promise.withResolvers<unknown>(), Promise.withResolvers<unknown>()]
+  const startedNumbers: number[] = []
+  h.handlers.set('quirky.repo/list', () => matching[count(h, 'quirky.repo/list') - 1].promise)
+  h.handlers.set('quirky.worktree/list', () => [{ id: 'wt-1', repoId: 'repo-1', isMain: true }])
+  h.handlers.set('quirky.hosting/repository', () => ({ origin: { host: 'github.com', owner: 'acme', repo: 'quirky' } }))
+  h.handlers.set('quirky.tasks/workspace', (params) => {
+    const target = params.target as { number: number }
+    startedNumbers.push(target.number)
+    return workspaces[target.number === 7 ? 0 : 1].promise
+  })
+  const container = await mount(h)
+  const firstStart = button(container, 'Start work on Improve project table')
+  const secondStart = button(container, 'Start work on Second project item')
+  await click(firstStart)
+  await click(secondStart)
+  expect(firstStart.disabled).toBe(true)
+  expect(secondStart.disabled).toBe(true)
+  await click(firstStart)
+  expect(count(h, 'quirky.repo/list')).toBe(2)
+  const repositories = [{ id: 'repo-1', kind: 'git', path: '/src/quirky', name: 'quirky' }]
+  await act(async () => matching[1].resolve(repositories))
+  await settle()
+  await act(async () => matching[0].resolve(repositories))
+  await settle()
+  expect(startedNumbers).toEqual([8, 7])
+  await act(async () => workspaces[1].resolve({ kind: 'composer' }))
+  await settle()
+  expect(firstStart.disabled).toBe(true)
+  expect(secondStart.disabled).toBe(false)
+  await click(firstStart)
+  expect(count(h, 'quirky.repo/list')).toBe(2)
+  expect(count(h, 'quirky.tasks/workspace')).toBe(2)
+  await act(async () => workspaces[0].resolve({ kind: 'composer' }))
+  await settle()
+  expect(firstStart.disabled).toBe(false)
+  expect(secondStart.disabled).toBe(false)
 })
 
 test('15. opening an item reports progress until its preview opens', async () => {
@@ -406,7 +459,7 @@ test('17. preview loading and detail failure are notices, not InlineErrors', asy
   expect(failedContainer.querySelector('[role="dialog"] .ui-inline-error')).toBeNull()
 })
 
-test('18. picker clicks route through one cached window connection and reopening clears browse errors', async () => {
+test('18. picker clicks resolve the current window each time and reopening clears browse errors', async () => {
   const h = harness()
   windowHandlers(h)
   h.handlers.set('quirky.tasks/projectView', loaded())
@@ -423,7 +476,7 @@ test('18. picker clicks route through one cached window connection and reopening
     { action: 'picker', open: false },
     { action: 'picker', open: true }
   ])
-  expect(count(h, 'ui.window.self')).toBe(1)
+  expect(count(h, 'ui.window.self')).toBe(3)
   await unmount(container)
 
   const noProject = harness()
@@ -433,6 +486,35 @@ test('18. picker clicks route through one cached window connection and reopening
   expect(controlArgs(noProject)).toEqual([{ action: 'picker', open: true }])
   expect(noProject.calls.find((call) => call.method === 'ui.window.command.run')?.params).toEqual({ connId: 7, id: PROJECTS_CONTROL_COMMAND, args: { action: 'picker', open: true } })
   expect(empty.querySelector('[role="dialog"]')?.textContent).toContain('Choose a project')
+})
+
+test('18b. a retained Projects mount routes only to its current window after connection ID reuse', async () => {
+  const h = harness()
+  let connId = 7
+  let foreignDeliveries = 0
+  const other = {} as never
+  const stop = registerProjectsControl(other, () => { foreignDeliveries += 1; return true })
+  h.handlers.set('ui.window.self', () => ({ connId }))
+  h.handlers.set('ui.window.command.run', (params) => {
+    if (params.connId === connId) return runProjectsControl(h.context as never, params.args)
+    if (params.connId === 7) return runProjectsControl(other, params.args)
+    throw new Error('No window')
+  })
+  try {
+    const container = await mount(h, tasksState(null))
+    await click(button(container, 'Choose a project'))
+    await click(button(container, 'Close dialog'))
+    for (const listener of h.connections) listener('reconnecting')
+    connId = 22
+    for (const listener of h.connections) listener('connected')
+    await click(button(container, 'Choose a project'))
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull()
+    expect(foreignDeliveries).toBe(0)
+    expect(h.calls.filter((entry) => entry.method === 'ui.window.command.run').map((entry) => entry.params.connId)).toEqual([7, 22])
+    expect(h.logs).toEqual([])
+  } finally {
+    stop()
+  }
 })
 
 test('19. a failed window command falls back locally and logs the failure', async () => {
@@ -463,7 +545,7 @@ test('20. column settings, visibility, and width route and preserve the local la
   const width = container.querySelector<HTMLInputElement>('input[aria-label="Status column width"]')!
   await changeInput(width, '200')
   expect(controlArgs(h)[2]).toEqual({ action: 'column', fieldId: 'PVTF_STATUS', width: 200 })
-  expect(count(h, 'ui.window.self')).toBe(1)
+  expect(count(h, 'ui.window.self')).toBe(3)
 })
 
 test('21. Back from the chooser routes to the picker', async () => {
@@ -521,7 +603,7 @@ test('23. project control rejects malformed requests and unidentified windows', 
   expect(() => parseProjectsControlRequest({ action: 'back-to-picker', open: true })).toThrow('projects-control back-to-picker takes no other fields.')
   const h = harness()
   h.handlers.set('ui.window.self', () => ({}))
-  await expect(requestProjectsControl(h.context as never, { current: null }, { action: 'picker', open: true })).rejects.toThrow('The daemon did not identify this window.')
+  await expect(requestProjectsControl(h.context as never, { action: 'picker', open: true })).rejects.toThrow('The daemon did not identify this window.')
 })
 
 test('24. activation provides the command and its descriptor keeps the public command shape', () => {

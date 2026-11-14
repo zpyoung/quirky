@@ -11,7 +11,7 @@ export type ProjectsControlRequest =
 export type ProjectsControlResult = { delivered: number }
 /** Returns true when this mounted Projects view applied the request. */
 export type ProjectsControlHandler = (request: ProjectsControlRequest) => boolean
-export type WindowConnection = { current: number | null }
+const CONNECTION_CHANGED_ERROR = 'The window connection changed while identifying this window.'
 
 type ProjectsControlDescriptor = { command: typeof PROJECTS_CONTROL_COMMAND; args: ProjectsControlRequest }
 
@@ -85,17 +85,21 @@ export function projectsControlDescriptor(request: ProjectsControlRequest): Proj
   return { command: PROJECTS_CONTROL_COMMAND, args: request }
 }
 
-export async function requestProjectsControl(context: UiPluginContext, connection: WindowConnection, request: ProjectsControlRequest): Promise<void> {
-  if (connection.current === null) {
+export async function requestProjectsControl(context: UiPluginContext, request: ProjectsControlRequest): Promise<void> {
+  let connectionChanged = false
+  const unsubscribe = context.onConnection(() => { connectionChanged = true })
+  try {
     const response = await context.call('ui.window.self', {})
+    if (connectionChanged) throw new Error(CONNECTION_CHANGED_ERROR)
     const connId = response !== null && typeof response === 'object' && !Array.isArray(response)
       ? (response as Record<string, unknown>).connId
       : undefined
     if (typeof connId !== 'number' || !Number.isSafeInteger(connId) || connId <= 0) {
       throw new Error('The daemon did not identify this window.')
     }
-    connection.current = connId
+    const descriptor = projectsControlDescriptor(request)
+    await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })
+  } finally {
+    unsubscribe()
   }
-  const descriptor = projectsControlDescriptor(request)
-  await context.call('ui.window.command.run', { connId: connection.current, id: descriptor.command, args: descriptor.args })
 }

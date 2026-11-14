@@ -30,7 +30,7 @@ import {
   type ProjectView
 } from './model'
 import { buildRoadmapTimeline, type RoadmapTimeline, type RoadmapZoom } from './timeline'
-import { registerProjectsControl, requestProjectsControl, type ProjectsControlHandler, type ProjectsControlRequest, type WindowConnection } from './control'
+import { registerProjectsControl, requestProjectsControl, type ProjectsControlHandler, type ProjectsControlRequest } from './control'
 
 const linkCommand = 'command:quirky.tasks/open-link'
 const copyTextCommand = 'command:quirky.tasks/copy-text'
@@ -358,7 +358,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const [addingRepo, setAddingRepo] = useState(false)
   const [previewDetails, setPreviewDetails] = useState<ProjectRecord | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
-  const [busyItem, setBusyItem] = useState('')
+  const [busyItems, setBusyItems] = useState<ReadonlySet<string>>(() => new Set())
   const [createdWorkspaceLinks, setCreatedWorkspaceLinks] = useState<Record<string, string>>({})
   const [issueTypesByItem, setIssueTypesByItem] = useState<Record<string, Array<{ id: string; name: string }>>>({})
   const [deviceColumns, setDeviceColumns] = useState<{ hidden: string[]; widths: Record<string, number> }>({ hidden: [], widths: {} })
@@ -373,9 +373,8 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const projectFieldOverrides = useRef(new Map<string, ProjectFieldOverride>())
   const warnedSubIssues = useRef(false)
   const roadmapScroller = useRef<HTMLDivElement>(null)
-  const connection = useRef<WindowConnection>({ current: null })
   const controlHandler = useRef<ProjectsControlHandler>(() => false)
-  const busyItemRef = useRef('')
+  const busyItemRef = useRef(new Set<string>())
   const previewGeneration = useRef(0)
   const openingGeneration = useRef(0)
   const currentView = views.find((view) => view.id === activeViewId) ?? (record(table?.view) as ProjectView | null)
@@ -717,7 +716,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
 
   async function controlProjects(request: ProjectsControlRequest): Promise<void> {
     try {
-      await requestProjectsControl(context, connection.current, request)
+      await requestProjectsControl(context, request)
     } catch (error) {
       context.log(`tasks: projects control failed: ${errorMessage(error)}`)
       applyControl(request)
@@ -978,12 +977,12 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     const targetProjectKey = projectIdentity(targetProject)
     const projectRequest = projectGeneration.current
     const busyKey = `${targetProjectKey}|${item.id}`
-    if (busyItemRef.current === busyKey) return
-    busyItemRef.current = busyKey
-    setBusyItem(busyKey)
+    if (busyItemRef.current.has(busyKey)) return
+    busyItemRef.current.add(busyKey)
+    setBusyItems(new Set(busyItemRef.current))
     const clearBusy = () => {
-      if (busyItemRef.current === busyKey) busyItemRef.current = ''
-      setBusyItem((current) => current === busyKey ? '' : current)
+      busyItemRef.current.delete(busyKey)
+      setBusyItems(new Set(busyItemRef.current))
     }
     const resolution = await matchLocalRepositories(context, state, parseRepoSlug(item, targetProject))
     if (projectGeneration.current !== projectRequest || currentProjectKey.current !== targetProjectKey) {
@@ -1193,7 +1192,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
         {pinnedProjects.length > 0 && <ProjectChoiceSection title="Pinned" projects={pinnedProjects} current={project} onChoose={(target) => void chooseProject('select', target)} onPin={togglePin} pinnedIdentities={pinnedIdentities} />}
         {recentProjects.length > 0 && <ProjectChoiceSection title="Recent" projects={recentProjects} current={project} onChoose={(target) => void chooseProject('select', target)} onPin={togglePin} pinnedIdentities={pinnedIdentities} />}
         {browseOpen && <ProjectChoiceSection title="Browse all" projects={pickerCandidates} current={project} onChoose={(target) => void chooseProject('select', target)} onPin={togglePin} pinnedIdentities={pinnedIdentities} />}
-        {browseOpen && pickerCandidates.length === 0 && !pickerBusy && !browseError && <EmptyState message={pickerQuery ? 'No projects match this search.' : 'No additional projects were found. Add a project URL or owner/number below.'} />}
+        {browseOpen && pickerCandidates.length === 0 && !pickerBusy && !browseError && <div role="status"><EmptyState message={pickerQuery ? 'No projects match this search.' : 'No additional projects were found. Add a project URL or owner/number below.'} /></div>}
         {partialFailures.length > 0 && <div role="status"><NoticeLine>Some organization projects could not be listed. Paste a project URL below to reach missing ones.</NoticeLine></div>}
         {browseError !== null && renderProjectError(browseError, 'browse')}
         <form onSubmit={(event) => { event.preventDefault(); if (addInput.trim()) void chooseProject('add', addInput.trim()) }} className="quirky-tasks-project-picker__add">
@@ -1208,7 +1207,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const openItemActions = (item: ProjectItem) => {
     const linked = linkedWorkspace(item, state, project, createdWorkspaceLinks) !== null
     const busyKey = `${projectKey}|${item.id}`
-    const busy = busyItem === busyKey
+    const busy = busyItems.has(busyKey)
     return <div className="quirky-tasks-projects__item-actions">
       <Button type="button" onClick={(event) => { event.stopPropagation(); void openLink(projectItemUrl(item, project)) }} aria-label={`Open ${item.content?.kind ?? 'project item'} on GitHub`}>GitHub</Button>
       <Button type="button" disabled={busy || isRestricted(item) || isDraft(item)} onClick={(event) => { event.stopPropagation(); void startItem(item) }} aria-label={`${linked ? 'Resume' : 'Start work on'} ${String(item.content?.title ?? 'project item')}`}>{busy ? 'Starting…' : linked ? 'Resume' : 'Start work'}</Button>
