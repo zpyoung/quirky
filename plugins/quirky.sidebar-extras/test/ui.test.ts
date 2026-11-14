@@ -2,6 +2,9 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act } from 'react'
 import type { MountFunction, QuirkyEvent, UiLayout, UiPluginContext } from '../../../packages/protocol/src'
+import { resolve } from 'node:path'
+import { collectInventory } from '../../../scripts/ui-scoreboard/inventory'
+import { discoverUiFiles } from '../../../scripts/ui-scoreboard/audit-discovery'
 
 type DirtyResult = {
   worktreeId: string | null
@@ -20,6 +23,19 @@ type Call = { method: string; params: Record<string, unknown> }
 const SLOT = 'activity-item:quirky.sidebar-extras/source-control'
 const PANEL = 'panel:quirky.git/source-control'
 const STOCK_TITLE = 'Source Control'
+
+test('the Source Control UI import graph excludes daemon state', () => {
+  const root = resolve(import.meta.dir, '../../..')
+  const inventory = collectInventory(root)
+  const plugin = inventory.plugins.find(({ id }) => id === 'quirky.sidebar-extras')
+  if (!plugin) throw new Error('quirky.sidebar-extras was not discovered')
+
+  const graph = discoverUiFiles(plugin)
+
+  expect(graph.failures).toEqual([])
+  expect(graph.files).toEqual(['plugins/quirky.sidebar-extras/src/ui.tsx'])
+  expect(graph.files).not.toContain('plugins/quirky.sidebar-extras/src/daemon/state.ts')
+})
 
 let activate: (context: UiPluginContext) => void
 let unmountItem: (() => void) | null = null
@@ -298,7 +314,7 @@ test('the mounted activity item reports singular, plural and capped status and c
   expect(item.element.textContent).not.toContain('1000+')
 
   await act(async () => item.element.querySelector('button')?.click())
-  expect(item.panelToggles.at(-1)?.id).toBe(PANEL)
+  expect(item.panelToggles.at(-1)).toEqual({ id: PANEL, open: undefined })
 })
 
 
