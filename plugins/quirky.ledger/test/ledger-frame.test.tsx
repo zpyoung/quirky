@@ -3,9 +3,12 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import type { UiPluginContext } from '@quirky/protocol'
 import { act } from 'react'
 import type { Root, createRoot as CreateRoot } from 'react-dom/client'
+import type { LedgerControl } from '../src/ui/types'
 
 type LedgerModule = typeof import('../src/ui/LedgerApp')
 type UiModule = typeof import('@quirky/ui')
+type RegisterControl = (handler: (control: LedgerControl) => Promise<void>, mode: 'page' | 'panel', instance: string) => () => void
+type TestContext = UiPluginContext & { registerControl: RegisterControl }
 let createRoot: typeof CreateRoot
 let LedgerApp: LedgerModule['LedgerApp']
 let ToolPanelFrame: UiModule['ToolPanelFrame']
@@ -46,9 +49,18 @@ const entry = {
   origin: { workspaceId: 'wt-1' }, createdAt: '2026-10-30T00:00:00Z', updatedAt: '2026-10-30T00:00:00Z', history: []
 }
 
-function fakeContext(calls: Array<{ method: string; params: Record<string, unknown> }>, opened: string[] = []): UiPluginContext {
+function fakeContext(calls: Array<{ method: string; params: Record<string, unknown> }>, opened: string[] = []): TestContext {
+  const controllers = new Map<string, (control: LedgerControl) => Promise<void>>()
   const call = async (method: string, params: Record<string, unknown> = {}) => {
     calls.push({ method, params })
+    if (method === 'ui.window.self') return { connId: 17 }
+    if (method === 'ui.window.command.run') {
+      if (params.connId !== 17 || params.id !== 'command:quirky.ledger/control') throw new Error('Unexpected exact-window command route.')
+      const control = params.args as LedgerControl
+      const handler = controllers.get(control.instance ?? '')
+      if (!handler) throw new Error('The addressed ledger controller is not mounted.')
+      return handler(control)
+    }
     if (method === 'quirky.repo/list') return [{ id: 'repo-1', name: 'quirky', kind: 'git' }]
     if (method === 'quirky.repo/groupList') return []
     if (method === 'quirky.worktree/list') return [{ id: 'wt-1', repoId: 'repo-1', name: 'main', kind: 'git' }]
@@ -62,15 +74,19 @@ function fakeContext(calls: Array<{ method: string; params: Record<string, unkno
     getLayout: () => ({ worktree: 'wt-1' }),
     onLayout: () => () => {},
     subscribe: () => () => {},
-    openView: (id: string) => { opened.push(id) }
-  } as unknown as UiPluginContext
+    openView: (id: string) => { opened.push(id) },
+    registerControl: (handler: (control: LedgerControl) => Promise<void>, _mode: 'page' | 'panel', instance: string) => {
+      controllers.set(instance, handler)
+      return () => { controllers.delete(instance) }
+    }
+  } as unknown as TestContext
 }
 
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 const listCalls = (calls: Array<{ method: string; params: Record<string, unknown> }>) => calls.filter((item) => item.params.operation === 'list').length
 
 /** Mounts the plugin in its own root under the host frame, the way a tool slot does. */
-async function mountPanel(context: UiPluginContext): Promise<HTMLElement> {
+async function mountPanel(context: TestContext): Promise<HTMLElement> {
   const host = document.createElement('div')
   document.body.append(host)
   const hostRoot = createRoot(host)
@@ -78,18 +94,18 @@ async function mountPanel(context: UiPluginContext): Promise<HTMLElement> {
   await act(async () => hostRoot.render(<ToolPanelFrame title="Ledger"><div data-plugin /></ToolPanelFrame>))
   const pluginRoot = createRoot(host.querySelector<HTMLElement>('[data-plugin]')!)
   roots.push(pluginRoot)
-  await act(async () => pluginRoot.render(<LedgerApp context={context} mode="panel" />))
+  await act(async () => pluginRoot.render(<LedgerApp context={context} mode="panel" registerControl={context.registerControl} />))
   await settle()
   await settle()
   return host
 }
 
-async function mountPage(context: UiPluginContext, input?: unknown): Promise<HTMLElement> {
+async function mountPage(context: TestContext, input?: unknown): Promise<HTMLElement> {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
   roots.push(root)
-  await act(async () => root.render(<LedgerApp context={context} mode="page" input={input} />))
+  await act(async () => root.render(<LedgerApp context={context} mode="page" input={input} registerControl={context.registerControl} />))
   await settle()
   await settle()
   return host
@@ -128,6 +144,12 @@ test('panel mode keeps refresh, triage and new on the rail, and refresh reloads 
   await act(async () => { refresh.click() })
   await settle()
   expect(listCalls(calls)).toBe(before + 1)
+  const routedRefresh = calls.find((item) => item.method === 'ui.window.command.run')
+  expect(routedRefresh?.params).toMatchObject({
+    connId: 17,
+    id: 'command:quirky.ledger/control',
+    args: { action: 'refresh', resource: 'entries', instance: expect.any(String) }
+  })
   expect(host.querySelector('.ui-tool-panel-frame__body')?.textContent).toContain('Frame record')
   expect(host.querySelector('.ui-tool-panel-frame__body [aria-label="Ledger filters"]')).toBeNull()
   await act(async () => { rail(host).querySelector<HTMLButtonElement>('button[aria-label="Filter ledger"]')!.click() })
