@@ -56,28 +56,11 @@ type WaitCondition = { selector: string } | { text: string } | { fn: string } | 
 type SettledWait =
   | { ok: true; receipt: CliReceipt }
   | { ok: false; error: unknown }
-const NAVIGATION_WAIT_GAP = 'a wait fulfilled by a navigation is rejected with browser_tab_changed. Follow-up: Let a pending browser wait finish when the navigation it waits for lands'
 
 function requireWaitSuccess(receipt: CliReceipt): void {
   if (receipt.exitCode !== 0) throw new BrowserFailure('cli-nonzero', `wait: ${JSON.stringify(receipt.result)}`, receipt.stderrTail)
   const result = receipt.result
   if (!result || typeof result !== 'object' || !('waited' in result) || result.waited !== true) throw new BrowserFailure('malformed-cli-json', 'wait returned no successful condition result')
-}
-
-function navigationWaitOutcome(receipt: CliReceipt): Record<string, unknown> {
-  if (receipt.exitCode === 0) {
-    requireWaitSuccess(receipt)
-    return { waitResult: receipt.result }
-  }
-  const result = receipt.result
-  if (receipt.exitCode === 1 && result && typeof result === 'object' && 'error' in result) {
-    const error = result.error
-    if (error && typeof error === 'object' && 'code' in error && error.code === 'conflict' &&
-      'message' in error && error.message === 'browser_tab_changed: browser page identity changed during the operation') {
-      return { gap: NAVIGATION_WAIT_GAP, waitResult: result }
-    }
-  }
-  throw new BrowserFailure('cli-nonzero', `unexpected navigation wait failure: ${JSON.stringify(result)}`, receipt.stderrTail)
 }
 
 async function assertPageBUnchanged(c: CheckContext, message: string): Promise<void> {
@@ -270,7 +253,8 @@ export const actionChecks: BrowserCheck[] = [
       const receipt = await waitBehindGate(c, 'url', { url: target }, 'URL')
       const observed = await c.call<ValueResult<string>>('get', { what: 'url' })
       c.equal(observed.value, target, 'navigation must satisfy the requested URL after release')
-      return { ...navigationWaitOutcome(receipt), pendingBeforeRelease: true, before: before.value, url: observed.value }
+      requireWaitSuccess(receipt)
+      return { waitResult: receipt.result, pendingBeforeRelease: true, before: before.value, url: observed.value }
     }
   },
   {
@@ -291,7 +275,8 @@ export const actionChecks: BrowserCheck[] = [
       c.equal(readyState, 'complete')
       c.equal(await c.observe<boolean>('window.__parityWaitGateReleased === true'), true)
       c.equal((await c.call<ValueResult<string>>('get', { what: 'url' })).value, target)
-      return { ...navigationWaitOutcome(receipt), pendingBeforeRelease: true, readyState, url: target }
+      requireWaitSuccess(receipt)
+      return { waitResult: receipt.result, pendingBeforeRelease: true, readyState, url: target }
     }
   },
   {

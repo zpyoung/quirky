@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test'
-import { existsSync, lstatSync, mkdtempSync, realpathSync, rmSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
-import { runBrowserParity, validateOutcomes, type BrowserCheck } from './browser-run'
+import { runBrowserParity, validateOutcomes, type BrowserCheck, type BrowserParityReport } from './browser-run'
 import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, daemonStatus, readShimLogs, type BrowserWorld, type CliReceipt } from './browser-world'
 import type { RuntimeInfo } from '@quirky/protocol/node'
 import { startBrowserFixture } from './browser-fixture'
@@ -11,6 +11,7 @@ import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { actionChecks } from './browser-checks-actions'
 import { stateChecks } from './browser-checks-state'
 import { networkChecks } from './browser-checks-network'
+import { tabChecks } from './browser-checks-tabs'
 
 test('daemon status retries transient health misses while the owned daemon remains alive', async () => {
   const runtime: RuntimeInfo = { pid: 37, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
@@ -137,6 +138,52 @@ const fakeWorld = (cleanup: BrowserWorld['cleanup'] = async () => ({ ok: true })
   }, worktreeA: 'a', worktreeB: 'b', daemonPid: 1,
   cli: async () => ({ argv: [], result: {}, exitCode: 0, stderrTail: '' }), cleanup, processEvidence: async () => ({})
 })
+type ProfileDeleteOutcome = 'refused' | 'completed' | 'metadata-retained' | 'directory-retained'
+const profileDeleteWorld = (home: string, outcome: ProfileDeleteOutcome) => {
+  const world = fakeWorld()
+  world.home = home
+  const chromeProfile = join(home, 'data', 'profiles', 'profile_g107', 'chrome-profile')
+  mkdirSync(chromeProfile, { recursive: true })
+  const profile = { id: 'profile_g107', label: 'Delete proof', scope: 'isolated' }
+  let metadataPresent = true
+  world.cli = async argv => {
+    const flagIndex = argv.findIndex(argument => argument.startsWith('--'))
+    const command = argv.slice(1, flagIndex < 0 ? argv.length : flagIndex).join(' ')
+    if (command === 'tab profile create') return { argv, result: { profile }, exitCode: 0, stderrTail: '' }
+    if (command === 'tab profile list') return { argv, result: { profiles: metadataPresent ? [profile] : [] }, exitCode: 0, stderrTail: '' }
+    if (command === 'tab create') return { argv, result: { browserPageId: 'page-profile-delete', profileId: profile.id }, exitCode: 0, stderrTail: '' }
+    if (command === 'cookie set') return { argv, result: { success: true }, exitCode: 0, stderrTail: '' }
+    if (command === 'tab close') return { argv, result: { closed: true }, exitCode: 0, stderrTail: '' }
+    if (command === 'tab profile delete') {
+      if (outcome === 'refused') return {
+        argv,
+        result: { error: { code: 'conflict', message: 'browser_error: Native storage clearance requires a live desktop acknowledgement; no Quirky window is open' } },
+        exitCode: 1,
+        stderrTail: ''
+      }
+      if (outcome !== 'directory-retained') rmSync(chromeProfile, { recursive: true, force: true })
+      if (outcome !== 'metadata-retained') metadataPresent = false
+      return { argv, result: { deleted: true }, exitCode: 0, stderrTail: '' }
+    }
+    throw new Error(`unexpected profile-delete command ${command}`)
+  }
+  return { world, chromeProfile }
+}
+const runProfileDelete = async (
+  outcome: ProfileDeleteOutcome,
+  inspect: (report: BrowserParityReport, chromeProfile: string) => void
+) => {
+  const home = mkdtempSync(join(tmpdir(), 'browser-profile-delete-'))
+  try {
+    const { world, chromeProfile } = profileDeleteWorld(home, outcome)
+    const check = tabChecks.find(candidate => candidate.id === 'tab-profile-delete')
+    if (!check) throw new Error('missing tab-profile-delete check')
+    const report = await runBrowserParity({ rows: [row(check.id)], checks: [check], startWorld: async () => world })
+    inspect(report, chromeProfile)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+}
 
 test('closed arguments reject caller targets before allocation', () => {
   for (const arg of ['--home', '--runtime', '--repo', '--url', '--page', '--profile', '--command', '--chrome', '--unknown']) {
@@ -372,7 +419,39 @@ test('wait evidence rejects an immediate success while the fixture gate is held'
 })
 
 
-test('interception auto-delivery is recorded as a gap, not pending evidence', async () => {
+function heldInterceptWorld(listedPending: boolean): BrowserWorld {
+  const world = fakeWorld()
+  const key = '__g10_1_intercept_enable'
+  const pattern = '*g10-1-intercept-enable*'
+  const url = `${world.fixture.origin}/intercept?probe=g10-1-intercept-enable`
+  const expression = `window[${JSON.stringify(key)}]`
+  let disabled = false
+  world.cli = async argv => {
+    const flagIndex = argv.findIndex(argument => argument.startsWith('--'))
+    const command = argv.slice(0, flagIndex < 0 ? argv.length : flagIndex).join(' ')
+    if (command === 'browser intercept enable') return { argv, result: { enabled: true, patterns: [pattern] }, exitCode: 0, stderrTail: '' }
+    if (command === 'browser intercept list') return { argv, result: { patterns: [pattern], requests: [{ url, pending: listedPending }] }, exitCode: 0, stderrTail: '' }
+    if (command === 'browser intercept disable') {
+      disabled = true
+      world.fixture.requests.push({ path: '/intercept', method: 'GET', headers: {} })
+      return { argv, result: { disabled: true }, exitCode: 0, stderrTail: '' }
+    }
+    if (command === 'browser eval') {
+      const source = String(argv[argv.indexOf('--expression') + 1])
+      if (source === expression) {
+        const value = disabled
+          ? { status: 'fulfilled', responseStatus: 200, body: 'intercept-proof' }
+          : { status: 'pending' }
+        return { argv, result: { value }, exitCode: 0, stderrTail: '' }
+      }
+      return { argv, result: { value: true }, exitCode: 0, stderrTail: '' }
+    }
+    throw new Error(`unexpected interception command ${command}`)
+  }
+  return world
+}
+
+test('interception auto-delivery fails as wrong-page evidence', async () => {
   const world = fakeWorld()
   const key = '__g10_1_intercept_enable'
   const pattern = '*g10-1-intercept-enable*'
@@ -389,12 +468,8 @@ test('interception auto-delivery is recorded as a gap, not pending evidence', as
       const source = String(argv[argv.indexOf('--expression') + 1])
       if (source === expression) {
         stateReads += 1
-        if (stateReads === 1) {
-          return { argv, result: { value: { status: 'pending' } }, exitCode: 0, stderrTail: '' }
-        }
-        if (stateReads === 2) {
-          world.fixture.requests.push({ path: '/intercept', method: 'GET', headers: {} })
-        }
+        if (stateReads === 1) return { argv, result: { value: { status: 'pending' } }, exitCode: 0, stderrTail: '' }
+        if (stateReads === 2) world.fixture.requests.push({ path: '/intercept', method: 'GET', headers: {} })
         return { argv, result: { value: { status: 'fulfilled', responseStatus: 200, body: 'intercept-proof' } }, exitCode: 0, stderrTail: '' }
       }
       return { argv, result: { value: true }, exitCode: 0, stderrTail: '' }
@@ -410,23 +485,85 @@ test('interception auto-delivery is recorded as a gap, not pending evidence', as
       return await source.run(c)
     }
   }
-  const report = await runBrowserParity({ rows: [row(check.id, 'gap')], checks: [check], startWorld: async () => world })
+  const report = await runBrowserParity({ rows: [row(check.id)], checks: [check], startWorld: async () => world })
   expect(stateReads).toBeGreaterThanOrEqual(3)
+  expect(report.ok).toBe(false)
+  expect(report.parityComplete).toBe(false)
+  expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'wrong-page' } })
+})
+
+test('a held interception passes with pending evidence', async () => {
+  const world = heldInterceptWorld(true)
+  const source = networkChecks.find(check => check.id === 'intercept-enable')
+  if (!source) throw new Error('missing intercept-enable check')
+  const check: BrowserCheck = {
+    ...source,
+    async run(c) {
+      c.state.pageA = 'page-a'
+      return await source.run(c)
+    }
+  }
+  const report = await runBrowserParity({ rows: [row(check.id)], checks: [check], startWorld: async () => world })
+  expect(world.fixture.requests.filter(request => request.path === '/intercept')).toHaveLength(1)
   expect(report.rows[0]).toMatchObject({
-    status: 'gap',
+    status: 'passed',
     evidence: {
-      pendingBeforeDisable: false,
-      pageStatusBeforeDisable: 'fulfilled',
-      pageStatusAfterDisable: 'fulfilled',
-      serverRequestsBeforeDisable: 1,
+      pendingBeforeDisable: true,
+      listedPending: true,
+      serverRequestsBeforeDisable: 0,
       serverRequestsAfterDisable: 1,
       responseStatus: 200,
       responseBody: 'intercept-proof'
     }
   })
-  expect(report.rows[0].status).not.toBe('passed')
 })
 
+test('a listed interception without pending evidence fails as wrong-page', async () => {
+  const world = heldInterceptWorld(false)
+  const source = networkChecks.find(check => check.id === 'intercept-enable')
+  if (!source) throw new Error('missing intercept-enable check')
+  const check: BrowserCheck = {
+    ...source,
+    async run(c) {
+      c.state.pageA = 'page-a'
+      return await source.run(c)
+    }
+  }
+  const report = await runBrowserParity({ rows: [row(check.id)], checks: [check], startWorld: async () => world })
+  expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'wrong-page' } })
+})
+
+test('a refused profile deletion fails with cli-nonzero and retains its directory', async () => {
+  await runProfileDelete('refused', (report, chromeProfile) => {
+    expect(report.ok).toBe(false)
+    expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'cli-nonzero' } })
+    expect(existsSync(chromeProfile)).toBe(true)
+  })
+})
+
+test('a completed profile deletion passes with removed metadata and directory', async () => {
+  await runProfileDelete('completed', (report, chromeProfile) => {
+    expect(report.rows[0]).toMatchObject({
+      status: 'passed',
+      evidence: { deleted: true, metadataRemoved: true, chromeRemoved: true }
+    })
+    expect(existsSync(chromeProfile)).toBe(false)
+  })
+})
+
+test('profile deletion fails when metadata is retained', async () => {
+  await runProfileDelete('metadata-retained', (report, chromeProfile) => {
+    expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'wrong-page' } })
+    expect(existsSync(chromeProfile)).toBe(false)
+  })
+})
+
+test('profile deletion fails when the Chrome directory is retained', async () => {
+  await runProfileDelete('directory-retained', (report, chromeProfile) => {
+    expect(report.rows[0]).toMatchObject({ status: 'failed', error: { kind: 'wrong-page' } })
+    expect(existsSync(chromeProfile)).toBe(true)
+  })
+})
 test('cookie evidence rejects a successful setter whose independent read lost the cookie', async () => {
   const world = fakeWorld()
   world.cli = async argv => {
@@ -454,7 +591,7 @@ test('CLI decoding validates opaque object results without treating them as empt
   expect(() => decodeCliReceipt(['browser', 'exec'], JSON.stringify({ ...result, command: 42 }), '', 0, '/owned')).toThrow('command must be an object')
 })
 
-for (const outcome of ['navigation-gap', 'fixed', 'timeout', 'other-fault', 'wrong-url'] as const) {
+for (const outcome of ['tab-changed', 'fixed', 'timeout', 'other-fault', 'wrong-url'] as const) {
   test(`pending URL wait classifies ${outcome} without hiding other failures`, async () => {
     const world = fakeWorld()
     const waiting = Promise.withResolvers<CliReceipt>()
@@ -496,16 +633,21 @@ for (const outcome of ['navigation-gap', 'fixed', 'timeout', 'other-fault', 'wro
       c.state.pageB = 'page-b'
       return await source.run(c)
     } }
-    const report = await runBrowserParity({ rows: [row(check.id, 'gap')], checks: [check], startWorld: async () => world })
+    const report = await runBrowserParity({ rows: [row(check.id)], checks: [check], startWorld: async () => world })
     expect(waitCalls).toBe(1)
     expect(released).toBe(true)
-    const status = outcome === 'navigation-gap' ? 'gap' : outcome === 'fixed' ? 'passed' : 'failed'
+    const status = outcome === 'fixed' ? 'passed' : 'failed'
     expect(report.rows[0].status).toBe(status)
-    expect(report.ok).toBe(status !== 'failed')
-    if (status !== 'failed') {
-      expect(report.rows[0].evidence).toMatchObject({ pendingBeforeRelease: true, url: `${world.fixture.origin}/second` })
-      if (status === 'gap') expect(report.rows[0].reason).toContain('Let a pending browser wait finish when the navigation it waits for lands')
-    } else expect(report.rows[0].error?.kind).toBe(outcome === 'wrong-url' ? 'wrong-page' : 'cli-nonzero')
+    expect(report.ok).toBe(status === 'passed')
+    if (outcome === 'fixed') {
+      expect(report.rows[0].evidence).toMatchObject({
+        pendingBeforeRelease: true,
+        url: `${world.fixture.origin}/second`,
+        waitResult: { waited: true }
+      })
+    } else {
+      expect(report.rows[0].error?.kind).toBe(outcome === 'wrong-url' ? 'wrong-page' : 'cli-nonzero')
+    }
   })
 }
 
