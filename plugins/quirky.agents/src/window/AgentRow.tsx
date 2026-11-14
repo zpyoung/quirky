@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import type { AgentInfo, AgentListing, PermissionMode } from '../core/types'
 import { Badge, Button, IconButton, ListRow } from '@quirky/ui'
 import { Field } from './Field'
@@ -11,17 +10,6 @@ const envText = (env: Record<string, string>) =>
     .map(([name, value]) => `${name}=${value}`)
     .join('\n')
 
-/** Reads `KEY=VALUE` lines; a line without a name or `=` is refused with a message. */
-function parseEnv(text: string): { env: Record<string, string> } | { error: string } {
-  const env: Record<string, string> = {}
-  for (const line of text.split('\n')) {
-    if (!line) continue
-    const separator = line.indexOf('=')
-    if (separator <= 0) return { error: `Invalid environment line; expected KEY=VALUE: ${line}` }
-    env[line.slice(0, separator)] = line.slice(separator + 1)
-  }
-  return { env }
-}
 
 const isCustom = (info: AgentInfo) =>
   info.permissions.mode === 'custom' || (info.permissions.mode === null && info.argsOverridden && info.args.trim() !== '')
@@ -65,15 +53,17 @@ function Details({ info, listing, store }: { info: AgentInfo; listing: AgentList
         label="Command"
         value={info.command}
         overridden={info.commandOverridden}
-        onSave={(text) => store.configure(info.id, { command: text })}
-        onReset={() => void store.configure(info.id, { reset: ['command'] })}
+        agentId={info.id}
+        field="command"
+        store={store}
       />
       <Field
         label="Arguments"
         value={info.args}
         overridden={info.argsOverridden}
-        onSave={(text) => store.configure(info.id, { args: text })}
-        onReset={() => void store.configure(info.id, { reset: ['args'] })}
+        agentId={info.id}
+        field="args"
+        store={store}
       />
       {info.showEnv && (
         <Field
@@ -81,11 +71,9 @@ function Details({ info, listing, store }: { info: AgentInfo; listing: AgentList
           multiline
           value={envText(info.env)}
           overridden={info.envOverridden}
-          onSave={async (text) => {
-            const parsed = parseEnv(text)
-            return 'error' in parsed ? parsed.error : store.configure(info.id, { env: parsed.env })
-          }}
-          onReset={() => void store.configure(info.id, { reset: ['env'] })}
+          agentId={info.id}
+          field="env"
+          store={store}
         />
       )}
       <p style={s.sectionHint}>Override the binary path or name, and edit the default launch arguments or environment for this agent.</p>
@@ -94,8 +82,7 @@ function Details({ info, listing, store }: { info: AgentInfo; listing: AgentList
 }
 
 /** One agent: its name and command, availability, default and docs controls, and, for an installed one, its editable settings. */
-export function AgentRow({ info, listing, store }: { info: AgentInfo; listing: AgentListing; store: AgentsStore }) {
-  const [open, setOpen] = useState(false)
+export function AgentRow({ info, listing, expanded = false, store }: { info: AgentInfo; listing: AgentListing; expanded?: boolean; store: AgentsStore }) {
   const link = info.homepage ?? info.install
   const subtitle = `${info.command} ${info.args}`.trim()
   const canDefault = info.installed && info.enabled
@@ -131,17 +118,17 @@ export function AgentRow({ info, listing, store }: { info: AgentInfo; listing: A
             )}
             {info.installed && (
               <IconButton
-                label={open ? 'Collapse agent settings' : 'Expand agent settings'}
-                aria-expanded={open}
-                onClick={() => setOpen(!open)}
+                label={expanded ? 'Collapse agent settings' : 'Expand agent settings'}
+                aria-expanded={expanded}
+                onClick={() => void store.setExpanded(info.id, !expanded)}
               >
-                {open ? '▴' : '▾'}
+                {expanded ? '▴' : '▾'}
               </IconButton>
             )}
           </div>
         }
       />
-      {open && info.installed && <Details info={info} listing={listing} store={store} />}
+      {expanded && info.installed && <Details info={info} listing={listing} store={store} />}
     </li>
   )
 }

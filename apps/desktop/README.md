@@ -285,10 +285,33 @@ native web content. Account captures use disposable provider executables and a l
 
 ### State and action coverage
 
-The four UI checks read `plugins/<id>/ui-scoreboard.json`. A missing file fails
-all four checks. The file is strict JSON with `schemaVersion: 1`, a `surfaces`
-map and `states`, `notState` and `actions` arrays. Unknown keys, duplicate keys
+The four UI checks read `plugins/<id>/ui-scoreboard.json` and
+`plugins/<id>/ui-scoreboard/<name>.json` fragments. Either location is optional;
+at least one coverage file is required. Every file uses the same strict JSON
+format: `schemaVersion: 1`, a `surfaces` map and `states`, `notState` and
+`actions` arrays. Empty maps and arrays are valid. Unknown keys, duplicate keys
 and empty quotes are rejected.
+
+Fragment names must match `^[a-z0-9][a-z0-9-]*\.json$`. Dot-entries are ignored.
+Other entries, subdirectories and symlinks fail inventory. The fragment directory
+is not production UI source.
+
+Coverage is the union of all files, root first and then fragments in byte-order
+by name. The audit processes all `states`, then all `notState`, then all `actions`.
+Surface keys must be unique: `coverage-surface-duplicate` fails the three state
+checks and the first declaration is evaluated. Duplicate candidate claims still
+fail with `coverage-duplicate`, naming the claiming files. An invalid file fails
+all four checks without hiding evidence from valid files.
+
+Evidence from a coverage file carries its repository-relative `coverageFile`.
+Failing messages end with ` [<file>]`; duplicate claims list the distinct claiming
+files. Passing messages stay unchanged. Unmapped candidates have no coverage file.
+
+To repair a large plugin in separate PRs, give each PR its own fragments named
+after the part they cover, such as `sidebar.json`. Put a surface's three decisions
+in the fragment covering that surface's top-level component. No shared root or
+index file needs editing. The ratchet evaluates the plugin's combined coverage;
+enroll a plugin only when all its files pass together.
 
 A ref is `{ "file": "...", "quote": "..." }`. Its file path must be canonical,
 repository-relative and point into the plugin's UI import graph. The quote must

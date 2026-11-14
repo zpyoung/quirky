@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { AgentsView } from './window/AgentsView'
 import { BUILT_IN_AGENT_IDS, openAgentTab } from './window/agentTabs'
-import { AgentsStore, SETTINGS_VIEW_ID } from './window/model'
+import { AGENT_DETAILS_COMMAND, AgentDetailsState, AgentsStore, setAgentDetails, SETTINGS_VIEW_ID } from './window/model'
 
 const PLUGIN_ID = 'quirky.agents'
 
@@ -11,9 +11,10 @@ const PLUGIN_ID = 'quirky.agents'
  * an agent tab in the worktree of the open session view.
  */
 export function activate(context: UiPluginContext): void {
+  const details = new AgentDetailsState()
   const mountSettings: MountFunction = (element) => {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' })
-    const store = new AgentsStore(context)
+    const store = new AgentsStore(context, details)
     const root = createRoot(element)
     store.start()
     root.render(<AgentsView store={store} />)
@@ -23,6 +24,8 @@ export function activate(context: UiPluginContext): void {
     }
   }
 
+  const setAgentDetailsCommand = (args: unknown) => setAgentDetails(context, details, args)
+  context.provide(AGENT_DETAILS_COMMAND, setAgentDetailsCommand)
   context.provide(SETTINGS_VIEW_ID, mountSettings)
   context.provide(`command:${PLUGIN_ID}/open-settings`, () => context.openView(SETTINGS_VIEW_ID))
   context.provide(`command:${PLUGIN_ID}/new-agent-tab`, () => openAgentTab(context, null))

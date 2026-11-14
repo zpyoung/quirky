@@ -1,10 +1,20 @@
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { DEFAULT_VALUES, PLUGIN_ID, SETTING_NAMES, settingId, type SettingName, type Values } from './copy'
 
-const TEST = `${PLUGIN_ID}/test`
-const PREVIEW = `${PLUGIN_ID}/preview`
+const TEST = 'quirky.notifications/test'
+const PREVIEW = 'quirky.notifications/preview'
+
+/** Command that opens the custom sound path editor in Notifications settings. */
+export const EDIT_CUSTOM_SOUND_COMMAND = 'command:quirky.notifications/edit-custom-sound'
 
 export const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
+
+/** Returns a valid kernel window connection ID from an RPC response, if present. */
+export function connectionIdFrom(route: unknown): number | null {
+  if (typeof route !== 'object' || route === null || !('connId' in route)) return null
+  const connId = route.connId
+  return typeof connId === 'number' && Number.isSafeInteger(connId) && connId > 0 ? connId : null
+}
 
 export type Snapshot = {
   values: Values
@@ -86,6 +96,13 @@ export class NotificationsStore {
     this.commit({ customOpen: true, customError: null })
   }
 
+  async editCustom(): Promise<void> {
+    const route = await this.context.call('ui.window.self', {})
+    const connId = connectionIdFrom(route)
+    if (connId === null) throw new Error('The daemon did not identify this window.')
+    await this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND, { connId }, { activateOwner: false })
+  }
+
   /** Tries `path` as the notification sound; it is saved only when the daemon plays it. */
   async useCustom(path: string): Promise<void> {
     if (this.snapshot.busy) return
@@ -136,15 +153,15 @@ export class NotificationsStore {
   }
 
   private read(): Values {
-    const values: Record<string, unknown> = { ...DEFAULT_VALUES }
-    for (const name of SETTING_NAMES) {
+    const entries = SETTING_NAMES.map((name) => {
       try {
-        values[name] = this.context.getSetting(name)
+        return [name, this.context.getSetting(name)] as const
       } catch {
         // an undeclared setting keeps its default
+        return [name, DEFAULT_VALUES[name]] as const
       }
-    }
-    return values as Values
+    })
+    return { ...DEFAULT_VALUES, ...Object.fromEntries(entries) } as Values
   }
 
   private commit(change: Partial<Snapshot>): void {

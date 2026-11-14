@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { Badge, EmptyState, SectionHeader, StatusDot, type UiStatus, type UiTone } from '@quirky/ui'
+import { Badge, EmptyState, InlineError, NoticeLine, SectionHeader, StatusDot, type UiStatus, type UiTone } from '@quirky/ui'
 import type { AskEnvelope, UiPluginContext } from '@quirky/protocol'
 import { AskCard } from './AskCard'
 import type { AskStore } from './store'
@@ -65,7 +65,19 @@ const SUMMARY_STYLE = { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } as co
 
 export function AskCards({ store, context }: { store: AskStore; context: UiPluginContext }) {
   const asks = useSyncExternalStore(store.subscribe, store.get)
+  const loadState = useSyncExternalStore(store.subscribe, store.loadState)
+  const previews = useSyncExternalStore(store.subscribe, store.previews)
   const flashes = useSyncExternalStore(store.subscribe, store.flashes)
+  const questionContent = () => {
+    if (loadState.status === 'loading') return <NoticeLine>Loading questions…</NoticeLine>
+    if (loadState.status === 'failed') {
+      return <InlineError message={`Could not load questions: ${loadState.message}`} action={{ label: 'Retry', onAction: store.retry }} />
+    }
+    if (asks.length === 0) return <EmptyState message="No pending questions." />
+    return asks.map((ask) => (
+      <AskCard key={ask.id} ask={ask} context={context} resolve={store.resolve} previews={previews} />
+    ))
+  }
   return (
     <div style={STACK_STYLE}>
       {flashes.map(({ ask }) => (
@@ -88,13 +100,7 @@ export function AskCards({ store, context }: { store: AskStore; context: UiPlugi
           {ask.envelope.status === 'unavailable' && <p>{ask.envelope.reason}</p>}
         </article>
       ))}
-      {asks.length === 0 ? (
-        <EmptyState message="No pending questions." />
-      ) : (
-        asks.map((ask) => (
-          <AskCard key={ask.id} ask={ask} context={context} onResolved={store.resolve} />
-        ))
-      )}
+      {questionContent()}
     </div>
   )
 }

@@ -18,6 +18,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
   const eventListeners = new Set<(event: QuirkyEvent) => void>()
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const opened: { id: string; input: unknown }[] = []
+  const executed: { id: string; args?: unknown }[] = []
   const toasts: { title: string; body: string }[] = []
   const layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null }
 
@@ -43,7 +44,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
     getSetting() {
       throw new Error('no settings in this fake')
     },
-    async executeCommand() {},
+    async executeCommand(id, args) {
+      executed.push({ id, args })
+    },
     createCommandDrag() { throw new Error('command dragging is unavailable in this fake') },
     consumeCommandDrag() { return null },
     cancelCommandDrag() {},
@@ -78,6 +81,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
     context,
     calls,
     provided,
+    executed,
     opened,
     toasts,
     layout,
@@ -86,7 +90,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
     dispatch: (event: QuirkyEvent) => void eventListeners.forEach((listener) => listener(event)),
     setConnection: (status: 'connected' | 'reconnecting') =>
       act(async () => void connectionListeners.forEach((listener) => listener(status))),
-    command: (id: string, args?: unknown) => act(async () => void (await provided.get(`command:quirky.agents/${id}`)!(args)))
+    command: async (id: string, args?: unknown) => await act(async () => void (await provided.get(`command:quirky.agents/${id}`)!(args)))
   }
 }
 
@@ -161,8 +165,10 @@ export const AGENT_IDS: string[] = manifest.contributes.agent.map((entry) => ent
 export class FakeAgents {
   default = 'auto'
   trust = true
-  failNextRefresh: Error | null = null
+  listGate: Promise<void> | null = null
+  failNextList: Error | null = null
   refreshGate: Promise<void> | null = null
+  failNextRefresh: Error | null = null
   private states = new Map<string, State>()
   private onChange: () => void = () => {}
 
@@ -176,7 +182,15 @@ export class FakeAgents {
 
   handlers(): Record<string, Handler> {
     return {
-      'quirky.agents/list': () => this.listing(),
+      'quirky.agents/list': async () => {
+        await this.listGate
+        if (this.failNextList) {
+          const error = this.failNextList
+          this.failNextList = null
+          throw error
+        }
+        return this.listing()
+      },
       'quirky.agents/get': (params) => this.info(this.known(params.agent)),
       'quirky.agents/refresh': async () => {
         await this.refreshGate

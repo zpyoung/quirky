@@ -465,6 +465,12 @@
         "@types/ws": "8.18.1",
       },
     },
+    "plugins/quirky.navigation": {
+      "name": "@quirky/plugin-navigation",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.notifications": {
       "name": "@quirky/plugin-notifications",
       "version": "0.1.0",
@@ -582,6 +588,13 @@
         "@happy-dom/global-registrator": "20.14.6",
         "@types/react": "^19.3.0",
         "@types/react-dom": "^19.3.0",
+      },
+    },
+    "plugins/quirky.sitter": {
+      "name": "@quirky/plugin-sitter",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
       },
     },
     "plugins/quirky.structured": {
@@ -1170,6 +1183,8 @@
 
     "@quirky/plugin-mobile": ["@quirky/plugin-mobile@workspace:plugins/quirky.mobile"],
 
+    "@quirky/plugin-navigation": ["@quirky/plugin-navigation@workspace:plugins/quirky.navigation"],
+
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],
 
     "@quirky/plugin-objective": ["@quirky/plugin-objective@workspace:plugins/quirky.objective"],
@@ -1187,6 +1202,8 @@
     "@quirky/plugin-session-info": ["@quirky/plugin-session-info@workspace:plugins/quirky.session-info"],
 
     "@quirky/plugin-sidebar-extras": ["@quirky/plugin-sidebar-extras@workspace:plugins/quirky.sidebar-extras"],
+
+    "@quirky/plugin-sitter": ["@quirky/plugin-sitter@workspace:plugins/quirky.sitter"],
 
     "@quirky/plugin-structured": ["@quirky/plugin-structured@workspace:plugins/quirky.structured"],
 
