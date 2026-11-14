@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Badge, Button, Dialog, FormRow, SectionHeader, TextField } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import type { AutomationDefinition, SchedulePreset } from '../../types'
 import { buildAutomationRrule, describeAutomationSchedule, isValidAutomationSchedule } from '../../schedule'
 import type {
@@ -589,9 +589,10 @@ export function AutomationEditor(props: EditorProps) {
   function updateOptionValue(optionId: string, value: string | boolean | null): void {
     const current = draftRef.current
     if (!current) return
-    const optionValues = { ...(current.launchOverrides?.optionValues ?? {}) }
-    if (value === null) delete optionValues[optionId]
-    else optionValues[optionId] = value
+    const currentOptionValues = current.launchOverrides?.optionValues ?? {}
+    const optionValues = value === null
+      ? Object.fromEntries(Object.entries(currentOptionValues).filter(([id]) => id !== optionId))
+      : { ...currentOptionValues, [optionId]: value }
     const overrides = {
       ...(current.launchOverrides?.model === undefined ? {} : { model: current.launchOverrides.model }),
       ...(Object.keys(optionValues).length === 0 ? {} : { optionValues })
@@ -794,11 +795,11 @@ export function AutomationEditor(props: EditorProps) {
                     onChange={(event) => updateDraft({ prompt: event.currentTarget.value })}
                   />
                 </FormRow>
-                {targetStatus && !targetStatus.available && <div className="auto-editor__warning" role="status">Saved target unavailable: {targetStatus.error}</div>}
-                {catalogLoading && <div className="auto-editor__muted" role="status">Loading projects, workspaces, and agents…</div>}
-                {!hasProjects && !catalogLoading && <div className="auto-editor__warning" role="status">No projects are available on Local. Add a project before saving an automation.</div>}
-                {visibleErrors.map((message) => <div key={message} className="auto-editor__error" role="alert">{message}</div>)}
-                {setupWarning && <div className="auto-editor__warning" role="status">{setupWarning}</div>}
+                {targetStatus && !targetStatus.available && <div role="status"><NoticeLine>Saved target unavailable: {targetStatus.error}</NoticeLine></div>}
+                {catalogLoading && <div role="status"><NoticeLine>Loading projects, workspaces, and agents…</NoticeLine></div>}
+                {!hasProjects && !catalogLoading && <div role="status"><EmptyState message="No projects are available on Local. Add a project before saving an automation." /></div>}
+                {visibleErrors.map((message) => <InlineError key={message} message={message} />)}
+                {setupWarning && <div role="status"><NoticeLine>{setupWarning}</NoticeLine></div>}
               </section>
 
               <aside className="auto-editor__settings" aria-label="Automation settings">
@@ -834,12 +835,12 @@ export function AutomationEditor(props: EditorProps) {
                   <datalist id={modelListId}>
                     {(options?.models ?? []).map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
                   </datalist>
-                  {optionsError && <span className="auto-editor__error" role="alert">{optionsError}</span>}
+                  {optionsError && <InlineError message={optionsError} />}
                   {options?.unlisted === 'accept' && <span className="auto-editor__help">This agent accepts opaque custom model IDs; native launch validation checks them when saved.</span>}
                   {options?.unlisted === 'refuse' && <span className="auto-editor__help">This agent's native catalog may refuse model IDs that are not listed.</span>}
                   {!options?.supported && options && <span className="auto-editor__help">This agent does not publish structured launch options.</span>}
                   {!options?.structured && options && <span className="auto-editor__help">This agent cannot use structured automation sessions.</span>}
-                  {savedModelUnavailable && <span className="auto-editor__warning" role="status">Saved model “{currentOverrides?.model}” is not in this agent's catalog and may be refused. Choose a listed model or clear it.</span>}
+                  {savedModelUnavailable && <div role="status"><NoticeLine>Saved model “{currentOverrides?.model}” is not in this agent's catalog and may be refused. Choose a listed model or clear it.</NoticeLine></div>}
                 </div>
 
                 {modelOptions.map((option) => {
@@ -851,16 +852,15 @@ export function AutomationEditor(props: EditorProps) {
                   )
                   return (
                     <div className="auto-editor__field" key={option.id}>
+                      {invalidSavedValue && <div role="status"><NoticeLine>Saved value is not in the current option catalog.</NoticeLine></div>}
                       {option.type === 'boolean' ? (
                         <>
                           <span className="auto-editor__field-label">{option.label}</span>
-                          {invalidSavedValue && <span className="auto-editor__warning" role="status">Saved value is not in the current option catalog.</span>}
                           <label className="auto-editor__check-row"><input id={`auto-option-${option.id}`} type="checkbox" checked={value === true} onChange={(event) => updateOptionValue(option.id, event.currentTarget.checked)} /> Enabled</label>
                           {value !== undefined && <Button onClick={() => updateOptionValue(option.id, null)}>Use default</Button>}
                         </>
                       ) : (
                         <>
-                          {invalidSavedValue && <span className="auto-editor__warning" role="status">Saved value is not in the current option catalog.</span>}
                           <div className="auto-editor__control-row">
                             <FormRow label={option.label} htmlFor={`auto-option-${option.id}`}>
                               <select
@@ -882,9 +882,10 @@ export function AutomationEditor(props: EditorProps) {
                   )
                 })}
                 {unavailableOptionIds.map((id) => (
-                  <div className="auto-editor__warning" role="status" key={`unavailable-${id}`}>
-                    Saved option “{id}” is unavailable for this model.
-                    <Button onClick={() => updateOptionValue(id, null)}>Clear saved option</Button>
+                  <div role="status" key={`unavailable-${id}`}>
+                    <NoticeLine actions={[{ label: 'Clear saved option', onAction: () => updateOptionValue(id, null) }]}>
+                      Saved option “{id}” is unavailable for this model.
+                    </NoticeLine>
                   </div>
                 ))}
 
@@ -943,8 +944,8 @@ export function AutomationEditor(props: EditorProps) {
                       <datalist id={branchListId}>
                         {branchRefs.map((branch) => <option key={`${branch.kind}:${branch.name}`} value={branch.name}>{branch.kind}</option>)}
                       </datalist>
-                      {branchLoading && <span className="auto-editor__muted" role="status">Searching branches…</span>}
-                      {branchError && <span className="auto-editor__error" role="alert">{branchError}</span>}
+                      {branchLoading && <div role="status"><NoticeLine>Searching branches…</NoticeLine></div>}
+                      {branchError && <InlineError message={branchError} />}
                     </div>
                   )}
                   <div className="auto-editor__field">
@@ -1049,7 +1050,7 @@ export function AutomationEditor(props: EditorProps) {
                       <input id="auto-editor-setup" type="checkbox" checked={draft.setupDecision === 'run'} onChange={(event) => updateDraft({ setupDecision: event.currentTarget.checked ? 'run' : 'skip' })} />
                     </FormRow>
                     {projectDetails?.setupPolicy && <span className="auto-editor__help">Project setup policy: {projectDetails.setupPolicy}</span>}
-                    {projectError && <span className="auto-editor__error" role="alert">{projectError}</span>}
+                    {projectError && <InlineError message={projectError} />}
                   </section>
                 )}
               </aside>
