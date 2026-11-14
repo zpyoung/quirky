@@ -75,6 +75,7 @@ function stateFor(options: StateOptions = {}): ReviewsState {
     headRefName: 'feature', baseRefName: 'main', headRefOid: 'a'.repeat(40), baseRefOid: 'b'.repeat(40),
     mergeable: 'MERGEABLE', checksStatus: 'passing', reviewDecision: 'APPROVED', mergeStateStatus: 'CLEAN',
     autoMergeRequest: null, stack: null, mergeMethods: null,
+    assignees: [], requestedReviewers: [], reviews: [],
     prRepo: { host: HOST, owner: repoOwner, repo: repoName }
   }
   const prRepo = { host: HOST, owner: repoOwner, repo: repoName }
