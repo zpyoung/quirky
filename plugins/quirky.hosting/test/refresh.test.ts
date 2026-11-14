@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { validateValue, type Schema } from '@quirky/protocol'
 import { isRecord } from '../src/pr-data'
 import { refreshMethods } from '../src/refresh'
 import type { Handler, HostingEnv, Scope } from '../src/env'
@@ -12,6 +15,39 @@ afterEach(async () => {
 function state(value: unknown): Record<string, unknown> {
   if (!isRecord(value)) throw new Error('expected fixture object')
   return value
+}
+const hostingManifest = JSON.parse(readFileSync(resolve(import.meta.dir, '../quirky-plugin.json'), 'utf8')) as {
+  contributes: {
+    method: { id: string; result: Schema }[]
+    event: { id: string; data: Schema }[]
+  }
+}
+
+function methodResultSchema(id: string): Schema {
+  const schema = hostingManifest.contributes.method.find((method) => method.id === id)?.result
+  if (!schema) throw new Error(`missing ${id} result schema`)
+  return schema
+}
+
+function eventDataSchema(id: string): Schema {
+  const schema = hostingManifest.contributes.event.find((event) => event.id === id)?.data
+  if (!schema) throw new Error(`missing ${id} event schema`)
+  return schema
+}
+
+function propertySchema(schema: Schema, name: string): Schema {
+  const property = schema.properties?.[name]
+  if (!property) throw new Error(`missing ${name} schema property`)
+  return property
+}
+
+function reviewForSchema(review: Record<string, unknown>, schema: Schema): Record<string, unknown> {
+  // The normalized review also carries repository identity, which these published review views omit.
+  return Object.fromEntries(
+    Object.keys(schema.properties ?? {})
+      .filter((name) => Object.hasOwn(review, name))
+      .map((name) => [name, review[name]])
+  )
 }
 
 const ghFixture = String.raw`
@@ -251,6 +287,55 @@ describe('quirky.hosting connection-owned refresh', () => {
       kind: 'found',
       review: { inMergeQueue: false, mergeQueueEntry: null, mergeQueueKnown: false }
     })
+  })
+
+  test('nullable participants in old review snapshots match published hosting schemas', async () => {
+    const harness = refreshHarness({
+      kind: 'found',
+      review: cachedReviewRecord(),
+      fetchedAt: Date.now()
+    })
+    const result = state(await harness.methods.refresh!({
+      candidate: { worktree: 'id:wt-refresh', branch: 'feature' },
+      reason: 'manual'
+    }, harness.caller))
+    const review = state(result.review)
+    expect(review).toMatchObject({ assignees: null, reviews: null })
+
+    const event = harness.events.map(state).find((value) => isRecord(value.outcome))
+    if (!event) throw new Error('expected completed refresh event')
+    const outcome = state(event.outcome)
+    const eventReview = state(outcome.review)
+
+    const eligibilityReviewSchema = propertySchema(methodResultSchema('creationEligibility'), 'review')
+    const refreshResultSchema = methodResultSchema('refresh')
+    const refreshReviewSchema = propertySchema(refreshResultSchema, 'review')
+    const refreshEventSchema = eventDataSchema('refresh')
+    const eventReviewSchema = propertySchema(propertySchema(refreshEventSchema, 'outcome'), 'review')
+    const surfaces = [
+      ['creationEligibility.review', eligibilityReviewSchema, review, ['assignees']],
+      ['refresh.result.review', refreshReviewSchema, review, ['assignees', 'reviews']],
+      ['refresh.event.outcome.review', eventReviewSchema, eventReview, ['assignees', 'reviews']]
+    ] as const
+    for (const [surface, schema, normalizedReview, fields] of surfaces) {
+      for (const field of fields) {
+        expect(normalizedReview[field], `${surface}.${field}`).toBeNull()
+        expect(validateValue(propertySchema(schema, field), normalizedReview[field], `${surface}.${field}`), `${surface}.${field}`).toBeNull()
+      }
+    }
+
+    expect(validateValue(eligibilityReviewSchema, reviewForSchema(review, eligibilityReviewSchema), 'creationEligibility review')).toBeNull()
+    expect(validateValue(refreshResultSchema, {
+      ...result,
+      review: reviewForSchema(review, refreshReviewSchema)
+    }, 'refresh result')).toBeNull()
+    expect(validateValue(refreshEventSchema, {
+      ...event,
+      outcome: {
+        ...outcome,
+        review: reviewForSchema(eventReview, eventReviewSchema)
+      }
+    }, 'refresh event')).toBeNull()
   })
 
   test('refresh preserves valid queue summaries in normalized review outcomes', async () => {
