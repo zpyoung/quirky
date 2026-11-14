@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import { RpcError, RpcErrorCode, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type MountFunction, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
 
 const VIEW_ID = 'view:quirky.notifications/settings'
 const COMMAND_ID = 'command:quirky.notifications/open-settings'
@@ -171,8 +171,10 @@ async function open(fake: Fake) {
   activate(fake.context)
   element = document.createElement('div')
   document.body.appendChild(element)
+  // The registered view ID has the host's mount contract, not a command return value.
+  const mountSettings = fake.provided.get(VIEW_ID) as unknown as MountFunction
   await act(async () => {
-    unmount = fake.provided.get(VIEW_ID)!(element, { input: undefined, report: (state: unknown) => void reports.push(state) })
+    unmount = mountSettings(element!, { input: undefined, report: (state: unknown) => void reports.push(state) })
   })
   await settle()
   const root = element
@@ -532,8 +534,10 @@ describe('editing the custom sound path', () => {
 
     element = document.createElement('div')
     document.body.appendChild(element)
+    // The registered view ID has the host's mount contract, not a command return value.
+    const mountSettings = fake.provided.get(VIEW_ID) as unknown as MountFunction
     await act(async () => {
-      unmount = fake.provided.get(VIEW_ID)!(element!, {
+      unmount = mountSettings(element!, {
         input: fake.opened[0]!.input,
         report: (state: unknown) => void reports.push(state)
       })

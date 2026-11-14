@@ -355,20 +355,12 @@ export const tabChecks: BrowserCheck[] = [
     const chrome = walk(c.world.home)
     c.assert(chrome, 'owned Chrome profile directory not found')
     await c.call('tab close', { yes: true }, page)
-    const deleted = await c.probe('tab profile delete', { profile: profile.id, yes: true }, '')
+    const deleted = await c.call('tab profile delete', { profile: profile.id, yes: true }, '')
+    c.equal(deleted, { deleted: true }, 'profile deletion must report completion')
     const profiles = (await c.call<Profiles>('tab profile list', {}, '')).profiles
-    if (deleted.exitCode === 0) {
-      c.assert(!profiles.some(p => p.id === profile.id) && !existsSync(chrome!), 'delete receipt without data erasure')
-      return { deleted: true, metadataRemoved: true, chromeRemoved: true }
-    }
-    const error = JSON.stringify(deleted.result)
-    c.assert(error.includes('conflict') && error.includes('no Quirky window is open'), 'unexpected profile-delete refusal')
-    c.assert(profiles.some(p => p.id === profile.id) && existsSync(chrome!), 'refused deletion changed profile metadata/data')
-    const reopened = (await c.call<PageReceipt>('tab create', { profile: profile.id, worktree: c.world.worktreeA, url: `${c.world.fixture.origin}/page` }, '')).browserPageId
-    const cookies = await c.call<{ cookies: Array<{ name: string; value: string }> }>('cookie get', {}, reopened)
-    c.assert(cookies.cookies.some(cookie => cookie.name === 'delete-proof' && cookie.value === 'preserved'), 'lost-cookie after refused deletion')
-    await c.call('tab close', { yes: true }, reopened)
-    return { gap: 'Headless agents cannot delete profiles: Native storage clearance requires a live desktop acknowledgement; no Quirky window is open', refusal: deleted.result, metadataPreserved: true, chromeDirectoryPreserved: true, cookies }
+    c.assert(!profiles.some(p => p.id === profile.id), 'deleted profile metadata remains')
+    c.assert(!existsSync(chrome!), 'deleted profile Chrome directory remains')
+    return { deleted: true, metadataRemoved: true, chromeRemoved: true }
   } },
   { id: 'goto', async run(c) {
     const navigated = await c.call('goto', { url: `${c.world.fixture.origin}/second` })
