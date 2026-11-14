@@ -2046,7 +2046,7 @@ test('host subscribers are notified as canonical tool state changes until they u
   expect(seen).toEqual(beforeUnsubscribe)
 })
 
-test('a failed active refresh does not strand the refresh queued behind it', async () => {
+test('refresh rejects when the daemon call fails, and the next refresh still works', async () => {
   const model = makeModel()
   const firstContributions = Promise.withResolvers<UiModel>()
   let contributionReads = 0
@@ -2067,7 +2067,7 @@ test('a failed active refresh does not strand the refresh queued behind it', asy
   expect(state(t).model).toBe(model)
 })
 
-test('unstarted refresh calls share one timed-out read, and a later retry succeeds', async () => {
+test('refresh reads have a deadline and a timed-out refresh does not block the next one', async () => {
   const model = makeModel()
   let contributionReads = 0
   const t = setup(model, {
