@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Button, IconButton } from '@quirky/ui'
+import { Button, EmptyState, IconButton } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { FLOATING_WORKSPACE, type Group, type QuickCommand } from '../../layout/types'
 import { isQuickCommandComplete, pickStripCommand } from '../../quick-commands/normalize'
-import { QuickCommandDialog } from './QuickCommandDialog'
+import { requestQuickCommandDialog } from './QuickCommandDialog'
 import { repoFirst, searchQuickCommands } from './search'
-import { CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlayIcon, TrashIcon, confirmAndRemove, runCommand, summaryOf, useQuickCommands } from './shared'
+import { COPY_QUICK_COMMAND_COMMAND, CheckIcon, ChevronDownIcon, CopyIcon, PencilIcon, PlayIcon, TrashIcon, messageOf, runCommand, summaryOf, useQuickCommands } from './shared'
 
 type Props = {
   context: UiPluginContext
@@ -15,9 +15,9 @@ type Props = {
   group: Group
   /** The workspace's repo; null where there is none. */
   repo: string | null
-  /** Whether the menu is open, when the owner keeps that state (so a window command can open it); the button keeps it itself when omitted. */
-  menuOpen?: boolean
-  onMenuOpenChange?(open: boolean): void
+  /** The owner controls whether this group's quick-command menu is open. */
+  menuOpen: boolean
+  onMenuOpenChange(open: boolean): void
 }
 
 type Dialog = { command: QuickCommand | null }
@@ -33,54 +33,45 @@ function runTitle(command: QuickCommand): string {
  * (a window command can still open the menu there, anchored to that button).
  * Not drawn in the floating workspace, which has no repo to scope commands to.
  */
-export function QuickCommandsStripButton({ context, workspace, group, repo, menuOpen: controlledOpen, onMenuOpenChange }: Props) {
+export function QuickCommandsStripButton({ context, workspace, group, repo, menuOpen, onMenuOpenChange }: Props) {
   const floating = workspace === FLOATING_WORKSPACE
-  const { commands, loaded, refresh } = useQuickCommands(context, floating ? null : workspace)
-  const [ownOpen, setOwnOpen] = useState(false)
-  const menuOpen = controlledOpen ?? ownOpen
-  const setMenuOpen = onMenuOpenChange ?? setOwnOpen
-  const [dialog, setDialog] = useState<Dialog | null>(null)
+  const { commands, loaded, error, refresh } = useQuickCommands(context, floating ? null : workspace)
   const chevron = useRef<HTMLButtonElement>(null)
+  const latest = useRef({ menuOpen, onMenuOpenChange })
+  latest.current = { menuOpen, onMenuOpenChange }
 
-  // a strip that goes away (its group closed) must not leave the owner believing its menu is open
-  const latest = useRef({ menuOpen, setMenuOpen })
-  latest.current = { menuOpen, setMenuOpen }
   useEffect(() => () => {
-    if (latest.current.menuOpen) latest.current.setMenuOpen(false)
+    if (latest.current.menuOpen) latest.current.onMenuOpenChange(false)
   }, [])
+
+  useEffect(() => {
+    if (error !== null) context.toast('Could not load quick commands', error)
+  }, [context, error])
 
   const pick = useMemo(() => pickStripCommand(commands, repo, group.lastQuickCommand), [commands, repo, group.lastQuickCommand])
 
+  function closeMenu(): void {
+    onMenuOpenChange(false)
+  }
+
+  function addQuickCommand(): void {
+    onMenuOpenChange(false)
+    void requestQuickCommandDialog(context, repo === null ? { action: 'open' } : { action: 'open', repo })
+  }
+
   if (floating || !loaded) return null
-
-  const run = (command: QuickCommand) => void runCommand(context, { id: command.id, workspace, group: group.id })
-  const openAdd = () => setDialog({ command: null })
-
-  const dialogView = dialog ? <QuickCommandDialog key={dialog.command?.id ?? 'new'} context={context} command={dialog.command} repo={repo} onSaved={() => void refresh()} onClose={() => setDialog(null)} /> : null
 
   const menuView = menuOpen ? (
     <QuickCommandsMenu
       context={context}
+      workspace={workspace}
+      group={group}
+      repo={repo}
       anchor={chevron}
       commands={commands}
       preferred={pick}
-      onClose={() => setMenuOpen(false)}
-      onRun={(command) => {
-        setMenuOpen(false)
-        run(command)
-      }}
-      onEdit={(command) => {
-        setMenuOpen(false)
-        setDialog({ command })
-      }}
-      onDelete={(command) => {
-        setMenuOpen(false)
-        void confirmAndRemove(context, command).then(refresh)
-      }}
-      onAdd={() => {
-        setMenuOpen(false)
-        openAdd()
-      }}
+      refresh={refresh}
+      onClose={closeMenu}
     />
   ) : null
 
@@ -88,16 +79,12 @@ export function QuickCommandsStripButton({ context, workspace, group, repo, menu
     return (
       <div className="qc-strip">
         <button ref={chevron} type="button" className="ui-button ui-button--secondary qc-single" aria-label="Add quick command" title="Save a quick command for this repo"
-          onClick={() => {
-            setMenuOpen(false)
-            openAdd()
-          }}
+          onClick={addQuickCommand}
         >
           <span className="ui-icon-button__icon"><PlayIcon size={13} /></span>
           <span className="qc-run-label">Command</span>
         </button>
         {menuView}
-        {dialogView}
       </div>
     )
   }
@@ -112,7 +99,7 @@ export function QuickCommandsStripButton({ context, workspace, group, repo, menu
           disabled={pick === null}
           aria-label={pick ? `Run quick command: ${pick.label}` : 'Run quick command'}
           title={pick ? runTitle(pick) : 'Run quick command'}
-          onClick={() => pick && run(pick)}
+          onClick={() => pick && void runCommand(context, { id: pick.id, workspace, group: group.id })}
         >
           <PlayIcon />
           <span className="qc-run-label">{pick?.label ?? 'Run'}</span>
@@ -124,31 +111,29 @@ export function QuickCommandsStripButton({ context, workspace, group, repo, menu
           aria-label="More quick commands"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          onClick={() => setMenuOpen(!menuOpen)}
+          onClick={() => onMenuOpenChange(!menuOpen)}
         >
           <span className="ui-icon-button__icon"><ChevronDownIcon size={12} /></span>
         </button>
       </div>
       {menuView}
-      {dialogView}
     </div>
   )
 }
 
 type MenuProps = {
   context: UiPluginContext
+  workspace: string
+  group: Group
+  repo: string | null
   anchor: React.RefObject<HTMLButtonElement | null>
   commands: QuickCommand[]
   preferred: QuickCommand | null
+  refresh(): Promise<void>
   onClose(): void
-  onRun(command: QuickCommand): void
-  onEdit(command: QuickCommand): void
-  onDelete(command: QuickCommand): void
-  onAdd(): void
 }
 
-
-function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRun, onEdit, onDelete, onAdd }: MenuProps) {
+function QuickCommandsMenu({ context, workspace, group, repo, anchor, commands, preferred, refresh, onClose }: MenuProps) {
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState<string | null>(preferred?.id ?? null)
   const [copied, setCopied] = useState<string | null>(null)
@@ -184,9 +169,48 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
     return () => clearTimeout(timer)
   }, [copied])
 
-  const copy = async (command: QuickCommand) => {
+  async function runQuickCommand(command: QuickCommand): Promise<void> {
+    onClose()
     try {
-      await navigator.clipboard.writeText(command.command)
+      await context.call('quirky.terminal/runQuickCommand', { id: command.id, workspace, group: group.id })
+    } catch (error) {
+      context.toast('Could not run quick command', messageOf(error))
+    }
+  }
+
+  function editQuickCommand(command: QuickCommand): void {
+    onClose()
+    void requestQuickCommandDialog(context, {
+      action: 'open',
+      command: command.id,
+      ...(repo === null ? {} : { repo })
+    })
+  }
+
+  async function deleteQuickCommand(command: QuickCommand): Promise<void> {
+    onClose()
+    try {
+      const confirmed = await context.confirm({
+        title: `Delete "${command.label}"?`,
+        body: 'This quick command will be removed from your saved list.',
+        confirmLabel: 'Delete'
+      })
+      if (!confirmed) return
+      await context.call('quirky.terminal/removeQuickCommand', { id: command.id, yes: true })
+      await refresh()
+    } catch (error) {
+      context.toast('Could not delete quick command', messageOf(error))
+    }
+  }
+
+  function addQuickCommand(): void {
+    onClose()
+    void requestQuickCommandDialog(context, repo === null ? { action: 'open' } : { action: 'open', repo })
+  }
+
+  async function copyQuickCommand(command: QuickCommand): Promise<void> {
+    try {
+      await context.executeCommand(COPY_QUICK_COMMAND_COMMAND, { command: command.id })
       setCopied(command.id)
     } catch {
       context.toast("Couldn't copy", command.label)
@@ -207,10 +231,9 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
       setHighlight(shown[next]!.id)
       return
     }
-    // enter on a row action or the footer button must activate that button, not run the highlighted row
     if (event.key === 'Enter' && event.target === search.current && active && isQuickCommandComplete(active)) {
       event.preventDefault()
-      onRun(active)
+      void runQuickCommand(active)
     }
   }
 
@@ -229,7 +252,7 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
         }}
       />
       <div className="qc-menu-list">
-        {shown.length === 0 ? <div className="qc-menu-empty">{query.trim() ? 'No commands match' : 'No commands'}</div> : null}
+        {shown.length === 0 ? <EmptyState message={query.trim() ? 'No commands match' : 'No commands'} /> : null}
         {shown.map((command, index) => (
           <div key={command.id}>
             {index === firstGlobal && index > 0 ? <div className="qc-menu-separator" /> : null}
@@ -240,7 +263,7 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
               aria-selected={command.id === active?.id}
               aria-disabled={!isQuickCommandComplete(command)}
               onMouseMove={() => setHighlight(command.id)}
-              onClick={() => isQuickCommandComplete(command) && onRun(command)}
+              onClick={() => isQuickCommandComplete(command) && void runQuickCommand(command)}
             >
               <PlayIcon />
               <span className="qc-row-main">
@@ -254,7 +277,7 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
                   disabled={command.command === ''}
                   onClick={(event) => {
                     event.stopPropagation()
-                    void copy(command)
+                    void copyQuickCommand(command)
                   }}
                 >
                   {copied === command.id ? <CheckIcon /> : <CopyIcon />}
@@ -264,7 +287,7 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
                   title={`Edit ${command.label}`}
                   onClick={(event) => {
                     event.stopPropagation()
-                    onEdit(command)
+                    editQuickCommand(command)
                   }}
                 >
                   <PencilIcon />
@@ -275,7 +298,7 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
                   variant="destructive"
                   onClick={(event) => {
                     event.stopPropagation()
-                    onDelete(command)
+                    void deleteQuickCommand(command)
                   }}
                 >
                   <TrashIcon />
@@ -286,7 +309,7 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
         ))}
       </div>
       <div className="qc-menu-footer">
-        <Button type="button" onClick={onAdd}>
+        <Button type="button" onClick={addQuickCommand}>
           + Command
         </Button>
       </div>
@@ -294,3 +317,4 @@ function QuickCommandsMenu({ context, anchor, commands, preferred, onClose, onRu
     document.body
   )
 }
+

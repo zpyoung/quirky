@@ -1,17 +1,20 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
-import { agent, button, cleanup, click, command, fill, key, loadQuickCommands, pick, qc, qcFake, render, unloadQuickCommands, $, $$ } from './qc-support'
-import type { QuickCommand } from '../../src/layout/types'
+import { agent, button, cleanup, click, command, fill, key, loadQuickCommands, pick, qc, qcFake, render, settle, unloadQuickCommands, $, $$ } from './qc-support'
+import type { AgentRow } from './qc-support'
 import type { ReactElement } from 'react'
-import { createElement } from 'react'
+import { act, createElement } from 'react'
+import type { UiPluginContext } from '@quirky/protocol'
+import type { QuickCommandDialogResult } from '../../src/window/quick-commands/QuickCommandDialog'
+import type { QuickCommand } from '../../src/layout/types'
 
 beforeAll(loadQuickCommands)
 afterAll(unloadQuickCommands)
 afterEach(cleanup)
 
-type Setup = { repo?: string | null; edit?: QuickCommand | null; agents?: ReturnType<typeof agent>[]; failNext?: string; commands?: QuickCommand[] }
+type Setup = { repo?: string | null; edit?: QuickCommand | null; agents?: AgentRow[]; failNext?: string; commands?: QuickCommand[] }
 
 async function openDialog(setup: Setup = {}) {
-  const { fake, world } = qcFake({ ...(setup.agents ? { agents: setup.agents } : {}), ...(setup.failNext ? { failNext: setup.failNext } : {}), ...(setup.commands ? { commands: setup.commands } : {}) })
+  const { fake, world, executed } = qcFake({ ...(setup.agents ? { agents: setup.agents } : {}), ...(setup.failNext ? { failNext: setup.failNext } : {}), ...(setup.commands ? { commands: setup.commands } : {}) })
   const closed: number[] = []
   const saved: QuickCommand[][] = []
   const ui = createElement(qc().dialog.QuickCommandDialog, {
@@ -22,12 +25,23 @@ async function openDialog(setup: Setup = {}) {
     onSaved: (commands: QuickCommand[]) => void saved.push(commands)
   }) as ReactElement
   await render(ui)
-  return { fake, world, closed, saved }
+  return { fake, world, executed, closed, saved }
 }
 
 const field = <T extends HTMLElement>(name: string) => $<T>(`[name="${name}"]`)!
 const radio = (name: string, value: string) => $<HTMLInputElement>(`input[name="${name}"][value="${value}"]`)
 const save = () => button('Save')
+const QC_DIALOG = 'command:quirky.terminal/quick-command-dialog'
+const hello = command({ id: 'hello', label: 'Hello' })
+async function runDialogCommand(context: UiPluginContext, args: unknown): Promise<QuickCommandDialogResult> {
+  let result: QuickCommandDialogResult | undefined
+  await act(async () => {
+    result = await qc().dialog.quickCommandDialogCommand(context, args)
+  })
+  await settle()
+  if (result === undefined) throw new Error('dialog command did not return a result')
+  return result
+}
 
 describe('QuickCommandDialog', () => {
   test(
@@ -238,5 +252,119 @@ describe('QuickCommandDialog', () => {
     expect(radio('action', 'agent')!.checked).toBe(true)
     expect(field<HTMLSelectElement>('agent').value).toBe('codex')
     expect(field<HTMLTextAreaElement>('command').value).toBe('review the diff')
+  })
+  test('17: Advanced routes through the dialog command', async () => {
+    const { executed } = await openDialog()
+    await click($('[aria-expanded]')!)
+    expect(executed).toEqual([{ id: QC_DIALOG, args: { action: 'toggle-advanced' } }])
+    expect($('[aria-expanded]')!.getAttribute('aria-expanded')).toBe('false')
+    expect($('input[name="scope"]')).toBeNull()
+  })
+
+  test('18: Append Enter routes through the dialog command', async () => {
+    const { executed } = await openDialog()
+    await click($('[role="switch"]')!)
+    expect(executed).toEqual([{ id: QC_DIALOG, args: { action: 'toggle-append-enter' } }])
+    expect($('[role="switch"]')!.getAttribute('aria-checked')).toBe('false')
+  })
+
+  test('19: opening for Add creates at most one dialog per window', async () => {
+    const { fake } = qcFake()
+    const args = { action: 'open', repo: 'api' } as const
+    const result = await runDialogCommand(fake.context, args)
+    expect(result).toEqual({ ok: true, dialog: 'add' })
+    expect($('[role="dialog"]')!.getAttribute('aria-label')).toBe('Add Quick Command')
+    expect(radio('scope', 'repo')!.checked).toBe(true)
+
+    await runDialogCommand(fake.context, args)
+    expect($$('[role="dialog"]')).toHaveLength(1)
+  })
+
+  test('19b: concurrent Edit opens after command lookup create only one dialog', async () => {
+    const { fake } = qcFake({ commands: [hello] })
+    const args = { action: 'open', command: 'hello' } as const
+    let results: QuickCommandDialogResult[] = []
+    await act(async () => {
+      results = await Promise.all([
+        qc().dialog.quickCommandDialogCommand(fake.context, args),
+        qc().dialog.quickCommandDialogCommand(fake.context, args)
+      ])
+    })
+    await settle()
+    expect(results).toEqual([
+      { ok: true, dialog: 'edit' },
+      { ok: true, dialog: 'edit' }
+    ])
+    expect($$('[role="dialog"]')).toHaveLength(1)
+  })
+
+  test('20: opening a saved command by ID creates an Edit dialog', async () => {
+    const { fake } = qcFake({ commands: [hello] })
+    const result = await runDialogCommand(fake.context, { action: 'open', command: 'hello' })
+    expect(result).toEqual({ ok: true, dialog: 'edit' })
+    expect(field<HTMLInputElement>('label').value).toBe('Hello')
+  })
+
+  test('21: opening an unknown command ID refuses without opening a dialog', async () => {
+    const { fake } = qcFake()
+    const result = await runDialogCommand(fake.context, { action: 'open', command: 'ghost' })
+    expect(result).toEqual({ ok: false, reason: 'no quick command ghost' })
+    expect($('[role="dialog"]')).toBeNull()
+  })
+
+  test('22: a toggle refuses when no quick command dialog is open', async () => {
+    const { fake } = qcFake()
+    const result = await runDialogCommand(fake.context, { action: 'toggle-advanced' })
+    expect(result).toEqual({ ok: false, reason: 'no quick command dialog is open' })
+  })
+
+  test('23: Append Enter refuses for an Agent command without changing its switch', async () => {
+    const { fake } = await openDialog()
+    await click(radio('action', 'agent')!)
+    const before = $('[role="switch"]')!.getAttribute('aria-checked')
+    const result = await runDialogCommand(fake.context, { action: 'toggle-append-enter' })
+    expect(result).toEqual({ ok: false, reason: 'Append Enter applies only to terminal commands' })
+    expect($('[role="switch"]')!.getAttribute('aria-checked')).toBe(before)
+  })
+
+  test('24: an unknown dialog action returns a validation refusal', async () => {
+    const { fake } = qcFake()
+    const result = await runDialogCommand(fake.context, { action: 'explode' })
+    expect(result).toEqual({ ok: false, reason: 'action must be one of open, toggle-advanced, toggle-append-enter' })
+  })
+
+  test('25: dialog toggles report their resulting values', async () => {
+    const { fake } = await openDialog()
+    const advanced = await runDialogCommand(fake.context, { action: 'toggle-advanced' })
+    const appendEnter = await runDialogCommand(fake.context, { action: 'toggle-append-enter' })
+    expect(advanced).toEqual({ ok: true, advanced: false })
+    expect(appendEnter).toEqual({ ok: true, appendEnter: false })
+  })
+
+  test('26: an agent-list failure is shown in the Agent field', async () => {
+    const { fake } = qcFake()
+    const call = fake.context.call.bind(fake.context)
+    fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'quirky.agents/list') throw new Error('agents offline')
+      return call(method, params)
+    }) as typeof fake.context.call
+    await render(createElement(qc().dialog.QuickCommandDialog, {
+      context: fake.context,
+      command: null,
+      repo: 'api',
+      onClose: () => {}
+    }) as ReactElement)
+    await settle()
+    expect($('#qc-command-agent-error')?.textContent).toBe('Could not load agents: agents offline')
+  })
+
+  test('27: a save refusal is shown with the shared InlineError', async () => {
+    const { closed } = await openDialog({ failNext: 'at most 40 quick commands' })
+    await fill(field<HTMLInputElement>('label'), 'Hello')
+    await fill(field<HTMLTextAreaElement>('command'), 'echo hello')
+    await click(save())
+    expect($('.ui-inline-error')?.textContent).toContain('at most 40 quick commands')
+    expect(closed).toHaveLength(0)
+    expect($('[role="dialog"]')).not.toBeNull()
   })
 })
