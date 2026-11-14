@@ -6,6 +6,7 @@ import { daemonRestart } from './daemon'
 import { serve } from './serve'
 import { distroInspect, distroInstall, distroList, distroRemove } from './distro'
 import { open } from './open'
+import { desktopPickFolder } from './desktop'
 import {
   pluginActivate,
   pluginContributions,
@@ -91,6 +92,7 @@ export const COMMANDS: Command[] = [
   themeList,
   themeSet,
   open,
+  desktopPickFolder,
   api,
   apiCall,
   skillShow,
