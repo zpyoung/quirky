@@ -236,7 +236,7 @@ function review(overrides: Record<string, unknown> = {}): Record<string, unknown
   }
 }
 
-function hostingChecks(checks: Record<string, unknown>[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
+function hostingChecks(checks: readonly Record<string, unknown>[], overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return { headSha: H1, partial: false, checks, ...overrides }
 }
 
@@ -1658,7 +1658,7 @@ test('required-check scope fails closed on partial or missing required metadata'
     {
       partial: true,
       checks: [optionalFailure],
-      decisionReason: 'checks-incomplete'
+      decisionReason: 'rerun-check'
     },
     {
       partial: false,
@@ -1677,6 +1677,7 @@ test('required-check scope fails closed on partial or missing required metadata'
       requiredPayload
     )
     expect(current).toMatchObject({ checkScope: 'all', requiredMetadataComplete: false })
+    expect(current.checksComplete).toBe(!fixture.partial)
     const decision = decide(snapshot(current), [], {
       ...enrollment(),
       kindPayload: requiredPayload

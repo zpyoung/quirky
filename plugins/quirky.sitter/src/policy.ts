@@ -134,6 +134,7 @@ export type SitterWorld = {
   defaultMergeMethod: 'merge' | 'squash' | 'rebase' | null
   allowedMergeMethods: string[]
   checksComplete: boolean
+  checksCurrentHead?: boolean
   checkScope: MergeCheckScope
   requiredMetadataComplete: boolean
   checks: SitterCheck[]
@@ -256,13 +257,13 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
   const checkRows = rawChecks !== null && Array.isArray(rawChecks.checks) ? rawChecks.checks : []
   const mappedChecks = checkRows.map(mapCheck).filter((value): value is SitterCheck => value !== null)
 
-  const checksComplete = checks === null || (
+  const checksCurrentHead = checks === null || (
     rawChecks !== null &&
     Array.isArray(rawChecks.checks) &&
     mappedChecks.length === checkRows.length &&
-    rawChecks.partial !== true &&
     rawChecks.headSha === headRefOid
   )
+  const checksComplete = checksCurrentHead && (checks === null || rawChecks?.partial !== true)
   const requiredMetadataComplete = checks === null || (
     checksComplete && mappedChecks.every((check) => check.required !== null)
   )
@@ -301,6 +302,7 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
     defaultMergeMethod,
     allowedMergeMethods,
     checksComplete,
+    checksCurrentHead,
     checkScope,
     requiredMetadataComplete,
     checks: mappedChecks,
@@ -791,7 +793,7 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
   const failedChecks = checks.filter((check) => check.state === 'failed')
   const runnableChecks = failedChecks.filter((check) => check.kind === 'check_run' && check.rerunTarget !== null)
   const rerunNames = [...new Set(runnableChecks.map((check) => check.name))].sort((left, right) => left.localeCompare(right))
-  if (runnableChecks.length > 0 && !world.checksComplete) {
+  if (runnableChecks.length > 0 && !world.checksComplete && world.checksCurrentHead !== true) {
     considered[considered.length - 1] = 'fix-checks: checks-incomplete'
     return noAction('checks-incomplete', considered)
   }
