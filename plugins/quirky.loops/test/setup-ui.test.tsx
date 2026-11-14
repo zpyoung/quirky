@@ -16,6 +16,7 @@ type FormSurface = {
   ConfigFields: typeof ConfigFields
 }
 type Call = { method: string; params: Record<string, unknown> }
+type CommandCall = { id: string; args: unknown }
 type DraftView = Pick<LoopDraft, 'prompt' | 'sessionPolicy' | 'preset' | 'queueItems' | 'repeatQueue'> & {
   pacingKind?: 'on-idle' | 'interval'
 }
@@ -54,6 +55,14 @@ function readSetup(handle: SurfaceHandle): ReadView {
   return result
 }
 
+function button(container: HTMLElement, label: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll('button')].find((candidate) =>
+    candidate.textContent?.trim() === label || candidate.getAttribute('aria-label') === label
+  )
+  if (!found) throw new Error(`Button not found: ${label}`)
+  return found
+}
+
 let SetupDialog: typeof SetupDialogType | undefined
 let form: FormSurface | undefined
 let host: HTMLElement
@@ -89,6 +98,17 @@ async function unmount() {
   document.body.innerHTML = ''
 }
 
+function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+function setSelectValue(element: HTMLSelectElement, value: string) {
+  element.value = value
+  element.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
 function requireSurface() {
   if (!form || !SetupDialog) throw new Error('setup surface is unavailable')
   return { form, SetupDialog }
@@ -100,6 +120,7 @@ function setup(options: {
   failWorkspace?: Error
   failAgents?: Error
   failLoops?: Error
+  failCommandAction?: string
   pendingWorkspace?: Promise<unknown>
   pendingAgents?: Promise<unknown>
   noAgents?: boolean
@@ -107,11 +128,23 @@ function setup(options: {
   workspaceKind?: 'git' | 'folder'
   onCreated?: (loop: LoopSnapshot) => Promise<void>
 } = {}) {
+  const commandCalls: CommandCall[] = []
+  let handle: SurfaceHandle | null = null
   const calls: Call[] = []
   const toasts: { title: string; body: string }[] = []
   const reports: unknown[] = []
   const created = { id: 'loop-1', name: 'Do the work', worktreeId: 'wt-1', state: 'running' }
   const context = {
+    async executeCommand(id: string, args?: unknown) {
+      commandCalls.push({ id, args })
+      const command = isRecord(args) ? args : {}
+      if (options.failCommandAction === command.action) throw new Error('bridge refused')
+      if (id !== 'command:quirky.loops/setup-action' || typeof command.action !== 'string') {
+        throw new Error(`Unexpected UI command ${id}`)
+      }
+      if (handle === null) throw new Error('Setup surface is unavailable.')
+      await handle.dispatch(command.action, isRecord(command.params) ? command.params : {})
+    },
     pluginId: 'quirky.loops',
     log() {},
     provide() {},
@@ -151,7 +184,6 @@ function setup(options: {
     }
   } as unknown as UiPluginContext
 
-  let handle: SurfaceHandle | null = null
   let closes = 0
   let createdCalls = 0
   const props: SetupDialogProps = {
@@ -179,6 +211,7 @@ function setup(options: {
   act(() => root?.render(createElement(SetupDialog!, props)))
 
   return {
+    commandCalls,
     calls,
     toasts,
     reports,
@@ -467,9 +500,10 @@ test('setup loads only installed enabled native agents, selects the default, and
   expect([...agent.options].map((option) => option.value)).toEqual(['codex', 'claude'])
   expect(read.workspaceKind).toBe('git')
   expect(read.showCost).toBe(true)
-  expect(read.warning).toBe('This workspace already has a running loop. A second loop edits the same files at the same time.')
-  expect(host.querySelector('.ui-notice-line')?.textContent).toContain(read.warning)
-  expect(host.querySelector('.ui-notice-line [role="status"]')?.textContent).toContain(read.warning)
+  const expectedWarning = 'This workspace already has a running loop. A second loop edits the same files at the same time.'
+  expect(read.warning).toBe(expectedWarning)
+  expect(host.querySelector('.ui-notice-line')?.textContent).toContain(expectedWarning)
+  expect(host.querySelector('.ui-notice-line [role="status"]')?.textContent).toContain(expectedWarning)
   expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false)
   expect(view.calls).toContainEqual({ method: 'quirky.worktree/show', params: { worktree: 'workspace-selector' } })
   expect(view.calls).toContainEqual({ method: 'quirky.loops/list', params: { worktreeId: 'wt-1' } })
@@ -561,6 +595,102 @@ test('folder setup hides checkpoints and reveals check controls only after a com
   expect(host.querySelector('[aria-label="Check timeout (seconds)"]')).not.toBeNull()
   expect(host.textContent).toContain('Enter 1 to 600 seconds.')
   expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
+  expect(view.commandCalls).toEqual([{
+    id: 'command:quirky.loops/setup-action',
+    args: { action: 'advanced', params: { open: true } }
+  }])
+})
+
+test('submits setup through the public command once and prevents native navigation', async () => {
+  const view = setup()
+  await view.ready()
+  const name = host.querySelector<HTMLInputElement>('[aria-label="Loop name"]')!
+  const prompt = host.querySelector<HTMLTextAreaElement>('[aria-label="Prompt"]')!
+  await act(async () => setValue(name, 'Do it'))
+  await view.ready()
+  await act(async () => setValue(prompt, 'Do it'))
+  await view.ready()
+
+  const form = host.querySelector<HTMLFormElement>('form[aria-label="New loop"]')!
+  const submitEvent = new Event('submit', { bubbles: true, cancelable: true })
+  await act(async () => {
+    form.dispatchEvent(submitEvent)
+  })
+  await view.ready()
+
+  expect(submitEvent.defaultPrevented).toBe(true)
+  expect(view.commandCalls).toEqual([
+    { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { name: 'Do it' } } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { prompt: 'Do it' } } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'start', params: {} } }
+  ])
+  expect(view.calls.filter((call) => call.method === 'quirky.loops/create')).toHaveLength(1)
+  expect(view.calls.find((call) => call.method === 'quirky.loops/create')?.params)
+    .toMatchObject({ name: 'Do it', config: { promptSource: { kind: 'repeat', body: 'Do it' } } })
+  expect(view.createdCalls).toBe(1)
+  expect(view.closes).toBe(1)
+})
+
+test('a rejected queue-add bridge keeps the local composer draft visible', async () => {
+  const view = setup({ failCommandAction: 'queue-add' })
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { preset: 'queue' } })
+  })
+  const composer = host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!
+  await act(async () => setValue(composer, 'keep this queue draft'))
+  await view.ready()
+  await act(async () => button(host, 'Add to queue').click())
+  await view.ready()
+
+  expect(view.commandCalls).toEqual([{
+    id: 'command:quirky.loops/setup-action',
+    args: { action: 'queue-add', params: { body: 'keep this queue draft' } }
+  }])
+  expect((host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!).value)
+    .toBe('keep this queue draft')
+  expect(host.querySelector('.ui-inline-error[role="alert"]')?.textContent).toBe('bridge refused')
+  expect(readSetup(view.handle).draft.queueItems).toEqual([])
+  expect(view.calls.filter((call) => call.method === 'quirky.loops/create')).toHaveLength(0)
+})
+
+test('routes setup queue edits through its public command boundary', async () => {
+  const view = setup()
+  await view.ready()
+  const run = host.querySelector<HTMLSelectElement>('[aria-label="Run"]')!
+  await act(async () => setSelectValue(run, 'queue'))
+  await view.ready()
+
+  const composer = host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!
+  await act(async () => setValue(composer, 'ONE'))
+  await view.ready()
+  await act(async () => button(host, 'Add to queue').click())
+  await view.ready()
+  expect((host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!).value).toBe('')
+
+  await act(async () => setValue(host.querySelector<HTMLTextAreaElement>('[aria-label="New queue item"]')!, 'TWO'))
+  await view.ready()
+  await act(async () => button(host, 'Add to queue').click())
+  await view.ready()
+  await act(async () => setValue(host.querySelector<HTMLTextAreaElement>('[aria-label="Queue item 2"]')!, 'TWO edited'))
+  await view.ready()
+  await act(async () => button(host, 'Move queue item 2 up').click())
+  await view.ready()
+  await act(async () => button(host, 'Remove queue item 2').click())
+  await view.ready()
+  await act(async () => button(host, 'Cancel').click())
+
+  expect(view.commandCalls).toEqual([
+    { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { preset: 'queue' } } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-add', params: { body: 'ONE' } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-add', params: { body: 'TWO' } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-edit', params: { index: 1, body: 'TWO edited' } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-move', params: { index: 1, position: 'up' } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'queue-remove', params: { index: 1 } } },
+    { id: 'command:quirky.loops/setup-action', args: { action: 'cancel', params: {} } }
+  ])
+  expect(readSetup(view.handle).draft.queueItems).toEqual(['TWO edited'])
+  expect(view.closes).toBe(1)
 })
 
 test('preset changes reset session and the queue editor shares add, edit, move, and remove state', async () => {
@@ -669,4 +799,5 @@ test('cancel closes the dialog without creating a loop and invalid surface actio
   })
   expect(view.calls.filter((call) => call.method === 'quirky.loops/create')).toHaveLength(0)
   expect(view.closes).toBe(1)
+  expect(view.commandCalls).toEqual([])
 })

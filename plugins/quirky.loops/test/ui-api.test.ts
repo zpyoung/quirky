@@ -45,6 +45,12 @@ function measureWorkspaceViewport(): () => void {
   }
 }
 
+function setDomValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
 afterEach(async () => {
   releaseTurn?.()
   releaseTurn = null
@@ -356,7 +362,9 @@ test('setup, lifecycle, queue, history, close and CLI actions use real daemon an
   await uiCommand('open', { loopId: queueLoop.id })
   await showWorktreeView()
   await waitForOverlay((report) => railIsReadyForLoop(report, queueLoop.id))
-  await uiCommand('action', { loopId: queueLoop.id, action: 'queue-draft', params: { body: 'Unsent queue draft' } })
+  const queueComposer = headless!.document.querySelector<HTMLTextAreaElement>('[aria-label="Describe the next task"]')
+  if (!queueComposer) throw new Error('the queue composer did not render')
+  setDomValue(queueComposer, 'Unsent queue draft')
   await waitForOverlay((report) =>
     railIsForLoop(report, queueLoop.id) &&
     isRecord(report.rail) &&
@@ -371,10 +379,21 @@ test('setup, lifecycle, queue, history, close and CLI actions use real daemon an
   let queueState = await rig.snapshot(queueLoop.id)
   const added = queueState.queueItems.find((item) => item.body === 'Queue third task')
   if (!added) throw new Error('queue-add did not persist the new task')
+  await headless!.waitFor(() => headless!.document.querySelector(`[data-queue-id="${added.id}"]`))
   const editableItem = queueState.queueItems.find((item) => item.state !== 'in-flight')
   if (!editableItem) throw new Error('queue fixture has no editable pending task')
-  await uiCommand('action', { loopId: queueLoop.id, action: 'queue-edit-open', params: { id: editableItem.id } })
-  await uiCommand('action', { loopId: queueLoop.id, action: 'queue-edit-update', params: { body: 'Unsent edit draft' } })
+  const editableRow = headless!.document.querySelector<HTMLElement>(`[data-queue-id="${editableItem.id}"]`)
+  if (!editableRow) throw new Error('the pending queue item did not render')
+  await headless!.click(`[data-queue-id="${editableItem.id}"] button[aria-label="Edit ${editableItem.id}"]`)
+  await waitForOverlay((report) =>
+    railIsForLoop(report, queueLoop.id) &&
+    isRecord(report.rail) &&
+    isRecord(report.rail.queueDraft) &&
+    report.rail.queueDraft.editingId === editableItem.id
+  )
+  const editableDraft = editableRow.querySelector<HTMLTextAreaElement>('textarea')
+  if (!editableDraft) throw new Error('the queue edit form did not render')
+  setDomValue(editableDraft, 'Unsent edit draft')
   await waitForOverlay((report) =>
     railIsForLoop(report, queueLoop.id) &&
     isRecord(report.rail) &&
@@ -383,10 +402,46 @@ test('setup, lifecycle, queue, history, close and CLI actions use real daemon an
     report.rail.queueDraft.editingBody === 'Unsent edit draft'
   )
   expect((await rig.snapshot(queueLoop.id)).queueItems.find((item) => item.id === editableItem.id)?.body).toBe(editableItem.body)
-  await uiCommand('action', { loopId: queueLoop.id, action: 'queue-edit-cancel' })
-  await uiCommand('action', { loopId: queueLoop.id, action: 'queue-edit', params: { id: added.id, body: 'Edited third task' } })
+  await headless!.click(`[data-queue-id="${editableItem.id}"] button[type="button"]`)
+  await waitForOverlay((report) =>
+    railIsForLoop(report, queueLoop.id) &&
+    isRecord(report.rail) &&
+    isRecord(report.rail.queueDraft) &&
+    report.rail.queueDraft.editingId === null
+  )
+  const addedRow = headless!.document.querySelector<HTMLElement>(`[data-queue-id="${added.id}"]`)
+  if (!addedRow) throw new Error('the added queue item did not render')
+  await headless!.click(`[data-queue-id="${added.id}"] button[aria-label="Edit ${added.id}"]`)
+  await waitForOverlay((report) =>
+    railIsForLoop(report, queueLoop.id) &&
+    isRecord(report.rail) &&
+    isRecord(report.rail.queueDraft) &&
+    report.rail.queueDraft.editingId === added.id
+  )
+  const addedDraft = addedRow.querySelector<HTMLTextAreaElement>('textarea')
+  if (!addedDraft) throw new Error('the added queue item edit form did not render')
+  setDomValue(addedDraft, 'Edited third task')
+  await waitForOverlay((report) =>
+    railIsForLoop(report, queueLoop.id) &&
+    isRecord(report.rail) &&
+    isRecord(report.rail.queueDraft) &&
+    report.rail.queueDraft.editingId === added.id &&
+    report.rail.queueDraft.editingBody === 'Edited third task'
+  )
+  expect((await rig.snapshot(queueLoop.id)).queueItems.find((item) => item.id === added.id)?.body).toBe('Queue third task')
+  await headless!.click(`[data-queue-id="${added.id}"] button[type="submit"]`)
+  queueState = await rig.waitForLoop(queueLoop.id, (snapshot) =>
+    snapshot.queueItems.some((item) => item.id === added.id && item.body === 'Edited third task')
+  )
+  expect(queueState.queueItems.find((item) => item.id === added.id)?.body).toBe('Edited third task')
+  await waitForOverlay((report) =>
+    railIsForLoop(report, queueLoop.id) &&
+    isRecord(report.rail) &&
+    report.rail.busy === null
+  )
   await uiCommand('action', { loopId: queueLoop.id, action: 'queue-move', params: { id: added.id, position: 1 } })
   queueState = await rig.snapshot(queueLoop.id)
+  expect(queueState.queueItems.find((item) => item.id === added.id)?.position).toBe(1)
   expect(queueState.queueItems.find((item) => item.id === added.id)?.body).toBe('Edited third task')
   await uiCommand('action', { loopId: queueLoop.id, action: 'queue-remove', params: { id: added.id } })
   expect((await rig.snapshot(queueLoop.id)).queueItems.some((item) => item.id === added.id)).toBe(false)

@@ -4,7 +4,7 @@ import type { IterationDetail, LoopConfig, LoopConfigPatch, LoopSnapshot, PauseR
 import { ConfigFields, draftFromLoop, validateDraft } from './config-form'
 import type { DraftValidation, LoopDraft, LoopViewProps, SurfaceHandle } from './contracts'
 import { LoopIterationDetail, formatDuration, iterationCheckLabel } from './LoopIterationDetail'
-import { LoopQueueEditor, type QueueEditorCommand, type QueueEditorState } from './LoopQueueEditor'
+import { LoopQueueEditor, type QueueEditorState } from './LoopQueueEditor'
 import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine, SectionHeader, TextArea, TextField, ToolPanelFrame } from '@quirky/ui'
 
 type LoopState = LoopSnapshot['state']
@@ -211,16 +211,24 @@ function editPatchFromDraft(base: LoopSnapshot, latest: LoopSnapshot, draft: Loo
   }
   if (doneChanged) patch.done = done
 
-  const caps: LoopConfig['caps'] = { ...latest.config.caps }
-  let capsChanged = false
-  for (const key of ['maxIterations', 'maxActiveMinutes', 'maxCostUsd'] as const) {
-    if (base.config.caps[key] === next.caps[key]) continue
-    capsChanged = true
-    const value = next.caps[key]
-    if (value === undefined) delete caps[key]
-    else caps[key] = value
+  const changedCaps = (['maxIterations', 'maxActiveMinutes', 'maxCostUsd'] as const)
+    .filter((key) => base.config.caps[key] !== next.caps[key])
+  if (changedCaps.length > 0) {
+    const maxIterations = base.config.caps.maxIterations === next.caps.maxIterations
+      ? latest.config.caps.maxIterations
+      : next.caps.maxIterations
+    const maxActiveMinutes = base.config.caps.maxActiveMinutes === next.caps.maxActiveMinutes
+      ? latest.config.caps.maxActiveMinutes
+      : next.caps.maxActiveMinutes
+    const maxCostUsd = base.config.caps.maxCostUsd === next.caps.maxCostUsd
+      ? latest.config.caps.maxCostUsd
+      : next.caps.maxCostUsd
+    patch.caps = {
+      ...(maxIterations === undefined ? {} : { maxIterations }),
+      ...(maxActiveMinutes === undefined ? {} : { maxActiveMinutes }),
+      ...(maxCostUsd === undefined ? {} : { maxCostUsd })
+    }
   }
-  if (capsChanged) patch.caps = caps
 
   if (base.config.noProgress !== next.noProgress) patch.noProgress = next.noProgress
   if (!sameValue(base.config.protectedPaths ?? [], next.protectedPaths ?? [])) patch.protectedPaths = next.protectedPaths ?? []
@@ -846,21 +854,20 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
     report?.(surfaceState)
   }, [report, surfaceState])
 
-  const runFromDom = useCallback((action: string, params: Record<string, unknown> = {}) => {
-    void dispatchRef.current(action, params).catch(() => {})
-  }, [])
-  const onQueueAction = useCallback((command: QueueEditorCommand) => {
-    switch (command.action) {
-      case 'queue-draft': return dispatchRef.current(command.action, { body: command.params.body })
-      case 'queue-edit-open': return dispatchRef.current(command.action, { id: command.params.id })
-      case 'queue-edit-update': return dispatchRef.current(command.action, { body: command.params.body })
-      case 'queue-edit-cancel': return dispatchRef.current(command.action, {})
-      case 'queue-add': return dispatchRef.current(command.action, { body: command.params.body })
-      case 'queue-edit': return dispatchRef.current(command.action, { id: command.params.id, body: command.params.body })
-      case 'queue-move': return dispatchRef.current(command.action, { id: command.params.id, position: command.params.position })
-      case 'queue-remove': return dispatchRef.current(command.action, { id: command.params.id })
+  const runFromDom = async (action: string, params: Record<string, unknown> = {}): Promise<void> => {
+    const generation = viewGeneration.current
+    try {
+      await context.executeCommand('command:quirky.loops/action', { loopId, action, params })
+    } catch (error) {
+      if (aliveRef.current && generation === viewGeneration.current) setActionError(errorMessage(error))
     }
-  }, [])
+  }
+  const onQueueError = (error: unknown) => {
+    if (aliveRef.current) setActionError(errorMessage(error))
+  }
+  const onDetailBack = () => {
+    void runFromDom('back')
+  }
 
   if (loading && loop === null) {
     return <ToolPanelFrame title="Loop"><NoticeLine><span role="status">Loading loop…</span></NoticeLine></ToolPanelFrame>
@@ -1068,7 +1075,7 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
                   aria-label="Loop name"
                   type="text"
                   value={editDraft.name}
-                  onChange={(event) => { void dispatchRef.current('edit-update', { patch: { name: event.currentTarget.value } }).catch(() => {}) }}
+                  onChange={(event) => { void runFromDom('edit-update', { patch: { name: event.currentTarget.value } }) }}
                   disabled={busy !== null}
                   error={formErrors.name}
                 />
@@ -1076,13 +1083,13 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
                   label="Prompt"
                   aria-label="Loop prompt"
                   value={editDraft.prompt}
-                  onChange={(event) => { void dispatchRef.current('edit-update', { patch: { prompt: event.currentTarget.value } }).catch(() => {}) }}
+                  onChange={(event) => { void runFromDom('edit-update', { patch: { prompt: event.currentTarget.value } }) }}
                   disabled={busy !== null}
                   error={formErrors.prompt}
                 />}
                 <ConfigFields
                   draft={editDraft}
-                  onChange={(patch) => { void dispatchRef.current('edit-update', { patch }).catch(() => {}) }}
+                  onChange={(patch) => { void runFromDom('edit-update', { patch }) }}
                   errors={formErrors}
                   workspaceKind={currentLoop.workspaceKind}
                   showCost={currentLoop.costUsd !== null || currentLoop.config.caps.maxCostUsd !== undefined}
@@ -1098,20 +1105,24 @@ export function LoopView({ context, loopId, onHandle, report }: LoopViewProps) {
               items={currentLoop.queueItems}
               state={queueState}
               disabled={busy !== null || isReadOnly}
-              onAction={onQueueAction}
+              context={context}
+              loopId={loopId}
+              onError={onQueueError}
             />
           </div>}
           {currentLoop?.preset === 'queue' && !selectedDetail && isReadOnly && <section className="ui-stack" aria-label="Loop queue history">
             <SectionHeader title="Queue" />
-            <ol className="ui-stack">{currentLoop.queueItems.map((item) => <li className="ui-stack" data-queue-id={item.id} key={item.id}>
-              <Badge tone={item.state === 'in-flight' ? 'working' : item.state === 'done' ? 'accent' : 'neutral'}>
-                {item.state === 'in-flight' ? 'In progress' : item.state === 'done' ? 'Done' : 'Pending'}
-              </Badge>
-              <p>{item.body}</p>
-            </li>)}</ol>
+            {currentLoop.queueItems.length === 0 ? <EmptyState message="No prompts queued." /> : (
+              <ol className="ui-stack">{currentLoop.queueItems.map((item) => <li className="ui-stack" data-queue-id={item.id} key={item.id}>
+                <Badge tone={item.state === 'in-flight' ? 'working' : item.state === 'done' ? 'accent' : 'neutral'}>
+                  {item.state === 'in-flight' ? 'In progress' : item.state === 'done' ? 'Done' : 'Pending'}
+                </Badge>
+                <p>{item.body}</p>
+              </li>)}</ol>
+            )}
           </section>}
 
-          {selectedDetail !== null ? <LoopIterationDetail detail={selectedDetail} onBack={() => runFromDom('back')} /> : (
+          {selectedDetail !== null ? <LoopIterationDetail detail={selectedDetail} onBack={onDetailBack} /> : (
             <section className="ui-stack" aria-label="Iteration history">
               <SectionHeader title="Iterations" />
               {historyError !== null ? <InlineError message={`Iteration history unavailable: ${historyError}`} /> : currentHistory.length === 0

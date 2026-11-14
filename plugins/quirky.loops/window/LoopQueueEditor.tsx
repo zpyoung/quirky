@@ -1,6 +1,7 @@
 import { Badge, Button, EmptyState, SectionHeader, TextArea } from '@quirky/ui'
 import type { FormEvent } from 'react'
 import type { QueueItem } from '../src/types'
+import type { UiPluginContext } from '@quirky/protocol'
 
 export type QueueEditorState = {
   addDraft: string
@@ -22,22 +23,35 @@ export type LoopQueueEditorProps = {
   items: readonly QueueItem[]
   state: QueueEditorState
   disabled?: boolean
-  onAction(command: QueueEditorCommand): Promise<unknown>
+  context: UiPluginContext
+  loopId: string
+  onError(error: unknown): void
 }
 
-export function LoopQueueEditor({ items, state, disabled = false, onAction }: LoopQueueEditorProps) {
+export function LoopQueueEditor({ items, state, disabled = false, context, loopId, onError }: LoopQueueEditorProps) {
   const orderedItems = items.slice().sort((left, right) => left.position - right.position)
+  const executeQueueCommand = async (command: QueueEditorCommand): Promise<void> => {
+    try {
+      await context.executeCommand('command:quirky.loops/action', {
+        loopId,
+        action: command.action,
+        params: command.params
+      })
+    } catch (error) {
+      onError(error)
+    }
+  }
 
   const submitAdd = (event: FormEvent) => {
     event.preventDefault()
     if (disabled || !state.addDraft.trim()) return
-    void onAction({ action: 'queue-add', params: { body: state.addDraft } }).catch(() => {})
+    void executeQueueCommand({ action: 'queue-add', params: { body: state.addDraft } })
   }
 
   const submitEdit = (event: FormEvent, item: QueueItem) => {
     event.preventDefault()
     if (disabled || !state.editingBody.trim()) return
-    void onAction({ action: 'queue-edit', params: { id: item.id, body: state.editingBody } }).catch(() => {})
+    void executeQueueCommand({ action: 'queue-edit', params: { id: item.id, body: state.editingBody } })
   }
 
   return (
@@ -63,12 +77,12 @@ export function LoopQueueEditor({ items, state, disabled = false, onAction }: Lo
                       label={`Prompt for queue item ${index + 1}`}
                       aria-label={`Prompt for queue item ${index + 1}`}
                       value={state.editingBody}
-                      onChange={(event) => { void onAction({ action: 'queue-edit-update', params: { body: event.currentTarget.value } }).catch(() => {}) }}
+                      onChange={(event) => { void executeQueueCommand({ action: 'queue-edit-update', params: { body: event.currentTarget.value } }) }}
                       disabled={disabled}
                     />
                     <div className="ui-cluster">
                       <Button type="submit" disabled={disabled || !state.editingBody.trim()}>Save</Button>
-                      <Button type="button" disabled={disabled} onClick={() => { void onAction({ action: 'queue-edit-cancel', params: {} }).catch(() => {}) }}>Cancel</Button>
+                      <Button type="button" disabled={disabled} onClick={() => { void executeQueueCommand({ action: 'queue-edit-cancel', params: {} }) }}>Cancel</Button>
                     </div>
                   </form>
                 ) : <p>{item.body}</p>}
@@ -78,26 +92,26 @@ export function LoopQueueEditor({ items, state, disabled = false, onAction }: Lo
                       type="button"
                       aria-label={`Move up ${item.id}`}
                       disabled={disabled || anotherEditActive || index === 0}
-                      onClick={() => { void onAction({ action: 'queue-move', params: { id: item.id, position: index - 1 } }).catch(() => {}) }}
+                      onClick={() => { void executeQueueCommand({ action: 'queue-move', params: { id: item.id, position: index - 1 } }) }}
                     >Move up</Button>
                     <Button
                       type="button"
                       aria-label={`Move down ${item.id}`}
                       disabled={disabled || anotherEditActive || index === orderedItems.length - 1}
-                      onClick={() => { void onAction({ action: 'queue-move', params: { id: item.id, position: index + 1 } }).catch(() => {}) }}
+                      onClick={() => { void executeQueueCommand({ action: 'queue-move', params: { id: item.id, position: index + 1 } }) }}
                     >Move down</Button>
                     <Button
                       type="button"
                       aria-label={`Edit ${item.id}`}
                       disabled={disabled || anotherEditActive}
-                      onClick={() => { void onAction({ action: 'queue-edit-open', params: { id: item.id } }).catch(() => {}) }}
+                      onClick={() => { void executeQueueCommand({ action: 'queue-edit-open', params: { id: item.id } }) }}
                     >Edit</Button>
                     <Button
                       type="button"
                       variant="destructive"
                       aria-label={`Remove ${item.id}`}
                       disabled={disabled || anotherEditActive}
-                      onClick={() => { void onAction({ action: 'queue-remove', params: { id: item.id } }).catch(() => {}) }}
+                      onClick={() => { void executeQueueCommand({ action: 'queue-remove', params: { id: item.id } }) }}
                     >Remove</Button>
                   </div>
                 )}
@@ -112,7 +126,7 @@ export function LoopQueueEditor({ items, state, disabled = false, onAction }: Lo
           aria-label="Describe the next task"
           placeholder="Describe the next task"
           value={state.addDraft}
-          onChange={(event) => { void onAction({ action: 'queue-draft', params: { body: event.currentTarget.value } }).catch(() => {}) }}
+          onChange={(event) => { void executeQueueCommand({ action: 'queue-draft', params: { body: event.currentTarget.value } }) }}
           disabled={disabled}
         />
         <Button type="submit" disabled={disabled || !state.addDraft.trim()}>Add prompt</Button>

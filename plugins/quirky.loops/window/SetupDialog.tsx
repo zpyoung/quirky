@@ -271,9 +271,9 @@ export function SetupDialog(props: SetupDialogProps) {
       throw new Error('Queue item index is out of range.')
     }
     if (operation === 'edit') {
-      if (typeof params.body !== 'string') throw new Error('Queue edit requires a text body.')
-      const queueItems = [...current.queueItems]
-      queueItems[index] = params.body
+      const body = params.body
+      if (typeof body !== 'string') throw new Error('Queue edit requires a text body.')
+      const queueItems = current.queueItems.map((itemBody, itemIndex) => itemIndex === index ? body : itemBody)
       commitDraft({ ...current, queueItems })
       return
     }
@@ -533,19 +533,40 @@ export function SetupDialog(props: SetupDialogProps) {
     props.report?.(stateForConsumer)
   }, [props.report, stateForConsumer])
 
-  const onConfigChange = (patch: Partial<LoopDraft>) => {
+  const runSetupAction = async (
+    action: string,
+    params: Record<string, unknown> = {},
+    onSuccess?: () => void
+  ): Promise<void> => {
+    try {
+      await propsRef.current.context.executeCommand('command:quirky.loops/setup-action', { action, params })
+      onSuccess?.()
+    } catch (error) {
+      setServerErrorState(messageOf(error))
+    }
+  }
+  const onConfigChange = async (patch: Partial<LoopDraft>) => {
     const { advanced, ...fields } = patch
-    if (Object.keys(fields).length > 0) void dispatch('update', { patch: fields })
-    if (advanced !== undefined) void dispatch('advanced', { open: advanced })
+    if (Object.keys(fields).length > 0) await runSetupAction('update', { patch: fields })
+    if (advanced !== undefined) await runSetupAction('advanced', { open: advanced })
   }
   const changeText = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    void dispatch('update', { patch: { prompt: event.currentTarget.value } })
+    void runSetupAction('update', { patch: { prompt: event.currentTarget.value } })
   }
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    void dispatch('start')
+    void runSetupAction('start')
   }
   const canEdit = !busy && !alreadyCreated
+  const closeDialog = () => {
+    if (canEdit) void runSetupAction('cancel')
+  }
+  const addQueuePrompt = () => {
+    const body = queueComposer
+    void runSetupAction('queue-add', { body }, () => {
+      setQueueComposer((current) => current === body ? '' : current)
+    })
+  }
   const namePlaceholder = presetName(draft)
   const agentLoadError = loadErrors.agents
   const workspaceLoadError = loadErrors.workspace
@@ -555,9 +576,7 @@ export function SetupDialog(props: SetupDialogProps) {
     <Dialog
       open
       title="New loop"
-      onClose={() => {
-        if (canEdit) void dispatch('cancel')
-      }}
+      onClose={closeDialog}
       closeOnBackdrop={false}
     >
       <form className="ui-stack" aria-label="New loop" onSubmit={onSubmit}>
@@ -571,7 +590,7 @@ export function SetupDialog(props: SetupDialogProps) {
             value={draft.name}
             placeholder={namePlaceholder}
             disabled={!canEdit}
-            onChange={(event) => void dispatch('update', { patch: { name: event.currentTarget.value } })}
+            onChange={(event) => void runSetupAction('update', { patch: { name: event.currentTarget.value } })}
           />
           {draft.preset === 'queue' ? (
             <div className="ui-stack" aria-label="Queue prompts">
@@ -585,12 +604,12 @@ export function SetupDialog(props: SetupDialogProps) {
                     rows={3}
                     disabled={!canEdit}
                     error={validation.errors[`queueItems.${index}`]}
-                    onChange={(event) => void dispatch('queue-edit', { index, body: event.currentTarget.value })}
+                    onChange={(event) => void runSetupAction('queue-edit', { index, body: event.currentTarget.value })}
                   />
                   <div className="ui-cluster">
-                    <Button type="button" aria-label={`Move queue item ${index + 1} up`} disabled={!canEdit || index === 0} onClick={() => void dispatch('queue-move', { index, position: 'up' })}>↑</Button>
-                    <Button type="button" aria-label={`Move queue item ${index + 1} down`} disabled={!canEdit || index === draft.queueItems.length - 1} onClick={() => void dispatch('queue-move', { index, position: 'down' })}>↓</Button>
-                    <Button type="button" variant="destructive" aria-label={`Remove queue item ${index + 1}`} disabled={!canEdit} onClick={() => void dispatch('queue-remove', { index })}>Remove</Button>
+                    <Button type="button" aria-label={`Move queue item ${index + 1} up`} disabled={!canEdit || index === 0} onClick={() => { void runSetupAction('queue-move', { index, position: 'up' }) }}>↑</Button>
+                    <Button type="button" aria-label={`Move queue item ${index + 1} down`} disabled={!canEdit || index === draft.queueItems.length - 1} onClick={() => { void runSetupAction('queue-move', { index, position: 'down' }) }}>↓</Button>
+                    <Button type="button" variant="destructive" aria-label={`Remove queue item ${index + 1}`} disabled={!canEdit} onClick={() => { void runSetupAction('queue-remove', { index }) }}>Remove</Button>
                   </div>
                 </div>
               ))}
@@ -611,10 +630,7 @@ export function SetupDialog(props: SetupDialogProps) {
                 <Button
                   type="button"
                   disabled={!canEdit}
-                  onClick={() => {
-                    void dispatch('queue-add', { body: queueComposer })
-                    setQueueComposer('')
-                  }}
+                  onClick={addQueuePrompt}
                 >
                   Add to queue
                 </Button>
@@ -625,7 +641,7 @@ export function SetupDialog(props: SetupDialogProps) {
                   type="checkbox"
                   checked={draft.repeatQueue}
                   disabled={!canEdit}
-                  onChange={(event) => void dispatch('update', { patch: { repeatQueue: event.currentTarget.checked } })}
+                  onChange={(event) => void runSetupAction('update', { patch: { repeatQueue: event.currentTarget.checked } })}
                 />
               </FormRow>
             </div>
@@ -654,7 +670,7 @@ export function SetupDialog(props: SetupDialogProps) {
             aria-label="Agent"
             value={draft.agent}
             disabled={!canEdit || agentsLoading || agents.length === 0}
-            onChange={(event) => void dispatch('update', { patch: { agent: event.currentTarget.value } })}
+            onChange={(event) => void runSetupAction('update', { patch: { agent: event.currentTarget.value } })}
           >
             {agents.length === 0 && <option value={draft.agent}>Unavailable</option>}
             {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}
@@ -671,7 +687,7 @@ export function SetupDialog(props: SetupDialogProps) {
         {serverError && <InlineError message={serverError} />}
         <p>Run an agent in this workspace over and over until the work is done.</p>
         <div className="ui-cluster">
-          <Button type="button" disabled={busy} onClick={() => void dispatch('cancel')}>Cancel</Button>
+          <Button type="button" disabled={busy} onClick={() => void runSetupAction('cancel')}>Cancel</Button>
           <Button type="submit" variant="primary" disabled={!canStart}>
             {busy ? 'Starting…' : 'Start loop'}
           </Button>

@@ -12,12 +12,13 @@ type DialogState =
   | { kind: 'close-loop'; id: number; loopId: string; tabId: string; name: string }
 type LoopSummary = Pick<LoopSnapshot, 'id' | 'name' | 'worktreeId' | 'state'>
 type MountProps = { input?: unknown; report?(state: unknown): void }
+type LoopViewMountState = { mounted: boolean; handle: SurfaceHandle | null }
 
 type CloseChoice = 'cancel' | 'keep-running' | 'stop'
 
 const COMMAND_PREFIX = 'command:quirky.loops/'
 const CLOSE_COMMAND = `${COMMAND_PREFIX}close-tab`
-const CLOSE_CHOICE_COMMAND = `${COMMAND_PREFIX}close-choice`
+const CLOSE_CHOICE_COMMAND = 'command:quirky.loops/close-choice'
 const CLOSE_METHOD = 'quirky.loops/viewCloseGuard'
 const CLOSE_FAILURE_TITLE = 'Could not update the loop, so the tab stays open.'
 const LIVE_STATES: readonly LoopState[] = ['running', 'needs-you']
@@ -48,6 +49,23 @@ function setupState(dialogId: number): Record<string, unknown> | null {
   if (setupSurface?.dialogId === dialogId) return setupSurface.handle.read()
   if (setupReport?.dialogId === dialogId && isRecord(setupReport.state)) return setupReport.state
   return null
+}
+
+function setSetupSurfaceHandle(dialogId: number, handle: SurfaceHandle | null): void {
+  if (currentDialog?.kind !== 'setup' || currentDialog.id !== dialogId) return
+  if (handle === null) {
+    if (setupSurface?.dialogId === dialogId) setupSurface = null
+    if (setupReport?.dialogId === dialogId) setupReport = null
+  } else {
+    setupSurface = { dialogId, handle }
+  }
+  reportOverlay()
+}
+
+function setSetupSurfaceReport(dialogId: number, state: unknown): void {
+  if (currentDialog?.kind !== 'setup' || currentDialog.id !== dialogId) return
+  setupReport = { dialogId, state }
+  reportOverlay()
 }
 
 function setupIsBusy(dialogId: number): boolean {
@@ -339,31 +357,23 @@ function DialogOverlay({ context }: { context: UiPluginContext }) {
   }, [dialog])
 
   if (dialog?.kind === 'setup') {
+    const setupGroupProps = dialog.group === undefined ? {} : { group: dialog.group }
+    const onSetupClose = () => clearDialog(dialog.id)
+    const onSetupCreated = async (loop: LoopSnapshot): Promise<void> => {
+      await openLoopView(context, loop, { group: dialog.group, activate: false })
+    }
+    const onSetupHandle = (handle: SurfaceHandle | null) => setSetupSurfaceHandle(dialog.id, handle)
+    const onSetupReport = (state: unknown) => setSetupSurfaceReport(dialog.id, state)
     return (
       <SetupDialog
         key={dialog.id}
         context={context}
         workspace={dialog.workspace}
-        {...(dialog.group === undefined ? {} : { group: dialog.group })}
-        onClose={() => clearDialog(dialog.id)}
-        onCreated={async (loop) => {
-          await openLoopView(context, loop, { group: dialog.group, activate: false })
-        }}
-        onHandle={(handle) => {
-          if (currentDialog?.kind !== 'setup' || currentDialog.id !== dialog.id) return
-          if (handle === null) {
-            if (setupSurface?.dialogId === dialog.id) setupSurface = null
-            if (setupReport?.dialogId === dialog.id) setupReport = null
-          } else {
-            setupSurface = { dialogId: dialog.id, handle }
-          }
-          reportOverlay()
-        }}
-        report={(state) => {
-          if (currentDialog?.kind !== 'setup' || currentDialog.id !== dialog.id) return
-          setupReport = { dialogId: dialog.id, state }
-          reportOverlay()
-        }}
+        {...setupGroupProps}
+        onClose={onSetupClose}
+        onCreated={onSetupCreated}
+        onHandle={onSetupHandle}
+        report={onSetupReport}
       />
     )
   }
@@ -375,30 +385,27 @@ function mountLoopView(context: UiPluginContext, element: HTMLElement, props: Mo
   if (!isRecord(props.input)) throw new Error('loop view input must be an object')
   const loopId = requiredText(props.input.loopId, 'input.loopId')
   const root = createRoot(element)
-  let mounted = true
-  let handle: SurfaceHandle | null = null
-  root.render(
-    <LoopView
-      context={context}
-      loopId={loopId}
-      onHandle={(next) => {
-        if (!mounted) return
-        const previous = handle
-        handle = next
-        if (next !== null) loopHandles.set(loopId, next)
-        else if (previous !== null && loopHandles.get(loopId) === previous) loopHandles.delete(loopId)
-        reportOverlay()
-      }}
-      report={(state) => {
-        if (mounted) noteLoopReport(loopId, state)
-      }}
-    />
-  )
-  return () => {
-    mounted = false
-    forgetLoop(loopId, handle)
+  const mountState: LoopViewMountState = { mounted: true, handle: null }
+  const syncHandle = (next: SurfaceHandle | null) => {
+    if (!mountState.mounted) return
+    const previous = mountState.handle
+    mountState.handle = next
+    if (next !== null) loopHandles.set(loopId, next)
+    else if (previous !== null && loopHandles.get(loopId) === previous) loopHandles.delete(loopId)
+    reportOverlay()
+  }
+  const onHandle = (next: SurfaceHandle | null) => syncHandle(next)
+  const reportLoopState = (state: unknown) => {
+    if (mountState.mounted) noteLoopReport(loopId, state)
+  }
+  const onReport = (state: unknown) => reportLoopState(state)
+  root.render(<LoopView context={context} loopId={loopId} onHandle={onHandle} report={onReport} />)
+  const cleanup = () => {
+    mountState.mounted = false
+    forgetLoop(loopId, mountState.handle)
     queueMicrotask(() => root.unmount())
   }
+  return cleanup
 }
 
 function mountOverlay(context: UiPluginContext, element: HTMLElement, report?: (state: unknown) => void): () => void {
@@ -406,7 +413,7 @@ function mountOverlay(context: UiPluginContext, element: HTMLElement, report?: (
   overlayReporter = report ?? null
   root.render(<DialogOverlay context={context} />)
   reportOverlay()
-  return () => {
+  const cleanup = () => {
     root.unmount()
     if (overlayReporter === report) overlayReporter = null
     setOverlayDialog = null
@@ -417,6 +424,7 @@ function mountOverlay(context: UiPluginContext, element: HTMLElement, report?: (
     loopReports.clear()
     loopReportOrder = []
   }
+  return cleanup
 }
 
 export function activate(context: UiPluginContext): void {

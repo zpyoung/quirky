@@ -105,9 +105,10 @@ export function validateDraft(
   }
   if (draft.preset === 'queue') {
     if (draft.queueItems.length === 0) errors.queueItems = 'Add at least one prompt to the queue.'
-    draft.queueItems.forEach((body, index) => {
-      if (body.trim() === '') errors[`queueItems.${index}`] = queueError
-    })
+    const queueErrors = draft.queueItems.reduce<Record<string, string>>((result, body, index) =>
+      body.trim() === '' ? { ...result, [`queueItems.${index}`]: queueError } : result,
+    {})
+    Object.assign(errors, queueErrors)
   }
 
   const pacingKind = options.editing
