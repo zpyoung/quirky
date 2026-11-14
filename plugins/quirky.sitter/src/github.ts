@@ -252,6 +252,16 @@ function identityChanged(review: Record<string, unknown>, payload: SitterPayload
     repository.repo !== payload.repository.repo
 }
 
+function lookupErrorMessage(lookup: Record<string, unknown>, payload: SitterPayload): string {
+  try {
+    reviewFromLookup(lookup, payload)
+  } catch (error) {
+    return messageOf(error)
+  }
+  return 'Pull request lookup is unavailable.'
+}
+
+
 export async function read(call: Call, enrollment: SitterEnrollment): Promise<Snapshot<SitterWorld>> {
   const payload = enrollment.kindPayload
   const review = reviewFromLookup(await call('quirky.hosting/review', {
@@ -321,23 +331,39 @@ export async function execute(
           ...apiParams(payload),
           expectedHead: action.head
         })
-        for (let poll = 0; poll < 10; poll++) {
-          if (poll > 0) await sleep(1000)
-          const lookup = asRecord(await call('quirky.hosting/review', apiParams(payload)))
-          if (lookup.kind !== 'found') continue
-          const review = asRecord(lookup.review)
-          const head = review.headRefOid
-          if (typeof head === 'string' && head.toLowerCase() !== action.head.toLowerCase()) {
-            return { effect: 'landed', expectedAfter: { head } }
+        try {
+          for (let poll = 0; poll < 10; poll++) {
+            if (poll > 0) await sleep(1000)
+            const lookup = asRecord(await call('quirky.hosting/review', apiParams(payload)))
+            if (lookup.kind !== 'found') continue
+            const review = asRecord(lookup.review)
+            const head = review.headRefOid
+            if (typeof head === 'string' && head.toLowerCase() !== action.head.toLowerCase()) {
+              return { effect: 'landed', expectedAfter: { head } }
+            }
           }
+          return { effect: 'indeterminate', reason: 'update-branch requested; head unchanged after polling' }
+        } catch (error) {
+          return { effect: 'indeterminate', reason: messageOf(error) }
         }
-        return { effect: 'indeterminate', reason: 'update-branch requested; head unchanged after polling' }
       }
       case 'rerun-check': {
         const lookup = asRecord(await call('quirky.hosting/review', apiParams(payload)))
-        const review = lookup.kind === 'found' ? asRecord(lookup.review) : {}
+        if (lookup.kind !== 'found') {
+          const reason = lookup.kind === 'no-review'
+            ? 'no-review'
+            : typeof lookup.reason === 'string' ? lookup.reason : 'lookup-unavailable'
+          const message = lookup.kind !== 'no-review' && typeof lookup.message === 'string'
+            ? lookup.message
+            : lookupErrorMessage(lookup, payload)
+          return { effect: 'not-landed', reason: `${reason}: ${message}` }
+        }
+        const review = asRecord(lookup.review)
         const head = review.headRefOid
-        if (typeof head !== 'string' || head.toLowerCase() !== action.head.toLowerCase()) {
+        if (typeof head !== 'string') {
+          return { effect: 'not-landed', reason: 'lookup-unavailable: Pull request lookup is unavailable.' }
+        }
+        if (head.toLowerCase() !== action.head.toLowerCase()) {
           return { effect: 'not-landed', reason: 'expected-state-mismatch: head moved' }
         }
         const result = asRecord(await call('quirky.hosting/rerunChecks', {

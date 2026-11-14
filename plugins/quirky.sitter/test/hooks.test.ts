@@ -482,6 +482,72 @@ test('executors call quirky.hosting once and classify every failure', async () =
     .resolves.toEqual({ effect: 'not-landed', reason: 'unsupported-action' })
   expect(unsupported.calls).toEqual([])
 })
+test('rerun-check preflight reports unsuccessful lookups instead of a moved head', async () => {
+  const enrolled = enrollment()
+  const rerun = action('rerun-check', { observations: ['check_run:9001:41:completed:failure'], checkNames: ['build'] })
+  const lookups = [
+    {
+      lookup: { kind: 'no-review' },
+      reason: 'no-review: Pull request #7 is no longer visible in test-owner/test-repo.'
+    },
+    {
+      lookup: { kind: 'unavailable', reason: 'auth_required', message: 'GitHub login required' },
+      reason: 'auth_required: GitHub login required'
+    },
+    {
+      lookup: { kind: 'unknown' },
+      reason: 'lookup-unavailable: Pull request lookup is unavailable.'
+    },
+    {
+      lookup: { kind: 'found', review: githubReview({ headRefOid: undefined }) },
+      reason: 'lookup-unavailable: Pull request lookup is unavailable.'
+    }
+  ]
+
+  for (const { lookup, reason } of lookups) {
+    const run = directCall(async method => {
+      if (method === 'quirky.hosting/review') return lookup
+      throw new Error(`unexpected call: ${method}`)
+    })
+    await expect(execute(run.call, rerun as never, enrolled as never, async () => undefined))
+      .resolves.toEqual({ effect: 'not-landed', reason })
+    expect(run.calls.map(call => call.method)).toEqual(['quirky.hosting/review'])
+  }
+
+
+  const movedHead = directCall(async () => foundReview(githubReview({ headRefOid: H2 })))
+  await expect(execute(movedHead.call, rerun as never, enrolled as never, async () => undefined))
+    .resolves.toEqual({ effect: 'not-landed', reason: 'expected-state-mismatch: head moved' })
+  expect(movedHead.calls.map(call => call.method)).toEqual(['quirky.hosting/review'])
+})
+
+test('update-branch polling failures are indeterminate after the request is accepted', async () => {
+  const enrolled = enrollment()
+  const update = action('update-branch', { base: B1 })
+
+  for (const reason of ['head_changed', 'auth_required']) {
+    const requestError = failure(`${reason} rejected update`, reason)
+    const rejected = directCall(async () => { throw requestError })
+    await expect(execute(rejected.call, update as never, enrolled as never, async () => undefined))
+      .resolves.toEqual({ effect: 'not-landed', reason: `${reason}: ${requestError.message}` })
+    expect(rejected.calls.map(call => call.method)).toEqual(['quirky.hosting/updateBranch'])
+
+    const pollError = failure(`${reason} while polling`, reason)
+    const accepted = directCall(async method => {
+      if (method === 'quirky.hosting/updateBranch') return { state: 'requested' }
+      throw pollError
+    })
+    const sleeps: number[] = []
+    await expect(execute(accepted.call, update as never, enrolled as never, async ms => { sleeps.push(ms) }))
+      .resolves.toEqual({ effect: 'indeterminate', reason: pollError.message })
+    expect(accepted.calls.map(call => call.method)).toEqual([
+      'quirky.hosting/updateBranch',
+      'quirky.hosting/review'
+    ])
+    expect(sleeps).toEqual([])
+  }
+})
+
 
 test('activation keeps the plugin up when Heimdall refuses the kind', async () => {
   const failed = runtimeContext(async method => {
