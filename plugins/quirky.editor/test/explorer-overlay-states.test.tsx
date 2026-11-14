@@ -43,6 +43,8 @@ async function fixture(
 ) {
   const handlers = new Map<string, Handler>()
   const listeners = new Set<(event: TestEvent) => void>()
+  const layoutListeners = new Set<() => void>()
+  let liveWorktree = layoutWorktree
   const settings = new Map<string, unknown>([
     ['editorAutoSave', false], ['editorAutoSaveDelayMs', 1000], ['editorWordWrap', false],
     ['editorFontFamily', 'monospace'], ['editorPreviewTabsEnabled', true],
@@ -75,8 +77,11 @@ async function fixture(
       return () => listeners.delete(listener)
     },
     onConnection: () => () => {},
-    onLayout: () => () => {},
-    getLayout: () => layoutWorktree === null ? { panel: null } : { worktree: layoutWorktree, panel: null },
+    onLayout: (listener: () => void) => {
+      layoutListeners.add(listener)
+      return () => layoutListeners.delete(listener)
+    },
+    getLayout: () => liveWorktree === null ? { panel: null } : { worktree: liveWorktree, panel: null },
     getSetting: (name: string) => settings.get(name),
     setPanelSize() {}, toast() {}, log() {},
     executeCommand: () => { throw new Error('Owner-window dispatch is forbidden') },
@@ -97,7 +102,11 @@ async function fixture(
   }
   const start = (name: string, args?: unknown) => Promise.resolve(handlers.get(`command:quirky.editor/${name}`)!(args))
   const emit = (event: TestEvent) => { for (const listener of listeners) listener(event) }
-  return { element, calls, context, command, control, start, settings, emit, bridge, get report() { return report } }
+  const changeLayout = (worktree: string | null) => {
+    liveWorktree = worktree
+    for (const listener of layoutListeners) listener()
+  }
+  return { element, calls, context, command, control, start, settings, emit, bridge, changeLayout, get report() { return report } }
 }
 
 async function tick(ms = 0) {
@@ -605,4 +614,73 @@ test('a busy dirty-close dialog still displays an exact-window bridge failure', 
     await ui.control('choose', { choice: 'cancel' })
     await closing
   }
+})
+
+function explorerResponse(method: string, params: Record<string, unknown>) {
+  if (method === 'quirky.editor/state') return {
+    buffers: [], tabs: [], explorer: { worktreeId: String(params.worktree ?? 'w1'), showDotfiles: true, expanded: [], selectedPaths: ['/repo/a.txt'], focusedPath: '/repo/a.txt' },
+    search: null, quickOpenHistory: [], closeRequests: []
+  }
+  if (method === 'quirky.editor/documentRoot') return { id: String(params.worktree ?? 'w1'), path: '/repo' }
+  if (method === 'quirky.git/status') return { files: [] }
+  if (method === 'quirky.editor/explorer') return { root: '/repo', entries: [{ path: '/repo/a.txt', name: 'a.txt', isDirectory: false, isSymlink: false }] }
+  return {}
+}
+
+test('Explorer refuses clipboard commands disabled by Contents mode', async () => {
+  const ui = await fixture(explorerResponse, 'panel:quirky.editor/explorer')
+  await tick()
+  const writes: string[] = []
+  const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { writes.push(text) } } })
+  try {
+    await ui.control('mode', { value: 'contents' })
+    const copy = Array.from(ui.element.querySelectorAll<HTMLButtonElement>('.qe-explorer-footer button')).find((button) => button.textContent === 'Copy Path')!
+    expect(copy.disabled).toBe(true)
+    expect(await ui.control('copy-path')).toEqual({ delivered: false })
+    expect(await ui.control('copy-path', { paths: ['/repo/a.txt'] })).toEqual({ delivered: false })
+    expect(writes).toEqual([])
+  } finally {
+    if (original) Object.defineProperty(navigator, 'clipboard', original)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+test('Explorer retains a settled keyed Contents search across a mode change', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const ui = await fixture((method, params) => method === 'quirky.editor/search' && params.action === 'run'
+    ? pending.promise : explorerResponse(method, params), 'panel:quirky.editor/explorer')
+  await tick()
+  await ui.control('mode', { value: 'contents' })
+  const input = ui.element.querySelector<HTMLInputElement>('input[placeholder="Search"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'needle')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => ui.element.querySelector<HTMLButtonElement>('.qe-explorer-query button')!.click())
+  expect(ui.element.querySelector('.ui-notice-line')?.textContent).toBe('Searching files…')
+  await ui.control('mode', { value: 'names' })
+  await act(async () => pending.resolve({ files: [], totalMatches: 0, truncated: false, error: null, loading: false }))
+  await ui.control('mode', { value: 'contents' })
+  expect(ui.element.querySelector('.qe-explorer-content-results .ui-notice-line')).toBeNull()
+  expect(ui.element.querySelector('.qe-explorer-content-results .ui-empty-state')?.textContent).toContain('No results')
+  expect(ui.calls.filter(({ method, params }) => method === 'quirky.editor/search' && params.action === 'run')).toHaveLength(1)
+})
+
+test('Explorer refuses an old create address synchronously on a layout worktree change', async () => {
+  const ui = await fixture(explorerResponse, 'panel:quirky.editor/explorer')
+  await tick()
+  await ui.control('new-file')
+  const old = ui.report.uiControls!.find(({ actions }) => actions.includes('create'))!
+  let result: unknown
+  await act(async () => {
+    ui.changeLayout('w2')
+    result = await ui.start('ui-control', {
+      surface: old.surface, target: old.target, generation: old.generation,
+      action: 'create', data: { name: 'obsolete.txt' }
+    })
+  })
+  expect(result).toEqual({ delivered: false })
+  expect(ui.calls.filter(({ method }) => method === 'quirky.editor/mutate')).toEqual([])
+  expect(ui.report.uiControls![0]!.target).toBe('explorer:w2')
 })

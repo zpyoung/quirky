@@ -304,7 +304,15 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       focusHandoffRef.current = null
     }
   }, [])
-  useEffect(() => context.onLayout(() => setLayoutWorktree(worktreeFromLayout(context))), [context])
+  useEffect(() => context.onLayout(() => {
+    const nextLayoutWorktree = worktreeFromLayout(context)
+    const nextWorktree = nextLayoutWorktree ?? selectedWorktree ?? activeDocument()?.worktreeId
+    if (currentWorktree.current !== nextWorktree) {
+      currentWorktree.current = nextWorktree
+      rotateControlGeneration()
+    }
+    setLayoutWorktree(nextLayoutWorktree)
+  }), [context, selectedWorktree])
 
   useEffect(() => {
     if (rowAction === null) return
@@ -708,13 +716,11 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         ...(exclude === '' ? {} : { excludePattern: exclude }),
         maxResults: 2000
       }) as SearchResult
-      if (attempt !== searchSequence.current || currentWorktree.current !== worktree ||
-        queryRef.current !== text || searchModeRef.current !== 'contents') return
+      if (attempt !== searchSequence.current || currentWorktree.current !== worktree) return
       searchRequest.current = result.requestId
       setSearchState({ key, result })
     } catch (reason) {
-      if (attempt === searchSequence.current && currentWorktree.current === worktree &&
-        queryRef.current === text && searchModeRef.current === 'contents') {
+      if (attempt === searchSequence.current && currentWorktree.current === worktree) {
         setSearchState({ key, result: { files: [], totalMatches: 0, truncated: false, error: messageOf(reason), loading: false } })
       }
     }
@@ -1659,6 +1665,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
         return { delivered: true }
       }
       case 'copy-path': {
+        if (searchMode !== 'names') return { delivered: false }
         const hasPaths = Object.hasOwn(data, 'paths')
         const hasRelative = Object.hasOwn(data, 'relative')
         if (!exactData(['paths', 'relative']) ||
