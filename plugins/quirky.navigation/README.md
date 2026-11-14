@@ -1,6 +1,6 @@
 # quirky.navigation
 
-`quirky.navigation` answers go-to-definition and find-references for TypeScript and JavaScript files. It reads files from disk; unsaved editor buffers are not included.
+`quirky.navigation` answers go-to-definition and find-references for TypeScript, JavaScript, and Python files. It reads files from disk; unsaved editor buffers are not included.
 
 ## CLI and daemon API
 
@@ -23,4 +23,12 @@ Navigation starts one TypeScript server per worktree on first use. It prefers `<
 
 At most two TypeScript servers run at once. When both are busy, another worktree's request fails with a conflict; when capacity is needed, the least-recently-used idle server is stopped. Servers also stop after 10 idle minutes. A request that does not answer within 120 seconds stops its server. `status` lists running servers, including their PID, runtime, server path, request count, and in-flight count. `stop` stops all servers, or filters by worktree and language.
 
-Python navigation is planned for a follow-up; this release supports TypeScript and JavaScript only.
+## Python
+
+Python navigation supports `.py` and `.pyi` files through the bundled standard-library resolver. It needs Python 3.8 or newer, found as `python3` on the daemon's `PATH`, and runs it in isolated mode. It answers from disk and never imports or runs worktree code.
+
+Definitions follow imports and re-exports, lexical bindings, classes, methods, and statically inferred instance attributes. Import lookup checks the parent of the file's outermost package, the worktree root, then `<worktree>/src`. Only worktree files are resolved; an unavailable import points to its own import name. This is navigation, not a type checker: string annotations and flow-sensitive inference are not supported.
+
+References include declarations and scan `.py` and `.pyi` files, skipping hidden directories, `node_modules`, `__pycache__`, `site-packages`, directories containing `pyvenv.cfg`, symlinks, and files larger than 2 MiB. Unparseable files are skipped. Renamed import uses are not references of the original spelling.
+
+At most four Python servers run at once, one per worktree. They share the 10-minute idle stop and 120-second request timeout described above. Use `quirky nav stop --language python` to stop them.
