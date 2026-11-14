@@ -8,6 +8,8 @@ export const BUDGETS = {
   diff: 1000,
   floodEcho: 100,
 } as const satisfies Readonly<Record<Metric, number>>
+export const NOMINAL_FRAME_MS = 1000 / 60
+
 
 export const REGRESSION_RATIO = 1.25
 export const CONFIDENCE_Z = 1.96
@@ -25,6 +27,23 @@ export type MetricResult = {
   medianMs: number | null
   budgetMs: number
   budgetMiss: boolean | null
+  wallSamplesMs?: number[]
+  unavailableSamples?: number
+}
+
+export type FrameTiming = {
+  status: 'complete' | 'unavailable'
+  wallMs: number
+  effectiveMs: number
+  deductionMs: number
+  candidate: null | {
+    kind: 'application-raf' | 'ready-to-frame'
+    requestedAt: number
+    deliveredAt: number
+    receiveCapAt: number | null
+    busySpans: { start: number; end: number }[]
+  }
+  reason: string | null
 }
 
 type SpeedProfileBase = {
@@ -48,7 +67,12 @@ type SpeedProfileBase = {
 
 export type SpeedProfileV1 = SpeedProfileBase & { workloadVersion: 1 }
 export type SpeedProfileV2 = SpeedProfileBase & { workloadVersion: 2; compositor: 'software' }
-export type SpeedProfile = SpeedProfileV1 | SpeedProfileV2
+export type SpeedProfileV3 = SpeedProfileBase & {
+  workloadVersion: 3
+  compositor: 'software'
+  frameTiming: 'native-final-frame-idle-cap-60hz'
+}
+export type SpeedProfile = SpeedProfileV1 | SpeedProfileV2 | SpeedProfileV3
 
 export type SpeedReport = {
   version: 1
