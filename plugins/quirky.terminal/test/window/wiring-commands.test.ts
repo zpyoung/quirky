@@ -73,6 +73,13 @@ async function wire(options: { mount?: boolean; settings?: Record<string, unknow
     options.settings
   )
   ui.activate(fake.context)
+  const executed: { id: string; args: unknown }[] = []
+  fake.context.executeCommand = async (id, args) => {
+    executed.push({ id, args })
+    const handler = fake.provided.get(id)
+    if (!handler) throw new Error(`command ${id} is not provided`)
+    await handler(args)
+  }
   const reports: any[] = []
   const element = document.createElement('div')
   document.body.appendChild(element)
@@ -88,6 +95,7 @@ async function wire(options: { mount?: boolean; settings?: Record<string, unknow
   }
   return {
     fake,
+    executed,
     daemon,
     element,
     reports,
@@ -359,6 +367,10 @@ describe('the quick commands', () => {
     const chevron = wired.element.querySelector<HTMLElement>('button[aria-label="More quick commands"]')!
     await act(async () => chevron.click())
     await settle()
+    expect(wired.executed).toEqual([{
+      id: 'command:quirky.terminal/open-menu',
+      args: { kind: 'quick-commands', target: 'grp-1' }
+    }])
     expect(quickMenu()).not.toBeNull()
     expect(wired.last().menu).toMatchObject({ kind: 'quick-commands', target: 'grp-1' })
     await wired.run('close-menu')

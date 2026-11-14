@@ -335,11 +335,11 @@ export function QuickCommandDialog({ context, command, repo, onClose: onDialogCl
   )
 }
 
+type OpenQuickCommandDialogProps = Omit<QuickCommandDialogProps, 'onClose'> & { onClose?(): void }
 /**
  * Opens the dialog in its own React root on `document.body`, for callers with no React tree to
  * render it in (a menu item's handler). Returns a function that closes it.
  */
-type OpenQuickCommandDialogProps = Omit<QuickCommandDialogProps, 'onClose'> & { onClose?(): void }
 export function openQuickCommandDialog(props: OpenQuickCommandDialogProps): () => void {
   if (retiredDialogContexts.has(props.context)) throw new Error('Terminal is not active')
   const existing = dialogControllers.get(props.context)

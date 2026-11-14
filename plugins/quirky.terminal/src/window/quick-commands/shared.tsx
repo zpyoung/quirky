@@ -13,11 +13,6 @@ export function summaryOf(command: QuickCommand): string {
   return command.kind === 'agent' && command.agent ? `${command.agent}: ${command.command}` : command.command
 }
 
-/**
- * The saved quick commands a view shows, loaded on mount and again on every `quickCommands`
- * event. With `workspace` it lists what that workspace's repo sees; `'all'` lists every command;
- * null loads nothing. `loaded` is false until the first answer, success or failure.
- */
 type QuickCommandsState = {
   commands: QuickCommand[]
   loaded: boolean
@@ -27,6 +22,11 @@ type QuickCommandsState = {
 
 type QuickCommandsResult = { commands: QuickCommand[] }
 
+/**
+ * The saved quick commands a view shows, loaded on mount and again on every `quickCommands`
+ * event. With `workspace` it lists what that workspace's repo sees; `'all'` lists every command;
+ * null loads nothing. `loaded` is false until the first answer, success or failure.
+ */
 export function useQuickCommands(context: UiPluginContext, workspace: string | 'all' | null): QuickCommandsState {
   const [commands, setCommands] = useState<QuickCommand[]>([])
   const [loaded, setLoaded] = useState(false)

@@ -15,6 +15,7 @@ type Props = {
   group: Group
   /** The workspace's repo; null where there is none. */
   repo: string | null
+  /** The owner controls whether this group's quick-command menu is open. */
   menuOpen: boolean
   onMenuOpenChange(open: boolean): void
 }
