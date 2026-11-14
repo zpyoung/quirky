@@ -1,0 +1,816 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "overlay:quirky.feedback/mode": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/session.ts",
+        "quote": "context.toast(title, message(cause), { kind: 'error' })"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.toast(title, message(cause), { kind: 'error' })"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/session.ts",
+        "quote": "context.toast(LIMIT_TITLE, LIMIT_BODY, { kind: 'warning' })"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.toast(LIMIT_TITLE, LIMIT_BODY, { kind: 'warning' })"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/ui.tsx",
+        "quote": "context.toast('Could not leave Feedback mode', message(cause))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.feedback/src/ui.tsx",
+          "quote": "context.toast('Could not leave Feedback mode', message(cause))"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/ui.tsx",
+        "quote": "context.toast('Could not start Annotate', typeof result.reason === 'string' ? result.reason : 'Browser Annotate did not start.')"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.feedback/src/ui.tsx",
+          "quote": "context.toast('Could not start Annotate', typeof result.reason === 'string' ? result.reason : 'Browser Annotate did not start.')"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/ui.tsx",
+        "quote": "context.toast('Could not start Annotate', message(cause))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.feedback/src/ui.tsx",
+          "quote": "context.toast('Could not start Annotate', message(cause))"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/ui.tsx",
+        "quote": "context.toast('Could not start Feedback mode', message(cause))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.feedback/src/ui.tsx",
+          "quote": "context.toast('Could not start Feedback mode', message(cause))"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/ui.tsx",
+        "quote": "context.toast('Could not change Feedback mode', message(cause))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.feedback/src/ui.tsx",
+          "quote": "context.toast('Could not change Feedback mode', message(cause))"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/ui.tsx",
+        "quote": "context.toast('Could not copy the comments', message(cause), { kind: 'error' })"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.feedback/src/ui.tsx",
+          "quote": "context.toast('Could not copy the comments', message(cause), { kind: 'error' })"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "state.phase === 'loading' ?"
+      },
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+          "quote": "<NoticeLine>Loading feedback comments…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "state.recovered ?"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+          "quote": "<InlineError message=\"An unreadable comments file was set aside, so the tray started empty.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "state.phase === 'failed' ?"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+          "quote": "<InlineError message={`Could not load feedback comments: ${state.loadError ?? ''}`} action={{ label: 'Retry', onAction: () => void session.load() }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.feedback/mode",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "state.phase === 'ready' && empty ?"
+      },
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+          "quote": "<EmptyState message=\"Click part of the app to add a comment.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/ui.tsx",
+        "quote": "context.toast('Copied', `${comments.length} comments copied as Markdown.`, { kind: 'success' })"
+      },
+      "anchor": "context.toast(",
+      "reason": "Successful copying is confirmation, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "state.card !== null ? <Card\n      key={state.card.serial}\n      card={state.card}\n      number={editing < 0 ? null : editing + 1}\n      onText={session.setText}\n      onIntent={session.setIntent}\n      onAdd={() => void session.add()}\n      onSave={() => void session.save()}\n      onCancel={session.cancel}\n    /> : null"
+      },
+      "anchor": "state.card !== null ?",
+      "reason": "The conditional opens the local comment draft card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Banner.tsx",
+        "quote": "role=\"status\""
+      },
+      "anchor": "role=\"status\"",
+      "reason": "The status describes the active interaction mode and keyboard shortcuts."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "editing ? `Edit comment ${number ?? ''}` : `Comment on ${card.label}`"
+      },
+      "anchor": "editing ?",
+      "reason": "The label and submit control distinguish adding from editing a draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "card.warned ? <p role=\"alert\" style={styles.warning}>{DISCARD_WARNING}</p> : null"
+      },
+      "anchor": "card.warned ?",
+      "reason": "The discard warning protects unsaved draft text; it is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "role=\"alert\""
+      },
+      "anchor": "role=\"alert\"",
+      "reason": "The discard warning protects unsaved draft text; it is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "editing\n        ? <Button data-feedback-submit variant=\"primary\" disabled={trimmed === '' || tooLong || card.saving} onClick={onSave}>Save</Button>\n        : <Button data-feedback-submit variant=\"primary\" disabled={trimmed === '' || tooLong || card.saving} onClick={onAdd}>Add</Button>"
+      },
+      "anchor": "editing\n        ?",
+      "reason": "The label and submit control distinguish adding from editing a draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Dots.tsx",
+        "quote": "if (rect === undefined) return null"
+      },
+      "anchor": "if (rect === undefined)",
+      "reason": "A missing target rectangle omits its position marker."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "if (collapsed) return null"
+      },
+      "anchor": "if (collapsed)",
+      "reason": "Closing the local tray hides it without changing saved comments."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "state.notice !== null ? <p data-feedback-notice role=\"status\" style={styles.notice}>{state.notice}</p> : null"
+      },
+      "anchor": "state.notice !== null ?",
+      "reason": "The notice confirms how issue drafts were opened, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "role=\"status\""
+      },
+      "anchor": "role=\"status\"",
+      "reason": "The notice confirms how issue drafts were opened, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "comment.intent === 'change' ? 'Change' : 'Question'"
+      },
+      "anchor": "comment.intent === 'change' ?",
+      "reason": "The badge labels the saved comment intent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "stale ? <span data-feedback-stale style={styles.rowStale}> · No longer on screen</span> : null"
+      },
+      "anchor": "stale ?",
+      "reason": "The marker says whether the saved target is still visible."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onToggle={session.toggleCollapsed}"
+      },
+      "anchor": "onToggle",
+      "transient": "draft",
+      "reason": "Changes the local tray or comment draft; persistence has its own routed action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onExit={() => void session.exit()}"
+      },
+      "anchor": "onExit",
+      "route": {
+        "target": "setting.set",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.call('setting.set', { id: ACTIVE, value: false })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async exit() {\n      try { await context.call('setting.set', { id: ACTIVE, value: false }) } catch (cause) { toastError('Could not leave Feedback mode', cause) }\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onComment={session.pickElement}"
+      },
+      "anchor": "onComment",
+      "transient": "draft",
+      "reason": "Changes the local tray or comment draft; persistence has its own routed action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onAnnotate={session.annotate}"
+      },
+      "anchor": "onAnnotate",
+      "route": {
+        "target": "command:quirky.feedback/annotate",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.executeCommand(COMMAND_ANNOTATE, { pane })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async annotate(pane: string) {\n      try { await context.executeCommand(COMMAND_ANNOTATE, { pane }) } catch (cause) { toastError('Could not start Annotate', cause) }\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onEdit={session.edit}"
+      },
+      "anchor": "onEdit",
+      "transient": "draft",
+      "reason": "Changes the local tray or comment draft; persistence has its own routed action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onText={session.setText}"
+      },
+      "anchor": "onText",
+      "transient": "draft",
+      "reason": "Changes the local tray or comment draft; persistence has its own routed action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onIntent={session.setIntent}"
+      },
+      "anchor": "onIntent",
+      "transient": "draft",
+      "reason": "Changes the local tray or comment draft; persistence has its own routed action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onAdd={() => void session.add()}"
+      },
+      "anchor": "onAdd",
+      "route": {
+        "target": "quirky.feedback/add",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.call('quirky.feedback/add', { intent: card.intent, comment: text, capture: card.capture })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async add() {\n      const card = state.card\n      if (card === null || card.id !== null) return\n      return saveCard(\n        (text) => context.call('quirky.feedback/add', { intent: card.intent, comment: text, capture: card.capture }) as Promise<Comment>,\n        (comments, added) => [...comments.filter((entry) => entry.id !== added.id), added]\n      )\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onSave={() => void session.save()}"
+      },
+      "anchor": "onSave",
+      "route": {
+        "target": "quirky.feedback/update",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.call('quirky.feedback/update', { id: card.id, comment: text, intent: card.intent })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async save() {\n      const card = state.card\n      if (card === null || card.id === null) return\n      return saveCard(\n        (text) => context.call('quirky.feedback/update', { id: card.id, comment: text, intent: card.intent }) as Promise<Comment>,\n        (comments, updated) => comments.map((entry) => (entry.id === updated.id ? updated : entry))\n      )\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/App.tsx",
+        "quote": "onCancel={session.cancel}"
+      },
+      "anchor": "onCancel",
+      "transient": "draft",
+      "reason": "Changes the local tray or comment draft; persistence has its own routed action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Banner.tsx",
+        "quote": "onClick={onToggle}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Banner.tsx",
+        "quote": "onClick={onExit}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "win.addEventListener('resize', place)"
+      },
+      "anchor": "win.addEventListener('resize'",
+      "notAction": "lifecycle",
+      "reason": "Keeps the comment card inside the resized window."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "onClick={() => onIntent(intent)}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "onChange={(event) => onText(event.target.value)}"
+      },
+      "anchor": "onChange",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "onClick={onCancel}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "onClick={onSave}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Card.tsx",
+        "quote": "onClick={onAdd}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Chip.tsx",
+        "quote": "onClick={() => onComment(element)}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Chip.tsx",
+        "quote": "onClick={() => onAnnotate(pane)}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the interaction to the parent callback that owns its behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "onClick={() => void session.copy()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.feedback/copy",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.executeCommand(COMMAND_COPY)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async copy() {\n      await context.executeCommand(COMMAND_COPY)\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "onClick={() => void session.fileIssue()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.terminal/openExternal",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.call('quirky.terminal/openExternal', { target: draft.url })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async fileIssue() {\n      if (state.comments.length === 0) return\n      let plugins: PluginInfo[]\n      try { plugins = pluginsOf(await context.call('plugin.list')) } catch (cause) { return toastError('Could not look up plugin repositories', cause) }\n      const repositoryOf = (owner: string) => builtinRepository(owner) ?? plugins.find((plugin) => plugin.id === owner)?.repository ?? null\n      const { drafts, unrouted } = buildIssueDrafts(state.comments, repositoryOf)\n      let opened = 0\n      for (const draft of drafts) {\n        try {\n          const result = await context.call('quirky.terminal/openExternal', { target: draft.url }) as { ok?: boolean } | null\n          if (result?.ok === false) toastError('Could not open the issue draft', `The draft for ${draft.repository} did not open.`)\n          else opened++\n        } catch (cause) { toastError('Could not open the issue draft', cause) }\n      }\n      const lines: string[] = []\n      if (opened > 0) lines.push(`Opened ${plural(opened, 'issue draft')}.`)\n      if (unrouted.length > 0) lines.push(`${plural(unrouted.length, 'comment')} can't go to GitHub. Use Copy for those.`)\n      const remaining = drafts.reduce((total, draft) => total + draft.remaining, 0)\n      if (remaining > 0) lines.push(`${plural(remaining, 'comment')} didn't fit. Delete the filed ones, then choose File issue again, or use Copy.`)\n      commit({ notice: lines.length > 0 ? lines.join(' ') : null })\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "onClick={() => void session.clear()}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.feedback/clear",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.call('quirky.feedback/clear')"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async clear() {\n      if (confirming) return\n      confirming = true\n      hooks.suspend(true)\n      let confirmed = false\n      try {\n        confirmed = await context.confirm({\n          title: 'Clear all feedback comments?',\n          body: `This removes all ${plural(state.comments.length, 'comment')} from the tray.`,\n          confirmLabel: 'Clear'\n        })\n      } catch (cause) { toastError('Could not ask for confirmation', cause) } finally { confirming = false; hooks.suspend(false) }\n      if (!confirmed) return\n      try { await context.call('quirky.feedback/clear') } catch (cause) { return toastError('Could not clear the comments', cause) }\n      saves++\n      commit({ comments: [], card: state.card?.id === null ? state.card : null, notice: null })\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "onAction: () => void session.load()"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.feedback/list",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.call('quirky.feedback/list')"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async load() {\n      commit({ phase: 'loading', loadError: null })\n      const owners = context.call('plugin.list').then(\n        (plugins) => commit({ owners: Object.fromEntries(pluginsOf(plugins).map((plugin) => [plugin.id, plugin.name ?? plugin.id])) }),\n        () => {}\n      )\n      const comments = (async () => {\n        let result: { comments?: Comment[]; recovered?: boolean }\n        let seen: number\n        // selection is live before this answers, so a snapshot from before a save would drop it\n        do {\n          seen = saves\n          try { result = await context.call('quirky.feedback/list') as typeof result } catch (cause) {\n            commit({ phase: 'failed', loadError: message(cause) })\n            return\n          }\n        } while (seen !== saves)\n        commit({ phase: 'ready', loadError: null, comments: Array.isArray(result.comments) ? result.comments : [], recovered: result.recovered === true })\n      })()\n      await Promise.all([owners, comments])\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "onClick={() => onEdit(comment.id)}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The parent owns opening the edit draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/Tray.tsx",
+        "quote": "onClick={() => void session.remove(comment.id)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.feedback/remove",
+        "invoke": {
+          "file": "plugins/quirky.feedback/src/mode/session.ts",
+          "quote": "context.call('quirky.feedback/remove', { id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.feedback/src/mode/session.ts",
+            "quote": "async remove(id: string) {\n      try { await context.call('quirky.feedback/remove', { id }) } catch (cause) { return toastError('Could not delete the comment', cause) }\n      saves++\n      commit({ comments: state.comments.filter((entry) => entry.id !== id), card: state.card?.id === id ? null : state.card })\n    }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/index.tsx",
+        "quote": "container.addEventListener('focusin', stopFocus)"
+      },
+      "anchor": "container.addEventListener('focusin'",
+      "notAction": "subscription",
+      "reason": "Tracks focus inside the overlay so teardown can restore the prior focus."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/index.tsx",
+        "quote": "bannerSlot.addEventListener('focusin', stopFocus)"
+      },
+      "anchor": "bannerSlot.addEventListener('focusin'",
+      "notAction": "subscription",
+      "reason": "Tracks focus inside the overlay so teardown can restore the prior focus."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/layout.ts",
+        "quote": "win.addEventListener('resize', schedule)"
+      },
+      "anchor": "win.addEventListener('resize'",
+      "notAction": "lifecycle",
+      "reason": "Repositions overlay markers when the host layout changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/layout.ts",
+        "quote": "win.addEventListener('scroll', schedule, true)"
+      },
+      "anchor": "win.addEventListener('scroll'",
+      "notAction": "subscription",
+      "reason": "Repositions overlay markers when the host layout changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('pointerdown', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('pointerdown'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('pointerup', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('pointerup'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('mousedown', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('mousedown'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('mouseup', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('mouseup'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('click', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('click'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('dblclick', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('dblclick'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('auxclick', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('auxclick'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('contextmenu', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('contextmenu'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('pointermove', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('pointermove'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('mousemove', onPointer, true)"
+      },
+      "anchor": "win.addEventListener('mousemove'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('keydown', onKey, true)"
+      },
+      "anchor": "win.addEventListener('keydown'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('keyup', onKey, true)"
+      },
+      "anchor": "win.addEventListener('keyup'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.feedback/src/mode/picker.ts",
+        "quote": "win.addEventListener('blur', onBlur)"
+      },
+      "anchor": "win.addEventListener('blur'",
+      "notAction": "forwarded",
+      "reason": "Forwards input to the picker handler, which owns selection, Option pass-through, and Esc policy."
+    }
+  ]
+}
