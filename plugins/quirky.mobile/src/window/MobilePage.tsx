@@ -140,39 +140,6 @@ export function MobilePage({ context, input, report }: { context: UiPluginContex
     }
   }
 
-  const addAddress = async (address: string) => {
-    const current = mobile.state
-    if (!current) return
-    if (current.customAddresses.includes(address)) {
-      setSelectedAddress(address)
-      return
-    }
-    if (current.customAddresses.length >= 50) throw new Error('You can save up to 50 custom addresses.')
-    const next = await mobile.configure({ customAddresses: [...current.customAddresses, address] })
-    setSelectedAddress(address)
-    setActionError(null)
-    if (!next.customAddresses.includes(address)) throw new Error('The address was not saved.')
-  }
-
-  const removeAddress = async (address: string) => {
-    const current = mobile.state
-    if (!current) return
-    const next = await mobile.configure({ customAddresses: current.customAddresses.filter((item) => item !== address) })
-    setSelectedAddress(next.interfaces[0]?.address ?? next.customAddresses[0] ?? '')
-    setActionError(null)
-  }
-
-  const refreshInterfaces = async () => {
-    try {
-      const interfaces = await mobile.refreshInterfaces()
-      if (!interfaces.some((item) => item.address === selectedAddress) && !mobile.state?.customAddresses.includes(selectedAddress)) {
-        setSelectedAddress(interfaces[0]?.address ?? mobile.state?.customAddresses[0] ?? '')
-      }
-      setActionError(null)
-    } catch (error) {
-      setActionError(messageOf(error))
-    }
-  }
 
   if (mobile.loading && mobile.state === null) {
     return <main className="ui-panel-content ui-stack"><p role="status">Loading Mobile…</p></main>
@@ -245,14 +212,12 @@ export function MobilePage({ context, input, report }: { context: UiPluginContex
               <p className="ui-text-muted">Step 2 of 2</p>
               <p>Pairing uses the selected LAN or Tailscale address. Relay is unavailable in this build.</p>
               <NetworkPicker
+                mobile={mobile}
                 interfaces={mobile.state.interfaces}
                 customAddresses={mobile.state.customAddresses}
                 selectedAddress={selectedAddress}
                 busy={busy}
-                onSelect={setSelectedAddress}
-                onRefresh={refreshInterfaces}
-                onAdd={addAddress}
-                onRemove={removeAddress}
+                onAddressChange={setSelectedAddress}
               />
             </div>
           </ToolPanelFrame>

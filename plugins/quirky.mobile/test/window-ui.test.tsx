@@ -7,6 +7,7 @@ import { DeviceList } from '../src/window/DeviceList'
 import { MobilePage } from '../src/window/MobilePage'
 import { MobileSettings } from '../src/window/MobileSettings'
 import { PairingPanel } from '../src/window/PairingPanel'
+import { NetworkPicker } from '../src/window/NetworkPicker'
 
 let root: Root | null = null
 let container: HTMLDivElement
@@ -91,6 +92,33 @@ function mobileCall(method: string, params: Record<string, unknown>) {
 }
 
 describe('Mobile desktop UI behavior', () => {
+  test('owns address removal and reports network refresh failures inside the picker', async () => {
+    const changes: unknown[] = []
+    const selections: string[] = []
+    const mobile = {
+      configure: async (value: { customAddresses: string[] }) => {
+        changes.push(value)
+        return { ...mobileState, ...value }
+      },
+      refreshInterfaces: async () => { throw new Error('interfaces unavailable') },
+    }
+    await render(<NetworkPicker mobile={mobile} interfaces={mobileState.interfaces} customAddresses={['phone.local']} selectedAddress="phone.local" onAddressChange={(address) => selections.push(address)} />)
+    await act(async () => {
+      const remove = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Remove selected custom address')
+      remove!.click()
+    })
+    expect(changes).toEqual([{ customAddresses: [] }])
+    expect(selections).toEqual(['192.168.1.20'])
+    await act(async () => {
+      const refresh = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Refresh network interfaces')
+      refresh!.click()
+    })
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('interfaces unavailable')
+
+    await render(<NetworkPicker mobile={mobile} interfaces={[]} customAddresses={[]} selectedAddress="" onAddressChange={(address) => selections.push(address)} />)
+    expect(container.querySelector('.ui-empty-state')?.textContent).toContain('No reachable address is available yet.')
+  })
+
   test('closes the enlarged pairing QR dialog by Escape and backdrop', async () => {
     await render(<PairingPanel offer={pairingResult} busy={false} error={null} buttonLabel="Generate QR code" onGenerate={async () => {}} />)
     await act(async () => {
