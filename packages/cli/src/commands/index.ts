@@ -22,6 +22,7 @@ import { skillInstall, skillShow, skillStatus } from './skill'
 import { status } from './status'
 import { diagnosticsMemory } from './diagnostics'
 import { themeList, themeSet } from './theme'
+import { keybindingDisable, keybindingList, keybindingReset, keybindingSet } from './keybinding'
 import {
   uiClosePanel,
   uiCloseTool,
@@ -93,6 +94,10 @@ export const COMMANDS: Command[] = [
   settingReset,
   themeList,
   themeSet,
+  keybindingList,
+  keybindingSet,
+  keybindingDisable,
+  keybindingReset,
   open,
   desktopPickFolder,
   api,
