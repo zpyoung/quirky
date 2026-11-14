@@ -140,6 +140,7 @@ export class NotificationsService {
   private lastStatus: string | null = null
   private readonly holds = new Set<BellHold>()
   private readonly timers = new Set<unknown>()
+  private readonly inFlight = new Map<string, Promise<unknown>>()
   private readonly askHeads = new Map<string, AskEscalation>()
   private askWatermark = 0
   private askReconcileQueued = false
@@ -428,7 +429,7 @@ export class NotificationsService {
     if (result !== 'dropped' && this.askHeads.get(head.key) === head) head.escalated = true
   }
 
-  /** A call to another plugin that gives up after the lookup timeout, so one silent handler cannot hold the queue. */
+  /** Shares identical calls still in flight, with a separate lookup deadline for each caller. */
   private async bounded(method: string, params: Record<string, unknown>): Promise<unknown> {
     const { promise: timeout, reject } = Promise.withResolvers<never>()
     const timer = this.setTimer(() => {
@@ -437,7 +438,18 @@ export class NotificationsService {
     }, this.lookupTimeoutMs)
     this.timers.add(timer)
     try {
-      return await Promise.race([this.context.call(method, params), timeout])
+      const key = JSON.stringify([method, params])
+      let call = this.inFlight.get(key)
+      if (!call) {
+        call = this.context.call(method, params)
+        this.inFlight.set(key, call)
+        const shared = call
+        const forget = () => {
+          if (this.inFlight.get(key) === shared) this.inFlight.delete(key)
+        }
+        void call.then(forget, forget)
+      }
+      return await Promise.race([call, timeout])
     } finally {
       this.clearTimer(timer)
       this.timers.delete(timer)

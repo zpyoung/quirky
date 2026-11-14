@@ -1,0 +1,58 @@
+name: Soak
+
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: Soak duration in minutes
+        default: '30'
+        type: string
+      slow_git:
+        description: Delay git worktree list by this many milliseconds
+        default: ''
+        type: string
+  pull_request:
+    paths:
+      - scripts/soak.ts
+      - scripts/soak/**
+      - .github/workflows/soak.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: soak-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: 1.4.0
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
+      - run: bun node_modules/playwright/cli.js install --with-deps chromium
+      - name: Run isolated soak
+        env:
+          MINUTES: ${{ github.event_name == 'pull_request' && '2' || inputs.minutes || '30' }}
+          SLOW_GIT: ${{ inputs.slow_git }}
+        run: |
+          export QUIRKY_HOME="$(mktemp -d)"
+          trap 'rm -rf "$QUIRKY_HOME"' EXIT
+          args=(--minutes "$MINUTES" --out soak)
+          if [ -n "$SLOW_GIT" ]; then args+=(--slow-git "$SLOW_GIT"); fi
+          bun scripts/soak.ts "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soak-${{ github.sha }}
+          path: soak/
+          retention-days: 14
