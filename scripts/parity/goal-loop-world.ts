@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
 import { get } from 'node:http'
 import { daemonEntryHash, readRuntime } from '@quirky/protocol/node'
@@ -20,8 +20,52 @@ const PLUGIN_IDS = [
   'quirky.agent-status', 'quirky.ask', 'quirky.structured', 'quirky.checks', 'quirky.loops', 'quirky.accounts'
 ] as const
 const ISOLATED_PATH_DIRECTORIES = ['/usr/bin', '/bin', '/usr/sbin', '/sbin']
+type ClaudeUsageListener = { url: string; stop(): Promise<void> }
 
-export type GoalLoopLogName = 'omp' | 'omp-input' | 'codex' | 'agy' | 'security' | 'orca' | 'egress'
+function createClaudeUsageListener(logPath: string, malformed: boolean): ClaudeUsageListener {
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: async (request) => {
+      const url = new URL(request.url)
+      const authorizationMatches = request.headers.get('authorization') === 'Bearer goal-loop-synthetic-access-token'
+      const betaMatches = request.headers.get('anthropic-beta') === 'oauth-2025-04-20'
+      const ok = request.method === 'GET' &&
+        url.pathname === '/api/oauth/usage' &&
+        authorizationMatches &&
+        betaMatches &&
+        !malformed
+      appendFileSync(logPath, `${JSON.stringify({
+        method: request.method,
+        path: url.pathname,
+        authorizationMatches,
+        betaMatches,
+        ok
+      })}\n`, { mode: 0o600 })
+      if (url.pathname !== '/api/oauth/usage') return new Response('not found', { status: 404 })
+      if (request.method !== 'GET') return new Response('method not allowed', { status: 405 })
+      if (request.headers.get('x-goal-loop-hold') === 'true') await Bun.sleep(250)
+      const body = malformed
+        ? '{malformed-claude-usage'
+        : JSON.stringify({
+            five_hour: { utilization: 17, resets_at: '2030-01-01T00:00:00.000Z' },
+            seven_day: { utilization: 43, resets_at: '2030-01-01T00:00:00.000Z' }
+          })
+      return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+  })
+  const url = `http://127.0.0.1:${server.port}/api/oauth/usage`
+  let stopPromise: Promise<void> | undefined
+  return {
+    url,
+    stop() {
+      stopPromise ??= server.stop(true)
+      return stopPromise
+    }
+  }
+}
+
+export type GoalLoopLogName = 'omp' | 'omp-input' | 'omp-signal' | 'claude' | 'claude-usage' | 'loop-check' | 'codex' | 'agy' | 'security' | 'orca' | 'egress'
 export type GoalLoopCliResult = { exitCode: number; stdout: string; stderr: string }
 export type GoalLoopCliOptions = { signal?: AbortSignal; timeoutMs?: number }
 export type GoalLoopWorldCleanupOptions = { signal?: AbortSignal; deadline?: number }
@@ -252,7 +296,14 @@ await import(${JSON.stringify(ptyEntry)})
 `, { mode: 0o600 })
 }
 
-function createWorldEnvironment(root: string, repoRoot: string, fixtures: GoalLoopFixturePaths, cliBootstrapEntry: string, ptyBootstrapEntry: string): Record<string, string> {
+function createWorldEnvironment(
+  root: string,
+  repoRoot: string,
+  fixtures: GoalLoopFixturePaths,
+  cliBootstrapEntry: string,
+  ptyBootstrapEntry: string,
+  claudeUsageUrl: string
+): Record<string, string> {
   const base = createIsolatedRuntimeEnvironment(root, { repoRoot })
   for (const key of ['TMPDIR', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME', 'XDG_RUNTIME_DIR']) {
     const directory = base[key]
@@ -280,6 +331,7 @@ function createWorldEnvironment(root: string, repoRoot: string, fixtures: GoalLo
     QUIRKY_PTY_HOST_ENTRY: ptyBootstrapEntry,
     CODEX_HOME: join(root, 'codex'),
     CLAUDE_CONFIG_DIR: join(root, 'claude'),
+    GOAL_LOOP_CLAUDE_USAGE_URL: claudeUsageUrl,
     GEMINI_CLI_HOME: join(root, 'gemini'),
     KIMI_CODE_HOME: join(root, 'kimi'),
     AGY_HOME: join(root, 'agy'),
@@ -396,31 +448,39 @@ type PreparedWorld = {
   fixtures: GoalLoopFixturePaths
   env: Record<string, string>
   scope: ProcessScope
+  claudeUsageListener: ClaudeUsageListener
   cliBootstrapEntry: string
   ptyBootstrapEntry: string
 }
 
 async function prepareWorld(root: string, repoRoot: string, faults?: GoalLoopFixtureFaults): Promise<PreparedWorld> {
   let scope: ProcessScope | undefined
+  let claudeUsageListener: ClaudeUsageListener | undefined
   try {
     const fixtures = installGoalLoopFixtures(root, faults)
-    installGoalLoopNetworkGuard(fixtures.networkPreload, fixtures.egressLog)
+    claudeUsageListener = createClaudeUsageListener(fixtures.claudeUsageLog, faults?.malformedClaudeUsage === true)
+    installGoalLoopNetworkGuard(fixtures.networkPreload, fixtures.egressLog, claudeUsageListener.url)
     const cliEntry = join(repoRoot, 'packages/cli/src/main.ts')
     const cliBootstrapEntry = join(root, 'fixtures', 'goal-loop-cli-bootstrap.ts')
     const ptyHostEntry = join(repoRoot, 'packages/pty-host/src/main.ts')
     const ptyBootstrapEntry = join(root, 'fixtures', 'goal-loop-pty-bootstrap.ts')
     writeCliBootstrap(cliBootstrapEntry, cliEntry, fixtures.networkPreload)
     writePtyBootstrap(ptyBootstrapEntry, ptyHostEntry, fixtures.networkPreload)
-    const env = createWorldEnvironment(root, repoRoot, fixtures, cliBootstrapEntry, ptyBootstrapEntry)
+    const env = createWorldEnvironment(root, repoRoot, fixtures, cliBootstrapEntry, ptyBootstrapEntry, claudeUsageListener.url)
     const rawScope = withOwnedProcessEnvironment(env, () => createProcessScope(root))
     scope = ownedScope(rawScope, env)
-    return { fixtures, env, scope, cliBootstrapEntry, ptyBootstrapEntry }
+    return { fixtures, env, scope, claudeUsageListener, cliBootstrapEntry, ptyBootstrapEntry }
   } catch (error) {
     let cleanupError: string | undefined
     try {
+      await claudeUsageListener?.stop()
+    } catch (failure) {
+      cleanupError = `Claude usage listener cleanup failed: ${errorText(failure)}`
+    }
+    try {
       if (scope) await scope.cleanup()
     } catch (failure) {
-      cleanupError = errorText(failure)
+      cleanupError = [cleanupError, errorText(failure)].filter(Boolean).join('; ')
     }
     try {
       rmSync(root, { recursive: true, force: true })
@@ -438,7 +498,7 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
   const repoRoot = realpathSync(resolve(import.meta.dir, '../..'))
   const root = realpathSync(mkdtempSync(join('/tmp', "quirky goal-loop 'fixture' ")))
   const prepared = await prepareWorld(root, repoRoot, options.faults)
-  const { fixtures, env, scope, cliBootstrapEntry, ptyBootstrapEntry } = prepared
+  const { fixtures, env, scope, claudeUsageListener, cliBootstrapEntry, ptyBootstrapEntry } = prepared
   const repoPath = join(root, 'repositories', "fixture's local repository")
   const cliEntry = join(repoRoot, 'packages/cli/src/main.ts')
   const daemonEntry = join(repoRoot, 'packages/daemon/src/main.ts')
@@ -508,6 +568,11 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
       const deadline = cleanupOptions.deadline ?? options.deadline ?? Date.now() + CLEANUP_DEFAULT_TIMEOUT_MS
       const signal = cleanupOptions.signal
       const cleanupErrors: string[] = []
+      try {
+        await claudeUsageListener.stop()
+      } catch (error) {
+        cleanupErrors.push(`Claude usage listener cleanup failed: ${errorText(error)}`)
+      }
       const ptyPid = readPtyPid(root)
       let ptyIdentity: PtyHostIdentity | undefined
       try {
@@ -783,6 +848,10 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
       const logs: Record<GoalLoopLogName, string> = {
         omp: fixtures.ompLog,
         'omp-input': fixtures.ompInputLog,
+        'omp-signal': fixtures.ompSignalLog,
+        claude: fixtures.claudeLog,
+        'claude-usage': fixtures.claudeUsageLog,
+        'loop-check': fixtures.loopCheckLog,
         codex: fixtures.codexLog,
         agy: fixtures.agyLog,
         security: fixtures.securityLog,
