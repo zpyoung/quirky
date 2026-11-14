@@ -1,0 +1,1340 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "panel:quirky.session-info/info": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.session-info/history": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.session-info/transcript": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/ui.tsx",
+        "quote": "context.toast(title, messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session-info/src/ui.tsx",
+          "quote": "context.toast(title, messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session-info/history",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "loading && <NoticeLine>Searching session history…</NoticeLine>"
+      },
+      "anchor": "loading &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "<NoticeLine>Searching session history…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session-info/history",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "error && <InlineError message={`Could not load session history: ${error}`} action={{ label: 'Retry', onAction: () => void load(query) }} />"
+      },
+      "anchor": "error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "<InlineError message={`Could not load session history: ${error}`} action={{ label: 'Retry', onAction: () => void load(query) }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session-info/history",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "!loading && !error && records.length === 0 && <EmptyState message=\"No matching sessions.\" />"
+      },
+      "anchor": "!loading && !error && records.length === 0 &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "<EmptyState message=\"No matching sessions.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session-info/history",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "rowError ? <InlineError key={name} message={rowError} /> : null"
+      },
+      "anchor": "rowError ?",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "<InlineError key={name} message={rowError} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "if (usage.status === 'waiting') return <NoticeLine>Waiting for the first completed turn…</NoticeLine>"
+      },
+      "anchor": "if (usage.status === 'waiting')",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<NoticeLine>Waiting for the first completed turn…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "refreshing && <NoticeLine>Refreshing usage…</NoticeLine>"
+      },
+      "anchor": "refreshing &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<NoticeLine>Refreshing usage…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "usage.error && <InlineError message={usage.error} />"
+      },
+      "anchor": "usage.error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<InlineError message={usage.error} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "if (detail.status === 'waiting') return <NoticeLine>Waiting for the first statusline update…</NoticeLine>"
+      },
+      "anchor": "if (detail.status === 'waiting')",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<NoticeLine>Waiting for the first statusline update…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "busy && <NoticeLine>Inspecting Hooks & MCP…</NoticeLine>"
+      },
+      "anchor": "busy &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<NoticeLine>Inspecting Hooks & MCP…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "error && <InlineError message={`Could not inspect Hooks & MCP: ${error}`} />"
+      },
+      "anchor": "error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<InlineError message={`Could not inspect Hooks & MCP: ${error}`} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "inspection?.error && <InlineError message={inspection.error} />"
+      },
+      "anchor": "inspection?.error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<InlineError message={inspection.error} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "inspection.mcp.length === 0 ? <EmptyState message=\"No configured servers found.\" /> : <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', listStyle: 'none', margin: '0', minWidth: '0', padding: '0' }}>\n          {inspection.mcp.map((server) => <li key={server.name}><ListRow title={server.name} description={`${server.transport} · ${displayLabel(server.state)}`} /></li>)}\n        </ul>"
+      },
+      "anchor": "inspection.mcp.length === 0 ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<EmptyState message=\"No configured servers found.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "loading && !projection && <NoticeLine>Loading session info…</NoticeLine>"
+      },
+      "anchor": "loading && !projection &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<NoticeLine>Loading session info…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "loading && projection && <NoticeLine>Refreshing session info…</NoticeLine>"
+      },
+      "anchor": "loading && projection &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<NoticeLine>Refreshing session info…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "loadError && <InlineError message={`Could not load session info: ${loadError}`} action={{ label: 'Retry', onAction: () => void retry() }} />"
+      },
+      "anchor": "loadError &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<InlineError message={`Could not load session info: ${loadError}`} action={{ label: 'Retry', onAction: () => void retry() }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "!loading && !loadError && projection?.info === null && <EmptyState message=\"No agent session. Focus a terminal pane with an agent session to inspect it here.\" />"
+      },
+      "anchor": "!loading && !loadError && projection?.info === null &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<EmptyState message=\"No agent session. Focus a terminal pane with an agent session to inspect it here.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "panel:quirky.session-info/info",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "actionError && <InlineError message={actionError} />"
+      },
+      "anchor": "actionError &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "<InlineError message={actionError} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session-info/transcript",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+        "quote": "view.kind === 'loading' && <NoticeLine>Loading transcript…</NoticeLine>"
+      },
+      "anchor": "view.kind === 'loading' &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+          "quote": "<NoticeLine>Loading transcript…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+          "quote": "import { EmptyState, InlineError, ListRow, NoticeLine, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session-info/transcript",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+        "quote": "view.kind === 'error' && <InlineError message={`Could not load transcript: ${view.message}`} action={{ label: 'Retry', onAction: () => void load() }} />"
+      },
+      "anchor": "view.kind === 'error' &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+          "quote": "<InlineError message={`Could not load transcript: ${view.message}`} action={{ label: 'Retry', onAction: () => void load() }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+          "quote": "import { EmptyState, InlineError, ListRow, NoticeLine, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session-info/transcript",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+        "quote": "view.kind === 'ready' && view.transcript.text === '' && <EmptyState message=\"This transcript has no entries yet.\" />"
+      },
+      "anchor": "view.kind === 'ready' && view.transcript.text === '' &&",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+          "quote": "<EmptyState message=\"This transcript has no entries yet.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+          "quote": "import { EmptyState, InlineError, ListRow, NoticeLine, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/ui.tsx",
+        "quote": "context.toast('Copied resume command', 'The command is on the clipboard.')"
+      },
+      "anchor": "context.toast(",
+      "reason": "This toast confirms a successful action rather than reporting an error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "!loading && !error && records.length > 0 && <ol aria-label=\"Session results\" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-8)', listStyle: 'none', margin: '0', minWidth: '0', padding: '0' }}>\n            {records.map((record) => <li key={record.id} data-session={record.id} style={{ minWidth: '0' }}>\n              <article style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', minWidth: '0' }}>\n                <ListRow\n                  title={record.title || record.agent}\n                  description={<span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-2)', minWidth: '0', overflowWrap: 'anywhere' }}>\n                    <span>{record.agent} · {record.status}{formatTimestamp(record.lastActivityAt) ? ` · ${formatTimestamp(record.lastActivityAt)}` : ''}</span>\n                    <span>Quirky ID: {record.id}</span>\n                    {record.providerSession?.id && <span>Provider ID: {record.providerSession.id}</span>}\n                  </span>}\n                />\n                <div style={ACTIONS_STYLE}>\n                  <Button aria-label={`Resume ${record.id}`} variant=\"primary\" onClick={() => void track('resume', record.id, context.executeCommand(COMMAND_RESUME, { session: record.id }))}>Resume</Button>\n                  <Button aria-label={`Fork ${record.id}`} onClick={() => void track('fork', record.id, context.executeCommand(COMMAND_FORK, { session: record.id }))}>Fork</Button>\n                  <Button aria-label={`Copy resume command ${record.id}`} onClick={() => void track('copy-resume-command', record.id, context.executeCommand(COMMAND_COPY_RESUME, { session: record.id }))}>{copied === record.id ? 'Copied' : 'Copy resume command'}</Button>\n                </div>\n                {(['resume', 'fork', 'copy-resume-command'] as const).map((name) => {\n                  const rowError = actionErrors[`${record.id}:${name}`]\n                  return rowError ? <InlineError key={name} message={rowError} /> : null\n                })}\n              </article>\n            </li>)}\n          </ol>"
+      },
+      "anchor": "!loading && !error && records.length > 0 &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "formatTimestamp(record.lastActivityAt) ? ` · ${formatTimestamp(record.lastActivityAt)}` : ''"
+      },
+      "anchor": "formatTimestamp(record.lastActivityAt) ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "record.providerSession?.id && <span>Provider ID: {record.providerSession.id}</span>"
+      },
+      "anchor": "record.providerSession?.id &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "copied === record.id ? 'Copied' : 'Copy resume command'"
+      },
+      "anchor": "copied === record.id ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "open ? '−' : '+'"
+      },
+      "anchor": "open ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "identity.providerSessionId ? [<Button key=\"copy\" aria-label=\"Copy ID\" onClick={() => void track(context.executeCommand(COMMAND_COPY_ID, { session }))}>{copied?.session === state.session && copied.kind === 'id' ? 'Copied' : 'Copy ID'}</Button>] : []"
+      },
+      "anchor": "identity.providerSessionId ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "copied?.session === state.session && copied.kind === 'id' ? 'Copied' : 'Copy ID'"
+      },
+      "anchor": "copied?.session === state.session && copied.kind === 'id' ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "identity.providerSessionId ? [\n      <Button key=\"vault\" aria-label=\"Open Vault\" onClick={() => void track(context.executeCommand(COMMAND_OPEN_VAULT, { agent: identity.agent, sessionId: identity.providerSessionId }))}>Open Vault</Button>\n    ] : []"
+      },
+      "anchor": "identity.providerSessionId ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "state.pane === null ? [] : [<Button key=\"focus\" aria-label=\"Focus pane\" onClick={() => void track(context.executeCommand(COMMAND_FOCUS_PANE, { session }))}>Focus pane</Button>]"
+      },
+      "anchor": "state.pane === null ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "identity.transcriptPath ? [\n      <Button key=\"transcript\" aria-label=\"Open transcript\" onClick={() => void track(context.executeCommand(COMMAND_OPEN_TRANSCRIPT, { session }))}>Open transcript</Button>,\n      <Button key=\"reveal\" aria-label=\"Reveal transcript\" onClick={() => void track(context.executeCommand(COMMAND_REVEAL_TRANSCRIPT, { session }))}>Reveal transcript</Button>\n    ] : []"
+      },
+      "anchor": "identity.transcriptPath ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "usage.freshness === 'stale' && <p role=\"status\">Stale{timestamp ? ` · As of ${timestamp}` : ''}</p>"
+      },
+      "anchor": "usage.freshness === 'stale' &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "<p role=\"status\">"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "This status note reports freshness or a preference change, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "timestamp ? ` · As of ${timestamp}` : ''"
+      },
+      "anchor": "timestamp ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "formatCount(value) ?? value"
+      },
+      "anchor": "formatCount(value) ??",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "usage.freshness === 'fresh' && timestamp && <p style={MUTED_STYLE}>As of {timestamp}</p>"
+      },
+      "anchor": "usage.freshness === 'fresh' && timestamp &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "canRetry && <Button aria-label=\"Retry usage\" onClick={onRetry} disabled={refreshing}>Retry</Button>"
+      },
+      "anchor": "canRetry &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "\"Retry usage\""
+      },
+      "anchor": "\"Retry usage\"",
+      "reason": "This text labels a control or confirms an action, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "g}>Retry</B"
+      },
+      "anchor": "Retry",
+      "reason": "This text labels a control or confirms an action, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "activity.label || activity.state"
+      },
+      "anchor": "activity.label ||",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "activity.toolName && <Row label=\"Tool\">{activity.toolName}</Row>"
+      },
+      "anchor": "activity.toolName &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "inputPreview && <Row label=\"Input preview\"><span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{inputPreview}</span></Row>"
+      },
+      "anchor": "inputPreview &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "formatCount(activity.subagentCount) ?? activity.subagentCount"
+      },
+      "anchor": "formatCount(activity.subagentCount) ??",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "updated && <p style={MUTED_STYLE}>Updated {updated}</p>"
+      },
+      "anchor": "updated &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "reset ? ` · resets ${reset}` : ''"
+      },
+      "anchor": "reset ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "used !== null && <Row label=\"Used\">{used}%</Row>"
+      },
+      "anchor": "used !== null &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "remaining !== null && <Row label=\"Remaining\">{remaining}%</Row>"
+      },
+      "anchor": "remaining !== null &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "window && <Row label=\"Window\">{window} tokens</Row>"
+      },
+      "anchor": "window &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "detail.used !== undefined && <Row label=\"Tokens used\">{formatCount(detail.used) ?? detail.used}</Row>"
+      },
+      "anchor": "detail.used !== undefined &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "formatCount(detail.used) ?? detail.used"
+      },
+      "anchor": "formatCount(detail.used) ??",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "detail.remaining !== undefined && <Row label=\"Tokens remaining\">{formatCount(detail.remaining) ?? detail.remaining}</Row>"
+      },
+      "anchor": "detail.remaining !== undefined &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "formatCount(detail.remaining) ?? detail.remaining"
+      },
+      "anchor": "formatCount(detail.remaining) ??",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "detail.estimated && <p style={MUTED_STYLE}>Estimated from transcript</p>"
+      },
+      "anchor": "detail.estimated &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "detail.planWindows?.fiveHour && <PlanWindowRow label=\"5 hour plan\" plan={detail.planWindows.fiveHour} />"
+      },
+      "anchor": "detail.planWindows?.fiveHour &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "detail.planWindows?.sevenDay && <PlanWindowRow label=\"7 day plan\" plan={detail.planWindows.sevenDay} />"
+      },
+      "anchor": "detail.planWindows?.sevenDay &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "<div>\n      {used !== null && <Row label=\"Used\">{used}%</Row>}\n      {remaining !== null && <Row label=\"Remaining\">{remaining}%</Row>}\n      {window && <Row label=\"Window\">{window} tokens</Row>}\n      {detail.used !== undefined && <Row label=\"Tokens used\">{formatCount(detail.used) ?? detail.used}</Row>}\n      {detail.remaining !== undefined && <Row label=\"Tokens remaining\">{formatCount(detail.remaining) ?? detail.remaining}</Row>}\n      {detail.estimated && <p style={MUTED_STYLE}>Estimated from transcript</p>}\n      {detail.planWindows?.fiveHour && <PlanWindowRow label=\"5 hour plan\" plan={detail.planWindows.fiveHour} />}\n      {detail.planWindows?.sevenDay && <PlanWindowRow label=\"7 day plan\" plan={detail.planWindows.sevenDay} />}\n      {updated && <p style={MUTED_STYLE}>As of {updated}</p>}\n    </div>"
+      },
+      "anchor": "updated &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "files.added !== undefined && <Row label=\"Lines added\">+{formatCount(files.added) ?? files.added}</Row>"
+      },
+      "anchor": "files.added !== undefined &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "formatCount(files.added) ?? files.added"
+      },
+      "anchor": "formatCount(files.added) ??",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "files.removed !== undefined && <Row label=\"Lines removed\">−{formatCount(files.removed) ?? files.removed}</Row>"
+      },
+      "anchor": "files.removed !== undefined &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "formatCount(files.removed) ?? files.removed"
+      },
+      "anchor": "formatCount(files.removed) ??",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "<div>\n      {files.added !== undefined && <Row label=\"Lines added\">+{formatCount(files.added) ?? files.added}</Row>}\n      {files.removed !== undefined && <Row label=\"Lines removed\">−{formatCount(files.removed) ?? files.removed}</Row>}\n      {updated && <p style={MUTED_STYLE}>As of {updated}</p>}\n    </div>"
+      },
+      "anchor": "updated &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "inspection?.hooks && <>\n        <SectionHeader title=\"Hooks\" />\n        <Row label=\"Status\">{displayLabel(inspection.hooks.state)}</Row>\n        {inspection.hooks.detail && <p style={{ overflowWrap: 'anywhere' }}>{inspection.hooks.detail}</p>}\n      </>"
+      },
+      "anchor": "inspection?.hooks &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "inspection.hooks.detail && <p style={{ overflowWrap: 'anywhere' }}>{inspection.hooks.detail}</p>"
+      },
+      "anchor": "inspection.hooks.detail &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "statuslineLabel && <>\n        <SectionHeader title={`Statusline · ${statuslineLabel}`} />\n        {statusline?.detail && <p style={{ overflowWrap: 'anywhere' }}>{statusline.detail}</p>}\n        <p>Telemetry preference changes apply on the next launch; the running session is unchanged.</p>\n        {needsConsent && <>\n          <p>Quirky preserves your existing statusline command when you consent to chaining.</p>\n          <Button aria-label=\"Enable session telemetry\" onClick={onEnable} disabled={enableBusy}>{enableBusy ? 'Updating…' : 'Enable session telemetry'}</Button>\n        </>}\n        {enabled && <Button aria-label=\"Disable session telemetry\" onClick={onDisable} disabled={enableBusy}>{enableBusy ? 'Updating…' : 'Disable session telemetry'}</Button>}\n      </>"
+      },
+      "anchor": "statuslineLabel &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "statusline?.detail && <p style={{ overflowWrap: 'anywhere' }}>{statusline.detail}</p>"
+      },
+      "anchor": "statusline?.detail &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "needsConsent && <>\n          <p>Quirky preserves your existing statusline command when you consent to chaining.</p>\n          <Button aria-label=\"Enable session telemetry\" onClick={onEnable} disabled={enableBusy}>{enableBusy ? 'Updating…' : 'Enable session telemetry'}</Button>\n        </>"
+      },
+      "anchor": "needsConsent &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "enableBusy ? 'Updating…' : 'Enable session telemetry'"
+      },
+      "anchor": "enableBusy ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "enabled && <Button aria-label=\"Disable session telemetry\" onClick={onDisable} disabled={enableBusy}>{enableBusy ? 'Updating…' : 'Disable session telemetry'}</Button>"
+      },
+      "anchor": "enabled &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "enableBusy ? 'Updating…' : 'Disable session telemetry'"
+      },
+      "anchor": "enableBusy ?",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "nextLaunchEffect && <p role=\"status\" style={{ overflowWrap: 'anywhere' }}>{nextLaunchEffect}</p>"
+      },
+      "anchor": "nextLaunchEffect &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "role=\"status\" style={{ overflowWrap: 'anywhere' }}"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "This status note reports freshness or a preference change, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "inspection && <>\n        <SectionHeader title=\"Configured MCP servers\" />\n        {inspection.mcp.length === 0 ? <EmptyState message=\"No configured servers found.\" /> : <ul style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', listStyle: 'none', margin: '0', minWidth: '0', padding: '0' }}>\n          {inspection.mcp.map((server) => <li key={server.name}><ListRow title={server.name} description={`${server.transport} · ${displayLabel(server.state)}`} /></li>)}\n        </ul>}\n        {formatTimestamp(inspection.updatedAt) && <p style={MUTED_STYLE}>As of {formatTimestamp(inspection.updatedAt)}</p>}\n      </>"
+      },
+      "anchor": "inspection &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "formatTimestamp(inspection.updatedAt) && <p style={MUTED_STYLE}>As of {formatTimestamp(inspection.updatedAt)}</p>"
+      },
+      "anchor": "formatTimestamp(inspection.updatedAt) &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "\"Retry\""
+      },
+      "anchor": "\"Retry\"",
+      "reason": "This text labels a control or confirms an action, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "y}>Retry</B"
+      },
+      "anchor": "Retry",
+      "reason": "This text labels a control or confirms an action, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "info && <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-4)', minWidth: '0', paddingBottom: 'var(--ui-space-8)', borderBottom: 'var(--ui-border-width) solid var(--ui-border)' }}>\n            <strong style={{ overflowWrap: 'anywhere' }}>{headerModel}</strong>\n            {contextPercentage !== null && contextBand !== null && <div data-context-threshold={contextBand}>\n              <strong>{contextPercentage}% context used</strong>\n              <div role=\"progressbar\" aria-label=\"Context used\" aria-valuemin={0} aria-valuemax={100} aria-valuenow={contextPercentage} style={{ height: 'var(--ui-space-4)', marginTop: 'var(--ui-space-4)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-mark)', overflow: 'hidden' }}>\n                <div style={{ width: `${contextPercentage}%`, height: '100%', background: contextBand === 'danger' ? 'var(--ui-failing)' : contextBand === 'strong' ? 'var(--ui-accent)' : 'var(--ui-muted)' }} />\n              </div>\n              {formatTimestamp(info.context?.updatedAt) && <small style={MUTED_STYLE}>As of {formatTimestamp(info.context?.updatedAt)}</small>}\n            </div>}\n          </div>"
+      },
+      "anchor": "info &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "contextPercentage !== null && contextBand !== null && <div data-context-threshold={contextBand}>\n              <strong>{contextPercentage}% context used</strong>\n              <div role=\"progressbar\" aria-label=\"Context used\" aria-valuemin={0} aria-valuemax={100} aria-valuenow={contextPercentage} style={{ height: 'var(--ui-space-4)', marginTop: 'var(--ui-space-4)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-mark)', overflow: 'hidden' }}>\n                <div style={{ width: `${contextPercentage}%`, height: '100%', background: contextBand === 'danger' ? 'var(--ui-failing)' : contextBand === 'strong' ? 'var(--ui-accent)' : 'var(--ui-muted)' }} />\n              </div>\n              {formatTimestamp(info.context?.updatedAt) && <small style={MUTED_STYLE}>As of {formatTimestamp(info.context?.updatedAt)}</small>}\n            </div>"
+      },
+      "anchor": "contextPercentage !== null && contextBand !== null &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "formatTimestamp(info.context?.updatedAt) && <small style={MUTED_STYLE}>As of {formatTimestamp(info.context?.updatedAt)}</small>"
+      },
+      "anchor": "formatTimestamp(info.context?.updatedAt) &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "projection && info && <div style={BODY_STYLE}>\n            {actionError && <InlineError message={actionError} />}\n            {CORE_SECTIONS.filter(({ id }) => {\n              if (id === 'identity' || id === 'liveActivity') return true\n              if (id === 'usage') return info?.usage !== undefined\n              if (id === 'context') return info?.context !== undefined\n              if (id === 'filesTouched') return info?.filesTouched !== undefined\n              return hasHooksSection\n            }).map(({ id, title }) => <AccordionSection key={id} id={id} title={title} open={openSections.includes(id)} onToggle={() => toggle(id)}>\n              {id === 'identity' && <IdentityContent state={projection} copied={copied} context={context} track={track} />}\n              {id === 'usage' && info.usage && <UsageContent usage={info.usage} busy={retryBusy || inspectionBusy} onRetry={() => void retry()} />}\n              {id === 'liveActivity' && <LiveActivityContent activity={info.liveActivity} />}\n              {id === 'context' && info.context && <ContextContent detail={info.context} />}\n              {id === 'filesTouched' && info.filesTouched && <FilesContent files={info.filesTouched} />}\n              {id === 'hooksAndMcp' && <InspectionContent inspection={info.hooksAndMcp} busy={inspectionBusy} error={inspectionError} nextLaunchEffect={nextLaunchEffect} enableBusy={enableBusy} onRetry={() => void retry()} onEnable={() => void setTelemetry(true)} onDisable={() => void setTelemetry(false)} />}\n            </AccordionSection>)}\n          </div>"
+      },
+      "anchor": "projection && info &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "id === 'identity' && <IdentityContent state={projection} copied={copied} context={context} track={track} />"
+      },
+      "anchor": "id === 'identity' &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "id === 'usage' && info.usage && <UsageContent usage={info.usage} busy={retryBusy || inspectionBusy} onRetry={() => void retry()} />"
+      },
+      "anchor": "id === 'usage' && info.usage &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "id === 'liveActivity' && <LiveActivityContent activity={info.liveActivity} />"
+      },
+      "anchor": "id === 'liveActivity' &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "id === 'context' && info.context && <ContextContent detail={info.context} />"
+      },
+      "anchor": "id === 'context' && info.context &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "id === 'filesTouched' && info.filesTouched && <FilesContent files={info.filesTouched} />"
+      },
+      "anchor": "id === 'filesTouched' && info.filesTouched &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "id === 'hooksAndMcp' && <InspectionContent inspection={info.hooksAndMcp} busy={inspectionBusy} error={inspectionError} nextLaunchEffect={nextLaunchEffect} enableBusy={enableBusy} onRetry={() => void retry()} onEnable={() => void setTelemetry(true)} onDisable={() => void setTelemetry(false)} />"
+      },
+      "anchor": "id === 'hooksAndMcp' &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+        "quote": "view.kind === 'ready' && view.transcript.text !== '' && <>\n            <ListRow title=\"Transcript path\" description={view.transcript.path} />\n            <pre aria-label=\"Transcript content\" style={{ flex: '1', minHeight: '0', overflow: 'auto', margin: '0', padding: 'var(--ui-space-12)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: 'var(--ui-surface)', border: 'var(--ui-border-width) solid var(--ui-border)', borderRadius: 'var(--ui-radius-control)' }}>{view.transcript.text}</pre>\n          </>"
+      },
+      "anchor": "view.kind === 'ready' && view.transcript.text !== '' &&",
+      "reason": "This conditional renders optional content or a control, not a loading, empty, or error state."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "onChange={(event) => setQuery(event.currentTarget.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Search text is draft input, not a committed user action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "onAction: () => void load(query)"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "context.call('quirky.session-info/history', value.trim() === '' ? {} : { query: value })"
+        },
+        "target": "quirky.session-info/history",
+        "via": [
+          {
+            "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+            "quote": "async function load(value: string): Promise<void> {\n    const request = ++requestRef.current\n    setLoading(true)\n    setError(null)\n    try {\n      const result = await context.call('quirky.session-info/history', value.trim() === '' ? {} : { query: value }) as Session[]\n      if (request !== requestRef.current) return\n      setRecords(result)\n      setLoading(false)\n    } catch (cause) {\n      if (request !== requestRef.current) return\n      setLoading(false)\n      setError(messageOf(cause))\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "onClick={() => void track('resume', record.id, context.executeCommand(COMMAND_RESUME, { session: record.id }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "context.executeCommand(COMMAND_RESUME, { session: record.id })"
+        },
+        "target": "command:quirky.session-info/resume"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "onClick={() => void track('fork', record.id, context.executeCommand(COMMAND_FORK, { session: record.id }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "context.executeCommand(COMMAND_FORK, { session: record.id })"
+        },
+        "target": "command:quirky.session-info/fork"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+        "quote": "onClick={() => void track('copy-resume-command', record.id, context.executeCommand(COMMAND_COPY_RESUME, { session: record.id }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/HistoryView.tsx",
+          "quote": "context.executeCommand(COMMAND_COPY_RESUME, { session: record.id })"
+        },
+        "target": "command:quirky.session-info/copy-resume-command"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={onToggle}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The accordion forwards its toggle callback to its owner."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={() => void track(context.executeCommand(COMMAND_COPY_ID, { session }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.executeCommand(COMMAND_COPY_ID, { session })"
+        },
+        "target": "command:quirky.session-info/copy-id"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={() => void track(context.executeCommand(COMMAND_OPEN_HISTORY, { session }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.executeCommand(COMMAND_OPEN_HISTORY, { session })"
+        },
+        "target": "command:quirky.session-info/open-history"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={() => void track(context.executeCommand(COMMAND_OPEN_VAULT, { agent: identity.agent, sessionId: identity.providerSessionId }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.executeCommand(COMMAND_OPEN_VAULT, { agent: identity.agent, sessionId: identity.providerSessionId })"
+        },
+        "target": "command:quirky.vault/open"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={() => void track(context.executeCommand(COMMAND_FOCUS_PANE, { session }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.executeCommand(COMMAND_FOCUS_PANE, { session })"
+        },
+        "target": "command:quirky.session-info/focus-pane"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={() => void track(context.executeCommand(COMMAND_OPEN_TRANSCRIPT, { session }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.executeCommand(COMMAND_OPEN_TRANSCRIPT, { session })"
+        },
+        "target": "command:quirky.session-info/open-transcript"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={() => void track(context.executeCommand(COMMAND_REVEAL_TRANSCRIPT, { session }))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.executeCommand(COMMAND_REVEAL_TRANSCRIPT, { session })"
+        },
+        "target": "command:quirky.session-info/reveal-transcript"
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "aria-label=\"Retry usage\" onClick={onRetry} disabled={refreshing}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Usage Retry button forwards its callback to the panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={onEnable}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Enable button forwards its callback to the panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onClick={onDisable}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Disable button forwards its callback to the panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "aria-label=\"Retry\" onClick={onRetry} disabled={busy}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Hooks & MCP Retry button forwards its callback to the panel."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onAction: () => void retry()"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.call('quirky.session-info/get', {})"
+        },
+        "target": "quirky.session-info/get",
+        "via": [
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "async function retry(): Promise<void> {\n    setActionError(null)\n    setLoadError(null)\n    const current = projectionRef.current\n    setRetryBusy(true)\n    try {\n      if (current?.session) await inspect(current.session, true)\n      await reload()\n    } finally {\n      if (aliveRef.current) setRetryBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "async function reload(clearFirst = false): Promise<void> {\n    requestRef.current++\n    if (clearFirst) {\n      updateProjection(null)\n      setLoading(true)\n      setLoadError(null)\n      setActionError(null)\n      telemetryRequestRef.current++\n      setEnableBusy(false)\n    }\n    refreshQueuedRef.current = true\n    const activeLoop = refreshLoopRef.current\n    if (activeLoop) {\n      await activeLoop\n      return\n    }\n    const loop = (async () => {\n      try {\n        while (refreshQueuedRef.current && aliveRef.current) {\n          refreshQueuedRef.current = false\n          const request = requestRef.current\n          setLoading(projectionRef.current === null)\n          setLoadError(null)\n          try {\n            const fetched = await context.call('quirky.session-info/get', {}) as PanelState\n            if (!aliveRef.current || request !== requestRef.current) continue\n            let next = fetched\n            const current = projectionRef.current\n            const previousSession = current?.session\n            if (previousSession !== next.session) {\n              inspectionRequestRef.current++\n              telemetryRequestRef.current++\n              inspectedSessionRef.current = null\n              setInspectionBusy(false)\n              setEnableBusy(false)\n              setInspectionError(null)\n              setNextLaunchEffect(null)\n            } else if (current?.info?.hooksAndMcp && next.info && !next.info.hooksAndMcp) {\n              next = { ...next, info: { ...next.info, hooksAndMcp: current.info.hooksAndMcp } }\n            }\n            updateProjection(next)\n            setLoading(false)\n          } catch (error) {\n            if (!aliveRef.current || request !== requestRef.current) continue\n            setLoading(false)\n            setLoadError(messageOf(error))\n          }\n        }\n      } finally {\n        refreshLoopRef.current = null\n      }\n    })()\n    refreshLoopRef.current = loop\n    await loop\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onToggle={() => toggle(id)}"
+      },
+      "anchor": "onToggle",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.call('quirky.session-info/sections', { open })"
+        },
+        "target": "quirky.session-info/sections",
+        "via": [
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "function toggle(id: SectionId): void {\n    const current = projectionRef.current\n    if (!current) return\n    const nextOpen = new Set(current.openSections)\n    if (nextOpen.has(id)) nextOpen.delete(id)\n    else nextOpen.add(id)\n    const open = [...nextOpen]\n    updateProjection({ ...current, openSections: open })\n    sectionWritesRef.current = sectionWritesRef.current.catch(() => undefined).then(async () => {\n      try {\n        const result = await context.call('quirky.session-info/sections', { open }) as { open: SectionId[] }\n        const latest = projectionRef.current\n        if (aliveRef.current && latest && latest.openSections.join('\\0') === open.join('\\0')) updateProjection({ ...latest, openSections: result.open })\n      } catch (error) {\n        if (aliveRef.current) setActionError(messageOf(error))\n      }\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "usage={info.usage} busy={retryBusy || inspectionBusy} onRetry={() => void retry()}"
+      },
+      "anchor": "onRetry",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.call('quirky.session-info/inspect', { session })"
+        },
+        "target": "quirky.session-info/inspect",
+        "via": [
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "async function retry(): Promise<void> {\n    setActionError(null)\n    setLoadError(null)\n    const current = projectionRef.current\n    setRetryBusy(true)\n    try {\n      if (current?.session) await inspect(current.session, true)\n      await reload()\n    } finally {\n      if (aliveRef.current) setRetryBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "async function inspect(session: string, force = false): Promise<void> {\n    if (!force && inspectedSessionRef.current === session) return\n    inspectedSessionRef.current = session\n    const request = ++inspectionRequestRef.current\n    setInspectionBusy(true)\n    setInspectionError(null)\n    try {\n      const inspection = await context.call('quirky.session-info/inspect', { session }) as Inspection\n      if (!aliveRef.current || request !== inspectionRequestRef.current || projectionRef.current?.session !== session) return\n      const current = projectionRef.current\n      if (current?.info) updateProjection({ ...current, info: { ...current.info, hooksAndMcp: inspection } })\n    } catch (error) {\n      if (aliveRef.current && request === inspectionRequestRef.current && projectionRef.current?.session === session) setInspectionError(messageOf(error))\n    } finally {\n      if (aliveRef.current && request === inspectionRequestRef.current) setInspectionBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "inspection={info.hooksAndMcp} busy={inspectionBusy} error={inspectionError} nextLaunchEffect={nextLaunchEffect} enableBusy={enableBusy} onRetry={() => void retry()} onEnable={() => void setTelemetry(true)} onDisable={() => void setTelemetry(false)}"
+      },
+      "anchor": "onRetry",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.call('quirky.session-info/inspect', { session })"
+        },
+        "target": "quirky.session-info/inspect",
+        "via": [
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "async function retry(): Promise<void> {\n    setActionError(null)\n    setLoadError(null)\n    const current = projectionRef.current\n    setRetryBusy(true)\n    try {\n      if (current?.session) await inspect(current.session, true)\n      await reload()\n    } finally {\n      if (aliveRef.current) setRetryBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "async function inspect(session: string, force = false): Promise<void> {\n    if (!force && inspectedSessionRef.current === session) return\n    inspectedSessionRef.current = session\n    const request = ++inspectionRequestRef.current\n    setInspectionBusy(true)\n    setInspectionError(null)\n    try {\n      const inspection = await context.call('quirky.session-info/inspect', { session }) as Inspection\n      if (!aliveRef.current || request !== inspectionRequestRef.current || projectionRef.current?.session !== session) return\n      const current = projectionRef.current\n      if (current?.info) updateProjection({ ...current, info: { ...current.info, hooksAndMcp: inspection } })\n    } catch (error) {\n      if (aliveRef.current && request === inspectionRequestRef.current && projectionRef.current?.session === session) setInspectionError(messageOf(error))\n    } finally {\n      if (aliveRef.current && request === inspectionRequestRef.current) setInspectionBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onEnable={() => void setTelemetry(true)}"
+      },
+      "anchor": "onEnable",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.call('quirky.session-info/enableTelemetry', { session, enabled })"
+        },
+        "target": "quirky.session-info/enableTelemetry",
+        "via": [
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "async function setTelemetry(enabled: boolean): Promise<void> {\n    const session = projectionRef.current?.session\n    if (!session) return\n    const request = ++telemetryRequestRef.current\n    setEnableBusy(true)\n    setActionError(null)\n    try {\n      const result = await context.call('quirky.session-info/enableTelemetry', { session, enabled }) as EnableTelemetryResult\n      if (!aliveRef.current || request !== telemetryRequestRef.current || projectionRef.current?.session !== session) return\n      setNextLaunchEffect(result.nextLaunchEffect)\n      const current = projectionRef.current\n      const prior = current?.info?.hooksAndMcp\n      if (current?.info && prior && result.statusline) {\n        updateProjection({ ...current, info: { ...current.info, hooksAndMcp: { ...prior, statusline: result.statusline } } })\n      }\n    } catch (error) {\n      if (aliveRef.current && request === telemetryRequestRef.current) setActionError(messageOf(error))\n    } finally {\n      if (aliveRef.current && request === telemetryRequestRef.current) setEnableBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+        "quote": "onDisable={() => void setTelemetry(false)}"
+      },
+      "anchor": "onDisable",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+          "quote": "context.call('quirky.session-info/enableTelemetry', { session, enabled })"
+        },
+        "target": "quirky.session-info/enableTelemetry",
+        "via": [
+          {
+            "file": "plugins/quirky.session-info/src/window/SessionInfoPanel.tsx",
+            "quote": "async function setTelemetry(enabled: boolean): Promise<void> {\n    const session = projectionRef.current?.session\n    if (!session) return\n    const request = ++telemetryRequestRef.current\n    setEnableBusy(true)\n    setActionError(null)\n    try {\n      const result = await context.call('quirky.session-info/enableTelemetry', { session, enabled }) as EnableTelemetryResult\n      if (!aliveRef.current || request !== telemetryRequestRef.current || projectionRef.current?.session !== session) return\n      setNextLaunchEffect(result.nextLaunchEffect)\n      const current = projectionRef.current\n      const prior = current?.info?.hooksAndMcp\n      if (current?.info && prior && result.statusline) {\n        updateProjection({ ...current, info: { ...current.info, hooksAndMcp: { ...prior, statusline: result.statusline } } })\n      }\n    } catch (error) {\n      if (aliveRef.current && request === telemetryRequestRef.current) setActionError(messageOf(error))\n    } finally {\n      if (aliveRef.current && request === telemetryRequestRef.current) setEnableBusy(false)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+        "quote": "onAction: () => void load()"
+      },
+      "anchor": "onAction",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+          "quote": "context.call('quirky.session-info/transcript', { session })"
+        },
+        "target": "quirky.session-info/transcript",
+        "via": [
+          {
+            "file": "plugins/quirky.session-info/src/window/TranscriptView.tsx",
+            "quote": "async function load(): Promise<void> {\n    const request = ++requestRef.current\n    if (!session) {\n      setView({ kind: 'error', message: 'No session was selected for this transcript.' })\n      return\n    }\n    setView({ kind: 'loading' })\n    try {\n      const transcript = await context.call('quirky.session-info/transcript', { session }) as TranscriptResult\n      if (request === requestRef.current) setView({ kind: 'ready', transcript })\n    } catch (error) {\n      if (request === requestRef.current) setView({ kind: 'error', message: messageOf(error) })\n    }\n  }"
+          }
+        ]
+      }
+    }
+  ]
+}
