@@ -1,0 +1,649 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {},
+  "states": [
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "error &&"
+      },
+      "anchor": "error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+          "quote": "<InlineError message={error} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+          "quote": "import { Badge, Button, Dialog, FormRow, InlineError, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "<FormRow label=\"L"
+      },
+      "anchor": "<FormRow",
+      "render": {
+        "component": "FormRow",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+          "quote": "<FormRow label=\"Location base\" htmlFor={`${id}-base`} error={errors.base || undefined}>\n                  <select id={`${id}-base`} className=\"ui-text-field__input\" value={selectedBase} onChange={(event) => setSelectedBase(event.target.value)}>\n                    <option value=\"\">Choose a location base</option>\n                    {availableBases.map((base) => <option key={base.value} value={base.value}>{base.label}</option>)}\n                  </select>\n                </FormRow>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+          "quote": "import { Button, Dialog, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "<FormRow key={field.key} label={label} htmlFor={id} error={errors[field.key] || undefined}>\n                <s"
+      },
+      "anchor": "<FormRow",
+      "render": {
+        "component": "FormRow",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+          "quote": "<FormRow key={field.key} label={label} htmlFor={id} error={errors[field.key] || undefined}>\n                <select id={id} className=\"ui-text-field__input\" value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)}>\n                  <option value=\"\">Choose {label.toLowerCase()}</option>\n                  {field.options.map((option) => <option value={option} key={option}>{option}</option>)}\n                </select>\n              </FormRow>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+          "quote": "import { Button, Dialog, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "<FormRow key={field.key} label={label} htmlFor={id} error={errors[field.key] || undefined}>\n                <t"
+      },
+      "anchor": "<FormRow",
+      "render": {
+        "component": "FormRow",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+          "quote": "<FormRow key={field.key} label={label} htmlFor={id} error={errors[field.key] || undefined}>\n                <textarea id={id} className=\"ui-text-field__input\" rows={3} value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)} />\n              </FormRow>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+          "quote": "import { Button, Dialog, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "message && !createdMatches &&"
+      },
+      "anchor": "message && !createdMatches &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+          "quote": "<InlineError message={message} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+          "quote": "import { Button, Dialog, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "conflict &&"
+      },
+      "anchor": "conflict &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+          "quote": "<InlineError message={`Review changed while you were acting: ${conflict}. Revisions changed; review the refreshed candidates before confirming again.`} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+          "quote": "import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "error &&"
+      },
+      "anchor": "error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+          "quote": "<InlineError message={`Could not load review candidates: ${error}`} action={{ label: 'Retry', onAction: onRetry }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+          "quote": "import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "busy\n          ?"
+      },
+      "anchor": "busy\n          ?",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+          "quote": "<NoticeLine>Loading review candidates…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+          "quote": "import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.ledger/ledger",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "candidates.length === 0 ?"
+      },
+      "anchor": "candidates.length === 0 ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+          "quote": "<EmptyState message=\"No review candidates match these filters.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+          "quote": "import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "location ??"
+      },
+      "anchor": "location ??",
+      "reason": "This fallback formats a content value when no location label is available; it is detail copy, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "entry.reviewed ? 'Reviewed' : 'R"
+      },
+      "anchor": "entry.reviewed ?",
+      "reason": "This branch chooses the Review or Reviewed button label from the entry flag; it changes control copy, not an application state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "entry.reviewed ? 'Reviewed' : 'U"
+      },
+      "anchor": "entry.reviewed ?",
+      "reason": "This branch chooses the Reviewed or Unreviewed badge text from the entry flag; it describes the entry rather than an application state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "entry.origin.workspaceId ??"
+      },
+      "anchor": "entry.origin.workspaceId ??",
+      "reason": "Missing optional origin workspaceId is shown as Not recorded in the detail view; this data fallback is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "entry.origin.owner ?"
+      },
+      "anchor": "entry.origin.owner ?",
+      "reason": "Missing optional origin owner is shown as Not recorded in the detail view; this data fallback is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "entry.origin.branch ??"
+      },
+      "anchor": "entry.origin.branch ??",
+      "reason": "Missing optional origin branch is shown as Not recorded in the detail view; this data fallback is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "entry.origin.host ??"
+      },
+      "anchor": "entry.origin.host ??",
+      "reason": "Missing optional origin host is shown as Not recorded in the detail view; this data fallback is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "entry.origin.revision ??"
+      },
+      "anchor": "entry.origin.revision ??",
+      "reason": "Missing optional origin revision is shown as Not recorded in the detail view; this data fallback is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "entry.origin.observedAt ??"
+      },
+      "anchor": "entry.origin.observedAt ??",
+      "reason": "Missing optional origin observedAt is shown as Not recorded in the detail view; this data fallback is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "change.changedFields.join(', ') ||"
+      },
+      "anchor": "change.changedFields.join(', ') ||",
+      "reason": "An empty changed-fields list is displayed as created in revision history; this is history copy, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "createdMatches ?"
+      },
+      "anchor": "createdMatches ?",
+      "reason": "This branch changes the dialog action label from Cancel to Done after duplicate matches; it does not represent an application state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "!createdMatches && ("
+      },
+      "anchor": "!createdMatches &&",
+      "reason": "This branch hides the submit action after a successful create with duplicates; it is dialog action visibility, not loading, empty, or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "entry ? '"
+      },
+      "anchor": "entry ?",
+      "reason": "This branch labels the submit action for edit versus create mode; it is action copy, not a state message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "!entry && ("
+      },
+      "anchor": "!entry &&",
+      "reason": "The type selector is available only while creating an entry; this is form-mode structure, not loading, empty, or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "if (field.key === 'file' || field.key === 'file_under_test') {\n         "
+      },
+      "anchor": "if (field.key === 'file' || field.key === 'file_under_test')",
+      "reason": "This branch selects the file-location control group for file-based entry types; it is dynamic form structure, not an application state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "external && <"
+      },
+      "anchor": "external &&",
+      "reason": "The external-host field appears only when the local External location checkbox is selected; it is form structure, not loading, empty, or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "if (field.options) {\n         "
+      },
+      "anchor": "if (field.options)",
+      "reason": "This branch renders a choice field for enum-backed entry data; it is dynamic form structure, not an application state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "if (field.multiline)"
+      },
+      "anchor": "if (field.multiline)",
+      "reason": "This branch renders a multiline field for the current entry type; it is dynamic form structure, not an application state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "createdMatches && <N"
+      },
+      "anchor": "createdMatches &&",
+      "reason": "This branch adds advisory duplicate guidance after creation; the success notice is not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "<NoticeLine"
+      },
+      "anchor": "<NoticeLine",
+      "reason": "This NoticeLine contains advisory duplicate guidance after creation; it is feedback, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "createdMatches && (\n          <"
+      },
+      "anchor": "createdMatches &&",
+      "reason": "This section lists possible duplicates after creation for human review; it is supplemental content, not loading, empty, or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "candidate.stale ? 's"
+      },
+      "anchor": "candidate.stale ?",
+      "reason": "This branch labels an individual candidate stale or fresh; it describes evidence status rather than loading, empty, or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "candidate.evidence &&"
+      },
+      "anchor": "candidate.evidence &&",
+      "reason": "Evidence details render only when this candidate has recorded evidence; this is optional row detail, not an application state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "candidate.evidence.baselineRevision ??"
+      },
+      "anchor": "candidate.evidence.baselineRevision ??",
+      "reason": "An unavailable baseline revision is a display fallback inside candidate evidence, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "candidate.evidence.observedRevision ??"
+      },
+      "anchor": "candidate.evidence.observedRevision ??",
+      "reason": "An unavailable observed revision is a display fallback inside candidate evidence, not a loading, empty, or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "candidate.evidence.fileExists === undefined ?"
+      },
+      "anchor": "candidate.evidence.fileExists === undefined ?",
+      "reason": "This branch reports whether a recorded file exists in the candidate evidence; it is evidence detail, not application state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "candidate.evidence.note ??"
+      },
+      "anchor": "candidate.evidence.note ??",
+      "reason": "This fallback chooses the candidate evidence note or its availability copy; it is row detail, not loading, empty, or error."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "onClose="
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "The dialog close handler forwards to the parent onClose callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "onClick={onE"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Edit button forwards to the parent onEdit callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "onClick={onR"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Review button forwards to the parent onReview callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "onClick={() => onS"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The selected state button forwards its state to the parent onState callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "onChange"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Changing the revision selector updates only the dialog-local revert draft; the parent callback runs when Revert is pressed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "onClick={() => onR"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Revert button forwards the selected revision to the parent onRevert callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerDetail.tsx",
+        "quote": "onClick={onC"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Close button forwards to the parent onClose callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onClose"
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "The dialog close handler forwards to the parent onCancel callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onClick"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Cancel or Done button forwards to the parent onCancel callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onSubmit"
+      },
+      "anchor": "onSubmit",
+      "notAction": "forwarded",
+      "reason": "The named submit handler forwards form submission through the parent onSave callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => {"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Changing the type selector updates and resets the local form draft; saving remains a separate parent action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setField('"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Editing the title updates the local form draft; the parent save callback runs only on submit."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setP"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Editing the file path updates the local location draft; the parent save callback runs only on submit."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setL"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Editing the optional line updates the local location draft; the parent save callback runs only on submit."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setS"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Choosing a location base updates the local location draft; the parent save callback runs only on submit."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setE"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Toggling External location updates local form state; it does not invoke a ledger action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setH"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Editing the external host updates the local location draft; the parent save callback runs only on submit."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setField(field.key, event.target.value)}>"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Choosing an enum value updates the local form draft; the parent save callback runs only on submit."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setField(field.key, event.target.value)} /"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Editing a multiline field updates the local form draft; the parent save callback runs only on submit."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerForm.tsx",
+        "quote": "onChange={(event) => setField(field.key, event.target.value)} e"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Editing a text field updates the local form draft; the parent save callback runs only on submit."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "onClose="
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "The dialog close action forwards to the parent onClose callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "onClick={onA"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Approve review button forwards to the parent onApprove callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "onClick={() => onBulkState('r"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Resolve action forwards the requested state to the parent onBulkState callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "onClick={() => onBulkState('a"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The Archive action forwards the requested state to the parent onBulkState callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "onClick={onC"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "The dialog close action forwards to the parent onClose callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "onAction"
+      },
+      "anchor": "onAction",
+      "notAction": "forwarded",
+      "reason": "The InlineError Retry action forwards to the parent onRetry callback."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.ledger/src/ui/LedgerTriage.tsx",
+        "quote": "onChange"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Toggling a review candidate forwards that candidate to the parent onToggle callback."
+    }
+  ]
+}

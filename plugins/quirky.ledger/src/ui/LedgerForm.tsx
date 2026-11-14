@@ -1,6 +1,6 @@
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Button, Dialog, FormRow, SectionHeader, TextField } from '@quirky/ui'
+import { Button, Dialog, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import type { LedgerEntry, LedgerLocation, LedgerResponse, LedgerType } from './types'
 import { errorMessage } from './api'
 import { ledgerStyles } from './styles'
@@ -85,14 +85,12 @@ export function LedgerForm({
 }) {
   const formId = useId()
   const [type, setType] = useState<LedgerType>(entry?.type ?? initialType ?? 'bug')
-  const [content, setContent] = useState<Record<string, string>>(() => {
-    const values: Record<string, string> = { title: typeof entry?.content.title === 'string' ? entry.content.title : '' }
-    for (const field of TYPE_FIELDS[entry?.type ?? initialType ?? 'bug']) {
-      if (field.key === 'file' || field.key === 'file_under_test') continue
-      values[field.key] = initialField(entry?.content ?? {}, field)
-    }
-    return values
-  })
+  const [content, setContent] = useState<Record<string, string>>(() => Object.fromEntries([
+    ['title', typeof entry?.content.title === 'string' ? entry.content.title : ''] as const,
+    ...TYPE_FIELDS[entry?.type ?? initialType ?? 'bug']
+      .filter((field) => field.key !== 'file' && field.key !== 'file_under_test')
+      .map((field) => [field.key, initialField(entry?.content ?? {}, field)] as const)
+  ]))
   const locationKey = type === 'test-gap' ? 'file_under_test' : 'file'
   const existingLocation = locationOf(entry?.content ?? {}, locationKey)
   const [path, setPath] = useState(existingLocation?.path ?? '')
@@ -127,24 +125,24 @@ export function LedgerForm({
   }
 
   const validate = (): Record<string, string> => {
-    const next: Record<string, string> = {}
-    if (!content.title?.trim()) next.title = 'Title is required.'
+    const errors: [string, string][] = []
+    if (!content.title?.trim()) errors.push(['title', 'Title is required.'])
     for (const field of TYPE_FIELDS[type]) {
       if (field.key === 'file' || field.key === 'file_under_test') {
-        if (!path.trim()) next[locationKey] = `${field.label} is required.`
-        if (!selectedBaseOption) next.base = 'Location base is required.'
+        if (!path.trim()) errors.push([locationKey, `${field.label} is required.`])
+        if (!selectedBaseOption) errors.push(['base', 'Location base is required.'])
         if (line.trim()) {
           const value = Number(line)
-          if (!Number.isSafeInteger(value) || value <= 0) next.line = 'Line must be a positive whole number.'
+          if (!Number.isSafeInteger(value) || value <= 0) errors.push(['line', 'Line must be a positive whole number.'])
         }
-        if (external && !host.trim()) next.host = 'External host is required.'
+        if (external && !host.trim()) errors.push(['host', 'External host is required.'])
       } else if (field.options) {
-        if (!field.options.includes(content[field.key] ?? '')) next[field.key] = `${field.label} is required.`
+        if (!field.options.includes(content[field.key] ?? '')) errors.push([field.key, `${field.label} is required.`])
       } else if (!content[field.key]?.trim()) {
-        next[field.key] = `${field.label} is required.`
+        errors.push([field.key, `${field.label} is required.`])
       }
     }
-    return next
+    return Object.fromEntries(errors)
   }
 
   const submit = async (event: FormEvent) => {
@@ -160,21 +158,22 @@ export function LedgerForm({
       return
     }
 
-    const nextContent: Record<string, unknown> = { ...(entry?.content ?? {}) }
-    nextContent.title = content.title.trim()
-    for (const field of TYPE_FIELDS[type]) {
-      if (field.key === 'file' || field.key === 'file_under_test') continue
-      nextContent[field.key] = field.options ? content[field.key] : content[field.key].trim()
-    }
-    if (TYPE_FIELDS[type].some((field) => field.key === 'file' || field.key === 'file_under_test')) {
-      const base = selectedBaseOption!.base
-      const location: LedgerLocation = {
-        path: path.trim(),
-        base,
-        ...(line.trim() ? { line: Number(line) } : {}),
-        ...(external ? { external: true, host: host.trim() } : {})
-      }
-      nextContent[locationKey] = location
+    const hasLocation = TYPE_FIELDS[type].some((field) => field.key === 'file' || field.key === 'file_under_test')
+    const location: LedgerLocation | undefined = hasLocation ? {
+      path: path.trim(),
+      base: selectedBaseOption!.base,
+      ...(line.trim() ? { line: Number(line) } : {}),
+      ...(external ? { external: true, host: host.trim() } : {})
+    } : undefined
+    const nextContent: Record<string, unknown> = {
+      ...(entry?.content ?? {}),
+      title: content.title.trim(),
+      ...Object.fromEntries(
+        TYPE_FIELDS[type]
+          .filter((field) => field.key !== 'file' && field.key !== 'file_under_test')
+          .map((field) => [field.key, field.options ? content[field.key] : content[field.key].trim()] as const)
+      ),
+      ...(location ? { [locationKey]: location } : {})
     }
 
     setBusy(true)
@@ -200,6 +199,9 @@ export function LedgerForm({
       setBusy(false)
     }
   }
+  const onFormSubmit = (event: FormEvent) => {
+    void submit(event)
+  }
 
   const title = entry ? `Edit ${entry.id}` : 'New ledger entry'
   return createPortal(
@@ -220,7 +222,7 @@ export function LedgerForm({
         </div>
       }
     >
-      <form id={formId} noValidate onSubmit={(event) => void submit(event)} style={ledgerStyles.stack}>
+      <form id={formId} noValidate onSubmit={onFormSubmit} style={ledgerStyles.stack}>
         {!entry && (
           <FormRow label="Type" htmlFor={`${formId}-type`}>
             <select id={`${formId}-type`} className="ui-text-field__input" value={type} onChange={(event) => {
@@ -281,7 +283,8 @@ export function LedgerForm({
           }
           return <TextField key={field.key} label={label} value={content[field.key] ?? ''} onChange={(event) => setField(field.key, event.target.value)} error={errors[field.key] || undefined} />
         })}
-        {message && <p role="alert" style={conflictRevision === null ? ledgerStyles.message : ledgerStyles.error}>{message}</p>}
+        {message && !createdMatches && <InlineError message={message} />}
+        {createdMatches && <NoticeLine>{message}</NoticeLine>}
         {createdMatches && (
           <section aria-label="Possible duplicate entries" style={ledgerStyles.section}>
             <SectionHeader title="Possible duplicate entries" />

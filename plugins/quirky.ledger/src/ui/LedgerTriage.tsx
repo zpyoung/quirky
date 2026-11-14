@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { Badge, Button, Dialog, EmptyState } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import { ledgerStyles } from './styles'
 import type { LedgerCandidate, LedgerSelection, LedgerState } from './types'
 
@@ -45,9 +45,12 @@ export function LedgerTriage({
     >
       <div style={ledgerStyles.stack}>
         <p>Advisory triage for the selected runtime, target, and filters. No entries are auto-resolved.</p>
-        {conflict && <p style={ledgerStyles.error} role="alert">Review changed while you were acting: {conflict}. Revisions changed; review the refreshed candidates before confirming again.</p>}
-        {error && <p style={ledgerStyles.error} role="alert">Could not load review candidates: {error} <Button onClick={onRetry}>Retry</Button></p>}
-        {candidates.length === 0 ? <EmptyState message={busy ? 'Loading review candidates…' : 'No review candidates match these filters.'} /> : (
+        {conflict && <InlineError message={`Review changed while you were acting: ${conflict}. Revisions changed; review the refreshed candidates before confirming again.`} />}
+        {error && <InlineError message={`Could not load review candidates: ${error}`} action={{ label: 'Retry', onAction: onRetry }} />}
+        {candidates.length === 0 ? busy
+          ? <NoticeLine>Loading review candidates…</NoticeLine>
+          : <EmptyState message="No review candidates match these filters." />
+          : (
           <ul style={ledgerStyles.list}>
             {candidates.map((candidate) => {
               const entry = candidate.entry

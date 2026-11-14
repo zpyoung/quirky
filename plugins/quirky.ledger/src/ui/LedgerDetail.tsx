@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Badge, Button, Dialog, FormRow, SectionHeader } from '@quirky/ui'
+import { Badge, Button, Dialog, FormRow, InlineError, SectionHeader } from '@quirky/ui'
 import { ledgerStyles } from './styles'
 import type { LedgerActor, LedgerEntry, LedgerState, LedgerType } from './types'
 
@@ -91,7 +91,7 @@ export function LedgerDetail({
     >
       <div style={ledgerStyles.stack}>
         <p style={ledgerStyles.meta}>{summary}</p>
-        {error && <p role="alert" style={ledgerStyles.error}>{error}</p>}
+        {error && <InlineError message={error} />}
         <section aria-label="Entry" style={ledgerStyles.section}>
           <SectionHeader title="Entry" />
           <p>{TYPE_NAMES[entry.type]} · {entry.state} · <Badge tone={entry.reviewed ? 'accent' : 'needs-you'}>{entry.reviewed ? 'Reviewed' : 'Unreviewed'}</Badge></p>

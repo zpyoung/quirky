@@ -12,5 +12,6 @@
   "quirky.agents": ["commands", "empty", "error", "loading"],
   "quirky.session-info": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.palette": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.ledger": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.sidebar-extras": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }
