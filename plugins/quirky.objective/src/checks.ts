@@ -1,4 +1,4 @@
-import { appendFileSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { appendFileSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
 import type { ObjectivePayload } from './contract'
@@ -54,6 +54,18 @@ async function ensurePrivateExclude(context: PluginContext, workspacePath: strin
   }
 }
 
+function trackedPathIsPresent(workspacePath: string, path: string): boolean {
+  try {
+    lstatSync(join(workspacePath, path))
+    return true
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error)) throw error
+    const code = error.code
+    if (code === 'ENOENT' || code === 'ENOTDIR') return false
+    throw error
+  }
+}
+
 async function captureTreeOid(
   context: PluginContext,
   workspacePath: string,
@@ -82,7 +94,30 @@ async function captureTreeOid(
       cached.stamp = stamp
     }
     const env = { ...process.env, GIT_INDEX_FILE: index }
-    await runGit(context, workspacePath, ['add', '-A'], { env })
+    const assumeUnchangedPaths = new Set<string>()
+    const skipWorktreePaths = new Set<string>()
+    for (const entry of (await runGit(context, workspacePath, ['ls-files', '-v', '-z'], { env })).split('\0')) {
+      if (entry.length < 3 || entry[1] !== ' ') continue
+      const tag = entry[0]
+      const path = entry.slice(2)
+      if (tag >= 'a' && tag <= 'z') assumeUnchangedPaths.add(path)
+      if (tag === 'S' || tag === 's') skipWorktreePaths.add(path)
+    }
+    const suppressedPaths = new Set([...assumeUnchangedPaths, ...skipWorktreePaths])
+    const presentPaths = new Set([...suppressedPaths].filter(path => trackedPathIsPresent(workspacePath, path)))
+    const presentAssumePaths = [...assumeUnchangedPaths].filter(path => presentPaths.has(path))
+    const presentSkipPaths = [...skipWorktreePaths].filter(path => presentPaths.has(path))
+    if (presentAssumePaths.length > 0) {
+      await runGit(context, workspacePath, [
+        'update-index', '--no-assume-unchanged', '-z', '--stdin'
+      ], { env, input: `${presentAssumePaths.join('\0')}\0` })
+    }
+    if (presentSkipPaths.length > 0) {
+      await runGit(context, workspacePath, [
+        'update-index', '--no-skip-worktree', '-z', '--stdin'
+      ], { env, input: `${presentSkipPaths.join('\0')}\0` })
+    }
+    await runGit(context, workspacePath, ['add', '--sparse', '-A'], { env })
     const tree = (await runGit(context, workspacePath, ['write-tree'], { env })).trim()
     if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(tree)) throw new Error('Git returned an invalid workspace tree OID')
     return tree

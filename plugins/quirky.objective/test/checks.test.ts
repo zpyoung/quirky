@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
@@ -170,6 +170,115 @@ test('captures dispatch baseline and rejects outside-territory or unreported wri
   const beforeIgnoredEdit = await r.runtime.captureContentIdentity()
   writeFileSync(join(r.root, 'src', 'tracked.ignored'), 'changed but ignored\n')
   expect(await r.runtime.captureContentIdentity()).not.toBe(beforeIgnoredEdit)
+}, 30_000)
+
+test('captures flagged tracked edits for territory, reviewer, and check evidence without changing the real index', async () => {
+  const cases: {
+    flag: 'assume-unchanged' | 'skip-worktree'
+    path: string
+    create(root: string): void
+    change(root: string, version: number): void
+  }[] = [
+    {
+      flag: 'assume-unchanged',
+      path: 'outside\nassumed-link',
+      create: root => symlinkSync('first-target', join(root, 'outside\nassumed-link')),
+      change: (root, version) => {
+        const path = join(root, 'outside\nassumed-link')
+        unlinkSync(path)
+        symlinkSync(`target-${version}`, path)
+      }
+    },
+    {
+      flag: 'skip-worktree',
+      path: 'outside\tskipped.ts',
+      create: root => writeFileSync(join(root, 'outside\tskipped.ts'), 'initial\n'),
+      change: (root, version) => writeFileSync(join(root, 'outside\tskipped.ts'), `changed-${version}\n`)
+    }
+  ]
+
+  for (const { flag, path, create, change } of cases) {
+    const r = rig()
+    await r.initGit()
+    create(r.root)
+    await r.runChecked(['git', 'add', '--', path], { cwd: r.root })
+    await r.runChecked(['git', 'commit', '-m', 'track flagged path'], { cwd: r.root })
+    await r.runChecked(['git', 'update-index', `--${flag}`, '--', path], { cwd: r.root })
+
+    const indexPath = join(r.root, '.git', 'index')
+    const originalIndex = readFileSync(indexPath)
+    const realIndexEntry = flag === 'assume-unchanged' ? `h ${path}` : `S ${path}`
+    const expectRealIndexUnchanged = async () => {
+      expect(readFileSync(indexPath)).toEqual(originalIndex)
+      const entries = (await r.runChecked(['git', 'ls-files', '-v', '-z'], { cwd: r.root })).split('\0')
+      expect(entries).toContain(realIndexEntry)
+    }
+
+    const baselineIdentity = await r.runtime.captureContentIdentity()
+    expect(await r.runtime.captureContentIdentity()).toBe(baselineIdentity)
+    await expectRealIndexUnchanged()
+    const baselineTree = baselineIdentity.slice('objective-tree:'.length)
+    change(r.root, 1)
+    const implementerAttempt = {
+      attemptId: `flagged-${flag}-implementer`, watcherId: r.enrollment.watcherId, role: 'implementer' as const,
+      revision: 1, taskKey: 'implement', reportPath: 'report.json', issuedAtMs: 1, baselineTree
+    }
+    expect(await baselineProblems(r.runtime, implementerAttempt, [])).toEqual([
+      `observed-change-outside-write-territory:${path}`
+    ])
+
+    const reviewerBaseline = (await r.runtime.captureContentIdentity()).slice('objective-tree:'.length)
+    change(r.root, 2)
+    const reviewerAttempt = {
+      ...implementerAttempt, attemptId: `flagged-${flag}-reviewer`, role: 'reviewer' as const,
+      baselineTree: reviewerBaseline, reportPath: join(r.root, 'report.json')
+    }
+    expect(await baselineProblems(r.runtime, reviewerAttempt)).toEqual([`reviewer-modified-workspace:${path}`])
+
+    const checkIdentity = await r.runtime.captureContentIdentity()
+    change(r.root, 3)
+    expect(await runEnrollmentGate(r.runtime, {
+      revision: 1, gateName: `flagged-${flag}`, command: 'true', timeoutSeconds: 5, contentIdentity: checkIdentity
+    }, `flagged-${flag}-stale-check`)).toEqual({ effect: 'not-landed', reason: 'check-evidence-stale' })
+    expect(r.checkRows.find(row => row.attemptId === `flagged-${flag}-stale-check`)).toMatchObject({
+      status: 'stale', exitCode: null
+    })
+    expect(r.calls.filter(call => call.argv[0] === 'sh')).toHaveLength(0)
+    await expectRealIndexUnchanged()
+    expect(reviewerBaseline).not.toBe(baselineTree)
+  }
+}, 30_000)
+
+test('preserves absent sparse-checkout entries during identity capture', async () => {
+  const r = rig()
+  await r.initGit()
+  mkdirSync(join(r.root, 'docs'), { recursive: true })
+  writeFileSync(join(r.root, 'docs', 'sparse-only.ts'), 'outside sparse cone\n')
+  await r.runChecked(['git', 'add', '--', 'docs/sparse-only.ts'], { cwd: r.root })
+  await r.runChecked(['git', 'commit', '-m', 'add sparse file'], { cwd: r.root })
+  await r.runChecked(['git', 'sparse-checkout', 'init', '--cone', '--sparse-index'], { cwd: r.root })
+  await r.runChecked(['git', 'sparse-checkout', 'set', 'src'], { cwd: r.root })
+
+  const sparsePath = join(r.root, 'docs', 'sparse-only.ts')
+  expect(existsSync(sparsePath)).toBe(false)
+  const indexPath = join(r.root, '.git', 'index')
+  const originalIndex = readFileSync(indexPath)
+  const tree = (await r.runChecked(['git', 'rev-parse', 'HEAD^{tree}'], { cwd: r.root })).trim()
+  expect((await r.runtime.captureContentIdentity())).toBe(`objective-tree:${tree}`)
+  expect(readFileSync(indexPath)).toEqual(originalIndex)
+  const entries = (await r.runChecked(['git', 'ls-files', '-v', '--sparse', '-z'], { cwd: r.root })).split('\0')
+  expect(entries).toContain('S docs/')
+  const treePaths = (await r.runChecked(['git', 'ls-tree', '-r', '-z', '--name-only', tree], { cwd: r.root })).split('\0')
+  expect(treePaths).toContain('docs/sparse-only.ts')
+
+  mkdirSync(join(r.root, 'docs'), { recursive: true })
+  writeFileSync(sparsePath, 'physically present out-of-cone edit\n')
+  const changedIdentity = await r.runtime.captureContentIdentity()
+  expect(changedIdentity).not.toBe(`objective-tree:${tree}`)
+  const changedTree = changedIdentity.slice('objective-tree:'.length)
+  expect(await r.runChecked(['git', 'show', `${changedTree}:docs/sparse-only.ts`], { cwd: r.root }))
+    .toBe('physically present out-of-cone edit\n')
+  expect(readFileSync(indexPath)).toEqual(originalIndex)
 })
 
 test('runs shell check and gate commands through context.process.run and stores tails by content identity', async () => {
