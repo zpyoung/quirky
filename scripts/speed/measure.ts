@@ -114,7 +114,7 @@ type BrowserObservationSpec = {
   offeredBytes?: number
 }
 
-type BrowserObservationMarks = FrameTimingObservation['marks'] & { echoReceived?: string }
+type BrowserObservationMarks = FrameTimingObservation['marks']
 
 type BrowserObservationResult = {
   id: string

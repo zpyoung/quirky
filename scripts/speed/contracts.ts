@@ -140,6 +140,7 @@ export type FrameTiming = {
     requestedAt: number
     deliveredAt: number
     receiveCapAt: number | null
+    receiveCapSource?: 'echo-arrival' | 'latest-receive' | null
     busySpans: { start: number; end: number }[]
   }
   reason: string | null
