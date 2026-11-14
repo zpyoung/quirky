@@ -251,6 +251,27 @@ export const notFound = (message: string) => new RpcError(RpcErrorCode.NotFound,
 
 export type MountedWorkspace = Awaited<ReturnType<typeof mountFixture>>
 
+/** Dispatches local RPCs to the real window handlers without changing external command routing. */
+export function installWindowCommands(fake: FakeContext): void {
+  const call = fake.context.call.bind(fake.context)
+  fake.context.call = async <T,>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
+    if (method !== 'ui.window.self' && method !== 'ui.window.command.run') return call<T>(method, params)
+    fake.calls.push({ method, params })
+    if (method === 'ui.window.self') return { connId: 41 } as T
+    if (params.connId !== 41) throw new Error('unknown window connection')
+    const id = String(params.id)
+    let handler = fake.provided.get(id)
+    if (!handler) {
+      // The workspace import reaches xterm, so load handlers only after happy-dom registers window.
+      const { terminalCommands, sessionCommands } = await import('../../src/window/commands')
+      if (id.startsWith('command:quirky.terminal/')) handler = terminalCommands(fake.context)[id.slice('command:quirky.terminal/'.length)]
+      else if (id.startsWith('command:quirky.session/')) handler = sessionCommands(fake.context)[id.slice('command:quirky.session/'.length)]
+    }
+    if (!handler) throw new Error(`unknown command: ${id}`)
+    return { result: await handler(params.args) } as T
+  }
+}
+
 /** Mounts the workspace view over `daemon` and waits until it has loaded. */
 export async function mountFixture(
   daemon: FakeDaemon,
@@ -263,6 +284,7 @@ export async function mountFixture(
   } = {}
 ) {
   const fake = fakeContext({ ...daemon.handlers, ...options.extra }, options.settings)
+  installWindowCommands(fake)
   const element = document.createElement('div')
   document.body.appendChild(element)
   const reports: any[] = []
