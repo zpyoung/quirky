@@ -351,6 +351,17 @@ A method's first refusal adds a warning to the plugin; later refusals do not dup
 warning clears when that method's running count falls to half the limit. A plugin that depends on
 this error declares `"apiVersion": "1.14.0"`.
 
+### API 1.15: Commands that leave the owner window in the background
+
+`UiPluginContext.executeCommand(id, args, { activateOwner: false })` runs a popped-out view's
+command in its owner window without raising that window. Activation defaults to true when the
+option is omitted. A main window validates the options, then ignores them and runs the command
+locally.
+
+Non-object options reject with `executeCommand: options must be an object`. A non-boolean
+`activateOwner` rejects with `executeCommand: options.activateOwner must be a boolean`. Neither
+case runs the command. A plugin using the option declares `"apiVersion": "1.15.0"`.
+
 ## Manifest declaration
 
 Every plugin manifest must include `apiVersion`. It is independent of the plugin's own package `version`:
@@ -511,6 +522,9 @@ a new event, and does not change authentication or version refusal.
 - **1.14.0** adds the [per-method running-handler limit](#api-114-running-handler-limit): 1,024
   handlers per plugin method by default. Calls over the limit fail with Busy before plugin code
   runs; Busy and stalled refusals are not stored under request IDs.
+- **1.15.0** adds [`executeCommand` owner-activation options](#api-115-commands-that-leave-the-owner-window-in-the-background):
+  popped-out views may run a command in their owner without raising it. Existing calls still
+  activate the owner by default.
 
 ## Example
 

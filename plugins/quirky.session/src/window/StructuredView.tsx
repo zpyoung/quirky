@@ -149,7 +149,7 @@ export function StructuredView({ context, session }: { context: UiPluginContext;
               onChange={(event) => {
                 const enabled = event.target.checked
                 rememberShowAllEvents(session, enabled)
-                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled })
+                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })
               }}
             />
             <span>Show all events</span>
