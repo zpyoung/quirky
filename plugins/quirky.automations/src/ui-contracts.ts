@@ -1,6 +1,5 @@
-import type { MethodHandler, PluginContext, UiPluginContext } from '@quirky/protocol'
+import type { MethodHandler, UiPluginContext } from '@quirky/protocol'
 import type { AutomationDefinition, AutomationRun } from '../types'
-import type { AutomationService } from '../service'
 
 export const AUTOMATIONS_VIEW = 'view:quirky.automations/automations'
 export const AUTOMATIONS_SETTINGS_VIEW = 'view:quirky.automations/settings'
@@ -42,13 +41,6 @@ export type AutomationUiState = {
   revision: number
   navigation: AutomationNavigation
   editor: { id: string | null; original: AutomationDefinition | null; draft: AutomationDraft; creationKey: string } | null
-}
-export type AutomationUiEnv = {
-  context: PluginContext
-  service: AutomationService
-  read(): AutomationUiState
-  update(change: (state: AutomationUiState) => void): AutomationUiState
-  navigate(patch: Partial<AutomationNavigation>): Promise<AutomationUiState>
 }
 export type AutomationMethods = Record<string, MethodHandler>
 export type AutomationSurfaceProps = {

@@ -8,9 +8,9 @@ import type {
   AutomationDraft,
   AutomationEditorData,
   AutomationMethods,
-  AutomationUiEnv,
   AutomationUiState
 } from '../ui-contracts'
+import type { AutomationUiEnv } from '../state'
 
 type ObjectValue = Record<string, unknown>
 type Project = { id: string; name: string; path: string; kind: string }

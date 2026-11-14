@@ -6,7 +6,8 @@ import { makeTempHome } from '../../../packages/daemon/test/helpers'
 import { createAutomationService, type AutomationServiceContext } from '../service'
 import type { AutomationOwner, AutomationTargetResolution, AutomationTargetResolver } from '../dispatch-contract'
 import { createAutomationStore, migrations } from '../store'
-import type { AutomationUiEnv, AutomationUiState } from '../src/ui-contracts'
+import type { AutomationUiState } from '../src/ui-contracts'
+import type { AutomationUiEnv } from '../src/state'
 import { editorMethods } from '../src/editor/methods'
 
 const fixtures: { cleanup(): void }[] = []
