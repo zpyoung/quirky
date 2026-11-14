@@ -9,6 +9,103 @@ export const BUDGETS = {
   floodEcho: 100,
 } as const satisfies Readonly<Record<Metric, number>>
 export const NOMINAL_FRAME_MS = 1000 / 60
+export type EchoTiming =
+  | {
+      status: 'complete'
+      reason: null
+      workerReadEpochMs: number
+      pageTimeOriginMs: number
+      receivedAt: number
+      keystrokeToWorkerMs: number
+      workerToPageMs: number
+      pageToPaintMs: number
+    }
+  | {
+      status: 'unavailable'
+      reason: string
+      workerReadEpochMs: number | null
+      pageTimeOriginMs: number | null
+      receivedAt: number | null
+      keystrokeToWorkerMs: null
+      workerToPageMs: null
+      pageToPaintMs: null
+    }
+
+export type TimerInterval = {
+  requestedEpochMs: number
+  dueEpochMs: number
+  wokeEpochMs: number
+  lateMs: number
+}
+
+export type TimerWindow = {
+  status: 'complete' | 'unavailable'
+  reason: string | null
+  intervals: TimerInterval[]
+  pendingLateAtEndMs: number | null
+}
+
+export type SampleScheduler = { harness: TimerWindow; floodWorker: TimerWindow | null }
+
+export type EchoTimingSummary = {
+  samples: EchoTiming[]
+  completeSamples: number
+  unavailableSamples: number
+  medians: {
+    keystrokeToWorkerMs: number | null
+    workerToPageMs: number | null
+    pageToPaintMs: number | null
+  }
+}
+
+export type TimerWindowSummary = {
+  status: 'complete' | 'unavailable'
+  reason: string | null
+  intervals: number
+  medianLateMs: number | null
+  maxLateMs: number | null
+  pendingLateAtEndMs: number | null
+}
+
+export type SchedulerSummary = {
+  samples: { harness: TimerWindowSummary; floodWorker: TimerWindowSummary | null }[]
+  medians: {
+    harnessMaxLateMs: number | null
+    harnessPendingLateAtEndMs: number | null
+    floodWorkerMaxLateMs: number | null
+  }
+}
+
+export type RunnerSetting = {
+  requested: 0 | 1
+  before: number | null
+  after: number | null
+  status: 'applied' | 'set-failed' | 'not-applied' | 'readback-unavailable'
+  errors: string[]
+}
+
+export type RunnerLatency = {
+  version: 1
+  runId: string | null
+  runner: string
+  status: 'attempted' | 'skipped' | 'unavailable'
+  reason: string | null
+  coalescing: RunnerSetting | null
+  appNap: RunnerSetting | null
+  timerCoalesceBgNsMax: number | null
+}
+
+export type FloodSleepCapture = {
+  version: 1
+  workerId: string
+  sessionId: string
+  runId: string
+  status: 'complete' | 'unavailable'
+  reason: string | null
+  intervals: TimerInterval[]
+}
+
+
 
 
 export const REGRESSION_RATIO = 1.25
@@ -29,6 +126,8 @@ export type MetricResult = {
   budgetMiss: boolean | null
   wallSamplesMs?: number[]
   unavailableSamples?: number
+  echoTiming?: EchoTimingSummary | null
+  scheduler?: SchedulerSummary | null
 }
 
 export type FrameTiming = {
@@ -72,7 +171,13 @@ export type SpeedProfileV3 = SpeedProfileBase & {
   compositor: 'software'
   frameTiming: 'native-final-frame-idle-cap-60hz'
 }
-export type SpeedProfile = SpeedProfileV1 | SpeedProfileV2 | SpeedProfileV3
+export type SpeedProfileV4 = SpeedProfileBase & {
+  workloadVersion: 4
+  compositor: 'software'
+  frameTiming: 'native-final-frame-echo-arrival-cap-60hz'
+  runnerPolicy: 'ci-macos-timer-experiment-v1'
+}
+export type SpeedProfile = SpeedProfileV1 | SpeedProfileV2 | SpeedProfileV3 | SpeedProfileV4
 
 export type SpeedReport = {
   version: 1
@@ -86,7 +191,21 @@ export type SpeedReport = {
   failures: Failure[]
   cleanup: 'complete' | 'failed'
   evidence: { samples: string; diagnostics: string[]; misses: string }
+  runnerLatency?: RunnerLatency
 }
+export type MetricResultV4 = MetricResult & {
+  wallSamplesMs: number[]
+  unavailableSamples: number
+  echoTiming: EchoTimingSummary | null
+  scheduler: SchedulerSummary | null
+}
+
+export type SpeedReportV4 = Omit<SpeedReport, 'profile' | 'metrics' | 'runnerLatency'> & {
+  profile: SpeedProfileV4
+  metrics: Record<Metric, MetricResultV4>
+  runnerLatency: RunnerLatency
+}
+
 
 export type PairSide = 'head' | 'base'
 export type PairBasis = 'merge-base' | 'parent'
@@ -131,4 +250,11 @@ export type SpeedMiss = {
   samples: string
   diagnostics: string[]
   finding: string
+  echoTiming?: EchoTimingSummary | null
+  scheduler?: SchedulerSummary | null
+}
+
+export type SpeedMissV4 = Omit<SpeedMiss, 'echoTiming' | 'scheduler'> & {
+  echoTiming: EchoTimingSummary | null
+  scheduler: SchedulerSummary | null
 }
