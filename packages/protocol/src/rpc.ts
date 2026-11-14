@@ -208,7 +208,7 @@ export type Methods = {
   'desktop.window.attach': { params: DesktopWindowAttachRequest; result: DesktopWindowSummary }
   /** Updates the view/input in this exact attached auxiliary window without changing the main layout. Role `ui` only. */
   'desktop.window.update': { params: DesktopWindowUpdateRequest; result: DesktopWindowSummary }
-  /** Runs a command in the exact owning main shell and activates that native window on success. Role `ui` only. */
+  /** Runs a command in the exact owner shell of an auxiliary window and, unless `activateOwner` is false, activates that native window on success. Role `ui` only. */
   'desktop.window.runOwnerCommand': { params: DesktopWindowRunOwnerCommandRequest; result: DesktopWindowRunOwnerCommandResult }
   /** Removes a window after its native owner confirms it closed. Role `desktop` only. */
   'desktop.window.closed': { params: DesktopWindowClosedRequest; result: DesktopWindowCloseResult }

@@ -3,6 +3,7 @@ import { commandHelp, usageOf } from '../command-spec'
 import { api, apiCall } from './api'
 import { jobList, jobRun } from './job'
 import { daemonRestart } from './daemon'
+import { serve } from './serve'
 import { distroInspect, distroInstall, distroList, distroRemove } from './distro'
 import { open } from './open'
 import {
@@ -68,6 +69,7 @@ export const COMMANDS: Command[] = [
   distroList,
   distroRemove,
   daemonRestart,
+  serve,
   jobList,
   jobRun,
   uiContributions,

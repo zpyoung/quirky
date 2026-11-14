@@ -172,6 +172,8 @@ export type ViewState = {
   selectedId: string | null
   expandedIds: string[]
   focusedSearch: boolean
+  /** Rises with every view change; a reader keeps the view with the highest revision. Read-only. */
+  revision?: number
 }
 export type WorkerRequest = { id: number; op: string; args: Record<string, unknown> }
 export type WorkerResponse = { id: number; result?: unknown; error?: { kind: string; message: string } }

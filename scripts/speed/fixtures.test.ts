@@ -165,6 +165,7 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
     const workerCommands = calls.filter(({ method }) => method === 'quirky.terminal/newTab' || method === 'quirky.terminal/splitPane')
     expect(workerCommands).toHaveLength(20)
     expect(workerCommands.every(({ params }) => String(params.command).includes('/scripts/speed/worker.ts'))).toBe(true)
+    expect(workerCommands.every(({ params }) => !String(params.command).includes('--echo-delay-ms'))).toBe(true)
     expect(calls).toContainEqual({
       method: 'setting.set',
       params: { id: 'setting:quirky.terminal/gpu-acceleration', value: 'off' }
@@ -201,6 +202,22 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
     await fixture.stop()
   } finally {
     rmSync(fixtureRoot, { recursive: true, force: true })
+  }
+})
+
+test('passes the requested echo delay to both speed worker commands', async () => {
+  const harness = fakeFixtureWorld()
+  try {
+    const fixture = await prepareSpeedFixture(harness.world as never, { echoDelayMs: 1500 })
+    const workerCommands = harness.calls.filter(({ method }) => method === 'quirky.terminal/newTab' || method === 'quirky.terminal/splitPane')
+
+    expect(workerCommands).toHaveLength(20)
+    expect(workerCommands.slice(0, 2).map(({ method }) => method)).toEqual(['quirky.terminal/newTab', 'quirky.terminal/splitPane'])
+    expect(workerCommands.slice(0, 2).every(({ params }) => String(params.command).replaceAll("'", '').includes('--echo-delay-ms 1500'))).toBe(true)
+    expect(workerCommands.slice(2).every(({ params }) => !String(params.command).includes('--echo-delay-ms'))).toBe(true)
+    await fixture.stop()
+  } finally {
+    harness.cleanup()
   }
 })
 
@@ -392,7 +409,7 @@ function fakeFixtureWorld(options: { failOnSplitAt?: number } = {}) {
         }
         if (method === 'quirky.terminal/newTab' || method === 'quirky.terminal/splitPane') {
           sessions++
-          const workerId = String(params.command ?? '').split(' ').at(-1)?.replaceAll("'", '') ?? `worker-${sessions}`
+          const workerId = String(params.command ?? '').match(/worker\.ts' '([^']+)'/)?.[1] ?? `worker-${sessions}`
           const session = `session-${sessions}`
           workerBySession.set(session, workerId)
           return method.endsWith('newTab')

@@ -651,7 +651,8 @@
             "query": { "type": "string" },
             "selectedId": { "description": "Host-qualified session ID, or null when no session is selected." },
             "expandedIds": { "type": "array", "items": { "type": "string" } },
-            "focusedSearch": { "type": "boolean" }
+            "focusedSearch": { "type": "boolean" },
+            "revision": { "type": "number", "description": "Rises with every view change; a reader keeps the view with the highest revision." }
           },
           "required": [
             "disabledAgents", "browseSort", "searchSort", "group", "hideEmptySessions", "sessionLimit",
@@ -694,7 +695,8 @@
             "query": { "type": "string" },
             "selectedId": { "description": "Host-qualified session ID, or null when no session is selected." },
             "expandedIds": { "type": "array", "items": { "type": "string" } },
-            "focusedSearch": { "type": "boolean" }
+            "focusedSearch": { "type": "boolean" },
+            "revision": { "type": "number", "description": "Rises with every view change; a reader keeps the view with the highest revision." }
           },
           "required": [
             "disabledAgents", "browseSort", "searchSort", "group", "hideEmptySessions", "sessionLimit",
@@ -720,7 +722,8 @@
             "query": { "type": "string" },
             "selectedId": { "description": "Host-qualified session ID, or null when no session is selected." },
             "expandedIds": { "type": "array", "items": { "type": "string" } },
-            "focusedSearch": { "type": "boolean" }
+            "focusedSearch": { "type": "boolean" },
+            "revision": { "type": "number", "description": "Rises with every view change; a reader keeps the view with the highest revision." }
           },
           "required": [
             "disabledAgents", "browseSort", "searchSort", "group", "hideEmptySessions", "sessionLimit",

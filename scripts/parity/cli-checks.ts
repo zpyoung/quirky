@@ -6,6 +6,7 @@ import type { CliWorld } from './cli-world'
 import { actorReceiptFiles, readActorReceipts, type CliActorReceipt } from './cli-actor'
 import { assertNoOutsideCalls, cleanupLocalChecks, LOCAL_CHECK_IDS, runLocalChecks } from './cli-local'
 import { cleanupWorkerChecks, runWorkerChecks, WORKER_CHECK_IDS } from './cli-workers'
+import { cleanupStartupChecks, runStartupChecks, STARTUP_CHECK_IDS } from './cli-startup'
 
 const CHECK_IDS = [
   'catalog',
@@ -23,7 +24,8 @@ const CHECK_IDS = [
   'file-open', 'file-state', 'file-read', 'file-close',
   'accounts-list', 'skill-show', 'skill-status', 'skill-install', 'skill-update', 'status',
   ...LOCAL_CHECK_IDS,
-  ...WORKER_CHECK_IDS
+  ...WORKER_CHECK_IDS,
+  ...STARTUP_CHECK_IDS
 ] as const
 
 export const checkIds = new Set<string>(CHECK_IDS)
@@ -1007,6 +1009,7 @@ export async function runCliChecks(context: CliCheckContext): Promise<void> {
   await runLocalChecks(context)
   await runWorkerChecks(context)
   await removeOwnedWorktree(context)
+  await runStartupChecks(context)
   assertNoOutsideCalls({
     egressLog: context.world.paths.egressLog,
     orcaLog: context.world.paths.orcaLog,
@@ -1016,6 +1019,7 @@ export async function runCliChecks(context: CliCheckContext): Promise<void> {
 
 export async function cleanupCliChecks(context: CliCheckContext): Promise<void> {
   const errors: string[] = []
+  await cleanupStartupChecks(context, errors)
   let sequence = 0
   const attempt = async (argv: string[]): Promise<unknown | undefined> => {
     context.check('cleanup')

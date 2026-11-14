@@ -23,3 +23,4 @@ plugins/quirky.terminal/test/artifacts.test.ts  real daemon artifact acceptance 
 plugins/quirky.terminal/test/emulator.test.ts  simulator list and frame APIs intentionally require macOS even with an owned xcrun fixture
 apps/desktop/test/allow-label-hosts.test.ts  edits an Info.plist with macOS plutil, which Linux lacks
 scripts/parity/browser.test.ts  real CLI browser parity uses installed macOS Chrome; remote Linux host has no Chrome/Chromium
+scripts/parity/browser-pane.test.ts  runs Watch pane parity against installed macOS Chrome; the remote Linux host has no Chrome/Chromium

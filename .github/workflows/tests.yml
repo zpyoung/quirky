@@ -159,10 +159,9 @@ jobs:
   speed:
     name: Speed
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
-      actions: read
     env:
       QUIRKY_SPEED_RUNNER: macos-15
     steps:
@@ -186,17 +185,41 @@ jobs:
       - name: Check real-daemon smoke
         run: bun test scripts/speed/run.e2e.test.ts
 
+      - name: Prepare speed base
+        continue-on-error: true
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE_SHA=$(git merge-base "$HEAD_SHA" origin/main)
+            BASE_BASIS=merge-base
+          else
+            BASE_SHA=$(git rev-parse "$HEAD_SHA^")
+            BASE_BASIS=parent
+          fi
+          git worktree add --detach "$RUNNER_TEMP/speed-base" "$BASE_SHA"
+          (cd "$RUNNER_TEMP/speed-base" && bun install --frozen-lockfile)
+          {
+            echo "SPEED_BASE_ROOT=$RUNNER_TEMP/speed-base"
+            echo "SPEED_BASE_BASIS=$BASE_BASIS"
+          } >> "$GITHUB_ENV"
+
       - name: Measure speed
-        run: bun scripts/speed.ts --out speed --samples 20
+        run: |
+          measure_args=(--out speed --samples 20)
+          if [ -n "${SPEED_BASE_ROOT:-}" ]; then
+            measure_args+=(--base-root "$SPEED_BASE_ROOT" --base-basis "$SPEED_BASE_BASIS")
+          fi
+          bun scripts/speed.ts "${measure_args[@]}"
 
       - name: Compare speed
         if: always()
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: bun scripts/speed/ci.ts compare --current speed/report.json --out speed --event "$EVENT_NAME" --head "$HEAD_SHA"
+        run: bun scripts/speed/ci.ts compare --current speed/report.json --pair speed/pair.json --out speed --head "$HEAD_SHA"
 
       - name: Qualify speed baseline
         id: qualify
