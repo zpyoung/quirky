@@ -2,7 +2,7 @@ import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
-import type { PluginCaller, PluginContext } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type PluginCaller, type PluginContext } from '@quirky/protocol'
 import { activate } from '../main'
 import { assertHeimdallCaller, authorize, execute } from '../src/github'
 
@@ -37,6 +37,7 @@ function runtimeContext(respond: Call = async () => undefined): Runtime {
       calls.push({ method, params })
       return respond(method, params)
     },
+    error: (_kind: string, message: string) => new RpcError(RpcErrorCode.InvalidParams, message),
     log: (message: string) => logs.push(message)
   } as unknown as PluginContext
   return { calls, logs, methods, context }

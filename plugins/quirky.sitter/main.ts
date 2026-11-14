@@ -35,17 +35,24 @@ type SitterEnrollment = { capabilities: Record<string, CapabilityMode>; kindPayl
 
 export async function activate(context: PluginContext): Promise<void> {
   const call: Call = (method, params) => context.call(method, params)
+  const assertCaller = (caller: PluginCaller) => {
+    try {
+      assertHeimdallCaller(caller)
+    } catch (error) {
+      throw context.error('invalid-params', error instanceof Error ? error.message : String(error))
+    }
+  }
 
   context.provide('method:quirky.sitter/authorize', (params: Record<string, unknown>, caller: PluginCaller) => {
-    assertHeimdallCaller(caller)
+    assertCaller(caller)
     return authorize(call, params.input as Parameters<typeof authorize>[1])
   })
   context.provide('method:quirky.sitter/read', (params: Record<string, unknown>, caller: PluginCaller) => {
-    assertHeimdallCaller(caller)
+    assertCaller(caller)
     return read(call, params.enrollment as Parameters<typeof read>[1])
   })
   context.provide('method:quirky.sitter/decide', (params: Record<string, unknown>, caller: PluginCaller) => {
-    assertHeimdallCaller(caller)
+    assertCaller(caller)
     return decide(
       params.snapshot as Snapshot<SitterWorld>,
       params.journal as JournalEntry[],
@@ -53,19 +60,19 @@ export async function activate(context: PluginContext): Promise<void> {
     )
   })
   context.provide('method:quirky.sitter/execute', (params: Record<string, unknown>, caller: PluginCaller) => {
-    assertHeimdallCaller(caller)
+    assertCaller(caller)
     return execute(call, params.action as SitterAction, params.enrollment as Parameters<typeof execute>[2])
   })
   context.provide('method:quirky.sitter/resolveOutcome', (params: Record<string, unknown>, caller: PluginCaller) => {
-    assertHeimdallCaller(caller)
+    assertCaller(caller)
     return resolveOutcome(params.attempt as Attempt, params.snapshot as Snapshot<SitterWorld>)
   })
   context.provide('method:quirky.sitter/pace', (params: Record<string, unknown>, caller: PluginCaller) => {
-    assertHeimdallCaller(caller)
+    assertCaller(caller)
     return pace(params.snapshot as Snapshot<SitterWorld>, params.journal as JournalEntry[])
   })
   context.provide('method:quirky.sitter/stop', (params: Record<string, unknown>, caller: PluginCaller) => {
-    assertHeimdallCaller(caller)
+    assertCaller(caller)
     return stop(
       params.snapshot as Snapshot<SitterWorld>,
       params.journal as JournalEntry[],
