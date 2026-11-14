@@ -1,12 +1,12 @@
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { Template } from '../core/types'
 import { TEMPLATE_BODY_MAX, TEMPLATE_LIMIT, TEMPLATE_NAME_MAX } from '../core/template'
-import { messageOf, PLUGIN_ID, reasonOf } from './copy'
+import { messageOf, reasonOf } from './copy'
 import type { CommandResult } from './model'
 
-const METHOD = (name: string) => `${PLUGIN_ID}/${name}`
-
 export type TemplateEditor = { id: string | null; name: string; body: string }
+
+export type TemplatesPhase = 'loading' | 'ready' | 'failed'
 
 export type TemplatesSnapshot = {
   templates: Template[]
@@ -17,6 +17,8 @@ export type TemplatesSnapshot = {
   confirm: string | null
   /** Set after a save that reused another template's name; both templates are kept. */
   warning: string | null
+  phase: TemplatesPhase
+  loadError: string | null
 }
 
 type CatalogResult = { templates: Template[]; custom: boolean; limit?: number; warnings?: string[] }
@@ -46,8 +48,9 @@ export const canSaveEditor = (editor: TemplateEditor | null): boolean =>
  * the view and its commands, so a script drives the page the window shows.
  */
 export class TemplatesStore {
-  private snapshot: TemplatesSnapshot = { templates: [], custom: false, limit: TEMPLATE_LIMIT, editor: null, confirm: null, warning: null }
+  private snapshot: TemplatesSnapshot = { templates: [], custom: false, limit: TEMPLATE_LIMIT, editor: null, confirm: null, warning: null, phase: 'loading', loadError: null }
   private listeners = new Set<() => void>()
+  private hasLoaded = false
 
   constructor(private readonly context: UiPluginContext) {}
 
@@ -75,8 +78,14 @@ export class TemplatesStore {
 
   async load(): Promise<void> {
     try {
-      this.adopt((await this.context.call(METHOD('templates'))) as CatalogResult)
+      this.adopt((await this.context.call('quirky.handoff/templates')) as CatalogResult)
+      this.hasLoaded = true
+      this.commit({ phase: 'ready', loadError: null })
     } catch (error) {
+      if (!this.hasLoaded) {
+        this.commit({ phase: 'failed', loadError: messageOf(error) })
+        return
+      }
       this.context.toast('Could not read the handoff templates', messageOf(error))
     }
   }
@@ -120,7 +129,7 @@ export class TemplatesStore {
     if (!canSaveEditor(editor)) return refused('cannot-save')
     const name = editor.name.trim()
     try {
-      const result = (await this.context.call(METHOD('templateMutate'), {
+      const result = (await this.context.call('quirky.handoff/templateMutate', {
         op: editor.id === null ? 'add' : 'update',
         template: { ...(editor.id === null ? {} : { id: editor.id }), name, body: editor.body }
       })) as CatalogResult
@@ -147,7 +156,7 @@ export class TemplatesStore {
     if (!template) return refused('unknown-template')
     if (!(await this.confirmed(`Delete “${template.name}”?`, 'Delete'))) return refused('cancelled')
     try {
-      this.adopt((await this.context.call(METHOD('templateMutate'), { op: 'remove', id })) as CatalogResult)
+      this.adopt((await this.context.call('quirky.handoff/templateMutate', { op: 'remove', id })) as CatalogResult)
       this.commit({ warning: null })
       return ok()
     } catch (error) {
@@ -159,7 +168,7 @@ export class TemplatesStore {
   async reset(): Promise<CommandResult> {
     if (!(await this.confirmed('Reset handoff templates?', 'Reset'))) return refused('cancelled')
     try {
-      this.adopt((await this.context.call(METHOD('templateMutate'), { op: 'reset' })) as CatalogResult)
+      this.adopt((await this.context.call('quirky.handoff/templateMutate', { op: 'reset' })) as CatalogResult)
       this.commit({ warning: null })
       return ok()
     } catch (error) {

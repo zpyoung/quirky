@@ -4,9 +4,8 @@ import { TEMPLATE_BODY_MAX, TEMPLATE_LIMIT, TEMPLATE_NAME_MAX } from '../core/te
 import type { ProbeResult } from '../daemon/probe'
 import type { ArchivedSource, Candidate, Controls, Draft, Include, Preview, Relationship, SourceInfo, SourceRef, Target } from '../daemon/types'
 import { isRecord } from '../daemon/guards'
-import { DEBOUNCE_MS, messageOf, NO_CONTEXT_MESSAGE, PLUGIN_ID, reasonOf, STALE_MESSAGE } from './copy'
+import { DEBOUNCE_MS, messageOf, NO_CONTEXT_MESSAGE, reasonOf, STALE_MESSAGE } from './copy'
 
-const METHOD = (name: string) => `${PLUGIN_ID}/${name}`
 
 export type CommandResult = { ok: true } | { ok: false; reason: string }
 
@@ -276,7 +275,7 @@ export class HandoffDialog {
     const attempt = ++this.opening
     let prepared: Prepared
     try {
-      prepared = (await this.context.call(METHOD('prepare'), { source: ref })) as Prepared
+      prepared = (await this.context.call('quirky.handoff/prepare', { source: ref })) as Prepared
     } catch (error) {
       if (attempt !== this.opening) return refused('superseded')
       const reason = reasonOf(error)
@@ -347,7 +346,7 @@ export class HandoffDialog {
     }
     this.commit({ agents: { state: 'loading', list: [] }, ...(preserveSelection ? {} : { agent: null }) })
     try {
-      const result = await this.context.call(METHOD('targetAgents'), { target })
+      const result = await this.context.call('quirky.handoff/targetAgents', { target })
       if (attempt !== this.targetSequence || !this.snapshot.shown) return
       if (!isRecord(result) || (result.state !== 'ready' && result.state !== 'failed') || !Array.isArray(result.list)) {
         throw new Error('The target owner returned an invalid Agent list.')
@@ -391,7 +390,7 @@ export class HandoffDialog {
     if (s.mode === 'create' && s.createName.trim() === '') delete controls.target
     this.commit({ previewing: true })
     try {
-      const result = (await this.context.call(METHOD('preview'), {
+      const result = (await this.context.call('quirky.handoff/preview', {
         source: ref,
         controls,
         ...(recapture ? { recapture: true } : {}),
@@ -596,7 +595,7 @@ export class HandoffDialog {
   private async reloadTemplates(): Promise<void> {
     if (!this.snapshot.shown) return
     try {
-      const { templates } = (await this.context.call(METHOD('templates'))) as TemplateResult
+      const { templates } = (await this.context.call('quirky.handoff/templates')) as TemplateResult
       if (!this.snapshot.shown) return
       const { templateId } = this.snapshot
       const before = this.snapshot.templates.find((template) => template.id === templateId)
@@ -632,7 +631,7 @@ export class HandoffDialog {
     if (!this.canSaveTemplate(typed)) return refused('cannot-save')
     let result: TemplateResult
     try {
-      result = (await this.context.call(METHOD('templateMutate'), { op: 'add', template: { name: typed, body: s.note } })) as TemplateResult
+      result = (await this.context.call('quirky.handoff/templateMutate', { op: 'add', template: { name: typed, body: s.note } })) as TemplateResult
     } catch (error) {
       this.context.toast('Could not save the template', messageOf(error))
       return refused(reasonOf(error) ?? 'save-failed')
@@ -659,7 +658,7 @@ export class HandoffDialog {
     this.sequence += 1
     this.commit({ starting: true, error: null })
     try {
-      await this.context.call(METHOD('start'), {
+      await this.context.call('quirky.handoff/start', {
         source: ref,
         controls: controlsOf(s),
         ...(s.detached ? { body: s.text } : { shown: s.text })
@@ -697,7 +696,7 @@ export class HandoffDialog {
     if (s.starting) return refused('starting')
     const draft: Draft = { controls: controlsOf(s), preview: s.detached ? { text: s.text, stale: s.stale } : null }
     try {
-      await this.context.call(METHOD('draft'), { source: this.ref, draft })
+      await this.context.call('quirky.handoff/draft', { source: this.ref, draft })
     } catch (error) {
       this.context.log(`could not keep the handoff draft: ${messageOf(error)}`)
       if (!this.snapshot.shown) return refused('superseded')
