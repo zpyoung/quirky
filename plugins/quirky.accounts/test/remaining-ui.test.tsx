@@ -87,6 +87,7 @@ let rejectStaleReset: boolean
 let resetOutcome: 'reset' | 'alreadyRedeemed' | 'nothingToReset' | 'noCredit'
 let credentialStatuses: CredentialStatus[]
 let clearCredentialGate: Promise<unknown> | null
+let credentialSaveGate: Promise<unknown> | null
 let confirmGate: Promise<boolean> | null
 let confirmCalls: unknown[]
 let externalOpenGate: Promise<unknown> | null
@@ -127,6 +128,7 @@ beforeEach(() => {
   resetOutcome = 'reset'
   credentialStatuses = []
   clearCredentialGate = null
+  credentialSaveGate = null
   confirmGate = null
   confirmCalls = []
   externalOpenGate = null
@@ -275,6 +277,11 @@ function makeContext(): UiPluginContext {
         if (credentialSaveFailure) {
           credentialSaveFailure = false
           throw new Error('api-key=private-fixture-secret at /private/home/fixture')
+        }
+        if (credentialSaveGate) {
+          const gate = credentialSaveGate
+          credentialSaveGate = null
+          return await gate
         }
         const status = { provider: params?.provider, kind: params?.kind, configured: true, readable: true }
         credentialStatuses = [...credentialStatuses.filter((item) => item.provider !== status.provider || item.kind !== status.kind), status as CredentialStatus]
@@ -838,6 +845,7 @@ test('login controls reject a second add while the first login request is pendin
   await act(async () => { add.click(); add.click() })
   expect(calls.filter((call) => call.method === 'quirky.accounts/beginLogin')).toHaveLength(1)
   expect(add.disabled).toBe(true)
+  expect([...container.querySelectorAll<HTMLElement>('.ui-notice-line')].some((line) => line.textContent?.trim() === 'Signing in…')).toBe(true)
   await act(async () => { resolveLogin({ id: 'login-1' }) })
   await settle()
   expect(calls.filter((call) => call.method === 'quirky.accounts/beginLogin')).toHaveLength(1)
@@ -858,6 +866,7 @@ test('Codex removal confirmation is single-flight and retains its provider-speci
   if (!confirmation || typeof confirmation !== 'object' || !('body' in confirmation) || typeof confirmation.body !== 'string') throw new Error('Missing provider-specific removal warning')
   expect(confirmation.body).toContain('session history and MCP logins')
   expect(remove.disabled).toBe(true)
+  expect([...container.querySelectorAll<HTMLElement>('.ui-notice-line')].some((line) => line.textContent?.trim() === 'Removing…')).toBe(true)
   await act(async () => { gate.resolve(true) })
   await settle()
   expect(calls.filter((call) => call.method === 'quirky.accounts/remove')).toHaveLength(1)
@@ -879,11 +888,74 @@ test('meter credential clear is single-flight and updates configured status', as
   await act(async () => { clear.click(); clear.click() })
   expect(calls.filter((call) => call.method === 'quirky.accounts/clearCredential')).toHaveLength(1)
   expect(clear.disabled).toBe(true)
+  expect([...container.querySelectorAll<HTMLElement>('.ui-notice-line')].some((line) => line.textContent?.trim() === 'Clearing…')).toBe(true)
   await act(async () => { gate.resolve({ provider: 'minimax', kind: 'api-key', configured: false, readable: false }) })
   await settle()
   const keyInput = inputByLabel(container, 'minimax API key')
   expect(keyInput.closest<HTMLElement>('.credential-row')?.querySelector('button[type="button"]')).toBeNull()
   expect(calls.filter((call) => call.method === 'quirky.accounts/clearCredential')).toHaveLength(1)
+})
+test('credential save shows shared progress and disables competing field actions', async () => {
+  stateValue = makeState('claude', 74, 'Account B', { stale: false })
+  usageValue = usageFor(stateValue)
+  credentialStatuses = [{ provider: 'minimax', kind: 'api-key', configured: true, readable: true }]
+  const gate = Promise.withResolvers<unknown>()
+  credentialSaveGate = gate.promise
+  await mount('view:quirky.accounts/settings')
+  await act(async () => { buttonByText('Meter credentials').click() })
+  const input = inputByLabel(container, 'minimax API key')
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  if (!setter) throw new Error('Missing native input value setter')
+  await act(async () => {
+    setter.call(input, 'fixture-secret')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const row = input.closest<HTMLElement>('.credential-row')
+  if (!row) throw new Error('Missing MiniMax credential row')
+  const save = row.querySelector<HTMLButtonElement>('button[type="submit"]')
+  const clear = [...row.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === 'Clear')
+  if (!save || !clear) throw new Error('Missing competing MiniMax credential actions')
+
+  await act(async () => { save.click() })
+  expect([...row.querySelectorAll<HTMLElement>('.ui-notice-line')].some((line) => line.textContent?.trim() === 'Saving…')).toBe(true)
+  expect(input.disabled).toBe(true)
+  expect(save.disabled).toBe(true)
+  expect(clear.disabled).toBe(true)
+
+  await act(async () => { gate.resolve({ provider: 'minimax', kind: 'api-key', configured: true, readable: true }) })
+  await settle()
+  expect(input.value).toBe('')
+  expect(row.textContent).toContain('Configured · Readable')
+})
+
+test('failed credential save keeps configured status and associates its safe error with the field', async () => {
+  stateValue = makeState('claude', 75, 'Account B', { stale: false })
+  usageValue = usageFor(stateValue)
+  credentialStatuses = [{ provider: 'minimax', kind: 'api-key', configured: true, readable: true }]
+  credentialSaveFailure = true
+  await mount('view:quirky.accounts/settings')
+  await act(async () => { buttonByText('Meter credentials').click() })
+  const input = inputByLabel(container, 'minimax API key')
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  if (!setter) throw new Error('Missing native input value setter')
+  await act(async () => {
+    setter.call(input, 'fixture-secret')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const row = input.closest<HTMLElement>('.credential-row')
+  if (!row) throw new Error('Missing MiniMax credential row')
+  await act(async () => { row.querySelector<HTMLButtonElement>('button[type="submit"]')?.click() })
+  await settle()
+  const error = [...row.querySelectorAll<HTMLElement>('[role="alert"]')].find((item) =>
+    item.textContent?.includes('Could not confirm saving this credential.')
+  )
+  if (!error) throw new Error('Missing MiniMax field error')
+  expect(input.getAttribute('aria-invalid')).toBe('true')
+  expect(input.getAttribute('aria-describedby')?.split(/\\s+/)).toContain(error.id)
+  expect(row.textContent).toContain('Configured · Readable')
+  expect(input.value).toBe('fixture-secret')
+  expect(error.textContent).not.toContain('fixture-secret')
+  expect(toastCalls.some(({ body }) => body.includes('fixture-secret') || body.includes('/private/home'))).toBe(false)
 })
 test('Claude copy-link and Codex add expose pending links and a working Cancel action', async () => {
   for (const provider of ['claude', 'codex'] as const) {
@@ -1215,6 +1287,12 @@ test('MiniMax, OpenCode Go and ZCode secrets stay masked through save, clear and
   await act(async () => { minimaxRow.querySelector<HTMLButtonElement>('button[type="submit"]')?.click() })
   await settle()
   expect(minimaxRow.querySelector('[role="alert"]')?.textContent).toContain('Could not confirm saving this credential')
+  const minimaxError = [...minimaxRow.querySelectorAll<HTMLElement>('[role="alert"]')].find((error) =>
+    error.textContent?.includes('Could not confirm saving this credential.')
+  )
+  if (!minimaxError) throw new Error('Missing MiniMax credential field error')
+  expect(minimaxInput.getAttribute('aria-invalid')).toBe('true')
+  expect(minimaxInput.getAttribute('aria-describedby')?.split(/\s+/)).toContain(minimaxError.id)
   expect(toastCalls).toContainEqual({ title: 'Could not save provider credential', body: 'The request could not be completed. Please try again.' })
 
   const zcodeInput = inputByLabel(container, 'zcode API key')
@@ -1229,6 +1307,12 @@ test('MiniMax, OpenCode Go and ZCode secrets stay masked through save, clear and
   await act(async () => { zcodeClear.click() })
   await settle()
   expect(zcodeRow.querySelector('[role="alert"]')?.textContent).toContain('Could not confirm clearing this credential')
+  const zcodeError = [...zcodeRow.querySelectorAll<HTMLElement>('[role="alert"]')].find((error) =>
+    error.textContent?.includes('Could not confirm clearing this credential.')
+  )
+  if (!zcodeError) throw new Error('Missing ZCode credential field error')
+  expect(zcodeInput.getAttribute('aria-invalid')).toBe('true')
+  expect(zcodeInput.getAttribute('aria-describedby')?.split(/\s+/)).toContain(zcodeError.id)
   expect(zcodeRow.textContent).toContain('Configured · Readable')
   expect(toastCalls).toContainEqual({ title: 'Could not clear provider credential', body: 'The request could not be completed. Please try again.' })
   expect(container.textContent).not.toContain('failure-secret')

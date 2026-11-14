@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { AccountsUiStore, accountSort, ageLabel, credentialLabel, displayIdentity, formatReset, snapshotStatus, windowEntries, type AccountState, type AccountSummary, type CredentialStatus, type ManagedProvider, type PendingLogin } from './model'
-import { Badge, Button, EmptyState, FormRow, ListRow, SectionHeader, SelectField, Tabs, TextField } from '@quirky/ui'
+import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'
 import { meterColor, SnapshotLine, UsagePreferencesControls } from './Usage'
 import { useStableReport, type UiReport } from './report'
 
@@ -36,9 +36,10 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
   const isCodex = provider === 'codex'
   const loginUrl = pending.url
   return <div className="login-notice" role="status" aria-live="polite">
-    <strong>{pending.status === 'pending' ? isCodex ? 'Codex opened this sign-in link in your browser.' : 'Waiting for Claude sign-in.' : pending.status === 'error' ? 'Sign-in could not be completed.' : pending.status === 'complete' ? 'Sign-in completed.' : 'Sign-in cancelled.'}</strong>
+    {pending.status === 'pending' && <NoticeLine>{isCodex ? 'Codex opened this sign-in link in your browser.' : 'Waiting for Claude sign-in.'}</NoticeLine>}
+    {pending.status !== 'pending' && pending.status !== 'error' && <strong>{pending.status === 'complete' ? 'Sign-in completed.' : 'Sign-in cancelled.'}</strong>}
     {isCodex && pending.status === 'pending' && <p>Copy it to finish signing in somewhere else — a private window, or another profile.</p>}
-    {pending.status === 'error' && <p className="status-error">Sign-in failed. Check the provider CLI and try again.</p>}
+    {pending.status === 'error' && <InlineError message="Sign-in failed. Check the provider CLI and try again." />}
     {loginUrl && <div className="login-actions">
       <Button type="button" disabled={remoteOwner} onClick={() => void store.copyLoginLink({ id: pending.id, provider: pending.provider, url: loginUrl })}>Copy link</Button>
       {isCodex && <Button type="button" disabled={remoteOwner || opening} onClick={async () => {
@@ -53,7 +54,9 @@ function LoginLinkNotice({ context, store, pending, provider }: { context: UiPlu
         }
       }}>{opening ? 'Opening…' : 'Open'}</Button>}
     </div>}
-    {openError && <p className="status-error" role="alert">Could not open the sign-in link. Try again or use Copy link to open it in your browser.</p>}
+    {opening && <NoticeLine>Opening…</NoticeLine>}
+    {loginCancelling && <NoticeLine>Cancelling…</NoticeLine>}
+    {openError && <InlineError message="Could not open the sign-in link. Try again or use Copy link to open it in your browser." />}
     {pending.status === 'pending' && <Button type="button" disabled={remoteOwner || loginCancelling} onClick={() => void store.cancelLogin()}>{loginCancelling ? 'Cancelling…' : 'Cancel'}</Button>}
   </div>
 }
@@ -84,7 +87,7 @@ function AccountRow({ store, provider, account, state }: { store: AccountsUiStor
       title={<><strong>{account.label}</strong>{badges.map((badge) => <Badge key={badge.text} tone={badge.tone}>{badge.text}</Badge>)}</>}
       description={<>
         <span>{[account.email, account.organization, account.lastAuthenticatedAt ? `Last signed in ${new Date(account.lastAuthenticatedAt).toLocaleDateString()}` : null].filter(Boolean).join(' · ') || 'Managed account on this device'}</span>
-        {account.needsSignIn && <span className="status-error">Sign in again to use this account.</span>}
+        {account.needsSignIn && <InlineError message="Sign in again to use this account." />}
       </>}
       selected={state.active[provider] === account.id}
       trailing={<span className="account-actions">
@@ -94,6 +97,7 @@ function AccountRow({ store, provider, account, state }: { store: AccountsUiStor
         <Button type="button" variant="destructive" aria-label={`Remove ${providerName} account ${account.label}`} title={remoteOwner ? 'Account removal is available on this device only.' : undefined} disabled={remoteOwner || removing} onClick={() => void remove()}>{removing ? 'Removing…' : 'Remove'}</Button>
       </span>}
     />
+    {removing && <div role="status" aria-live="polite"><NoticeLine>Removing…</NoticeLine></div>}
     {account.needsSignIn && provider === 'claude' && <details className="account-more">
       <summary aria-label="More sign-in options">More sign-in options</summary>
       <Button type="button" disabled={remoteOwner || loginBusy} onClick={() => void store.beginLogin('claude', { accountId: account.id, copyLink: true })}>Copy sign-in link instead</Button>
@@ -138,12 +142,13 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
       </div>
       {configWarnings.length > 0 && <section className="section-card" role="status" aria-label="Codex configuration warnings">
         <SectionHeader title="Codex settings sync" />
-        {configWarnings.map((warning, index) => <p className="status-error" key={`${warning.accountId ?? 'system'}-${warning.kind}-${index}`}>{warning.message}</p>)}
+        {configWarnings.map((warning, index) => <InlineError key={`${warning.accountId ?? 'system'}-${warning.kind}-${index}`} message={warning.message} />)}
       </section>}
       {provider === 'claude' ? <div className="details-actions">
         <Button type="button" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('claude')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>
         <details><summary aria-label="More sign-in options">More sign-in options</summary><Button type="button" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('claude', { copyLink: true })}>Copy sign-in link instead</Button></details>
       </div> : <Button type="button" disabled={remoteOwner || Boolean(anyPending)} onClick={() => void store.beginLogin('codex')}>{anyPending ? 'Signing in…' : 'Add Account'}</Button>}
+      {snapshot.loginStarting && <div role="status" aria-live="polite"><NoticeLine>Signing in…</NoticeLine></div>}
       {pending?.provider === provider && <LoginLinkNotice key={pending.id} context={context} store={store} pending={pending} provider={provider} />}
     </section>
     {provider === 'claude' && <section className="section-card">
@@ -160,7 +165,7 @@ function ManagedAccountsSection({ context, store, provider }: { context: UiPlugi
   </div>
 }
 
-function ProviderReadOnlySettings({ store, provider }: { store: AccountsUiStore; provider: 'grok' | 'cursor' }) {
+function ProviderReadOnlySettings({ context, store, provider }: { context: UiPluginContext; store: AccountsUiStore; provider: 'grok' | 'cursor' }) {
   const snapshot = useStore(store)
   const title = provider === 'grok' ? 'Grok (xAI)' : 'Cursor'
   const usage = snapshot.usage?.providers.find((item) => item.provider === provider)
@@ -172,12 +177,23 @@ function ProviderReadOnlySettings({ store, provider }: { store: AccountsUiStore;
     ? signedIn ? status?.label === 'Sign-in expired' ? 'Session expired — run grok on this computer and refresh usage.' : 'Signed in. Quirky reads the Grok CLI session without changing it.' : 'Not signed in to Grok CLI. In a terminal, run grok login, then refresh usage here.'
     : signedIn ? status?.label === 'Sign-in expired' ? 'Sign-in expired — run cursor-agent login on this computer, then refresh usage.' : `Signed in${source ? ` · ${sourceName(source)}` : ''}. Quirky only reads the existing Cursor sign-in.` : 'No Cursor sign-in found on this computer.'
   const windows = usage ? windowEntries(usage) : []
+  const openHelp = async () => {
+    try {
+      await context.call('quirky.terminal/openExternal', { target: helpUrl })
+    } catch {
+      context.toast('Could not open provider help', 'Try again or open the provider help page in your browser.')
+    }
+  }
   return <section className="section-card">
     <SectionHeader title={title} actions={<Button type="button" aria-label={`Refresh ${title} usage`} disabled={snapshot.refreshing} onClick={() => void store.refreshCommand(provider)}>Refresh usage</Button>} />
     <p className="settings-description">{provider === 'grok' ? 'Shows weekly credit usage from your existing Grok CLI sign-in. Quirky never refreshes or changes Grok credentials.' : 'Shows monthly Cursor plan usage from the sign-in already on this computer. Quirky only reads it — it never changes your Cursor login.'}</p>
-    <p className={status?.kind === 'warning' ? 'status-error' : ''} role="status">{statusText}</p>
+    {!usage ? <EmptyState message={provider === 'grok' ? 'No Grok usage reported yet.' : 'No Cursor usage reported yet.'} />
+      : status?.signedOut ? <EmptyState message={statusText} />
+        : usage.status === 'idle' || usage.status === 'fetching' ? <div role="status" aria-live="polite"><NoticeLine>{status?.label}</NoticeLine></div>
+          : usage.status === 'error' || usage.status === 'unavailable' ? <InlineError message={status?.label ?? 'Usage unavailable'} /> : null}
+    {!status?.signedOut && <p className="settings-description">{statusText}</p>}
     {source && <p className="muted">Credential source: {sourceName(source)} · {usage ? ageLabel(usage.updatedAt) : 'Not refreshed yet'}</p>}
-    <div className="details-actions"><a href={helpUrl} target="_blank" rel="noopener noreferrer">{provider === 'grok' ? 'Grok CLI docs' : 'Cursor dashboard'}</a></div>
+    <div className="details-actions"><Button type="button" onClick={() => void openHelp()}>{provider === 'grok' ? 'Grok CLI docs' : 'Cursor dashboard'}</Button></div>
     {usage && <>
       <div className="usage-window-list">{windows.map(({ name, window }) => <div key={name} className="usage-window">
         <div className="usage-window-heading"><strong>{provider === 'grok' ? name === '7d' ? 'Weekly credits' : name === '30d' ? 'Monthly usage' : name : provider === 'cursor' ? name === '30d' ? 'Monthly plan usage' : name : name}</strong><span>{Math.round(window.usedPercent)}% used</span></div>
@@ -231,12 +247,16 @@ function CredentialField({ store, provider, kind, inputType, statuses, disabled 
     }
   }
   return <div className="credential-row">
-    <div className="account-row-main"><small role="status">{status?.configured ? status.readable ? 'Configured · Readable' : 'Configured · Not readable' : 'Not configured'}</small>{actionError && <small className="status-error" role="alert">{actionError}</small>}</div>
+    <div className="account-row-main"><small role="status">{status?.configured ? status.readable ? 'Configured · Readable' : 'Configured · Not readable' : 'Not configured'}</small></div>
     <form className="credential-entry" onSubmit={save}>
-      <TextField label={`${provider} ${credentialLabel(kind)}`} type={inputType} autoComplete="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => setValue(event.currentTarget.value)} />
+      <FormRow label={`${provider} ${credentialLabel(kind)}`} htmlFor={`credential-${provider}-${kind}`} error={actionError ?? undefined}>
+        <input className="ui-text-field__input" type={inputType} autoComplete="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => setValue(event.currentTarget.value)} />
+      </FormRow>
       <Button type="submit" disabled={!value || busy}>{saving ? 'Saving…' : 'Set'}</Button>
       {status?.configured && <Button type="button" variant="destructive" disabled={busy} onClick={() => void clear()}>{clearing ? 'Clearing…' : 'Clear'}</Button>}
     </form>
+    {saving && <div role="status" aria-live="polite"><NoticeLine>Saving…</NoticeLine></div>}
+    {clearing && <div role="status" aria-live="polite"><NoticeLine>Clearing…</NoticeLine></div>}
   </div>
 }
 
@@ -287,7 +307,7 @@ function GeminiCliSettings({ context }: { context: UiPluginContext }) {
     <FormRow label="Allow Gemini CLI OAuth credential refresh" htmlFor="gemini-cli-oauth-enabled">
       <input id="gemini-cli-oauth-enabled" type="checkbox" checked={enabled} disabled={saving} onChange={(event) => void update(event.currentTarget.checked)} />
     </FormRow>
-    {saving && <small className="loading-indicator">Saving…</small>}
+    {saving && <div role="status" aria-live="polite"><NoticeLine>Saving…</NoticeLine></div>}
   </section>
 }
 
@@ -296,7 +316,7 @@ function SettingsSection({ context, store, id }: { context: UiPluginContext; sto
   const state = useStore(store).accounts
   if (id === 'claude' || id === 'codex') return <ManagedAccountsSection context={context} store={store} provider={id} />
   if (id === 'gemini') return <GeminiCliSettings context={context} />
-  if (id === 'grok' || id === 'cursor') return <ProviderReadOnlySettings store={store} provider={id} />
+  if (id === 'grok' || id === 'cursor') return <ProviderReadOnlySettings context={context} store={store} provider={id} />
   if (id === 'credentials') return <MeterCredentials store={store} />
   return <UsagePreferencesControls store={store} preferences={state?.preferences ?? { mode: 'compact', direction: 'used', hidden: false, visibleProviders: [], density: 'normal', claudeSwitchPolicy: 'ask', skipCodexResetConfirm: false }} />
 }
@@ -314,6 +334,9 @@ export function AccountsSettings({ context, store, report }: { context: UiPlugin
   const snapshot = useStore(store)
   const section = SETTINGS_SECTIONS.some((item) => item.id === snapshot.ui.settingsSection) ? snapshot.ui.settingsSection! : 'claude'
   const warnings = snapshot.accounts?.configWarnings.filter((warning) => warning.provider === 'codex' && warning.accountId === snapshot.accounts?.active.codex).map(({ kind, message }) => ({ kind, message })) ?? []
+  const accountError = snapshot.error ?? (snapshot.scope.kind === 'remote' ? snapshot.scope.error : null)
+  const accountLoading = !snapshot.accounts && !accountError
+  const loadingText = snapshot.scope.kind === 'remote' ? `Loading Accounts from ${snapshot.scope.hostName ?? 'the remote owner'}…` : 'Loading accounts…'
   const reportState = {
     view: 'accounts-settings',
     section,
@@ -341,16 +364,12 @@ export function AccountsSettings({ context, store, report }: { context: UiPlugin
     </nav>
     <main className="settings-content" aria-label={`${SETTINGS_SECTIONS.find((item) => item.id === section)?.title ?? 'Accounts'} settings`}>
       <section>
-        <SectionHeader title={SETTINGS_SECTIONS.find((item) => item.id === section)?.title ?? 'Accounts'} actions={snapshot.refreshing ? <small className="loading-indicator" role="status">Refreshing…</small> : undefined} />
-        {snapshot.scope.kind === 'remote' && <p className={snapshot.scope.status === 'unavailable' ? 'status-error' : ''} role="status">
-          {snapshot.scope.status === 'loading'
-            ? `Loading Accounts from ${snapshot.scope.hostName ?? 'the remote owner'}…`
-            : snapshot.scope.status === 'unavailable'
-              ? `${snapshot.scope.hostName ?? 'Remote owner'} is unavailable.`
-              : `Accounts on ${snapshot.scope.hostName ?? 'the remote owner'}. Remote sign-in and reauthentication are unavailable.`}
-        </p>}
-        {snapshot.error && <p className="status-error" role="alert">{snapshot.error}</p>}
-        <SettingsSection key={section} context={context} store={store} id={section} />
+        <SectionHeader title={SETTINGS_SECTIONS.find((item) => item.id === section)?.title ?? 'Accounts'} />
+        {snapshot.refreshing && <div role="status" aria-live="polite"><NoticeLine>Refreshing…</NoticeLine></div>}
+        {snapshot.scope.kind === 'remote' && snapshot.scope.status === 'ready' && <p className="settings-description">Accounts on {snapshot.scope.hostName ?? 'the remote owner'}. Remote sign-in and reauthentication are unavailable.</p>}
+        {accountLoading ? <div role="status" aria-live="polite"><NoticeLine>{loadingText}</NoticeLine></div>
+          : accountError ? <InlineError message={accountError} />
+            : <SettingsSection key={section} context={context} store={store} id={section} />}
       </section>
     </main>
   </div>
