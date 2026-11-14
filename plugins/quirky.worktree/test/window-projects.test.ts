@@ -447,6 +447,7 @@ test('SC-60: Project Settings shows what repo set stored, and saving a change sh
     worktreeLocation: join(w.root, 'api-ws'),
     setupPolicy: 'skip-by-default',
     agentStartup: 'start-immediately',
+    commandSource: 'local-only',
     setupScript: '  make deps  \n  ',
     archiveScript: ''
   })
