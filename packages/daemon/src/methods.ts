@@ -246,6 +246,7 @@ export function createHandlers(
       return OK
     },
     'status.get': () => core.status(),
+    'diagnostics.memory': () => core.memory(),
     'daemon.stop': () => {
       setTimeout(services.stopDaemon, 0)
       return OK
