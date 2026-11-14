@@ -532,6 +532,20 @@ identity remains explicit when origin and upstream reuse a PR number. Merge and
 comment deletion retain kernel confirmation and canonical provider validation;
 queued merge is not displayed as completed merge.
 
+When Heimdall is available, Checks includes **PR Sitter** controls and a fleet-wide
+**Stop all PR Sitters** safety strip, even with no review selected. The dialog
+arms or re-arms a sitter, shows its status and activity, approves a specific held
+action, stops the watcher, and copies its debug report. Permissions start at Off;
+Ask holds an action for approval. Active-time budgets count only worker/action time.
+An unreachable owner makes approval, stop and re-arm read-only until contact returns.
+Stopping prevents new actions; an in-flight provider operation may finish.
+
+The same actions are available through `reviews checks-sitter-state`,
+`checks-sitter-arm`, `checks-sitter-approve`, `checks-sitter-stop`,
+`checks-sitter-stop-all` and `checks-sitter-debug-report`. Worktree-scoped commands
+accept `--worktree <id>`; the API catalog describes enrollment and approval arguments.
+The debug-report CLI prints JSON rather than writing the clipboard.
+
 Creation rechecks the exact branch/head and eligibility, pushes first only when
 required, preserves an existing review, and reports a created PR separately from
 failed stack registration. Failed or superseded generation cannot replace another
