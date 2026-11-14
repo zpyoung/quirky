@@ -262,7 +262,7 @@ export function installWindowCommands(fake: FakeContext): void {
     const id = String(params.id)
     let handler = fake.provided.get(id)
     if (!handler) {
-      // The workspace import reaches xterm, so load handlers only after happy-dom registers window.
+      // the workspace import reaches xterm, so handlers need happy-dom's window before evaluation
       const { terminalCommands, sessionCommands } = await import('../../src/window/commands')
       if (id.startsWith('command:quirky.terminal/')) handler = terminalCommands(fake.context)[id.slice('command:quirky.terminal/'.length)]
       else if (id.startsWith('command:quirky.session/')) handler = sessionCommands(fake.context)[id.slice('command:quirky.session/'.length)]
