@@ -143,7 +143,8 @@ function makeContext(): UiPluginContext {
         if (typeof id !== 'string') throw new Error('Missing routed command ID')
         const handler = provided.get(id)
         if (typeof handler !== 'function') throw new Error(`Missing routed command handler: ${id}`)
-        return { result: await (handler as (args?: unknown) => unknown)(params?.args) }
+        const result = await (handler as (args?: unknown) => unknown)(params?.args)
+        return { result: result === undefined ? null : result }
       }
       if (method === 'quirky.agents/list') return agentListing
       if (method === 'quirky.agents/refresh') return refreshedAgentListing
@@ -846,4 +847,28 @@ test('select-account and copy-login-link are declared with their public command 
   expect(pluginManifest.contributes.command).toContainEqual({ id: 'select-account', title: 'Select Accounts account' })
   expect(pluginManifest.contributes.command).toContainEqual({ id: 'copy-login-link', title: 'Copy account sign-in link' })
   expect(pluginManifest.apiVersion).toBe('1.15.0')
+})
+test('origin-routed void commands remain successful after daemon null-result normalization', async () => {
+  const context = makeContext()
+  activate(context)
+  await settle()
+
+  const selectResult = await commandHandler(SELECT_ACCOUNT_COMMAND_ID)({
+    provider: 'claude', accountId: null, connId: 8
+  })
+  expect(selectResult).toBeUndefined()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/select').map((call) => call.params)).toEqual([
+    { provider: 'claude', accountId: null }
+  ])
+
+  calls = []
+  const refreshResult = await commandHandler(REFRESH_COMMAND_ID)({ provider: 'grok', connId: 8 })
+  expect(refreshResult).toBeUndefined()
+  expect(calls.filter((call) => call.method === 'quirky.accounts/refresh').map((call) => call.params)).toEqual([
+    { provider: 'grok', force: true }
+  ])
+  expect(await commandHandler(SELECT_ACCOUNT_COMMAND_ID)({ provider: 'other', accountId: null, connId: 8 }))
+    .toEqual({ ok: false, reason: 'invalid-args' })
+  expect(await commandHandler(REFRESH_COMMAND_ID)({ provider: 'grok', connId: 0 }))
+    .toEqual({ ok: false, reason: 'invalid-args' })
 })

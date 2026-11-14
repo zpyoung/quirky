@@ -91,8 +91,8 @@ function isCopySuccess(value: unknown): value is { ok: true } {
 
 
 function routeResult(value: unknown): void | CommandRefusal {
-  if (value === undefined || isCommandRefusal(value)) return value
-  return { ok: false, reason: 'owner-unavailable' }
+  if (value === undefined || value === null) return
+  return isCommandRefusal(value) ? value : { ok: false, reason: 'owner-unavailable' }
 }
 
 async function routeCommandToOrigin(

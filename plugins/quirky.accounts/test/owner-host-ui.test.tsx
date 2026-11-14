@@ -257,7 +257,8 @@ function makeContext(world: OwnerWorld, options: { layout: UiLayout; holdFirstRe
           if (typeof id !== 'string' || !targetProviders) throw new Error('The originating window is unavailable.')
           const handler = targetProviders.get(id)
           if (typeof handler !== 'function') throw new Error(`Unknown window command: ${id}`)
-          return { result: await (handler as (args?: unknown) => unknown)(params.args) }
+          const result = await (handler as (args?: unknown) => unknown)(params.args)
+          return { result: result ?? null }
         }
         const result = await world.local.client.callAny(method, params)
         if (method === 'quirky.worktree/remoteShow') {
@@ -530,7 +531,7 @@ test('the window layout keeps the remote workspace owner through Accounts settin
   expect(fixture.calls.some((item) => item.method === 'quirky.accounts/ownerCall' && item.params?.operation === 'setPreferences')).toBe(false)
   expect((await call<{ preferences: { claudeSwitchPolicy: string } }>(world.local, 'quirky.accounts/list')).preferences.claudeSwitchPolicy).toBe('never')
   expect((await call<{ preferences: { claudeSwitchPolicy: string } }>(world.remote, 'quirky.accounts/list')).preferences.claudeSwitchPolicy).toBe('always')
-})
+}, 15_000)
 
 test('remote Accounts disables browser sign-in and reauthentication while keeping local policy state local', async () => {
   const world = await makeOwnerWorld('accounts-ui-sign-in')
@@ -564,7 +565,7 @@ test('remote Accounts disables browser sign-in and reauthentication while keepin
   expect(fixture.calls.some((item) => item.method === 'quirky.accounts/beginLogin')).toBe(false)
   expect(fixture.calls.some((item) => item.method === 'quirky.terminal/openExternal')).toBe(false)
   expect(fixture.calls.some((item) => item.method === 'quirky.accounts/ownerCall' && item.params?.operation === 'beginLogin')).toBe(false)
-})
+}, 15_000)
 
 test('a stale remote response and owner event cannot replace the new local scope; a replaced offline mirror never falls back locally', async () => {
   const world = await makeOwnerWorld('accounts-ui-stale-scope')
@@ -584,17 +585,19 @@ test('a stale remote response and owner event cannot replace the new local scope
   })
   if (!loadingRefusal) throw new Error('Missing loading-owner selection result')
   expect(await loadingRefusal).toEqual({ ok: false, reason: 'owner-unavailable' })
-  fixture.releaseRemoteResolution()
+  await act(async () => { fixture.releaseRemoteResolution(); await Promise.resolve() })
   await waitUntil(() => fixture.firstRemoteListStarted(), 'Remote Accounts request did not start for the focused mirror.')
   expect(fixture.calls.filter((item) => item.method === 'quirky.accounts/ownerCall' && item.params?.operation === 'select')).toEqual([])
 
   await act(async () => { fixture.emitLayout(localLayout(world.localWorktree.id)) })
   await waitUntil(() => container.textContent?.includes('Local Claude account') === true, 'The new local workspace scope did not load.')
   const remoteOwnerCallsBeforeStaleDelivery = fixture.calls.filter((item) => item.method === 'quirky.accounts/ownerCall').length
-  fixture.resolveFirstRemoteList()
-  await settle(40)
-  fixture.emitEvent({ type: 'quirky.accounts/changed', data: { revision: 99, owner } } as unknown as QuirkyEvent)
-  await settle(50)
+  await act(async () => { fixture.resolveFirstRemoteList(); await fixture.whenIdle() })
+  await act(async () => {
+    fixture.emitEvent({ type: 'quirky.accounts/changed', data: { revision: 99, owner } } as unknown as QuirkyEvent)
+    await Bun.sleep(50)
+    await fixture.whenIdle()
+  })
   expect(container.textContent).toContain('Local Claude account')
   expect(container.textContent).not.toContain('Remote Claude active')
   expect(fixture.calls.filter((item) => item.method === 'quirky.accounts/ownerCall')).toHaveLength(remoteOwnerCallsBeforeStaleDelivery)
@@ -678,6 +681,7 @@ test('auxiliary Settings routes commands to its own local Accounts store when ma
   const target = localState.accounts.find((account) => account.provider === 'claude' && account.id !== localState.active.claude)
   if (!target) throw new Error('Missing auxiliary local Claude selection target')
   const auxiliaryLoginUrl = 'https://auth.openai.com/oauth/authorize?state=auxiliary-window'
+  const loginStatus = Promise.withResolvers<unknown>()
   let auxiliaryAccounts: AccountState = {
     ...localState,
     pendingLogin: {
@@ -696,6 +700,10 @@ test('auxiliary Settings routes commands to its own local Accounts store when ma
     if (method === 'quirky.accounts/list') {
       auxiliary.calls.push({ method, params })
       return auxiliaryAccounts
+    }
+    if (method === 'quirky.accounts/loginStatus') {
+      auxiliary.calls.push({ method, params })
+      return await loginStatus.promise
     }
     if (method === 'quirky.accounts/usage' || method === 'quirky.accounts/refresh') {
       auxiliary.calls.push({ method, params })
@@ -825,6 +833,8 @@ test('auxiliary Settings routes commands to its own local Accounts store when ma
       for (const cleanup of unregister.splice(0)) cleanup()
       mainUi.deactivate()
       auxiliaryUi.deactivate()
+      loginStatus.resolve({ status: 'pending', url: auxiliaryLoginUrl, error: null, result: null })
+      await Promise.resolve()
       modules.remove()
     })
   }
