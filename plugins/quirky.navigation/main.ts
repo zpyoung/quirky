@@ -2,8 +2,9 @@ import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import { findTsServer, ServerPool, ServerPoolError, tsRuntime } from './src/servers'
 import { NavigationService } from './src/service'
 import { TsServer } from './src/tsserver'
+import { pythonFactory } from './src/python'
 
-const serverLimits = { typescript: 2 }
+const serverLimits = { typescript: 2, python: 4 }
 const idleMs = 600000
 
 let pool: ServerPool | undefined
@@ -15,7 +16,8 @@ export async function activate(context: PluginContext): Promise<void> {
       typescript: async (worktree) => {
         const { executable } = tsRuntime()
         return new TsServer({ process: context.process, worktreePath: worktree.path, serverPath: findTsServer(worktree.path, context.dir), runtime: executable })
-      }
+      },
+      python: pythonFactory({ process: context.process, pluginDir: context.dir })
     },
     limits: serverLimits, idleMs, requestTimeoutMs: 120000
   })
