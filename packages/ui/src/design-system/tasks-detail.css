@@ -401,7 +401,34 @@
 }
 
 .quirky-tasks-markdown-composer__image-toggle {
-  margin-inline-start: auto;
+  border-radius: var(--ui-radius-control);
+  color: var(--ui-muted);
+  cursor: pointer;
+  inline-size: fit-content;
+  list-style: none;
+}
+
+.quirky-tasks-markdown-composer__image-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.quirky-tasks-markdown-composer__image-toggle::after {
+  content: '⌄';
+  margin-inline-start: var(--ui-space-6);
+}
+
+.quirky-tasks-markdown-composer__image-toggle:hover,
+.quirky-tasks-markdown-composer__image[open] > .quirky-tasks-markdown-composer__image-toggle {
+  color: var(--ui-text);
+}
+
+.quirky-tasks-markdown-composer__image-toggle:focus-visible {
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: var(--ui-focus-offset);
+}
+
+.quirky-tasks-markdown-composer__image[open] > .quirky-tasks-markdown-composer__image-toggle {
+  margin-block-end: var(--ui-space-8);
 }
 
 .quirky-tasks-markdown-composer__error {

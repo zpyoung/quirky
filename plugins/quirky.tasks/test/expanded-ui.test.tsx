@@ -248,6 +248,8 @@ async function mountExpanded(options: { state?: TasksState; handlers?: Record<st
     'quirky.hosting/viewer': () => ({ login: 'zach' }),
     'ui.tool.open': () => ({}),
     'quirky.reviews/open': () => ({ opened: true }),
+    'ui.window.self': () => ({ connId: 7 }),
+    'ui.window.command.run': async (params) => ({ result: await (provided.get(params.id as string) as (args: unknown) => unknown)(params.args) }),
     ...options.handlers
   }
   const context = {
