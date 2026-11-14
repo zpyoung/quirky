@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, Checkbox, ContextMenu, EmptyState, IconButton, ListRow, SectionHeader, StatusDot, TextField, type ContextMenuItem } from '@quirky/ui'
+import { Button, Checkbox, ContextMenu, EmptyState, IconButton, InlineError, ListRow, NoticeLine, SectionHeader, StatusDot, TextField, type ContextMenuItem } from '@quirky/ui'
 import { isRecord as record } from './loop-status'
 import { currentWindowId } from './actions'
+import { registerUiController, requestUiControl } from './ui-control'
 
 type HostRow = { id: string; runtimeId: string; name: string; connected: boolean; error: string | null }
 type WorkspaceRow = { id: string; hostId: string; name: string; connected: boolean }
-type OpenMenu = { x: number; y: number; label: string; items: ContextMenuItem[]; returnFocusTo?: HTMLElement }
+type OpenMenu = { workspace: string; x: number; y: number; label: string; items: ContextMenuItem[]; returnFocusTo?: HTMLElement }
 
 function readHosts(value: unknown): HostRow[] {
   if (!record(value) || !Array.isArray(value.hosts)) throw new Error('Invalid registered host inventory.')
@@ -34,11 +35,13 @@ function readWorkspaces(value: unknown): WorkspaceRow[] {
 export function RemoteWorkspacesSection({ context }: { context: UiPluginContext }) {
   const [hosts, setHosts] = useState<HostRow[]>([])
   const [workspaces, setWorkspaces] = useState<WorkspaceRow[]>([])
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading')
   const [runtime, setRuntime] = useState('')
   const [replace, setReplace] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [menu, setMenu] = useState<OpenMenu | null>(null)
+  const root = useRef<HTMLElement | null>(null)
   const mounted = useRef(false)
   const inFlight = useRef(false)
 
@@ -52,16 +55,41 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
     if (mounted.current) {
       setHosts(nextHosts)
       setWorkspaces(nextWorkspaces)
+      setLoadState('ready')
     }
   }, [context])
 
   useEffect(() => {
     mounted.current = true
     void load().catch((failure: unknown) => {
-      if (mounted.current) setError(failure instanceof Error ? failure.message : String(failure))
+      if (mounted.current) {
+        setError(failure instanceof Error ? failure.message : String(failure))
+        setLoadState('failed')
+      }
     })
     return () => { mounted.current = false }
   }, [load])
+  useEffect(() => registerUiController(context, 'remote-workspaces', (args) => {
+    if (args.action === 'open-workspace-menu') {
+      const row = [...(root.current?.querySelectorAll<HTMLElement>('[data-workspace-id]') ?? [])]
+        .find((candidate) => candidate.dataset.workspaceId === args.workspace)
+      const button = row?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')
+      const workspace = workspaces.find((candidate) => candidate.id === args.workspace)
+      if (!button || button.disabled || !workspace) return false
+      const bounds = button.getBoundingClientRect()
+      openWorkspaceMenu(workspace, bounds.left, bounds.bottom, button)
+      return true
+    }
+    if (args.action === 'close-workspace-menu') {
+      if (menu?.workspace !== args.workspace) return false
+      const row = [...(root.current?.querySelectorAll<HTMLElement>('[data-workspace-id]') ?? [])]
+        .find((candidate) => candidate.dataset.workspaceId === args.workspace)
+      row?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')?.focus()
+      setMenu(null)
+      return true
+    }
+    return false
+  }), [context, menu, workspaces])
 
   async function run(action: () => Promise<void>) {
     if (inFlight.current) return
@@ -99,13 +127,33 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
 
   function openWorkspaceMenu(workspace: WorkspaceRow, x: number, y: number, returnFocusTo: HTMLElement) {
     setMenu({
+      workspace: workspace.id,
       x, y, returnFocusTo,
       label: `Actions for ${workspace.name}`,
       items: [{ id: 'open', label: 'Open workspace', onSelect: () => { void run(() => navigate(workspace.id)) } }]
     })
   }
+  async function requestOpenWorkspaceMenu(workspace: string) {
+    setError(null)
+    try {
+      const result = await requestUiControl(context, { action: 'open-workspace-menu', workspace })
+      if (result.delivered === 0) context.log('worktree: open-workspace-menu reached no mounted target')
+    } catch (failure) {
+      if (mounted.current) setError(failure instanceof Error ? failure.message : String(failure))
+    }
+  }
 
-  return <section aria-label="Remote workspaces" className="ui-panel-content remote-workspaces">
+  async function requestCloseWorkspaceMenu(workspace: string) {
+    try {
+      const result = await requestUiControl(context, { action: 'close-workspace-menu', workspace })
+      if (result.delivered === 0) context.log('worktree: close-workspace-menu reached no mounted target')
+    } catch (failure) {
+      if (mounted.current) setMenu((current) => current?.workspace === workspace ? null : current)
+      context.log(`worktree: menu close failed: ${failure instanceof Error ? failure.message : String(failure)}`)
+    }
+  }
+
+  return <section ref={root} aria-label="Remote workspaces" className="ui-panel-content remote-workspaces">
     <Button type="button" disabled={busy} onClick={() => context.openView('view:quirky.worktree/environments')}>VM environments</Button>
     <form className="remote-form" onSubmit={(event) => { event.preventDefault(); void run(register) }}>
       <TextField id="remote-owner-runtime" label="Saved owner runtime" value={runtime} disabled={busy} onChange={(event) => setRuntime(event.currentTarget.value)} placeholder="runtime ID or name" />
@@ -114,10 +162,10 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
       </fieldset>
       <Button type="submit" variant="primary" disabled={busy || runtime.trim() === ''}>Register host</Button>
     </form>
-    {error && <p className="ui-error-text" role="alert">{error}</p>}
-    {hosts.length === 0
-      ? <EmptyState message="No owner hosts registered" />
-      : hosts.map((host) => {
+    {error && <InlineError message={error} />}
+    {loadState === 'loading' && <div role="status"><NoticeLine>Loading owner hosts…</NoticeLine></div>}
+    {loadState === 'ready' && hosts.length === 0 && <EmptyState message="No owner hosts registered" />}
+    {loadState === 'ready' && hosts.map((host) => {
         const hostWorkspaces = workspaces.filter((workspace) => workspace.hostId === host.id)
         const hostState = host.connected ? 'Connected' : 'Unavailable'
         return <section key={host.id} aria-label={host.name} className="remote-host">
@@ -139,12 +187,12 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
               }) }}>Re-register</Button>}
             </span>}
           />
-          {host.error && <p role="status" className="ui-error-text">{host.error}</p>}
+          {host.error && <InlineError message={host.error} />}
           {hostWorkspaces.length > 0 && (
             <ul className="remote-rows" aria-label={`Workspaces on ${host.name}`}>
               {hostWorkspaces.map((workspace) => {
                 const unavailable = busy || !host.connected || !workspace.connected
-                return <li key={workspace.id} className="remote-row">
+                return <li key={workspace.id} data-workspace-id={workspace.id} className="remote-row">
                   <ListRow
                     title={<span className="ui-text-ellipsis">{workspace.name}</span>}
                     status={workspace.connected ? 'working' : 'needs-you'}
@@ -159,10 +207,7 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
                           label={`Actions for ${workspace.name}`}
                           aria-haspopup="menu"
                           disabled={unavailable}
-                          onClick={(event) => {
-                            const box = event.currentTarget.getBoundingClientRect()
-                            openWorkspaceMenu(workspace, box.left, box.bottom, event.currentTarget)
-                          }}
+                          onClick={() => { void requestOpenWorkspaceMenu(workspace.id) }}
                         >
                           ⋯
                         </IconButton>
@@ -175,6 +220,13 @@ export function RemoteWorkspacesSection({ context }: { context: UiPluginContext 
           )}
         </section>
       })}
-    {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+    {menu && <ContextMenu
+      x={menu.x}
+      y={menu.y}
+      label={menu.label}
+      items={menu.items}
+      returnFocusTo={menu.returnFocusTo}
+      onClose={() => { void requestCloseWorkspaceMenu(menu.workspace) }}
+    />}
   </section>
 }

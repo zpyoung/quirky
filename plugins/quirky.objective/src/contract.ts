@@ -1,4 +1,6 @@
 import type { Schema } from '@quirky/protocol'
+import type { PlanTask, Assumption, RepairPlannerReport } from './plan'
+import type { CheckRecord, DraftRejection, LandingRecord, OverrunRecord, VerdictRecord } from './store'
 
 export interface ObjectivePayload {
   objectiveText: string
@@ -11,6 +13,43 @@ export interface ObjectivePayload {
   roleAgents: { planner?: string; implementer?: string; reviewer?: string; integrator?: string }
   gates: { name: string; command: string; timeoutSeconds: number }[]
   worktree: string
+}
+
+export interface ObjectiveDetail {
+  watcherId: string
+  worktreeId: string | null
+  workspacePath: string
+  contract: ObjectivePayload
+  effectiveConcurrency: number
+  contentIdentity: string | null
+  git: { branch: string | null; headSha: string | null }
+  rejectedDrafts: DraftRejection[]
+  gates: CheckRecord[]
+  verdicts: VerdictRecord[]
+  landings: LandingRecord[]
+  next: { actionKind: string | null; evidenceKey: string | null; reason: string | null }
+  draft: null | {
+    plannerAttemptId: string
+    digest: string
+    kind: 'initial' | 'repair'
+    tasks?: PlanTask[]
+    repair?: RepairPlannerReport['repair']
+    assumptions: Assumption[]
+  }
+  revision: null | {
+    number: number
+    digest: string
+    approvedAtMs: number
+    repairCount: number
+    tasks: (PlanTask & {
+      state: string
+      attempts: number
+      summary: string | null
+      filesModified: string[]
+      overruns: OverrunRecord[]
+      checks: CheckRecord[]
+    })[]
+  }
 }
 
 export type ResolvedWorkspace = Record<string, unknown> & {
