@@ -355,9 +355,10 @@ comments and the legacy compatibility definition sheet are excluded from consump
 A dynamic custom-property prefix starts at an identifier boundary. BEM modifier class names
 such as `ui-button--${variant}` are not custom-property evidence.
 
-`scripts/ui-scoreboard-ratchet.json` initially enrolls nothing. A repair worker
-enrolls newly passing plugin/static-check pairs in the same PR; reviewers reject
-deleting enrollment to hide regressions. All five static checks are enrollable
+`scripts/ui-scoreboard-ratchet.json` records enrolled plugin/static-check pairs.
+`quirky.terminal-dock` covers all five static checks. Repair workers enroll newly
+passing pairs in the same PR; reviewers reject deleting enrollment to hide
+regressions. All five static checks are enrollable
 for plugins. `screenshots` remain unenrollable, and the host row still has only
 token and screenshot checks.
 The ratchet runs from `typecheck` and directly in the Tests workflow's Plan job, including draft
