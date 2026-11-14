@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, CSSProperties, SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Button, FormRow, TextField } from '@quirky/ui'
+import type { UiPluginContext } from '@quirky/protocol'
+import { Button, FormRow, InlineError, TextField } from '@quirky/ui'
 import type { DesignScreenshot } from '../design-contract'
 import { DESIGN_FULL_SCREENSHOT_MAX_BYTES } from '../design-contract'
 import { cacheMarkupBounds, eraseShapes, mapClientPointToSource } from './geometry'
@@ -14,15 +15,17 @@ import {
   undoMarkup
 } from './history'
 import type { MarkupHistory } from './history'
+import { registerMarkupController, requestDesignControl } from '../ui-control'
+import type { DesignControlArgs, MarkupTool } from '../ui-control'
 
 export type MarkupOverlayProps = {
+  context: UiPluginContext
+  pane: string
   screenshot: DesignScreenshot
   onClose(): void
   onCopied(): void
   onError(message: string): void
 }
-
-type MarkupTool = 'pen' | 'highlighter' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'eraser'
 
 const MAX_SHAPES = 500
 const MAX_STROKE_POINTS = 6000
@@ -250,7 +253,7 @@ function makeShape(active: ActivePointer, copyStroke: boolean): MarkupShape | nu
   return { kind: 'ellipse', ...shape }
 }
 
-export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: MarkupOverlayProps) {
+export function MarkupOverlay({ context, pane, screenshot, onClose, onCopied, onError }: MarkupOverlayProps) {
   const markupId = useId()
   const titleId = `${markupId}-title`
   const colorId = `${markupId}-color`
@@ -283,6 +286,7 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
   const onCloseRef = useRef(onClose)
   const onCopiedRef = useRef(onCopied)
   const onErrorRef = useRef(onError)
+  const markupActionRef = useRef<(args: DesignControlArgs) => void>(() => undefined)
   onCloseRef.current = onClose
   onCopiedRef.current = onCopied
   onErrorRef.current = onError
@@ -295,6 +299,9 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
   const reportError = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     onErrorRef.current(message)
+  }
+  const requestMarkupAction = (args: DesignControlArgs) => {
+    void requestDesignControl(context, args).catch(reportError)
   }
 
   const closeOverlay = () => {
@@ -534,6 +541,32 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
     }
   }
 
+  const handleMarkupAction = (args: DesignControlArgs) => {
+    switch (args.action) {
+      case 'markup-tool':
+        if (args.tool) setTool(args.tool)
+        break
+      case 'markup-undo':
+        if (!copying && historyRef.current.undo.length > 0) updateHistory(undoMarkup(historyRef.current))
+        break
+      case 'markup-redo':
+        if (!copying && historyRef.current.redo.length > 0) updateHistory(redoMarkup(historyRef.current))
+        break
+      case 'markup-clear':
+        if (!copying && historyRef.current.shapes.length > 0) updateHistory(clearMarkup(historyRef.current))
+        break
+      case 'markup-close':
+        closeOverlay()
+        break
+      case 'markup-copy':
+        if (isValid && !copying) void copyMarkup()
+        break
+    }
+  }
+  markupActionRef.current = handleMarkupAction
+  useEffect(() => registerMarkupController(context, pane, (args) => markupActionRef.current(args)), [context, pane])
+
+
   return createPortal(
     <div
       ref={dialogRef}
@@ -577,7 +610,7 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
             aria-label={label}
             aria-pressed={tool === item}
             title={label}
-            onClick={() => setTool(item)}
+            onClick={() => requestMarkupAction({ action: 'markup-tool', pane, tool: item })}
           >{label}</Button>
         ))}
         <div style={fieldGroupStyle}>
@@ -606,9 +639,9 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
             <TextField label="Text" aria-label="Text to place" maxLength={200} value={textValue} onChange={(event) => setTextValue(event.currentTarget.value)} />
           </div>
         </>}
-        <Button type="button" aria-label="Undo" disabled={!history.undo.length || copying} onClick={() => updateHistory(undoMarkup(historyRef.current))}>Undo</Button>
-        <Button type="button" aria-label="Redo" disabled={!history.redo.length || copying} onClick={() => updateHistory(redoMarkup(historyRef.current))}>Redo</Button>
-        <Button type="button" aria-label="Clear all markup" disabled={!history.shapes.length || copying} onClick={() => updateHistory(clearMarkup(historyRef.current))}>Clear all</Button>
+        <Button type="button" aria-label="Undo" disabled={!history.undo.length || copying} onClick={() => requestMarkupAction({ action: 'markup-undo', pane })}>Undo</Button>
+        <Button type="button" aria-label="Redo" disabled={!history.redo.length || copying} onClick={() => requestMarkupAction({ action: 'markup-redo', pane })}>Redo</Button>
+        <Button type="button" aria-label="Clear all markup" disabled={!history.shapes.length || copying} onClick={() => requestMarkupAction({ action: 'markup-clear', pane })}>Clear all</Button>
       </div>
       <div style={imageStageStyle}>
         {isValid ? <div
@@ -641,12 +674,12 @@ export function MarkupOverlay({ screenshot, onClose, onCopied, onError }: Markup
             onPointerCancel={cancelPointer}
             onLostPointerCapture={cancelPointer}
           />
-        </div> : <p role="alert">The frozen screenshot cannot be displayed.</p>}
+        </div> : <InlineError message="The frozen screenshot cannot be displayed." />}
       </div>
       <div style={footerStyle}>
         <span style={footerMessageStyle}>Changes apply only to this frozen screenshot.</span>
-        <Button type="button" disabled={committingCopy} onClick={closeOverlay}>Cancel</Button>
-        <Button type="button" variant="primary" disabled={!isValid || copying} onClick={() => void copyMarkup()}>
+        <Button type="button" disabled={committingCopy} onClick={() => requestMarkupAction({ action: 'markup-close', pane })}>Cancel</Button>
+        <Button type="button" variant="primary" disabled={!isValid || copying} onClick={() => requestMarkupAction({ action: 'markup-copy', pane })}>
           {committingCopy ? 'Writing PNG…' : copying ? 'Preparing PNG…' : 'Copy Markup'}
         </Button>
       </div>
