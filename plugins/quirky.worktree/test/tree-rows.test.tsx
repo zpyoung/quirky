@@ -95,9 +95,10 @@ async function mount(options: {
   const repos = options.repos ?? [REPO]
   const tags = options.tags ?? []
   const groups = options.groups ?? []
+  const stock = { ...DEFAULT_STOCK_OPTIONS, ...options.stock }
   host = document.createElement('div')
   document.body.append(host)
-  const baseSpec = allSpecFromStock({ ...DEFAULT_STOCK_OPTIONS, ...options.stock }, DEFAULT_ACTIVITY_PREFERENCES)
+  const baseSpec = allSpecFromStock(stock, DEFAULT_ACTIVITY_PREFERENCES)
   const model = buildTree({
     worktrees: options.worktrees,
     repos,
@@ -123,6 +124,7 @@ async function mount(options: {
     onToggleAutomationDetails: () => {},
     now: NOW,
     separatorEnabled: false,
+    options: stock,
     allWorktrees: options.worktrees,
     canShowSleeping: () => true,
     statusDefinitions: [
@@ -580,6 +582,65 @@ test('a focused row shows its hover card after a short delay with every tag and 
   expect([...card.querySelectorAll('.ui-tag-chip')].map((chip) => chip.textContent)).toEqual(['urgent', 'release-2.4', 'docs'])
   await act(async () => trigger.blur())
   expect(document.querySelector('.worktree-hover')).toBeNull()
+})
+
+test("the hover card shows the worktree's notes, keeps their text exactly, and leaves them out when comments are hidden or empty", async () => {
+  const comment = 'see the auth bug\nthen ship'
+  const review = {
+    provider: 'github' as const,
+    kind: 'pullRequest' as const,
+    number: 42,
+    title: 'Add route',
+    url: 'https://example.test/42',
+    repository: { host: 'github.com', owner: 'o', repo: 'r' }
+  }
+  await mount({
+    worktrees: [
+      worktree('notes', 'alpha', { comment, linkedPR: review }),
+      worktree('empty', 'empty', { comment: '' }),
+      worktree('blank', 'blank', { comment: '   ' })
+    ]
+  })
+  const cardFor = async (id: string) => {
+    const trigger = rowOf(id).querySelector<HTMLButtonElement>('.worktree-row__main')!
+    await act(async () => trigger.focus())
+    await act(async () => { await Bun.sleep(450) })
+    return document.querySelector<HTMLElement>('.worktree-hover')!
+  }
+
+  const card = await cardFor('notes')
+  const terms = [...card.querySelectorAll('dt')].map((term) => term.textContent)
+  expect(terms.slice(terms.indexOf('Agent'), terms.indexOf('Review') + 1)).toEqual(['Agent', 'Notes', 'Review'])
+  const notesTerm = [...card.querySelectorAll('dt')].find((term) => term.textContent === 'Notes')
+  expect(notesTerm?.nextElementSibling?.textContent).toBe(comment)
+
+  for (const id of ['empty', 'blank']) {
+    const emptyCard = await cardFor(id)
+    expect([...emptyCard.querySelectorAll('dt')].map((term) => term.textContent)).not.toContain('Notes')
+  }
+
+  await act(async () => root!.unmount())
+  root = null
+  document.body.innerHTML = ''
+  await mount({
+    worktrees: [worktree('hidden-comment', 'hidden-comment', { comment })],
+    stock: { showComment: false }
+  })
+  const hiddenCard = await cardFor('hidden-comment')
+  expect([...hiddenCard.querySelectorAll('dt')].map((term) => term.textContent)).not.toContain('Notes')
+
+  await act(async () => root!.unmount())
+  root = null
+  document.body.innerHTML = ''
+  await mount({
+    worktrees: [worktree('hidden-property', 'hidden-property', { comment })],
+    stock: {
+      showComment: true,
+      showProperties: DEFAULT_STOCK_OPTIONS.showProperties.filter((property) => property !== 'notes')
+    }
+  })
+  const propertyHiddenCard = await cardFor('hidden-property')
+  expect([...propertyHiddenCard.querySelectorAll('dt')].map((term) => term.textContent)).not.toContain('Notes')
 })
 
 test('the tags popover checks, mixes, creates and recolors tags for the selected worktrees', async () => {
