@@ -26,7 +26,7 @@ type StartWorldOptions = {
   workers?: boolean
 }
 
-export type DaemonRestart = { spawnedAt: number }
+export type DaemonSpawn = { spawnedAt: number; pid: number }
 
 export type SoakWorld = {
   home: string
@@ -39,7 +39,7 @@ export type SoakWorld = {
   workers: Worker[]
   env: Record<string, string>
   preserveSessions(sessionIds: readonly string[]): void
-  restartDaemon(signal?: AbortSignal): Promise<DaemonRestart>
+  restartDaemon(signal?: AbortSignal, onSpawn?: (spawn: DaemonSpawn) => void): Promise<DaemonRestart>
   track(pid: number): void
   stop(): Promise<void>
 }
@@ -275,7 +275,7 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
       throwIfAborted(options.signal)
     }
 
-    const spawnDaemon = async (signal?: AbortSignal) => {
+    const spawnDaemon = async (signal?: AbortSignal, onSpawn?: (spawn: DaemonSpawn) => void) => {
       throwIfAborted(signal)
       const logPath = join(out, 'daemon.log')
       const logFd = openSync(logPath, 'a')
@@ -294,6 +294,7 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
         closeSync(logFd)
       }
       daemonProcess = daemon
+      onSpawn?.({ spawnedAt, pid: daemon.pid })
       const healthy = await (dependencies.waitForDaemon ?? waitForDaemon)(home, daemon, signal)
       writeFileSync(join(out, 'daemon.pid'), String(healthy.pid))
       throwIfAborted(signal)
@@ -365,7 +366,7 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
       preservedSessions = ids
     }
 
-    const restartDaemon = async (signal?: AbortSignal): Promise<DaemonRestart> => {
+    const restartDaemon = async (signal?: AbortSignal, onSpawn?: (spawn: DaemonSpawn) => void): Promise<DaemonRestart> => {
       throwIfAborted(signal)
       const oldProcess = daemonProcess
       const oldControl = control
@@ -376,7 +377,7 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
       oldProcess.kill('SIGTERM')
       await (dependencies.waitForShutdown ?? waitForDaemonShutdown)(oldProcess, signal)
 
-      const replacement = await spawnDaemon(signal)
+      const replacement = await spawnDaemon(signal, onSpawn)
       try {
         await assertSessionsAlive(replacement.control, preservedSessions, signal)
       } catch (error) {
