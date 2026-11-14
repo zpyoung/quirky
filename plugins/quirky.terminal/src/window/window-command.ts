@@ -6,9 +6,9 @@ export type WindowCommandDescriptor = { command: string; args?: unknown }
 
 /** Runs a UI-local action in the clicking window and preserves its result. */
 export async function requestWindowCommand(context: UiPluginContext, descriptor: WindowCommandDescriptor): Promise<unknown> {
-  const self = await context.call<{ connId?: number }>('ui.window.self', {})
+  const self = await context.call('ui.window.self', {}) as { connId?: number } | null
   const connId = self?.connId
   if (typeof connId !== 'number' || !Number.isSafeInteger(connId) || connId <= 0) throw new Error('window connection is unavailable')
-  const reply = await context.call<{ result: unknown }>('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })
+  const reply = await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args }) as { result: unknown }
   return reply.result
 }

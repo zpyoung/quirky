@@ -1,14 +1,20 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act } from 'react'
-import type { FloatingState, QuickCommand } from '../../src/layout/types'
+import type { UiMenuItemEntry, UiModel } from '@quirky/protocol'
+import type { FloatingState, QuickCommand, Workspace } from '../../src/layout/types'
 import {
   conceptualWorkspace,
   fakeContext,
   fakeDaemon,
+  group,
+  installWindowCommands,
   loadWorkspace,
+  makeWorkspace,
+  pane,
   settle,
   startRecording,
   stopRecording,
+  tab,
   terminals,
   unloadWorkspace,
   type FakeContext
@@ -51,8 +57,17 @@ const GLOBAL_HELLO: QuickCommand = { id: 'hello', label: 'Hello', kind: 'termina
 const REPO_TEST: QuickCommand = { id: 'test', label: 'Test', kind: 'terminal', agent: null, command: 'bun test', appendEnter: false, scope: 'repo', repo: 'repo-1' }
 
 /** Activates the plugin on a fake context over a fake daemon and mounts the worktree view it provides. */
-async function wire(options: { mount?: boolean; settings?: Record<string, unknown>; floating?: Partial<FloatingState>; commands?: QuickCommand[]; wake?: () => unknown } = {}) {
-  const daemon = fakeDaemon(conceptualWorkspace())
+async function wire(options: {
+  mount?: boolean
+  settings?: Record<string, unknown>
+  floating?: Partial<FloatingState>
+  commands?: QuickCommand[]
+  wake?: () => unknown
+  workspace?: Workspace
+  agents?: unknown
+  menuItems?: UiMenuItemEntry[]
+} = {}) {
+  const daemon = fakeDaemon(options.workspace ?? conceptualWorkspace(), { agents: options.agents })
   let floating: FloatingState = { enabled: true, open: false, maximized: false, bounds: null, button: null, ...options.floating }
   const fake: FakeContext = fakeContext(
     {
@@ -62,6 +77,13 @@ async function wire(options: { mount?: boolean; settings?: Record<string, unknow
       'quirky.terminal/paneOf': (params) => ({ workspace: 'wt-main', tab: 'tab-1', pane: params.pane }),
       'quirky.terminal/focusContext': (params) => ({ workspace: params.workspace ?? null }),
       'quirky.terminal/openSession': () => ({ workspace: daemon.current, pane: 'pane-1' }),
+      'quirky.terminal/groupInfo': ({ group }) => ({ workspace: 'wt-main', group }),
+      'quirky.session/get': ({ session: id }) => {
+        const current = daemon.sessions.find((entry) => entry.id === id)
+        if (!current) throw new Error(`session ${String(id)} not found`)
+        return current
+      },
+      'ui.contributions': () => ({ menuItems: options.menuItems ?? [], keybindings: [] }),
       'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
       'quirky.worktree/wake': options.wake ?? (() => ({})),
       'quirky.terminal/floating': () => floating,
@@ -72,6 +94,7 @@ async function wire(options: { mount?: boolean; settings?: Record<string, unknow
     },
     options.settings
   )
+  installWindowCommands(fake)
   ui.activate(fake.context)
   const executed: { id: string; args: unknown }[] = []
   fake.context.executeCommand = async (id, args) => {
@@ -200,7 +223,7 @@ describe('window commands route to the focused workspace', () => {
     expect(term.buffer.active.viewportY).toBe(term.buffer.active.baseY)
   })
 
-  test('open-session delegates terminal focus to the public focus-pane command', async () => {
+  test('open-session focuses through the result-preserving local command bridge', async () => {
     const wired = await track()
     const executions: { command: string; args: unknown }[] = []
     wired.fake.context.executeCommand = async (command, args) => {
@@ -212,10 +235,28 @@ describe('window commands route to the focused workspace', () => {
 
     expect(await wired.run('open-session', { session: 's-1', workspace: 'wt-main' })).toEqual({ ok: true })
     expect(wired.calls('openSession')).toEqual([{ session: 's-1', workspace: 'wt-main' }])
-    expect(executions).toEqual([
-      { command: 'command:quirky.terminal/focus-pane', args: { pane: 'pane-1', workspace: 'wt-main' } }
+    expect(wired.fake.callsTo('ui.window.command.run').map((call) => call.params)).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/focus-pane', args: { pane: 'pane-1', workspace: 'wt-main' } }
     ])
+    expect(executions).toEqual([])
     expect(wired.calls('focusPane')).toEqual([{ pane: 'pane-1' }])
+  })
+
+  test('open-session returns focus refusal and toasts bridge transport failures', async () => {
+    const refused = await track()
+    refused.fake.provided.set('command:quirky.terminal/focus-pane', async () => ({ ok: false, reason: 'not a terminal' }))
+
+    expect(await refused.run('open-session', { session: 's-1' })).toEqual({ ok: false, reason: 'not a terminal' })
+    expect(refused.fake.callsTo('ui.window.command.run').map((call) => call.params)).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/focus-pane', args: { pane: 'pane-1', workspace: 'wt-main' } }
+    ])
+
+    const offline = await track()
+    offline.fake.provided.set('command:quirky.terminal/focus-pane', async () => {
+      throw new Error('offline')
+    })
+    expect(await offline.run('open-session', { session: 's-1' })).toEqual({ ok: false, reason: 'offline' })
+    expect(offline.fake.toasts).toEqual([{ title: 'Could not open session', body: 'offline' }])
   })
 
   test('the inline fields and the switcher open: rename-tab, set-pane-title, recent-tab', async () => {
@@ -537,3 +578,408 @@ describe('the shortcut policy', () => {
     expect(wired.fake.contextValue('terminalKeysFirst')).toBe(true)
   })
 })
+
+describe('public workspace menu commands', () => {
+  test('hidden command schemas are strict and expose the declared actions', async () => {
+    type PropertySchema = { type: string; enum?: string[]; additionalProperties?: boolean }
+    type ArgumentSchema = {
+      type: string
+      required?: string[]
+      additionalProperties?: boolean
+      properties: Record<string, PropertySchema>
+    }
+    type CommandSchema = { id: string; title: string; palette?: boolean; args?: ArgumentSchema }
+    const manifest = JSON.parse(await Bun.file(new URL('../../quirky-plugin.json', import.meta.url)).text()) as {
+      contributes: { command: CommandSchema[] }
+    }
+    const menu = manifest.contributes.command.find((entry) => entry.id === 'run-menu-item')!
+    const workspace = manifest.contributes.command.find((entry) => entry.id === 'workspace-menu-action')!
+    expect(menu).toMatchObject({
+      title: 'Run Terminal Menu Item',
+      palette: false,
+      args: { type: 'object', required: ['item'], additionalProperties: false }
+    })
+    expect(menu.args?.properties).toEqual({
+      item: { type: 'string' },
+      session: { type: 'string' },
+      worktree: { type: 'string' },
+      workspace: { type: 'string' },
+      group: { type: 'string' }
+    })
+    expect(workspace).toMatchObject({
+      title: 'Terminal Workspace Menu Action',
+      palette: false,
+      args: { type: 'object', required: ['action', 'target'], additionalProperties: false }
+    })
+    expect(workspace.args?.properties).toMatchObject({
+      action: { type: 'string', enum: ['copy-id', 'choose-agent', 'hidden-tabs', 'run-group-command'] },
+      target: { type: 'string' },
+      kind: { type: 'string', enum: ['tab', 'pane', 'session'] },
+      agent: { type: 'string' },
+      background: { type: 'boolean' },
+      open: { type: 'boolean' },
+      command: { type: 'string' },
+      args: { type: 'object', additionalProperties: true }
+    })
+
+    const openMenu = manifest.contributes.command.find((entry) => entry.id === 'open-menu')!
+    expect(openMenu.args?.properties.kind.enum).toEqual(['tab', 'pane', 'plus', 'actions', 'quick-commands'])
+    expect(openMenu.args?.properties.x).toMatchObject({ type: 'number' })
+    expect(openMenu.args?.properties.y).toMatchObject({ type: 'number' })
+  })
+
+  test('open-menu forwards context coordinates and keeps anchor defaults for ordinary opens', async () => {
+    const wired = await track()
+    const controller = registry.controllerFor('wt-main')!
+    expect(await wired.run('open-menu', { kind: 'actions', target: 'grp-1', x: 37, y: 81 })).toEqual({ ok: true })
+    expect(controller.getSnapshot().menu).toMatchObject({ kind: 'actions', target: 'grp-1', x: 37, y: 81 })
+
+    expect(await wired.run('open-menu', { kind: 'tab', target: 'tab-1' })).toEqual({ ok: true })
+    expect(controller.getSnapshot().menu).toMatchObject({ kind: 'tab', target: 'tab-1' })
+  })
+
+  test('copy-id returns the copied tab, pane and session IDs', async () => {
+    const wired = await track()
+    expect(await wired.run('workspace-menu-action', { action: 'copy-id', target: 'tab-2', kind: 'tab' })).toEqual({
+      ok: true,
+      text: 'tab-2'
+    })
+    expect(await wired.run('workspace-menu-action', { action: 'copy-id', target: 'pane-3', kind: 'pane' })).toEqual({
+      ok: true,
+      text: 'pane-3'
+    })
+    expect(await wired.run('workspace-menu-action', { action: 'copy-id', target: 'pane-3', kind: 'session' })).toEqual({
+      ok: true,
+      text: 's-3'
+    })
+    expect(copied).toEqual(['tab-2', 'pane-3', 's-3'])
+  })
+
+  test('copy-id reports missing, stale, wrong-kind and clipboard failures', async () => {
+    const wired = await track()
+    expect(await wired.run('workspace-menu-action', { action: 'copy-id', kind: 'tab' })).toEqual({
+      ok: false,
+      reason: 'target is required'
+    })
+    expect(await wired.run('workspace-menu-action', { action: 'copy-id', target: 'gone', kind: 'tab' })).toEqual({
+      ok: false,
+      reason: 'no mounted terminal workspace holds gone'
+    })
+    expect(await wired.run('workspace-menu-action', { action: 'copy-id', target: 'pane-3', kind: 'tab' })).toEqual({
+      ok: false,
+      reason: 'target pane-3 is not a tab target'
+    })
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => { throw new Error('clipboard denied') }, readText: async () => '' }
+    })
+    expect(await wired.run('workspace-menu-action', { action: 'copy-id', target: 'tab-2', kind: 'tab' })).toEqual({
+      ok: false,
+      reason: 'clipboard denied'
+    })
+  })
+
+  test('choose-agent uses the current enabled request for a foreground prompt', async () => {
+    const agents = {
+      defaultAgent: 'claude',
+      agents: [{ id: 'claude', label: 'Claude', installed: true, enabled: true, isDefault: true, permissions: { mode: 'yolo' } }]
+    }
+    const wired = await track({ agents })
+    expect(await wired.run('workspace-menu-action', { action: 'choose-agent', target: 'grp-2', agent: 'claude' })).toEqual({ ok: true })
+    expect(registry.controllerFor('wt-main')!.getSnapshot().dialog).toMatchObject({
+      kind: 'new-session',
+      group: 'grp-2',
+      request: { agent: 'claude', background: false, label: 'Claude', permissions: 'yolo' }
+    })
+    expect(wired.calls('newTab')).toEqual([])
+    expect(wired.fake.callsTo('quirky.structured/create')).toEqual([])
+  })
+
+  test('choose-agent opens the background Claude prompt through the command', async () => {
+    const agents = {
+      defaultAgent: 'claude',
+      agents: [{ id: 'claude', label: 'Claude', installed: true, enabled: true, isDefault: true, permissions: { mode: 'yolo' } }]
+    }
+    const wired = await track({ agents })
+    expect(await wired.run('workspace-menu-action', {
+      action: 'choose-agent',
+      target: 'grp-2',
+      agent: 'claude',
+      background: true
+    })).toEqual({ ok: true })
+    expect(registry.controllerFor('wt-main')!.getSnapshot().dialog).toMatchObject({
+      kind: 'new-session',
+      group: 'grp-2',
+      request: { agent: 'claude', background: true, label: 'Claude (background)' }
+    })
+    expect(wired.calls('newTab')).toEqual([])
+    expect(wired.fake.callsTo('quirky.structured/create')).toEqual([])
+  })
+
+  test('choose-agent refuses unavailable agents and non-group targets', async () => {
+    const wired = await track({ agents: { defaultAgent: 'claude', agents: [] } })
+    expect(await wired.run('workspace-menu-action', { action: 'choose-agent', target: 'grp-2', agent: 'claude' })).toEqual({
+      ok: false,
+      reason: 'agent claude is not available'
+    })
+    expect(registry.controllerFor('wt-main')!.getSnapshot().dialog).toBeNull()
+    expect(await wired.run('workspace-menu-action', { action: 'choose-agent', target: 'pane-3', agent: 'claude' })).toEqual({
+      ok: false,
+      reason: 'target pane-3 is not a group target'
+    })
+  })
+
+  test('hidden-tabs accepts requests without measured overflow and validates open', async () => {
+    const wired = await track()
+    const controller = registry.controllerFor('wt-main')!
+    expect(await wired.run('workspace-menu-action', { action: 'hidden-tabs', target: 'grp-1', open: true })).toEqual({ ok: true })
+    await settle()
+    expect(controller.getSnapshot().overflowGroup).toBeNull()
+    expect(document.body.querySelector('[role="menu"][aria-label="Hidden tabs"]')).toBeNull()
+    expect(await wired.run('workspace-menu-action', { action: 'hidden-tabs', target: 'grp-1', open: false })).toEqual({ ok: true })
+    expect(await wired.run('workspace-menu-action', { action: 'hidden-tabs', target: 'grp-1' })).toEqual({
+      ok: false,
+      reason: 'open must be a boolean'
+    })
+    expect(await wired.run('workspace-menu-action', { action: 'hidden-tabs', target: 'pane-3', open: true })).toEqual({
+      ok: false,
+      reason: 'target pane-3 is not a group target'
+    })
+  })
+
+  test('run-group-command overwrites caller group context and validates before external dispatch', async () => {
+    const wired = await track()
+    const received: unknown[] = []
+    wired.fake.provided.set('command:acme.tools/run', async (args) => { received.push(args) })
+    const args = { task: 'build', group: 'forged', worktree: 'forged' }
+    expect(await wired.run('workspace-menu-action', {
+      action: 'run-group-command',
+      target: 'grp-2',
+      command: 'command:acme.tools/run',
+      args
+    })).toEqual({ ok: true })
+    expect(wired.fake.callsTo('quirky.terminal/groupInfo').map((call) => call.params)).toEqual([{ group: 'grp-2' }])
+    expect(wired.executed).toEqual([{
+      id: 'command:acme.tools/run',
+      args: { task: 'build', group: 'grp-2', worktree: 'wt-main' }
+    }])
+    expect(received).toEqual([{ task: 'build', group: 'grp-2', worktree: 'wt-main' }])
+
+    const call = wired.fake.context.call.bind(wired.fake.context)
+    wired.fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'quirky.terminal/groupInfo') return { workspace: 'wt-other' }
+      return call(method, params)
+    }) as typeof wired.fake.context.call
+    expect(await wired.run('workspace-menu-action', {
+      action: 'run-group-command',
+      target: 'grp-2',
+      command: 'command:acme.tools/run',
+      args: { task: 'build' }
+    })).toEqual({
+      ok: false,
+      reason: 'The target group is no longer available in this worktree.'
+    })
+    expect(wired.executed).toHaveLength(1)
+  })
+
+  test('workspace menu actions reject malformed or action-inapplicable arguments', async () => {
+    const wired = await track()
+    const malformed: [unknown, string][] = [
+      [null, 'invalid workspace menu arguments'],
+      [{ action: 'other', target: 'grp-1' }, 'action must be one of copy-id, choose-agent, hidden-tabs, run-group-command'],
+      [{ action: 'copy-id', target: 'tab-2' }, 'kind must be one of tab, pane, session'],
+      [{ action: 'copy-id', target: 'tab-2', kind: 'other' }, 'kind must be one of tab, pane, session'],
+      [{ action: 'copy-id', target: 'tab-2', kind: 'tab', text: 'forged' }, 'invalid workspace menu arguments'],
+      [{ action: 'choose-agent', target: 'grp-2', agent: 'claude', label: 'Forged', permissions: 'ignore' }, 'invalid workspace menu arguments'],
+      [{ action: 'choose-agent', target: 'grp-2', agent: 'claude', background: 'yes' }, 'invalid workspace menu arguments'],
+      [{ action: 'hidden-tabs', target: 'grp-1', open: 'yes' }, 'open must be a boolean'],
+      [{ action: 'run-group-command', target: 'grp-2' }, 'command is required'],
+      [{ action: 'run-group-command', target: 'grp-2', command: 'command:acme.tools/run', args: [] }, 'invalid workspace menu arguments'],
+      [{ action: 'run-group-command', target: 'grp-2', command: 'command:acme.tools/run', token: 'forged' }, 'invalid workspace menu arguments']
+    ]
+    for (const [args, reason] of malformed) {
+      expect(await wired.run('workspace-menu-action', args)).toEqual({ ok: false, reason })
+    }
+  })
+
+  test('all nine literal session shortcut handlers preserve their numeric positions', async () => {
+    const workspace = makeWorkspace(group('grp-1', Array.from({ length: 9 }, (_, index) =>
+      tab(`tab-${index + 1}`, pane(`pane-${index + 1}`, `s-${index + 1}`))
+    )))
+    const wired = await track({ workspace })
+    for (let index = 1; index <= 9; index += 1) {
+      await wired.run(`select-tab-${index}`, undefined, 'quirky.session')
+    }
+    expect(wired.calls('activateTab')).toEqual(
+      Array.from({ length: 9 }, (_, index) => ({ workspace: 'wt-main', index: index + 1 }))
+    )
+    await wired.run('select-tab', { index: 0 }, 'quirky.session')
+    await wired.run('select-tab', { index: 'not-a-number' }, 'quirky.session')
+    expect(wired.calls('activateTab')).toHaveLength(9)
+  })
+})
+
+// The command module imports the browser-bound workspace, so these tests load it after beforeAll.
+describe('menu data watcher errors', () => {
+  test('quick-command read failures toast once and preserve the last successful snapshot', async () => {
+    const { watchQuickCommands } = await import('../../src/window/commands')
+    let reads = 0
+    const fake = fakeContext({
+      'quirky.terminal/quickCommands': () => {
+        reads += 1
+        if (reads === 1 || reads === 3) throw new Error('store locked')
+        return { commands: [{ ...GLOBAL_HELLO, id: 'fresh' }] }
+      },
+      'quirky.worktree/resolve': () => ({ repoId: null })
+    })
+    const source = watchQuickCommands(fake.context, 'wt')
+    await settle()
+    await settle()
+    expect(source.commands()).toEqual([])
+    expect(fake.toasts).toEqual([{ title: 'Could not load quick commands', body: 'store locked' }])
+
+    await fake.emit({ type: 'quirky.terminal/quickCommands' } as never)
+    await settle()
+    await settle()
+    expect(source.commands().map((entry) => entry.id)).toEqual(['fresh'])
+
+    await fake.emit({ type: 'quirky.terminal/quickCommands' } as never)
+    await settle()
+    await settle()
+    expect(source.commands().map((entry) => entry.id)).toEqual(['fresh'])
+    expect(fake.toasts).toEqual([
+      { title: 'Could not load quick commands', body: 'store locked' },
+      { title: 'Could not load quick commands', body: 'store locked' }
+    ])
+    source.dispose()
+  })
+
+  test('a failed contribution refresh toasts once and retains menu items and keybindings', async () => {
+    const { watchMenuContributions } = await import('../../src/window/commands')
+    const model = {
+      menuItems: [{
+        id: 'menu-item:acme.tools/first',
+        plugin: 'acme.tools',
+        menu: 'quirky.terminal/pane',
+        title: 'First',
+        command: 'command:acme.tools/first'
+      }],
+      keybindings: [{ command: 'command:acme.tools/first', key: 'mod+k', status: 'active' }]
+    } as UiModel
+    let reads = 0
+    const fake = fakeContext({
+      'ui.contributions': () => {
+        reads += 1
+        if (reads === 2) throw new Error('registry offline')
+        return model
+      }
+    })
+    const source = watchMenuContributions(fake.context)
+    let notifications = 0
+    source.subscribe(() => { notifications += 1 })
+    await settle()
+    await settle()
+    const successfulNotifications = notifications
+    expect(source.items()).toEqual(model.menuItems)
+    expect(source.key?.('command:acme.tools/first')).toBe('⌘K')
+
+    await fake.emit({ type: 'plugin.changed' })
+    await settle()
+    await settle()
+
+    expect(source.items()).toEqual(model.menuItems)
+    expect(source.key?.('command:acme.tools/first')).toBe('⌘K')
+    expect(notifications).toBe(successfulNotifications)
+    expect(fake.toasts).toEqual([{ title: 'Could not load menu contributions', body: 'registry offline' }])
+    source.dispose()
+  })
+
+  test('disposed watchers ignore late failed reads without toasts or notifications', async () => {
+    const { watchQuickCommands, watchMenuContributions } = await import('../../src/window/commands')
+    const quickRead = Promise.withResolvers<unknown>()
+    const quickFake = fakeContext({
+      'quirky.terminal/quickCommands': () => quickRead.promise,
+      'quirky.worktree/resolve': () => ({ repoId: null })
+    })
+    const quick = watchQuickCommands(quickFake.context, 'wt')
+    let quickChanges = 0
+    quick.subscribe(() => { quickChanges += 1 })
+    quick.dispose()
+    quickRead.reject(new Error('store locked'))
+    await settle()
+    expect(quickFake.toasts).toEqual([])
+    expect(quickChanges).toBe(0)
+
+    const registryRead = Promise.withResolvers<unknown>()
+    const registryFake = fakeContext({ 'ui.contributions': () => registryRead.promise })
+    const contributions = watchMenuContributions(registryFake.context)
+    let registryChanges = 0
+    contributions.subscribe(() => { registryChanges += 1 })
+    contributions.dispose()
+    registryRead.reject(new Error('registry offline'))
+    await settle()
+    expect(registryFake.toasts).toEqual([])
+    expect(registryChanges).toBe(0)
+  })
+})
+
+describe('pane quick-command adapters', () => {
+  test('disabled rows have no action and runnable callbacks execute for their pane', async () => {
+    // The command module imports the browser-bound workspace, so load it after beforeAll.
+    const { paneMenuQuickCommands } = await import('../../src/window/commands')
+    const wired = await track()
+    const emptySource = {
+      commands: () => [],
+      repo: () => null,
+      menu: () => null,
+      openMenu: () => {},
+      closeMenu: () => {},
+      subscribe: () => () => {},
+      dispose: () => {}
+    }
+    const emptyRows = paneMenuQuickCommands(wired.fake.context, emptySource, 'pane-1')
+    expect(emptyRows.find((entry) => entry.label === 'No quick commands')?.onSelect).toBeUndefined()
+
+    const source = { ...emptySource, commands: () => [GLOBAL_HELLO] }
+    const rows = paneMenuQuickCommands(wired.fake.context, source, 'pane-1')
+    const hello = rows.find((entry) => entry.label === 'Hello')
+    if (hello?.onSelect === undefined) throw new Error('the runnable quick command has no action')
+    await act(async () => {
+      await hello.onSelect?.()
+    })
+    expect(wired.calls('runQuickCommand')).toEqual([{ id: 'hello', pane: 'pane-1' }])
+  })
+})
+
+describe('agent command catalog freshness', () => {
+  test('choose-agent re-reads the current catalog and refuses a now-disabled agent', async () => {
+    const enabled = {
+      id: 'claude',
+      label: 'Claude',
+      installed: true,
+      enabled: true,
+      isDefault: true,
+      permissions: { mode: 'yolo' }
+    }
+    const wired = await track({ agents: { defaultAgent: 'claude', agents: [enabled] } })
+    const call = wired.fake.context.call.bind(wired.fake.context)
+    let catalogReads = 0
+    wired.fake.context.call = (async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'quirky.agents/list') {
+        catalogReads += 1
+        return { defaultAgent: 'claude', agents: [{ ...enabled, enabled: false }] }
+      }
+      return call(method, params)
+    }) as typeof wired.fake.context.call
+
+    expect(await wired.run('workspace-menu-action', { action: 'choose-agent', target: 'grp-2', agent: 'claude' })).toEqual({
+      ok: false,
+      reason: 'agent claude is not available'
+    })
+    expect(catalogReads).toBe(1)
+    expect(registry.controllerFor('wt-main')!.getSnapshot().dialog).toBeNull()
+    expect(wired.calls('newTab')).toEqual([])
+    expect(wired.fake.callsTo('quirky.structured/create')).toEqual([])
+  })
+})
+

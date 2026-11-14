@@ -10,6 +10,7 @@ import { repoFirst } from './quick-commands/search'
 import { controllerFor, focusedController, type WorkspaceController } from './workspace'
 import { locatePane, locateTab } from './workspace/model'
 import { waitForController } from './workspace/registry'
+import { requestWindowCommand, RUN_MENU_ITEM_COMMAND } from './window-command'
 
 export const QUICK_COMMANDS_PANEL = 'panel:quirky.terminal/quick-commands'
 export const QUICK_COMMANDS_MENU = 'quick-commands'
@@ -24,6 +25,29 @@ export type CommandHandler = (args?: unknown) => unknown
 
 export const NO_WORKSPACE: CommandFailure = { ok: false, reason: 'no terminal workspace is open' }
 const OK = { ok: true } as const
+type MenuResult = { ok: true } | { ok: true; text: string } | CommandFailure
+type RunMenuItemArgs = { item: string; session?: string; worktree?: string; workspace?: string; group?: string }
+type WorkspaceMenuActionArgs =
+  | { action: 'copy-id'; target: string; kind: 'tab' | 'pane' | 'session' }
+  | { action: 'choose-agent'; target: string; agent: string; background?: boolean }
+  | { action: 'hidden-tabs'; target: string; open: boolean }
+  | { action: 'run-group-command'; target: string; command: string; args?: Record<string, unknown> }
+
+const WORKSPACE_MENU_ACTIONS = ['copy-id', 'choose-agent', 'hidden-tabs', 'run-group-command'] as const
+const WORKSPACE_MENU_KINDS = ['tab', 'pane', 'session'] as const
+
+
+function hasOnlyKeys(args: Args, keys: readonly string[]): boolean {
+  return Object.keys(args).every((key) => keys.includes(key))
+}
+
+function failure(reason: string): CommandFailure {
+  return { ok: false, reason }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 
 type Args = Record<string, unknown>
 
@@ -40,6 +64,111 @@ function textArg(args: Args, name: string): string | undefined {
 function stringArg(args: Args, name: string): string | undefined {
   const value = args[name]
   return typeof value === 'string' ? value : undefined
+}
+function parseRunMenuItemArgs(raw: unknown): RunMenuItemArgs | CommandFailure {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return failure('invalid run-menu-item arguments')
+  const args = raw as Args
+  if (!Object.prototype.hasOwnProperty.call(args, 'item') || args.item === undefined || args.item === '') {
+    return failure('item is required')
+  }
+  if (
+    typeof args.item !== 'string' ||
+    !hasOnlyKeys(args, ['item', 'session', 'worktree', 'workspace', 'group']) ||
+    ['session', 'worktree', 'workspace', 'group'].some((key) =>
+      Object.prototype.hasOwnProperty.call(args, key) && typeof args[key] !== 'string'
+    )
+  ) {
+    return failure('invalid run-menu-item arguments')
+  }
+  return {
+    item: args.item,
+    ...(typeof args.session === 'string' ? { session: args.session } : {}),
+    ...(typeof args.worktree === 'string' ? { worktree: args.worktree } : {}),
+    ...(typeof args.workspace === 'string' ? { workspace: args.workspace } : {}),
+    ...(typeof args.group === 'string' ? { group: args.group } : {})
+  }
+}
+
+function parseWorkspaceMenuArgs(raw: unknown): WorkspaceMenuActionArgs | CommandFailure {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return failure('invalid workspace menu arguments')
+  const args = raw as Args
+  if (!Object.prototype.hasOwnProperty.call(args, 'target') || args.target === undefined || args.target === '') {
+    return failure('target is required')
+  }
+  if (typeof args.target !== 'string') return failure('invalid workspace menu arguments')
+  if (
+    typeof args.action !== 'string' ||
+    !WORKSPACE_MENU_ACTIONS.includes(args.action as (typeof WORKSPACE_MENU_ACTIONS)[number])
+  ) {
+    return failure(`action must be one of ${WORKSPACE_MENU_ACTIONS.join(', ')}`)
+  }
+
+  if (args.action === 'copy-id') {
+    if (
+      typeof args.kind !== 'string' ||
+      !WORKSPACE_MENU_KINDS.includes(args.kind as (typeof WORKSPACE_MENU_KINDS)[number])
+    ) {
+      return failure(`kind must be one of ${WORKSPACE_MENU_KINDS.join(', ')}`)
+    }
+    if (!hasOnlyKeys(args, ['action', 'target', 'kind'])) return failure('invalid workspace menu arguments')
+    return { action: 'copy-id', target: args.target, kind: args.kind as 'tab' | 'pane' | 'session' }
+  }
+
+  if (args.action === 'choose-agent') {
+    if (
+      !hasOnlyKeys(args, ['action', 'target', 'agent', 'background']) ||
+      typeof args.agent !== 'string' ||
+      args.agent === '' ||
+      (Object.prototype.hasOwnProperty.call(args, 'background') && typeof args.background !== 'boolean')
+    ) {
+      return failure('invalid workspace menu arguments')
+    }
+    return {
+      action: 'choose-agent',
+      target: args.target,
+      agent: args.agent,
+      ...(typeof args.background === 'boolean' ? { background: args.background } : {})
+    }
+  }
+
+  if (args.action === 'hidden-tabs') {
+    if (!Object.prototype.hasOwnProperty.call(args, 'open') || typeof args.open !== 'boolean') {
+      return failure('open must be a boolean')
+    }
+    if (!hasOnlyKeys(args, ['action', 'target', 'open'])) return failure('invalid workspace menu arguments')
+    return { action: 'hidden-tabs', target: args.target, open: args.open }
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(args, 'command') || args.command === undefined || args.command === '') {
+    return failure('command is required')
+  }
+  let commandArgs: Record<string, unknown> | undefined
+  if (Object.prototype.hasOwnProperty.call(args, 'args')) {
+    const value = args.args
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return failure('invalid workspace menu arguments')
+    }
+    commandArgs = value as Record<string, unknown>
+  }
+  if (!hasOnlyKeys(args, ['action', 'target', 'command', 'args']) || typeof args.command !== 'string') {
+    return failure('invalid workspace menu arguments')
+  }
+  return {
+    action: 'run-group-command',
+    target: args.target,
+    command: args.command,
+    ...(commandArgs === undefined ? {} : { args: commandArgs })
+  }
+}
+
+function dispatchMenuItem(context: UiPluginContext, title: string, args: RunMenuItemArgs): void {
+  void requestWindowCommand(context, { command: RUN_MENU_ITEM_COMMAND, args })
+    .then((result) => {
+      if (typeof result !== 'object' || result === null || !('ok' in result) || result.ok !== false) return
+      const reason = 'reason' in result && typeof result.reason === 'string' ? result.reason : 'menu item request was refused'
+      context.toast(title, reason)
+    })
+    .catch((error: unknown) => context.toast(title, errorMessage(error)))
 }
 
 function selectedWorktree(context: UiPluginContext): string | null {
@@ -174,9 +303,12 @@ async function openSessionCommand(context: UiPluginContext, raw: unknown): Promi
       workspace: Workspace
       pane: string
     }
-    const focused: unknown = await context.executeCommand('command:quirky.terminal/focus-pane', {
-      pane: opened.pane,
-      workspace: opened.workspace.id
+    const focused: unknown = await requestWindowCommand(context, {
+      command: 'command:quirky.terminal/focus-pane',
+      args: {
+        pane: opened.pane,
+        workspace: opened.workspace.id
+      }
     })
     if (typeof focused === 'object' && focused !== null && 'ok' in focused && focused.ok === false) {
       const reason = 'reason' in focused && typeof focused.reason === 'string' ? focused.reason : 'could not focus pane'
@@ -187,6 +319,63 @@ async function openSessionCommand(context: UiPluginContext, raw: unknown): Promi
     const reason = error instanceof Error ? error.message : String(error)
     context.toast('Could not open session', reason)
     return { ok: false, reason }
+  }
+}
+async function runMenuItemCommand(context: UiPluginContext, raw: unknown): Promise<MenuResult> {
+  const args = parseRunMenuItemArgs(raw)
+  if ('ok' in args) return args
+  try {
+    const model = (await context.call('ui.contributions')) as UiModel
+    const item = model.menuItems?.find((entry) => entry.id === args.item)
+    if (!item) return failure(`no menu item ${args.item}`)
+    if (item.menu !== TERMINAL_PANE_MENU && item.menu !== TERMINAL_TAB_MENU) {
+      return failure(`menu item ${args.item} is not a terminal menu item`)
+    }
+
+    let commandArgs: Record<string, unknown>
+    if (item.menu === TERMINAL_PANE_MENU) {
+      const session = textArg(args, 'session')
+      if (session === undefined) return failure('session is required for pane menu items')
+      const current = (await context.call('quirky.session/get', { session })) as Session
+      if (current.id !== session) return failure(`session ${session} is not the exact session returned by the provider`)
+      if (item.when?.agent === 'any' && current.agent === 'shell') {
+        return failure(`menu item ${args.item} requires an agent session`)
+      }
+      commandArgs = { session }
+    } else {
+      const worktree = textArg(args, 'worktree')
+      const workspace = textArg(args, 'workspace')
+      const group = textArg(args, 'group')
+      if (worktree === undefined || workspace === undefined || group === undefined) {
+        return failure('worktree, workspace and group are required for tab menu items')
+      }
+      commandArgs = { worktree, workspace, group }
+    }
+    await context.executeCommand(item.command, commandArgs)
+    return OK
+  } catch (error) {
+    return failure(errorMessage(error))
+  }
+}
+
+async function workspaceMenuActionCommand(context: UiPluginContext, raw: unknown): Promise<MenuResult> {
+  const args = parseWorkspaceMenuArgs(raw)
+  if ('ok' in args) return args
+  const found = resolve(context, { target: args.target }, 'target')
+  if ('ok' in found) return found
+  try {
+    switch (args.action) {
+      case 'copy-id':
+        return await found.controller.copyId(args.target, args.kind)
+      case 'choose-agent':
+        return await found.controller.chooseAgent(args.target, args.agent, args.background ?? false)
+      case 'hidden-tabs':
+        return found.controller.setOverflowGroup(args.target, args.open)
+      case 'run-group-command':
+        return await found.controller.runGroupCommand(args.target, args.command, args.args)
+    }
+  } catch (error) {
+    return failure(errorMessage(error))
   }
 }
 async function forkAgentSessionCommand(context: UiPluginContext, raw: unknown): Promise<CommandFailure | typeof OK> {
@@ -263,6 +452,8 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
     'focus-next-pane': on(context, 'pane', (controller) => controller.focusNext()),
     'focus-pane': (args) => focusPaneCommand(context, args),
     'focus-previous-pane': on(context, 'pane', (controller) => controller.focusPrevious()),
+    'run-menu-item': (args) => runMenuItemCommand(context, args),
+    'workspace-menu-action': (args) => workspaceMenuActionCommand(context, args),
     'open-session': (args) => openSessionCommand(context, args),
     'fork-agent-session': (args) => forkAgentSessionCommand(context, args),
     'toggle-expand-pane': onPane(context, (controller, pane) => controller.toggleExpand(pane)),
@@ -294,7 +485,10 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
       if (kind === undefined || !MENU_KINDS.includes(kind)) return { ok: false, reason: `kind must be one of ${MENU_KINDS.join(', ')}` } satisfies CommandFailure
       if (kind === QUICK_COMMANDS_MENU) return openQuickCommandsMenu(controller, textArg(args, 'target'))
       closeMenus(controller)
-      controller.openMenu(kind, textArg(args, 'target'))
+      const x = args.x
+      const y = args.y
+      const at = typeof x === 'number' && Number.isFinite(x) && typeof y === 'number' && Number.isFinite(y) ? { x, y } : undefined
+      controller.openMenu(kind, textArg(args, 'target'), at)
     }),
     'close-menu': on(context, 'target', (controller) => closeMenus(controller)),
     'toggle-floating': () => changeFloating(context, (state) => ({ open: !state.open })),
@@ -328,9 +522,17 @@ export function sessionCommands(context: UiPluginContext): Record<string, Comman
       return OK
     },
     'close-session': on(context, 'pane', (controller) => controller.closeFocused()),
-    'select-tab': select((args) => Number(args.index))
+    'select-tab': select((args) => Number(args.index)),
+    'select-tab-1': select(() => 1),
+    'select-tab-2': select(() => 2),
+    'select-tab-3': select(() => 3),
+    'select-tab-4': select(() => 4),
+    'select-tab-5': select(() => 5),
+    'select-tab-6': select(() => 6),
+    'select-tab-7': select(() => 7),
+    'select-tab-8': select(() => 8),
+    'select-tab-9': select(() => 9)
   }
-  for (let n = 1; n <= 9; n += 1) handlers[`select-tab-${n}`] = select(() => n)
   return handlers
 }
 
@@ -366,11 +568,13 @@ export function watchQuickCommands(context: UiPluginContext, workspace: string):
     const mine = ++latest
     try {
       const result = (await context.call('quirky.terminal/quickCommands', { workspace })) as { commands: QuickCommand[] }
-      if (live && mine === latest) commands = result.commands
-    } catch {
-      // the menus show "No quick commands" until the next change brings them
+      if (live && mine === latest) {
+        commands = result.commands
+        changed()
+      }
+    } catch (error) {
+      if (live && mine === latest) context.toast('Could not load quick commands', errorMessage(error))
     }
-    changed()
   }
   const findRepo = async () => {
     if (workspace === FLOATING_WORKSPACE) return
@@ -380,7 +584,7 @@ export function watchQuickCommands(context: UiPluginContext, workspace: string):
     } catch {
       // without a repo the Add dialog preselects no project
     }
-    changed()
+    if (live) changed()
   }
   void load()
   void findRepo()
@@ -457,7 +661,7 @@ export function reportQuickCommandsMenu(source: QuickCommandSource, publish: (st
 /** The pane menu's Quick Commands rows for `pane`, adapted to the workspace menu's row shape. */
 export function paneMenuQuickCommands(context: UiPluginContext, source: QuickCommandSource, pane: string): ContextMenuItem[] {
   return paneQuickCommandItems(context, source.commands(), pane, { repo: source.repo() }).flatMap((item) => {
-    const row: ContextMenuItem = { label: item.label, key: item.hint ?? null, enabled: item.enabled, onSelect: () => void item.onSelect() }
+    const row: ContextMenuItem = { label: item.label, key: item.hint ?? null, enabled: item.enabled, onSelect: item.onSelect }
     return item.separatorBefore ? [CONTEXT_MENU_SEPARATOR, row] : [row]
   })
 }
@@ -485,8 +689,8 @@ export function watchMenuContributions(context: UiPluginContext): MenuContributi
         bindings = model.keybindings ?? []
         for (const listener of [...listeners]) listener()
       }
-    } catch {
-      // The last effective list remains until the next change brings one.
+    } catch (error) {
+      if (live && mine === latest) context.toast('Could not load menu contributions', errorMessage(error))
     }
   }
   void load()
@@ -531,10 +735,7 @@ export function paneMenuContributions(context: UiPluginContext, source: MenuCont
     .map((item) => ({
       label: item.title,
       key: source.key?.(item.command) ?? null,
-      onSelect: () =>
-        void context.executeCommand(item.command, { session: pane.session }).catch((error: unknown) => {
-          context.toast(item.title, error instanceof Error ? error.message : String(error))
-        })
+      onSelect: () => dispatchMenuItem(context, item.title, { item: item.id, session: pane.session })
     }))
 }
 
@@ -556,8 +757,6 @@ export function tabMenuContributions(
       label: item.title,
       key: source.key?.(item.command) ?? null,
       onSelect: () =>
-        void context.executeCommand(item.command, { worktree, workspace, group: group.id }).catch((error: unknown) => {
-          context.toast(item.title, error instanceof Error ? error.message : String(error))
-        })
+        dispatchMenuItem(context, item.title, { item: item.id, worktree, workspace, group: group.id })
     }))
 }

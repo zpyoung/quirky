@@ -123,14 +123,14 @@ export function qcFake(init: Partial<World> = {}): QcFakeResult {
   fake.context.provide(modules.dialog.QUICK_COMMAND_DIALOG_COMMAND, (args: unknown) => modules.dialog.quickCommandDialogCommand(fake.context, args))
   fake.context.provide(modules.shared.COPY_QUICK_COMMAND_COMMAND, (args: unknown) => modules.shared.copyQuickCommand(fake.context, args))
   const call = fake.context.call.bind(fake.context)
-  fake.context.call = async <T,>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
-    if (method !== 'ui.window.self' && method !== 'ui.window.command.run') return call<T>(method, params)
+  fake.context.call = async (method, params = {}) => {
+    if (method !== 'ui.window.self' && method !== 'ui.window.command.run') return call(method, params)
     fake.calls.push({ method, params })
-    if (method === 'ui.window.self') return { connId: 41 } as T
+    if (method === 'ui.window.self') return { connId: 41 }
     if (params.connId !== 41) throw new Error('unknown window connection')
     const handler = fake.provided.get(String(params.id))
     if (!handler) throw new RpcError(RpcErrorCode.MethodNotFound, `unknown command: ${params.id}`)
-    return { result: await handler(params.args) } as T
+    return { result: await handler(params.args) }
   }
   fake.context.executeCommand = async (id, args) => {
     executed.push({ id, args })

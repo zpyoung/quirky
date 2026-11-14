@@ -254,10 +254,10 @@ export type MountedWorkspace = Awaited<ReturnType<typeof mountFixture>>
 /** Dispatches local RPCs to the real window handlers without changing external command routing. */
 export function installWindowCommands(fake: FakeContext): void {
   const call = fake.context.call.bind(fake.context)
-  fake.context.call = async <T,>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
-    if (method !== 'ui.window.self' && method !== 'ui.window.command.run') return call<T>(method, params)
+  fake.context.call = async (method, params = {}) => {
+    if (method !== 'ui.window.self' && method !== 'ui.window.command.run') return call(method, params)
     fake.calls.push({ method, params })
-    if (method === 'ui.window.self') return { connId: 41 } as T
+    if (method === 'ui.window.self') return { connId: 41 }
     if (params.connId !== 41) throw new Error('unknown window connection')
     const id = String(params.id)
     let handler = fake.provided.get(id)
@@ -268,7 +268,7 @@ export function installWindowCommands(fake: FakeContext): void {
       else if (id.startsWith('command:quirky.session/')) handler = sessionCommands(fake.context)[id.slice('command:quirky.session/'.length)]
     }
     if (!handler) throw new Error(`unknown command: ${id}`)
-    return { result: await handler(params.args) } as T
+    return { result: await handler(params.args) }
   }
 }
 
