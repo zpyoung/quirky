@@ -5,6 +5,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import { MobilePage, MOBILE_PAGE_ID, MOBILE_SETTINGS_ID } from './window/MobilePage'
 import { MobileSettings } from './window/MobileSettings'
 import { useMobileState } from './window/useMobileState'
+import { COPY_PAIRING_CODE_COMMAND, copyPairingCode } from './window/pairing-code'
 
 const MOBILE_SIDEBAR_ID = 'sidebar-section:quirky.mobile/mobile'
 
@@ -74,4 +75,5 @@ export function activate(context: UiPluginContext): void {
 
   context.provide('command:quirky.mobile/open', () => context.openView(MOBILE_PAGE_ID))
   context.provide('command:quirky.mobile/open-settings', () => context.openView(MOBILE_SETTINGS_ID))
+  context.provide(COPY_PAIRING_CODE_COMMAND, (args: unknown) => copyPairingCode(args))
 }
