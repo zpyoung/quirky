@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Badge, Button, FormRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
+import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import { isRecord, safeHttpUrl } from './guards'
 import type { ReviewsSurfaceProps } from '../contracts'
 import { useDraftField, useTargetGuard } from '../draft-field'
@@ -30,6 +30,10 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const saving = savingOperation?.identity === identity && savingOperation.isCurrent()
   const generationRunning = creation.generating || generationEpoch === epoch
   const localError = errorState?.epoch === epoch ? errorState.message : null
+  const [confirmationPending, setConfirmationPending] = useState(false)
+  const confirmationLock = useRef<string | null>(null)
+  const confirmationAttempted = useRef<string | null>(null)
+  const eligibilityLock = useRef<string | null>(null)
   const submitLock = useRef<{ identity: string; isCurrent: () => boolean } | null>(null)
   const generationLock = useRef<number | null>(null)
   const draftWrites = useRef<Promise<void>>(Promise.resolve())
@@ -131,7 +135,12 @@ export function CreateReview(props: ReviewsSurfaceProps) {
 
   useEffect(() => {
     if (creation.worktree !== null || !selectedWorktreeId || creation.loading) return
+    const confirmationKey = `${selectedWorktreeId}:${creation.generation}:${creation.head}`
+    if (confirmationAttempted.current === confirmationKey || confirmationLock.current === confirmationKey) return
+    confirmationAttempted.current = confirmationKey
     const isCurrent = targetGuard()
+    confirmationLock.current = confirmationKey
+    setConfirmationPending(true)
     setLocalError(null)
     void props.context.call('quirky.reviews/createOpen', { worktree: selectedWorktreeId })
       .then(async () => {
@@ -141,7 +150,12 @@ export function CreateReview(props: ReviewsSurfaceProps) {
       .catch((error: unknown) => {
         if (isCurrent()) setLocalError(errorText(error))
       })
-  }, [selectedWorktreeId, creation.worktree, creation.loading, props.context, props.refresh])
+      .finally(() => {
+        if (!isCurrent()) return
+        if (confirmationLock.current === confirmationKey) confirmationLock.current = null
+        setConfirmationPending(false)
+      })
+  }, [selectedWorktreeId, creation.worktree, creation.loading, creation.generation, creation.head, props.context, props.refresh])
   const setBaseValue = (value: string) => {
     if (value === creation.base) {
       baseField.reset(value)
@@ -173,15 +187,25 @@ export function CreateReview(props: ReviewsSurfaceProps) {
 
   const refreshEligibility = async () => {
     if (!worktree) return
+    const isConfirmation = !currentTarget
+    const lockKey = isConfirmation ? `${identity}:confirmation` : `${identity}:eligibility`
+    if ((isConfirmation && confirmationLock.current !== null) || (!isConfirmation && eligibilityLock.current !== null)) return
     const isCurrent = targetGuard()
+    if (isConfirmation) confirmationLock.current = lockKey
+    else eligibilityLock.current = lockKey
+    if (isConfirmation) setConfirmationPending(true)
     setLocalError(null)
     try {
-      if (!await settleDrafts(isCurrent)) return
+      if (!isConfirmation && !await settleDrafts(isCurrent)) return
       await props.context.call('quirky.reviews/createOpen', { worktree })
       if (!isCurrent()) return
       await props.refresh()
     } catch (error) {
       if (isCurrent()) setLocalError(errorText(error))
+    } finally {
+      if (isConfirmation && confirmationLock.current === lockKey) confirmationLock.current = null
+      if (!isConfirmation && eligibilityLock.current === lockKey) eligibilityLock.current = null
+      if (isConfirmation && isCurrent()) setConfirmationPending(false)
     }
   }
 
@@ -343,30 +367,36 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const resultUrl = resultReview ? safeHttpUrl(resultReview.url) : null
   const resultNumber = resultReview && Number.isSafeInteger(resultReview.number) ? Number(resultReview.number) : null
   const fieldError = titleField.error ?? bodyField.error ?? baseField.error ?? draftField.error ?? templateField.error
+  const partialError = result?.status === 'partial' ? 'Pull request created; stack registration was incomplete.' : null
+  const stateErrors = [creation.error, localError, fieldError, partialError && creation.error !== partialError ? partialError : null]
+    .filter((message): message is string => typeof message === 'string' && message !== '')
 
   if (!worktree) {
     return <section className="ui-stack" aria-label="Create pull request">
       <SectionHeader title="Create pull request" />
-      <p role="alert"><Badge tone="failing">Select a Git worktree before creating a pull request.</Badge></p>
+      <EmptyState message="Select a Git worktree before creating a pull request." />
     </section>
   }
 
   if (!currentTarget || creation.loading) {
-    return <section className="ui-stack" aria-label="Create pull request" aria-busy="true">
+    const confirming = creation.loading || confirmationPending
+    const confirmationError = localError ?? creation.error ?? (!confirming ? 'The current worktree and branch could not be confirmed.' : null)
+    return <section className="ui-stack" aria-label="Create pull request" aria-busy={confirming}>
       <SectionHeader title="Create pull request" />
-      <p role="status" className="ui-text-muted">{localError ?? creation.error ?? 'Confirming this worktree and its current branch…'}</p>
+      {confirmationError
+        ? <InlineError message={confirmationError} action={!currentTarget ? { label: 'Retry confirmation', onAction: () => { void refreshEligibility() } } : undefined} />
+        : <NoticeLine>Confirming this worktree and its current branch…</NoticeLine>}
     </section>
   }
 
-  return <main className="ui-stack" aria-label="Create pull request" aria-busy={creation.submitting || generationRunning}>
+  return <main className="ui-stack" aria-label="Create pull request" aria-busy={creation.submitting || generationRunning || saving}>
     <header className="ui-stack">
       <SectionHeader title="Create pull request" />
       <p>Worktree <strong>{worktree}</strong> · <code>{creation.head || 'No current branch'}</code></p>
     </header>
 
-    {creation.error && <p role="alert"><StatusDot status="failing" label="Error" /> {creation.error}</p>}
-    {localError && <p role="alert"><StatusDot status="failing" label="Error" /> {localError}</p>}
-    {fieldError && <p role="alert"><StatusDot status="failing" label="Error" /> {fieldError}</p>}
+    {stateErrors.map((message) => <InlineError key={message} message={message} />)}
+    {stackLookupError && <InlineError message={`Stack capability could not be confirmed: ${stackLookupError}`} />}
     {resultReview && <section className="ui-stack" aria-live="polite">
       <strong>{result?.status === 'partial' ? 'Pull request created; stack registration was incomplete.' : result?.status === 'already_exists' ? 'Pull request already exists.' : 'Pull request created.'}</strong>
       <p>{resultNumber === null ? 'The review identity could not be shown.' : `Pull request #${resultNumber}`}{resultUrl ? ` · ${resultUrl}` : ''}</p>
@@ -383,6 +413,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
           value={base}
           aria-label="Search remote base branches"
           help={`Choose a remote branch different from ${creation.head || 'the current branch'}.`}
+          error={baseField.error ?? undefined}
           disabled={creation.submitting || saving || generationRunning}
           onChange={(event) => { baseField.hold(event.target.value); setLocalError(null) }}
           onBlur={() => setBaseValue(baseField.value)}
@@ -391,13 +422,15 @@ export function CreateReview(props: ReviewsSurfaceProps) {
           {creation.bases.map((branch) => <option key={branch} value={branch} />)}
         </datalist>
       </div>
-      {creation.bases.length === 0 && <p role="status" className="ui-text-muted">No remote base branches are available.</p>}
+      {creation.bases.length === 0 && !creation.loading && !creation.error &&
+        <EmptyState message="No remote base branches are available." />}
 
       <TextField
         id="review-title"
         label="Title"
         value={title}
         placeholder="Short summary"
+        error={titleField.error ?? undefined}
         disabled={creation.submitting || saving || generationRunning}
         onChange={(event) => {
           titleField.edit(event.target.value)
@@ -405,7 +438,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
         }}
       />
 
-      <FormRow label="Description" htmlFor="review-body">
+      <FormRow label="Description" htmlFor="review-body" error={bodyField.error ?? undefined}>
         <textarea
           id="review-body"
           className="ui-text-field__input"
@@ -424,13 +457,13 @@ export function CreateReview(props: ReviewsSurfaceProps) {
 
       <fieldset className="ui-stack" disabled={creation.submitting || saving || generationRunning}>
         <legend>Creation options</legend>
-        <FormRow label="Create as draft" htmlFor="review-create-draft">
+        <FormRow label="Create as draft" htmlFor="review-create-draft" error={draftField.error ?? undefined}>
           <input id="review-create-draft" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={draft} onChange={(event) => {
             draftField.edit(event.target.checked)
             setLocalError(null)
           }} />
         </FormRow>
-        <FormRow label="Use repository pull-request template when the description is empty" htmlFor="review-use-template">
+        <FormRow label="Use repository pull-request template when the description is empty" htmlFor="review-use-template" error={templateField.error ?? undefined}>
           <input id="review-use-template" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={useTemplate} onChange={(event) => {
             templateField.edit(event.target.checked)
             setLocalError(null)
@@ -439,7 +472,6 @@ export function CreateReview(props: ReviewsSurfaceProps) {
         {stackSupported && stackParentNumber !== null && <FormRow label={`Create pull request in stack with #${stackParentNumber}`} htmlFor="review-create-stack">
           <input id="review-create-stack" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={stackEnabled} onChange={(event) => void createStack(event.target.checked)} />
         </FormRow>}
-        {stackSupported && stackParentNumber === null && stackLookupError !== null && <small role="status">Stack capability could not be confirmed: {stackLookupError}</small>}
         {!stackSupported && <small>Stacked pull requests are available only for supported GitHub.com repositories.</small>}
       </fieldset>
 

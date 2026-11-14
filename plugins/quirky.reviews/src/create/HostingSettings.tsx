@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Badge, Button, FormRow, SectionHeader, StatusDot } from '@quirky/ui'
+import { Badge, Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'
 import type { CreationDefaults, ReviewsSurfaceProps } from '../contracts'
 import { isRecord } from './guards'
 
@@ -141,7 +141,8 @@ function githubScopeCommand(check: ProviderCheck): string {
 
 export function HostingSettings(props: ReviewsSurfaceProps) {
   const selectedWorktreeId = selectedWorktreeFromLayout(props)
-  const [selectedWorktree, setSelectedWorktree] = useState<string | null>(() => selectedWorktreeId ?? props.state.settings.worktree)
+  const [selectedWorktree, setSelectedWorktree] = useState<string | null>(null)
+  const selectionTouched = useRef(false)
   const worktree = selectedWorktree
   const settings = props.state.settings
   const settingsMatches = worktree !== null && settings.worktree === worktree
@@ -163,87 +164,113 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   const [defaultScope, setDefaultScope] = useState<'global' | 'repository'>('global')
   const [savingDefaults, setSavingDefaults] = useState(false)
   const [defaultsError, setDefaultsError] = useState<string | null>(null)
-  const [settingsContextError, setSettingsContextError] = useState<string | null>(null)
+  const [globalDefaultsReady, setGlobalDefaultsReady] = useState(false)
+  const [globalDefaultsLoading, setGlobalDefaultsLoading] = useState(true)
+  const [repositoryDefaultsLoading, setRepositoryDefaultsLoading] = useState(false)
+  const [repositoryDefaultsFailed, setRepositoryDefaultsFailed] = useState(false)
   const [registeredWorktrees, setRegisteredWorktrees] = useState<WorkspaceOption[]>([])
+  const [refreshingBudget, setRefreshingBudget] = useState(false)
   const [workspacesLoading, setWorkspacesLoading] = useState(true)
   const [workspacesError, setWorkspacesError] = useState<string | null>(null)
-  const [refreshingBudget, setRefreshingBudget] = useState(false)
+  const [providerRefreshPending, setProviderRefreshPending] = useState(false)
+  const [budgetRefreshPending, setBudgetRefreshPending] = useState(false)
   const defaultsLoadSequence = useRef(0)
+  const workspaceRequestSequence = useRef(0)
   const currentWorktree = useRef(worktree)
   currentWorktree.current = worktree
   const settingsError = settingsMatches ? settings.error : null
-  const providerError = !worktree ? 'Select a registered worktree to check GitHub readiness.'
-    : diagnostics === null && settingsMatches ? settingsError : null
-  const accountsError = !worktree ? 'Select a worktree to list host accounts.' : accountsData === null && settingsMatches ? settingsError : null
-  const configurationError = !worktree ? 'Repository account binding is unavailable without a worktree.' : configuration === null && settingsMatches ? settingsError : null
-  const budgetError = !worktree ? 'Select a registered worktree to read the GitHub API budget.' : budget === null && settingsMatches ? settingsError : null
-  const loadingProvider = worktree !== null && (!settingsMatches || settings.loading)
+  const loadingProvider = worktree !== null && providerRefreshPending
+  const loadingBudget = worktree !== null && (budgetRefreshPending || providerRefreshPending)
+  const providerError = worktree !== null && provider === null && !loadingProvider
+    ? settingsError ?? 'GitHub diagnostics are unavailable.' : null
+  const accountsError = worktree !== null && accountsData === null && !loadingProvider
+    ? settingsError ?? 'GitHub accounts are unavailable.' : null
+  const configurationError = worktree !== null && configuration === null && !loadingProvider
+    ? settingsError ?? 'Repository hosting configuration is unavailable.' : null
+  const budgetError = worktree !== null && budget === null && !loadingBudget
+    ? settingsError ?? 'GitHub API budget is unavailable.' : null
   const storedAccountKey = accountKey(configuration?.account ?? null)
   const repositoryDefaultsReady = worktree !== null && repoDefaultsWorktree === worktree
   const currentRepoHasOverride = repositoryDefaultsReady && repoHasOverride
 
-  useEffect(() => {
-    let active = true
+  const settingsInput = props.context.getLayout().view?.input
+  const contextErrorFromLayout = isRecord(settingsInput) && typeof settingsInput.contextError === 'string' ? settingsInput.contextError : null
+  const loadWorktrees = useCallback(async () => {
+    const request = ++workspaceRequestSequence.current
     setWorkspacesLoading(true)
     setWorkspacesError(null)
-    if (selectedWorktreeId !== null) setSelectedWorktree(selectedWorktreeId)
-    void props.context.call('quirky.worktree/list', {})
-      .then((value: unknown) => {
-        if (!active) return
-        const workspaces = workspaceOptions(value)
-        if (workspaces === null) throw new Error('The worktree service returned an invalid workspace list.')
-        setRegisteredWorktrees(workspaces)
-        setSelectedWorktree((current) => {
-          const requested = selectedWorktreeId ?? current
-          return requested !== null && workspaces.some((item) => item.id === requested) ? requested : null
-        })
+    try {
+      const value = await props.context.call('quirky.worktree/list', {})
+      if (workspaceRequestSequence.current !== request) return
+      const workspaces = workspaceOptions(value)
+      if (workspaces === null) throw new Error('The worktree service returned an invalid workspace list.')
+      setRegisteredWorktrees(workspaces)
+      setSelectedWorktree((current) => {
+        const requested = selectionTouched.current ? current : current ?? selectedWorktreeId ?? props.state.settings.worktree
+        selectionTouched.current = true
+        return requested !== null && workspaces.some((item) => item.id === requested) ? requested : null
       })
-      .catch((error: unknown) => {
-        if (active) setWorkspacesError(errorText(error))
-      })
-      .finally(() => {
-        if (active) setWorkspacesLoading(false)
-      })
-    return () => { active = false }
-  }, [props.context, selectedWorktreeId])
+    } catch (error) {
+      if (workspaceRequestSequence.current === request) setWorkspacesError(errorText(error))
+    } finally {
+      if (workspaceRequestSequence.current === request) setWorkspacesLoading(false)
+    }
+  }, [props.context, props.state.settings.worktree, selectedWorktreeId])
+
+  useEffect(() => {
+    void loadWorktrees()
+    return () => { workspaceRequestSequence.current += 1 }
+  }, [loadWorktrees])
 
   const refreshBudget = useCallback(async (force: boolean) => {
     const target = worktree
     if (!target) return
+    setBudgetRefreshPending(true)
     setRefreshingBudget(true)
     setLocalSettingsError(null)
     try {
       await props.context.call('quirky.reviews/hostingBudget', { worktree: target, force })
-    } catch (error) {
-      if (currentWorktree.current === target) setLocalSettingsError(errorText(error))
-    }
-    try {
       await props.refresh()
     } catch (error) {
       if (currentWorktree.current === target) setLocalSettingsError(errorText(error))
     } finally {
-      setRefreshingBudget(false)
+      if (currentWorktree.current === target) {
+        setBudgetRefreshPending(false)
+        setRefreshingBudget(false)
+      }
     }
   }, [props.context, props.refresh, worktree])
 
   const recheckProvider = useCallback(async (forceBudget = true) => {
     const target = worktree
     if (!target) return
+    setProviderRefreshPending(true)
+    if (forceBudget) setBudgetRefreshPending(true)
     setLocalSettingsError(null)
     try {
       await props.context.call('quirky.reviews/hostingSettingsRefresh', { worktree: target, forceBudget })
-    } catch (error) {
-      if (currentWorktree.current === target) setLocalSettingsError(errorText(error))
-    }
-    try {
       await props.refresh()
     } catch (error) {
       if (currentWorktree.current === target) setLocalSettingsError(errorText(error))
+    } finally {
+      if (currentWorktree.current === target) {
+        setProviderRefreshPending(false)
+        if (forceBudget) setBudgetRefreshPending(false)
+      }
     }
   }, [props.context, props.refresh, worktree])
 
   const loadDefaults = useCallback(async (request: number) => {
-    const isCurrent = () => defaultsLoadSequence.current === request && currentWorktree.current === worktree
+    const target = worktree
+    const isCurrent = () => defaultsLoadSequence.current === request && currentWorktree.current === target
+    setGlobalDefaultsLoading(true)
+    setGlobalDefaultsReady(false)
+    setRepositoryDefaultsLoading(false)
+    setRepositoryDefaultsFailed(false)
+    setRepoDefaultsWorktree(null)
+    setRepoHasOverride(false)
+    setRepoId(null)
+    setDefaultsError(null)
     try {
       const globalResult = await props.context.call('quirky.reviews/creationDefaults', { scope: 'global' })
       if (!isCurrent()) return
@@ -252,28 +279,43 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       if (!global) throw new Error('Creation defaults returned invalid booleans.')
       setGlobalDefaults(global)
       setRepoDefaults(global)
-      setRepoHasOverride(false)
-      setRepoId(null)
-      setRepoDefaultsWorktree(null)
-      if (!worktree) {
+      setGlobalDefaultsReady(true)
+      setGlobalDefaultsLoading(false)
+      if (!target) {
         setDefaultScope('global')
         return
       }
-      const repositoryResult = await props.context.call('quirky.reviews/creationDefaults', { scope: 'repository', worktree })
-      if (!isCurrent()) return
-      if (!isRecord(repositoryResult)) throw new Error('Repository creation defaults returned an invalid response.')
-      const repository = defaultsValue(repositoryResult.defaults)
-      const currentRepoId = typeof repositoryResult.repoId === 'string' ? repositoryResult.repoId : null
-      if (!repository || currentRepoId === null) throw new Error('Repository creation defaults returned invalid scope data.')
-      const overrides = isRecord(repositoryResult.overrides) ? repositoryResult.overrides : null
-      const hasOverride = overrides !== null && Object.keys(overrides).length > 0
-      setRepoDefaults(repository)
-      setRepoHasOverride(hasOverride)
-      setRepoId(currentRepoId)
-      setRepoDefaultsWorktree(worktree)
-      setDefaultScope(hasOverride ? 'repository' : 'global')
+
+      setRepositoryDefaultsLoading(true)
+      try {
+        const repositoryResult = await props.context.call('quirky.reviews/creationDefaults', { scope: 'repository', worktree: target })
+        if (!isCurrent()) return
+        if (!isRecord(repositoryResult)) throw new Error('Repository creation defaults returned an invalid response.')
+        const repository = defaultsValue(repositoryResult.defaults)
+        const currentRepoId = typeof repositoryResult.repoId === 'string' ? repositoryResult.repoId : null
+        if (!repository || currentRepoId === null) throw new Error('Repository creation defaults returned invalid scope data.')
+        const overrides = isRecord(repositoryResult.overrides) ? repositoryResult.overrides : null
+        const hasOverride = overrides !== null && Object.keys(overrides).length > 0
+        setRepoDefaults(repository)
+        setRepoHasOverride(hasOverride)
+        setRepoId(currentRepoId)
+        setRepoDefaultsWorktree(target)
+        setDefaultScope(hasOverride ? 'repository' : 'global')
+      } catch (error) {
+        if (isCurrent()) {
+          setRepositoryDefaultsFailed(true)
+          setDefaultsError(errorText(error))
+        }
+      } finally {
+        if (isCurrent()) setRepositoryDefaultsLoading(false)
+      }
     } catch (error) {
-      if (isCurrent()) setDefaultsError(errorText(error))
+      if (isCurrent()) {
+        setGlobalDefaultsLoading(false)
+        setGlobalDefaultsReady(false)
+        setRepositoryDefaultsLoading(false)
+        setDefaultsError(errorText(error))
+      }
     }
   }, [props.context, worktree])
 
@@ -286,14 +328,12 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     setRepoHasOverride(false)
     setRepoId(null)
     setDefaultScope('global')
-    const input = props.context.getLayout().view?.input
-    setSettingsContextError(isRecord(input) && typeof input.contextError === 'string' ? input.contextError : null)
     void loadDefaults(request)
-    void recheckProvider(true)
+    if (worktree) void recheckProvider(true)
     return () => {
       if (defaultsLoadSequence.current === request) defaultsLoadSequence.current += 1
     }
-  }, [loadDefaults, props.context, recheckProvider])
+  }, [loadDefaults, recheckProvider, worktree])
 
   useEffect(() => {
     setAccountSelection(storedAccountKey)
@@ -316,6 +356,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
 
   const selectedDefaults = defaultScope === 'global' || !repositoryDefaultsReady ? globalDefaults : repoDefaults
   const setDefault = (key: keyof CreationDefaults, value: boolean) => {
+    if (!globalDefaultsReady || (defaultScope === 'repository' && !repositoryDefaultsReady)) return
     if (defaultScope === 'global') setGlobalDefaults((current) => ({ ...current, [key]: value }))
     else {
       setRepoDefaults((current) => ({ ...current, [key]: value }))
@@ -326,7 +367,8 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   const saveDefaults = async () => {
     const scope = defaultScope
     const target = worktree
-    if (scope === 'repository' && (!target || !repositoryDefaultsReady)) return
+    if (!globalDefaultsReady || savingDefaults ||
+      (scope === 'repository' && (!target || !repositoryDefaultsReady || repositoryDefaultsLoading || repositoryDefaultsFailed))) return
     const values = { ...selectedDefaults }
     setSavingDefaults(true)
     setDefaultsError(null)
@@ -346,7 +388,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
 
   const resetRepoDefaults = async () => {
     const target = worktree
-    if (!target || !repositoryDefaultsReady) return
+    if (!target || !repositoryDefaultsReady || !currentRepoHasOverride || savingDefaults) return
     setSavingDefaults(true)
     setDefaultsError(null)
     try {
@@ -354,6 +396,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       if (currentWorktree.current !== target) return
       const parsed = isRecord(result) ? defaultsValue(result.defaults) : null
       if (!parsed) throw new Error('Reset did not return the inherited defaults.')
+      setGlobalDefaults(parsed)
       setRepoDefaults(parsed)
       setRepoHasOverride(false)
       setDefaultScope('global')
@@ -361,7 +404,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     } catch (error) {
       if (currentWorktree.current === target) setDefaultsError(errorText(error))
     } finally {
-      setSavingDefaults(false)
+      if (currentWorktree.current === target) setSavingDefaults(false)
     }
   }
 
@@ -415,7 +458,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       {worktree ? <p>Repository scope: <code>{repositoryDefaultsReady ? repoId ?? worktree : worktree}</code></p> : <p>Global settings are available. Select a worktree to inspect repository hosting.</p>}
     </header>
 
-    <section className="ui-stack" aria-label="Workspace">
+    <section className="ui-stack" aria-label="Workspace" aria-busy={workspacesLoading} aria-live="polite">
       <SectionHeader title="Workspace" />
       <FormRow label="Repository worktree" htmlFor="settings-worktree">
         <select
@@ -423,7 +466,10 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
           className="ui-text-field__input"
           value={worktree ?? ''}
           disabled={workspacesLoading || workspacesError !== null}
-          onChange={(event) => setSelectedWorktree(event.target.value === '' ? null : event.target.value)}
+          onChange={(event) => {
+            selectionTouched.current = true
+            setSelectedWorktree(event.target.value === '' ? null : event.target.value)
+          }}
         >
           <option value="">No workspace · global settings only</option>
           {registeredWorktrees.map((workspace) => <option key={workspace.id} value={workspace.id}>
@@ -431,26 +477,31 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
           </option>)}
         </select>
       </FormRow>
-      {workspacesLoading && <p role="status" className="ui-text-muted">Loading registered worktrees…</p>}
-      {workspacesError && <p role="alert"><StatusDot status="failing" label="Error" /> Could not list registered worktrees: {workspacesError}</p>}
+      {workspacesLoading && <NoticeLine>Loading registered worktrees…</NoticeLine>}
+      {workspacesError && <InlineError
+        message={`Could not list registered worktrees: ${workspacesError}`}
+        action={{ label: 'Retry worktrees', onAction: () => { void loadWorktrees() } }}
+      />}
       {!workspacesLoading && !workspacesError && registeredWorktrees.length === 0 &&
-        <p role="status" className="ui-text-muted">No registered Git worktrees are available. Global creation defaults remain available.</p>}
+        <EmptyState message="No registered Git worktrees are available. Global creation defaults remain available." />}
       <small className="ui-text-muted">Repository hosting settings require a registered Git worktree. Global defaults are available without one.</small>
     </section>
 
-    {settingsContextError && <p role="alert"><StatusDot status="failing" label="Error" /> {settingsContextError}</p>}
-    {localSettingsError && <p role="alert"><StatusDot status="failing" label="Error" /> {localSettingsError}</p>}
-    {settingsError && <p role="alert"><StatusDot status="failing" label="Error" /> Hosting observations may be stale: {settingsError}</p>}
+    {contextErrorFromLayout && <InlineError message={contextErrorFromLayout} />}
+    {localSettingsError && <InlineError message={localSettingsError} />}
+    {settingsError && <InlineError message={`Hosting observations may be stale: ${settingsError}`} />}
 
-    <section className="ui-stack" aria-label="Review providers">
+
+    <section className="ui-stack" aria-label="Review providers" aria-busy={loadingProvider} aria-live="polite">
       <SectionHeader title="Review providers" />
+      {!worktree && <EmptyState message="Select a registered Git worktree to inspect repository hosting." />}
       <article className="ui-stack" aria-label="GitHub">
         <SectionHeader title="GitHub" />
-        <p role={providerError ? 'alert' : 'status'}>
-          {providerError
-            ? <><StatusDot status="failing" label="Error" /> {githubReadiness}: {providerError}</>
-            : <Badge tone={provider?.missingScopes.length ? 'needs-you' : provider?.requiredHostAuthenticated ? 'working' : 'neutral'}>{githubReadiness}</Badge>}
-        </p>
+        {worktree && loadingProvider && <NoticeLine>Checking GitHub readiness…</NoticeLine>}
+        {worktree && providerError && <InlineError message={providerError} />}
+        {provider && <p role="status">
+          <Badge tone={provider.missingScopes.length ? 'needs-you' : provider.requiredHostAuthenticated ? 'working' : 'neutral'}>{githubReadiness}</Badge>
+        </p>}
         {provider && <>
           {provider.ghAvailable === false && <p>Install GitHub CLI: <code>brew install gh</code></p>}
           {provider.ghAvailable && !provider.requiredHostAuthenticated && <p>Sign in to {provider.requiredHost}: <code>{githubLoginCommand(provider)}</code></p>}
@@ -484,33 +535,43 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       </article>
     </section>
 
-    <section className="ui-stack" aria-label="Hosted-review creation defaults">
+    <section className="ui-stack" aria-label="Hosted-review creation defaults" aria-busy={globalDefaultsLoading || repositoryDefaultsLoading} aria-live="polite">
       <SectionHeader title="Hosted-review creation defaults" />
+      {globalDefaultsLoading && <NoticeLine>Loading creation defaults…</NoticeLine>}
+      {repositoryDefaultsLoading && <NoticeLine>Loading repository creation defaults…</NoticeLine>}
       <fieldset className="ui-stack">
         <legend>Apply defaults to</legend>
         <FormRow label="Global" htmlFor="creation-default-global">
-          <input id="creation-default-global" type="radio" style={{ accentColor: 'var(--ui-accent)' }} name="creation-default-scope" value="global" checked={defaultScope === 'global'} onChange={() => {
+          <input id="creation-default-global" type="radio" style={{ accentColor: 'var(--ui-accent)' }} name="creation-default-scope" value="global" checked={defaultScope === 'global'} disabled={!globalDefaultsReady || savingDefaults} onChange={() => {
+            if (!globalDefaultsReady || savingDefaults) return
             setDefaultScope('global')
             setDefaultsError(null)
           }} />
         </FormRow>
         <FormRow label={`This repository${currentRepoHasOverride ? ' · overrides global' : ' · inherits global'}`} htmlFor="creation-default-repository">
-          <input id="creation-default-repository" type="radio" style={{ accentColor: 'var(--ui-accent)' }} name="creation-default-scope" value="repository" checked={defaultScope === 'repository'} disabled={!repositoryDefaultsReady} onChange={() => {
+          <input id="creation-default-repository" type="radio" style={{ accentColor: 'var(--ui-accent)' }} name="creation-default-scope" value="repository" checked={defaultScope === 'repository'} disabled={!repositoryDefaultsReady || repositoryDefaultsLoading || repositoryDefaultsFailed || savingDefaults} onChange={() => {
+            if (!repositoryDefaultsReady || repositoryDefaultsLoading || repositoryDefaultsFailed || savingDefaults) return
             setDefaultScope('repository')
             if (!currentRepoHasOverride) setRepoDefaults(globalDefaults)
             setDefaultsError(null)
           }} />
         </FormRow>
       </fieldset>
-      <fieldset className="ui-stack" disabled={savingDefaults || (defaultScope === 'repository' && !repositoryDefaultsReady)}>
+      <fieldset className="ui-stack" disabled={!globalDefaultsReady || savingDefaults || (defaultScope === 'repository' && (!repositoryDefaultsReady || repositoryDefaultsLoading || repositoryDefaultsFailed))}>
         <legend>Creation options</legend>
         {DEFAULT_FIELDS.map(({ key, label }) => <FormRow key={key} label={label} htmlFor={`creation-default-${key}`}>
           <input id={`creation-default-${key}`} type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={displayedDefaults[key]} onChange={(event) => setDefault(key, event.target.checked)} />
         </FormRow>)}
       </fieldset>
-      {defaultsError && <p role="alert"><StatusDot status="failing" label="Error" /> {defaultsError}</p>}
+      {defaultsError && <InlineError
+        message={defaultsError}
+        action={(!globalDefaultsReady || repositoryDefaultsFailed) ? { label: 'Retry defaults', onAction: () => {
+          const request = ++defaultsLoadSequence.current
+          void loadDefaults(request)
+        } } : undefined}
+      />}
       <div className="ui-cluster">
-        <Button variant="primary" disabled={savingDefaults || (defaultScope === 'repository' && !repositoryDefaultsReady)} onClick={() => void saveDefaults()}>{savingDefaults ? 'Saving…' : 'Save creation defaults'}</Button>
+        <Button variant="primary" disabled={!globalDefaultsReady || savingDefaults || (defaultScope === 'repository' && (!repositoryDefaultsReady || repositoryDefaultsLoading || repositoryDefaultsFailed))} onClick={() => void saveDefaults()}>{savingDefaults ? 'Saving…' : 'Save creation defaults'}</Button>
         {defaultScope === 'repository' && currentRepoHasOverride && <Button disabled={savingDefaults || !repositoryDefaultsReady} onClick={() => void resetRepoDefaults()}>
           Reset repository defaults to global
         </Button>}
@@ -519,17 +580,16 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
 
     <section className="ui-stack" aria-label="Repository GitHub account">
       <SectionHeader title="Repository GitHub account" />
-      {configurationError && <p role="alert"><StatusDot status="failing" label="Error" /> {configurationError}</p>}
-      {accountsError && <p role="alert"><StatusDot status="failing" label="Error" /> {accountsError}</p>}
-      {selectedBinding && !bindingAvailable && <p role="alert">
-        <StatusDot status="failing" label="Error" /> The saved binding to {selectedBinding.user} @ {selectedBinding.host} is unavailable. It remains saved and GitHub requests fail closed; no ambient-account fallback is used.
-      </p>}
+      {worktree && loadingProvider && accountsData === null && <NoticeLine>Loading GitHub accounts…</NoticeLine>}
+      {worktree && configurationError && <InlineError message={configurationError} />}
+      {worktree && accountsError && <InlineError message={accountsError} />}
+      {selectedBinding && !bindingAvailable && <InlineError message={`The saved binding to ${selectedBinding.user} @ ${selectedBinding.host} is unavailable. It remains saved and GitHub requests fail closed; no ambient-account fallback is used.`} />}
       <FormRow label="Account for this repository" htmlFor="hosting-account">
         <select
           id="hosting-account"
           className="ui-text-field__input"
           value={accountSelection}
-          disabled={!worktree || savingAccount || configuration === null}
+          disabled={!worktree || savingAccount || loadingProvider || configuration === null || accountsData === null}
           onChange={(event) => setAccountSelection(event.target.value)}
         >
           <option value="ambient">Default (ambient gh login)</option>
@@ -542,15 +602,15 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       {requiredHostAccounts.map((account) => <p key={`${accountKey(account)}-scope`}>
         {account.user} @ {account.host} · {account.source} · scopes: {account.scopes.length ? account.scopes.join(', ') : 'unknown'}
       </p>)}
-      {accountSaveError && <p role="alert"><StatusDot status="failing" label="Error" /> {accountSaveError}</p>}
-      <Button variant="primary" disabled={!worktree || savingAccount || configuration === null} onClick={() => void saveAccount()}>{savingAccount ? 'Saving account…' : 'Save account binding'}</Button>
+      {accountSaveError && <InlineError message={accountSaveError} />}
+      <Button variant="primary" disabled={!worktree || savingAccount || loadingProvider || configuration === null || accountsData === null} onClick={() => void saveAccount()}>{savingAccount ? 'Saving account…' : 'Save account binding'}</Button>
     </section>
 
-    <section className="ui-stack" aria-label="GitHub API Budget">
+    <section className="ui-stack" aria-label="GitHub API Budget" aria-busy={loadingBudget} aria-live="polite">
       <SectionHeader title="GitHub API Budget" />
-      <Button disabled={!worktree || refreshingBudget} onClick={() => void refreshBudget(true)}>{refreshingBudget ? 'Refreshing…' : 'Refresh budget'}</Button>
-      {budgetError && <p role="alert"><StatusDot status="failing" label="Error" /> Budget unavailable: {budgetError}</p>}
-      {!budget && !budgetError && <p role="status" className="ui-text-muted">Loading GitHub API budget…</p>}
+      <Button disabled={!worktree || refreshingBudget || loadingBudget} onClick={() => void refreshBudget(true)}>{refreshingBudget ? 'Refreshing…' : 'Refresh budget'}</Button>
+      {worktree && !budget && loadingBudget && <NoticeLine>Loading GitHub API budget…</NoticeLine>}
+      {worktree && !budget && budgetError && <InlineError message={budgetError} />}
       {budget && <>
         <dl className="ui-stack">
           {([['REST', budget.core], ['Search', budget.search], ['GraphQL', budget.graphql]] as const).map(([name, bucket]) => {
