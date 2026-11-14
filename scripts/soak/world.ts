@@ -27,6 +27,7 @@ type StartWorldOptions = {
 }
 
 export type DaemonSpawn = { spawnedAt: number; pid: number }
+export type DaemonRestart = { spawnedAt: number }
 
 export type SoakWorld = {
   home: string

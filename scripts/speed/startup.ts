@@ -17,6 +17,7 @@ export function watchReplacementRuntime(options: {
   let watcher: FSWatcher | undefined
   let timeout: ReturnType<typeof setTimeout> | undefined
   let expectedPid: number | undefined
+  let deadline: number | undefined
   let settled = false
 
   const close = () => {
@@ -36,6 +37,8 @@ export function watchReplacementRuntime(options: {
     reject(error)
   }
 
+  const deadlineError = (pid: number) => new Error(`runtime.json for replacement PID ${pid} missed the startup deadline`)
+
   const onAbort = () => {
     const reason = options.signal.reason
     fail(reason instanceof Error ? reason : new Error('replacement runtime watch aborted'))
@@ -43,8 +46,16 @@ export function watchReplacementRuntime(options: {
 
   const readExpectedRuntime = () => {
     if (settled || expectedPid === undefined) return
+    if (deadline !== undefined && performance.now() >= deadline) {
+      fail(deadlineError(expectedPid))
+      return
+    }
     const candidate = readRuntime(options.home)
     if (candidate?.pid !== expectedPid) return
+    if (deadline !== undefined && performance.now() >= deadline) {
+      fail(deadlineError(expectedPid))
+      return
+    }
     settled = true
     close()
     resolve(candidate)
@@ -78,16 +89,18 @@ export function watchReplacementRuntime(options: {
       }
 
       expectedPid = spawn.pid
+      const expectedDeadline = spawn.spawnedAt + options.timeoutMs
+      deadline = expectedDeadline
       readExpectedRuntime()
       if (settled) return
 
-      const remainingMs = spawn.spawnedAt + options.timeoutMs - performance.now()
+      const remainingMs = expectedDeadline - performance.now()
       if (remainingMs <= 0) {
-        fail(new Error(`runtime.json for replacement PID ${spawn.pid} missed the startup deadline`))
+        fail(deadlineError(spawn.pid))
         return
       }
       timeout = setTimeout(() => {
-        fail(new Error(`runtime.json for replacement PID ${spawn.pid} missed the startup deadline`))
+        fail(deadlineError(spawn.pid))
       }, remainingMs)
     },
     runtime,

@@ -122,3 +122,16 @@ test('rejects when the home-directory watcher cannot be created', async () => {
     cleanup()
   }
 })
+test('rejects an already-published runtime after the spawn deadline', async () => {
+  const { home, cleanup } = makeHome()
+  const expected = runtime(506)
+  writePrivateJson(runtimeFilePath(home), expected)
+  const watcher = watchReplacementRuntime({ home, signal: new AbortController().signal, timeoutMs: 1_000 })
+  try {
+    watcher.expectSpawn({ spawnedAt: performance.now() - 2_000, pid: expected.pid })
+    await expect(watcher.runtime).rejects.toThrow(/deadline/i)
+  } finally {
+    watcher.dispose()
+    cleanup()
+  }
+})
