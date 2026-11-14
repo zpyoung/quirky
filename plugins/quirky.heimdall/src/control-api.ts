@@ -431,6 +431,7 @@ export const controlContributions = {
       cap: flag('string', 'Repeatable capability assignment key=off|gated|on.', { repeatable: true }),
       'branch-update': flag('string', 'Hosted-review branch update mode.', { enum: ['merge-base-update', 'rebase'] }),
       'merge-method': flag('string', 'Hosted-review merge method.', { enum: ['default', 'merge', 'squash', 'rebase'] }),
+      'merge-check-scope': flag('string', 'Hosted-review merge check scope.', { enum: ['all', 'required'] }),
       ...ownerFlags
     }),
     command('pause', 'pause one watcher after its current tick drains', commandMethods, [watcherId]),

@@ -210,6 +210,42 @@ describe('Heimdall control CLI', () => {
   })
 
 
+  test('defaults hosted-review merge check scope to all', async () => {
+    const { ctx, calls } = contextFor(() => ({ kind: 'enrolled', enrollment: { watcherId: 'review-default' } }))
+
+    await invoke('create', ['hosted-review'], {}, ctx)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({
+      method: 'quirky.heimdall/enroll',
+      params: { kind: 'hosted-review', kindPayload: { mergeCheckScope: 'all' } }
+    })
+  })
+
+  test('accepts hosted-review merge check scope all', async () => {
+    const { ctx, calls } = contextFor(() => ({ kind: 'enrolled', enrollment: { watcherId: 'review-all' } }))
+
+    await invoke('create', ['hosted-review'], { 'merge-check-scope': 'all' }, ctx)
+
+    expect(calls[0]?.params.kindPayload).toMatchObject({ mergeCheckScope: 'all' })
+  })
+
+  test('accepts hosted-review merge check scope required', async () => {
+    const { ctx, calls } = contextFor(() => ({ kind: 'enrolled', enrollment: { watcherId: 'review-required' } }))
+
+    await invoke('create', ['hosted-review'], { 'merge-check-scope': 'required' }, ctx)
+
+    expect(calls[0]?.params.kindPayload).toMatchObject({ mergeCheckScope: 'required' })
+  })
+
+  test('rejects invalid hosted-review merge check scope before enrollment', async () => {
+    const { ctx, calls } = contextFor(() => { throw new Error('must not call enrollment') })
+
+    await expect(invoke('create', ['hosted-review'], { 'merge-check-scope': 'bogus' }, ctx))
+      .rejects.toMatchObject({ name: 'UsageError', message: '--merge-check-scope must be all or required' })
+    expect(calls).toHaveLength(0)
+  })
+
   test('rejects an unsupported owner agent before enrollment', async () => {
     const { ctx, calls } = contextFor(() => { throw new Error('must not call enrollment') })
 

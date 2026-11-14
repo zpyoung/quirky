@@ -77,7 +77,8 @@ function setup(table: Record<string, unknown>, clock?: ManualClock) {
     emit: () => true,
     getSetting: (name: string) => settings[name],
     notify: (n: PluginNotification) => notifications.push(n),
-    error: (_kind: string, message: string) => new Error(message),
+    error: (kind: string, message: string) =>
+      Object.assign(new Error(message), { kind, code: kind === 'conflict' ? -32009 : -32602 }),
     call: async (method: string, params?: Record<string, unknown>) => {
       calls.push({ method, params })
       if (!(method in table)) throw Object.assign(new Error(`unknown method: ${method}`), { code: -32601 })
@@ -151,7 +152,7 @@ describe('lookups that never answer', () => {
 })
 
 describe('identical calls in flight', () => {
-  test('four syncs share one never-answering worktree list lookup', async () => {
+  test('refresh requests share one never-answering worktree list read', async () => {
     const clock = manualClock()
     const { service, calls } = setup(answers({ 'quirky.worktree/list': never }), clock)
 
@@ -167,7 +168,6 @@ describe('identical calls in flight', () => {
     await flushMicrotasks()
 
     expect(calls.filter(({ method }) => method === 'quirky.worktree/list')).toHaveLength(1)
-    expect(calls.filter(({ method }) => method === 'ui.state').length).toBeGreaterThanOrEqual(4)
     service.shutdown()
   })
 
@@ -212,7 +212,7 @@ describe('identical calls in flight', () => {
     service.shutdown()
   })
 
-  test('a settled worktree list call frees its key before the next sync', async () => {
+  test('a settled worktree list call frees its key before the next direct status', async () => {
     const clock = manualClock()
     const { service, calls } = setup(answers({
       'quirky.worktree/list': () => {
@@ -222,11 +222,11 @@ describe('identical calls in flight', () => {
       }
     }), clock)
 
-    const first = service.status()
+    const first = service.status().catch(() => undefined)
     await flushMicrotasks()
     clock.advance(200)
     await flushMicrotasks()
-    const second = service.status()
+    const second = service.status().catch(() => undefined)
     await flushMicrotasks()
     clock.advance(40)
     await flushMicrotasks()
@@ -238,16 +238,24 @@ describe('identical calls in flight', () => {
     service.shutdown()
   })
 
-  test('each joined caller keeps its own timeout and the existing log message', async () => {
+  test('each direct caller keeps its own timeout and the existing log message', async () => {
     const clock = manualClock()
     const { service, calls, logs } = setup(answers({ 'quirky.worktree/list': never }), clock)
 
     let firstSettled = false
-    const first = service.status().then(() => { firstSettled = true })
+    let firstError: unknown
+    const first = service.status().catch((error: unknown) => {
+      firstSettled = true
+      firstError = error
+    })
     await flushMicrotasks()
     clock.advance(20)
     let secondSettled = false
-    const second = service.status().then(() => { secondSettled = true })
+    let secondError: unknown
+    const second = service.status().catch((error: unknown) => {
+      secondSettled = true
+      secondError = error
+    })
     await flushMicrotasks()
     clock.advance(20)
     await flushMicrotasks()
@@ -258,6 +266,8 @@ describe('identical calls in flight', () => {
     await flushMicrotasks()
     await Promise.all([first, second])
 
+    expect(firstError).toMatchObject({ code: -32009, message: 'worktree status is temporarily unavailable' })
+    expect(secondError).toMatchObject({ code: -32009, message: 'worktree status is temporarily unavailable' })
     expect(calls.filter(({ method }) => method === 'quirky.worktree/list')).toHaveLength(1)
     expect(logs).toEqual([
       'quirky.worktree/list failed: quirky.worktree/list did not answer within 40ms',
