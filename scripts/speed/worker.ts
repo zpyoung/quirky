@@ -1,3 +1,10 @@
+import { writeFile } from 'node:fs/promises'
+import { isAbsolute } from 'node:path'
+import { parseArgs } from 'node:util'
+import type { FloodSleepCapture } from './contracts'
+
+const MAX_SLEEP_INTERVALS = 8192
+const MAX_CAPTURE_BYTES = 2 * 1024 * 1024
 export const FLOOD_CHUNK_BYTES = 65_536 as const
 export const FLOOD_INTERVAL_MS = 16 as const
 const CONTROL_PREFIX = 0x1e
@@ -15,6 +22,7 @@ type FloodRun = {
   lastCounter: number
   bytesWritten: number
   startedAt: number
+  sleepTiming: FloodSleepCapture
 }
 
 /** Builds one bounded flood chunk with its progress counter embedded in the terminal stream. */
@@ -51,9 +59,37 @@ function parseControl(bytes: number[]): Control | null {
   }
 }
 
-async function runWorker(workerId: string, echoDelayMs: number): Promise<void> {
-  const input = process.stdin
-  const output = process.stdout
+type WorkerDependencies = {
+  input: {
+    isTTY?: boolean
+    setRawMode(mode: boolean): unknown
+    setEncoding(encoding: 'utf8'): unknown
+    on(event: 'data', listener: (value: string | Buffer) => void): unknown
+    pause(): unknown
+  }
+  output: WorkerOutput
+  now(): number
+  sleep(ms: number): Promise<unknown>
+  publish(path: string, capture: FloodSleepCapture): Promise<void>
+}
+
+/** Publishes bounded disposable evidence without placing sleep intervals in terminal output. */
+export async function publishFloodSleepCapture(path: string, capture: FloodSleepCapture): Promise<void> {
+  let serialized = JSON.stringify(capture)
+  if (Buffer.byteLength(serialized) > MAX_CAPTURE_BYTES) {
+    serialized = JSON.stringify({ version: 1, workerId: capture.workerId.slice(0, 128),
+      sessionId: capture.sessionId.slice(0, 128), runId: capture.runId.slice(0, 128),
+      status: 'unavailable', reason: 'serialized-capture-too-large', intervals: [] })
+  }
+  await writeFile(path, serialized)
+}
+
+/** Runs isolated benchmark input and load with injectable clocks and output for deterministic checks. */
+export async function runWorker(workerId: string, echoDelayMs: number, timingFile?: string, dependencies?: WorkerDependencies): Promise<void> {
+  const { input, output, now, sleep, publish } = dependencies ?? {
+    input: process.stdin, output: process.stdout,
+    now: () => performance.timeOrigin + performance.now(), sleep: Bun.sleep, publish: publishFloodSleepCapture
+  }
   if (!input.isTTY || typeof input.setRawMode !== 'function') throw new Error('speed worker requires a raw terminal')
   input.setRawMode(true)
   input.setEncoding('utf8')
@@ -82,9 +118,23 @@ async function runWorker(workerId: string, echoDelayMs: number): Promise<void> {
       await writeWorkerOutput(output, chunk)
       state.bytesWritten += chunk.byteLength
       if (!floodRunning) break
-      await Bun.sleep(FLOOD_INTERVAL_MS)
+      const requestedEpochMs = now()
+      await sleep(FLOOD_INTERVAL_MS)
+      const wokeEpochMs = now()
+      const capture = state.sleepTiming
+      if (capture.status === 'complete') {
+        if (capture.intervals.length === MAX_SLEEP_INTERVALS || !Number.isFinite(requestedEpochMs) || !Number.isFinite(wokeEpochMs) || wokeEpochMs < requestedEpochMs + FLOOD_INTERVAL_MS) {
+          capture.status = 'unavailable'
+          capture.reason = capture.intervals.length === MAX_SLEEP_INTERVALS ? 'sleep-buffer-overflow' : 'invalid-sleep-clock'
+          capture.intervals = []
+        } else {
+          capture.intervals.push({ requestedEpochMs, dueEpochMs: requestedEpochMs + FLOOD_INTERVAL_MS,
+            wokeEpochMs, lateMs: wokeEpochMs - requestedEpochMs - FLOOD_INTERVAL_MS })
+        }
+      }
     }
-    const elapsedMs = Math.max(0, performance.now() - state.startedAt)
+    const elapsedMs = Math.max(0, now() - state.startedAt)
+    if (timingFile) await publish(timingFile, state.sleepTiming).catch(() => undefined)
     await writeMarker(
       `SPEED_FLOOD_SUMMARY:${workerId}:${sessionId}:${state.runId}:${state.firstCounter}:${state.lastCounter}:${state.bytesWritten}:${elapsedMs}`
     )
@@ -109,7 +159,8 @@ async function runWorker(workerId: string, echoDelayMs: number): Promise<void> {
         firstCounter: 0,
         lastCounter: 0,
         bytesWritten: 0,
-        startedAt: performance.now()
+        startedAt: now(),
+        sleepTiming: { version: 1, workerId, sessionId, runId: control.runId, status: 'complete', reason: null, intervals: [] }
       }
       currentFloodRun = run
       await writeMarker(`SPEED_FLOOD_STARTED ${workerId} ${sessionId} ${run.runId}`)
@@ -164,17 +215,17 @@ async function runWorker(workerId: string, echoDelayMs: number): Promise<void> {
         discardControl = false
         continue
       }
-      if (closing || !sessionId || byte > 0x7f) continue
+      if (closing || !sessionId || byte < 0x20 || byte >= 0x7f) continue
       sequence++
       const key = String.fromCharCode(byte)
-      const marker = `SPEED_ECHO ${workerId} ${sessionId} ${sequence} ${key}`
+      const marker = `SPEED_ECHO ${workerId} ${sessionId} ${sequence} ${key} readEpochMs=${now()}`
       if (echoDelayMs === 0) {
         void writeMarker(marker).catch(() => undefined)
       } else {
-        const deadline = performance.now() + echoDelayMs
+        const deadline = now() + echoDelayMs
         echoQueue = (echoQueue ?? Promise.resolve()).then(async () => {
-          const remainingMs = deadline - performance.now()
-          if (remainingMs > 0) await Bun.sleep(remainingMs)
+          const remainingMs = deadline - now()
+          if (remainingMs > 0) await sleep(remainingMs)
           await writeMarker(marker)
         }).catch(() => undefined)
       }
@@ -185,19 +236,14 @@ async function runWorker(workerId: string, echoDelayMs: number): Promise<void> {
 if (import.meta.main) {
   const workerId = process.argv[2]
   if (!workerId) throw new Error('speed worker requires a worker ID')
-  const delayFlag = process.argv[3]
-  let echoDelayMs = 0
-  if (delayFlag !== undefined) {
-    const delayArgument = process.argv[4]
-    if (delayFlag !== '--echo-delay-ms' || delayArgument === undefined) {
-      throw new Error('speed worker expects --echo-delay-ms <n> after its worker ID')
-    }
-    echoDelayMs = Number(delayArgument)
-    if (!Number.isFinite(echoDelayMs) || echoDelayMs < 0) {
-      throw new Error('--echo-delay-ms must be a non-negative number')
-    }
-  }
-  void runWorker(workerId, echoDelayMs).catch((error: unknown) => {
+  const { values } = parseArgs({ args: process.argv.slice(3), strict: true, allowPositionals: false, options: {
+    'echo-delay-ms': { type: 'string' }, 'timing-file': { type: 'string' }
+  } })
+  const echoDelayMs = Number(values['echo-delay-ms'] ?? 0)
+  if (!Number.isFinite(echoDelayMs) || echoDelayMs < 0) throw new Error('--echo-delay-ms must be a non-negative number')
+  const timingFile = values['timing-file']
+  if (timingFile !== undefined && !isAbsolute(timingFile)) throw new Error('--timing-file must be an absolute disposable path')
+  void runWorker(workerId, echoDelayMs, timingFile).catch((error: unknown) => {
     console.error(`speed worker failed: ${error instanceof Error ? error.message : String(error)}`)
     process.exitCode = 1
   })

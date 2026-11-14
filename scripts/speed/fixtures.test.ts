@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs'
+import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PreparedCaptureFixtureHome, RegisteredCaptureFixtures } from '../ui-review/fixtures'
-import { prepareSpeedFixture } from './fixtures.ts'
-import { createFloodChunk, writeWorkerOutput } from './worker.ts'
+import { prepareSpeedFixture, readFloodSleepCapture } from './fixtures.ts'
+import { createFloodChunk, writeWorkerOutput, runWorker, publishFloodSleepCapture } from './worker.ts'
 import { startWorld } from '../soak/world.ts'
 import { fixtureIssue, fixturePullRequest } from '../../plugins/quirky.tasks/test/fixtures/list'
 
@@ -81,8 +82,7 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
     if (method === 'quirky.terminal/newTab' || method === 'quirky.terminal/splitPane') {
       sessionCounter++
       const session = `speed-session-${sessionCounter}`
-      const workerId = String(params.command ?? '').split(' ').at(-1)?.replaceAll("'", '')
-        ?? String(params.title ?? '').split(' ').at(-1)!
+      const workerId = String(params.command ?? '').match(/worker\.ts' '([^']+)'/)?.[1]!
       workerBySession.set(session, workerId)
       return method.endsWith('newTab')
         ? { session, tab: `tab-${sessionCounter}`, pane: `pane-${sessionCounter}` }
@@ -98,6 +98,9 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
         if (command.op === 'flood-stop') {
           const runId = command.runId ?? runIdBySession.get(session)!
           pendingSummaryBySession.set(session, `SPEED_FLOOD_SUMMARY:${workerId}:${session}:${runId}:1:2:131072:32`)
+          writeFileSync(join(fixtureRoot, `speed-sleep-${workerId}.json`), JSON.stringify({
+            version: 1, workerId, sessionId: session, runId, status: 'complete', reason: null, intervals: []
+          }))
         }
         if (command.op === 'shutdown') stoppedBySession.add(session)
       }
@@ -182,6 +185,7 @@ test('builds ten two-pane worktrees, a committed empty diff, and isolated raw wo
     expect(flood.runId.length).toBeGreaterThan(0)
     const stats = await fixture.stopFlood()
     expect(stats).toMatchObject({ workerId: flood.workerId, sessionId: flood.sessionId, runId: flood.runId, offeredBytesPerChunk: 65536, intervalMs: 16, offeredBytesPerSecond: 4_096_000 })
+    expect(stats.sleepTiming).toMatchObject({ status: 'complete', runId: flood.runId, intervals: [] })
     expect(flood.offeredBytesPerSecond).toBe(4_096_000)
     expect(stats.bytesWritten).toBeGreaterThanOrEqual(0)
     expect(stats.elapsedMs).toBeGreaterThanOrEqual(0)
@@ -240,6 +244,137 @@ test('encodes flood counters in an exact 65,536-byte output chunk', () => {
   expect(chunk.byteLength).toBe(65_536)
   expect(text.includes('SPEED_FLOOD worker-a session-a 42 65536\r\n')).toBe(true)
   expect(text.endsWith('\r\n')).toBe(true)
+})
+
+async function flushWorker() {
+  for (let index = 0; index < 20; index++) await Promise.resolve()
+}
+
+async function workerHarness(delay = 0, options: { backpressure?: boolean; failPublish?: boolean } = {}) {
+  const input = Object.assign(new EventEmitter(), { isTTY: true, setRawMode() {}, setEncoding() {}, pause() {} })
+  let epoch = 100012
+  let drain: (() => void) | undefined
+  let sleeping: (() => void) | undefined
+  let requestedAt: number | undefined
+  let capture: unknown
+  const chunks: string[] = []
+  await runWorker('w', delay, '/tmp/disposable-timing.json', {
+    input, output: {
+      write(bytes) {
+        const text = Buffer.from(bytes).toString()
+        chunks.push(text)
+        return !(options.backpressure && text.length === 65536)
+      },
+      once(_event, listener) { drain = listener }
+    },
+    now: () => epoch,
+    sleep: () => {
+      requestedAt = epoch
+      const { promise, resolve } = Promise.withResolvers<void>()
+      sleeping = resolve
+      return promise
+    },
+    async publish(_path, value) { if (options.failPublish) throw new Error('disk full'); capture = structuredClone(value) }
+  })
+  const control = async (op: string, extras: Record<string, string> = {}) => {
+    input.emit('data', `\u001e${JSON.stringify({ op, ...extras })}\n`)
+    await flushWorker()
+  }
+  await control('bind', { session: 's' })
+  return {
+    input, chunks, control, capture: () => capture, requestedAt: () => requestedAt,
+    setEpoch(value: number) { epoch = value },
+    drain() { drain?.() },
+    async wake(value: number) { epoch = value; sleeping?.(); await flushWorker() }
+  }
+}
+
+test('timestamps printable input at read, before a seeded delay, and ignores controls and UTF-8 bytes', async () => {
+  for (const delay of [0, 1500]) {
+    const worker = await workerHarness(delay)
+    worker.input.emit('data', 'a\u0003é')
+    await flushWorker()
+    if (delay) {
+      expect(worker.chunks.join('')).not.toContain('SPEED_ECHO')
+      await worker.wake(101512)
+    }
+    expect(worker.chunks.join('')).toContain('\r\nSPEED_ECHO w s 1 a readEpochMs=100012\r\n')
+    expect(worker.chunks.join('').match(/SPEED_ECHO/g)).toHaveLength(1)
+    await worker.control('shutdown')
+  }
+})
+
+test('captures actual flood sleep after drain, publishes before acknowledgement, and resets each run', async () => {
+  const worker = await workerHarness(0, { backpressure: true })
+  await worker.control('flood-start', { runId: 'r1' })
+  expect(worker.requestedAt()).toBeUndefined()
+  worker.setEpoch(100052)
+  worker.drain()
+  await flushWorker()
+  expect(worker.requestedAt()).toBe(100052)
+  await worker.control('flood-stop', { runId: 'r1' })
+  expect(worker.chunks.join('')).not.toContain('SPEED_FLOOD_SUMMARY')
+  await worker.wake(100104)
+  expect(worker.capture()).toMatchObject({
+    version: 1, workerId: 'w', sessionId: 's', runId: 'r1', status: 'complete', reason: null,
+    intervals: [{ requestedEpochMs: 100052, dueEpochMs: 100068, wokeEpochMs: 100104, lateMs: 36 }]
+  })
+  expect(worker.chunks.join('')).toContain('SPEED_FLOOD_SUMMARY:w:s:r1:1:1:65536:92')
+  await worker.control('flood-start', { runId: 'r2' })
+  worker.drain()
+  await flushWorker()
+  await worker.control('flood-stop', { runId: 'r2' })
+  await worker.wake(100120)
+  expect(worker.capture()).toMatchObject({ runId: 'r2', intervals: [{ lateMs: 0 }] })
+  await worker.control('shutdown')
+})
+
+test('sidecar publication failure does not suppress flood stop acknowledgement', async () => {
+  const worker = await workerHarness(0, { failPublish: true })
+  await worker.control('flood-start', { runId: 'r' })
+  await worker.control('flood-stop', { runId: 'r' })
+  await worker.wake(100028)
+  expect(worker.chunks.join('')).toContain('SPEED_FLOOD_SUMMARY:w:s:r:')
+  expect(worker.chunks.join('')).not.toContain('SPEED_FLOOD_ERROR')
+  await worker.control('shutdown')
+})
+
+test('bounds flood sidecars and rejects stale, truncated, malformed, oversized and invalid-clock captures', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'speed-capture-'))
+  const path = join(root, 'timing.json')
+  const expected = { workerId: 'w', sessionId: 's', runId: 'r' }
+  const interval = { requestedEpochMs: 100008, dueEpochMs: 100024, wokeEpochMs: 100060, lateMs: 36 }
+  const capture = { version: 1 as const, ...expected, status: 'complete' as const, reason: null, intervals: [interval] }
+  try {
+    expect((await readFloodSleepCapture(path, expected)).status).toBe('unavailable')
+    await publishFloodSleepCapture(path, capture)
+    expect(await readFloodSleepCapture(path, expected)).toEqual(capture)
+    for (const value of [
+      { ...capture, runId: 'old' }, { ...capture, workerId: 'other' }, { ...capture, sessionId: 'other' },
+      { ...capture, intervals: [{ ...interval, lateMs: 35 }] },
+      { ...capture, intervals: [{ a: 1, b: 2, c: 3, d: 4 }] },
+      { ...capture, intervals: [null] },
+      { ...capture, intervals: [{ ...interval, wokeEpochMs: 100020, lateMs: -4 }] },
+      { ...capture, intervals: Array(8193).fill(interval) }
+    ]) {
+      writeFileSync(path, JSON.stringify(value))
+      expect((await readFloodSleepCapture(path, expected)).status).toBe('unavailable')
+    }
+    for (const text of ['{', JSON.stringify(capture).slice(0, -2), ' '.repeat(2 * 1024 * 1024 + 1)]) {
+      writeFileSync(path, text)
+      expect((await readFloodSleepCapture(path, expected)).status).toBe('unavailable')
+    }
+    await publishFloodSleepCapture(path, { ...capture, intervals: Array.from({ length: 8192 }, (_, index) => ({
+      requestedEpochMs: 100000 + index * 16, dueEpochMs: 100016 + index * 16,
+      wokeEpochMs: 100016 + index * 16, lateMs: 0
+    })) })
+    expect((await readFloodSleepCapture(path, expected)).intervals).toHaveLength(8192)
+    await publishFloodSleepCapture(path, { ...capture, runId: 'x'.repeat(2 * 1024 * 1024) })
+    expect(Buffer.byteLength(readFileSync(path))).toBeLessThan(2 * 1024 * 1024)
+    expect(JSON.parse(readFileSync(path, 'utf8')).status).toBe('unavailable')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('does not offer a subsequent output chunk before stdout drain', async () => {
@@ -638,3 +773,26 @@ async function git(args: string[], cwd: string, env: Record<string, string>): Pr
   if (code !== 0) throw new Error(`git ${args.join(' ')} failed: ${stderr.trim()}`)
   return stdout.trimEnd()
 }
+
+test('worker capture overflow is unavailable, not a truncated complete run', async () => {
+  const input = Object.assign(new EventEmitter(), { isTTY: true, setRawMode() {}, setEncoding() {}, pause() {} })
+  let epoch = 100000
+  let sleeps = 0
+  let capture: unknown
+  let stopped = false
+  const control = (op: string) => input.emit('data', `\u001e${JSON.stringify({ op, session: 's', runId: 'r' })}\n`)
+  await runWorker('w', 0, '/tmp/disposable-capture.json', {
+    input, now: () => epoch,
+    output: { write(chunk) { if (Buffer.from(chunk).toString().startsWith('\r\nSPEED_FLOOD_SUMMARY:')) stopped = true; return true }, once() {} },
+    async sleep() { epoch += 16; if (++sleeps === 8193) control('flood-stop') },
+    async publish(_path, value) { capture = value }
+  })
+  control('bind')
+  await flushWorker()
+  control('flood-start')
+  for (let turn = 0; !stopped && turn < 100000; turn++) await Promise.resolve()
+  expect(stopped).toBe(true)
+  expect(capture).toMatchObject({ status: 'unavailable', reason: 'sleep-buffer-overflow', intervals: [] })
+  control('shutdown')
+  await flushWorker()
+})
