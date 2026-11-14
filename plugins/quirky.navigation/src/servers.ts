@@ -46,6 +46,7 @@ export class ServerPoolError extends Error {
 
 export type TypeScriptResolver = (specifier: string, fromDirectory: string) => string | null | undefined
 
+/** Finds the worktree TypeScript server, falling back to the plugin installation. */
 export function findTsServer(
   worktreePath: string,
   pluginDir: string,
@@ -112,6 +113,7 @@ type Entry = {
 
 type Timers = { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout }
 
+/** Bounds per-worktree server capacity and coordinates startup, reuse, eviction, and shutdown. */
 export class ServerPool {
   private readonly entries = new Map<string, Entry>()
   private readonly factories: Partial<Record<Language, ServerFactory>>
@@ -140,6 +142,7 @@ export class ServerPool {
     this.now = options.now ?? Date.now
   }
 
+  /** Runs a request on the pooled server and rejects when it times out or the server stops. */
   async use<T>(
     worktree: { id: string; path: string },
     language: Language,
@@ -189,6 +192,7 @@ export class ServerPool {
       .sort((a, b) => compare(a.worktreePath, b.worktreePath) || compare(a.language, b.language) || compare(a.worktreeId, b.worktreeId))
   }
 
+  /** Stops matching servers and rejects if any server fails to stop. */
   async stop(filter?: { worktreePath?: string; language?: Language }): Promise<number> {
     return await this.withAdmission(async () => {
       const matches = [...this.entries.values()].filter((entry) =>
@@ -201,6 +205,7 @@ export class ServerPool {
     })
   }
 
+  /** Prevents further use and stops all remaining servers. */
   dispose(): Promise<void> {
     if (!this.disposePromise) {
       this.disposed = true
@@ -218,7 +223,8 @@ export class ServerPool {
         const existing = this.entries.get(key)
         if (existing) {
           if (existing.state === 'stopping') {
-            waitForStop = existing.stopPromise ?? Promise.resolve()
+            waitForStop = Promise.allSettled([existing.stopPromise ?? Promise.resolve()])
+              .then(() => undefined)
             return undefined
           }
           this.markUsed(existing)
@@ -240,7 +246,7 @@ export class ServerPool {
             }
             throw new ServerPoolError('conflict', `all ${language} servers are busy; cannot start one for worktree ${worktree.path}`)
           }
-          await this.requestStop(victim).promise
+          await Promise.allSettled([this.requestStop(victim).promise])
         }
         if (this.disposed) throw new Error('server pool is disposed')
 

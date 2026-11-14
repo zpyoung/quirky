@@ -17,7 +17,7 @@ function inside(root: string, path: string): boolean {
 
 /** Validates disk-backed navigation requests before consuming a language server slot. */
 export class NavigationService {
-  constructor(private context: PluginContext, private pool: ServerPool) {}
+  constructor(private context: Pick<PluginContext, 'call' | 'error'>, private pool: ServerPool) {}
 
   private async worktree(selector: string | undefined, caller: PluginCaller): Promise<Worktree> {
     return await this.context.call('quirky.worktree/resolve', {
@@ -32,7 +32,7 @@ export class NavigationService {
     if (params.path.includes('\0')) throw this.context.error('invalid-params', 'Path must not contain NUL bytes')
     const root = await realpath(worktree.path)
     const candidate = resolve(worktree.path, params.path)
-    if (!isAbsolute(params.path) && !inside(resolve(worktree.path), candidate)) {
+    if (!inside(resolve(worktree.path), candidate) && !inside(root, candidate)) {
       throw this.context.error('invalid-params', `Path is outside the worktree: ${params.path}`)
     }
     let path: string

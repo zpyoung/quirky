@@ -99,6 +99,26 @@ class DelayedStopServer extends FakeServer {
   }
 }
 
+class RejectingStopServer extends FakeServer {
+  constructor(pid: number, private readonly stopError: Error) {
+    super(pid)
+  }
+
+  override async stop(): Promise<void> {
+    this.stopCalls++
+    throw this.stopError
+  }
+}
+
+class DelayedRejectingStopServer extends FakeServer {
+  readonly finishStop = deferred<void>()
+
+  override async stop(): Promise<void> {
+    this.stopCalls++
+    await this.finishStop.promise
+  }
+}
+
 type PoolSetup = {
   pool: ServerPool
   clock: FakeTimers
@@ -168,12 +188,35 @@ describe('ServerPool', () => {
     await clock.advanceBy(1)
     await runOnce(pool, b)
     await clock.advanceBy(1)
-
+    await runOnce(pool, a)
     await runOnce(pool, c)
 
     expect(created).toHaveLength(3)
-    expect((created[0].server as FakeServer).stopCalls).toBe(1)
-    expect(pool.status().map((server) => server.worktreeId).sort()).toEqual(['b', 'c'])
+    expect((created[0].server as FakeServer).stopCalls).toBe(0)
+    expect((created[1].server as FakeServer).stopCalls).toBe(1)
+    expect(pool.status().map((server) => server.worktreeId).sort()).toEqual(['a', 'c'])
+  })
+
+  test('continues after an evicted server rejects stop', async () => {
+    const stopError = new Error('stop failed')
+    const servers: FakeServer[] = []
+    const { pool } = createPool({
+      limits: { typescript: 1 },
+      factory: async () => {
+        const server = servers.length === 0
+          ? new RejectingStopServer(601, stopError)
+          : new FakeServer(602)
+        servers.push(server)
+        return server
+      }
+    })
+    await runOnce(pool, worktree('evicted'))
+
+    await expect(runOnce(pool, worktree('replacement'))).resolves.toBeUndefined()
+
+    expect(servers[0].stopCalls).toBe(1)
+    expect(servers).toHaveLength(2)
+    expect(pool.status().map((server) => server.worktreeId)).toEqual(['replacement'])
   })
 
   test('rejects a third worktree when every server is busy without stopping either', async () => {
@@ -225,6 +268,35 @@ describe('ServerPool', () => {
     await expect(pending).resolves.toBeUndefined()
     expect(servers).toHaveLength(2)
     expect(pool.status().map((server) => server.worktreeId)).toEqual(['waiting'])
+  })
+
+  test('retries same-key use after idle stop rejection while explicit stop still rejects', async () => {
+    const stopError = new Error('stop failed')
+    const server = new DelayedRejectingStopServer(321)
+    let starts = 0
+    const { pool, clock } = createPool({
+      limits: { typescript: 1 },
+      idleMs: 10,
+      factory: async () => starts++ === 0 ? server : new FakeServer(322)
+    })
+    const wt = worktree('same-key-stop')
+    await runOnce(pool, wt)
+    await clock.advanceBy(10)
+    expect(server.stopCalls).toBe(1)
+
+    const pending = pool.use(wt, 'typescript', async () => undefined)
+    void pending.catch(() => {})
+    await flushPromises()
+    const stopping = pool.stop({ worktreePath: wt.path })
+    void stopping.catch(() => {})
+    await flushPromises()
+    expect(starts).toBe(1)
+
+    server.finishStop.reject(stopError)
+    await expect(stopping).rejects.toBe(stopError)
+    await expect(pending).resolves.toBeUndefined()
+    expect(starts).toBe(2)
+    expect(pool.status().map((item) => item.worktreeId)).toEqual([wt.id])
   })
 
   test('stops a server after its idle timeout and resets the timeout on use', async () => {
@@ -283,6 +355,47 @@ describe('ServerPool', () => {
     expect(pool.status().map((server) => server.pid)).toEqual([402])
   })
 
+  test('retries a TypeScript server factory after resolution fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'quirky-navigation-'))
+    roots.push(root)
+    const worktreePath = join(root, 'worktree')
+    const pluginDir = join(root, 'plugin')
+    mkdirSync(worktreePath, { recursive: true })
+    mkdirSync(pluginDir, { recursive: true })
+    const wt = { id: 'factory-retry', path: worktreePath }
+    const servers: FakeServer[] = []
+    let factoryCalls = 0
+    let firstError: unknown
+    const { pool } = createPool({
+      factory: async (worktree) => {
+        factoryCalls++
+        if (factoryCalls === 1) {
+          try {
+            findTsServer(worktree.path, pluginDir, () => undefined)
+          } catch (error) {
+            firstError = error
+            throw error
+          }
+        }
+        const server = new FakeServer(551)
+        servers.push(server)
+        return server
+      }
+    })
+
+    const rejection = await pool.use(wt, 'typescript', async () => undefined)
+      .then(() => undefined, (error: unknown) => error)
+
+    expect(rejection).toBe(firstError)
+    expect(rejection).toBeInstanceOf(ServerPoolError)
+    expect(rejection).toMatchObject({ kind: 'not-found' })
+    expect(pool.status()).toEqual([])
+    await runOnce(pool, wt)
+    expect(factoryCalls).toBe(2)
+    expect(servers).toHaveLength(1)
+    expect(pool.status().map((item) => item.pid)).toEqual([551])
+  })
+
   test('stops matching worktrees and all remaining servers idempotently', async () => {
     const { pool } = createPool()
     const a = worktree('filter-a')
@@ -319,11 +432,10 @@ describe('ServerPool', () => {
     const request = pool.use(worktree('slow'), 'typescript', () => pending.promise)
     await flushPromises()
     await clock.advanceBy(5)
-
     await expect(request).rejects.toThrow('did not answer')
-    await pool.stop()
     expect((created[0].server as FakeServer).stopCalls).toBe(1)
     expect(pool.status()).toEqual([])
+    await pool.stop()
   })
 })
 

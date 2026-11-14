@@ -5,8 +5,8 @@ import { join } from 'node:path'
 import { QuirkyClient, RpcError, RpcErrorCode } from '@quirky/protocol'
 import { rpcUrl } from '@quirky/protocol/node'
 import { builtinsDir, startHarness, waitFor, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
-import type { NavResult } from '../src/service'
-import type { NavServerStatus } from '../src/servers'
+import { NavigationService, type NavResult } from '../src/service'
+import { ServerPool, type NavServerStatus } from '../src/servers'
 
 let harness: Harness | undefined
 let root: string | undefined
@@ -89,7 +89,9 @@ test('definitions resolve re-exports, methods, types, imports, modules and empty
   })
   expect(positions(await navigate(client, 'definition', 6, 9))).toEqual([['src/greet.ts', 10, 3, 10, 8]])
   expect((await navigate(client, 'definition', 6, 9)).locations[0]!.preview).toBe('  hello(name: Name): string {')
-  expect(positions(await navigate(client, 'definition', 3, 12))).toEqual([['src/greet.ts', 1, 13, 1, 17]])
+  const typeDefinition = await navigate(client, 'definition', 3, 12)
+  expect(positions(typeDefinition)).toEqual([['src/greet.ts', 1, 13, 1, 17]])
+  expect(typeDefinition.locations[0]!.preview).toBe('export type Name = string')
   expect(positions(await navigate(client, 'definition', 1, 17))).toEqual([['src/greet.ts', 7, 14, 7, 21]])
   expect(positions(await navigate(client, 'definition', 1, 44))).toEqual([['src/index.ts', 1, 1, 1, 1]])
   expect(await navigate(client, 'definition', 2, 1)).toMatchObject({ locations: [], truncated: false })
@@ -134,6 +136,7 @@ test('rejects invalid paths and positions before starting a server', async () =>
   const cases: [string, number, number, number, string][] = [
     ['../outside.ts', 1, 1, RpcErrorCode.InvalidParams, 'outside the worktree'],
     [outside, 1, 1, RpcErrorCode.InvalidParams, 'outside the worktree'],
+    [join(root!, 'missing-outside.ts'), 1, 1, RpcErrorCode.InvalidParams, 'outside the worktree'],
     ['src/link.ts', 1, 1, RpcErrorCode.InvalidParams, 'outside the worktree'],
     ['src/nope.ts', 1, 1, RpcErrorCode.NotFound, 'src/nope.ts'],
     ['tsconfig.json', 1, 1, RpcErrorCode.InvalidParams, '.json'],
@@ -189,9 +192,32 @@ test('prefers worktree TypeScript and falls back to the plugin-resolvable versio
 }, 60000)
 
 test('canonicalizes relative locations when the registered workspace is a symlink', async () => {
-  const { client, real } = await start(true)
+  const { client, workspace, real, worktree } = await start(true)
   const result = await navigate(client, 'definition', 4, 27)
   expect(result.locations[0]).toMatchObject({ path: join(real, 'src/greet.ts'), relativePath: 'src/greet.ts' })
+  const exit = Promise.withResolvers<{ exitCode: number | null; stderrTail: string }>()
+  const location = { path: join(real, 'src/greet.ts'), line: 3, column: 17, endLine: 3, endColumn: 22 }
+  const pool = new ServerPool({
+    factories: { typescript: async () => ({
+      pid: null, runtime: 'fixture', serverPath: 'fixture', exited: exit.promise,
+      definition: async () => [location], references: async () => [],
+      stop: async () => { exit.resolve({ exitCode: 0, stderrTail: '' }) }
+    }) },
+    limits: { typescript: 1 }, idleMs: 600000, requestTimeoutMs: 120000
+  })
+  // the daemon canonicalizes folder records; this isolates the service's alias-root contract.
+  const context = {
+    call: async () => ({ ...worktree, path: workspace }),
+    error: (_kind: string, message: string) => new Error(message)
+  }
+  const service = new NavigationService(context, pool)
+  try {
+    for (const path of [join(workspace, 'src/use.ts'), join(real, 'src/use.ts')]) {
+      expect((await service.navigate('definition', { path, line: 4, column: 27 }, { role: 'cli' })).locations).toEqual(result.locations)
+    }
+  } finally {
+    await pool.dispose()
+  }
 }, 60000)
 
 test('caps sorted references at 1000 and bounds Unicode previews', async () => {
