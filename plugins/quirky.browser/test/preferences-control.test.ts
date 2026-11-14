@@ -20,7 +20,7 @@ function makeContext(): { context: UiPluginContext; handlers: Map<string, unknow
 
 function controllerApi(): {
   register: (context: UiPluginContext, instance: string, handler: (args: ControlArgs) => void) => () => void
-  dispatch: (context: UiPluginContext, args: unknown) => void
+  dispatch: (context: UiPluginContext, args: unknown) => unknown
 } {
   const register = Reflect.get(shared, 'registerPreferencesController')
   const dispatch = Reflect.get(shared, 'dispatchPreferencesControl')
@@ -29,7 +29,7 @@ function controllerApi(): {
   }
   return {
     register: register as (context: UiPluginContext, instance: string, handler: (args: ControlArgs) => void) => () => void,
-    dispatch: dispatch as (context: UiPluginContext, args: unknown) => void
+    dispatch: dispatch as (context: UiPluginContext, args: unknown) => unknown
   }
 }
 
@@ -60,7 +60,7 @@ test('registers the hidden preferences control command with the exact manifest c
       type: 'object',
       additionalProperties: false,
       properties: {
-        action: { type: 'string', enum: ['open-create-profile', 'close-create-profile', 'toggle-import', 'open-file-import', 'close-file-import'] },
+        action: { type: 'string', enum: ['open-create-profile', 'close-create-profile', 'toggle-import', 'open-file-import', 'close-file-import', 'toggle-profile-menu', 'toggle-import-hint'] },
         instance: { type: 'string' },
         profile: { type: 'string' }
       },
@@ -79,7 +79,7 @@ test('routes a control command to only the controller matching its instance', ()
   register(context, 'b', (args) => receivedB.push(args))
 
   const args = { action: 'open-create-profile', instance: 'a' }
-  expect(controlCommand(handlers)(args)).toBeUndefined()
+  expect(controlCommand(handlers)(args)).toEqual({ instance: 'a', action: 'open-create-profile', delivered: 1 })
   expect(receivedA).toEqual([args])
   expect(receivedB).toEqual([])
 })
@@ -94,11 +94,11 @@ test('a stale cleanup preserves a replacement registration with the same instanc
   const args = { action: 'open-create-profile', instance: 'a' }
 
   cleanupOriginal()
-  dispatch(context, args)
+  expect(dispatch(context, args)).toEqual({ instance: 'a', action: 'open-create-profile', delivered: 1 })
   expect(received).toEqual([args])
 
   cleanupReplacement()
-  dispatch(context, args)
+  expect(dispatch(context, args)).toEqual({ instance: 'a', action: 'open-create-profile', delivered: 0 })
   expect(received).toEqual([args])
 })
 
@@ -110,7 +110,9 @@ test('keeps controller registries isolated by context', () => {
   const received: ControlArgs[] = []
   register(contextX, 'a', (args) => received.push(args))
 
-  expect(controlCommand(handlers)({ action: 'open-create-profile', instance: 'a' })).toBeUndefined()
+  expect(controlCommand(handlers)({ action: 'open-create-profile', instance: 'a' })).toEqual({
+    instance: 'a', action: 'open-create-profile', delivered: 0
+  })
   expect(received).toEqual([])
 })
 
@@ -123,8 +125,12 @@ test('silently ignores unknown and already-unmounted instances', () => {
   cleanup()
   const command = controlCommand(handlers)
 
-  expect(() => command({ action: 'close-file-import', instance: 'ghost' })).not.toThrow()
-  expect(() => command({ action: 'close-file-import', instance: 'gone' })).not.toThrow()
+  expect(command({ action: 'close-file-import', instance: 'ghost' })).toEqual({
+    instance: 'ghost', action: 'close-file-import', delivered: 0
+  })
+  expect(command({ action: 'close-file-import', instance: 'gone' })).toEqual({
+    instance: 'gone', action: 'close-file-import', delivered: 0
+  })
   expect(received).toEqual([])
 })
 
@@ -183,8 +189,42 @@ test('requires a string profile for toggle-import and forwards it only when vali
   }
 
   const valid = { action: 'toggle-import', instance: 'a', profile: 'default' }
-  expect(command(valid)).toBeUndefined()
+  expect(command(valid)).toEqual({ instance: 'a', action: 'toggle-import', delivered: 1 })
   expect(received).toEqual([valid])
+})
+
+test('routes profile menu and import hint controls without unused keys', () => {
+  const { context } = makeContext()
+  const { dispatch, register } = controllerApi()
+  const received: ControlArgs[] = []
+  register(context, 'a', (args) => received.push(args))
+
+  expect(dispatch(context, { action: 'toggle-profile-menu', instance: 'a', profile: 'x' })).toEqual({
+    instance: 'a', action: 'toggle-profile-menu', delivered: 1
+  })
+  expect(dispatch(context, { action: 'toggle-import-hint', instance: 'a', profile: 'x' })).toEqual({
+    instance: 'a', action: 'toggle-import-hint', delivered: 1
+  })
+  expect(received).toEqual([
+    { action: 'toggle-profile-menu', instance: 'a' },
+    { action: 'toggle-import-hint', instance: 'a' }
+  ])
+})
+
+test('delivers a preferences control to every registration for its instance', () => {
+  const { context, handlers } = makeContext()
+  registerPreferencesUi(context)
+  const { register } = controllerApi()
+  const receivedA: ControlArgs[] = []
+  const receivedB: ControlArgs[] = []
+  register(context, 'a', (args) => receivedA.push(args))
+  register(context, 'a', (args) => receivedB.push(args))
+
+  expect(controlCommand(handlers)({ action: 'open-create-profile', instance: 'a' })).toEqual({
+    instance: 'a', action: 'open-create-profile', delivered: 2
+  })
+  expect(receivedA).toEqual([{ action: 'open-create-profile', instance: 'a' }])
+  expect(receivedB).toEqual([{ action: 'open-create-profile', instance: 'a' }])
 })
 
 test('drops unused command keys before calling a controller', () => {
@@ -194,6 +234,8 @@ test('drops unused command keys before calling a controller', () => {
   const received: ControlArgs[] = []
   register(context, 'a', (args) => received.push(args))
 
-  expect(controlCommand(handlers)({ action: 'open-create-profile', instance: 'a', profile: 'default', extra: 1 })).toBeUndefined()
+  expect(controlCommand(handlers)({ action: 'open-create-profile', instance: 'a', profile: 'default', extra: 1 })).toEqual({
+    instance: 'a', action: 'open-create-profile', delivered: 1
+  })
   expect(received).toEqual([{ action: 'open-create-profile', instance: 'a' }])
 })

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, Dialog } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import type { CleanupCandidate, CleanupRemovalResult, CleanupSelection } from './control-types'
 
 type Preview = { generatedAt: number; candidates: CleanupCandidate[] }
@@ -32,7 +32,7 @@ export function CleanupDialog({ context, onClose }: Props) {
     [candidates, selected]
   )
 
-  const refresh = useCallback(async () => {
+  async function refresh() {
     setLoading(true)
     try {
       const next = await context.call('quirky.worktree/cleanupPreview') as Preview
@@ -44,9 +44,9 @@ export function CleanupDialog({ context, onClose }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [context])
+  }
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { void refresh() }, [context])
 
   const toggleSelected = (candidate: CleanupCandidate, checked: boolean) => {
     setSelected((current) => {
@@ -106,8 +106,12 @@ export function CleanupDialog({ context, onClose }: Props) {
     }
   }
 
+  function onDialogClose() {
+    if (!busy) onClose()
+  }
+
   return (
-    <Dialog open title="Clean up archived worktrees" onClose={() => { if (!busy) onClose() }} size="wide">
+    <Dialog open title="Clean up archived worktrees" onClose={onDialogClose} size="wide">
       <section className="ui-stack">
         <header>
           <p className="ui-text-muted">Inspect current blockers before permanently deleting selected local worktrees.</p>
@@ -116,11 +120,11 @@ export function CleanupDialog({ context, onClose }: Props) {
           <Button type="button" disabled={busy || ignoredCount === 0} onClick={() => void restore()}>Restore ignored</Button>
           <Button type="button" disabled={busy || loading} onClick={() => void refresh()}>Refresh preview</Button>
         </div>
-        {loading && <p className="ui-text-muted" role="status">Checking current worktree safety…</p>}
-        {error && <p className="ui-error-text" role="alert">{error}</p>}
+        {loading && <div role="status"><NoticeLine>Checking current worktree safety…</NoticeLine></div>}
+        {error && <InlineError message={error} />}
         {!loading && !error && candidates.length === 0 && (
           <div className="ui-stack">
-            <p>Nothing to clean up</p>
+            <EmptyState message="Nothing to clean up" />
             <p className="ui-text-muted">Worktrees archived for 7 days or more with nothing unpushed, or idle for 30 days or more, show up here.</p>
           </div>
         )}
@@ -155,7 +159,9 @@ export function CleanupDialog({ context, onClose }: Props) {
           <ul className="ui-tree" aria-label="Cleanup results">
             {results.map((result) => (
               <li key={result.worktreeId} className="ui-tree-item">
-                {result.removed ? `Removed ${result.worktreeId}` : `Kept ${result.worktreeId}: ${result.error ?? 'not removed'}`}
+                {result.removed
+                  ? `Removed ${result.worktreeId}`
+                  : <InlineError message={`Kept ${result.worktreeId}: ${result.error ?? 'not removed'}`} />}
               </li>
             ))}
           </ul>

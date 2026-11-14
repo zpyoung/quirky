@@ -12,6 +12,7 @@ import * as preferencesWindowShared from '../src/preferences-window/shared'
 const DEFAULT_PROFILE: BrowserProfile = { id: 'default', label: 'Default', scope: 'default' }
 const REVIEW_PROFILE_ID = 'profile_0123456789abcdef0123456789abcdef'
 const REVIEW_PROFILE: BrowserProfile = { id: REVIEW_PROFILE_ID, label: 'Review', scope: 'isolated' }
+const PREFERENCES_CONTROL_COMMAND = 'command:quirky.browser/preferencesControl'
 const settingIds = {
   homePage: 'setting:quirky.browser/defaultHomePage',
   searchEngine: 'setting:quirky.browser/defaultSearchEngine',
@@ -277,6 +278,46 @@ test('profile menu marks the pane profile and switches only after the profile AP
   expect(errors).toEqual([])
 })
 
+test('the pane profile menu trigger toggles through its deterministic preferences instance', async () => {
+  const context = makeContext()
+  const args = { action: 'toggle-profile-menu', instance: 'browser-pane:pane-1:profile-menu' }
+  await mount(<BrowserProfileMenu {...props(context, pane())} />)
+  expect(container.querySelector('[aria-label="Browser profile menu"]')).toBeNull()
+
+  await clickButton('Profile: Default')
+  expect(commandCalls).toEqual([{ id: PREFERENCES_CONTROL_COMMAND, args }])
+  expect(container.querySelector('[aria-label="Browser profile menu"]')).not.toBeNull()
+
+  await clickButton('Profile: Default')
+  expect(commandCalls).toEqual([
+    { id: PREFERENCES_CONTROL_COMMAND, args },
+    { id: PREFERENCES_CONTROL_COMMAND, args }
+  ])
+  expect(container.querySelector('[aria-label="Browser profile menu"]')).toBeNull()
+})
+
+test('New Profile and Cancel route through the pane profile menu instance', async () => {
+  const context = makeContext()
+  const instance = 'browser-pane:pane-1:profile-menu'
+  await mount(<BrowserProfileMenu {...props(context, pane())} />)
+  await clickButton('Profile: Default')
+  commandCalls = []
+
+  await clickButton('New Profile')
+  expect(commandCalls).toEqual([{
+    id: PREFERENCES_CONTROL_COMMAND,
+    args: { action: 'open-create-profile', instance }
+  }])
+  expect(container.querySelectorAll('[role="dialog"][aria-label="New Browser Profile"]')).toHaveLength(1)
+
+  await clickButton('Cancel')
+  expect(commandCalls[1]).toEqual({
+    id: PREFERENCES_CONTROL_COMMAND,
+    args: { action: 'close-create-profile', instance }
+  })
+  expect(container.querySelector('[role="dialog"][aria-label="New Browser Profile"]')).toBeNull()
+})
+
 test('imported Default remains visible in profile surfaces and keeps clear-only maintenance', async () => {
   const importedDefault: BrowserProfile = {
     ...DEFAULT_PROFILE,
@@ -339,8 +380,9 @@ test('failed profile switching clears pending state without changing the checkma
   expect(reviewRadio.checked).toBe(false)
   expect(defaultRadio.disabled).toBe(false)
   expect(reviewRadio.disabled).toBe(false)
-  expect(container.querySelectorAll('[role="alert"]').length).toBe(1)
-  expect(container.querySelector('[role="alert"]')?.textContent).toBe('Profile switch failed.')
+  const alert = container.querySelector('[role="alert"].ui-inline-error')
+  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1)
+  expect(alert?.textContent).toBe('Profile switch failed.')
   expect(errors).toEqual([])
 })
 test('creating a profile refreshes the menu with the persisted profile row', async () => {
@@ -548,9 +590,13 @@ test('import controls detect only after expansion, preserve the settings link, a
   await clickButton('Profile: Default')
   await clickButton('Import Cookies')
   expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(1)
+  expect(commandCalls).toEqual([
+    { id: PREFERENCES_CONTROL_COMMAND, args: { action: 'toggle-profile-menu', instance: 'browser-pane:pane-1:profile-menu' } },
+    { id: PREFERENCES_CONTROL_COMMAND, args: { action: 'toggle-import', instance: 'browser-pane:pane-1:profile-menu', profile: 'default' } }
+  ])
   await clickButton('Import Cookies')
   await clickButton(/^Browser Settings\b/)
-  expect(commands).toEqual(['command:quirky.browser/browserSettings'])
+  expect(commands.filter((id) => id !== PREFERENCES_CONTROL_COMMAND)).toEqual(['command:quirky.browser/browserSettings'])
   await clickButton('Import browser data')
   expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(2)
   await clickButton('Hide Hint')
@@ -643,6 +689,34 @@ test('menu and import hint target their pane profile, while a pane-less hint def
   expect(calls.find(({ method }) => method === 'quirky.browser/importStart')?.params?.profile).toBe(REVIEW_PROFILE_ID)
 })
 
+test('the import hint uses a deterministic pane instance and a separate generated instance without a pane', async () => {
+  const context = makeContext()
+  await mount(<BrowserImportHint {...props(context, pane())} />)
+  await clickButton('Import browser data')
+
+  expect(commandCalls).toEqual([{
+    id: PREFERENCES_CONTROL_COMMAND,
+    args: { action: 'toggle-import-hint', instance: 'browser-pane:pane-1:import-hint' }
+  }])
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(1)
+
+  await act(async () => { root?.unmount() })
+  root = null
+  commandCalls = []
+  calls = []
+  await mount(<BrowserImportHint {...props(context)} />)
+  await clickButton('Import browser data')
+
+  const hintCall = commandCalls[0]
+  expect(hintCall?.id).toBe(PREFERENCES_CONTROL_COMMAND)
+  const args = hintCall?.args as Record<string, unknown>
+  expect(args.action).toBe('toggle-import-hint')
+  expect(typeof args.instance).toBe('string')
+  expect(args.instance).not.toBe('')
+  expect((args.instance as string).startsWith('browser-pane:')).toBe(false)
+  expect(calls.filter(({ method }) => method === 'quirky.browser/detectBrowsers')).toHaveLength(1)
+})
+
 test('Session & Cookies reports unsupported native clearing without claiming data removal', async () => {
   state = { ...state, profiles: [{ profile: DEFAULT_PROFILE, active: true }, { profile: REVIEW_PROFILE, active: false }] }
   const context = makeContext()
@@ -698,12 +772,36 @@ test('embedded settings subscribe to shared setting changes without duplicating 
 })
 
 
+
+test('profile menu and expanded import hint show loading notices while preferences are pending', async () => {
+  pendingPreferencesState = Promise.withResolvers<unknown>().promise
+  const context = makeContext()
+  await mount(<>
+    <BrowserProfileMenu {...props(context, pane())} />
+    <BrowserImportHint {...props(context, pane())} />
+  </>)
+
+  await clickButton('Profile: Default')
+  await clickButton('Import browser data')
+  const notices = [...container.querySelectorAll('[role="status"] .ui-notice-line')].map((notice) => notice.textContent)
+  expect(notices).toContain('Loading browser profiles…')
+  expect(notices).toContain('Loading cookie import availability…')
+})
 test('Browser Settings shows a loading notice while preferencesState is pending', async () => {
   pendingPreferencesState = Promise.withResolvers<unknown>().promise
   const context = makeContext()
   await mount(<BrowserSettings {...props(context)} />)
 
   expect(container.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe('Loading Browser preferences…')
+})
+
+test('profile menu shows preferences state failures as inline errors', async () => {
+  preferencesStateFailure = new Error('Settings are unavailable.')
+  const context = makeContext()
+  await mount(<BrowserProfileMenu {...props(context, pane())} />)
+  await clickButton('Profile: Default')
+
+  expect(container.querySelector('[aria-label="Browser profile menu"] .ui-inline-error')?.textContent).toContain('Settings are unavailable.')
 })
 
 test('Browser Settings retries a failed preferences load', async () => {
@@ -788,6 +886,23 @@ test('Add Profile displays command execution failures and reports them to onErro
 
   expect(container.querySelector('[role="alert"].ui-inline-error')?.textContent).toContain('No command: command:quirky.browser/preferencesControl')
   expect(errors).toContain('No command: command:quirky.browser/preferencesControl')
+})
+
+test('New Profile reports command failures in the pane menu and to onError', async () => {
+  const context = makeContext()
+  await mount(<BrowserProfileMenu {...props(context, pane())} />)
+  await clickButton('Profile: Default')
+  commandCalls = []
+  executeCommandFailure = new Error(`No command: ${PREFERENCES_CONTROL_COMMAND}`)
+  await clickButton('New Profile')
+
+  const message = `No command: ${PREFERENCES_CONTROL_COMMAND}`
+  expect(commandCalls).toEqual([{
+    id: PREFERENCES_CONTROL_COMMAND,
+    args: { action: 'open-create-profile', instance: 'browser-pane:pane-1:profile-menu' }
+  }])
+  expect(container.querySelector('[aria-label="Browser profile menu"] .ui-inline-error')?.textContent).toContain(message)
+  expect(errors).toContain(message)
 })
 
 test('the Browser settings mount reports load failures with an error toast', async () => {
