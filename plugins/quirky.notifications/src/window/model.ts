@@ -9,6 +9,13 @@ export const EDIT_CUSTOM_SOUND_COMMAND = 'command:quirky.notifications/edit-cust
 
 export const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
+/** Returns a valid kernel window connection ID from an RPC response, if present. */
+export function connectionIdFrom(route: unknown): number | null {
+  if (typeof route !== 'object' || route === null || !('connId' in route)) return null
+  const connId = route.connId
+  return typeof connId === 'number' && Number.isSafeInteger(connId) && connId > 0 ? connId : null
+}
+
 export type Snapshot = {
   values: Values
   /** Whether the custom sound path field is showing. */
@@ -89,8 +96,11 @@ export class NotificationsStore {
     this.commit({ customOpen: true, customError: null })
   }
 
-  editCustom(): void {
-    void this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND)
+  async editCustom(): Promise<void> {
+    const route = await this.context.call('ui.window.self', {})
+    const connId = connectionIdFrom(route)
+    if (connId === null) throw new Error('The daemon did not identify this window.')
+    await this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND, { connId }, { activateOwner: false })
   }
 
   /** Tries `path` as the notification sound; it is saved only when the daemon plays it. */

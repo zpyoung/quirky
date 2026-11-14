@@ -196,12 +196,12 @@
         "target": "command:quirky.notifications/edit-custom-sound",
         "invoke": {
           "file": "plugins/quirky.notifications/src/window/model.ts",
-          "quote": "this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND)"
+        "quote": "this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND, { connId }, { activateOwner: false })"
         },
         "via": [
           {
             "file": "plugins/quirky.notifications/src/window/model.ts",
-            "quote": "editCustom(): void {\n    void this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND)\n  }"
+            "quote": "async editCustom(): Promise<void> {\n    const route = await this.context.call('ui.window.self', {})\n    const connId = connectionIdFrom(route)\n    if (connId === null) throw new Error('The daemon did not identify this window.')\n    await this.context.executeCommand(EDIT_CUSTOM_SOUND_COMMAND, { connId }, { activateOwner: false })\n  }"
           }
         ]
       }

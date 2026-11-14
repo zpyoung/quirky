@@ -8,7 +8,12 @@ const COMMAND_ID = 'command:quirky.notifications/open-settings'
 const EDIT_CUSTOM_SOUND_COMMAND = 'command:quirky.notifications/edit-custom-sound'
 const SETTING = (name: string) => `setting:quirky.notifications/${name}`
 
-type Handler = (params: Record<string, any>) => unknown
+type Handler = (params: Record<string, unknown>) => unknown
+type ProvidedHandler = (...args: unknown[]) => unknown
+type FakeOptions = { connId?: number; ownerConnId?: number }
+type ExecuteOptions = { activateOwner?: boolean }
+const connections = new Map<number, Map<string, ProvidedHandler>>()
+let nextConnId = 1
 
 const DEFAULTS: Record<string, boolean | number | string> = {
   enabled: true,
@@ -31,11 +36,17 @@ async function settle(): Promise<void> {
 }
 
 /** A `UiPluginContext` over an in-memory settings store whose `setting.set` announces `setting.changed`, as the daemon does. */
-function fakeContext(handlers: Record<string, Handler> = {}, initial: Record<string, boolean | number | string> = {}) {
+function fakeContext(
+  handlers: Record<string, Handler> = {},
+  initial: Record<string, boolean | number | string> = {},
+  options: FakeOptions = {}
+) {
   const values = { ...DEFAULTS, ...initial }
-  const calls: { method: string; params: Record<string, any> }[] = []
-  const executed: { id: string; input: unknown }[] = []
-  const provided = new Map<string, (...args: any[]) => any>()
+  const connId = options.connId ?? nextConnId++
+  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const executed: { id: string; args: unknown; options: ExecuteOptions | undefined }[] = []
+  const provided = new Map<string, ProvidedHandler>()
+  connections.set(connId, provided)
   const listeners = new Set<(event: QuirkyEvent) => void>()
   const opened: { id: string; input: unknown }[] = []
   const toasts: { title: string; body: string }[] = []
@@ -45,9 +56,25 @@ function fakeContext(handlers: Record<string, Handler> = {}, initial: Record<str
 
   const defaults: Record<string, Handler> = {
     'setting.set': (params) => {
-      values[nameOf(params.id)] = params.value
-      announce({ type: 'setting.changed', id: params.id, value: params.value })
+      const id = params.id
+      const value = params.value
+      if (typeof id !== 'string' || (typeof value !== 'boolean' && typeof value !== 'number' && typeof value !== 'string')) {
+        throw new Error('invalid setting.set params')
+      }
+      values[nameOf(id)] = value
+      announce({ type: 'setting.changed', id, value })
       return {}
+    },
+    'ui.window.self': () => ({ connId }),
+    'ui.window.command.run': async (params) => {
+      const targetConnId = params.connId
+      const commandId = params.id
+      if (typeof targetConnId !== 'number' || !Number.isSafeInteger(targetConnId) || targetConnId < 1 || typeof commandId !== 'string') {
+        throw new Error('invalid ui.window.command.run params')
+      }
+      const handler = connections.get(targetConnId)?.get(commandId)
+      if (!handler) throw new Error(`unknown command in window ${targetConnId}: ${commandId}`)
+      return { result: await handler(params.args) }
     }
   }
 
@@ -55,7 +82,8 @@ function fakeContext(handlers: Record<string, Handler> = {}, initial: Record<str
     pluginId: 'quirky.notifications',
     log() {},
     provide(id: string, implementation: unknown) {
-      provided.set(id, implementation as (...args: any[]) => any)
+      if (typeof implementation !== 'function') throw new Error(`invalid implementation for ${id}`)
+      provided.set(id, implementation as ProvidedHandler)
     },
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
@@ -72,11 +100,12 @@ function fakeContext(handlers: Record<string, Handler> = {}, initial: Record<str
       if (!(key in values)) throw new Error(`no setting ${name}`)
       return values[key]
     },
-    async executeCommand(id: string, input?: unknown) {
-      executed.push({ id, input })
-      const handler = provided.get(id)
-      if (!handler) throw new Error(`unknown command: ${id}`)
-      return handler(input)
+    async executeCommand(id: string, args?: unknown, executeOptions?: ExecuteOptions) {
+      executed.push({ id, args, options: executeOptions })
+      const targetConnId = options.ownerConnId ?? connId
+      const handler = connections.get(targetConnId)?.get(id)
+      if (!handler) throw new Error(`unknown command in window ${targetConnId}: ${id}`)
+      return handler(args)
     },
     openView(id: string, input?: unknown) {
       opened.push({ id, input })
@@ -98,6 +127,7 @@ function fakeContext(handlers: Record<string, Handler> = {}, initial: Record<str
 
   return {
     context,
+    connId,
     values,
     calls,
     executed,
@@ -428,17 +458,77 @@ describe('editing the custom sound path', () => {
 
     await view.click(view.button('Change'))
 
-    expect(fake.executed).toEqual([{ id: EDIT_CUSTOM_SOUND_COMMAND, input: undefined }])
+    expect(fake.executed).toEqual([{
+      id: EDIT_CUSTOM_SOUND_COMMAND,
+      args: { connId: fake.connId },
+      options: { activateOwner: false }
+    }])
     expect(view.pathField()?.value).toBe('/tmp/ping.wav')
   })
 
-  test('the command opens settings with the custom path active when no view is mounted', async () => {
+  test('Change stays in the originating view through the owner to its exact routed connection', async () => {
+    const owner = fakeContext()
+    activate(owner.context)
+    const routed = fakeContext({}, { sound: 'custom', customSoundPath: '/tmp/ping.wav' }, { ownerConnId: owner.connId })
+    const view = await open(routed)
+
+    await view.click(view.button('Change'))
+
+    expect(routed.executed).toEqual([{
+      id: EDIT_CUSTOM_SOUND_COMMAND,
+      args: { connId: routed.connId },
+      options: { activateOwner: false }
+    }])
+    expect(owner.callsTo('ui.window.command.run')).toEqual([{
+      method: 'ui.window.command.run',
+      params: { connId: routed.connId, id: EDIT_CUSTOM_SOUND_COMMAND, args: {} }
+    }])
+    expect({ path: view.pathField()?.value, ownerOpened: owner.opened, ownerExecuted: owner.executed }).toEqual({
+      path: '/tmp/ping.wav',
+      ownerOpened: [],
+      ownerExecuted: []
+    })
+  })
+
+  test('the command forwards a foreign connId to that exact window', async () => {
+    const owner = fakeContext()
+    activate(owner.context)
+    const foreign = fakeContext()
+    const view = await open(foreign)
+
+    await act(async () => {
+      await owner.provided.get(EDIT_CUSTOM_SOUND_COMMAND)!({ connId: foreign.connId })
+    })
+
+    expect(owner.callsTo('ui.window.command.run')).toEqual([{
+      method: 'ui.window.command.run',
+      params: { connId: foreign.connId, id: EDIT_CUSTOM_SOUND_COMMAND, args: {} }
+    }])
+    expect(view.pathField()).not.toBeNull()
+    expect(owner.opened).toEqual([])
+  })
+
+  test('the command acts locally when connId identifies its own window', async () => {
+    const fake = fakeContext()
+    const view = await open(fake)
+
+    await act(async () => {
+      await fake.provided.get(EDIT_CUSTOM_SOUND_COMMAND)!({ connId: fake.connId })
+    })
+
+    expect(fake.callsTo('ui.window.command.run')).toEqual([])
+    expect(view.pathField()).not.toBeNull()
+    expect(fake.opened).toEqual([])
+  })
+
+  test('a missing connId opens settings with the custom path active when no view is mounted', async () => {
     const fake = fakeContext()
     activate(fake.context)
 
     await act(async () => void (await fake.provided.get(EDIT_CUSTOM_SOUND_COMMAND)!()))
 
     expect(fake.opened).toEqual([{ id: VIEW_ID, input: { customOpen: true } }])
+    expect(fake.callsTo('ui.window.command.run')).toEqual([])
 
     element = document.createElement('div')
     document.body.appendChild(element)

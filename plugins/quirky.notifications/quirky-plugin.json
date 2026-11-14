@@ -286,7 +286,12 @@
       },
       {
         "id": "edit-custom-sound",
-        "title": "Edit custom notification sound"
+        "title": "Edit custom notification sound",
+        "args": {
+          "type": "object",
+          "properties": { "connId": { "type": "integer", "minimum": 1 } },
+          "additionalProperties": false
+        }
       }
     ],
     "cli-command": [
