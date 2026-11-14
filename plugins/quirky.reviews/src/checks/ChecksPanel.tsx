@@ -885,7 +885,6 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     sitterState={sitterState}
     loadingDetail={sitterDetailLoading}
     onRefreshSitter={refreshSitter}
-    onAfterAction={() => refreshSitter(true)}
   /> : null
   const missingOrigin = lookup?.kind === 'unsupported' && lookup.reason === 'missing_origin'
   const eligibility = active && isRecord(active.eligibility) ? active.eligibility : null

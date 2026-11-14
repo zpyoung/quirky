@@ -539,6 +539,8 @@ action, stops the watcher, and copies its debug report. Permissions start at Off
 Ask holds an action for approval. Active-time budgets count only worker/action time.
 An unreachable owner makes approval, stop and re-arm read-only until contact returns.
 Stopping prevents new actions; an in-flight provider operation may finish.
+Closing the dialog stops activity-detail fetches, including when an action is still
+pending. Fleet status updates continue without loading the activity journal.
 
 The same actions are available through `reviews checks-sitter-state`,
 `checks-sitter-arm`, `checks-sitter-approve`, `checks-sitter-stop`,

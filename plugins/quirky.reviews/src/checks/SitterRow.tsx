@@ -134,6 +134,8 @@ export function SitterSafetyStrip({
   )
 }
 
+type SitterDialogSession = { generation: number; worktree: string | null }
+
 export function SitterRow({
   context,
   activeWorktree,
@@ -142,7 +144,6 @@ export function SitterRow({
   sitterState,
   loadingDetail,
   onRefreshSitter,
-  onAfterAction,
 }: {
   context: UiPluginContext
   activeWorktree: string | null
@@ -151,7 +152,6 @@ export function SitterRow({
   sitterState: ChecksSitterState
   loadingDetail: boolean
   onRefreshSitter(includeDetail: boolean): Promise<void>
-  onAfterAction(): void | Promise<void>
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [capabilities, setCapabilities] = useState<SitterCapabilities>(emptyCapabilities)
@@ -165,7 +165,54 @@ export function SitterRow({
   const activeWorktreeRef = useRef(activeWorktree)
   activeWorktreeRef.current = activeWorktree
   const dialogWorktreeRef = useRef(activeWorktree)
+  const dialogOpenRef = useRef(false)
+  const dialogGenerationRef = useRef(0)
+  const dialogSessionRef = useRef<SitterDialogSession | null>(null)
+  const actionGenerationRef = useRef(0)
+  const busyActionGenerationRef = useRef<number | null>(null)
+  const debugFeedbackGenerationRef = useRef(0)
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mountedRef = useRef(true)
+  const isCurrentDialogSession = (session: SitterDialogSession | null): session is SitterDialogSession =>
+    session !== null &&
+    mountedRef.current &&
+    dialogOpenRef.current &&
+    dialogSessionRef.current === session &&
+    session.generation === dialogGenerationRef.current &&
+    session.worktree === dialogWorktreeRef.current &&
+    session.worktree === activeWorktreeRef.current
+  const clearDebugFeedback = useCallback(() => {
+    debugFeedbackGenerationRef.current += 1
+    if (copyTimer.current !== null) {
+      clearTimeout(copyTimer.current)
+      copyTimer.current = null
+    }
+    setDebugCopied(false)
+  }, [])
+  const invalidateDialog = useCallback(() => {
+    dialogGenerationRef.current += 1
+    dialogSessionRef.current = null
+    dialogOpenRef.current = false
+    busyActionGenerationRef.current = null
+  }, [])
+  const openDialog = useCallback((worktree: string | null) => {
+    const currentSession = dialogSessionRef.current
+    if (dialogOpenRef.current && currentSession?.worktree === worktree && worktree === activeWorktreeRef.current) {
+      void onRefreshSitter(true)
+      return
+    }
+    const generation = dialogGenerationRef.current + 1
+    dialogGenerationRef.current = generation
+    dialogSessionRef.current = { generation, worktree }
+    dialogWorktreeRef.current = worktree
+    dialogOpenRef.current = true
+    busyActionGenerationRef.current = null
+    setBusyAction(null)
+    clearDebugFeedback()
+    setActionError(null)
+    setDialogOpen(true)
+    void onRefreshSitter(true)
+  }, [clearDebugFeedback, onRefreshSitter])
   const sitterCandidate = sitterState.sitter
   const currentSitter = activeWorktree !== null && sitterCandidate !== null && sitterCandidate.enrollment.worktreeId === activeWorktree
     ? sitterCandidate
@@ -216,55 +263,65 @@ export function SitterRow({
 
   const openForWorktree = useCallback((worktree: string | null) => {
     if (worktree !== activeWorktreeRef.current || !consumePendingSitterOpen(worktree)) return
-    dialogWorktreeRef.current = worktree
+    openDialog(worktree)
+  }, [openDialog])
+
+  const dismissDialog = useCallback(() => {
+    invalidateDialog()
+    clearDebugFeedback()
+    setDialogOpen(false)
     setActionError(null)
-    setDialogOpen(true)
-    void onRefreshSitter(true)
-  }, [onRefreshSitter])
+    setBusyAction(null)
+    void onRefreshSitter(false)
+  }, [clearDebugFeedback, invalidateDialog, onRefreshSitter])
 
   useEffect(() => {
     const unsubscribe = subscribeOpenSitter(openForWorktree)
-    if (consumePendingSitterOpen(activeWorktree)) {
-      dialogWorktreeRef.current = activeWorktree
-      setActionError(null)
-      setDialogOpen(true)
-      void onRefreshSitter(true)
-    }
+    if (consumePendingSitterOpen(activeWorktree)) openDialog(activeWorktree)
     return unsubscribe
-  }, [activeWorktree, onRefreshSitter, openForWorktree])
+  }, [activeWorktree, openDialog, openForWorktree])
 
   useEffect(() => {
-    if (!dialogOpen || dialogWorktreeRef.current === activeWorktree) return
-    setDialogOpen(false)
-    setActionError(null)
-    void onRefreshSitter(false)
-  }, [activeWorktree, dialogOpen, onRefreshSitter])
+    if (!dialogOpenRef.current || dialogWorktreeRef.current === activeWorktree) return
+    dismissDialog()
+  }, [activeWorktree, dialogOpen, dismissDialog])
 
-  useEffect(() => () => {
-    if (copyTimer.current !== null) {
-      clearTimeout(copyTimer.current)
-      copyTimer.current = null
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      invalidateDialog()
+      debugFeedbackGenerationRef.current += 1
+      if (copyTimer.current !== null) {
+        clearTimeout(copyTimer.current)
+        copyTimer.current = null
+      }
     }
-  }, [])
-
-  const dismissDialog = () => {
-    setDialogOpen(false)
-    setActionError(null)
-    void onRefreshSitter(false)
-  }
+  }, [invalidateDialog])
 
   const runAction = async (key: string, command: string, args: JsonRecord, refresh = true) => {
+    const session = dialogSessionRef.current
+    if (!isCurrentDialogSession(session)) return false
+    const actionGeneration = ++actionGenerationRef.current
+    busyActionGenerationRef.current = actionGeneration
     setActionError(null)
     setBusyAction(key)
     try {
       await context.executeCommand(command, args)
-      if (refresh) await onAfterAction()
+      if (!isCurrentDialogSession(session)) return false
+      if (refresh) {
+        await onRefreshSitter(true)
+        if (!isCurrentDialogSession(session)) return false
+      }
       return true
     } catch (cause) {
-      setActionError(messageOf(cause, 'The PR Sitter action failed.'))
+      if (isCurrentDialogSession(session)) setActionError(messageOf(cause, 'The PR Sitter action failed.'))
       return false
     } finally {
-      setBusyAction(null)
+      if (isCurrentDialogSession(session) && busyActionGenerationRef.current === actionGeneration) {
+        busyActionGenerationRef.current = null
+        setBusyAction(null)
+      }
     }
   }
 
@@ -332,21 +389,20 @@ export function SitterRow({
   }
 
   const copyDebugReport = async () => {
-    if (!activeWorktree || !currentSitter) return
-    setDebugCopied(false)
-    if (copyTimer.current !== null) {
-      clearTimeout(copyTimer.current)
-      copyTimer.current = null
-    }
+    const session = dialogSessionRef.current
+    if (!activeWorktree || !currentSitter || !isCurrentDialogSession(session) || session.worktree !== activeWorktree) return
+    clearDebugFeedback()
     const copied = await runAction('debug', 'command:quirky.reviews/copy-sitter-debug', {
       worktree: activeWorktree,
       watcherId: currentSitter.target.watcherId,
     }, false)
-    if (!copied) return
+    if (!copied || !isCurrentDialogSession(session)) return
+    const generation = ++debugFeedbackGenerationRef.current
     setDebugCopied(true)
     copyTimer.current = setTimeout(() => {
-      setDebugCopied(false)
+      if (debugFeedbackGenerationRef.current !== generation || !isCurrentDialogSession(session)) return
       copyTimer.current = null
+      setDebugCopied(false)
     }, 2_000)
   }
 
@@ -375,8 +431,13 @@ export function SitterRow({
           <ControlIcon name="caret-right" />
         </span>}
         onClick={() => {
-          void context.executeCommand('command:quirky.reviews/open-sitter', activeWorktree ? { worktree: activeWorktree } : {})
-            .catch((cause: unknown) => setActionError(messageOf(cause, 'The PR Sitter dialog could not be opened.')))
+          const worktree = activeWorktree
+          const generation = dialogGenerationRef.current
+          void context.executeCommand('command:quirky.reviews/open-sitter', worktree ? { worktree } : {})
+            .catch((cause: unknown) => {
+              if (!mountedRef.current || activeWorktreeRef.current !== worktree || dialogGenerationRef.current !== generation) return
+              setActionError(messageOf(cause, 'The PR Sitter dialog could not be opened.'))
+            })
         }}
       />}
 

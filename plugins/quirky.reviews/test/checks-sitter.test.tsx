@@ -503,3 +503,132 @@ test('late errors from another worktree cannot add an alert', async () => {
   expect(document.body.textContent).not.toContain('Old worktree failed')
   expect(document.querySelector('[role="alert"]')).toBeNull()
 })
+
+test.each(['stop', 'arm', 'approve'] as const)('a pending %s action cannot resume detail polling after the dialog closes', async (action) => {
+  const pending = Promise.withResolvers<unknown>()
+  const row = action === 'arm' ? null : sitter(action === 'approve' ? 'held' : 'watching')
+  if (row && action === 'approve') {
+    row.openEscalations = [{
+      escalationId: 'esc-close', escalationKind: 'approval', status: 'open', foldCount: 0,
+      approvalScope: { actionKind: 'merge', contentIdentity: 'head', evidenceKey: 'merge/head' },
+    }]
+  }
+  const method = action === 'stop' ? 'checksSitterStop' : action === 'arm' ? 'checksSitterArm' : 'checksSitterApprove'
+  const label = action === 'stop' ? 'Stop this sitter' : action === 'arm' ? 'Arm PR Sitter' : 'Approve this action'
+  const ui = mount({
+    response: { ...sitterState(row), detail: row ? detailFor(row) : null },
+    call: (name) => name === `quirky.reviews/${method}` ? pending.promise : undefined,
+  })
+  await settle()
+  await click('PR Sitter')
+  await click(label)
+  await click('Close')
+  const before = ui.calls.length
+  await act(async () => { pending.resolve({ ok: true, kind: 'applied' }) })
+  await settle()
+  await ui.fleetChanged()
+  expect(ui.calls.slice(before).filter(({ method, params }) =>
+    method === 'quirky.reviews/checksSitterGet' && params.includeDetail === true)).toHaveLength(0)
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+})
+
+test.each(['resolve', 'reject'] as const)('a pending action that later %ss cannot affect the new worktree dialog', async (outcome) => {
+  const previous = Promise.withResolvers<unknown>()
+  const current = Promise.withResolvers<unknown>()
+  const rowA = sitter()
+  const rowB = sitter()
+  rowB.target.watcherId = 'watcher-b'
+  rowB.enrollment.watcherId = 'watcher-b'
+  rowB.enrollment.worktreeId = OTHER
+  const ui = mount({ call: (method, params) => {
+    if (method === 'quirky.reviews/checksSitterStop') return params.worktree === WORKTREE ? previous.promise : current.promise
+    if (method !== 'quirky.reviews/checksSitterGet') return undefined
+    const row = params.worktree === OTHER ? rowB : rowA
+    return { ...sitterState(row), detail: params.includeDetail === true ? detailFor(row) : null }
+  } })
+  await settle()
+  await click('PR Sitter')
+  await click('Stop this sitter')
+  ui.switchWorktree(OTHER)
+  ui.setState(reviewsState(OTHER))
+  await settle()
+  await click('PR Sitter')
+  await click('Stop this sitter')
+  const before = ui.calls.length
+  await act(async () => {
+    if (outcome === 'resolve') previous.resolve({ ok: true, kind: 'applied' })
+    else previous.reject(new Error('Previous worktree action failed'))
+  })
+  await settle()
+  expect(button('Stopping…').disabled).toBe(true)
+  expect(document.querySelector('[role="alert"]')).toBeNull()
+  expect(ui.calls.slice(before).filter(({ method }) => method === 'quirky.reviews/checksSitterGet')).toHaveLength(0)
+  await act(async () => { current.resolve({ ok: true, kind: 'applied' }) })
+  await settle()
+  expect(button('Stop this sitter').disabled).toBe(false)
+})
+
+test.each(['resolve', 'reject'] as const)('a stale action that %ss after reopening cannot alter the new dialog', async (outcome) => {
+  const previous = Promise.withResolvers<unknown>()
+  const current = Promise.withResolvers<unknown>()
+  let stops = 0
+  const row = sitter()
+  const ui = mount({
+    response: { ...sitterState(row), detail: detailFor(row) },
+    call: (method) => {
+      if (method !== 'quirky.reviews/checksSitterStop') return undefined
+      stops += 1
+      return stops === 1 ? previous.promise : current.promise
+    },
+  })
+  await settle()
+  await click('PR Sitter')
+  await click('Stop this sitter')
+  await click('Close')
+  await click('PR Sitter')
+  await click('Stop this sitter')
+  const before = ui.calls.length
+  await act(async () => {
+    if (outcome === 'resolve') previous.resolve({ ok: true, kind: 'applied' })
+    else previous.reject(new Error('Previous dialog action failed'))
+  })
+  await settle()
+  expect(button('Stopping…').disabled).toBe(true)
+  expect(document.querySelector('[role="alert"]')).toBeNull()
+  expect(ui.calls.slice(before).filter(({ method }) => method === 'quirky.reviews/checksSitterGet')).toHaveLength(0)
+  await act(async () => { current.resolve({ ok: true, kind: 'applied' }) })
+  await settle()
+  expect(button('Stop this sitter').disabled).toBe(false)
+})
+
+test('a pending debug copy cannot change feedback or busy state in a reopened dialog', async () => {
+  const report = Promise.withResolvers<unknown>()
+  const stop = Promise.withResolvers<unknown>()
+  const row = sitter()
+  const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const copied: string[] = []
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText(value: string) { copied.push(value) } } })
+  try {
+    mount({
+      response: { ...sitterState(row), detail: detailFor(row) },
+      call: (method) => method === 'quirky.reviews/checksSitterDebugReport' ? report.promise
+        : method === 'quirky.reviews/checksSitterStop' ? stop.promise : undefined,
+    })
+    await settle()
+    await click('PR Sitter')
+    await click('Copy debug report')
+    await click('Close')
+    await click('PR Sitter')
+    await click('Stop this sitter')
+    await act(async () => { report.resolve({ report: { watcher: row.target.watcherId } }) })
+    await settle()
+    expect(button('Stopping…').disabled).toBe(true)
+    expect(document.body.textContent).not.toContain('Debug report copied')
+    expect(copied).toEqual([JSON.stringify({ watcher: row.target.watcherId }, null, 2)])
+    await act(async () => { stop.resolve({ ok: true, kind: 'applied' }) })
+    await settle()
+  } finally {
+    if (original) Object.defineProperty(navigator, 'clipboard', original)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
