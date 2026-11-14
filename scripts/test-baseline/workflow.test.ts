@@ -236,6 +236,22 @@ describe('artifacts', () => {
 })
 
 describe('speed evidence', () => {
+  test('runs the guarded timer experiment before both browser measurements with shared evidence outside smoke output', () => {
+    const speed = steps('speed')
+    const isolate = speed.find(step => step.name === 'Isolate speed checks')!
+    const configure = speed.find(step => step.name === 'Configure runner latency experiment')
+    expect(configure).toBeDefined()
+    expect(isolate.run).toContain('echo "QUIRKY_SPEED_RUNNER_LATENCY=$RUNNER_TEMP/speed-runner-latency.json" >> "$GITHUB_ENV"')
+    expect(configure!.run).toBe('bun scripts/speed/runner-latency.ts --configure --out "$QUIRKY_SPEED_RUNNER_LATENCY"')
+    expect(speed.indexOf(isolate)).toBeLessThan(speed.indexOf(configure!))
+    for (const name of ['Check real-daemon smoke', 'Measure speed']) {
+      expect(speed.indexOf(configure!)).toBeLessThan(speed.findIndex(step => step.name === name))
+    }
+    expect(allRuns.filter(run => run.includes('runner-latency.ts --configure'))).toHaveLength(1)
+    expect(configure!.run).not.toContain('sudo')
+    expect(configure!.run).not.toContain('defaults write')
+  })
+
   test('compares a prepared base on the same runner after the solo benchmark', () => {
     expect(jobs.speed).toMatchObject({ 'runs-on': 'macos-15', 'timeout-minutes': 60 })
     expect(jobs.speed!.if).toBeUndefined()

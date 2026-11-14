@@ -80,7 +80,6 @@ export function useCompactList(
   const [details, setDetails] = useState<{ key: string; checks: Record<string, CheckResult>; merges: Record<string, MergeMetadata> } | null>(null)
   const [viewer, setViewer] = useState<string | null>(null)
   const [counts, setCounts] = useState<CompactCounts>({ issues: null, prs: null })
-  const [attempt, setAttempt] = useState(0)
   const rowsRef = useRef<HTMLElement | null>(null)
   const latestKey = useRef(viewKey)
   const fetchGeneration = useRef(0)
@@ -104,23 +103,30 @@ export function useCompactList(
   const refreshError = !idle && failed?.key === viewKey ? failed.message : null
   const error = result === null ? refreshError : null
   const loading = result === null && error === null
+  const retry = () => {
+    const generation = ++fetchGeneration.current
+    const owner = viewGeneration.current
+    void context.call('quirky.tasks/list', { mode: view.mode, repoIds, query: view.query, page: view.page })
+      .then((value) => {
+        const parsed = parseListResult(value)
+        if (!parsed) throw new Error('The Tasks list API returned an invalid result.')
+        if (generation === fetchGeneration.current && viewGeneration.current === owner) {
+          setLoaded({ key: viewKey, result: parsed })
+          setFailed(null)
+        }
+      })
+      .catch((cause) => {
+        if (generation === fetchGeneration.current && viewGeneration.current === owner) setFailed({ key: viewKey, message: errorMessage(cause) })
+      })
+  }
+  const retryRef = useRef(retry)
+  retryRef.current = retry
 
   useEffect(() => {
     if (idle) return
-    const generation = ++fetchGeneration.current
-    const owner = viewGeneration.current
-    const owns = () => generation === fetchGeneration.current && viewGeneration.current === owner
-    void (async () => {
-      try {
-        const parsed = parseListResult(await context.call('quirky.tasks/list', { mode: view.mode, repoIds, query: view.query, page: view.page }))
-        if (!parsed) throw new Error('The Tasks list API returned an invalid result.')
-        if (owns()) { setLoaded({ key: viewKey, result: parsed }); setFailed(null) }
-      } catch (cause) {
-        if (owns()) setFailed({ key: viewKey, message: errorMessage(cause) })
-      }
-    })()
+    retryRef.current()
     return () => { fetchGeneration.current += 1 }
-  }, [context, viewKey, idle, attempt])
+  }, [context, viewKey, idle])
 
   useEffect(() => {
     if (idle) return
@@ -162,8 +168,6 @@ export function useCompactList(
       }
     })()
   }, [context, result])
-
-  const retry = useCallback(() => setAttempt((count) => count + 1), [])
 
   const loadChecks = useCallback(async (item: ListItem) => {
     const key = rowKey(item)

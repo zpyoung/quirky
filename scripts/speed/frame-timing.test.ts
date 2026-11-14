@@ -14,6 +14,7 @@ type TraceOptions = {
   requestedAt?: number
   deliveredAt?: number
   receiveAt?: number[]
+  echoAt?: number[]
   tasks?: Span[]
   duplicateCandidateMarks?: boolean
   missing?: string[]
@@ -35,6 +36,7 @@ function makeObservation(options: TraceOptions) {
     action: 'action-start',
     end: 'painted-end',
     ...(candidate === undefined ? {} : { candidate }),
+    ...(options.echoAt === undefined ? {} : { echoReceived: 'echo-arrival' }),
   }
   const events: Record<string, unknown>[] = []
   const mark = (name: string, at: number): void => {
@@ -51,6 +53,7 @@ function makeObservation(options: TraceOptions) {
   }
   mark(marks.action, 0)
   mark(marks.end, wallMs)
+  for (const at of options.echoAt ?? []) mark('echo-arrival', at)
   if (candidate) {
     mark(candidate.requested, requestedAt)
     mark(candidate.delivered, deliveredAt)
@@ -296,5 +299,41 @@ describe('extractFrameTiming', () => {
   test('invalid raw endpoints remain observation failures rather than accounting fallbacks', () => {
     const input = makeObservation({ wallMs: 80, receiveAt: [10] })
     expect(() => extractFrameTiming(input.trace, { ...input.observation, endedAt: input.observation.startedAt })).toThrow()
+  })
+})
+
+describe('own echo arrival receive cap', () => {
+  const input = {
+    wallMs: 100, requestedAt: 20, deliveredAt: 90, receiveAt: [85], coverBoundaries: false,
+    tasks: [0, 10, 20, 85, 90, 100].map(start => ({ start, end: start + 1 }))
+  }
+  test('retains unrelated receive busy work but caps at the own arrival under solo and flood traffic', () => {
+    for (const receiveAt of [[85], [85, 85.2, 85.4, 85.8]]) {
+      const value = account({ ...input, receiveAt, echoAt: [10] })
+      expect(value).toMatchObject({
+        status: 'complete', wallMs: 100,
+        candidate: { receiveCapAt: 1010, receiveCapSource: 'echo-arrival', requestedAt: 1020,
+          busySpans: [{ start: 1020, end: 1021 }, { start: 1085, end: 1086 }] }
+      })
+      expect(value.deductionMs).toBeCloseTo(51.33333333333333, 9)
+      expect(value.effectiveMs).toBeCloseTo(48.66666666666667, 9)
+    }
+  })
+  test('falls back to latest receive for absent, conflicting, wrong-thread, out-of-bounds or uncovered marks', () => {
+    for (const options of [
+      {}, { echoAt: [] }, { echoAt: [10, 11] },
+      { echoAt: [10], markThreads: { 'echo-arrival': { tid: TID + 1 } } },
+      { echoAt: [-1] }, { echoAt: [95] }, { echoAt: [101] }, { echoAt: [15] }
+    ]) {
+      const value = account({ ...input, ...options })
+      expect(value).toMatchObject({
+        status: 'complete', wallMs: 100, effectiveMs: 100, deductionMs: 0,
+        candidate: { receiveCapAt: 1085, receiveCapSource: 'latest-receive' }
+      })
+    }
+  })
+  test('ready-to-frame keeps its semantics without a receive cap or provenance', () => {
+    const value = account({ ...input, kind: 'ready-to-frame', echoAt: [10] })
+    expect(value.candidate).toMatchObject({ receiveCapAt: null, receiveCapSource: null })
   })
 })
