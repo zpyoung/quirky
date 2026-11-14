@@ -1,5 +1,19 @@
 import type { PluginCaller, Schema, Worktree } from '@quirky/protocol'
-import { isRecord } from './data'
+import {
+  findWorktreeSitter,
+  isActiveSitter,
+  isDisarmableSitter,
+  isRecord,
+  sameApprovalScope,
+  type SitterBranchUpdateMode,
+  type SitterApprovalScope,
+  type SitterCapabilities,
+  type SitterCapabilityMode,
+  type SitterDetail,
+  type SitterFleetRow,
+  type SitterMergeCheckScope,
+  type SitterMergeMethod
+} from './data'
 import { newChecksEntry } from '../env'
 import {
   REVIEW_VIEW,
@@ -20,6 +34,260 @@ const MAX_TITLE_LENGTH = 256
 const MAX_PROMPT_LENGTH = 32_000
 const MAX_AGENT_ARGS_LENGTH = 2_000
 const MAX_CHECKS = 100
+
+const SITTER_STATES: readonly SitterFleetRow['status']['state'][] = [
+  'watching', 'acting', 'held', 'escalated', 'parked', 'terminal', 'disabled', 'unreachable', 'malformed'
+]
+const SITTER_CAPABILITY_KEYS: readonly (keyof SitterCapabilities)[] = ['updateBranch', 'resolveConflicts', 'fixChecks', 'merge']
+
+function finite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function optionalFinite(value: unknown): value is number | null | undefined {
+  return value === undefined || value === null || finite(value)
+}
+
+function capabilityMode(value: unknown): value is SitterCapabilityMode {
+  return value === 'off' || value === 'gated' || value === 'on'
+}
+
+function validTarget(value: unknown): value is SitterFleetRow['target'] {
+  return isRecord(value) && typeof value.watcherId === 'string' && value.watcherId.length > 0 &&
+    optionalFinite(value.pairingRevision) &&
+    (value.connectionId === undefined || value.connectionId === null || typeof value.connectionId === 'string')
+}
+
+function validOwnerFence(value: unknown): value is SitterFleetRow['ownerFence'] {
+  return isRecord(value) && typeof value.executionHostId === 'string' &&
+    typeof value.schedulerOwner === 'string' && typeof value.workspaceKey === 'string' &&
+    Number.isSafeInteger(value.revision)
+}
+
+function validBudgetPolicy(value: unknown): value is SitterFleetRow['enrollment']['budget'] {
+  return isRecord(value) &&
+    (value.wallClockActiveMs === null || finite(value.wallClockActiveMs)) &&
+    (value.turns === null || finite(value.turns))
+}
+
+function validBudgetUsage(value: unknown): value is SitterFleetRow['budget'] {
+  return isRecord(value) && finite(value.activeMs) && finite(value.turns) &&
+    (value.exhausted === null || value.exhausted === 'budget-wall-clock' || value.exhausted === 'budget-turns')
+}
+
+function validStatus(value: unknown): value is SitterFleetRow['status'] {
+  return isRecord(value) && typeof value.state === 'string' &&
+    SITTER_STATES.includes(value.state as SitterFleetRow['status']['state']) &&
+    optionalFinite(value.nextPulseAtMs) &&
+    finite(value.consecutiveErrors) && finite(value.consecutiveGateHolds) &&
+    (value.reason === undefined || typeof value.reason === 'string') &&
+    (value.detail === undefined || typeof value.detail === 'string')
+}
+
+function validEnrollment(value: unknown): value is SitterFleetRow['enrollment'] {
+  if (!isRecord(value) || !isRecord(value.capabilities)) return false
+  return typeof value.watcherId === 'string' &&
+    typeof value.kind === 'string' &&
+    typeof value.enabled === 'boolean' &&
+    typeof value.paused === 'boolean' &&
+    Number.isSafeInteger(value.commandRevision) &&
+    (value.worktreeId === undefined || value.worktreeId === null || typeof value.worktreeId === 'string') &&
+    Object.values(value.capabilities).every(capabilityMode) &&
+    validBudgetPolicy(value.budget) &&
+    isRecord(value.kindPayload) &&
+    finite(value.createdAtMs) &&
+    optionalFinite(value.terminalAtMs) &&
+    (value.parkReason === null || typeof value.parkReason === 'string') &&
+    (value.haltReason === null || typeof value.haltReason === 'string') &&
+    (value.malformed === undefined || typeof value.malformed === 'string')
+}
+
+function validApprovalScope(value: unknown): value is SitterApprovalScope {
+  return isRecord(value) && typeof value.actionKind === 'string' &&
+    typeof value.contentIdentity === 'string' && typeof value.evidenceKey === 'string' &&
+    (value.preparedCommitSha === undefined || typeof value.preparedCommitSha === 'string')
+}
+
+function validEscalation(value: unknown): boolean {
+  return isRecord(value) &&
+    typeof value.escalationId === 'string' &&
+    typeof value.escalationKind === 'string' &&
+    typeof value.status === 'string' &&
+    finite(value.foldCount) &&
+    (value.reason === undefined || typeof value.reason === 'string') &&
+    (value.detail === undefined || typeof value.detail === 'string') &&
+    (value.approvalScope === undefined || validApprovalScope(value.approvalScope))
+}
+
+function isSitterFleetRow(value: unknown): value is SitterFleetRow {
+  return isRecord(value) &&
+    validTarget(value.target) &&
+    validOwnerFence(value.ownerFence) &&
+    validEnrollment(value.enrollment) &&
+    validStatus(value.status) &&
+    typeof value.name === 'string' &&
+    typeof value.workspaceName === 'string' &&
+    (value.branch === null || typeof value.branch === 'string') &&
+    (value.phase === null || typeof value.phase === 'string') &&
+    (value.ownerContact === 'live' || value.ownerContact === 'unverifiable') &&
+    finite(value.observedAtMs) &&
+    optionalFinite(value.lastSuccessfulTickAtMs) &&
+    validBudgetUsage(value.budget) &&
+    Array.isArray(value.openEscalations) &&
+    value.openEscalations.every(validEscalation) &&
+    typeof value.pendingQuestion === 'boolean'
+}
+
+function isSitterJournalEntry(value: unknown): boolean {
+  return isRecord(value) &&
+    finite(value.seq) &&
+    typeof value.eventId === 'string' &&
+    finite(value.atMs) &&
+    (value.class === 'fact' || value.class === 'observation') &&
+    (value.origin === 'owner' || value.origin === 'client') &&
+    typeof value.kind === 'string' &&
+    typeof value.resolved === 'boolean'
+}
+
+function isSitterDetail(value: unknown): value is SitterDetail {
+  return isRecord(value) &&
+    validTarget(value.target) &&
+    validOwnerFence(value.ownerFence) &&
+    validEnrollment(value.enrollment) &&
+    (value.status === null || validStatus(value.status)) &&
+    validBudgetUsage(value.budget) &&
+    (value.ownerContact === 'live' || value.ownerContact === 'unverifiable') &&
+    finite(value.observedAtMs) &&
+    (value.readOnly === undefined || typeof value.readOnly === 'boolean') &&
+    Array.isArray(value.openEscalations) &&
+    value.openEscalations.every(validEscalation) &&
+    Array.isArray(value.pendingControls) &&
+    value.pendingControls.every((item) => typeof item === 'string') &&
+    Array.isArray(value.journal) &&
+    value.journal.every(isSitterJournalEntry)
+}
+
+function rpcCode(error: unknown): unknown {
+  return isRecord(error) ? error.code : undefined
+}
+
+function rpcReason(error: unknown): unknown {
+  return isRecord(error) && isRecord(error.data) ? error.data.reason : undefined
+}
+
+function errorMessageOf(error: unknown): string {
+  return error instanceof Error && error.message.trim() !== '' ? error.message : String(error)
+}
+
+function heimdallUnavailable(error: unknown): boolean {
+  const code = rpcCode(error)
+  const reason = rpcReason(error)
+  return code === -32601 || code === -32004 ||
+    reason === 'method-not-found' || reason === 'method_not_found' || reason === 'not-found' ||
+    /method not found|not found/i.test(errorMessageOf(error))
+}
+
+async function sitterFleetRows(env: ReviewsEnv): Promise<SitterFleetRow[] | null> {
+  let value: unknown
+  try {
+    value = await env.call('quirky.heimdall/fleet')
+  } catch (error) {
+    if (heimdallUnavailable(error)) return null
+    throw error
+  }
+  if (!isRecord(value) || !Array.isArray(value.rows)) return null
+  return value.rows.filter(isSitterFleetRow)
+}
+
+function sitterInvalid(env: ReviewsEnv, reason: string, detail: string): Error {
+  return Object.assign(env.invalid(reason, detail), { data: { reason, detail } })
+}
+
+async function requiredSitterRows(env: ReviewsEnv): Promise<SitterFleetRow[]> {
+  const rows = await sitterFleetRows(env)
+  if (rows === null) throw sitterInvalid(env, 'heimdall_unavailable', 'PR Sitter requires the Heimdall watcher service.')
+  return rows
+}
+
+function isMissingWorktree(error: unknown): boolean {
+  return rpcCode(error) === -32004 || rpcReason(error) === 'not-found' ||
+    /registered workspace is unavailable|select a registered workspace/i.test(errorMessageOf(error))
+}
+
+async function resolveSitterWorktree(
+  env: ReviewsEnv,
+  params: Record<string, unknown>,
+  caller: PluginCaller,
+  optional: boolean
+): Promise<Worktree | null> {
+  const requested = selector(env, params)
+  if (requested !== undefined) return env.resolve({ worktree: requested }, caller)
+  if (!optional) return env.resolve({}, caller)
+  try {
+    return await env.resolve({}, caller)
+  } catch (error) {
+    if (isMissingWorktree(error)) return null
+    throw error
+  }
+}
+
+function sameOwnerFence(left: SitterFleetRow['ownerFence'], right: SitterFleetRow['ownerFence']): boolean {
+  return left.executionHostId === right.executionHostId &&
+    left.schedulerOwner === right.schedulerOwner &&
+    left.workspaceKey === right.workspaceKey &&
+    left.revision === right.revision
+}
+
+function sameTarget(left: SitterFleetRow['target'], right: SitterFleetRow['target']): boolean {
+  return left.watcherId === right.watcherId &&
+    (left.connectionId ?? null) === (right.connectionId ?? null) &&
+    (left.pairingRevision ?? null) === (right.pairingRevision ?? null)
+}
+
+function rowForWorktree(
+  env: ReviewsEnv,
+  rows: readonly SitterFleetRow[],
+  worktree: Worktree,
+  watcherId?: string
+): SitterFleetRow {
+  const row = findWorktreeSitter(rows, worktree.id)
+  if (!row || (watcherId !== undefined && row.target.watcherId !== watcherId)) {
+    throw sitterInvalid(env, 'sitter_not_found', 'No PR Sitter is enrolled for this worktree.')
+  }
+  return row
+}
+
+function requestedWatcherId(env: ReviewsEnv, params: Record<string, unknown>): string | undefined {
+  if (params.watcherId === undefined) return undefined
+  if (typeof params.watcherId !== 'string' || params.watcherId.trim() === '') {
+    throw env.invalid('invalid_input', 'watcherId must be a non-empty watcher ID.')
+  }
+  return params.watcherId
+}
+
+function validCommandResult(value: unknown): value is
+  | { kind: 'applied'; appliedAtMs: number }
+  | { kind: 'refused'; detail: string }
+  | { kind: 'indeterminate'; detail: string } {
+  return isRecord(value) && (
+    value.kind === 'applied' && finite(value.appliedAtMs) ||
+    value.kind === 'refused' && typeof value.detail === 'string' ||
+    value.kind === 'indeterminate' && typeof value.detail === 'string'
+  )
+}
+
+function requireApplied(env: ReviewsEnv, value: unknown): { kind: 'applied'; appliedAtMs: number } {
+  if (isRecord(value) && value.kind === 'refused' && typeof value.detail === 'string') {
+    throw sitterInvalid(env, 'heimdall_refused', value.detail)
+  }
+  if (isRecord(value) && value.kind === 'indeterminate' && typeof value.detail === 'string') {
+    throw sitterInvalid(env, 'heimdall_indeterminate', value.detail)
+  }
+  if (!validCommandResult(value) || value.kind !== 'applied') {
+    throw sitterInvalid(env, 'heimdall_indeterminate', 'The owner returned an unrecognized command result; refresh to confirm its state.')
+  }
+  return value
+}
 
 type RepoIdentity = { host: string; owner: string; repo: string }
 type LookupResult = { kind: 'found' | 'no-review' | 'unavailable'; review?: ReviewData; record: JsonRecord }
@@ -1629,6 +1897,237 @@ async function openReview(env: ReviewsEnv, params: Record<string, unknown>, call
   return { opened: true, worktree: worktree.id, number, tab, prRepo: review.prRepo }
 }
 
+async function checksSitterGet(
+  env: ReviewsEnv,
+  params: Record<string, unknown>,
+  caller: PluginCaller
+): Promise<ChecksSitterState> {
+  const rows = await sitterFleetRows(env)
+  if (rows === null) return { available: false, sitter: null, detail: null, activeCount: 0, otherActiveCount: 0 }
+  const worktree = await resolveSitterWorktree(env, params, caller, true)
+  const active = rows.filter((row) => row.enrollment.kind === 'hosted-review' && isActiveSitter(row))
+  const sitter = worktree ? findWorktreeSitter(rows, worktree.id) : null
+  let detail: SitterDetail | null = null
+  if (params.includeDetail === true && sitter) {
+    try {
+      const value = await env.call('quirky.heimdall/detail', { target: sitter.target })
+      if (isSitterDetail(value)) detail = value
+    } catch (error) {
+      if (!heimdallUnavailable(error)) throw error
+    }
+  }
+  return {
+    available: true,
+    sitter,
+    detail,
+    activeCount: active.length,
+    otherActiveCount: active.filter((row) => worktree === null || row.enrollment.worktreeId !== worktree.id).length
+  }
+}
+
+async function checksSitterArm(
+  env: ReviewsEnv,
+  params: Record<string, unknown>,
+  caller: PluginCaller
+): Promise<{ ok: true; kind: 'enrolled' | 're-armed'; enrollment: Record<string, unknown> }> {
+  const worktree = await resolveSitterWorktree(env, params, caller, false)
+  if (!worktree) throw env.invalid('missing_worktree', 'A registered worktree is required to arm PR Sitter.')
+  if (worktree.kind !== 'git') throw env.invalid('worktree_not_git', 'PR Sitter can only watch a Git worktree.')
+  if (!isRecord(params.capabilities) ||
+    Object.keys(params.capabilities).length !== SITTER_CAPABILITY_KEYS.length ||
+    Object.keys(params.capabilities).some((key) => !SITTER_CAPABILITY_KEYS.includes(key as keyof SitterCapabilities)) ||
+    !SITTER_CAPABILITY_KEYS.every((key) => capabilityMode(params.capabilities[key]))) {
+    throw env.invalid('invalid_input', 'All four PR Sitter capabilities must be set to Off, Ask, or On.')
+  }
+  const capabilities: SitterCapabilities = {
+    updateBranch: params.capabilities.updateBranch as SitterCapabilityMode,
+    resolveConflicts: params.capabilities.resolveConflicts as SitterCapabilityMode,
+    fixChecks: params.capabilities.fixChecks as SitterCapabilityMode,
+    merge: params.capabilities.merge as SitterCapabilityMode
+  }
+  const branchUpdateMode: SitterBranchUpdateMode = params.branchUpdateMode === undefined
+    ? 'merge-base-update'
+    : params.branchUpdateMode as SitterBranchUpdateMode
+  if (branchUpdateMode !== 'merge-base-update' && branchUpdateMode !== 'rebase') {
+    throw env.invalid('invalid_input', 'branchUpdateMode must be merge-base-update or rebase.')
+  }
+  const mergeMethod: SitterMergeMethod = params.mergeMethod === undefined ? null : params.mergeMethod as SitterMergeMethod
+  if (mergeMethod !== null && mergeMethod !== 'merge' && mergeMethod !== 'squash' && mergeMethod !== 'rebase') {
+    throw env.invalid('invalid_input', 'mergeMethod must be merge, squash, rebase, or null.')
+  }
+  const mergeCheckScope: SitterMergeCheckScope = params.mergeCheckScope === undefined
+    ? 'all'
+    : params.mergeCheckScope as SitterMergeCheckScope
+  if (mergeCheckScope !== 'all' && mergeCheckScope !== 'required') {
+    throw env.invalid('invalid_input', 'mergeCheckScope must be all or required.')
+  }
+  if (!finite(params.budgetHours) || params.budgetHours <= 0) {
+    throw env.invalid('invalid_input', 'budgetHours must be a finite number greater than zero.')
+  }
+  const wallClockActiveMs = Math.round(params.budgetHours * 3_600_000)
+  if (!Number.isSafeInteger(wallClockActiveMs) || wallClockActiveMs <= 0) {
+    throw env.invalid('invalid_input', 'budgetHours is outside the supported active-time budget range.')
+  }
+  const result = await env.call('quirky.heimdall/enroll', {
+    kind: 'hosted-review',
+    kindPayload: {
+      worktree: `id:${worktree.id}`,
+      branchUpdateMode,
+      mergeMethod,
+      mergeCheckScope
+    },
+    capabilities,
+    budget: { wallClockActiveMs, turns: null },
+    owner: null,
+    ownerInterventionCapability: 'off'
+  })
+  if (isRecord(result) && result.kind === 'refused') {
+    const detail = typeof result.detail === 'string' ? result.detail : 'PR Sitter enrollment was refused.'
+    throw sitterInvalid(env, typeof result.reason === 'string' ? result.reason : 'enrollment_refused', detail)
+  }
+  if (!isRecord(result) ||
+    (result.kind !== 'enrolled' && result.kind !== 're-armed') ||
+    !isRecord(result.enrollment)) {
+    throw sitterInvalid(env, 'enrollment_indeterminate', 'Heimdall returned an unrecognized enrollment result.')
+  }
+  return { ok: true, kind: result.kind, enrollment: result.enrollment }
+}
+
+async function freshSitterRow(
+  env: ReviewsEnv,
+  worktree: Worktree,
+  watcherId?: string
+): Promise<SitterFleetRow> {
+  return rowForWorktree(env, await requiredSitterRows(env), worktree, watcherId)
+}
+
+async function freshSitterDetail(env: ReviewsEnv, row: SitterFleetRow): Promise<SitterDetail> {
+  const value = await env.call('quirky.heimdall/detail', { target: row.target })
+  if (!isSitterDetail(value)) {
+    throw sitterInvalid(env, 'sitter_detail_unavailable', 'The current PR Sitter detail could not be verified.')
+  }
+  if (!sameTarget(row.target, value.target) ||
+    !sameOwnerFence(row.ownerFence, value.ownerFence) ||
+    value.enrollment.watcherId !== row.target.watcherId ||
+    value.enrollment.kind !== 'hosted-review') {
+    throw sitterInvalid(env, 'stale_sitter_owner', 'The PR Sitter owner changed; refresh before issuing this command.')
+  }
+  return value
+}
+
+async function checksSitterApprove(
+  env: ReviewsEnv,
+  params: Record<string, unknown>,
+  caller: PluginCaller
+): Promise<{ ok: true; kind: 'applied'; appliedAtMs: number }> {
+  const worktree = await resolveSitterWorktree(env, params, caller, false)
+  if (!worktree) throw env.invalid('missing_worktree', 'A registered worktree is required to approve a PR Sitter action.')
+  if (typeof params.escalationId !== 'string' || params.escalationId.trim() === '') {
+    throw env.invalid('invalid_input', 'escalationId must be a non-empty escalation ID.')
+  }
+  const watcherId = requestedWatcherId(env, params)
+  const row = await freshSitterRow(env, worktree, watcherId)
+  const detail = await freshSitterDetail(env, row)
+  const escalation = detail.openEscalations.find((entry) =>
+    entry.escalationId === params.escalationId && (entry.status === 'open' || entry.status === 'escalated')
+  )
+  if (!escalation || !escalation.approvalScope) {
+    throw sitterInvalid(env, 'escalation_not_approvable', 'The requested open escalation has no approval scope.')
+  }
+  if (params.expectedScope !== undefined) {
+    if (!validApprovalScope(params.expectedScope)) {
+      throw env.invalid('invalid_input', 'expectedScope is not a valid approval scope.')
+    }
+    if (!sameApprovalScope(params.expectedScope, escalation.approvalScope)) {
+      throw sitterInvalid(env, 'approval_scope_changed', 'The approval scope changed; inspect the current escalation before approving.')
+    }
+  }
+  const result = await env.call('quirky.heimdall/command', {
+    target: row.target,
+    expectedOwner: row.ownerFence,
+    command: {
+      kind: 'approve',
+      escalationId: params.escalationId,
+      scope: escalation.approvalScope
+    }
+  })
+  return { ok: true, ...requireApplied(env, result) }
+}
+
+async function checksSitterStop(
+  env: ReviewsEnv,
+  params: Record<string, unknown>,
+  caller: PluginCaller
+): Promise<{ ok: true; kind: 'applied'; appliedAtMs: number }> {
+  const worktree = await resolveSitterWorktree(env, params, caller, false)
+  if (!worktree) throw env.invalid('missing_worktree', 'A registered worktree is required to stop a PR Sitter.')
+  const row = await freshSitterRow(env, worktree, requestedWatcherId(env, params))
+  if (!isDisarmableSitter(row)) {
+    throw sitterInvalid(env, 'sitter_not_disarmable', 'This PR Sitter is not currently stoppable.')
+  }
+  const result = await env.call('quirky.heimdall/command', {
+    target: row.target,
+    expectedOwner: row.ownerFence,
+    command: { kind: 'disarm' }
+  })
+  return { ok: true, ...requireApplied(env, result) }
+}
+
+async function checksSitterStopAll(env: ReviewsEnv): Promise<{
+  total: number
+  stopped: number
+  refusedCount: number
+  indeterminateCount: number
+  warning: string | null
+}> {
+  const rows = await requiredSitterRows(env)
+  const stoppable = rows.filter(isDisarmableSitter)
+  let stopped = 0
+  let refusedCount = 0
+  let indeterminateCount = 0
+  for (const row of stoppable) {
+    let value: unknown
+    try {
+      value = await env.call('quirky.heimdall/command', {
+        target: row.target,
+        expectedOwner: row.ownerFence,
+        command: { kind: 'disarm' }
+      })
+    } catch {
+      indeterminateCount++
+      continue
+    }
+    if (isRecord(value) && value.kind === 'applied' && finite(value.appliedAtMs)) stopped++
+    else if (isRecord(value) && value.kind === 'refused') refusedCount++
+    else indeterminateCount++
+  }
+  const warnings: string[] = []
+  if (refusedCount > 0) warnings.push(`${refusedCount} owners refused the stop command.`)
+  if (indeterminateCount > 0) warnings.push(`${indeterminateCount} stop commands may or may not have applied; refresh to confirm.`)
+  return {
+    total: stoppable.length,
+    stopped,
+    refusedCount,
+    indeterminateCount,
+    warning: warnings.length === 0 ? null : warnings.join(' ')
+  }
+}
+
+async function checksSitterDebugReport(
+  env: ReviewsEnv,
+  params: Record<string, unknown>,
+  caller: PluginCaller
+): Promise<{ report: Record<string, unknown> }> {
+  const worktree = await resolveSitterWorktree(env, params, caller, false)
+  if (!worktree) throw env.invalid('missing_worktree', 'A registered worktree is required to read the PR Sitter debug report.')
+  const row = await freshSitterRow(env, worktree, requestedWatcherId(env, params))
+  const report = await env.call('quirky.heimdall/debugReport', { target: row.target })
+  if (!isRecord(report)) {
+    throw sitterInvalid(env, 'sitter_report_unavailable', 'No PR Sitter debug report is available for this worktree.')
+  }
+  return { report }
+}
+
 const objectSchema = (properties: Record<string, Schema>, required: string[] = []): Schema => ({
   type: 'object',
   properties,
@@ -1638,6 +2137,28 @@ const objectSchema = (properties: Record<string, Schema>, required: string[] = [
 const stringSchema: Schema = { type: 'string' }
 const worktreeProperty: Schema = { type: 'string', description: 'Worktree selector (ID, name, branch, or path); omitted to resolve the caller workspace.' }
 const repoSchema = objectSchema({ host: stringSchema, owner: stringSchema, repo: stringSchema }, ['host', 'owner', 'repo'])
+
+const sitterCapabilityModeSchema: Schema = { type: 'string', enum: ['off', 'gated', 'on'] }
+const sitterCapabilitiesSchema = objectSchema({
+  updateBranch: sitterCapabilityModeSchema,
+  resolveConflicts: sitterCapabilityModeSchema,
+  fixChecks: sitterCapabilityModeSchema,
+  merge: sitterCapabilityModeSchema
+}, ['updateBranch', 'resolveConflicts', 'fixChecks', 'merge'])
+const sitterApprovalScopeSchema = objectSchema({
+  actionKind: stringSchema,
+  contentIdentity: stringSchema,
+  evidenceKey: stringSchema,
+  preparedCommitSha: stringSchema
+}, ['actionKind', 'contentIdentity', 'evidenceKey'])
+const sitterStateResultSchema = objectSchema({
+  available: { type: 'boolean' },
+  sitter: { description: 'The active worktree hosted-review fleet row, or null.' },
+  detail: { description: 'The requested watcher detail, or null.' },
+  activeCount: { type: 'integer' },
+  otherActiveCount: { type: 'integer' }
+}, ['available', 'sitter', 'detail', 'activeCount', 'otherActiveCount'])
+
 
 export const checksSpecs: MethodSpec[] = [
   {
@@ -1740,6 +2261,74 @@ export const checksSpecs: MethodSpec[] = [
     description: 'Open the current canonical review in the conversation, checks or files tab.',
     params: objectSchema({ worktree: { ...worktreeProperty, description: 'Workspace containing the review.' }, number: { type: 'integer', minimum: 1 }, tab: { type: 'string', enum: ['conversation', 'checks', 'files'] } }, ['worktree', 'number']),
     result: objectSchema({ opened: { type: 'boolean' }, worktree: stringSchema, number: { type: 'integer' }, tab: stringSchema, prRepo: repoSchema }, ['opened', 'worktree', 'number', 'tab', 'prRepo'])
+  },
+  {
+    id: 'checksSitterGet',
+    readOnly: true,
+    description: 'Read the PR Sitter fleet row and optionally its live detail for one worktree.',
+    params: objectSchema({ worktree: worktreeProperty, includeDetail: { type: 'boolean' } }),
+    result: sitterStateResultSchema
+  },
+  {
+    id: 'checksSitterArm',
+    description: 'Enroll or re-arm the hosted-review PR Sitter for a worktree.',
+    params: objectSchema({
+      worktree: worktreeProperty,
+      capabilities: sitterCapabilitiesSchema,
+      branchUpdateMode: { type: 'string', enum: ['merge-base-update', 'rebase'] },
+      mergeMethod: { description: 'merge, squash, rebase, or null for repository default.' },
+      mergeCheckScope: { type: 'string', enum: ['all', 'required'] },
+      budgetHours: { type: 'number', minimum: 0 }
+    }, ['capabilities', 'budgetHours']),
+    result: objectSchema({
+      ok: { type: 'boolean' },
+      kind: { type: 'string', enum: ['enrolled', 're-armed'] },
+      enrollment: { type: 'object', additionalProperties: true }
+    }, ['ok', 'kind', 'enrollment'])
+  },
+  {
+    id: 'checksSitterApprove',
+    description: 'Approve the exact current scope of one open PR Sitter escalation.',
+    params: objectSchema({
+      worktree: worktreeProperty,
+      watcherId: stringSchema,
+      escalationId: stringSchema,
+      expectedScope: sitterApprovalScopeSchema
+    }, ['escalationId']),
+    result: objectSchema({
+      ok: { type: 'boolean' },
+      kind: { type: 'string', enum: ['applied'] },
+      appliedAtMs: { type: 'number' }
+    }, ['ok', 'kind', 'appliedAtMs'])
+  },
+  {
+    id: 'checksSitterStop',
+    description: 'Disarm the PR Sitter for one worktree.',
+    params: objectSchema({ worktree: worktreeProperty, watcherId: stringSchema }),
+    result: objectSchema({
+      ok: { type: 'boolean' },
+      kind: { type: 'string', enum: ['applied'] },
+      appliedAtMs: { type: 'number' }
+    }, ['ok', 'kind', 'appliedAtMs'])
+  },
+  {
+    id: 'checksSitterStopAll',
+    description: 'Disarm every stoppable hosted-review PR Sitter.',
+    params: objectSchema({}),
+    result: objectSchema({
+      total: { type: 'integer' },
+      stopped: { type: 'integer' },
+      refusedCount: { type: 'integer' },
+      indeterminateCount: { type: 'integer' },
+      warning: { description: 'Partial-stop warning, or null when all stop commands applied.' }
+    }, ['total', 'stopped', 'refusedCount', 'indeterminateCount', 'warning'])
+  },
+  {
+    id: 'checksSitterDebugReport',
+    readOnly: true,
+    description: 'Read a PR Sitter diagnostic report for one worktree.',
+    params: objectSchema({ worktree: worktreeProperty, watcherId: stringSchema }),
+    result: objectSchema({ report: { type: 'object', additionalProperties: true } }, ['report'])
   }
 ]
 
@@ -1812,6 +2401,12 @@ export function checksMethods(env: ReviewsEnv): ReviewMethodTable {
     checksSetAgentDialog: (params, caller) => setAgentDialog(env, params, caller),
     checksLaunchAgent: (params, caller) => launchAgent(env, params, caller),
     checksGitAction: (params, caller) => runGitAction(env, params, caller),
-    checksOpenReview: (params, caller) => openReview(env, params, caller)
+    checksOpenReview: (params, caller) => openReview(env, params, caller),
+    checksSitterGet: (params, caller) => checksSitterGet(env, params, caller),
+    checksSitterArm: (params, caller) => checksSitterArm(env, params, caller),
+    checksSitterApprove: (params, caller) => checksSitterApprove(env, params, caller),
+    checksSitterStop: (params, caller) => checksSitterStop(env, params, caller),
+    checksSitterStopAll: () => checksSitterStopAll(env),
+    checksSitterDebugReport: (params, caller) => checksSitterDebugReport(env, params, caller)
   }
 }
