@@ -69,6 +69,12 @@ async function mountSurface({ cachedAOnRevisit = false }: SurfaceOptions = {}) {
     provide: (id: string, implementation: unknown) => provided.set(id, implementation),
     call: (method: string, params: Record<string, unknown> = {}) => {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return Promise.resolve({ connId: 42 })
+      if (method === 'ui.window.command.run') {
+        const handler = provided.get(String(params.id))
+        if (typeof handler !== 'function') throw new Error(`Missing provided command: ${String(params.id)}`)
+        return Promise.resolve(handler(params.args)).then((result) => ({ result }))
+      }
       if (method === 'quirky.reviews/state') {
         const worktree = String(params.worktree)
         if (cachedAOnRevisit && worktree === WORKTREE_A) {
