@@ -13,12 +13,14 @@ export type CloseRequest = {
   targets: CloseTarget[]
   resolve(value: boolean): void
   error: string | null
+  busy: boolean
 }
 
 type CloseResult = { closed: boolean; needsDecision?: boolean }
 let nextRequestId = 0
 let quickOpen: QuickOpenRequest | null = null
 let closeRequest: CloseRequest | null = null
+let closeRequestLifecycle = 0
 const listeners = new Set<() => void>()
 
 function notify(): void {
@@ -63,7 +65,9 @@ export function dismissQuickOpen(id?: number): void {
 
 function showCloseRequest(context: UiPluginContext, kind: 'single' | 'all', targets: CloseTarget[]): Promise<boolean> {
   const { promise, resolve } = Promise.withResolvers<boolean>()
-  closeRequest = { id: ++nextRequestId, context, kind, targets, resolve, error: null }
+  closeRequestLifecycle++
+  closeRequest?.resolve(false)
+  closeRequest = { id: ++nextRequestId, context, kind, targets, resolve, error: null, busy: false }
   notify()
   return promise
 }
@@ -71,6 +75,11 @@ function showCloseRequest(context: UiPluginContext, kind: 'single' | 'all', targ
 export function updateCloseError(id: number, error: string | null): void {
   if (!closeRequest || closeRequest.id !== id) return
   closeRequest = { ...closeRequest, error }
+  notify()
+}
+export function updateCloseBusy(id: number, busy: boolean): void {
+  if (!closeRequest || closeRequest.id !== id) return
+  closeRequest = { ...closeRequest, busy }
   notify()
 }
 
@@ -83,27 +92,48 @@ export function finishCloseRequest(id: number, result: boolean): void {
 }
 
 export async function requestSingleClose(context: UiPluginContext, bufferId: string, tabId?: string): Promise<boolean> {
+  const lifecycle = closeRequestLifecycle
+  const isCurrent = () => lifecycle === closeRequestLifecycle
   const active = activeDocument()
   try {
-    if (active?.bufferId === bufferId) await active.flush()
+    if (active?.bufferId === bufferId) {
+      await active.flush()
+      if (!isCurrent()) return false
+    }
+    if (!isCurrent()) return false
     const params = { bufferId, ...(tabId ? { tabId } : {}) }
     const result = await context.call('quirky.editor/close', params) as CloseResult
     if (result.closed) return true
-    if (!result.needsDecision) return false
+    if (!isCurrent() || !result.needsDecision) return false
     const state = await context.call('quirky.editor/state', { bufferId }) as EditorState
+    if (!isCurrent()) return false
     const buffer = state.buffers.find((entry) => entry.id === bufferId)
-    return showCloseRequest(context, 'single', [{ bufferId, tabId: tabId ?? buffer?.tabId ?? '', name: buffer?.name ?? 'file', dirty: buffer?.dirty === true, mode: 'edit' }])
+    return showCloseRequest(context, 'single', [{
+      bufferId,
+      tabId: tabId ?? buffer?.tabId ?? '',
+      name: buffer?.name ?? 'file',
+      dirty: buffer?.dirty === true,
+      mode: 'edit'
+    }])
   } catch (reason) {
+    if (!isCurrent()) return false
     context.toast('Unable to close file', messageOf(reason))
     return false
   }
 }
 
 export async function requestCloseAll(context: UiPluginContext, worktree?: string): Promise<boolean> {
+  const lifecycle = closeRequestLifecycle
+  const isCurrent = () => lifecycle === closeRequestLifecycle
   try {
     const active = activeDocument()
-    if (active) await active.flush()
+    if (active) {
+      await active.flush()
+      if (!isCurrent()) return false
+    }
+    if (!isCurrent()) return false
     const state = await context.call('quirky.editor/state', worktree ? { worktree } : {}) as EditorState
+    if (!isCurrent()) return false
     const buffers = new Map(state.buffers.map((buffer) => [buffer.id, buffer]))
     const targets = state.tabs.map((tab) => {
       const buffer = buffers.get(tab.bufferId)
@@ -117,20 +147,30 @@ export async function requestCloseAll(context: UiPluginContext, worktree?: strin
     })
     if (targets.length === 0) return true
     if (targets.some((target) => target.dirty)) return showCloseRequest(context, 'all', targets)
-    const canClose = await Promise.all(targets.map((target) => context.call('quirky.editor/canClose', { bufferId: target.bufferId, tabId: target.tabId })))
+    if (!isCurrent()) return false
+    const canClose = await Promise.all(targets.map((target) =>
+      context.call('quirky.editor/canClose', { bufferId: target.bufferId, tabId: target.tabId })
+    ))
+    if (!isCurrent()) return false
     for (let index = 0; index < canClose.length; index++) {
       if (canClose[index] === false) targets[index]!.dirty = true
     }
     if (targets.some((target) => target.dirty)) return showCloseRequest(context, 'all', targets)
-    for (const target of targets) await context.call('quirky.editor/close', { bufferId: target.bufferId, tabId: target.tabId })
+    for (const target of targets) {
+      if (!isCurrent()) return false
+      await context.call('quirky.editor/close', { bufferId: target.bufferId, tabId: target.tabId })
+      if (!isCurrent()) return false
+    }
     return true
   } catch (reason) {
+    if (!isCurrent()) return false
     context.toast('Unable to close editor tabs', messageOf(reason))
     return false
   }
 }
 
 export function clearOverlayRequests(): void {
+  closeRequestLifecycle++
   quickOpen = null
   if (closeRequest) {
     const request = closeRequest

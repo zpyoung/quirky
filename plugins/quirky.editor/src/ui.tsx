@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { Button, Dialog, FormRow } from '@quirky/ui'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Button, Dialog, FormRow, InlineError, NoticeLine } from '@quirky/ui'
 import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import { CloseOverlay } from './window/CloseOverlay'
@@ -10,6 +10,8 @@ import { openExplorerSearch } from './window/explorerIntent'
 import { type EditorState, worktreeFromLayout } from './window/editorState'
 import { clearOverlayRequests, requestCloseAll, requestSingleClose, showMarkdownOpen, showNewMarkdown, showQuickOpen } from './window/overlayState'
 import { clearEditorUiControls, createEditorUiControlReportScope, EditorUiControlProvider, EDITOR_UI_CONTROL_COMMAND, runEditorUiControl } from './window/uiControl'
+import { useEditorUiControl, useEditorUiControlReport, useEditorUiControlSurface } from './window/uiControl'
+import type { EditorUiControl, EditorUiControlResult } from './window/uiControl'
 import { QuickOpenOverlay } from './window/QuickOpenOverlay'
 
 type MountReport = (state: unknown) => void
@@ -133,14 +135,16 @@ function clearSaveAsRequest(): void {
   cancelSaveAs(saveAsRequest.id)
 }
 
-function editorUiContext(context: UiPluginContext): UiPluginContext {
+function editorUiContext(context: UiPluginContext, isCurrent: () => boolean): UiPluginContext {
   const originalCall = context.call.bind(context)
   const call = async (method: string, params?: Record<string, unknown>): Promise<unknown> => {
+    if (!isCurrent()) throw new Error('The editor control is no longer available.')
     const request = params ?? {}
     if (method === 'quirky.editor/save' && params && params.trigger !== 'autosave') {
       const bufferId = nonEmptyString(request.bufferId)
       if (bufferId) {
         const result = await originalCall('quirky.editor/read', { bufferId, action: 'buffer' }) as SaveAsReadResult
+        if (!isCurrent()) throw new Error('The editor control is no longer available.')
         if (result.buffer?.untitled) return await requestSaveAs(context, result.buffer)
       }
     }
@@ -148,11 +152,13 @@ function editorUiContext(context: UiPluginContext): UiPluginContext {
       const bufferId = nonEmptyString(request.bufferId)
       if (bufferId) {
         const result = await originalCall('quirky.editor/read', { bufferId, action: 'buffer' }) as SaveAsReadResult
+        if (!isCurrent()) throw new Error('The editor control is no longer available.')
         if (result.buffer?.untitled) {
           try {
             await requestSaveAs(context, result.buffer)
+            if (!isCurrent()) throw new Error('The editor control is no longer available.')
           } catch (reason) {
-            await originalCall(method, { ...request, choice: 'cancel' }).catch(() => undefined)
+            if (isCurrent()) await originalCall(method, { ...request, choice: 'cancel' }).catch(() => undefined)
             throw reason
           }
           const closeParams = { ...request }
@@ -161,6 +167,7 @@ function editorUiContext(context: UiPluginContext): UiPluginContext {
         }
       }
     }
+    if (!isCurrent()) throw new Error('The editor control is no longer available.')
     return await originalCall(method, params)
   }
   return new Proxy(context, {
@@ -172,34 +179,52 @@ function editorUiContext(context: UiPluginContext): UiPluginContext {
   })
 }
 
-function SaveAsOverlay() {
+function SaveAsOverlay({ context }: { context: UiPluginContext }) {
   const request = useSaveAsRequest()
+  const report = useEditorUiControlReport()
+  const surface = useEditorUiControlSurface()
+  const generation = useMemo(() => crypto.randomUUID(), [request?.id])
   const [path, setPath] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
   const pathInput = useRef<HTMLInputElement>(null)
   useEffect(() => {
     setPath(request ? suggestedSaveAsPath(request.relativePath) : '')
     setError(null)
     setBusy(false)
+    busyRef.current = false
   }, [request?.id, request?.relativePath])
   useEffect(() => {
     if (!request) return
     const focusTimer = window.setTimeout(() => pathInput.current?.focus(), 0)
     return () => window.clearTimeout(focusTimer)
   }, [request?.id])
+  useEffect(() => {
+    report({ saveAs: {
+      open: request !== null,
+      requestId: request?.id ?? null,
+      bufferId: request?.bufferId ?? null,
+      busy: request !== null && busy,
+      error: request ? error : null
+    } })
+  }, [report, request?.id, request?.bufferId, busy, error])
 
-  if (!request) return null
-  const cancel = () => {
-    if (!busy) cancelSaveAs(request.id)
-  }
-  const submit = async () => {
-    const destination = path.trim()
-    if (destination === '') {
-      setError('Enter a worktree-relative Markdown path.')
-      return
+  async function handleControl(control: EditorUiControl): Promise<EditorUiControlResult> {
+    if (!request || saveAsRequest?.id !== request.id || !isCurrent() || busyRef.current) return { delivered: false }
+    const data = control.data ?? {}
+    if (Object.keys(data).some((key) => key !== 'path') || (Object.hasOwn(data, 'path') && typeof data.path !== 'string')) return { delivered: false }
+    if (control.action === 'cancel') {
+      if (Object.keys(data).length) return { delivered: false }
+      cancelSaveAs(request.id)
+      return { delivered: true }
     }
+    if (control.action !== 'submit') return { delivered: false }
+    const destination = (typeof data.path === 'string' ? data.path : path).trim()
+    if (!destination) return { delivered: false }
+    busyRef.current = true
     setBusy(true)
+    setPath(destination)
     setError(null)
     try {
       const saved = await request.context.call('quirky.editor/saveAs', {
@@ -207,26 +232,35 @@ function SaveAsOverlay() {
         path: destination,
         expectedRevision: request.expectedRevision
       })
-      if (saveAsRequest?.id !== request.id) return
+      if (!isCurrent() || saveAsRequest?.id !== request.id) return { delivered: false }
       saveAsRequest = null
       notifySaveAs()
       request.resolve(saved)
     } catch (reason) {
-      if (saveAsRequest?.id !== request.id) return
+      if (!isCurrent() || saveAsRequest?.id !== request.id) return { delivered: false }
       setError(reason instanceof Error ? reason.message : String(reason))
+      busyRef.current = false
       setBusy(false)
     }
+    return { delivered: true }
   }
+  const { run, isCurrent } = useEditorUiControl({
+    context,
+    address: request ? { surface, target: `save-as:${request.bufferId}:${request.id}`, generation, actions: ['submit', 'cancel'] } : null,
+    handler: handleControl,
+    onError: (reason) => setError(reason.message)
+  })
 
+  if (!request) return null
   return (
     <Dialog
       open
       title="Save Markdown As"
-      onClose={cancel}
+      onClose={() => { void run('cancel') }}
       actions={
         <>
-          <Button disabled={busy} onClick={cancel}>Cancel</Button>
-          <Button variant="primary" disabled={busy || path.trim() === ''} onClick={() => void submit()}>Save</Button>
+          <Button disabled={busy} onClick={() => void run('cancel')}>Cancel</Button>
+          <Button variant="primary" disabled={busy || path.trim() === ''} onClick={() => void run('submit')}>Save</Button>
         </>
       }
     >
@@ -242,12 +276,13 @@ function SaveAsOverlay() {
             disabled={busy}
             onChange={(event) => setPath(event.currentTarget.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') { event.preventDefault(); void submit() }
-              if (event.key === 'Escape') { event.preventDefault(); cancel() }
+              if (event.key === 'Enter') { event.preventDefault(); void run('submit') }
+              if (event.key === 'Escape') { event.preventDefault(); void run('cancel') }
             }}
           />
         </FormRow>
-        {error && <p className="qe-editor-error" role="alert">{error}</p>}
+        {busy && <NoticeLine>Saving Markdown…</NoticeLine>}
+        {error && <InlineError message={error} />}
       </div>
     </Dialog>
   )
@@ -371,8 +406,9 @@ function configureExplorerPanel(context: UiPluginContext): void {
 }
 
 export function activate(context: UiPluginContext): void {
-  const uiContext = editorUiContext(context)
   deactivateCurrent?.()
+  let active = true
+  const uiContext = editorUiContext(context, () => active)
   clearEditorUiControls()
 
   context.provide(DOCUMENT_VIEW, (element: HTMLElement, props: MountProps) =>
@@ -389,7 +425,7 @@ export function activate(context: UiPluginContext): void {
     mount(element, (report) => <QuickOpenOverlay context={context} report={report} />, props.report, { open: false, requestId: null }, QUICK_OPEN_OVERLAY)
   )
   context.provide(CLOSE_OVERLAY, (element: HTMLElement, props: MountProps) =>
-    mount(element, (report) => <><CloseOverlay report={report} /><SaveAsOverlay /></>, props.report, {
+    mount(element, (report) => <><CloseOverlay context={uiContext} report={report} /><SaveAsOverlay context={context} /></>, props.report, {
       open: false,
       kind: null,
       targetCount: 0,
@@ -411,6 +447,7 @@ export function activate(context: UiPluginContext): void {
   })
 
   deactivateCurrent = () => {
+    active = false
     unsubscribe()
     clearOverlayRequests()
     clearSaveAsRequest()

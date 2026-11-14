@@ -6,6 +6,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import { CloseOverlay } from '../src/window/CloseOverlay'
 import { QuickOpenOverlay } from '../src/window/QuickOpenOverlay'
 import { clearOverlayRequests, requestSingleClose, showQuickOpen } from '../src/window/overlayState'
+import { EditorUiControlProvider, createEditorUiControlReportScope, runEditorUiControl } from '../src/window/uiControl'
 
 
 beforeAll(() => {
@@ -24,7 +25,9 @@ afterEach(() => {
 test('Escape cancels the shared dirty-close dialog without saving or closing its draft', async () => {
   const calls: string[] = []
   const context = {
-    call: async (method: string) => {
+    call: async (method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.command.run') return { result: await runEditorUiControl(params.args) }
       calls.push(method)
       if (method === 'quirky.editor/close') return { closed: false, needsDecision: true }
       if (method === 'quirky.editor/state') {
@@ -34,13 +37,14 @@ test('Escape cancels the shared dirty-close dialog without saving or closing its
     },
     toast() {},
   } as unknown as UiPluginContext
+  const scope = createEditorUiControlReportScope(undefined, { surface: 'overlay:quirky.editor/close' })
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
   let result!: Promise<boolean>
 
   await act(async () => {
-    root.render(<CloseOverlay />)
+    root.render(<EditorUiControlProvider scope={scope}><CloseOverlay context={context} /></EditorUiControlProvider>)
     result = requestSingleClose(context, 'buffer-1', 'tab-1')
     await Promise.resolve()
     await Promise.resolve()
@@ -57,7 +61,9 @@ test('Escape cancels the shared dirty-close dialog without saving or closing its
   expect(calls).toEqual(['quirky.editor/close', 'quirky.editor/state'])
   expect(element.querySelector('[role="dialog"]')).toBeNull()
   await act(async () => { root.unmount() })
+  scope.dispose()
 })
+
 
 async function flushTimers(): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
@@ -69,6 +75,8 @@ test('Quick Open keeps focus and arrow/Enter navigation inside the shared dialog
   const calls: { method: string; params?: Record<string, unknown> }[] = []
   const context = {
     call: async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.command.run') return { result: await runEditorUiControl(params?.args) }
       calls.push({ method, params })
       if (method === 'quirky.editor/quickOpen') {
         return {
@@ -84,12 +92,15 @@ test('Quick Open keeps focus and arrow/Enter navigation inside the shared dialog
     },
     toast() {},
   } as unknown as UiPluginContext
+  const scope = createEditorUiControlReportScope(undefined, { surface: 'overlay:quirky.editor/quick-open' })
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
   showQuickOpen(context, 'worktree-1')
 
-  await act(async () => { root.render(<QuickOpenOverlay context={context} />) })
+  await act(async () => {
+    root.render(<EditorUiControlProvider scope={scope}><QuickOpenOverlay context={context} /></EditorUiControlProvider>)
+  })
   await flushTimers()
 
   const input = element.querySelector<HTMLInputElement>('input[aria-label="Go to file"]')
@@ -110,4 +121,5 @@ test('Quick Open keeps focus and arrow/Enter navigation inside the shared dialog
   }))
   expect(element.querySelector('[role="dialog"]')).toBeNull()
   await act(async () => { root.unmount() })
+  scope.dispose()
 })

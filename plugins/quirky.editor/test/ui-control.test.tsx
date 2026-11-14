@@ -383,3 +383,37 @@ function RefusalControl({ context }: { context: UiPluginContext }) {
   })
   return <><button onClick={() => { void control.run('select') }}>Select</button>{error && <div role="alert">{error}</div>}</>
 }
+
+test('teardown refuses a pending untitled-buffer read before it can open Save As', async () => {
+  const fixture = makeContext()
+  const pendingRead = Promise.withResolvers<unknown>()
+  const originalCall = fixture.context.call.bind(fixture.context)
+  fixture.context.call = async (method, params) => method === 'quirky.editor/read'
+    ? pendingRead.promise
+    : originalCall(method, params)
+  activate(fixture.context)
+  type SurfaceMount = (element: HTMLElement, props: { report(state: unknown): void }) => () => void
+  const mountClose = fixture.provided.get('overlay:quirky.editor/close') as unknown as SurfaceMount
+  const element = document.createElement('div')
+  document.body.append(element)
+  let unmount = () => {}
+  let settled = false
+  let result: unknown
+  try {
+    await act(async () => {
+      unmount = mountClose(element, { report() {} })
+      void Promise.resolve(fixture.provided.get('command:quirky.editor/save')!({ bufferId: 'b1' }))
+        .then((value) => { settled = true; result = value }, (reason: unknown) => { settled = true; result = reason })
+      await Promise.resolve()
+      deactivate()
+      pendingRead.resolve({ buffer: { id: 'b1', relativePath: 'untitled.md', contentRevision: 7, untitled: true } })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(element.querySelector('[role="dialog"]')).toBeNull()
+    expect(settled).toBe(true)
+    expect(result).toBeInstanceOf(Error)
+  } finally {
+    await act(async () => { deactivate(); unmount() })
+  }
+})
