@@ -261,17 +261,26 @@
         "id": "control",
         "title": "Ledger Control",
         "palette": false,
-        "description": "Route ledger scope, filter, selection, detail and dialog actions to the mounted ledger view.",
+        "description": "Route ledger navigation, scope, filters, refresh, selection, confirmation and dialog actions to a mounted ledger instance.",
         "args": {
           "type": "object",
           "properties": {
-            "action": { "type": "string", "enum": ["scope", "filters", "sort", "selection", "detail", "new", "edit", "triage", "settings"] },
+            "action": { "type": "string", "enum": ["scope", "filters", "sort", "selection", "detail", "new", "edit", "triage", "settings", "choose", "chooser", "refresh", "filters-open", "prepare", "confirm", "dismiss"] },
             "scope": { "type": "string", "enum": ["worktree", "project", "group"] },
             "filters": { "type": "object", "properties": { "type": { "type": "string", "enum": ["bug", "deferred", "test-gap", "proposal", "decision"] }, "state": { "type": "string", "enum": ["open", "resolved", "archived"] }, "reviewed": { "type": "boolean" }, "stale": { "type": "boolean" }, "workspaceId": { "type": "string" }, "branch": { "type": "string" }, "search": { "type": "string" } } },
             "sort": { "type": "string", "enum": ["activity", "sequence", "title"] },
             "selections": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "revision": { "type": "integer", "minimum": 1 } }, "required": ["id", "revision"] } },
             "id": { "type": "string" },
-            "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } }
+            "target": { "type": "object", "properties": { "workspaceId": { "type": "string" }, "owner": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] }, "ledgerId": { "type": "string" }, "group": { "type": "boolean" }, "groupSelector": { "type": "string" } } },
+            "instance": { "type": "string" },
+            "resource": { "type": "string", "enum": ["entries", "catalog", "directory", "candidates", "detail"] },
+            "open": { "type": "boolean" },
+            "replace": { "type": "boolean" },
+            "selectionScope": { "type": "string", "enum": ["entries", "triage"] },
+            "kind": { "type": "string", "enum": ["bulk-state", "delete-entries", "delete-ledger", "attach"] },
+            "state": { "type": "string", "enum": ["resolved", "archived"] },
+            "attachTo": { "type": "object", "properties": { "tier": { "type": "string", "enum": ["project", "group"] }, "id": { "type": "string" } }, "required": ["tier", "id"] },
+            "dialog": { "type": "string", "enum": ["confirmation", "detail", "form", "triage"] }
           },
           "required": ["action"]
         }
