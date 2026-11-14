@@ -4,6 +4,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import { act } from 'react'
 import type { Root, createRoot as CreateRoot } from 'react-dom/client'
 import type { LedgerControl } from '../src/ui/types'
+import type { LedgerCandidate, LedgerEntry, LedgerOwner, LedgerRequest, LedgerResponse, LedgerSummary } from '../src/types'
 
 type LedgerModule = typeof import('../src/ui/LedgerApp')
 let createRoot: typeof CreateRoot

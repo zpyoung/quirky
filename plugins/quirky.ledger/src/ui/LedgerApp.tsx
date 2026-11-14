@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, ListRow, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'
+import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, ListRow, NoticeLine, Tabs, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import { currentRevisionOf, errorData, errorMessage, isConflict, ledgerRequest } from './api'
 import { LedgerDetail } from './LedgerDetail'
@@ -184,7 +184,7 @@ export function LedgerApp({
   const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_FILTERS)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [sort, setSort] = useState<SortMode>('activity')
-  const [response, setResponse] = useState<LedgerResponse | null>(null)
+  const [response, setResponseState] = useState<LedgerResponse | null>(null)
   const [catalog, setCatalog] = useState<LedgerResponse | null>(null)
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogError, setCatalogError] = useState('')
@@ -213,7 +213,7 @@ export function LedgerApp({
   const [triageConflict, setTriageConflict] = useState('')
   const [triageSelected, setTriageSelected] = useState<LedgerSelection[]>([])
   const [triageTitles, setTriageTitles] = useState<Map<string, string>>(new Map())
-  const [confirmation, setConfirmation] = useState<PendingConfirmation | null>(null)
+  const [confirmation, setConfirmationState] = useState<PendingConfirmation | null>(null)
   const [confirmBusy, setConfirmBusy] = useState(false)
   const [attachChoice, setAttachChoice] = useState('')
   const [actionMessage, setActionMessage] = useState('')
@@ -225,8 +225,21 @@ export function LedgerApp({
   const confirmationBusyRef = useRef(false)
   const connectionIdRef = useRef<number | null>(null)
   const detailTargetRef = useRef<LedgerTarget | null>(null)
+  const confirmationRef = useRef<PendingConfirmation | null>(null)
+  const responseRef = useRef<LedgerResponse | null>(null)
+  const previousWorkspaceRef = useRef(workspaceId)
 
-  async function runControl(command: LedgerControl): Promise<void> {
+  function setConfirmation(next: PendingConfirmation | null): void {
+    confirmationRef.current = next
+    setConfirmationState(next)
+  }
+
+  function setResponse(next: LedgerResponse | null): void {
+    responseRef.current = next
+    setResponseState(next)
+  }
+
+  async function requestControl(command: LedgerControl): Promise<void> {
     let connId = connectionIdRef.current
     if (connId === null) {
       const self = object(await context.call('ui.window.self', {}))
@@ -235,6 +248,10 @@ export function LedgerApp({
       connectionIdRef.current = connId
     }
     await dispatchLedgerControl(context, connId, { ...command, instance: controlId })
+  }
+
+  function runControl(command: LedgerControl): void {
+    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))
   }
 
   function invalidateContextState(): void {
@@ -260,15 +277,15 @@ export function LedgerApp({
 
   useEffect(() => {
     if (mode !== 'panel') return
-    setWorkspaceId(activeWorkspace(context.getLayout()))
-    return context.onLayout((next) => setWorkspaceId(activeWorkspace(next)))
+    const syncWorkspace = (layout: UiLayout) => {
+      const next = activeWorkspace(layout)
+      if (previousWorkspaceRef.current !== next) invalidateContextState()
+      previousWorkspaceRef.current = next
+      setWorkspaceId(next)
+    }
+    syncWorkspace(context.getLayout())
+    return context.onLayout(syncWorkspace)
   }, [context, mode])
-  const previousWorkspaceRef = useRef(workspaceId)
-  useEffect(() => {
-    if (mode !== 'panel') return
-    if (previousWorkspaceRef.current !== workspaceId) invalidateContextState()
-    previousWorkspaceRef.current = workspaceId
-  }, [mode, workspaceId])
 
   useEffect(() => {
     let live = true
@@ -332,10 +349,11 @@ export function LedgerApp({
     }
   }, [context])
 
+  const panelDirectoryLoading = mode === 'panel' && directory.loading
   const loadEntries = useCallback(async (showDelayedSpinner = false) => {
     const generation = ++entryGeneration.current
     setError('')
-    if (mode === 'panel' && (!workspaceId || directory.loading)) {
+    if (mode === 'panel' && (!workspaceId || panelDirectoryLoading)) {
       setEntries([])
       setResponse(null)
       setLoading(Boolean(workspaceId))
@@ -371,7 +389,7 @@ export function LedgerApp({
         setRefreshSpinner(false)
       }
     }
-  }, [context, mode, workspaceId, directory.loading, effectiveTarget, requestFilters])
+  }, [context, mode, workspaceId, panelDirectoryLoading, effectiveTarget, requestFilters])
 
   useEffect(() => {
     void loadCatalog()
@@ -621,7 +639,7 @@ export function LedgerApp({
   }
   function prepareConfirmation(command: LedgerControl): void {
     if (!command.kind) throw new Error('Ledger prepare requires a confirmation kind.')
-    const summary = currentSummary
+    const summary = responseRef.current?.ledger ?? null
     if (!summary) throw new Error('An authoritative ledger summary is required for this confirmation.')
     if (command.kind === 'delete-ledger') {
       setConfirmation({ kind: 'delete-ledger', ledgerId: summary.ledgerId, revision: summary.revision, entryCount: summary.entryCount })
@@ -644,8 +662,14 @@ export function LedgerApp({
       return
     }
     const selections = command.selections ?? (triageOpen ? triageSelected : selected)
-    if (selections.length === 0) throw new Error('Ledger preparation requires at least one selected entry.')
-    const snapshots = selections.map((selection) => ({ id: selection.id, revision: selection.revision }))
+    if (selections.length < 1 || selections.length > MAX_SELECTIONS) throw new Error(`Ledger preparation requires 1 to ${MAX_SELECTIONS} entry snapshots.`)
+    const ids = new Set<string>()
+    const snapshots = selections.map((selection) => {
+      if (!selection.id.trim() || !Number.isSafeInteger(selection.revision) || selection.revision < 1) throw new Error('Ledger preparation selections require nonempty ids and positive safe revisions.')
+      if (ids.has(selection.id)) throw new Error('Ledger preparation selections cannot contain duplicate entry ids.')
+      ids.add(selection.id)
+      return { id: selection.id, revision: selection.revision }
+    })
     const titles = new Map([...selectionTitles, ...triageTitles])
     const sourceEntries = [...entries, ...candidates.map((candidate) => candidate.entry)]
     const details = snapshots.map((selection) => snapshotFor(selection, titles, sourceEntries))
@@ -669,7 +693,7 @@ export function LedgerApp({
 
   async function confirmAction(): Promise<void> {
     if (confirmationBusyRef.current) throw new Error('A ledger confirmation is already in progress.')
-    const pending = confirmation
+    const pending = confirmationRef.current
     if (!pending) throw new Error('There is no pending ledger confirmation.')
     confirmationBusyRef.current = true
     setConfirmBusy(true)
@@ -818,6 +842,7 @@ export function LedgerApp({
       if (command.target) throw new Error('Ledger refresh uses the current target.')
       switch (command.resource) {
         case 'entries':
+          if (!effectiveTarget) throw new Error('Ledger entries refresh requires a target.')
           await loadEntries(true)
           return
         case 'catalog':
@@ -889,7 +914,7 @@ export function LedgerApp({
       case 'detail':
         if (!command.id) throw new Error('Ledger detail requires an entry id.')
         if (command.target) setOwnerTarget(command.target)
-        await requestDetail(command.id, command.target ?? pageLedgerTarget)
+        await requestDetail(command.id, command.target ?? pageLedgerTarget ?? undefined)
         return
       case 'new':
         if (command.target) setOwnerTarget(command.target)
@@ -1078,8 +1103,8 @@ export function LedgerApp({
     <section className="ledger-root ledger-chooser" style={ledgerStyles.page}>
       <p className="ledger-summary" style={ledgerStyles.meta}>Attached and detached ledgers for this runtime</p>
       {runtimeText && <p className="ledger-muted" title={runtimeText} style={ledgerStyles.meta}>Runtime identity: {response?.runtime.runtimeId ?? catalog?.runtime.runtimeId ?? 'loading'}</p>}
-      {catalogError && <div className="ledger-error" role="alert" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger catalog could not be loaded: {catalogError}</span><Button type="button" onClick={() => void runControl({ action: 'refresh', resource: 'catalog' })}>Retry</Button></div>}
-      {catalogLoading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledgers…</p>}
+      {catalogError && <InlineError message={`Ledger catalog could not be loaded: ${catalogError}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'catalog' }) }} />}
+      {catalogLoading && <NoticeLine>Loading ledgers…</NoticeLine>}
       {!catalogLoading && !catalogError && (catalog?.ledgers?.length ?? 0) === 0 && <EmptyState message="No attached or detached ledgers yet. File an entry to create one." />}
       <ul className="ledger-chooser-list" style={ledgerStyles.list}>
         {(catalog?.ledgers ?? []).map((summary) => {
@@ -1141,12 +1166,13 @@ export function LedgerApp({
           {scope === 'worktree' && workspace && <span> · Filed in {workspace.name ?? workspace.id}</span>}
         </div>
         {(filtersOpen || filtering) && renderFilters()}
-        {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Owner catalog could not be loaded: {directory.error}</span><Button type="button" onClick={() => void runControl({ action: 'refresh', resource: 'directory' })}>Retry</Button></div>}
-        {directory.loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
+        {directory.error && <InlineError message={`Owner catalog could not be loaded: ${directory.error}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'directory' }) }} />}
+        {directory.loading && <NoticeLine>Loading ledger…</NoticeLine>}
         {!directory.loading && noWorkspace && <EmptyState message="Open a workspace to see its ledger." />}
-        {!directory.loading && missingGroup && <p className="ledger-error" style={ledgerStyles.error}>This workspace has no group.</p>}
-        {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>{error}</span><Button type="button" onClick={refreshEntries}>Retry</Button></div>}
-        {!directory.loading && !noWorkspace && !missingGroup && loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
+        {!directory.loading && missingGroup && <InlineError message="This workspace has no group." />}
+        {error && <InlineError message={error} action={{ label: 'Retry', onAction: refreshEntries }} />}
+        {actionMessage && <InlineError message={actionMessage} />}
+        {!directory.loading && !noWorkspace && !missingGroup && loading && <NoticeLine>Loading ledger…</NoticeLine>}
         {!directory.loading && !noWorkspace && !missingGroup && !loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: () => void runControl({ action: 'new' }) }} />}
         {!directory.loading && !error && !missingGroup && <ul className="ledger-entry-list" style={ledgerStyles.list}>{visibleRows.map(renderRow)}</ul>}
       </section>
@@ -1179,14 +1205,14 @@ export function LedgerApp({
           </select>
         </FormRow>
         <Button type="button" disabled={!attachChoice} onClick={prepareAttach}>Attach</Button>
-        {availableOwners.length === 0 && <p className="ledger-muted" style={ledgerStyles.muted}>No unoccupied live owners are available.</p>}
+        {availableOwners.length === 0 && <EmptyState message="No unoccupied live owners are available." />}
       </section>}
-      {catalogError && <p role="alert" className="ledger-error" style={ledgerStyles.error}>Owner catalog unavailable: {catalogError}</p>}
-      {directory.error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Location bases could not be loaded: {directory.error}</span><Button type="button" onClick={() => void runControl({ action: 'refresh', resource: 'directory' })}>Retry</Button></div>}
+      {catalogError && <InlineError message={`Owner catalog unavailable: ${catalogError}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'catalog' }) }} />}
+      {directory.error && <InlineError message={`Location bases could not be loaded: ${directory.error}`} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'directory' }) }} />}
       {(filtersOpen || filtering) && renderFilters()}
-      {error && <div role="alert" className="ledger-error" style={ledgerStyles.actions}><span style={ledgerStyles.error}>Ledger could not be loaded: {error}</span><Button type="button" onClick={refreshEntries}>Retry</Button></div>}
-      {actionMessage && <p role="alert" className="ledger-error" style={ledgerStyles.error}>{actionMessage}</p>}
-      {loading && <p className="ledger-state-message" style={ledgerStyles.message}>Loading ledger…</p>}
+      {error && <InlineError message={`Ledger could not be loaded: ${error}`} action={{ label: 'Retry', onAction: refreshEntries }} />}
+      {actionMessage && <InlineError message={actionMessage} />}
+      {loading && <NoticeLine>Loading ledger…</NoticeLine>}
       {!loading && !error && visibleRows.length === 0 && <EmptyState message="No entries match this view." action={{ label: 'New entry', onAction: () => void runControl({ action: 'new' }) }} />}
       {!error && <ul className="ledger-entry-list" style={ledgerStyles.list}>{visibleRows.map(renderRow)}</ul>}
       {selected.length > 0 && <div className="ledger-bulk-actions" aria-label="Selected ledger actions" style={ledgerStyles.actions}>
@@ -1220,7 +1246,7 @@ export function LedgerApp({
         actions={<div className="ledger-dialog-actions" style={ledgerStyles.actions}><Button type="button" onClick={() => void runControl({ action: 'dismiss', dialog: 'detail' })}>Close</Button></div>}
       >
         <div className="ledger-dialog-body">
-          {detailLoading ? <p style={ledgerStyles.message}>Loading entry…</p> : <p role="alert" className="ledger-error" style={ledgerStyles.error}>{detailError} <Button type="button" onClick={() => void runControl({ action: 'refresh', resource: 'detail' })}>Retry</Button></p>}
+          {detailLoading ? <NoticeLine>Loading entry…</NoticeLine> : <InlineError message={detailError} action={{ label: 'Retry', onAction: () => void runControl({ action: 'refresh', resource: 'detail' }) }} />}
         </div>
       </Dialog>,
       document.body
@@ -1279,6 +1305,8 @@ export function LedgerApp({
 }
 
 export function LedgerSidebarSection({ context, report }: { context: UiPluginContext; report?(state: unknown): void }) {
-  useEffect(() => report?.({ view: 'navigation', target: undefined, scope: null, filters: {}, sort: 'activity', selection: [], dialog: 'none' }), [report])
+  useEffect(() => {
+    report?.({ view: 'navigation', target: undefined, scope: null, filters: {}, sort: 'activity', selection: [], dialog: 'none' })
+  }, [report])
   return <div className="ledger-root" style={ledgerStyles.root}><Button type="button" className="ledger-nav-item" onClick={() => context.openView(LEDGER_VIEW_ID)}>Ledger</Button></div>
 }
