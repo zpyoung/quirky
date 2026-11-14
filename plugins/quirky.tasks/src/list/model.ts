@@ -61,12 +61,16 @@ export function parseItem(value: unknown): ListItem | null {
     repoId: raw.repoId,
     repoName: raw.repoName
   }
-  for (const key of ['headRefName', 'baseRefName', 'headRefOid', 'mergeStateStatus', 'reviewDecision', 'stateReason'] as const) {
-    if (typeof raw[key] === 'string') item[key] = raw[key]
-  }
-  for (const key of ['additions', 'deletions', 'changedFiles', 'duplicateOf'] as const) {
-    if (typeof raw[key] === 'number' && Number.isSafeInteger(raw[key]) && raw[key] >= 0) item[key] = raw[key]
-  }
+  if (typeof raw.headRefName === 'string') item.headRefName = raw.headRefName
+  if (typeof raw.baseRefName === 'string') item.baseRefName = raw.baseRefName
+  if (typeof raw.headRefOid === 'string') item.headRefOid = raw.headRefOid
+  if (typeof raw.mergeStateStatus === 'string') item.mergeStateStatus = raw.mergeStateStatus
+  if (typeof raw.reviewDecision === 'string') item.reviewDecision = raw.reviewDecision
+  if (typeof raw.stateReason === 'string') item.stateReason = raw.stateReason
+  if (typeof raw.additions === 'number' && Number.isSafeInteger(raw.additions) && raw.additions >= 0) item.additions = raw.additions
+  if (typeof raw.deletions === 'number' && Number.isSafeInteger(raw.deletions) && raw.deletions >= 0) item.deletions = raw.deletions
+  if (typeof raw.changedFiles === 'number' && Number.isSafeInteger(raw.changedFiles) && raw.changedFiles >= 0) item.changedFiles = raw.changedFiles
+  if (typeof raw.duplicateOf === 'number' && Number.isSafeInteger(raw.duplicateOf) && raw.duplicateOf >= 0) item.duplicateOf = raw.duplicateOf
   if (object(raw.linkedWorkspace)) item.linkedWorkspace = raw.linkedWorkspace
   return item
 }

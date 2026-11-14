@@ -627,13 +627,34 @@ for (const fault of ['startup', 'daemon-death', 'sigterm'] as const) {
     const marker = join(scope.home, 'observed.json')
     const entry = join(scope.home, 'failure-child.ts')
     writeFileSync(entry, `
-      import { writeFileSync } from 'node:fs'
+      import { realpathSync, writeFileSync } from 'node:fs'
       import { main } from ${JSON.stringify(new URL('./cli.ts', import.meta.url).href)}
+      import { startActorTerminal } from ${JSON.stringify(new URL('./cli-checks.ts', import.meta.url).href)}
       let world
       const record = phase => {
-        if (world) writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ phase, home: world.home, pids: [world.daemonPid, world.ptyPid].filter(Boolean) }))
+        if (world) writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ phase, home: world.home, pids: [world.daemonPid, world.ptyPid].filter(Boolean), at: Date.now() }))
       }
       process.exitCode = await main(['--json'], {
+        ${fault === 'sigterm' ? `
+        // project checks don't prove reaping and dominate startup under load.
+        runChecks: async context => {
+          context.check('lifecycle-repo-add')
+          const { id } = await context.call('lifecycle-repo-add', ['repo', 'add', realpathSync(context.world.paths.repository)])
+          context.check('lifecycle-main-worktree')
+          const worktrees = await context.call('lifecycle-main-worktree', ['worktree', 'list', '--repo', 'id:' + id])
+          const mainWorktrees = worktrees.filter(worktree => worktree.isMain === true)
+          if (mainWorktrees.length !== 1) throw new Error('Expected exactly one main worktree')
+          await startActorTerminal(context, mainWorktrees[0].id)
+          await context.onActorLive()
+          const deadline = Date.now() + 10_000
+          // real OS signals need the child's event loop; fake time cannot deliver them.
+          while (Date.now() < deadline) {
+            context.check('actor-live-wait')
+            await Bun.sleep(50)
+          }
+          throw new Error('SIGTERM did not interrupt the CLI rehearsal')
+        },
+        ` : ''}
         hooks: {
           beforeStart: () => { if (${JSON.stringify(fault)} === 'startup') throw new Error('fixture startup failure') },
           afterReady: value => {
@@ -646,20 +667,39 @@ for (const fault of ['startup', 'daemon-death', 'sigterm'] as const) {
       })
     `)
     try {
-      const child = scope.spawn([process.execPath, entry], { cwd: repoRoot, env, stdout: 'pipe', stderr: 'pipe', timeout: 40_000 })
-      const [stdout, stderr, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
-      expect(exit, stderr + '\n' + stdout).toBe(1)
+      const spawnedAt = Date.now()
+      const child = scope.spawn([process.execPath, entry], {
+        cwd: repoRoot, env, stdout: 'pipe', stderr: 'pipe',
+        ...(fault === 'sigterm' ? { timeout: 120_000, killSignal: 'SIGKILL' as const } : { timeout: 40_000 })
+      })
+      const [stdout, stderr, { exit, exitedAt }] = await Promise.all([
+        new Response(child.stdout).text(), new Response(child.stderr).text(),
+        child.exited.then(exit => ({ exit, exitedAt: Date.now() }))
+      ])
+      expect(exit, stderr + '\n' + stdout + '\nmarker: ' + (existsSync(marker) ? readFileSync(marker, 'utf8') : 'none')).toBe(1)
       const report: CliParityReport = JSON.parse(stdout)
       expect(report).toMatchObject({ ok: false, parityComplete: false, cleanup: { ok: true } })
       expect(report.error).toBeTruthy()
       if (fault === 'startup') expect(report.error?.message).toContain('fixture startup failure')
       expect(report.rows.some(row => row.status === 'not-run')).toBe(true)
-      expect(report.elapsedMs).toBeLessThan(40_000)
+      if (fault !== 'sigterm') expect(report.elapsedMs).toBeLessThan(40_000)
       if (fault !== 'startup') {
-        const observed: { phase: string; home: string; pids: number[] } = JSON.parse(readFileSync(marker, 'utf8'))
+        const observed: { phase: string; home: string; pids: number[]; at: number } = JSON.parse(readFileSync(marker, 'utf8'))
         expect(observed.pids.length).toBeGreaterThan(0)
         expect(observed.phase, JSON.stringify(report.error)).toBe(fault === 'sigterm' ? 'actor-live' : 'ready')
-        if (fault === 'sigterm') expect(report.error?.kind).toBe('interrupted')
+        if (fault === 'sigterm') {
+          expect(report.error?.kind).toBe('interrupted')
+          const startupMs = observed.at - spawnedAt
+          const afterSignalMs = exitedAt - observed.at
+          const timing = JSON.stringify({ startupMs, afterSignalMs, error: report.error })
+          expect(startupMs, timing).toBeLessThan(90_000)
+          expect(afterSignalMs, timing).toBeLessThan(30_000)
+          expect(report.receipts.slice(0, 7).map(receipt => receipt.id)).toEqual([
+            'catalog', 'lifecycle-repo-add', 'lifecycle-main-worktree',
+            'terminal-layout-before-actor', 'terminal-create', 'terminal-layout', 'actor-live-readback'
+          ])
+          expect(report.receipts.slice(7).every(receipt => receipt.id.startsWith('cleanup-'))).toBe(true)
+        }
         expect(existsSync(observed.home)).toBe(false)
         for (const pid of observed.pids) expect(() => process.kill(pid, 0)).toThrow()
       }
@@ -669,7 +709,7 @@ for (const fault of ['startup', 'daemon-death', 'sigterm'] as const) {
       await sentinel.exited
       await scope.cleanup()
     }
-  }, 40_000)
+  }, fault === 'sigterm' ? 130_000 : 40_000)
 }
 
 test('delivery proof rejects terminal echo, missing input and duplicate prompt/input delivery', () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { QuickCommand } from '../../layout/types'
 
@@ -13,45 +13,77 @@ export function summaryOf(command: QuickCommand): string {
   return command.kind === 'agent' && command.agent ? `${command.agent}: ${command.command}` : command.command
 }
 
+type QuickCommandsState = {
+  commands: QuickCommand[]
+  loaded: boolean
+  error: string | null
+  refresh(): Promise<void>
+}
+
+type QuickCommandsResult = { commands: QuickCommand[] }
+
 /**
  * The saved quick commands a view shows, loaded on mount and again on every `quickCommands`
  * event. With `workspace` it lists what that workspace's repo sees; `'all'` lists every command;
- * null loads nothing. `loaded` is false until the first answer, so a caller can avoid drawing the empty state early.
+ * null loads nothing. `loaded` is false until the first answer, success or failure.
  */
-export function useQuickCommands(context: UiPluginContext, workspace: string | 'all' | null): { commands: QuickCommand[]; loaded: boolean; refresh(): Promise<void> } {
+export function useQuickCommands(context: UiPluginContext, workspace: string | 'all' | null): QuickCommandsState {
   const [commands, setCommands] = useState<QuickCommand[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const latest = useRef(0)
+  const refreshRef = useRef<() => Promise<void>>(() => Promise.resolve())
 
-  const refresh = useCallback(async () => {
+  async function refresh(): Promise<void> {
     if (workspace === null) return
     const generation = ++latest.current
     try {
       const params = workspace === 'all' ? { all: true } : { workspace }
-      const result = (await context.call('quirky.terminal/quickCommands', params)) as { commands: QuickCommand[] }
+      const result = (await context.call('quirky.terminal/quickCommands', params)) as QuickCommandsResult
       if (generation === latest.current) {
         setCommands(result.commands)
+        setError(null)
         setLoaded(true)
       }
-    } catch (error) {
+    } catch (failure) {
       if (generation !== latest.current) return
+      setError(messageOf(failure))
       setLoaded(true)
-      context.toast('Could not load quick commands', messageOf(error))
     }
-  }, [context, workspace])
+  }
 
+  refreshRef.current = refresh
   useEffect(() => {
-    void refresh()
+    void refreshRef.current()
     const unsubscribe = context.subscribe((event) => {
-      if (event.type === QUICK_COMMANDS_EVENT) void refresh()
+      if (event.type === QUICK_COMMANDS_EVENT) void refreshRef.current()
     })
     return () => {
       latest.current++
       unsubscribe()
     }
-  }, [context, refresh])
+  }, [context, workspace])
 
-  return { commands, loaded, refresh }
+  return { commands, loaded, error, refresh }
+}
+
+export const COPY_QUICK_COMMAND_COMMAND = 'command:quirky.terminal/copy-quick-command'
+
+type CopyQuickCommandArgs = { command?: unknown }
+type CopyQuickCommandResult = { ok: true; text: string }
+
+/** The handler for COPY_QUICK_COMMAND_COMMAND; rejects with the reason when it can't copy. */
+export async function copyQuickCommand(context: UiPluginContext, raw: unknown): Promise<CopyQuickCommandResult> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw new Error('command must be a quick command ID')
+  const args = raw as CopyQuickCommandArgs
+  const commandId = args.command
+  if (typeof commandId !== 'string' || commandId.length === 0) throw new Error('command must be a quick command ID')
+  const result = (await context.call('quirky.terminal/quickCommands', { all: true })) as QuickCommandsResult
+  const command = result.commands.find((entry) => entry.id === commandId)
+  if (!command) throw new Error(`no quick command ${commandId}`)
+  if (command.command.trim() === '') throw new Error(`quick command ${commandId} has no command text`)
+  await navigator.clipboard.writeText(command.command)
+  return { ok: true, text: command.command }
 }
 
 /** Asks the person to confirm and removes a command; returns true when it was removed. */
@@ -112,34 +144,34 @@ function Svg({ size = 12, children, filled = false }: IconProps & { children: Re
   )
 }
 
-export const PlayIcon = (props: IconProps) => (
-  <Svg {...props} filled>
+export const PlayIcon = ({ size }: IconProps) => (
+  <Svg size={size} filled>
     <path d="M4 2.5v11l9-5.5z" />
   </Svg>
 )
-export const ChevronDownIcon = (props: IconProps) => (
-  <Svg {...props}>
+export const ChevronDownIcon = ({ size }: IconProps) => (
+  <Svg size={size}>
     <path d="M3.5 6l4.5 4.5L12.5 6" />
   </Svg>
 )
-export const CopyIcon = (props: IconProps) => (
-  <Svg {...props}>
+export const CopyIcon = ({ size }: IconProps) => (
+  <Svg size={size}>
     <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
     <path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" />
   </Svg>
 )
-export const CheckIcon = (props: IconProps) => (
-  <Svg {...props}>
+export const CheckIcon = ({ size }: IconProps) => (
+  <Svg size={size}>
     <path d="M3 8.5l3.2 3.2L13 4.8" />
   </Svg>
 )
-export const PencilIcon = (props: IconProps) => (
-  <Svg {...props}>
+export const PencilIcon = ({ size }: IconProps) => (
+  <Svg size={size}>
     <path d="M10.5 2.5l3 3L5 14H2v-3z" />
   </Svg>
 )
-export const TrashIcon = (props: IconProps) => (
-  <Svg {...props}>
+export const TrashIcon = ({ size }: IconProps) => (
+  <Svg size={size}>
     <path d="M2.5 4.5h11M6 4.5V2.8h4v1.7M4 4.5l.7 9h6.6l.7-9" />
   </Svg>
 )
