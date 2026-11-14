@@ -250,21 +250,23 @@ describe('review fixtures', () => {
     expect(worktree).toMatchObject({ session: 'shell-1', sessionId: 'shell-1', paneId: 'pane-1' })
   })
 
-  test('Handoff seeds terminal scrollback after waiting for shell readiness', async () => {
-    const calls: Array<{ method: string; params: Record<string, unknown> }> = []
-    let historyHasOutput = false
+  test.each(['ready', 'unsupported'])('Handoff seeds scrollback with a POSIX shell whose integration is %s', async (shellState) => {
+    let output: string[] = []
     const runtime = {
       terminalFixture: { sessionId: 'shell-1', tabId: 'tab-1', paneId: 'pane-1' },
       options: { timeoutMs: 1_000 },
       client: {
         async callAny(method: string, params: Record<string, unknown> = {}) {
-          calls.push({ method, params })
           if (method === 'quirky.terminal/history') {
-            return { lines: historyHasOutput ? ['UI review handoff fixture'] : [], cursor: null }
+            return { lines: output.slice(0, Math.max(0, output.length - 24)), cursor: null }
           }
-          if (method === 'quirky.terminal/snapshot') return { shellState: 'ready', rows: 24 }
+          if (method === 'quirky.terminal/snapshot') return { shellState, rows: 24 }
           if (method === 'quirky.terminal/write') {
-            historyHasOutput = true
+            const command = Bun.spawnSync(['/bin/sh', '-c', String(params.data)], {
+              env: { PATH: '/usr/bin:/bin', QUIRKY_HOME: process.env.QUIRKY_HOME! }
+            })
+            expect(command.exitCode).toBe(0)
+            output = command.stdout.toString().trim().split('\n')
             return { ok: true }
           }
           throw new Error(`unexpected RPC ${method}`)
@@ -273,17 +275,8 @@ describe('review fixtures', () => {
     } as unknown as Parameters<typeof ensureHandoffTerminalContext>[0]
 
     await ensureHandoffTerminalContext(runtime)
-
-    expect(calls.map((call) => call.method)).toEqual([
-      'quirky.terminal/history',
-      'quirky.terminal/snapshot',
-      'quirky.terminal/write',
-      'quirky.terminal/history'
-    ])
-    expect(calls[2]?.params).toMatchObject({
-      session: 'shell-1',
-      data: expect.stringContaining('{1..44}')
-    })
+    expect(output.length).toBeGreaterThan(24)
+    expect(new Set(output)).toEqual(new Set(['UI review handoff fixture']))
   })
 
   test('seeding marks two changed files reviewed and leaves one of them changed since review', async () => {

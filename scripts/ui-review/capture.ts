@@ -741,16 +741,16 @@ export async function ensureHandoffTerminalContext(
   let snapshot: Record<string, unknown> = {}
   while (Date.now() < deadline) {
     snapshot = await readSnapshot()
-    if (snapshot.shellState === 'ready') break
+    if (snapshot.shellState === 'ready' || snapshot.shellState === 'unsupported') break
     if (snapshot.shellState === 'timed_out') throw new Error('terminal fixture shell timed out before Handoff context was captured')
     await waitForNextPoll()
   }
-  if (snapshot.shellState !== 'ready') throw new Error('terminal fixture shell did not become ready for Handoff context')
+  if (snapshot.shellState !== 'ready' && snapshot.shellState !== 'unsupported') throw new Error('terminal fixture shell did not become ready for Handoff context')
   const rows = typeof snapshot.rows === 'number' && Number.isFinite(snapshot.rows) ? Math.max(1, Math.ceil(snapshot.rows)) : 24
   const lineCount = rows + 20
   await rpc(runtime.client, 'quirky.terminal/write', {
     session: terminal.sessionId,
-    data: `printf 'UI review handoff fixture\\n%.0s' {1..${lineCount}}\n`
+    data: `printf '${'UI review handoff fixture\\n'.repeat(lineCount)}'\n`
   }, timeoutMs, signal)
   while (Date.now() < deadline) {
     if (await readHistory()) return
