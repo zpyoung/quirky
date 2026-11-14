@@ -577,19 +577,31 @@ export function LedgerApp({
   function toggleSelected(entry: LedgerEntry): void {
     const selection = { id: entry.id, revision: entry.revision }
     const key = selectionKey(selection)
-    const next = selected.some((item) => selectionKey(item) === key)
-      ? selected.filter((item) => selectionKey(item) !== key)
-      : selected.length < MAX_SELECTIONS ? [...selected, selection] : selected
-    void runControl({ action: 'selection', selectionScope: 'entries', selections: next })
+    setSelected((current) => {
+      if (current.some((item) => selectionKey(item) === key)) return current.filter((item) => selectionKey(item) !== key)
+      return current.length < MAX_SELECTIONS ? [...current, selection] : current
+    })
+    setSelectionTitles((current) => {
+      const next = new Map(current)
+      if (selectedKeys.has(key)) next.delete(key)
+      else if (!next.has(key)) next.set(key, entryTitle(entry))
+      return next
+    })
   }
 
   function toggleTriage(candidate: LedgerCandidate): void {
     const selection = { id: candidate.entry.id, revision: candidate.entry.revision }
     const key = selectionKey(selection)
-    const next = triageSelected.some((item) => selectionKey(item) === key)
-      ? triageSelected.filter((item) => selectionKey(item) !== key)
-      : triageSelected.length < MAX_SELECTIONS ? [...triageSelected, selection] : triageSelected
-    void runControl({ action: 'selection', selectionScope: 'triage', selections: next })
+    setTriageSelected((current) => {
+      if (current.some((item) => selectionKey(item) === key)) return current.filter((item) => selectionKey(item) !== key)
+      return current.length < MAX_SELECTIONS ? [...current, selection] : current
+    })
+    setTriageTitles((current) => {
+      const next = new Map(current)
+      if (triageKeys.has(key)) next.delete(key)
+      else if (!next.has(key)) next.set(key, entryTitle(candidate.entry))
+      return next
+    })
   }
 
   const approve = async (selections: LedgerSelection[], onConflict: (message: string) => void) => {
@@ -989,11 +1001,13 @@ export function LedgerApp({
   }
 
   function updateFilters(patch: Partial<LedgerFilters>): void {
-    const next: LedgerFilters = { ...filters, ...patch }
-    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {
-      if (next[key] === undefined || next[key] === '') delete next[key]
-    }
-    void runControl({ action: 'filters', replace: true, filters: next })
+    setFilters((current) => {
+      const next: LedgerFilters = { ...current, ...patch }
+      for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {
+        if (next[key] === undefined || next[key] === '') delete next[key]
+      }
+      return next
+    })
   }
 
   const renderFilters = () => (
@@ -1044,7 +1058,7 @@ export function LedgerApp({
         </div>
         <div style={ledgerStyles.field}>
           <FormRow label="Sort" htmlFor={`${controlId}-filter-sort`}>
-            <select aria-label="Sort ledger entries" className="ui-text-field__input" value={sort} onChange={(event) => void runControl({ action: 'sort', sort: event.target.value as SortMode })}>
+            <select aria-label="Sort ledger entries" className="ui-text-field__input" value={sort} onChange={(event) => setSort(event.target.value as SortMode)}>
               <option value="activity">Newest activity</option><option value="sequence">Sequence</option><option value="title">Title</option>
             </select>
           </FormRow>

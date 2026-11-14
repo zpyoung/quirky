@@ -1312,3 +1312,80 @@ for (const failedMethod of ['ui.window.self', 'ui.window.command.run']) {
     else expect(methodCalls(world, 'ui.window.command.run')).toHaveLength(1)
   })
 }
+
+function holdCommandRoute(world: World): { pending(): number; release(): Promise<void> } {
+  const queue: Array<() => void> = []
+  world.methods.set('ui.window.command.run', (params) => {
+    const deferred = Promise.withResolvers<unknown>()
+    queue.push(() => {
+      const command = params.args as LedgerControl
+      const controller = world.controllers.get(command.instance ?? '')!
+      controller.handler(command).then(deferred.resolve, deferred.reject)
+    })
+    return deferred.promise
+  })
+  return {
+    pending: () => queue.length,
+    async release() {
+      await act(async () => {
+        for (const run of queue.splice(0)) run()
+        for (let index = 0; index < 8; index++) await Promise.resolve()
+      })
+    }
+  }
+}
+
+test('typing stays synchronous and sends no controls while the exact-window route is held', async () => {
+  const world = createWorld()
+  const host = await mountPage(world)
+  await settle()
+  await sendControl(world, { action: 'filters-open', open: true }, 'page')
+  const input = host.querySelector<HTMLInputElement>('input[aria-label="Search ledger"]')!
+  const before = methodCalls(world, 'ui.window.command.run').length
+  const route = holdCommandRoute(world)
+  try {
+    await act(async () => setNativeValue(input, 'a'))
+    expect(input.value).toBe('a')
+    await act(async () => setNativeValue(input, `${input.value}b`))
+    expect(input.value).toBe('ab')
+    expect(world.lastReport('page').filters).toEqual({ search: 'ab' })
+    expect(methodCalls(world, 'ui.window.command.run')).toHaveLength(before)
+    expect(route.pending()).toBe(0)
+  } finally {
+    await route.release()
+  }
+  expect(input.value).toBe('ab')
+})
+
+for (const selectionScope of ['entries', 'triage'] as const) {
+  test(`two ${selectionScope} checkboxes stay selected while the exact-window route is held`, async () => {
+    const world = createWorld()
+    const entries = [entryAt('bug-1', 'One', 1, 1), entryAt('bug-2', 'Two', 1, 2)]
+    world.ledger.list = () => response(PROJECT_SUMMARY, { entries })
+    world.ledger.review = () => response(PROJECT_SUMMARY, { candidates: entries.map(candidateAt) })
+    const host = await mountPage(world)
+    await settle()
+    if (selectionScope === 'triage') await sendControl(world, { action: 'triage' }, 'page')
+    const surface = selectionScope === 'triage' ? document.querySelector<HTMLElement>('[role="dialog"]')! : host
+    const boxes = [...surface.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+    expect(boxes).toHaveLength(2)
+    const before = methodCalls(world, 'ui.window.command.run').length
+    const route = holdCommandRoute(world)
+    try {
+      await act(async () => {
+        boxes[0]!.click()
+        boxes[1]!.click()
+      })
+      expect(boxes.map((box) => box.checked)).toEqual([true, true])
+      expect(world.lastReport('page').selection).toHaveLength(2)
+      expect(world.lastReport('page').selection).toEqual(expect.arrayContaining([
+        { id: 'bug-1', revision: 1 }, { id: 'bug-2', revision: 1 }
+      ]))
+      expect(methodCalls(world, 'ui.window.command.run')).toHaveLength(before)
+      expect(route.pending()).toBe(0)
+    } finally {
+      await route.release()
+    }
+    expect(world.lastReport('page').selection).toHaveLength(2)
+  })
+}

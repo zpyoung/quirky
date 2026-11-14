@@ -707,35 +707,8 @@
         "quote": "    onChange={(e"
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function updateFilters(patch: Partial<LedgerFilters>): void {\n    const next: LedgerFilters = { ...filters, ...patch }\n    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {\n      if (next[key] === undefined || next[key] === '') delete next[key]\n    }\n    void runControl({ action: 'filters', replace: true, filters: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
     },
     {
       "site": {
@@ -743,35 +716,8 @@
         "quote": "pe ?? ''} onChange={(event) "
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function updateFilters(patch: Partial<LedgerFilters>): void {\n    const next: LedgerFilters = { ...filters, ...patch }\n    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {\n      if (next[key] === undefined || next[key] === '') delete next[key]\n    }\n    void runControl({ action: 'filters', replace: true, filters: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
     },
     {
       "site": {
@@ -779,35 +725,8 @@
         "quote": "te ?? ''} onChange={(event) "
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function updateFilters(patch: Partial<LedgerFilters>): void {\n    const next: LedgerFilters = { ...filters, ...patch }\n    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {\n      if (next[key] === undefined || next[key] === '') delete next[key]\n    }\n    void runControl({ action: 'filters', replace: true, filters: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
     },
     {
       "site": {
@@ -815,35 +734,8 @@
         "quote": "d)} onChange={(e"
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function updateFilters(patch: Partial<LedgerFilters>): void {\n    const next: LedgerFilters = { ...filters, ...patch }\n    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {\n      if (next[key] === undefined || next[key] === '') delete next[key]\n    }\n    void runControl({ action: 'filters', replace: true, filters: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
     },
     {
       "site": {
@@ -851,35 +743,8 @@
         "quote": "e)} onChange={(e"
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function updateFilters(patch: Partial<LedgerFilters>): void {\n    const next: LedgerFilters = { ...filters, ...patch }\n    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {\n      if (next[key] === undefined || next[key] === '') delete next[key]\n    }\n    void runControl({ action: 'filters', replace: true, filters: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
     },
     {
       "site": {
@@ -887,35 +752,8 @@
         "quote": "d ?? ''} onChange={(event)"
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function updateFilters(patch: Partial<LedgerFilters>): void {\n    const next: LedgerFilters = { ...filters, ...patch }\n    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {\n      if (next[key] === undefined || next[key] === '') delete next[key]\n    }\n    void runControl({ action: 'filters', replace: true, filters: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
     },
     {
       "site": {
@@ -923,67 +761,17 @@
         "quote": "h ?? ''} onChange={(event)"
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function updateFilters(patch: Partial<LedgerFilters>): void {\n    const next: LedgerFilters = { ...filters, ...patch }\n    for (const key of Object.keys(next) as Array<keyof LedgerFilters>) {\n      if (next[key] === undefined || next[key] === '') delete next[key]\n    }\n    void runControl({ action: 'filters', replace: true, filters: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates only the local filter draft; changing filters does not issue a control command."
     },
     {
       "site": {
         "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-        "quote": "t} onChange={("
+        "quote": "value={sort} onChange={(event)"
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates only the local sort draft; sorting does not issue a control command."
     },
     {
       "site": {
@@ -991,35 +779,8 @@
         "quote": "x} onChange={("
       },
       "anchor": "onChange",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function toggleSelected(entry: LedgerEntry): void {\n    const selection = { id: entry.id, revision: entry.revision }\n    const key = selectionKey(selection)\n    const next = selected.some((item) => selectionKey(item) === key)\n      ? selected.filter((item) => selectionKey(item) !== key)\n      : selected.length < MAX_SELECTIONS ? [...selected, selection] : selected\n    void runControl({ action: 'selection', selectionScope: 'entries', selections: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates the local selected immutable entry revisions and cached titles only; selection is not a mutation."
     },
     {
       "site": {
@@ -2256,39 +2017,8 @@
         "quote": "onToggle"
       },
       "anchor": "onToggle",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-          "quote": "command: LEDGER_CONTROL_COMMAND_ID"
-        },
-        "target": "command:quirky.ledger/control",
-        "via": [
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "toggleTriageCandidate = (candidate: LedgerCandidate) => toggleTriage(candidate)"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function toggleTriage(candidate: LedgerCandidate): void {\n    const selection = { id: candidate.entry.id, revision: candidate.entry.revision }\n    const key = selectionKey(selection)\n    const next = triageSelected.some((item) => selectionKey(item) === key)\n      ? triageSelected.filter((item) => selectionKey(item) !== key)\n      : triageSelected.length < MAX_SELECTIONS ? [...triageSelected, selection] : triageSelected\n    void runControl({ action: 'selection', selectionScope: 'triage', selections: next })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function runControl(command: LedgerControl): void {\n    void requestControl(command).catch((reason: unknown) => setActionMessage(errorMessage(reason)))\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function requestControl(command: LedgerControl): Promise<void> {\n    let connId = connectionIdRef.current\n    if (connId === null) {\n      const self = object(await context.call('ui.window.self', {}))\n      if (!validConnectionId(self.connId)) throw new Error('The daemon did not identify this UI connection.')\n      connId = self.connId\n      connectionIdRef.current = connId\n    }\n    await dispatchLedgerControl(context, connId, { ...command, instance: controlId })\n  }"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "async function dispatchLedgerControl(context: UiPluginContext, connId: number, args: LedgerControl): Promise<void> {\n  const descriptor = ledgerControlDescriptor(args)\n  await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })\n}"
-          },
-          {
-            "file": "plugins/quirky.ledger/src/ui/LedgerApp.tsx",
-            "quote": "function ledgerControlDescriptor(args: LedgerControl): LedgerControlDescriptor {\n  return { command: LEDGER_CONTROL_COMMAND_ID, args }\n}"
-          }
-        ]
-      }
+      "transient": "draft",
+      "reason": "This handler updates the local triage selection of immutable entry revisions and cached titles only; selection is not a mutation."
     },
     {
       "site": {
