@@ -176,24 +176,27 @@ export function CloseOverlay({
     setBusyChoice({ requestId: request.id, choice })
     updateCloseBusy(request.id, true)
     updateCloseError(request.id, null)
-    let operationError: string | null = null
-    try {
-      if (!await performChoice(request, choice, isCurrent)) return { delivered: false }
-    } catch (reason) {
-      if (!isCurrent()) return { delivered: false }
-      operationError = reason instanceof Error ? reason.message : String(reason)
-    } finally {
-      if (!isCurrent()) updateCloseBusy(request.id, false)
+    const completeChoice = async (): Promise<void> => {
+      let operationError: string | null = null
+      try {
+        if (!await performChoice(request, choice, isCurrent)) return
+      } catch (reason) {
+        if (!isCurrent()) return
+        operationError = reason instanceof Error ? reason.message : String(reason)
+      } finally {
+        if (!isCurrent()) updateCloseBusy(request.id, false)
+      }
+      if (!isCurrent()) return
+      busyRef.current.busy = false
+      setBusyChoice(null)
+      if (operationError !== null) {
+        updateCloseBusy(request.id, false)
+        updateCloseError(request.id, operationError)
+        return
+      }
+      finishCloseRequest(request.id, true)
     }
-    if (!isCurrent()) return { delivered: false }
-    busyRef.current.busy = false
-    setBusyChoice(null)
-    if (operationError !== null) {
-      updateCloseBusy(request.id, false)
-      updateCloseError(request.id, operationError)
-      return { delivered: true }
-    }
-    finishCloseRequest(request.id, true)
+    void completeChoice()
     return { delivered: true }
   }
   const onControlError = (reason: Error) => {
@@ -230,7 +233,7 @@ export function CloseOverlay({
         <p>{body}</p>
         {request.kind === 'all' && <p className="muted">{request.targets.filter((entry) => entry.dirty).length} dirty tab(s)</p>}
         {request.busy && currentBusyChoice && (
-          <NoticeLine>{currentBusyChoice === 'save' ? 'Saving Markdown…' : 'Closing files…'}</NoticeLine>
+          <div role="status" aria-live="polite"><NoticeLine>{currentBusyChoice === 'save' ? 'Saving Markdown…' : 'Closing files…'}</NoticeLine></div>
         )}
         {request.error && <InlineError message={request.error} />}
       </div>

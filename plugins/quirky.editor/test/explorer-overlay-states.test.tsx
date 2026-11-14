@@ -22,6 +22,7 @@ type Report = {
   truncated?: boolean
 }
 type TestEvent = { type: string; id?: string; data?: unknown }
+type BridgeDelivery = { result: unknown; settled: boolean; expire(): void }
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -53,7 +54,12 @@ async function fixture(
     ['editorFontZoomLevel', 0], ['editorMinimapEnabled', false], ['editorSidebarWidth', 320]
   ])
   const calls: { method: string; params: Record<string, unknown> }[] = []
-  const bridge: { error: Error | null } = { error: null }
+  const deliveries: BridgeDelivery[] = []
+  const bridge = {
+    error: null as Error | null,
+    deliveries,
+    expire() { for (const delivery of deliveries) delivery.expire() }
+  }
   let report: Report = {}
   const context = {
     pluginId: 'quirky.editor',
@@ -68,7 +74,20 @@ async function fixture(
         if (params.connId !== 22) throw new Error('The control must stay in this window.')
         const handler = handlers.get(String(params.id))
         if (!handler) throw new Error(`No activated handler for ${String(params.id)}.`)
-        return { result: await handler(params.args) }
+        const expiry = Promise.withResolvers<never>()
+        const delivery: BridgeDelivery = {
+          result: undefined,
+          settled: false,
+          expire: () => expiry.reject(new Error('the window did not answer'))
+        }
+        deliveries.push(delivery)
+        try {
+          const result = await Promise.race([Promise.resolve(handler(params.args)), expiry.promise])
+          delivery.result = result
+          return { result }
+        } finally {
+          delivery.settled = true
+        }
       }
       return respond(method, params)
     },
@@ -120,20 +139,20 @@ test('Quick Open distinguishes unresolved reads from a completed ordinary empty 
   const ui = await fixture((method) => method === 'quirky.editor/quickOpen' ? pending.promise : {})
   await ui.command('quick-open', { worktree: 'w1' })
   await tick()
-  expect(ui.element.querySelector('.ui-notice-line')?.textContent).toBe('Searching files…')
+  expect(ui.element.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe('Searching files…')
   expect(ui.element.textContent).not.toContain('No matching files.')
   await act(async () => { pending.resolve({ results: [], history: [], truncated: false }) })
-  expect(ui.element.querySelector('.ui-empty-state')?.textContent).toContain('No matching files.')
+  expect(ui.element.querySelector('[role="status"] .ui-empty-state')?.textContent).toContain('No matching files.')
 })
 
 test('empty template inventory is an empty state while blank Markdown remains available', async () => {
   const pending = Promise.withResolvers<unknown>()
   const ui = await fixture((method) => method === 'quirky.editor/markdown' ? pending.promise : {})
   await ui.command('new-markdown', { worktree: 'w1' })
-  expect(ui.element.querySelector('.ui-notice-line')?.textContent).toBe('Loading Markdown templates…')
+  expect(ui.element.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe('Loading Markdown templates…')
   expect(ui.element.textContent).not.toContain('No matching templates.')
   await act(async () => { pending.resolve({ templates: [] }) })
-  expect(ui.element.querySelector('.ui-empty-state')?.textContent).toContain('No matching templates.')
+  expect(ui.element.querySelector('[role="status"] .ui-empty-state')?.textContent).toContain('No matching templates.')
   expect(ui.element.textContent).toContain('Blank Markdown')
 })
 
@@ -684,3 +703,144 @@ test('Explorer refuses an old create address synchronously on a layout worktree 
   expect(ui.calls.filter(({ method }) => method === 'quirky.editor/mutate')).toEqual([])
   expect(ui.report.uiControls![0]!.target).toBe('explorer:w2')
 })
+
+async function waitForUiState(check: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    if (check()) return
+    await tick()
+  }
+  throw new Error('The expected editor state did not settle.')
+}
+
+function clickDialogAction(element: HTMLElement, bodySelector: string, label: string): void {
+  const dialog = element.querySelector(bodySelector)?.closest('[role="dialog"]')
+  const button = Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+    .find((candidate) => candidate.textContent === label)
+  if (!button) throw new Error(`Missing ${label} action in ${bodySelector}.`)
+  button.click()
+}
+
+for (const purpose of ['open', 'create-markdown'] as const) {
+  for (const outcome of ['success', 'failure'] as const) {
+    test(`Quick Open acknowledges slow ${purpose} before its deadline and owns ${outcome}`, async () => {
+      const pending = Promise.withResolvers<unknown>()
+      let operations = 0
+      const ui = await fixture((method, params) => {
+        const isOperation = purpose === 'open'
+          ? method === 'quirky.editor/open'
+          : method === 'quirky.editor/markdown' && params.action === 'new'
+        if (isOperation) return ++operations === 1 ? pending.promise : purpose === 'open' ? {} : { path: 'created.md' }
+        if (method === 'quirky.editor/markdown') return { templates: [] }
+        if (method === 'quirky.editor/quickOpen') return { results: [{ path: 'notes.md', name: 'notes.md', score: 1 }], history: [], truncated: false }
+        return {}
+      })
+      try {
+        await ui.command(purpose === 'open' ? 'quick-open' : 'new-markdown', { worktree: 'w1' })
+        await tick()
+        const click = () => {
+          const button = purpose === 'open'
+            ? ui.element.querySelector<HTMLButtonElement>('[role="option"]')
+            : Array.from(ui.element.querySelectorAll<HTMLButtonElement>('button')).find((candidate) => candidate.textContent?.startsWith('Blank Markdown'))
+          if (!button) throw new Error('Missing Quick Open operation action.')
+          button.click()
+        }
+        await act(async () => click())
+        expect(operations).toBe(1)
+        await act(async () => ui.bridge.expire())
+        expect(ui.bridge.deliveries[0]?.result).toEqual({ delivered: true })
+        expect(ui.report.busy).toBe(true)
+        expect(ui.report.error).toBeNull()
+        expect(await ui.control(purpose, purpose === 'open' ? { path: 'notes.md' } : {})).toEqual({ delivered: false })
+        expect(operations).toBe(1)
+        if (outcome === 'failure') {
+          await act(async () => pending.reject(new Error('The operation failed on disk.')))
+          await waitForUiState(() => ui.report.busy === false)
+          expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('The operation failed on disk.')
+          expect(ui.element.querySelector('[role="dialog"]')).not.toBeNull()
+          await act(async () => click())
+          expect(operations).toBe(2)
+        } else {
+          await act(async () => pending.resolve(purpose === 'open' ? {} : { path: 'created.md' }))
+        }
+        await waitForUiState(() => ui.element.querySelector('[role="dialog"]') === null)
+        expect(ui.bridge.deliveries.at(-1)?.result).toEqual({ delivered: true })
+      } finally {
+        await act(async () => { pending.resolve({ path: 'created.md' }); deactivate() })
+      }
+    })
+  }
+}
+
+for (const entry of ['close', 'save'] as const) {
+  for (const outcome of ['success', 'failure'] as const) {
+    test(`${entry} preserves public completion while mounted Save As acknowledges slow ${outcome}`, async () => {
+      const pending = Promise.withResolvers<unknown>()
+      let saved = false
+      let saveCalls = 0
+      let publicFinished = false
+      let publicResult: Promise<unknown> | undefined
+      const ui = await fixture((method, params) => {
+        if (method === 'quirky.editor/read') return { buffer: { id: 'b1', relativePath: 'untitled.md', contentRevision: 7, untitled: true } }
+        if (method === 'quirky.editor/state') return { buffers: [{ id: 'b1', tabId: 't1', name: 'untitled.md', dirty: true }] }
+        if (method === 'quirky.editor/close') return saved ? { closed: true } : { closed: false, needsDecision: true }
+        if (method === 'quirky.editor/saveAs') {
+          saveCalls++
+          return (saveCalls === 1 ? pending.promise : Promise.resolve({ saved: true })).then((value) => { saved = true; return value })
+        }
+        return {}
+      }, 'overlay:quirky.editor/close')
+      try {
+        await act(async () => {
+          publicResult = ui.start(entry, { bufferId: 'b1', tabId: 't1' }).then(
+            (value) => { publicFinished = true; return value },
+            (reason: unknown) => { publicFinished = true; return reason }
+          )
+          await Promise.resolve()
+          await Promise.resolve()
+          await Promise.resolve()
+        })
+        if (entry === 'close') {
+          await act(async () => clickDialogAction(ui.element, '.qe-close-dialog', 'Save'))
+          await waitForUiState(() => ui.report.saveAs?.open === true)
+          await act(async () => ui.bridge.expire())
+          expect(ui.bridge.deliveries[0]?.result).toEqual({ delivered: true })
+          expect(ui.report.busy).toBe(true)
+          expect(ui.report.error).toBeNull()
+          expect(saveCalls).toBe(0)
+        }
+        await waitForUiState(() => ui.report.saveAs?.open === true)
+        expect(publicFinished).toBe(false)
+        const path = ui.element.querySelector<HTMLInputElement>('#qe-saveas-path')!
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(path, 'notes/plan.md')
+          path.dispatchEvent(new Event('input', { bubbles: true }))
+        })
+        await act(async () => clickDialogAction(ui.element, '.qe-saveas-dialog', 'Save'))
+        await act(async () => ui.bridge.expire())
+        expect(ui.bridge.deliveries.at(-1)?.result).toEqual({ delivered: true })
+        expect(ui.report.saveAs).toMatchObject({ busy: true, error: null })
+        expect(publicFinished).toBe(false)
+        expect(saveCalls).toBe(1)
+        expect(await ui.control('submit', { path: 'notes/plan.md' }, 'save-as:')).toEqual({ delivered: false })
+        expect(saveCalls).toBe(1)
+        if (outcome === 'failure') {
+          await act(async () => pending.reject(new Error('Destination is locked.')))
+          await waitForUiState(() => ui.report.saveAs?.busy === false)
+          expect(ui.element.querySelector('.qe-saveas-dialog .ui-inline-error')?.textContent).toContain('Destination is locked.')
+          expect(path.value).toBe('notes/plan.md')
+          expect(publicFinished).toBe(false)
+          await act(async () => clickDialogAction(ui.element, '.qe-saveas-dialog', 'Save'))
+          expect(saveCalls).toBe(2)
+        } else {
+          await act(async () => pending.resolve({ saved: true }))
+        }
+        await waitForUiState(() => publicFinished)
+        expect(await publicResult).toEqual(entry === 'close' ? true : { saved: true })
+        expect(ui.report.saveAs?.open).toBe(false)
+        expect(ui.calls.find(({ method }) => method === 'quirky.editor/saveAs')?.params).toEqual({ bufferId: 'b1', path: 'notes/plan.md', expectedRevision: 7 })
+      } finally {
+        await act(async () => { pending.resolve({ saved: true }); clearOverlayRequests(); deactivate(); await publicResult })
+      }
+    })
+  }
+}

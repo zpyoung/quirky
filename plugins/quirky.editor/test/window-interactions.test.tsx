@@ -278,9 +278,11 @@ test('close busy state clears when its operation settles after the overlay remou
   let root = createRoot(element)
   let tracked = trackRoot(root, scope)
   let closing!: Promise<boolean>
+  let closeFinished = false
   await act(async () => {
     root.render(<EditorUiControlProvider scope={scope}><CloseOverlay context={context} /></EditorUiControlProvider>)
     closing = requestSingleClose(context, 'buffer-1', 'tab-1')
+    void closing.then(() => { closeFinished = true })
     await Promise.resolve()
     await Promise.resolve()
   })
@@ -298,6 +300,8 @@ test('close busy state clears when its operation settles after the overlay remou
     })
     await Promise.resolve()
   })
+  expect(await saving).toEqual({ delivered: true })
+  expect(closeFinished).toBe(false)
   expect(report.busy).toBe(true)
   await unmountRoot(tracked)
 
@@ -324,7 +328,7 @@ test('close busy state clears when its operation settles after the overlay remou
   expect(calls.filter(({ method, params }) => method === 'quirky.editor/close' && params?.choice === 'discard')).toEqual([])
 
   await act(async () => { pending.resolve({ closed: false, needsDecision: true }); await saving })
-  expect(await saving).toEqual({ delivered: false })
+  expect(closeFinished).toBe(false)
   expect(calls.filter(({ method, params }) => method === 'quirky.editor/close' && params?.choice === 'save')).toHaveLength(1)
   expect(report.requestId).toBe(requestId)
   expect(report.busy).toBe(false)

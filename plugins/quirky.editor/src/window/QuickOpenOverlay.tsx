@@ -293,53 +293,55 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
     }
     busyRef.current.busy = true
     setOperation({ session: capturedSession, busy: true, error: null })
-    let operationError: string | null = null
-    try {
-      if (control.action === 'open' && result) {
-        await context.call('quirky.editor/open', {
-          worktree: request.worktree,
-          ...(request.group === undefined ? {} : { group: request.group }),
-          path: result.path,
-          ...(result.line === undefined ? {} : { line: result.line }),
-          ...(result.column === undefined ? {} : { column: result.column }),
-          focus: true,
-          preview: false
-        })
-        if (!isCurrent()) return { delivered: false }
-        await context.call('quirky.editor/quickOpen', { action: 'record', worktree: request.worktree, path: result.path })
-        if (!isCurrent()) return { delivered: false }
-      } else if (control.action === 'create-markdown') {
-        const created = await context.call('quirky.editor/markdown', {
-          action: 'new',
-          ...(request.worktree ? { worktree: request.worktree } : {}),
-          ...(request.group === undefined ? {} : { group: request.group }),
-          title: requestedTitle,
-          ...(selectedTemplate === undefined ? {} : { template: selectedTemplate })
-        }) as { path?: unknown }
-        if (!isCurrent()) return { delivered: false }
-        if (typeof created?.path !== 'string' || created.path.trim() === '') {
-          throw new Error('The Markdown template did not return the created file path.')
+    const completeOperation = async (): Promise<void> => {
+      let operationError: string | null = null
+      try {
+        if (control.action === 'open' && result) {
+          await context.call('quirky.editor/open', {
+            worktree: request.worktree,
+            ...(request.group === undefined ? {} : { group: request.group }),
+            path: result.path,
+            ...(result.line === undefined ? {} : { line: result.line }),
+            ...(result.column === undefined ? {} : { column: result.column }),
+            focus: true,
+            preview: false
+          })
+          if (!isCurrent()) return
+          await context.call('quirky.editor/quickOpen', { action: 'record', worktree: request.worktree, path: result.path })
+          if (!isCurrent()) return
+        } else if (control.action === 'create-markdown') {
+          const created = await context.call('quirky.editor/markdown', {
+            action: 'new',
+            ...(request.worktree ? { worktree: request.worktree } : {}),
+            ...(request.group === undefined ? {} : { group: request.group }),
+            title: requestedTitle,
+            ...(selectedTemplate === undefined ? {} : { template: selectedTemplate })
+          }) as { path?: unknown }
+          if (!isCurrent()) return
+          if (typeof created?.path !== 'string' || created.path.trim() === '') {
+            throw new Error('The Markdown template did not return the created file path.')
+          }
+          await context.call('quirky.editor/open', {
+            worktree: request.worktree,
+            ...(request.group === undefined ? {} : { group: request.group }),
+            path: created.path,
+            mode: 'rich',
+            focus: true,
+            preview: false
+          })
+          if (!isCurrent()) return
         }
-        await context.call('quirky.editor/open', {
-          worktree: request.worktree,
-          ...(request.group === undefined ? {} : { group: request.group }),
-          path: created.path,
-          mode: 'rich',
-          focus: true,
-          preview: false
-        })
-        if (!isCurrent()) return { delivered: false }
+        if (!isCurrent()) return
+      } catch (reason) {
+        if (!isCurrent()) return
+        operationError = messageOf(reason)
       }
-      if (!isCurrent()) return { delivered: false }
-    } catch (reason) {
-      if (!isCurrent()) return { delivered: false }
-      operationError = messageOf(reason)
+      if (!isCurrent()) return
+      busyRef.current.busy = false
+      setOperation({ session: capturedSession, busy: false, error: operationError })
+      if (operationError === null) dismissQuickOpen(request.id)
     }
-    if (!isCurrent()) return { delivered: false }
-    busyRef.current.busy = false
-    setOperation({ session: capturedSession, busy: false, error: operationError })
-    if (operationError !== null) return { delivered: true }
-    dismissQuickOpen(request.id)
+    void completeOperation()
     return { delivered: true }
   }
   const onControlError = (reason: Error) => {
@@ -397,14 +399,14 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
             disabled={actionBusy}
             onChange={(event) => setTemplatesQuery(event.currentTarget.value)}
           />
-          {actionBusy && <NoticeLine>{'Creating Markdown…'}</NoticeLine>}
-          {!actionBusy && templatesPending && <NoticeLine>{'Loading Markdown templates…'}</NoticeLine>}
+          {actionBusy && <div role="status" aria-live="polite"><NoticeLine>{'Creating Markdown…'}</NoticeLine></div>}
+          {!actionBusy && templatesPending && <div role="status" aria-live="polite"><NoticeLine>{'Loading Markdown templates…'}</NoticeLine></div>}
           {error && <InlineError message={error} />}
           <Button variant="primary" disabled={actionBusy} onClick={() => {
             void controls.run('create-markdown', { title })
           }}>Blank Markdown (untitled.md)</Button>
           {!templatesPending && !templateError && currentTemplatesRead?.status === 'success' && visibleTemplates.length === 0 &&
-            <EmptyState message="No matching templates." />}
+            <div role="status" aria-live="polite"><EmptyState message="No matching templates." /></div>}
           <ul className="qe-quick-open-results" aria-label="Markdown templates">
             {visibleTemplates.map((template) => <li key={template.relativePath}>
               <Button disabled={actionBusy} onClick={() => {
@@ -432,12 +434,12 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
             }}
             onKeyDown={onKeyDown}
           />
-          {actionBusy && <NoticeLine>{'Opening file…'}</NoticeLine>}
-          {!actionBusy && searchPending && <NoticeLine>{'Searching files…'}</NoticeLine>}
+          {actionBusy && <div role="status" aria-live="polite"><NoticeLine>{'Opening file…'}</NoticeLine></div>}
+          {!actionBusy && searchPending && <div role="status" aria-live="polite"><NoticeLine>{'Searching files…'}</NoticeLine></div>}
           {error && <InlineError message={error} />}
           {truncated && <p className="muted">More matches may be available.</p>}
           {!searchPending && !searchError && currentSearch?.status === 'success' && results.length === 0 &&
-            <EmptyState message={emptyMessage} />}
+            <div role="status" aria-live="polite"><EmptyState message={emptyMessage} /></div>}
           <ul className="qe-quick-open-results" role="listbox" aria-label={markdownOpen ? 'Markdown files' : 'Files'}>
             {results.map((result, index) => (
               <li key={`${result.path}:${result.line ?? ''}:${result.column ?? ''}:${index}`}>

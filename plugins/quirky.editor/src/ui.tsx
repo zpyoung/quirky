@@ -226,22 +226,25 @@ function SaveAsOverlay({ context }: { context: UiPluginContext }) {
     setBusy(true)
     setPath(destination)
     setError(null)
-    try {
-      const saved = await request.context.call('quirky.editor/saveAs', {
-        bufferId: request.bufferId,
-        path: destination,
-        expectedRevision: request.expectedRevision
-      })
-      if (!isCurrent() || saveAsRequest?.id !== request.id) return { delivered: false }
-      saveAsRequest = null
-      notifySaveAs()
-      request.resolve(saved)
-    } catch (reason) {
-      if (!isCurrent() || saveAsRequest?.id !== request.id) return { delivered: false }
-      setError(reason instanceof Error ? reason.message : String(reason))
-      busyRef.current = false
-      setBusy(false)
+    const completeSave = async (): Promise<void> => {
+      try {
+        const saved = await request.context.call('quirky.editor/saveAs', {
+          bufferId: request.bufferId,
+          path: destination,
+          expectedRevision: request.expectedRevision
+        })
+        if (!isCurrent() || saveAsRequest?.id !== request.id) return
+        saveAsRequest = null
+        notifySaveAs()
+        request.resolve(saved)
+      } catch (reason) {
+        if (!isCurrent() || saveAsRequest?.id !== request.id) return
+        setError(reason instanceof Error ? reason.message : String(reason))
+        busyRef.current = false
+        setBusy(false)
+      }
     }
+    void completeSave()
     return { delivered: true }
   }
   const { run, isCurrent } = useEditorUiControl({
@@ -281,7 +284,7 @@ function SaveAsOverlay({ context }: { context: UiPluginContext }) {
             }}
           />
         </FormRow>
-        {busy && <NoticeLine>Saving Markdown…</NoticeLine>}
+        {busy && <div role="status" aria-live="polite"><NoticeLine>Saving Markdown…</NoticeLine></div>}
         {error && <InlineError message={error} />}
       </div>
     </Dialog>
