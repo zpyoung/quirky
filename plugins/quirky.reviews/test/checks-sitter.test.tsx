@@ -6,7 +6,7 @@ import type { QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { ChecksPanel } from '../src/checks/ChecksPanel'
 import { CHECKS_PANEL, type ReviewData, type ReviewsState } from '../src/contracts'
 import { activate } from '../src/ui'
-import { formatLedgerEntry, sitterStatusPresentation, type ChecksSitterState, type SitterDetail, type SitterFleetRow } from '../src/checks/data'
+import { formatLedgerEntry, listReviewsUiControls, REVIEWS_UI_CONTROL, sitterStatusPresentation, type ChecksSitterState, type SitterDetail, type SitterFleetRow } from '../src/checks/data'
 
 GlobalRegistrator.register()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -115,11 +115,19 @@ function mount(options: Options = {}) {
       calls.push({ method, params })
       const custom = options.call?.(method, params)
       if (custom !== undefined) return await custom
+      if (method === 'ui.window.self') return { connId: 42 }
+      if (method === 'ui.window.command.run') {
+        if (params.connId !== 42 || params.id !== REVIEWS_UI_CONTROL) throw new Error('Unexpected exact-window UI control route.')
+        const handler = registered.get(String(params.id))
+        if (!handler) throw new Error(`Unregistered command ${String(params.id)}`)
+        return { result: await handler(params.args) }
+      }
       if (method === 'quirky.reviews/checksSitterGet') return response
       if (method === 'quirky.reviews/checksSitterDebugReport') return { report: { watcher: 'watcher-a', state: 'watching' } }
       if (method === 'quirky.hosting/visibleRefreshCandidates') return { accepted: true }
       return { ok: true }
     },
+
     async executeCommand(id: string, args?: unknown) {
       executed.push({ id, args })
       const command = registered.get(id)
@@ -157,6 +165,12 @@ function mount(options: Options = {}) {
     },
   }
 }
+function sitterDialogControl(ui: { context: UiPluginContext }) {
+  const descriptor = listReviewsUiControls(ui.context, CHECKS_PANEL).find(({ slot }) => slot === 'sitter-dialog')
+  if (!descriptor) throw new Error('The sitter dialog control is not registered.')
+  return descriptor
+}
+
 
 function button(label: string): HTMLButtonElement {
   const found = [...document.querySelectorAll('button')].find((element) => element.textContent?.trim() === label || element.getAttribute('aria-label') === label)
@@ -630,5 +644,131 @@ test('a pending debug copy cannot change feedback or busy state in a reopened di
   } finally {
     if (original) Object.defineProperty(navigator, 'clipboard', original)
     else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+test('Stop all PR Sitters suppresses same-tick duplicate UI control requests', async () => {
+  const row = sitter()
+  const ui = mount({ response: { ...sitterState(row), activeCount: 1 } })
+  await settle()
+  const stopAll = button('Stop all PR Sitters')
+  await act(async () => {
+    stopAll.click()
+    stopAll.click()
+  })
+  await settle()
+  expect(ui.executed.filter(({ id }) => id === `${commandsPrefix}stop-all-sitters`)).toHaveLength(1)
+})
+
+test('sitter dialog control renews on close/reopen and worktree A-to-B-to-A', async () => {
+  const row = sitter()
+  const ui = mount({ response: { ...sitterState(row), detail: detailFor(row) } })
+  await settle()
+  await click('PR Sitter')
+  const first = sitterDialogControl(ui)
+
+  await click('Close')
+  await click('PR Sitter')
+  const reopened = sitterDialogControl(ui)
+  expect(reopened.target).toBe(first.target)
+  expect(reopened.generation).not.toBe(first.generation)
+
+  ui.switchWorktree(OTHER)
+  ui.setState(reviewsState(OTHER))
+  await settle()
+  ui.switchWorktree(WORKTREE)
+  ui.setState(reviewsState(WORKTREE))
+  await settle()
+  await click('PR Sitter')
+  const afterAba = sitterDialogControl(ui)
+  expect(afterAba.target).toBe(first.target)
+  expect(afterAba.generation).not.toBe(reopened.generation)
+})
+
+test('sitter dialog enrollment replacement rotates its lease and isolates stale busy cleanup', async () => {
+  const previousStop = Promise.withResolvers<unknown>()
+  const currentStop = Promise.withResolvers<unknown>()
+  const row = sitter()
+  let stops = 0
+  const ui = mount({
+    response: { ...sitterState(row), detail: detailFor(row) },
+    call: (method) => {
+      if (method !== 'quirky.reviews/checksSitterStop') return undefined
+      stops += 1
+      return stops === 1 ? previousStop.promise : currentStop.promise
+    },
+  })
+  await settle()
+  await click('PR Sitter')
+  const first = sitterDialogControl(ui)
+  const stop = button('Stop this sitter')
+  await act(async () => {
+    stop.click()
+    stop.click()
+  })
+  await settle()
+  expect(stops).toBe(1)
+
+  const replacement = { ...row, enrollment: { ...row.enrollment, commandRevision: row.enrollment.commandRevision + 1 } }
+  ui.setResponse({ ...sitterState(replacement), detail: detailFor(replacement) })
+  await ui.fleetChanged()
+  const next = sitterDialogControl(ui)
+  expect(next.target).toBe(first.target)
+  expect(next.generation).not.toBe(first.generation)
+
+  await act(async () => { button('Stop this sitter').click() })
+  await settle()
+  expect(stops).toBe(2)
+  expect(button('Stopping…').disabled).toBe(true)
+  await act(async () => { previousStop.resolve({ ok: true, kind: 'applied' }) })
+  await settle()
+  expect(button('Stopping…').disabled).toBe(true)
+  expect(document.querySelector('[role="alert"]')).toBeNull()
+  await act(async () => { currentStop.resolve({ ok: true, kind: 'applied' }) })
+  await settle()
+  expect(button('Stop this sitter').disabled).toBe(false)
+  const watcherReplacement = {
+    ...replacement,
+    target: { ...replacement.target, watcherId: 'watcher-b' },
+    enrollment: { ...replacement.enrollment, watcherId: 'watcher-b' },
+  }
+  ui.setResponse({ ...sitterState(watcherReplacement), detail: detailFor(watcherReplacement) })
+  await ui.fleetChanged()
+  const watcherLease = sitterDialogControl(ui)
+  expect(watcherLease.target).toBe(next.target)
+  expect(watcherLease.generation).not.toBe(next.generation)
+})
+
+test('sitter dialog control renews for every approval scope field and escalation replacement', async () => {
+  let row = sitter('held')
+  row.openEscalations = [{
+    escalationId: 'esc-a',
+    escalationKind: 'approval',
+    status: 'open',
+    foldCount: 0,
+    approvalScope: { actionKind: 'merge', contentIdentity: 'head/base', evidenceKey: 'merge/head', preparedCommitSha: 'prepared-a' },
+  }]
+  const ui = mount({ response: { ...sitterState(row), detail: detailFor(row) } })
+  await settle()
+  await click('PR Sitter')
+  let prior = sitterDialogControl(ui)
+  const changes = [
+    ['actionKind', 'updateBranch'],
+    ['contentIdentity', 'head/base-2'],
+    ['evidenceKey', 'merge/head-2'],
+    ['preparedCommitSha', 'prepared-b'],
+    ['escalationId', 'esc-b'],
+  ] as const
+  for (const [field, value] of changes) {
+    const escalation = row.openEscalations[0]!
+    const replacement = field === 'escalationId'
+      ? { ...escalation, escalationId: value }
+      : { ...escalation, approvalScope: { ...escalation.approvalScope!, [field]: value } }
+    row = { ...row, openEscalations: [replacement] }
+    ui.setResponse({ ...sitterState(row), detail: detailFor(row) })
+    await ui.fleetChanged()
+    const current = sitterDialogControl(ui)
+    expect(current.target).toBe(prior.target)
+    expect(current.generation).not.toBe(prior.generation)
+    prior = current
   }
 })

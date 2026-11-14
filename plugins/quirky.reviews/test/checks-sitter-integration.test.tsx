@@ -7,6 +7,7 @@ import type { HostingTest } from '../../quirky.hosting/test/helpers'
 import { GITHUB_STAND_IN, standInState, type StandInState } from '../../quirky.sitter/test/github-stand-in'
 import { ChecksPanel } from '../src/checks/ChecksPanel'
 import { CHECKS_PANEL, type ReviewsState } from '../src/contracts'
+import { REVIEWS_UI_CONTROL } from '../src/checks/data'
 import { activate } from '../src/ui'
 import { bootReviews } from './support'
 
@@ -249,8 +250,8 @@ async function mountChecks(host: TestHost, initial: ReviewsState): Promise<Mount
   const provided = new Map<string, (input?: unknown) => unknown>()
   const eventListeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
-  const pending = new Set<Promise<unknown>>()
   let state = initial
+  let windowConnId: number | null = null
   let layout = {
     view: { id: 'view:quirky.reviews/review' },
     worktree: host.worktree,
@@ -271,6 +272,7 @@ async function mountChecks(host: TestHost, initial: ReviewsState): Promise<Mount
       sizes: { left: 0, right: 0, bottom: 0, leftSplit: 0, rightSplit: 0, bottomSplit: 0 }
     }
   } as UiLayout
+  const pending = new Set<Promise<unknown>>()
   const track = <T,>(operation: Promise<T>): Promise<T> => {
     let tracked: Promise<T>
     tracked = operation.then((value) => {
@@ -299,7 +301,20 @@ async function mountChecks(host: TestHost, initial: ReviewsState): Promise<Mount
     provide(id: string, implementation: unknown) {
       if (typeof implementation === 'function') provided.set(id, implementation as (input?: unknown) => unknown)
     },
-    call(method: string, params: Record<string, unknown> = {}) {
+    async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') {
+        const identity = record(await track(windowClient.callAny(method, params)), 'UI window identity')
+        const connId = identity.connId
+        if (typeof connId !== 'number' || !Number.isSafeInteger(connId) || connId < 1) {
+          throw new Error('The UI window did not identify its own connection.')
+        }
+        windowConnId = connId
+        return identity
+      }
+      if (method === 'ui.window.command.run' &&
+        (windowConnId === null || params.connId !== windowConnId || params.id !== REVIEWS_UI_CONTROL)) {
+        throw new Error('The UI control request did not use this window’s exact dispatcher envelope.')
+      }
       return track(windowClient.callAny(method, params))
     },
     subscribe(listener: (event: QuirkyEvent) => void | Promise<void>) {
