@@ -461,7 +461,7 @@ describe('coverage fragments', () => {
   test.each([true, false])('audits split coverage with root=%s', (root) => {
     const data = splitFixture({ root })
     expect(data.results().map(({ id, status, applicable }) => ({ id, status, applicable }))).toEqual(
-      ['loading', 'empty', 'error', 'commands'].map((id) => ({ id, status: 'pass', applicable: true }))
+      (['loading', 'empty', 'error', 'commands'] as const).map((id) => ({ id, status: 'pass', applicable: true }))
     )
     expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({
       code: 'action-routed', coverageFile: fragmentFile('actions'), message: 'Action routes through acme.app/save'
