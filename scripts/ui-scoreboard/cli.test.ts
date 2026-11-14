@@ -1,8 +1,10 @@
 import { afterEach, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { runUiScoreboard, type SignalSource } from '../ui-scoreboard'
+import { SCORE_DIMENSIONS, type CaptureManifest, type ModelFamily, type ReviewReport } from '../ui-review/contracts'
+import { collectInventory } from './inventory'
 import type { Inventory, ScoreboardReport } from './contracts'
 
 const roots: string[] = []
@@ -19,6 +21,31 @@ function fixture() {
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 const quiet = { stdout: (_: string) => {}, stderr: (_: string) => {} }
 function report(output: string): ScoreboardReport { return JSON.parse(readFileSync(join(output, 'scoreboard.json'), 'utf8')) }
+
+function fixtureFile(root: string, path: string, content: string): void {
+  const fullPath = join(root, path)
+  mkdirSync(dirname(fullPath), { recursive: true })
+  writeFileSync(fullPath, content)
+}
+
+function git(root: string, ...args: string[]): void {
+  const result = Bun.spawnSync(['git', ...args], {
+    cwd: root,
+    env: {
+      PATH: process.env.PATH ?? '/usr/bin:/bin',
+      HOME: root,
+      QUIRKY_HOME: root,
+      GIT_CONFIG_GLOBAL: '/dev/null',
+      GIT_CONFIG_SYSTEM: '/dev/null',
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_AUTHOR_NAME: 'Scoreboard CLI fixture',
+      GIT_AUTHOR_EMAIL: 'scoreboard@example.invalid',
+      GIT_COMMITTER_NAME: 'Scoreboard CLI fixture',
+      GIT_COMMITTER_EMAIL: 'scoreboard@example.invalid',
+    },
+  })
+  if (result.exitCode !== 0) throw new Error(result.stderr.toString())
+}
 function manyActionInventory(inventory: Inventory): Inventory {
   const file = 'plugins/acme.ui/src/ui.tsx'
   const invoke = "context.call('acme.ui/save', {})"
@@ -59,11 +86,192 @@ ${extraActions}
   return inventory
 }
 
+function pluginModeInventory(baseInventory: Inventory): Inventory {
+  const repoRoot = join(baseInventory.repoRoot, 'repo')
+  const file = 'plugins/acme.ui/src/ui.tsx'
+  const importLine = "import { EmptyState, InlineError } from '@quirky/ui'"
+  const source = `${importLine}
+export function Main({ status }: { status: string }) {
+  if (status === 'busy') return <EmptyState message="Loading items" />
+  if (status === 'none') return <EmptyState message="No items yet" />
+  if (status === 'bad') return <InlineError message="Could not load" />
+  return <button onClick={() => context.call('acme.ui/save', {})}>Save</button>
+}`
+  const quote = (value: string) => ({ file, quote: value })
+  const coverage = {
+    schemaVersion: 1,
+    surfaces: {
+      'view:acme.ui/main': {
+        loading: { applicable: true },
+        empty: { applicable: true },
+        error: { applicable: true },
+      },
+    },
+    states: [
+      {
+        surface: 'view:acme.ui/main', state: 'loading',
+        site: quote("if (status === 'busy')"),
+        render: { component: 'EmptyState', element: quote('<EmptyState message="Loading items" />'), import: quote(importLine) },
+      },
+      {
+        surface: 'view:acme.ui/main', state: 'empty',
+        site: quote("if (status === 'none')"),
+        render: { component: 'EmptyState', element: quote('<EmptyState message="No items yet" />'), import: quote(importLine) },
+      },
+      {
+        surface: 'view:acme.ui/main', state: 'error',
+        site: quote("if (status === 'bad')"),
+        render: { component: 'InlineError', element: quote('<InlineError message="Could not load" />'), import: quote(importLine) },
+      },
+    ],
+    notState: [],
+    actions: [{
+      site: quote('onClick'),
+      route: { invoke: quote("context.call('acme.ui/save', {})"), target: 'acme.ui/save' },
+    }],
+  }
+  fixtureFile(repoRoot, 'plugins/acme.ui/quirky-plugin.json', JSON.stringify({
+    id: 'acme.ui',
+    name: 'Acme UI',
+    ui: 'src/ui.tsx',
+    contributes: { view: [{ id: 'view', title: 'View' }] },
+  }))
+  fixtureFile(repoRoot, file, source)
+  fixtureFile(repoRoot, 'plugins/acme.ui/ui-scoreboard.json', JSON.stringify(coverage))
+  fixtureFile(repoRoot, 'packages/ui/src/styles.css', ':root { color: var(--ui-text-primary); }\n')
+  fixtureFile(repoRoot, 'packages/ui/src/design-system/compatibility-tokens.css', ':root { --compat-px-40: 40px; }\n')
+  fixtureFile(repoRoot, 'packages/daemon/src/runtime.ts', 'export const runtime = true\n')
+  fixtureFile(repoRoot, 'apps/desktop/src/main.ts', 'export const desktop = true\n')
+  git(repoRoot, 'init', '--quiet')
+  git(repoRoot, 'add', '--all')
+  git(repoRoot, 'commit', '--quiet', '-m', 'CLI plugin fixture')
+  const inventory = collectInventory(repoRoot)
+  const selected = inventory.plugins[0]!
+  selected.targets = ['view:acme.ui/main']
+  selected.sources = [{ file, content: source }]
+  selected.coverage = { file: 'plugins/acme.ui/ui-scoreboard.json', content: JSON.stringify(coverage) }
+  selected.contributions = {
+    methods: ['acme.ui/save', 'acme.ui/load'],
+    commands: ['command:acme.ui/refresh'],
+    cliCommands: [{ id: 'save', words: 'save', methods: ['acme.ui/save'] }],
+  }
+  inventory.plugins.push(
+    { id: 'acme.other', directory: 'plugins/acme.other', hasUi: false, targets: ['view:acme.other/main'], sources: [] },
+    { id: 'acme.palette', directory: 'plugins/acme.palette', hasUi: true, targets: [], sources: [] },
+  )
+  inventory.targets = [
+    { id: 'view:acme.ui/main', plugin: 'acme.ui', title: 'Main', kind: 'view' },
+    { id: 'view:acme.other/main', plugin: 'acme.other', title: 'Other', kind: 'view' },
+    { id: 'host:shell', plugin: null, title: 'Shell', kind: 'host' },
+  ]
+  return inventory
+}
+
+function pluginManifest(inventory: Inventory, pluginId: string): CaptureManifest {
+  const targets = inventory.targets.filter((target) => target.plugin === pluginId)
+  const captures = targets.flatMap((target) => (['dark', 'light'] as const).map((theme) => ({
+    targetId: target.id,
+    theme,
+    image: { path: `/captures/${target.id}-${theme}.png`, sha256: (theme === 'dark' ? 'a' : 'b').repeat(64) },
+    reference: { path: `/goldens/${theme}.png`, sha256: (theme === 'dark' ? 'c' : 'd').repeat(64) },
+    status: 'captured' as const,
+  })))
+  return {
+    schemaVersion: 1, createdAt: '2026-11-13T00:00:00.000Z', commit: inventory.commit,
+    surface: 'desktop-renderer', viewport: { width: 1280, height: 800 },
+    scope: 'filtered', selectors: [pluginId], targets, captures, failures: [],
+  }
+}
+
+function passingPluginReview(manifest: CaptureManifest, reviewerAlias: string, authorFamily: ModelFamily): ReviewReport {
+  return {
+    schemaVersion: 1, createdAt: '2026-11-13T00:00:00.000Z', status: 'passed',
+    scope: manifest.scope, threshold: 85, authorFamily, reviewerAlias,
+    captures: manifest.captures.map((capture) => ({
+      targetId: capture.targetId, theme: capture.theme, image: capture.image!, reference: capture.reference,
+      reviewer: { alias: reviewerAlias, provider: 'fixture', model: 'fixture-reviewer', family: authorFamily },
+      assessment: {
+        targetVisible: true, imagesRead: true, reasons: [],
+        scores: Object.fromEntries(SCORE_DIMENSIONS.map((dimension) => [dimension, 85])) as Record<typeof SCORE_DIMENSIONS[number], number>,
+      },
+      score: 85, passed: true,
+    })),
+    failures: [],
+  }
+}
+
+test('plugin mode captures and reports only the selected plugin without certifying the full goal', async () => {
+  const { inventory: base, output } = fixture()
+  const inventory = pluginModeInventory(base)
+  let captureOnly: string[] | undefined
+  const exit = await runUiScoreboard(['--plugin', 'acme.ui', '--author-family', 'openai', '--output', output], {
+    ...quiet,
+    collectInventory: () => inventory,
+    captureApplication: async (options) => {
+      captureOnly = options.only
+      return pluginManifest(inventory, 'acme.ui')
+    },
+    reviewManifest: async (manifest, options) => passingPluginReview(manifest, options.reviewerAlias, options.authorFamily),
+  })
+
+  expect(exit).toBe(0)
+  expect(captureOnly).toEqual(['acme.ui'])
+  const value = report(output)
+  expect(value).toMatchObject({ mode: 'plugin', plugin: 'acme.ui', status: 'passed', goalPassed: false })
+  expect(value.plugins.map((plugin) => plugin.id)).toEqual(['acme.ui'])
+  expect(value.host).toEqual({ checks: [], targets: [] })
+  expect(value.cells.map((cell) => [cell.plugin, cell.targetId, cell.theme])).toEqual([
+    ['acme.ui', 'view:acme.ui/main', 'dark'],
+    ['acme.ui', 'view:acme.ui/main', 'light'],
+  ])
+  const markdown = readFileSync(join(output, 'scoreboard.md'), 'utf8')
+  expect(markdown).toContain('Mode: plugin (acme.ui).')
+  expect(markdown).not.toContain('| host |')
+  expect(markdown).not.toContain('acme.other')
+})
+
+test('plugin arguments reject duplicates, missing values, incompatible modes, and missing requirements', async () => {
+  const forbidden = () => { throw new Error('side effect') }
+  for (const args of [
+    ['--plugin'],
+    ['--plugin', 'acme.ui', '--plugin', 'acme.ui', '--author-family', 'openai', '--output', '/tmp/no'],
+    ['--plugin', 'acme.ui', '--help'],
+    ['--plugin', 'acme.ui', '--check-ratchet'],
+    ['--plugin', 'acme.ui', '--static-only', '--output', '/tmp/no'],
+    ['--plugin', 'acme.ui', '--output', '/tmp/no'],
+    ['--plugin', 'acme.ui', '--author-family', 'openai'],
+  ]) {
+    expect(await runUiScoreboard(args, { ...quiet, collectInventory: forbidden, mkdir: forbidden })).toBe(2)
+  }
+})
+
+test('plugin mode rejects unknown and zero-target plugins before capture', async () => {
+  const { inventory: base, root } = fixture()
+  const inventory = pluginModeInventory(base)
+  let captureStarted = false
+  for (const [pluginId, output, expected] of [
+    ['acme.missing', join(root, 'unknown-output'), 'Unknown plugin: acme.missing'],
+    ['acme.palette', join(root, 'zero-output'), 'Plugin acme.palette has no declared capture targets'],
+  ]) {
+    const errors: string[] = []
+    expect(await runUiScoreboard(['--plugin', pluginId, '--author-family', 'openai', '--output', output], {
+      ...quiet,
+      collectInventory: () => inventory,
+      captureApplication: async () => { captureStarted = true; throw new Error('capture should not start') },
+      stderr: (text) => errors.push(text),
+    })).toBe(2)
+    expect(errors.join('\\n')).toContain(expected)
+  }
+  expect(captureStarted).toBe(false)
+})
+
 test('help and malformed arguments perform no filesystem or runtime work', async () => {
   const forbidden = () => { throw new Error('side effect') }
   const help: string[] = []
   expect(await runUiScoreboard(['--help'], { ...quiet, stdout: (text) => help.push(text), collectInventory: forbidden, mkdir: forbidden })).toBe(0)
-  expect(help.join('\n')).toContain("source audit read from each plugin's ui-scoreboard.json")
+  expect(help.join('\\n')).toContain("source audit read from each plugin's ui-scoreboard.json")
+  expect(help.join('\\n')).toContain('[--plugin <id>]')
+  expect(help.join('\\n')).toContain('never sets goalPassed: true')
   for (const args of [[], ['--wat'], ['--help', '--help'], ['--static-only', '--output', 'relative'], ['--check-ratchet', '--output', '/tmp/no'], ['--static-only', '--author-family', 'openai', '--output', '/tmp/no'], ['--author-family', 'no', '--output', '/tmp/no'], ['--static-only', '--output', '/tmp/no', '--output', '/tmp/no']]) {
     expect(await runUiScoreboard(args, { ...quiet, collectInventory: forbidden, mkdir: forbidden })).toBe(2)
   }
@@ -132,9 +340,9 @@ test('render contributions keep failed full screenshot measurement applicable wi
     .toMatchObject({ applicable: true, status: 'fail', reason: 'image-checks-failed' })
 })
 
-test('daemon-only plugins keep screenshot checks non-applicable', async () => {
+test('UI plugins with no declared capture targets rate screenshots as not applicable', async () => {
   const { inventory, output } = fixture()
-  inventory.plugins[0]!.hasUi = false
+  inventory.plugins[0]!.hasUi = true
   inventory.plugins[0]!.targets = []
   inventory.targets = []
 
