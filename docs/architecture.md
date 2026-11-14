@@ -60,6 +60,12 @@ sends SIGKILL after 10 s and allows another 2 s for exit. `quirky daemon restart
 connection, handshake and stop request together at 5 s, closes its link before signalling, and
 reports whether the old process stopped cleanly, was terminated, was killed, or was not running.
 
+`quirky serve` starts and owns one foreground daemon, reporting readiness only when runtime,
+health and status agree on its identity. A signal or loss of `serve`'s parent forwards one SIGTERM,
+waits up to 10 s, then sends SIGKILL if needed. The daemon's `--exit-with-parent=<pid>` flag exits
+before startup if its owner is gone, or shuts it down when that parent later exits. The PTY host
+and its terminal sessions survive because `serve` does not own or stop them.
+
 The daemon sends its supported protocol range in `hello`; the host chooses the highest version
 both speak. A host built before negotiation is adopted with an exact-version hello when its
 version is in range. A host below the daemon's minimum is shut down and replaced; an incompatible

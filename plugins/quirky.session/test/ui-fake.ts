@@ -1,5 +1,5 @@
 import { act } from 'react'
-import { RpcError, RpcErrorCode, type QuirkyEvent, type Session, type UiLayout, type UiPluginContext } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type QuirkyEvent, type Session, type UiExecuteCommandOptions, type UiLayout, type UiPluginContext } from '@quirky/protocol'
 import { createNativeBrowserCapability } from '../../../packages/ui/src/native-browser'
 import type { AgentInfo, AgentListing } from '../../quirky.agents/src/core/types'
 
@@ -74,7 +74,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const streams = new Map<number, (bytes: Uint8Array) => void>()
   const streamLagHandlers = new Map<number, () => void>()
   const opened: { id: string; input: unknown }[] = []
-  const executed: { id: string; args?: unknown }[] = []
+  const executed: { id: string; args?: unknown; options?: UiExecuteCommandOptions }[] = []
   const toasts: { title: string; body: string }[] = []
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
   const state = { confirmAnswer: true }
@@ -103,8 +103,8 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
       if (!(name in settings)) throw new Error(`no setting ${name}`)
       return settings[name]
     },
-    async executeCommand(id, args) {
-      executed.push({ id, args })
+    async executeCommand(id, args, options?: UiExecuteCommandOptions) {
+      executed.push({ id, args, ...(options === undefined ? {} : { options }) })
     },
     createCommandDrag() { throw new Error('command dragging is unavailable in this fake') },
     consumeCommandDrag() { return null },

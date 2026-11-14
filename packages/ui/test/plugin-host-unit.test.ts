@@ -3117,6 +3117,79 @@ test('an auxiliary view context reads and updates its own daemon route without c
   }])
 })
 
+test('an auxiliary view context can run an owner command without activating its owner', async () => {
+  const viewId = 'view:acme.dashboard/page'
+  const route: DesktopWindowRoute = {
+    windowId: 'window-route-1', ownerShellConnId: 21, view: viewId, title: 'Dashboard', attached: true
+  }
+  const t = setup(makeModel({
+    views: [view('acme.dashboard', 'page')],
+    commands: [command('acme.dashboard', 'openActivityThread')]
+  }), { windowRoute: route })
+  let context: UiPluginContext | undefined
+  t.useModule('acme.dashboard', {
+    activate(next) {
+      context = next
+      next.provide(viewId, () => () => {})
+      next.provide('command:acme.dashboard/openActivityThread', () => ({ opened: true }))
+    }
+  })
+  await t.host.refresh()
+  t.host.mount(viewId, element())
+  await until(() => context !== undefined)
+
+  await context!.executeCommand(
+    'command:acme.dashboard/openActivityThread',
+    { worktreeId: 'worktree-1' },
+    { activateOwner: false }
+  )
+
+  expect(t.methodCalls('desktop.window.runOwnerCommand')).toEqual([{
+    method: 'desktop.window.runOwnerCommand',
+    params: {
+      windowId: 'window-route-1',
+      id: 'command:acme.dashboard/openActivityThread',
+      args: { worktreeId: 'worktree-1' },
+      activateOwner: false
+    }
+  }])
+})
+
+test('executeCommand validates options in main and auxiliary windows, and main commands stay local', async () => {
+  const commandId = 'command:acme.notes/run'
+  const create = async (windowRoute?: DesktopWindowRoute) => {
+    const t = setup(makeModel({ commands: [command(NOTES, 'run')] }), windowRoute ? { windowRoute } : {})
+    const received: unknown[] = []
+    let context: UiPluginContext | undefined
+    t.useModule(NOTES, {
+      activate(next) {
+        context = next
+        next.provide(commandId, (args: unknown) => received.push(args))
+      }
+    })
+    await t.host.refresh()
+    await until(() => context !== undefined)
+    return { t, context: context!, received }
+  }
+  const main = await create()
+  const auxiliary = await create({
+    windowId: 'window-route-1', ownerShellConnId: 21, view: null, attached: true
+  })
+
+  for (const entry of [main, auxiliary]) {
+    await expect(entry.context.executeCommand('command:acme.notes/missing', {}, { activateOwner: 'no' } as never))
+      .rejects.toThrow('executeCommand: options.activateOwner must be a boolean')
+    await expect(entry.context.executeCommand('command:acme.notes/missing', {}, 5 as never))
+      .rejects.toThrow('executeCommand: options must be an object')
+    expect(entry.received).toEqual([])
+    expect(entry.t.methodCalls('desktop.window.runOwnerCommand')).toEqual([])
+  }
+
+  await main.context.executeCommand(commandId, { a: 1 }, { activateOwner: false })
+  expect(main.received).toEqual([{ a: 1 }])
+  expect(main.t.methodCalls('desktop.window.runOwnerCommand')).toEqual([])
+})
+
 type MountWithInput = (() => void) & { updateInput?: (input: unknown) => boolean }
 
 const mountWithInput = (host: WindowPluginHost, id: string, input?: unknown): MountWithInput =>

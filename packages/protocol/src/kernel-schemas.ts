@@ -756,8 +756,13 @@ export const KERNEL_METHOD_SCHEMAS = {
     result: desktopWindowSummary
   },
   'desktop.window.runOwnerCommand': {
-    description: 'Runs a command in the exact owner shell of an auxiliary window and activates that native window on success. Role `ui` only.',
-    params: object({ windowId: string(), id: string(), args: { description: 'Command arguments, validated against the UI command declaration.' } }, ['windowId', 'id']),
+    description: 'Runs a command in the exact owner shell of an auxiliary window and, unless `activateOwner` is false, activates that native window on success. Role `ui` only.',
+    params: object({
+      windowId: string(),
+      id: string(),
+      args: { description: 'Command arguments, validated against the UI command declaration.' },
+      activateOwner: boolean('False runs the command without activating the owner window. Default true.')
+    }, ['windowId', 'id']),
     result: object({ result: { description: 'The owner window command result.' }, activated: boolean() }, ['result', 'activated'])
   },
   'desktop.window.closed': {

@@ -671,6 +671,10 @@ const KERNEL_MAPPINGS: CliCatalogMapping[] = [
     flagBinding('dir', 'string', 'the skills folder; the skill goes in <dir>/quirky/SKILL.md', true)
   ]),
   kernelMapping('status', 'status', ['status.get']),
+  kernelMapping('serve', 'serve', ['status.get'], [
+    flagBinding('port', 'integer', 'listen on this loopback port; refuse to start when it is in use'),
+    flagBinding('disable-plugins', 'boolean', 'safe mode: installed plugins, stored disables and the distro layer are off for this run')
+  ]),
   kernelMapping('serve-service-status', 'status', ['status.get'])
 ]
 

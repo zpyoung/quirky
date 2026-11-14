@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
-import { delimiter, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { daemonEntryHash, isDaemonAlive, readRuntime } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope, type ProcessScopeSpawnOptions } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
@@ -42,6 +42,7 @@ export type CliWorld = {
   readonly ptyPid: number | undefined
   scope: ProcessScope
   paths: CliWorldPaths
+  serveEnvironment(home: string): Record<string, string>
   execute(argv: string[], options?: CliWorldExecuteOptions): Promise<CliWorldResult>
   actorLive(): Promise<void>
   cleanup(): Promise<void>
@@ -495,6 +496,38 @@ function resolveCliCwd(cwd: string | undefined, repoRoot: string, home: string):
   }
   return realCwd
 }
+
+export function createServeEnvironment(
+  home: string,
+  worldHome: string,
+  worldEnv: Record<string, string>,
+  repoRoot: string
+): Record<string, string> {
+  const lexicalRoot = resolve(worldHome)
+  const candidate = resolve(home)
+  const lexicalRelative = relative(lexicalRoot, candidate)
+  if (lexicalRelative === '' || lexicalRelative === '..' || lexicalRelative.startsWith(`..${sep}`) || isAbsolute(lexicalRelative)) {
+    throw new CliWorldError('invalid-serve-home', 'serve home must be inside the CLI world home')
+  }
+  const root = realpathSync(lexicalRoot)
+  let existing = candidate
+  while (!existsSync(existing)) {
+    const parent = dirname(existing)
+    if (parent === existing) throw new CliWorldError('invalid-serve-home', 'serve home has no existing parent')
+    existing = parent
+  }
+  const canonicalCandidate = resolve(realpathSync(existing), relative(existing, candidate))
+  const relativeHome = relative(root, canonicalCandidate)
+  if (relativeHome === '' || relativeHome === '..' || relativeHome.startsWith(`..${sep}`) || isAbsolute(relativeHome)) {
+    throw new CliWorldError('invalid-serve-home', 'serve home resolves outside the CLI world home')
+  }
+
+  return {
+    ...worldEnv,
+    QUIRKY_HOME: candidate,
+    QUIRKY_DAEMON_ENTRY: join(resolve(repoRoot), 'packages/daemon/src/main.ts')
+  }
+}
 function ensureWorldLive(daemon: CliBoundedChild, closed: boolean): void {
   if (closed) throw new CliWorldError('world-closed', 'CLI world has already been cleaned up')
   if (daemon.exitCode !== null) throw new CliWorldError('daemon-exited', 'owned daemon exited; refusing CLI auto-start')
@@ -545,6 +578,9 @@ function makeWorld(options: {
     },
     scope: options.scope,
     paths: options.paths,
+    serveEnvironment(home) {
+      return createServeEnvironment(home, options.home, { ...options.env, ...options.scope.env }, options.paths.repoRoot)
+    },
     async execute(argv: string[], executeOptions: CliWorldExecuteOptions = {}) {
       const signal = executeOptions.signal ?? options.defaultSignal
       checkInterrupted(signal)

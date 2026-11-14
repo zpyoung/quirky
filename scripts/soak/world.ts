@@ -1,5 +1,5 @@
 import { closeSync, mkdirSync, openSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { delimiter, join, resolve } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { createProcessScope } from '../test-support/process-scope'
@@ -10,7 +10,7 @@ import {
   type RegisteredCaptureFixtures
 } from '../ui-review/fixtures'
 import type { FaultKind } from './contracts.ts'
-import { FAULT_ENV, FAULT_PLUGIN_ID, installFaultPlugin } from './faults.ts'
+import { FAULT_ENV, FAULT_PLUGIN_ID, SLOW_GIT_PIDS, installFaultPlugin, installSlowGit } from './faults.ts'
 
 type Worker = { worktree: string; path: string; session: string }
 
@@ -22,6 +22,7 @@ type StartWorldOptions = {
   signal?: AbortSignal
   fault?: FaultKind
   windows?: number
+  slowGit?: boolean
   workers?: boolean
 }
 
@@ -243,6 +244,11 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
       { timeoutMs: 30_000, signal: options.signal, env }
     )
     throwIfAborted(options.signal)
+    if (options.slowGit || options.fault === 'slow-git') {
+      const fakebin = join(home, 'fakebin')
+      const path = env.PATH.split(delimiter).filter((entry) => resolve(entry) !== fakebin).join(delimiter)
+      installSlowGit(home, path, join(out, SLOW_GIT_PIDS))
+    }
     delete env[FAULT_ENV]
     if (options.fault) {
       installFaultPlugin(home, repoRoot)

@@ -9,7 +9,8 @@ const FAULT_CHECK: Record<FaultKind, FaultCheck> = {
   leak: 'children',
   zombies: 'zombies',
   storm: 'events',
-  block: 'stalls'
+  block: 'stalls',
+  'slow-git': 'calls'
 }
 
 function isAlive(pid: number): boolean {
@@ -19,6 +20,16 @@ function isAlive(pid: number): boolean {
   } catch {
     return false
   }
+}
+
+function expectGroupGone(pid: number): void {
+  let error: unknown
+  try {
+    process.kill(-pid, 0)
+  } catch (caught) {
+    error = caught
+  }
+  expect((error as NodeJS.ErrnoException | undefined)?.code).toBe('ESRCH')
 }
 
 function lastSample(path: string): Sample {
@@ -35,6 +46,7 @@ async function runFault(kind: FaultKind): Promise<void> {
     expect(report.verdict).toBe('fail')
     expect(report.qualifies).toBe(false)
     expect(report.disqualified).toContain(`fault injected: ${kind}`)
+    expect(Number.isSafeInteger(report.skippedBeats)).toBe(true)
 
     expect(report.fault).not.toBeNull()
     if (report.fault === null) throw new Error(`missing ${kind} fault record`)
@@ -74,6 +86,17 @@ async function runFault(kind: FaultKind): Promise<void> {
       expect(check.peakType).toBe('soak.faults/changed')
       expect(check.peakPer5s).toBeGreaterThan(30)
       expect(fault.detail.refreshes).toBeGreaterThan(30)
+    } else if (kind === 'slow-git') {
+      expect(report.config.slowGitMs).toBeNull()
+      expect(report.disqualified).toContain('fault injected: slow-git')
+      expect(report.checks.calls.ok).toBe(false)
+      expect(report.checks.calls.byMethod).toContainEqual({
+        method: 'quirky.worktree/list',
+        count: expect.any(Number),
+      })
+      expect(report.checks.calls.byMethod.find(({ method }) => method === 'quirky.worktree/list')!.count).toBeGreaterThanOrEqual(1)
+      expect(fault.detail.pids.length).toBeGreaterThanOrEqual(1)
+      for (const pid of fault.detail.pids) expectGroupGone(pid)
     } else {
       const check = report.checks.stalls
       expect(check.ok).toBe(false)
@@ -104,4 +127,8 @@ test('detects the injected event storm', async () => {
 
 test('detects the injected event-loop block', async () => {
   await runFault('block')
+}, 180_000)
+
+test('detects slow git calls and stops every wrapper process group', async () => {
+  await runFault('slow-git')
 }, 180_000)
