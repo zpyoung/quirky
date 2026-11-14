@@ -27,7 +27,7 @@ At most two TypeScript servers run at once. When both are busy, another worktree
 
 Python navigation supports `.py` and `.pyi` files through the bundled standard-library resolver. It needs Python 3.8 or newer, found as `python3` on the daemon's `PATH`, and runs it in isolated mode. It answers from disk and never imports or runs worktree code.
 
-Definitions follow imports and re-exports, lexical bindings, classes, methods, and statically inferred instance attributes. Import lookup checks the parent of the file's outermost package, the worktree root, then `<worktree>/src`. Only worktree files are resolved; an unavailable import points to its own import name. This is navigation, not a type checker: string annotations and flow-sensitive inference are not supported.
+Definitions follow scoped imports and re-exports, lexical bindings (including annotated parameters), classes, methods, and statically inferred instance attributes. Function-local and class-local imports remain in their declaring scope; `global` and `nonlocal` imports follow Python's binding rules. Import lookup checks the parent of the file's outermost package, the worktree root, then `<worktree>/src`. Only worktree files are resolved; an unavailable import points to its own import name. This is navigation, not a type checker: string annotations and flow-sensitive inference are not supported.
 
 References include declarations and scan `.py` and `.pyi` files, skipping hidden directories, `node_modules`, `__pycache__`, `site-packages`, directories containing `pyvenv.cfg`, symlinks, and files larger than 2 MiB. Unparseable files are skipped. Renamed import uses are not references of the original spelling.
 

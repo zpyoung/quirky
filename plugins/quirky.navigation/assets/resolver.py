@@ -10,7 +10,7 @@ import sys
 import tokenize
 from collections import OrderedDict
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 from urllib.request import url2pathname
 
 MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -44,7 +44,7 @@ def _uri_path(uri):
     parsed = urlsplit(uri)
     if parsed.scheme.lower() != "file":
         return None
-    path = url2pathname(unquote(parsed.path))
+    path = url2pathname(parsed.path)
     if parsed.netloc and parsed.netloc not in ("", "localhost"):
         path = "//" + parsed.netloc + path
     return os.path.realpath(path)
@@ -479,16 +479,11 @@ def _location_from_chars(model, name, line, start_char, end_char):
 def _ast_location(model, node, name):
     line = getattr(node, "lineno", None)
     start_byte = getattr(node, "col_offset", None)
-    end_byte = getattr(node, "end_col_offset", None)
-    end_line = getattr(node, "end_lineno", line)
-    if line is None or start_byte is None or end_byte is None or end_line != line:
-        return None
-    if line < 1 or line > len(model.lines):
+    if line is None or start_byte is None or line < 1 or line > len(model.lines):
         return None
     source = model.lines[line - 1]
     start_char = _byte_column_to_char(source, start_byte)
-    end_char = _byte_column_to_char(source, end_byte)
-    return _location_from_chars(model, name, line, start_char, end_char)
+    return _location_from_chars(model, name, line, start_char, start_char + len(name))
 
 
 def _ast_attribute_location(model, node):
@@ -798,27 +793,28 @@ class Resolver(object):
                 self._collect_imports(model, expression, scope)
             for expression in node.args.defaults + [item for item in node.args.kw_defaults if item is not None]:
                 self._collect_imports(model, expression, scope)
-            child_scope = model._node_scope[id(node)]
+            child_scope = model._scope_builder.node_scopes[id(node)]
             for statement in node.body:
                 self._collect_imports(model, statement, child_scope)
             return
         if isinstance(node, ast.ClassDef):
             for expression in node.decorator_list + node.bases:
                 self._collect_imports(model, expression, scope)
-            child_scope = model._node_scope[id(node)]
+            child_scope = model._scope_builder.node_scopes[id(node)]
             for statement in node.body:
                 self._collect_imports(model, statement, child_scope)
             return
         if isinstance(node, ast.Lambda):
             self._collect_imports(model, node.args, scope)
-            self._collect_imports(model, node.body, model._node_scope[id(node)])
+            self._collect_imports(model, node.body, model._scope_builder.node_scopes[id(node)])
             return
         if isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
             if node.generators:
                 self._collect_imports(model, node.generators[0].iter, scope)
-            child_scope = model._node_scope[id(node)]
-            for generator in node.generators:
-                self._collect_imports(model, generator.iter, child_scope)
+            child_scope = model._scope_builder.node_scopes[id(node)]
+            for index, generator in enumerate(node.generators):
+                if index:
+                    self._collect_imports(model, generator.iter, child_scope)
                 for condition in generator.ifs:
                     self._collect_imports(model, condition, child_scope)
             for child in ast.iter_child_nodes(node):
@@ -847,7 +843,10 @@ class Resolver(object):
                 location = _token_location(model, component, token) if token is not None else None
                 module_names.append((component, location, parts[:index + 1]))
             local_name = alias.asname or parts[0]
-            binding = scope.binding(local_name)
+            binding_scope = self._binding_scope(scope, local_name)
+            if binding_scope is None:
+                continue
+            binding = binding_scope.binding(local_name)
             spec = ImportSpec("import", binding, local_name, alias.name, 0, module_names,
                               alias_location=alias_location, renamed=alias.asname is not None)
             binding.imports.append(spec)
@@ -877,7 +876,10 @@ class Resolver(object):
             name_token = name_tokens[0] if name_tokens else None
             name_location = _token_location(model, alias.name, name_token) if name_token is not None else None
             local_name = alias.asname or alias.name
-            binding = scope.binding(local_name)
+            binding_scope = self._binding_scope(scope, local_name)
+            if binding_scope is None:
+                continue
+            binding = binding_scope.binding(local_name)
             module_names = []
             for index, token in enumerate(raw_module_tokens):
                 module_names.append((token[1], _token_location(model, token[1], token), None))
@@ -1196,21 +1198,26 @@ class Resolver(object):
             return self._infer(node.value, scope)
         return None
 
-    def _lookup(self, scope, name):
-        if scope is None:
-            return None
-        module_scope = scope
-        while module_scope.parent is not None:
-            module_scope = module_scope.parent
+    def _binding_scope(self, scope, name):
         if name in scope.globals:
-            return module_scope.bindings.get(name)
+            while scope.parent is not None:
+                scope = scope.parent
+            return scope
         if name in scope.nonlocals:
             current = scope.parent
             while current is not None and current.kind != "module":
                 if current.kind != "class" and name in current.bindings:
-                    return current.bindings[name]
+                    return current
                 current = current.parent
             return None
+        return scope
+
+    def _lookup(self, scope, name):
+        if scope is None:
+            return None
+        if name in scope.globals or name in scope.nonlocals:
+            owner = self._binding_scope(scope, name)
+            return owner.bindings.get(name) if owner is not None else None
         current = scope
         while current is not None:
             binding = current.bindings.get(name)

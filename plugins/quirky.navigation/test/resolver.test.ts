@@ -265,6 +265,115 @@ test('17: resolves Python aliases, f-strings, inheritance, annotations, walrus a
   expect(await def(1, 30)).toEqual([])
 }, 60000)
 
+test('resolves imports in local, nested, class, global and nonlocal binding scopes', async () => {
+  const { root, home } = workspace()
+  const file = 'scope-imports.py'
+  const source = [
+    'def local_import():',
+    '    from pkg.mod import greet as local_greet',
+    '    return local_greet("local")',
+    'local_greet("module")',
+    '',
+    'def outer_import():',
+    '    def inner_import():',
+    '        from pkg.mod import greet as nested_greet',
+    '        return nested_greet("nested")',
+    '    return inner_import()',
+    'nested_greet("module")',
+    '',
+    'class C:',
+    '    from pkg.mod import greet',
+    '',
+    'greet("module")',
+    'C.greet("class")',
+    '',
+    'def global_import():',
+    '    global global_greet',
+    '    from pkg.mod import greet as global_greet',
+    '    return global_greet("global")',
+    '',
+    'global_greet("outside")',
+    '',
+    'def outer_nonlocal():',
+    '    nonlocal_greet = None',
+    '    def inner_nonlocal():',
+    '        nonlocal nonlocal_greet',
+    '        from pkg.mod import greet as nonlocal_greet',
+    '        return nonlocal_greet("nonlocal")',
+    '    return inner_nonlocal()'
+  ].join('\n') + '\n'
+  writeFileSync(join(root, file), source, 'utf8')
+  const server = await start(root, home)
+  const def = (line: number, column: number) => server.definition(join(root, file), line, column)
+  const refs = (line: number, column: number) => server.references(join(root, file), line, column)
+  const inFile = async (line: number, column: number) =>
+    positions(root, await refs(line, column)).filter(([candidate]) => candidate === file)
+  const greet = [['pkg/mod.py', 4, 5, 4, 10]]
+
+  expect(positions(root, await def(3, 12))).toEqual(greet)
+  expect(positions(root, await def(9, 16))).toEqual(greet)
+  expect(positions(root, await def(17, 3))).toEqual(greet)
+  expect(positions(root, await def(22, 12))).toEqual(greet)
+  expect(positions(root, await def(31, 16))).toEqual(greet)
+  expect(await def(4, 1)).toEqual([])
+  expect(await def(11, 1)).toEqual([])
+  expect(await def(16, 1)).toEqual([])
+
+  expect(await inFile(3, 12)).toEqual([
+    [file, 2, 34, 2, 45], [file, 3, 12, 3, 23]
+  ])
+  expect(await inFile(9, 16)).toEqual([
+    [file, 8, 38, 8, 50], [file, 9, 16, 9, 28]
+  ])
+  expect(await inFile(17, 3)).toEqual([
+    [file, 2, 25, 2, 30], [file, 8, 29, 8, 34],
+    [file, 14, 25, 14, 30], [file, 17, 3, 17, 8],
+    [file, 21, 25, 21, 30], [file, 30, 29, 30, 34]
+  ])
+  expect(await inFile(24, 1)).toEqual([
+    [file, 20, 12, 20, 24], [file, 21, 34, 21, 46],
+    [file, 22, 12, 22, 24], [file, 24, 1, 24, 13]
+  ])
+  expect(await inFile(31, 16)).toEqual([
+    [file, 27, 5, 27, 19], [file, 29, 18, 29, 32],
+    [file, 30, 38, 30, 52], [file, 31, 16, 31, 30]
+  ])
+}, 60000)
+
+test('annotated parameters resolve their exact identifiers and UTF-16 references', async () => {
+  const { root, home } = workspace()
+  const file = join(root, 'annotated.py')
+  const source = [
+    'def annotated(',
+    '    é: str,',
+    '    positional_only: str,',
+    '    /,',
+    '    positional: str,',
+    '    *variadic: str,',
+    '    keyword_only: str,',
+    '    **keywords: str,',
+    ') -> str:',
+    '    return "é🙂" + str(é) + positional_only + positional + variadic[0] + keyword_only + keywords["x"]'
+  ].join('\n') + '\n'
+  writeFileSync(file, source, 'utf8')
+  const server = await start(root, home)
+
+  for (const [name, declarationLine, declarationColumn, declarationEnd, useColumn] of [
+    ['é', 2, 5, 6, 24],
+    ['positional_only', 3, 5, 20, 29],
+    ['positional', 5, 5, 15, 47],
+    ['variadic', 6, 6, 14, 60],
+    ['keyword_only', 7, 5, 17, 74],
+    ['keywords', 8, 7, 15, 89]
+  ] as const) {
+    const declaration = ['annotated.py', declarationLine, declarationColumn, declarationLine, declarationEnd]
+    const use = ['annotated.py', 10, useColumn, 10, useColumn + name.length]
+    expect(positions(root, await server.definition(file, 10, useColumn))).toEqual([declaration])
+    expect(positions(root, await server.definition(file, declarationLine, declarationColumn))).toEqual([declaration])
+    expect(positions(root, await server.references(file, 10, useColumn))).toEqual([declaration, use])
+  }
+}, 60000)
+
 test('18-19: honors source encodings and Python line endings and skips syntax errors', async () => {
   const { root, home } = workspace()
   edgeFiles(root)
@@ -305,6 +414,33 @@ test('21: refreshes changed imports and definitions from disk on the same server
   expect(server.pid).toBe(firstPid)
   expect(positions(root, await server.definition(join(root, 'main.py'), 5, 21))).toEqual([['pkg/mod.py', 6, 5, 6, 10]])
   expect(positions(root, await server.definition(join(root, 'main.py'), 7, 9))).toEqual([['pkg/mod.py', 14, 9, 14, 14]])
+}, 60000)
+
+test('decodes file URIs once for literal percent escapes in roots and source names', async () => {
+  const temporary = realpathSync(mkdtempSync(join(tmpdir(), 'nav py é-')))
+  temporaryRoots.push(temporary)
+  const root = join(temporary, 'workspace %20 py é')
+  const decodedRoot = join(temporary, 'workspace   py é')
+  const home = join(temporary, 'home')
+  const source = join(root, 'literal%20name.py')
+  mkdirSync(root, { recursive: true })
+  mkdirSync(decodedRoot, { recursive: true })
+  mkdirSync(home, { recursive: true })
+  writeFileSync(source, 'def selected():\n    return "actual"\nselected()\n', 'utf8')
+  writeFileSync(join(root, 'literal name.py'),
+    '# source-name decoy\n\ndef selected():\n    return "space filename"\nselected()\n', 'utf8')
+  writeFileSync(join(decodedRoot, 'literal name.py'),
+    '# root and source decoy\n\n\ndef selected():\n    return "decoded root"\nselected()\n', 'utf8')
+  const server = await start(root, home)
+
+  expect(pathToFileURL(root).href).toContain('workspace%20%2520%20py%20%C3%A9')
+  expect(pathToFileURL(source).href).toContain('literal%2520name.py')
+  expect(positions(root, await server.definition(source, 3, 1))).toEqual([
+    ['literal%20name.py', 1, 5, 1, 13]
+  ])
+  expect(positions(root, await server.references(source, 1, 5))).toEqual([
+    ['literal%20name.py', 1, 5, 1, 13], ['literal%20name.py', 3, 1, 3, 9]
+  ])
 }, 60000)
 
 test('22: returns references from hundreds of generated modules', async () => {
