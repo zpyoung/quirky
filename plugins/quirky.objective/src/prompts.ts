@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import type { ObjectivePayload } from './contract'
-import type { PlanTask } from './plan'
+import type { PlanTask, PlannerReport } from './plan'
 
 const plannerContract = `Write one JSON object with plan: {tasks: PlanTask[]} and assumptions: Assumption[].
 PlanTask = {taskKey: string, title: string, spec: string, deps: string[], criteria: Criterion[], territory: string[]}.
@@ -80,6 +80,40 @@ function workerFinish(reportPath: string, additionalInstructions: string): strin
   return `${prefix}Write the JSON report atomically to the exact REPORT PATH: write a temporary file beside it, then rename it. Send the worker_done command from the CLI commands section with --report-path ${JSON.stringify(reportPath)} added. If the task cannot be completed, send --outcome failed without a report. Keep the full report at most 262144 bytes.`
 }
 
+function compactCriteriaSection(plan: PlannerReport): string {
+  const criteria = plan.plan.tasks.map((task) => [
+    task.taskKey,
+    task.criteria.map((criterion) => [criterion.body, criterion.shellCheckable, criterion.checkCommand])
+  ])
+  return `ACTIVE PLAN AND CRITERIA:\nCompact JSON entries are [taskKey, criteria]. Each criterion is [body, shellCheckable, checkCommand], and its criterionIndex is its zero-based position in that task's criteria array.\n${JSON.stringify(criteria)}`
+}
+
+function boundedCriteriaPrompt(
+  requiredSections: string[],
+  objectiveSection: string,
+  criteriaSection: string,
+  finalSections: string[]
+): string {
+  const fixedSections = [...requiredSections, criteriaSection, ...finalSections]
+  const fixed = fixedSections.join(SECTION_SEPARATOR)
+  const fixedBytes = Buffer.byteLength(fixed, 'utf8')
+  if (fixedBytes > MAX_PROMPT_BYTES) {
+    throw new RangeError('Required criteria and role instructions exceed the 262144-byte prompt limit')
+  }
+
+  const objectiveBudget = MAX_PROMPT_BYTES -
+    fixedBytes -
+    Buffer.byteLength(SECTION_SEPARATOR, 'utf8')
+  if (Buffer.byteLength(objectiveSection, 'utf8') <= objectiveBudget) {
+    return [...requiredSections, objectiveSection, criteriaSection, ...finalSections].join(SECTION_SEPARATOR)
+  }
+  if (objectiveBudget < Buffer.byteLength('OBJECTIVE:\n', 'utf8') + Buffer.byteLength(TRUNCATION_MARKER, 'utf8')) {
+    return fixed
+  }
+  const objective = truncateUtf8(objectiveSection, objectiveBudget)
+  return [...requiredSections, objective, criteriaSection, ...finalSections].join(SECTION_SEPARATOR)
+}
+
 /** Gives a worker its bounded role and the exact report channel that can settle its dispatch. */
 export function objectivePrompt(
   payload: ObjectivePayload,
@@ -149,25 +183,39 @@ export function repairPlannerSpec(
 
 export function reviewerSpec(payload: ObjectivePayload, reportPath: string, plan: PlannerReport): string {
   const sections = [
-    ...commonRoleSections(payload, 'reviewer'),
-    jsonPromptSection('ACTIVE PLAN AND CRITERIA', plan, 200_000)
+    `ROLE: reviewer`,
+    promptSection('TIER', payload.tier, 128),
+    promptSection('LANDING BAR', payload.landingBar, 128),
+    `WRITE TERRITORY:\n${jsonPromptValue(payload.writeTerritory)}`
   ]
-  return boundedPrompt(sections, [
-    `REPORT CONTRACT:\n${reviewerContract}`,
-    `REPORT PATH: ${reportPath}`,
-    `FINISH:\n${workerFinish(reportPath, 'Do not modify any workspace files. Do not commit or land changes.')}`
-  ])
+  return boundedCriteriaPrompt(
+    sections,
+    promptSection('OBJECTIVE', payload.objectiveText, 16_384),
+    compactCriteriaSection(plan),
+    [
+      `REPORT CONTRACT:\n${reviewerContract}`,
+      `REPORT PATH: ${reportPath}`,
+      `FINISH:\n${workerFinish(reportPath, 'Do not modify any workspace files. Do not commit or land changes.')}`
+    ]
+  )
 }
 
 export function integratorSpec(payload: ObjectivePayload, reportPath: string, plan: PlannerReport): string {
   const sections = [
-    ...commonRoleSections(payload, 'integrator'),
-    jsonPromptSection('ACTIVE PLAN AND CRITERIA', plan, 192_000),
-    jsonPromptSection('ENROLLMENT GATES', payload.gates, 16_384)
+    `ROLE: integrator`,
+    promptSection('TIER', payload.tier, 128),
+    promptSection('LANDING BAR', payload.landingBar, 128),
+    `WRITE TERRITORY:\n${jsonPromptValue(payload.writeTerritory)}`,
+    `ENROLLMENT GATES:\n${jsonPromptValue(payload.gates)}`
   ]
-  return boundedPrompt(sections, [
-    `REPORT CONTRACT:\n${integratorContract}`,
-    `REPORT PATH: ${reportPath}`,
-    `FINISH:\n${workerFinish(reportPath, 'Edit only files inside WRITE TERRITORY. Do not commit or land changes.')}`
-  ])
+  return boundedCriteriaPrompt(
+    sections,
+    promptSection('OBJECTIVE', payload.objectiveText, 16_384),
+    compactCriteriaSection(plan),
+    [
+      `REPORT CONTRACT:\n${integratorContract}`,
+      `REPORT PATH: ${reportPath}`,
+      `FINISH:\n${workerFinish(reportPath, 'Edit only files inside WRITE TERRITORY. Do not commit or land changes.')}`
+    ]
+  )
 }

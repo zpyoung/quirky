@@ -485,3 +485,46 @@ test('builds bounded repair-planner, reviewer, and integrator prompts', () => {
     expect(prompt).toContain('REPORT CONTRACT:')
   }
 })
+
+test('preserves every criterion in bounded reviewer and integrator prompts for a large valid plan', () => {
+  const payload = {
+    objectiveText: 'Review the active plan.',
+    tier: 'full' as const,
+    landingBar: 'files-on-disk' as const,
+    lanesEnabled: false,
+    maxConcurrency: 1,
+    writeTerritory: ['src/**'],
+    roleAgents: {},
+    gates: [],
+    worktree: '/workspace'
+  }
+  const largePlan = plannerReport({
+    plan: {
+      tasks: Array.from({ length: 96 }, (_, index) => {
+        const marker = `criterion-${index}-`
+        return task({
+          taskKey: `task-${index}`,
+          criteria: [{ ...baseCriterion, body: marker + 'x'.repeat(2_048 - marker.length) }]
+        })
+      })
+    }
+  })
+  expect(plannerReportProblems(largePlan)).toEqual([])
+  const serializedPlanBytes = byteLength(JSON.stringify(largePlan))
+  expect(serializedPlanBytes).toBeGreaterThan(200_000)
+  expect(serializedPlanBytes).toBeLessThanOrEqual(262_144)
+
+  const reportPath = '/workspace/.quirky/objective/watcher/review.json'
+  const prompts = [
+    reviewerSpec(payload, reportPath, largePlan),
+    integratorSpec(payload, reportPath, largePlan)
+  ]
+  for (const prompt of prompts) {
+    expect(byteLength(prompt)).toBeLessThanOrEqual(262_144)
+    for (let index = 0; index < 96; index++) {
+      expect(prompt).toContain(`task-${index}`)
+      expect(prompt).toContain(`criterion-${index}-`)
+    }
+    expect(prompt).not.toContain('Implement the requested change.')
+  }
+})
