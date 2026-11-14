@@ -27,18 +27,20 @@ export function initialDraftFor(partial?: AskPartialQuestionDraft): QuestionDraf
 }
 
 function draftToPartial(draft: QuestionDraft, multiselect: boolean): AskPartialQuestionDraft | undefined {
-  const partial: AskPartialQuestionDraft = {}
-  if (draft.selected.length > 0) {
-    partial.selected = [...draft.selected]
-    // the answer and the timeout builder read a multiselect's free text only from `other`
-    if (draft.freeText) partial[multiselect ? 'other' : 'note'] = draft.freeText
-  } else if (draft.freeText) {
-    partial.other = draft.freeText
+  const hasSelection = draft.selected.length > 0
+  const partial: AskPartialQuestionDraft = {
+    ...(hasSelection ? { selected: [...draft.selected] } : {}),
+    ...(draft.freeText
+      ? hasSelection
+        ? multiselect ? { other: draft.freeText } : { note: draft.freeText }
+        : { other: draft.freeText }
+      : {}),
+    ...(draft.text ? { draft: draft.text } : {}),
+    ...(draft.confirm === null ? {} : { confirm: draft.confirm })
   }
-  if (draft.text) partial.draft = draft.text
-  if (draft.confirm !== null) partial.confirm = draft.confirm
   return Object.keys(partial).length > 0 ? partial : undefined
 }
+
 
 /**
  * The saved-draft form of the window state, leaving out questions with nothing entered. Pass the
@@ -47,13 +49,14 @@ function draftToPartial(draft: QuestionDraft, multiselect: boolean): AskPartialQ
  */
 export function draftsToPartial(drafts: Record<string, QuestionDraft>, spec?: AskSpec): AskPartial {
   const multiselects = new Set(spec?.questions.filter((q) => q.type === 'multiselect').map((q) => q.id))
-  const partial: AskPartial = {}
+  const partial = new Map<string, AskPartialQuestionDraft>()
   for (const [questionId, draft] of Object.entries(drafts)) {
     const entry = draftToPartial(draft, multiselects.has(questionId))
-    if (entry) partial[questionId] = entry
+    if (entry) partial.set(questionId, entry)
   }
-  return partial
+  return Object.fromEntries(partial) as AskPartial
 }
+
 
 type Outcome = { kind: 'answer'; answer: AskAnswer } | { kind: 'skipped' } | { kind: 'error'; message: string }
 
@@ -148,14 +151,16 @@ export function buildSubmission(
   spec: AskSpec,
   drafts: Record<string, QuestionDraft>
 ): { ok: true; answers: Record<string, AskAnswer>; skipped: string[] } | { ok: false; errors: Record<string, string> } {
-  const answers: Record<string, AskAnswer> = {}
+  const answers = new Map<string, AskAnswer>()
   const skipped: string[] = []
-  const errors: Record<string, string> = {}
+  const errors = new Map<string, string>()
   for (const question of spec.questions) {
     const outcome = resolveQuestion(question, drafts[question.id] ?? initialDraftFor())
-    if (outcome.kind === 'answer') answers[question.id] = outcome.answer
+    if (outcome.kind === 'answer') answers.set(question.id, outcome.answer)
     else if (outcome.kind === 'skipped') skipped.push(question.id)
-    else errors[question.id] = outcome.message
+    else errors.set(question.id, outcome.message)
   }
-  return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, answers, skipped }
+  return errors.size > 0
+    ? { ok: false, errors: Object.fromEntries(errors) }
+    : { ok: true, answers: Object.fromEntries(answers), skipped }
 }

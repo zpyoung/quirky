@@ -16,6 +16,7 @@ CLI commands are `quirky notifications status`, `send --body ... [--title ...] [
 ## Settings
 
 The Notifications settings view uses shared graphite form controls and semantic tokens in dark and light. Dependent controls remain disabled when notification delivery is off; the menu-bar control stays independent. Sound selection, custom-path validation and range save-on-commit behavior keep the same canonical setting IDs and policy. Rendering preferences does not create notifications or unread markers.
+The custom sound path editor can be opened with `command:quirky.notifications/edit-custom-sound` (`quirky ui run command:quirky.notifications/edit-custom-sound`).
 
 
 | Setting | Default | Effect |
