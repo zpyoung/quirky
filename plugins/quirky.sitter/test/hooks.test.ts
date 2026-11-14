@@ -1007,3 +1007,25 @@ test('rebase preflight holds dirty, occupied, and locally moved worktrees', asyn
     expect(result).toMatchObject({ verdict: 'hold', reason: blocker === 'head' ? 'local-head-moved' : 'worktree-busy' })
   }
 })
+
+test('rebase refuses changed review heads and an unverifiable base remote before touching Git history', async () => {
+  for (const blocker of ['remote-head', 'local-head', 'base-remote']) {
+    const runtime = await startRuntime(async method => {
+      if (method === 'quirky.git/pushTarget') return {
+        ready: true, headOid: blocker === 'remote-head' ? H2 : H1,
+        localHead: blocker === 'local-head' ? H2 : H1, remote: 'fork'
+      }
+      throw new Error(`unexpected mutation: ${method}`)
+    }, async argv => {
+      if (argv[1] === 'remote') return processResult('fork\tgit@github.com:someone-else/test-repo.git (fetch)\n')
+      return defaultProcessRun(argv)
+    })
+    const enrolled = enrollment()
+    ;(enrolled.kindPayload as Record<string, unknown>).branchUpdateMode = 'rebase'
+    const result = await runtime.methods.get('method:quirky.sitter/execute')!({
+      action: action('update-branch', { mode: 'rebase', base: B1, baseRefName: 'main' }), enrollment: enrolled
+    }, HEIMDALL_CALLER)
+    expect(result).toMatchObject({ effect: 'not-landed', reason: blocker === 'base-remote' ? 'invalid-base' : 'head-moved' })
+    expect(runtime.calls.some(call => call.method === 'quirky.git/rebaseFromBase' || call.method === 'quirky.git/forcePush')).toBe(false)
+  }
+})
