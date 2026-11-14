@@ -133,7 +133,7 @@ function makeContext(connId = 41, worktree: string | null = WORKTREE) {
       for (const listener of layoutListeners) listener(layout)
     },
     async emitChanged() {
-      for (const listener of eventListeners) await listener({ type: 'quirky.reviews/changed' } as QuirkyEvent)
+      for (const listener of eventListeners) await listener({ type: 'quirky.reviews/changed', data: {} } as QuirkyEvent)
     }
   }
 }
@@ -455,6 +455,86 @@ test('the existing copy-text command uses the shared validated local clipboard h
   }
 })
 
+for (const [label, update, selector, message] of [
+  ['initial lookup loading', (state: ReviewsState) => { state.checks.review = null; state.checks.loading = true }, '.ui-notice-line', 'Checking pull request status…'],
+  ['eligible branch without review', (state: ReviewsState) => { state.checks.review = null; state.checks.lookup = { kind: 'no-review', gitStatus: { branch: 'feature', head: review.headRefOid } }; state.checks.eligibility = { eligible: true, worktree: WORKTREE, confirmedAt: Date.now(), head: 'feature', headOid: review.headRefOid } }, '.ui-empty-state', 'No pull request found'],
+  ['lookup failure', (state: ReviewsState) => { state.checks.review = null; state.checks.lookup = { kind: 'unavailable', reason: 'lookup_unavailable', message: 'lookup fixture failed' } }, '.ui-inline-error', 'lookup fixture failed'],
+  ['retained review failure', (state: ReviewsState) => { state.checks.error = 'retained fixture failed' }, '.ui-inline-error', 'Showing the last known review status.'],
+  ['stack failure', (state: ReviewsState) => { state.checks.review = { ...state.checks.review!, stack: { available: false, reason: 'stack_unavailable', message: 'loading provider fixture failed' } } }, '.ui-inline-error', 'loading provider fixture failed'],
+  ['stack mismatch', (state: ReviewsState) => { state.checks.review = { ...state.checks.review!, stack: { available: false, reason: 'stack_mismatch' } } }, '.ui-inline-error', 'The provider stack did not match the selected pull request.'],
+  ['incomplete canonical stack', (state: ReviewsState) => { state.checks.review = { ...state.checks.review!, stack: { available: true, entries: [] } } }, '.ui-inline-error', 'The canonical stack response is incomplete.'],
+  ['pending canonical stack', (state: ReviewsState) => { state.checks.review = { ...state.checks.review!, stack: { number: 1, position: 1, size: 2 } } }, '.ui-notice-line', 'Loading the canonical stack member list…'],
+  ['conflict lookup loading', (state: ReviewsState) => { state.checks.review = { ...state.checks.review!, mergeable: 'CONFLICTING' }; state.checks.conflicts = { status: 'loading' } }, '.ui-notice-line', 'Loading conflict paths…'],
+] as const) {
+  test(`the activated Checks surface uses a shared state for ${label}`, async () => {
+    const state = reviewsState()
+    update(state)
+    const harness = makeContext(42)
+    harness.methods.set('quirky.reviews/state', () => state)
+    const { element } = await mountSurface(harness, CHECKS_PANEL)
+    await settle()
+    const messages = [...element.querySelectorAll(selector)].map((node) => node.textContent).join(' ')
+    expect(messages).toContain(message)
+    if (label === 'eligible branch without review') expect([...element.querySelectorAll('button')].find((button) => button.textContent === 'Create PR')?.disabled).toBe(false)
+    if (label === 'lookup failure') expect([...element.querySelectorAll('button')].some((button) => button.textContent === 'Create PR')).toBe(false)
+    if (label === 'retained review failure') expect(element.textContent).toContain('Review 12')
+  })
+}
+
+function agentState(): ReviewsState {
+  const state = reviewsState()
+  state.checks.agentDialog = {
+    visible: true, surface: 'checks', target: { worktree: WORKTREE, number: 12, prRepo: REPO },
+    headOid: review.headRefOid, action: 'fix', prompt: 'Fix the fixture check.'
+  }
+  return state
+}
+
+for (const catalog of ['pending', 'empty', 'failed'] as const) {
+  test(`the activated agent dialog distinguishes a ${catalog} catalog`, async () => {
+    const harness = makeContext()
+    harness.methods.set('quirky.reviews/state', agentState)
+    harness.methods.set('quirky.agents/list', () => catalog === 'pending' ? new Promise(() => {}) : catalog === 'failed' ? Promise.reject(new Error('catalog fixture failed')) : { agents: [] })
+    const { element } = await mountSurface(harness, CHECKS_PANEL)
+    await settle()
+    const scope = document.querySelector('[role="dialog"]') ?? element
+    const selector = catalog === 'pending' ? '.ui-notice-line' : catalog === 'empty' ? '.ui-empty-state' : '.ui-inline-error'
+    expect(scope.querySelector(selector)?.textContent).toContain(catalog === 'pending' ? 'Detecting agents…' : catalog === 'empty' ? 'No enabled agents' : 'catalog fixture failed')
+    const start = [...scope.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Start agent')
+    expect(start?.disabled).toBe(true)
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksLaunchAgent')).toEqual([])
+  })
+}
+
+test('the reported agent command settles its draft once and rejects a concurrent launch', async () => {
+  const harness = makeContext(42)
+  harness.methods.set('quirky.reviews/state', agentState)
+  harness.methods.set('quirky.agents/list', () => ({ agents: [{ id: 'fixture', enabled: true, installed: true }], defaultAgent: 'fixture' }))
+  const draft = Promise.withResolvers<unknown>()
+  harness.methods.set('quirky.reviews/checksSetAgentDialog', () => draft.promise)
+  harness.methods.set('quirky.reviews/checksLaunchAgent', () => ({ delivered: false, error: 'delivery fixture failed' }))
+  await mountSurface(harness, CHECKS_PANEL)
+  await settle()
+  const control = listReviewsUiControls(harness.context, CHECKS_PANEL).find((control) => control.slot === 'agent')!
+  expect(control).toBeDefined()
+  const request = { target: control.target, generation: control.generation, action: 'agent-start' }
+  const handler = harness.providers.get(CONTROL_COMMAND)!
+  let first!: Promise<unknown>
+  await act(async () => {
+    first = Promise.resolve(handler(request))
+    expect(await handler(request)).toEqual({ delivered: false, reason: 'disabled' })
+  })
+  expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksLaunchAgent')).toEqual([])
+  expect(await handler(request)).toEqual({ delivered: false, reason: 'disabled' })
+  expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksSetAgentDialog')).toHaveLength(1)
+  await act(async () => { draft.resolve({ ok: true }); await first })
+  const launches = harness.calls.filter((call) => call.method === 'quirky.reviews/checksLaunchAgent')
+  expect(launches).toHaveLength(1)
+  expect(launches[0]?.params).toMatchObject({ worktree: WORKTREE, agent: 'fixture' })
+  expect(document.querySelector('.ui-inline-error')?.textContent).toContain('delivery fixture failed')
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+})
+
 afterEach(async () => {
   await act(async () => { for (const cleanup of cleanups.splice(0)) cleanup() })
   document.body.innerHTML = ''
@@ -462,3 +542,9 @@ afterEach(async () => {
 
 afterAll(() => GlobalRegistrator.unregister())
 
+test('Checks without a selected workspace renders genuine absence', async () => {
+  const harness = makeContext(41, null)
+  const { element } = await mountSurface(harness, CHECKS_PANEL)
+  expect(element.querySelector('.ui-empty-state')?.textContent).toContain('Select a workspace to view checks.')
+  expect(element.querySelector('.ui-notice-line')).toBeNull()
+})

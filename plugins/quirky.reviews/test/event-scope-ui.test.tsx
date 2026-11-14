@@ -88,6 +88,13 @@ function fakeContext(worktree: string | null, respond?: (method: string, params?
       provide(id: string, implementation: unknown) { provided.set(id, implementation) },
       async call(method: string, params?: unknown) {
         calls.push({ method, params })
+        if (method === 'ui.window.self') return { connId: 42 }
+        if (method === 'ui.window.command.run') {
+          const request = params as { id: string; args: unknown }
+          const handler = provided.get(request.id)
+          if (typeof handler !== 'function') throw new Error(`Missing provided command: ${request.id}`)
+          return { result: await handler(request.args) }
+        }
         if (respond) return respond(method, params)
         if (method === 'quirky.reviews/state') {
           const requested = typeof params === 'object' && params !== null && 'worktree' in params && typeof params.worktree === 'string' ? params.worktree : null

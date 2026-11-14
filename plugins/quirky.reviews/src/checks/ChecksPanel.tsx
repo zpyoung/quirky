@@ -1,11 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, Menu, SectionHeader, StatusDot, TextField, ToolPanelFrame } from '@quirky/ui'
-import { CHECKS_PANEL, type JsonRecord, type ReviewData, type ReviewsSurfaceProps } from '../contracts'
-import { isRecord } from './data'
+import { Badge, Button, ControlIcon, Dialog, EmptyState, FormRow, IconButton, InlineError, Menu, NoticeLine, SectionHeader, TextField, ToolPanelFrame } from '@quirky/ui'
+import { CHECKS_PANEL, REVIEW_VIEW, type JsonRecord, type ReviewData, type ReviewsSurfaceProps } from '../contracts'
+import {
+  copyReviewsText,
+  isRecord,
+  registerReviewsUiControl,
+  requestReviewsUiControl,
+  type ReviewsUiControlRequest,
+} from './data'
 import { SitterRow, SitterSafetyStrip } from './SitterRow'
 import type { ChecksSitterState, SitterDetail, SitterFleetRow } from './data'
-import { reviewContext } from '../detail/data'
+import { parseRepoIdentity, reviewContext, safeHttpUrl, type RepoIdentity } from '../detail/data'
 import { useDraftField, type DraftAction } from '../draft-field'
 import { ReviewActions } from '../detail/Actions'
 import { ChecksList } from '../detail/ChecksList'
@@ -275,6 +281,133 @@ export function installChecksPolling(initialTarget: ChecksPollingTarget, runtime
 function messageOf(error: unknown, fallback = 'The review action failed.'): string {
   return error instanceof Error && error.message.trim() !== '' ? error.message : fallback
 }
+type ReviewsControlAction = { action: string; enabled: boolean }
+
+function reviewsControlTarget(
+  surface: string,
+  slot: string,
+  worktree: string | null,
+  repo: RepoIdentity | null,
+  number: number | null,
+  headOid: string | null,
+  dialogAction: string | null = null,
+): string {
+  return JSON.stringify([
+    surface,
+    slot,
+    worktree,
+    repo === null ? null : { host: repo.host, owner: repo.owner, repo: repo.repo },
+    number,
+    headOid,
+    dialogAction,
+  ])
+}
+
+function controlDeliveryError(result: { delivered: false; reason: 'target-unavailable' | 'disabled' | 'unknown-action' }): string {
+  if (result.reason === 'disabled') return 'This action is not currently available.'
+  if (result.reason === 'unknown-action') return 'This action is no longer supported by the mounted view.'
+  return 'This control is no longer available.'
+}
+
+function controlValue(request: ReviewsUiControlRequest, allowed: readonly string[]): JsonRecord {
+  const value = request.value
+  if (value === undefined) return {}
+  if (!isRecord(value) || Object.keys(value).some((key) => !allowed.includes(key))) {
+    throw new Error('Invalid Reviews control arguments.')
+  }
+  return value
+}
+
+function useReviewsUiControl(options: {
+  context: UiPluginContext
+  surface: string
+  slot: string
+  worktree: string | null
+  repo: RepoIdentity | null
+  number: number | null
+  headOid: string | null
+  dialogAction?: string | null
+  active: boolean
+  actions(): ReviewsControlAction[]
+  run(request: ReviewsUiControlRequest, isCurrent: () => boolean): unknown | Promise<unknown>
+  onError?(message: string): void
+}) {
+  const target = reviewsControlTarget(
+    options.surface,
+    options.slot,
+    options.worktree,
+    options.repo,
+    options.number,
+    options.headOid,
+    options.dialogAction ?? null,
+  )
+  const actionsRef = useRef(options.actions)
+  const runRef = useRef(options.run)
+  const errorRef = useRef(options.onError)
+  actionsRef.current = options.actions
+  runRef.current = options.run
+  errorRef.current = options.onError
+  const registrationRef = useRef<{
+    target: string
+    generation: number
+    changed(): void
+    dispose(): void
+  } | null>(null)
+  const [reported, setReported] = useState<{ target: string; generation: number } | null>(null)
+  const actionsKey = JSON.stringify(options.actions())
+
+  useEffect(() => {
+    if (!options.active) {
+      registrationRef.current = null
+      setReported(null)
+      return
+    }
+    const registration = registerReviewsUiControl(options.context, {
+      surface: options.surface,
+      slot: options.slot,
+      target,
+      actions: () => actionsRef.current(),
+      run: (request, isCurrent) => runRef.current(request, isCurrent),
+    })
+    const lease = { target, generation: registration.generation, changed: registration.changed, dispose: registration.dispose }
+    registrationRef.current = lease
+    setReported({ target, generation: registration.generation })
+    return () => {
+      registration.dispose()
+      if (registrationRef.current === lease) registrationRef.current = null
+    }
+  }, [options.active, options.context, options.slot, options.surface, target])
+
+  useEffect(() => {
+    const lease = registrationRef.current
+    if (options.active && lease?.target === target) lease.changed()
+  }, [actionsKey, options.active, target])
+
+  async function request(action: string, value?: Record<string, unknown>) {
+    const lease = registrationRef.current
+    if (!options.active || lease === null || lease.target !== target) return null
+    const controlRequest: ReviewsUiControlRequest = {
+      target,
+      generation: lease.generation,
+      action,
+      ...(value === undefined ? {} : { value }),
+    }
+    try {
+      const result = await requestReviewsUiControl(options.context, controlRequest)
+      if (!result.delivered && registrationRef.current === lease) errorRef.current?.(controlDeliveryError(result))
+      return result
+    } catch (error) {
+      if (registrationRef.current === lease) errorRef.current?.(messageOf(error, 'The local action could not be delivered.'))
+      return null
+    }
+  }
+
+  return {
+    target,
+    generation: options.active && reported?.target === target ? reported.generation : undefined,
+    request,
+  }
+}
 
 function layoutWorktree(layout: UiLayout): string | null {
   const worktree = layout.worktree
@@ -462,34 +595,52 @@ function eligibilityDisabledReason(state: ReviewsSurfaceProps['state'], worktree
 }
 
 
-type StackMap = { available: boolean; number?: number; position?: number; size?: number; entries: JsonRecord[]; truncated: boolean; message?: string }
+type StackMap = {
+  available: boolean
+  loading: boolean
+  number?: number
+  position?: number
+  size?: number
+  entries: JsonRecord[]
+  truncated: boolean
+  message?: string
+}
 
 function stackModel(value: unknown): StackMap | null {
   if (!isRecord(value)) return null
   const number = positiveNumber(String(value.number ?? ''))
   const position = positiveNumber(String(value.position ?? ''))
   const size = positiveNumber(String(value.size ?? ''))
+  const reason = typeof value.reason === 'string' ? value.reason : null
+  const status = typeof value.status === 'string' ? value.status : null
   if (value.available !== true || !Array.isArray(value.entries)) {
-    const message = typeof value.message === 'string' ? value.message : value.reason === 'stack_unavailable'
-      ? 'The public hosting API could not load this stack.'
-      : value.reason === 'stack_mismatch'
-        ? 'The provider stack did not match the selected pull request.'
-        : 'Loading the canonical stack member list…'
+    const failed = reason === 'stack_unavailable' || reason === 'stack_mismatch' || status === 'error' || status === 'unavailable'
+    const loading = !failed && (status === 'loading' || status === 'pending' || reason === 'loading' || reason === 'pending' || reason === 'stack_loading'
+      || value.available === undefined && number !== null && position !== null && size !== null)
+    const fallback = loading
+      ? 'Loading the canonical stack member list…'
+      : reason === 'stack_unavailable'
+        ? 'The public hosting API could not load this stack.'
+        : reason === 'stack_mismatch'
+          ? 'The provider stack did not match the selected pull request.'
+          : 'The canonical stack could not be loaded.'
     return {
       available: false,
+      loading,
       ...(number ? { number } : {}),
       ...(position ? { position } : {}),
       ...(size ? { size } : {}),
       entries: [],
       truncated: value.truncated === true,
-      message
+      message: typeof value.message === 'string' && value.message.trim() !== '' ? value.message : fallback,
     }
   }
   if (!number || !position || !size) {
-    return { available: false, entries: [], truncated: false, message: 'The canonical stack response is incomplete.' }
+    return { available: false, loading: false, entries: [], truncated: false, message: 'The canonical stack response is incomplete.' }
   }
   return {
     available: true,
+    loading: false,
     number,
     position,
     size,
@@ -611,50 +762,37 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
   const rawDialog = state.checks.agentDialog
   const dialog = isRecord(rawDialog) ? rawDialog : null
   const surface = dialog?.surface === 'detail' ? 'detail' : 'checks'
+  const publicSurface = surface === 'checks' ? CHECKS_PANEL : REVIEW_VIEW
   const visible = dialog !== null && dialog.visible !== false
-  const target = dialog && isRecord(dialog.target) ? dialog.target : null
-  const worktree = target && typeof target.worktree === 'string' ? target.worktree : state.checks.worktree
-  const number = target && positiveNumber(String(target.number ?? '')) ? Number(target.number) : null
-  const action = dialog && typeof dialog.action === 'string' ? dialog.action : 'fix'
+  const rawTarget = dialog && isRecord(dialog.target) ? dialog.target : null
+  const worktree = rawTarget && typeof rawTarget.worktree === 'string' && rawTarget.worktree.trim() !== '' ? rawTarget.worktree : null
+  const number = rawTarget && positiveNumber(String(rawTarget.number ?? '')) ? Number(rawTarget.number) : null
+  const action = dialog?.action === 'conflicts' || dialog?.action === 'comments' ? dialog.action : 'fix'
+  const selectedReview = surface === 'checks' ? state.checks.review : state.detail.review
+  const selectedWorktree = surface === 'checks' ? state.checks.worktree : state.detail.target?.worktree ?? null
+  const selectedOwner = reviewContext(state, surface)
+  const selectedHead = selectedReview?.headRefOid ?? null
+  const dialogHead = dialog && typeof dialog.headOid === 'string' ? dialog.headOid : null
+  const matchingTarget = worktree !== null && worktree === selectedWorktree
+    && number !== null && selectedReview?.number === number
+    && (dialogHead === null || dialogHead === selectedHead)
+  const targetKey = reviewsControlTarget(publicSurface, 'agent', worktree, selectedOwner?.repo ?? null, number, selectedHead, action)
   const originalPrompt = dialogPrompt(dialog)
   const [prompt, setPrompt] = useState(originalPrompt)
   const [agent, setAgent] = useState(dialog && typeof dialog.agent === 'string' ? dialog.agent : '')
   const [args, setArgs] = useState(dialog && typeof dialog.args === 'string' ? dialog.args : '')
   const [agents, setAgents] = useState<JsonRecord[]>([])
   const [defaultAgent, setDefaultAgent] = useState('')
-  const [loadingAgents, setLoadingAgents] = useState(false)
+  const [loadingAgents, setLoadingAgents] = useState(visible)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const targetKey = `${surface}|${worktree ?? ''}|${number ?? ''}|${dialog?.headOid ?? ''}|${action}`
+  const startingRef = useRef<object | null>(null)
+  const busyRef = useRef(false)
+  const targetKeyRef = useRef(targetKey)
+  targetKeyRef.current = targetKey
   const promptRef = useRef<HTMLTextAreaElement>(null)
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    setPrompt(originalPrompt)
-    setAgent(dialog && typeof dialog.agent === 'string' ? dialog.agent : '')
-    setArgs(dialog && typeof dialog.args === 'string' ? dialog.args : '')
-    setError(null)
-  }, [targetKey])
-
-  useEffect(() => {
-    if (!visible) return
-    let active = true
-    setLoadingAgents(true)
-    context.call('quirky.agents/list').then((value) => {
-      if (!active) return
-      const result = createAgentList(value)
-      setAgents(result.agents)
-      setDefaultAgent(result.defaultAgent)
-    }).catch((failure: unknown) => {
-      if (active) setError(messageOf(failure))
-    }).finally(() => {
-      if (active) setLoadingAgents(false)
-    })
-    return () => { active = false }
-  }, [context, visible, targetKey])
-
-  const selectedReview = surface === 'checks' ? state.checks.review : state.detail.review
-  const currentPrRepo = selectedReview ? currentReviewPrRepo(selectedReview) : undefined
   const configuredAgent = defaultAgent !== 'auto' && defaultAgent !== 'shell' && agents.some((entry) => entry.id === defaultAgent)
     ? defaultAgent
     : undefined
@@ -662,122 +800,267 @@ export function ChecksAgentDialog(props: ReviewsSurfaceProps) {
   const markedAgentId = typeof markedAgent?.id === 'string' ? markedAgent.id : undefined
   const firstAgentId = typeof agents[0]?.id === 'string' ? agents[0].id : ''
   const selectedAgent = agent || configuredAgent || markedAgentId || firstAgentId
-  const persistTarget = useRef<{ surface: 'checks' | 'detail'; worktree: string | null; number: number | null; action: string; prRepo?: JsonRecord } | null>(null)
+  const draftRef = useRef({ prompt, agent: selectedAgent, args })
+  draftRef.current = { prompt, agent: selectedAgent, args }
+  const persistTarget = useRef<{
+    surface: 'checks' | 'detail'
+    worktree: string | null
+    number: number | null
+    action: string
+    prRepo?: JsonRecord
+  } | null>(null)
+  const currentPrRepo = selectedReview ? currentReviewPrRepo(selectedReview) : undefined
   persistTarget.current = { surface, worktree, number, action, ...(currentPrRepo ? { prRepo: currentPrRepo } : {}) }
 
+  useEffect(() => {
+    setPrompt(originalPrompt)
+    setAgent(dialog && typeof dialog.agent === 'string' ? dialog.agent : '')
+    setArgs(dialog && typeof dialog.args === 'string' ? dialog.args : '')
+    setCatalogError(null)
+    setError(null)
+    setAgents([])
+    setDefaultAgent('')
+    startingRef.current = null
+    busyRef.current = false
+    setBusy(false)
+  }, [targetKey])
+
+  useEffect(() => {
+    if (!visible) {
+      setLoadingAgents(false)
+      return
+    }
+    let active = true
+    setLoadingAgents(true)
+    setCatalogError(null)
+    setAgents([])
+    setDefaultAgent('')
+    context.call('quirky.agents/list').then((value) => {
+      if (!active) return
+      const result = createAgentList(value)
+      setAgents(result.agents)
+      setDefaultAgent(result.defaultAgent)
+    }).catch((failure: unknown) => {
+      if (active) setCatalogError(messageOf(failure, 'Could not detect enabled agents.'))
+    }).finally(() => {
+      if (active) setLoadingAgents(false)
+    })
+    return () => { active = false }
+  }, [context, visible, targetKey])
+
   const persist = useCallback(async (nextPrompt: string, nextAgent: string, nextArgs: string): Promise<boolean> => {
-    const target = persistTarget.current
-    if (!target || !target.worktree || target.number === null) return false
+    const current = persistTarget.current
+    if (!current || !current.worktree || current.number === null) return false
     const params: JsonRecord = {
-      surface: target.surface,
-      worktree: target.worktree,
-      number: target.number,
-      action: target.action,
+      surface: current.surface,
+      worktree: current.worktree,
+      number: current.number,
+      action: current.action,
       prompt: nextPrompt,
       ...(nextAgent ? { agent: nextAgent } : {}),
       args: nextArgs,
-      ...(target.prRepo ? { prRepo: target.prRepo } : {})
+      ...(current.prRepo ? { prRepo: current.prRepo } : {})
     }
     await context.call('quirky.reviews/checksSetAgentDialog', params)
     return true
   }, [context])
 
+  const canStartAgent = () => {
+    const draft = draftRef.current
+    return visible && dialog !== null && matchingTarget && !loadingAgents && catalogError === null
+      && !busyRef.current && startingRef.current === null
+      && agents.some((entry) => entry.id === draft.agent)
+      && draft.prompt.trim() !== ''
+  }
+
+  const finishDraftTimer = () => {
+    if (persistTimer.current === null) return
+    clearTimeout(persistTimer.current)
+    persistTimer.current = null
+  }
+
   useEffect(() => {
-    if (!visible || !worktree || number === null) return
-    if (persistTimer.current !== null) clearTimeout(persistTimer.current)
+    if (!visible || !matchingTarget) return
+    const scheduledTarget = targetKey
+    finishDraftTimer()
     persistTimer.current = setTimeout(() => {
       persistTimer.current = null
-      void persist(prompt, selectedAgent, args).catch((failure: unknown) => setError(messageOf(failure)))
+      if (targetKeyRef.current !== scheduledTarget) return
+      const draft = draftRef.current
+      void persist(draft.prompt, draft.agent, draft.args).catch((failure: unknown) => {
+        if (targetKeyRef.current === scheduledTarget) setError(messageOf(failure))
+      })
     }, 200)
-    return () => {
-      if (persistTimer.current !== null) clearTimeout(persistTimer.current)
-      persistTimer.current = null
+    return finishDraftTimer
+  }, [args, matchingTarget, persist, prompt, selectedAgent, targetKey, visible])
+
+  const runClose = async (isCurrent: () => boolean) => {
+    if (!isCurrent() || busyRef.current) return
+    busyRef.current = true
+    const token = {}
+    startingRef.current = token
+    setBusy(true)
+    finishDraftTimer()
+    const draft = draftRef.current
+    try {
+      await persist(draft.prompt, draft.agent, draft.args)
+      if (!isCurrent()) return
+      await context.call('quirky.reviews/checksSetAgentDialog', { action: 'hide', surface })
+      if (!isCurrent()) return
+      await refresh()
+    } catch (failure) {
+      if (isCurrent()) setError(messageOf(failure))
+    } finally {
+      if (startingRef.current === token) {
+        startingRef.current = null
+        busyRef.current = false
+        if (isCurrent()) setBusy(false)
+      }
     }
-  }, [args, number, persist, prompt, selectedAgent, visible, worktree])
+  }
+
+  const runStart = async (isCurrent: () => boolean) => {
+    if (!isCurrent() || !canStartAgent()) return
+    const token = {}
+    startingRef.current = token
+    busyRef.current = true
+    setBusy(true)
+    setError(null)
+    finishDraftTimer()
+    const draft = draftRef.current
+    try {
+      const saved = await persist(draft.prompt, draft.agent, draft.args)
+      if (!isCurrent() || !saved) return
+      const result = await context.call('quirky.reviews/checksLaunchAgent', {
+        worktree,
+        agent: draft.agent,
+        ...(draft.args ? { args: draft.args } : {})
+      })
+      if (!isCurrent()) return
+      const outcome = isRecord(result) ? result : null
+      if (outcome?.delivered !== true) {
+        setError(typeof outcome?.error === 'string' ? outcome.error : 'The agent prompt was not delivered.')
+      }
+      if (isCurrent()) await refresh()
+    } catch (failure) {
+      if (isCurrent()) {
+        setError(messageOf(failure))
+        await refresh().catch(() => undefined)
+      }
+    } finally {
+      if (startingRef.current === token) {
+        startingRef.current = null
+        busyRef.current = false
+        if (isCurrent()) setBusy(false)
+      }
+    }
+  }
+
+  const agentControl = useReviewsUiControl({
+    context,
+    surface: publicSurface,
+    slot: 'agent',
+    worktree,
+    repo: selectedOwner?.repo ?? null,
+    number,
+    headOid: selectedHead,
+    dialogAction: action,
+    active: visible && dialog !== null,
+    actions: () => [
+      { action: 'agent-start', enabled: canStartAgent() },
+      { action: 'agent-cancel', enabled: visible && dialog !== null && !busyRef.current },
+    ],
+    onError: setError,
+    run: async (request, isCurrent) => {
+      if (request.value !== undefined) throw new Error('Agent actions do not accept extra values.')
+      if (request.action === 'agent-start') return runStart(isCurrent)
+      if (request.action === 'agent-cancel') return runClose(isCurrent)
+      throw new Error('Unknown agent dialog action.')
+    },
+  })
+  const requestAgentControl = (action: string) => agentControl.request(action)
 
   useEffect(() => {
     if (!visible) return
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
-        void submit()
+        void requestAgentControl('agent-start')
       }
     }
     document.addEventListener('keydown', onKeyDown)
     promptRef.current?.focus()
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [visible, targetKey, prompt, agent, args])
-
-  const close = async () => {
-    if (busy) return
-    setBusy(true)
-    try {
-      await persist(prompt, selectedAgent, args)
-      await context.call('quirky.reviews/checksSetAgentDialog', { action: 'hide', surface })
-      await refresh()
-    } catch (failure) {
-      setError(messageOf(failure))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const submit = async () => {
-    if (busy || !worktree || number === null) return
-    if (prompt.trim() === '') {
-      setError('Enter an agent prompt before starting.')
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      await persist(prompt, selectedAgent, args)
-      const result = await context.call('quirky.reviews/checksLaunchAgent', {
-        worktree,
-        agent: selectedAgent,
-        ...(args ? { args } : {})
-      })
-      const outcome = isRecord(result) ? result : null
-      if (outcome?.delivered !== true) {
-        setError(typeof outcome?.error === 'string' ? outcome.error : 'The agent prompt was not delivered.')
-      }
-      await refresh()
-    } catch (failure) {
-      setError(messageOf(failure))
-      await refresh().catch(() => undefined)
-    } finally {
-      setBusy(false)
-    }
-  }
+  }, [requestAgentControl, visible])
 
   if (!visible || !dialog) return null
   const title = action === 'conflicts' ? 'Resolve Review Conflicts With AI' : action === 'comments' ? 'Resolve Comments With AI' : 'Fix With AI'
   return <Dialog
     open={visible}
     title={title}
-    onClose={() => { void close() }}
+    onClose={() => { void requestAgentControl('agent-cancel') }}
     closeOnBackdrop={false}
     actions={<div className="ui-cluster">
-      <Button disabled={busy} onClick={() => void close()}>Cancel</Button>
-      <Button variant="primary" disabled={busy || loadingAgents || agents.length === 0 || selectedAgent === '' || prompt.trim() === ''} onClick={() => void submit()}>
+      <Button disabled={busy} onClick={() => { void requestAgentControl('agent-cancel') }}>Cancel</Button>
+      <Button variant="primary" disabled={!canStartAgent()} onClick={() => { void requestAgentControl('agent-start') }}>
         {busy ? 'Starting…' : 'Start agent'}
       </Button>
     </div>}
   >
-    <div className="ui-stack">
+    <div
+      className="ui-stack"
+      data-review-control-target={agentControl.target}
+      data-review-control-generation={agentControl.generation}
+    >
       <p className="ui-text-muted">PR #{number} · {contextTargetLabel(state, surface)}</p>
+      {loadingAgents && <NoticeLine>Detecting agents…</NoticeLine>}
+      {!loadingAgents && !catalogError && agents.length === 0 && <EmptyState message="No enabled agents" />}
+      {(catalogError ?? error) && <InlineError message={catalogError ?? error!} />}
       <FormRow label="Agent" htmlFor="reviews-agent-select">
-        <select id="reviews-agent-select" className="ui-text-field__input" aria-label="Agent" value={selectedAgent} disabled={busy || loadingAgents || agents.length === 0} onChange={(event) => setAgent(event.target.value)}>
+        <select
+          id="reviews-agent-select"
+          className="ui-text-field__input"
+          aria-label="Agent"
+          value={selectedAgent}
+          disabled={busy || loadingAgents || catalogError !== null || agents.length === 0}
+          onChange={(event) => {
+            draftRef.current = { ...draftRef.current, agent: event.target.value }
+            setAgent(event.target.value)
+          }}
+        >
           {agents.length === 0 && <option value="">{loadingAgents ? 'Detecting agents…' : 'No enabled agents'}</option>}
           {agents.map((entry) => <option key={String(entry.id)} value={String(entry.id)}>{String(entry.label ?? entry.id)}</option>)}
         </select>
       </FormRow>
       <FormRow label="Prompt" htmlFor="reviews-agent-prompt">
-        <textarea id="reviews-agent-prompt" className="ui-text-field__input" ref={promptRef} aria-label="Agent prompt" rows={9} maxLength={MAX_PROMPT_LENGTH} value={prompt} disabled={busy} onChange={(event) => setPrompt(event.target.value)} />
+        <textarea
+          id="reviews-agent-prompt"
+          className="ui-text-field__input"
+          ref={promptRef}
+          aria-label="Agent prompt"
+          rows={9}
+          maxLength={MAX_PROMPT_LENGTH}
+          value={prompt}
+          disabled={busy}
+          onChange={(event) => {
+            draftRef.current = { ...draftRef.current, prompt: event.target.value }
+            setPrompt(event.target.value)
+          }}
+        />
       </FormRow>
-      <TextField id="reviews-agent-args" label="CLI arguments" aria-label="CLI arguments" value={args} maxLength={MAX_AGENT_ARGS_LENGTH} disabled={busy} onChange={(event) => setArgs(event.target.value)} />
+      <TextField
+        id="reviews-agent-args"
+        label="CLI arguments"
+        aria-label="CLI arguments"
+        value={args}
+        maxLength={MAX_AGENT_ARGS_LENGTH}
+        disabled={busy}
+        onChange={(event) => {
+          draftRef.current = { ...draftRef.current, args: event.target.value }
+          setArgs(event.target.value)
+        }}
+      />
       <p className="ui-text-muted">Cmd/Ctrl+Enter starts the selected agent after it is ready.</p>
-      {error && <p role="alert"><StatusDot status="failing" label="Error" /> {error}</p>}
     </div>
   </Dialog>
 }
@@ -798,6 +1081,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const [authDiagnostics, setAuthDiagnostics] = useState<JsonRecord | null>(null)
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkNumber, setLinkNumber] = useState('')
+  const linkNumberRef = useRef('')
   const [dragHeight, setDragHeight] = useState<number | null>(null)
   const dragHeightRef = useRef<number | null>(null)
   const [countdownNow, setCountdownNow] = useState(Date.now())
@@ -848,8 +1132,8 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const currentReview = active?.review ?? null
   const titleOwner = active === null ? null : reviewContext(state, 'checks')
   const titleIdentity = titleOwner === null
-    ? `checks|${activeWorktree ?? ''}|none`
-    : `${titleOwner.worktree}|${titleOwner.number}|${titleOwner.repo?.host ?? ''}/${titleOwner.repo?.owner ?? ''}/${titleOwner.repo?.repo ?? ''}`
+    ? `checks|${activeWorktree ?? ''}|none|${currentReview?.headRefOid ?? ''}`
+    : `${titleOwner.worktree}|${titleOwner.number}|${titleOwner.repo?.host ?? ''}/${titleOwner.repo?.owner ?? ''}/${titleOwner.repo?.repo ?? ''}|${currentReview?.headRefOid ?? ''}`
   const titleField = useDraftField<string | null>({
     identity: titleIdentity,
     remote: active?.titleDraft ?? null,
@@ -872,10 +1156,12 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const titleInput = titleField.value ?? ''
   const titleSaveAction = useRef<DraftAction<string | null> | null>(null)
   const lookup = active && isRecord(active.lookup) ? active.lookup : null
+  const onStoppedAll = () => refreshSitter(sitterIncludeDetail.current)
+  const onRefreshSitter = refreshSitter
   const sitterSafetyStrip = sitterState?.available ? <SitterSafetyStrip
     context={context}
     sitterState={sitterState}
-    onStoppedAll={() => refreshSitter(sitterIncludeDetail.current)}
+    onStoppedAll={onStoppedAll}
   /> : null
   const sitterRow = sitterState?.available ? <SitterRow
     context={context}
@@ -884,7 +1170,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     lookup={lookup}
     sitterState={sitterState}
     loadingDetail={sitterDetailLoading}
-    onRefreshSitter={refreshSitter}
+    onRefreshSitter={onRefreshSitter}
   /> : null
   const missingOrigin = lookup?.kind === 'unsupported' && lookup.reason === 'missing_origin'
   const eligibility = active && isRecord(active.eligibility) ? active.eligibility : null
@@ -939,9 +1225,14 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     })
   }, [activeWorktree, context, isPanelVisible, missingOrigin])
 
-  const runRefresh = useCallback(async (reason: 'manual' | 'active', worktree = activeWorktree): Promise<boolean> => {
+  const runRefresh = useCallback(async (
+    reason: 'manual' | 'active',
+    worktree = activeWorktree,
+    leaseCurrent?: () => boolean,
+  ): Promise<boolean> => {
     if (!worktree) return false
-    const stillActive = () => mounted.current && activeWorktreeRef.current === worktree
+    const stillActive = () => mounted.current && activeWorktreeRef.current === worktree && (leaseCurrent?.() ?? true)
+    if (!stillActive()) return false
     setActionError(null)
     const current = currentTargetRef.current
     const candidate: JsonRecord = current?.worktree === worktree ? current.candidate : { worktree, active: true }
@@ -954,7 +1245,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
         : null
       const result = await context.call('quirky.reviews/checksRefresh', { worktree, force: true })
       if (!stillActive()) return false
-      await refresh()
+      await refreshRef.current()
       if (!stillActive()) return false
       if (queuedError) setActionError(queuedError)
       if (isRecord(result) && result.stale === true) return queuedError === null
@@ -968,7 +1259,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       if (stillActive()) setActionError(messageOf(error))
       return false
     }
-  }, [activeWorktree, context, refresh])
+  }, [activeWorktree, context])
 
   useEffect(() => {
     if (!currentTarget || !activeWorktree || !isPanelVisible) {
@@ -1031,118 +1322,343 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     return () => window.clearInterval(timer)
   }, [isPanelVisible, lookup?.retryDisabledUntil])
 
-  const runReviewMethod = useCallback(async (id: string, params: JsonRecord, refreshState = true): Promise<unknown> => {
+  const conflicts = active?.conflicts
+  const localConflict = isRecord(conflicts) && (
+    conflicts.status === 'loading' || conflicts.status === 'unavailable' ||
+    conflicts.status === 'ready' && (
+      conflicts.conflicting === true ||
+      (Array.isArray(conflicts.files) && conflicts.files.length > 0) ||
+      (Array.isArray(conflicts.localFiles) && conflicts.localFiles.length > 0)
+    )
+  )
+  const hostConflict = currentReview?.mergeable === 'CONFLICTING' || currentReview?.mergeStateStatus === 'DIRTY'
+  const checkRows = active && isRecord(active.checks) && Array.isArray(active.checks.checks) ? active.checks.checks : []
+  const broken = checkRows.some((row) => isRecord(row) && (
+    ['failure', 'error', 'startup_failure', 'timed_out', 'cancelled', 'action_required'].includes(String(row.conclusion ?? '').toLowerCase()) ||
+    ['failure', 'error', 'action_required'].includes(String(row.status ?? '').toLowerCase())
+  ))
+  const queuedCount = active?.queuedComments.length ?? 0
+  const triageAction = hostConflict || localConflict ? 'conflicts' : broken ? 'fix' : queuedCount > 0 ? 'comments' : null
+  const noReviewStatus = active && activeWorktree && !currentReview ? selectStatus(state, activeWorktree) : null
+  const offeredBlockerAction = noReviewStatus?.action ?? null
+  const retrySeconds = retryDelay(lookup, countdownNow)
+  const reviewRetrySeconds = retryDelay(active?.lookup, countdownNow)
+  const noReviewEligibility = eligibilityIsCurrent(state, activeWorktree)
+  const blocked = prioritizedBlocker(eligibility)
+  const reason = blocked && typeof blocked.reason === 'string'
+    ? blocked.reason
+    : eligibility && typeof eligibility.reason === 'string'
+      ? eligibility.reason
+      : lookupReason(lookup)
+  const diagnosticData = authDiagnostics ?? (
+    lookup && isRecord(lookup.authDiagnostics)
+      ? lookup.authDiagnostics
+      : eligibility && isRecord(eligibility.authDiagnostics)
+        ? eligibility.authDiagnostics
+        : null
+  )
+  const diagnosticError = lookup && typeof lookup.authDiagnosticsError === 'string'
+    ? lookup.authDiagnosticsError
+    : eligibility && typeof eligibility.authDiagnosticsError === 'string'
+      ? eligibility.authDiagnosticsError
+      : null
+  const diagnostics = diagnosticsCopy(diagnosticData)
+  const currentReviewOwner = active === null ? null : reviewContext(state, 'checks')
+  const lookupGitStatus = statusFromLookup(lookup)
+  const blockerReview = eligibility && isRecord(eligibility.review) ? eligibility.review : null
+  const panelHead = currentReview?.headRefOid
+    ?? (typeof lookupGitStatus?.head === 'string' ? lookupGitStatus.head : null)
+    ?? (typeof eligibility?.headOid === 'string' ? eligibility.headOid : null)
+  const panelNumber = currentReview?.number
+    ?? (lookup && positiveNumber(String(lookup.number ?? '')) ? Number(lookup.number) : null)
+    ?? (blockerReview && positiveNumber(String(blockerReview.number ?? '')) ? Number(blockerReview.number) : null)
+  const controlRepo = currentReviewOwner?.repo
+    ?? parseRepoIdentity(lookup?.prRepo)
+    ?? parseRepoIdentity(eligibility?.prRepo)
+    ?? parseRepoIdentity(blockerReview?.prRepo)
+    ?? null
+  const panelTarget = reviewsControlTarget(CHECKS_PANEL, 'checks', activeWorktree, controlRepo, panelNumber, panelHead)
+  const canRefresh = active !== null && activeWorktree !== null && !active.loading && retrySeconds === null
+    && (currentReview !== null || !missingOrigin)
+  const canUnlink = currentReview !== null && currentReviewOwner !== null && activeWorktree !== null && active !== null && !active.loading
+  const canRelink = offeredBlockerAction === 'relink' && activeWorktree !== null && active !== null && !active.loading
+  const canLink = currentReview !== null && currentReviewOwner !== null && activeWorktree !== null && active !== null && !active.loading
+  const canTitleEdit = currentReview !== null && titleOwner !== null && activeWorktree !== null && active !== null && !active.loading
+  const canCreate = noReviewEligibility && active !== null && !active.loading
+  const canBlocker = offeredBlockerAction !== null && activeWorktree !== null && active !== null && !active.loading
+  const canOpenLink = currentReview !== null && currentReviewOwner !== null && activeWorktree !== null && active !== null && !active.loading && safeHttpUrl(currentReview.url) !== null
+  const canCopyLink = activeWorktree !== null && ((currentReview !== null && currentReviewOwner !== null && safeHttpUrl(currentReview.url) !== null) || diagnosticData !== null)
+  const canAgentOpen = triageAction !== null && activeWorktree !== null && active !== null && !active.loading
+  const canSetHeight = active !== null && activeWorktree !== null
+
+  const runReviewOperation = async (
+    operation: () => Promise<unknown>,
+    isCurrent: () => boolean,
+    refreshState = true,
+  ): Promise<unknown> => {
+    if (!isCurrent()) return null
     setActionError(null)
     try {
-      const result = await context.call(`quirky.reviews/${id}`, params)
-      if (refreshState) await refresh()
+      const result = await operation()
+      if (!isCurrent()) return result
+      if (refreshState) {
+        await refreshRef.current()
+        if (!isCurrent()) return result
+      }
       const error = presentationError(result)
       if (error) setActionError(error)
       return result
     } catch (error) {
-      setActionError(messageOf(error))
+      if (isCurrent()) setActionError(messageOf(error))
       return null
     }
-  }, [context, refresh])
+  }
 
-  const openAgentDialog = useCallback(async (action: 'fix' | 'conflicts' | 'comments') => {
-    if (!activeWorktree) return
-    await runReviewMethod('checksSetAgentDialog', { surface: 'checks', worktree: activeWorktree, action })
-  }, [activeWorktree, runReviewMethod])
-
-  const openLink = useCallback(async (url: string, event?: MouseEvent<HTMLButtonElement>) => {
-    if (!activeWorktree) return
-    const invert = event !== undefined && routing.invert(event)
-    await runReviewMethod('openLink', { url, worktree: activeWorktree, ...(invert ? { invert: true } : {}) }, false)
-  }, [activeWorktree, runReviewMethod, routing.invert])
-
-  const copyLink = useCallback(async (url: string) => {
-    await runReviewMethod('copyText', { text: url }, false)
-  }, [runReviewMethod])
-
-  const linkAnother = async (event: FormEvent) => {
-    event.preventDefault()
-    const number = positiveNumber(linkNumber)
-    if (!number || !activeWorktree) {
-      setActionError('Enter a positive pull request number.')
-      return
-    }
-    const result = await runReviewMethod('checksLink', { worktree: activeWorktree, number })
-    if (isRecord(result) && result.linked === true) {
-      setLinkOpen(false)
-      setLinkNumber('')
+  const runAuthDiagnosis = async (isCurrent: () => boolean) => {
+    if (!activeWorktree || !isCurrent()) return
+    setActionError(null)
+    try {
+      const result = await context.call('quirky.hosting/diagnoseAuth', { worktree: activeWorktree })
+      if (!isCurrent()) return
+      await refreshRef.current()
+      if (!isCurrent()) return
+      if (!isRecord(result)) throw new Error('GitHub returned invalid authentication diagnostics.')
+      setAuthDiagnostics(result)
+      setActionError(null)
+    } catch (error) {
+      if (isCurrent()) setActionError(messageOf(error))
     }
   }
 
-  const openComposer = async () => {
-    if (!activeWorktree || !eligibilityIsCurrent(state, activeWorktree)) return
-    await runReviewMethod('createOpen', { worktree: activeWorktree }, false)
-  }
-
-  const runBlockerAction = async (action: 'publish' | 'sync' | 'push' | 'open' | 'auth' | 'relink', number?: number) => {
-    if (!activeWorktree) return
+  const runBlocker = async (request: ReviewsUiControlRequest, isCurrent: () => boolean) => {
+    const value = controlValue(request, ['action', 'number'])
+    const action = value.action
+    const allowed = ['publish', 'sync', 'push', 'open', 'auth', 'relink']
+    if (typeof action !== 'string' || !allowed.includes(action)) throw new Error('Invalid pull request blocker action.')
+    if (!noReviewStatus || action !== offeredBlockerAction || !activeWorktree || !isCurrent()) return
+    const existingNumber = noReviewStatus.existingNumber
+    if (value.number !== undefined && !positiveInteger(value.number)) throw new Error('Invalid blocker pull request number.')
+    if (value.number !== undefined && value.number !== existingNumber) return
+    if (action !== 'open' && action !== 'relink' && value.number !== undefined) {
+      throw new Error('This blocker action does not accept a pull request number.')
+    }
     if (action === 'relink') {
-      await runReviewMethod('checksRelink', { worktree: activeWorktree })
+      await runReviewOperation(() => context.call('quirky.reviews/checksRelink', { worktree: activeWorktree }), isCurrent)
       return
     }
     if (action === 'open') {
-      const existingValue = eligibility?.review
-      const existingNumber = number ?? (isRecord(existingValue) && positiveNumber(String(existingValue.number ?? '')) ? Number(existingValue.number) : currentReview?.number)
-      if (existingNumber) await runReviewMethod('checksOpenReview', { worktree: activeWorktree, number: existingNumber, tab: 'conversation' })
+      if (!existingNumber) return
+      await runReviewOperation(() => context.call('quirky.reviews/checksOpenReview', {
+        worktree: activeWorktree,
+        number: existingNumber,
+        tab: 'conversation',
+      }), isCurrent)
       return
     }
     if (action === 'auth') {
-      try {
-        const diagnostics = await context.call('quirky.hosting/diagnoseAuth', { worktree: activeWorktree })
-        await refresh()
-        if (!isRecord(diagnostics)) throw new Error('GitHub returned invalid authentication diagnostics.')
-        setAuthDiagnostics(diagnostics)
-        setActionError(null)
-      } catch (error) {
-        setActionError(messageOf(error))
-      }
+      await runAuthDiagnosis(isCurrent)
       return
     }
-    const result = await runReviewMethod('checksGitAction', { worktree: activeWorktree, action })
-    if (action === 'push' && isRecord(result) && result.ok === true) {
-      await runReviewMethod('createOpen', { worktree: activeWorktree }, false)
+    const result = await runReviewOperation(() => context.call('quirky.reviews/checksGitAction', {
+      worktree: activeWorktree,
+      action,
+    }), isCurrent)
+    if (action === 'push' && isRecord(result) && result.ok === true && isCurrent()) {
+      await runReviewOperation(() => context.call('quirky.reviews/createOpen', { worktree: activeWorktree }), isCurrent, false)
     }
   }
 
-  const startTitleEdit = () => {
-    if (!titleOwner || !currentReview) return
-    setActionError(null)
-    titleField.edit(currentReview.title)
+  const resolveOpenLink = (number: number | null): string | null => {
+    if (!currentReview) return null
+    if (number === currentReview.number) return safeHttpUrl(currentReview.url)
+    const stack = stackModel(currentReview.stack)
+    if (!stack?.available) return null
+    const entry = stack.entries.find((candidate) => candidate.number === number)
+    return safeHttpUrl(entry?.url)
   }
-  const saveTitle = async () => {
-    if (!titleOwner || !currentReview || titleField.value === null || titleInput.trim() === '') return
+
+  const runChecksControl = async (request: ReviewsUiControlRequest, isCurrent: () => boolean) => {
+    if (!isCurrent()) return
+    if (request.action === 'refresh') {
+      controlValue(request, [])
+      await runRefresh('manual', activeWorktree, isCurrent)
+      return
+    }
+    if (request.action === 'unlink') {
+      controlValue(request, [])
+      if (activeWorktree) await runReviewOperation(() => context.call('quirky.reviews/checksUnlink', { worktree: activeWorktree }), isCurrent)
+      return
+    }
+    if (request.action === 'relink') {
+      controlValue(request, [])
+      if (offeredBlockerAction === 'relink' && activeWorktree) {
+        await runReviewOperation(() => context.call('quirky.reviews/checksRelink', { worktree: activeWorktree }), isCurrent)
+      }
+      return
+    }
+    if (request.action === 'link-open') {
+      controlValue(request, [])
+      if (currentReview && isCurrent()) {
+        setActionError(null)
+        linkNumberRef.current = ''
+        setLinkNumber('')
+        setLinkOpen(true)
+      }
+      return
+    }
+    if (request.action === 'title-edit') {
+      controlValue(request, [])
+      if (!currentReview || !isCurrent()) return
+      setActionError(null)
+      titleField.edit(currentReview.title)
+      return
+    }
+    if (request.action === 'create') {
+      controlValue(request, [])
+      if (activeWorktree && noReviewEligibility) {
+        await runReviewOperation(() => context.call('quirky.reviews/createOpen', { worktree: activeWorktree }), isCurrent, false)
+      }
+      return
+    }
+    if (request.action === 'blocker') {
+      await runBlocker(request, isCurrent)
+      return
+    }
+    if (request.action === 'open-link') {
+      const value = controlValue(request, ['number', 'invert'])
+      const number = value.number === undefined ? currentReview?.number ?? null : value.number
+      if (!positiveInteger(number)) throw new Error('Invalid pull request link target.')
+      if (value.invert !== undefined && typeof value.invert !== 'boolean') throw new Error('Invalid pull request link modifier.')
+      const url = resolveOpenLink(number)
+      if (!url || !activeWorktree) throw new Error('Select a current pull request or stack member link.')
+      await runReviewOperation(() => context.call('quirky.reviews/openLink', {
+        url,
+        worktree: activeWorktree,
+        ...(value.invert === true ? { invert: true } : {}),
+      }), isCurrent, false)
+      return
+    }
+    if (request.action === 'copy-link') {
+      const value = controlValue(request, ['source'])
+      const source = value.source ?? 'review'
+      const text = source === 'review'
+        ? currentReview && currentReviewOwner !== null && safeHttpUrl(currentReview.url)
+        : source === 'auth-status' && diagnosticData !== null
+          ? 'gh auth status'
+          : null
+      if (typeof text !== 'string' || text === '') throw new Error('Select a current pull request link or GitHub auth status.')
+      await runReviewOperation(() => copyReviewsText(text), isCurrent, false)
+      return
+    }
+    if (request.action === 'agent-open') {
+      const value = controlValue(request, ['action'])
+      if (value.action !== 'fix' && value.action !== 'conflicts' && value.action !== 'comments') {
+        throw new Error('Invalid agent action.')
+      }
+      if (value.action !== triageAction || !activeWorktree) return
+      await runReviewOperation(() => context.call('quirky.reviews/checksSetAgentDialog', {
+        surface: 'checks',
+        worktree: activeWorktree,
+        action: value.action,
+      }), isCurrent)
+      return
+    }
+    if (request.action === 'height-set') {
+      const value = controlValue(request, ['height'])
+      if (typeof value.height !== 'number' || !Number.isFinite(value.height)) throw new Error('Invalid Checks panel height.')
+      const height = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(value.height)))
+      dragHeightRef.current = null
+      setDragHeight(null)
+      await runReviewOperation(() => context.call('quirky.reviews/checksSetHeight', { height }), isCurrent)
+      return
+    }
+    throw new Error('Unknown Checks panel action.')
+  }
+
+  const checksControl = useReviewsUiControl({
+    context,
+    surface: CHECKS_PANEL,
+    slot: 'checks',
+    worktree: activeWorktree,
+    repo: controlRepo,
+    number: panelNumber,
+    headOid: panelHead,
+    active: true,
+    onError: setActionError,
+    actions: () => [
+      { action: 'refresh', enabled: canRefresh },
+      { action: 'unlink', enabled: canUnlink },
+      { action: 'relink', enabled: canRelink },
+      { action: 'link-open', enabled: canLink },
+      { action: 'title-edit', enabled: canTitleEdit },
+      { action: 'create', enabled: canCreate },
+      { action: 'blocker', enabled: canBlocker },
+      { action: 'open-link', enabled: canOpenLink },
+      { action: 'copy-link', enabled: canCopyLink },
+      { action: 'agent-open', enabled: canAgentOpen },
+      { action: 'height-set', enabled: canSetHeight },
+    ],
+    run: runChecksControl,
+  })
+  const requestChecksControl = (action: string, value?: Record<string, unknown>) => checksControl.request(action, value)
+
+  const titleControl = useReviewsUiControl({
+    context,
+    surface: CHECKS_PANEL,
+    slot: 'title',
+    worktree: titleOwner?.worktree ?? activeWorktree,
+    repo: titleOwner?.repo ?? controlRepo,
+    number: titleOwner?.number ?? currentReview?.number ?? null,
+    headOid: currentReview?.headRefOid ?? panelHead,
+    active: titleEditing && currentReview !== null && titleOwner !== null,
+    onError: setActionError,
+    actions: () => [
+      { action: 'title-save', enabled: canTitleEdit && titleInput.trim() !== '' },
+      { action: 'title-cancel', enabled: canTitleEdit },
+    ],
+    run: async (request, isCurrent) => {
+      controlValue(request, [])
+      if (request.action === 'title-save') await saveTitle(isCurrent)
+      else if (request.action === 'title-cancel') {
+        if (titleOwner && currentReview && isCurrent()) {
+          setActionError(null)
+          titleField.edit(null)
+        }
+      } else throw new Error('Unknown title editor action.')
+    },
+  })
+  const requestTitleControl = (action: string) => titleControl.request(action)
+
+  async function saveTitle(isCurrent: () => boolean): Promise<void> {
+    if (!titleOwner || !currentReview || titleField.value === null || titleInput.trim() === '' || !isCurrent()) return
     if (titleSaveAction.current !== null && titleSaveAction.current.status() !== 'gone') return
+    const owner = titleOwner
+    const reviewAtStart = currentReview
     const action = titleField.begin()
     titleSaveAction.current = action
     setActionError(null)
     try {
       await titleField.settled()
-      if (action.status() === 'gone') return
+      if (!isCurrent() || action.status() === 'gone') return
       const title = action.take()
       if (title === null) {
         action.fail()
         return
       }
       const result = await context.call('quirky.reviews/checksSaveTitle', {
-        worktree: titleOwner.worktree,
-        number: titleOwner.number,
-        expectedHead: currentReview.headRefOid,
+        worktree: owner.worktree,
+        number: owner.number,
+        expectedHead: reviewAtStart.headRefOid,
         title,
       })
-      if (action.status() === 'gone') return
-      if (isRecord(result) && result.updated === true) {
-        action.succeed(null)
-      } else {
+      if (!isCurrent() || action.status() === 'gone') return
+      if (isRecord(result) && result.updated === true) action.succeed(null)
+      else {
         action.fail()
         setActionError(presentationError(result) ?? 'The pull request title could not be saved.')
       }
     } catch (error) {
-      if (action.status() !== 'gone') {
+      if (isCurrent() && action.status() !== 'gone') {
         action.fail()
         setActionError(messageOf(error))
       }
@@ -1150,22 +1666,57 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       if (titleSaveAction.current === action) titleSaveAction.current = null
     }
   }
-  const cancelTitle = () => {
-    if (!titleOwner || !currentReview) return
-    setActionError(null)
-    titleField.edit(null)
-  }
+
+  const linkControl = useReviewsUiControl({
+    context,
+    surface: CHECKS_PANEL,
+    slot: 'link',
+    worktree: activeWorktree,
+    repo: controlRepo,
+    number: panelNumber,
+    headOid: panelHead,
+    active: linkOpen && currentReview !== null && activeWorktree !== null,
+    onError: setActionError,
+    actions: () => [
+      { action: 'link-submit', enabled: linkOpen && activeWorktree !== null && active !== null && !active.loading },
+      { action: 'link-cancel', enabled: linkOpen },
+    ],
+    run: async (request, isCurrent) => {
+      const value = controlValue(request, request.action === 'link-submit' ? ['number'] : [])
+      if (request.action === 'link-cancel') {
+        if (isCurrent()) {
+          setActionError(null)
+          linkNumberRef.current = ''
+          setLinkNumber('')
+          setLinkOpen(false)
+        }
+        return
+      }
+      if (request.action !== 'link-submit') throw new Error('Unknown pull request link action.')
+      if (value.number !== undefined && typeof value.number !== 'string') throw new Error('Invalid pull request number.')
+      const number = positiveNumber(typeof value.number === 'string' ? value.number : linkNumberRef.current)
+      if (!number || !activeWorktree) {
+        if (isCurrent()) setActionError('Enter a positive pull request number.')
+        return
+      }
+      const result = await runReviewOperation(() => context.call('quirky.reviews/checksLink', {
+        worktree: activeWorktree,
+        number,
+      }), isCurrent)
+      if (isCurrent() && isRecord(result) && result.linked === true) {
+        linkNumberRef.current = ''
+        setLinkNumber('')
+        setLinkOpen(false)
+      }
+    },
+  })
+  const requestLinkControl = (action: string) => linkControl.request(action)
 
   const setHeight = useCallback((height: number) => {
     const bounded = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, Math.round(height)))
     dragHeightRef.current = bounded
     setDragHeight(bounded)
   }, [])
-  const commitHeight = useCallback(async (height: number) => {
-    dragHeightRef.current = null
-    setDragHeight(null)
-    await runReviewMethod('checksSetHeight', { height })
-  }, [runReviewMethod])
   const beginResize = (event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault()
     const startY = event.clientY
@@ -1175,7 +1726,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       dragCleanup.current = null
-      void commitHeight(dragHeightRef.current ?? active?.height ?? startHeight)
+      void requestChecksControl('height-set', { height: dragHeightRef.current ?? active?.height ?? startHeight })
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
@@ -1186,55 +1737,93 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   }
 
   useEffect(() => () => dragCleanup.current?.(), [])
+  useEffect(() => {
+    dragCleanup.current?.()
+    dragCleanup.current = null
+    dragHeightRef.current = null
+    setDragHeight(null)
+    linkNumberRef.current = ''
+    setLinkNumber('')
+    setLinkOpen(false)
+    setActionError(null)
+  }, [panelTarget])
 
   const actionItems = useMemo(() => [
-    { id: 'unlink', label: 'Unlink PR from workspace', onAction: () => { void runReviewMethod('checksUnlink', { worktree: activeWorktree }) } },
-    { id: 'link-another', label: 'Link another PR', onAction: () => setLinkOpen(true) },
-  ], [activeWorktree, runReviewMethod])
+    {
+      id: 'unlink',
+      label: 'Unlink PR from workspace',
+      disabled: !canUnlink,
+      onAction: () => { void requestChecksControl('unlink') },
+    },
+    {
+      id: 'link-another',
+      label: 'Link another PR',
+      disabled: !canLink,
+      onAction: () => { void requestChecksControl('link-open') },
+    },
+  ], [canLink, canUnlink, requestChecksControl])
 
+  const panelMetadata = {
+    'data-review-control-target': checksControl.target,
+    'data-review-control-generation': checksControl.generation,
+  }
   if (!activeWorktree) {
-    return <section className="ui-stack">
+    return <section className="ui-stack" {...panelMetadata}>
       {sitterSafetyStrip}
       {sitterRow}
       <SectionHeader title="No workspace selected" />
       <EmptyState message="Select a workspace to view checks." />
     </section>
   }
-  if (!active || active.loading && !active.lookup && !active.review) {
-    return <section className="ui-stack" aria-busy="true">
+  const initialLookupPending = active !== null && active.lookup?.kind === 'loading' && !active.review
+  if (!active || active.loading && !active.lookup && !active.review || initialLookupPending) {
+    const readError = actionError ?? active?.error ?? titleField.error
+    return <section className="ui-stack" aria-busy={readError === null} {...panelMetadata}>
       {sitterSafetyStrip}
       {sitterRow}
-      <p role="status" className="ui-text-muted">Checking pull request status…</p>
-      {actionError && <p role="alert"><Badge tone="failing">{actionError}</Badge></p>}
+      {readError
+        ? <InlineError message={readError} />
+        : <NoticeLine>Checking pull request status…</NoticeLine>}
     </section>
   }
   if (!currentReview) {
-    const empty = selectStatus(state, activeWorktree)
-    const retrySeconds = retryDelay(lookup, countdownNow)
-    const eligible = eligibilityIsCurrent(state, activeWorktree)
-    const blocked = prioritizedBlocker(eligibility)
-    const reason = blocked && typeof blocked.reason === 'string' ? blocked.reason : eligibility && typeof eligibility.reason === 'string' ? eligibility.reason : lookupReason(lookup)
-    const blocker = blockerCopy(reason, blocked)
-    const diagnosticData = authDiagnostics ?? (lookup && isRecord(lookup.authDiagnostics) ? lookup.authDiagnostics : eligibility && isRecord(eligibility.authDiagnostics) ? eligibility.authDiagnostics : null)
-    const diagnosticError = lookup && typeof lookup.authDiagnosticsError === 'string' ? lookup.authDiagnosticsError : eligibility && typeof eligibility.authDiagnosticsError === 'string' ? eligibility.authDiagnosticsError : null
-    const diagnostics = diagnosticsCopy(diagnosticData)
+    const empty = noReviewStatus ?? selectStatus(state, activeWorktree)
     const existingNumber = empty.existingNumber
-    const busy = Boolean(active.loading)
+    const busy = active.loading
+    const lookupFailure = lookup?.kind === 'unavailable'
+      ? typeof lookup.message === 'string' ? lookup.message : 'The provider could not determine whether this branch has a pull request.'
+      : reason === 'lookup_unavailable'
+        ? 'The provider could not establish whether this branch has a review. No composer is available until lookup succeeds.'
+        : null
+    const genuineEmpty = lookup?.kind === 'no-review' && noReviewEligibility && active.error === null
+    const createUnavailable = lookup?.kind === 'unavailable' || reason === 'lookup_unavailable'
     return (
-      <section className="ui-stack" style={{ minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
+      <section className="ui-stack" style={{ minHeight: 0, maxHeight: '100%', overflow: 'hidden' }} {...panelMetadata}>
         {sitterSafetyStrip}
         {sitterRow}
-        {!missingOrigin && actionError && <p role="alert"><StatusDot status="failing" label="Error" /> {actionError}</p>}
-        {!missingOrigin && active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}</p>}
+        {actionError && <InlineError message={actionError} />}
+        {active.error && <InlineError message={active.error} />}
+        {lookupFailure && <InlineError message={lookupFailure} />}
+        {diagnosticError && <InlineError message={diagnosticError} />}
         <div className="ui-stack" style={{ padding: 'var(--ui-space-12)', overflow: 'auto' }}>
-          <EmptyState message={empty.title} />
-          <p>{empty.message}</p>
-          {empty.action && <Button variant={empty.action === 'open' || empty.action === 'relink' ? 'primary' : 'secondary'} disabled={busy} onClick={() => void runBlockerAction(empty.action!, existingNumber)}>
+          {genuineEmpty
+            ? <EmptyState message="No pull request found" />
+            : <SectionHeader title={empty.title} />}
+          {!lookupFailure && <p>{empty.message}</p>}
+          {empty.action && <Button
+            variant={empty.action === 'open' || empty.action === 'relink' ? 'primary' : 'secondary'}
+            disabled={busy}
+            onClick={() => {
+              if (empty.action === 'relink') void requestChecksControl('relink')
+              else void requestChecksControl('blocker', {
+                action: empty.action!,
+                ...(existingNumber === undefined ? {} : { number: existingNumber }),
+              })
+            }}
+          >
             {empty.action === 'open' ? `Open Review #${existingNumber ?? ''}` : empty.action === 'relink' ? `Link PR #${existingNumber ?? ''}` : empty.action === 'publish' ? 'Publish Branch' : empty.action === 'sync' ? 'Sync Branch' : empty.action === 'push' ? 'Push & Create PR' : 'Connect GitHub'}
           </Button>}
-          {reason === 'lookup_unavailable' && !eligibility && <p role="alert"><StatusDot status="failing" label="Error" /> The provider could not establish whether this branch has a review. No composer is available until lookup succeeds.</p>}
           {diagnostics.length > 0 && <section className="ui-stack" aria-label="GitHub CLI diagnostics"><SectionHeader title="GitHub CLI diagnostics" /><ul className="ui-stack">{diagnostics.map((item) => <li key={item}>{item}</li>)}</ul></section>}
-          {diagnosticError && <p role="alert"><StatusDot status="failing" label="Error" /> {diagnosticError}</p>}
           {diagnosticData && <section className="ui-stack" aria-label="GitHub account status">
             {typeof diagnosticData.requiredHost === 'string' && <p>Required host: <code>{diagnosticData.requiredHost}</code></p>}
             {Array.isArray(diagnosticData.accounts) && diagnosticData.accounts.length > 0 && <ul className="ui-stack">
@@ -1247,25 +1836,31 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
               ))}
             </ul>}
             {diagnosticData.ghAvailable === false && <p>GitHub CLI (gh) is unavailable. Install it, then retry.</p>}
-            <Button onClick={() => void copyLink('gh auth status')}>Copy gh auth status</Button>
+            <Button onClick={() => { void requestChecksControl('copy-link', { source: 'auth-status' }) }}>Copy gh auth status</Button>
           </section>}
           {reason === 'authentication_required' || reason === 'auth_required' || reason === 'not_authenticated' || reason === 'scope_missing' || reason === 'gh_unavailable'
             ? <p>Check GitHub access with <code>gh auth status</code>. Sign in with <code>gh auth login</code>; no token is entered or stored here.</p>
             : null}
-          {eligibility?.eligible === true && !eligible && <p>Eligibility is stale or belongs to a different branch. Refresh to confirm the current workspace.</p>}
-          {eligible && <Button variant="primary" disabled={busy} onClick={() => void openComposer()}>Create PR</Button>}
-          {!eligible && eligibility?.eligible === true && <Button disabled={busy} title={eligibilityDisabledReason(state, activeWorktree) ?? undefined}>Create PR</Button>}
-          {!missingOrigin && <Button disabled={busy || retrySeconds !== null} onClick={() => void runRefresh('manual')}>
+          {eligibility?.eligible === true && !noReviewEligibility && <p>Eligibility is stale or belongs to a different branch. Refresh to confirm the current workspace.</p>}
+          {!createUnavailable && noReviewEligibility && <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() => { void requestChecksControl('create') }}
+          >Create PR</Button>}
+          {!createUnavailable && !noReviewEligibility && eligibility?.eligible === true && <Button
+            disabled={busy}
+            title={eligibilityDisabledReason(state, activeWorktree) ?? undefined}
+          >Create PR</Button>}
+          {!missingOrigin && <Button disabled={busy || retrySeconds !== null} onClick={() => { void requestChecksControl('refresh') }}>
             {retrySeconds === null ? 'Retry' : `Retry in ${retrySeconds}s`}
           </Button>}
-          {lookup?.kind === 'unavailable' && typeof lookup.message === 'string' && <p role="alert">{lookup.message}</p>}
         </div>
         <div role="separator" aria-orientation="horizontal" aria-label="Resize Checks panel" tabIndex={0}
           onMouseDown={beginResize}
           onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
             if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
               event.preventDefault()
-              void commitHeight((active.height ?? 320) + (event.key === 'ArrowUp' ? 24 : -24))
+              void requestChecksControl('height-set', { height: (active.height ?? 320) + (event.key === 'ArrowUp' ? 24 : -24) })
             }
           }}
           style={{ height: 'var(--ui-space-8)', cursor: 'row-resize', borderTop: 'var(--ui-border-width) solid var(--ui-border)' }} />
@@ -1274,23 +1869,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   }
 
   const stack = stackModel(currentReview.stack)
-  const reviewRetrySeconds = retryDelay(active.lookup, countdownNow)
   const editedTitle = titleField.value !== null
-  const checkRows = isRecord(active.checks) && Array.isArray(active.checks.checks) ? active.checks.checks : []
-  const broken = checkRows.some((row) => isRecord(row) && (
-    ['failure', 'error', 'startup_failure', 'timed_out', 'cancelled', 'action_required'].includes(String(row.conclusion ?? '').toLowerCase()) ||
-    ['failure', 'error', 'action_required'].includes(String(row.status ?? '').toLowerCase())
-  ))
-  const localConflict = isRecord(active.conflicts) && (
-    active.conflicts.status === 'loading' || active.conflicts.status === 'unavailable' ||
-    active.conflicts.status === 'ready' && (
-      active.conflicts.conflicting === true ||
-      (Array.isArray(active.conflicts.files) && active.conflicts.files.length > 0) ||
-      (Array.isArray(active.conflicts.localFiles) && active.conflicts.localFiles.length > 0)
-    )
-  )
-  const hostConflict = currentReview.mergeable === 'CONFLICTING' || currentReview.mergeStateStatus === 'DIRTY'
-  const queuedCount = active.queuedComments.length
   const contentHeight = dragHeight ?? active.height
 
   const refreshTitle = reviewRetrySeconds === null ? 'Refresh checks' : `Retry is paused for ${reviewRetrySeconds}s`
@@ -1299,53 +1878,75 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     <ToolPanelFrame
       title="Checks"
       tools={
-        <IconButton label="Refresh checks" disabled={active.loading || reviewRetrySeconds !== null} title={refreshTitle} onClick={() => void runRefresh('manual')}>
+        <IconButton label="Refresh checks" disabled={!canRefresh} title={refreshTitle} onClick={() => { void requestChecksControl('refresh') }}>
           <ControlIcon name="arrows-clockwise" />
         </IconButton>
       }
       actions={<Menu label="More PR actions" trigger={<ControlIcon name="dots-three" />} items={actionItems} />}
     >
-    <section className="ui-stack" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}>
+    <section
+      className="ui-stack"
+      style={{ display: 'flex', flexDirection: 'column', minHeight: 0, maxHeight: '100%', overflow: 'hidden' }}
+      {...panelMetadata}
+    >
       {sitterSafetyStrip}
-      {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}{currentReview ? ' Showing the last known review status.' : ''}</p>}
-      {actionError ?? titleField.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError ?? titleField.error}</p> : null}
+      {active.error && <InlineError message={`${active.error} Showing the last known review status.`} />}
+      {(actionError ?? titleField.error) && <InlineError message={actionError ?? titleField.error!} />}
       <div className="ui-stack" style={{ padding: 'var(--ui-space-12)' }}>
         <div className="ui-cluster">
           <span aria-hidden="true">PR</span>
-          <Button title={routing.title} onClick={(event) => void openLink(currentReview.url, event)}>#{currentReview.number}</Button>
+          <Button title={routing.title} disabled={!canOpenLink} onClick={(event) => {
+            void requestChecksControl('open-link', { number: currentReview.number, invert: routing.invert(event) })
+          }}>#{currentReview.number}</Button>
           <Badge tone={currentReview.state === 'open' ? 'working' : currentReview.state === 'merged' ? 'accent' : 'neutral'}>{reviewStateName(currentReview.state)}</Badge>
-          <Button aria-label="Copy PR link" onClick={() => void copyLink(currentReview.url)}>Copy link</Button>
+          <Button aria-label="Copy PR link" disabled={!canCopyLink} onClick={() => { void requestChecksControl('copy-link', { source: 'review' }) }}>Copy link</Button>
         </div>
         <div className="ui-cluster" style={{ alignItems: 'start', justifyContent: 'space-between' }}>
           <div className="ui-stack" style={{ minWidth: 0, flex: '1 1 auto' }}>
             {editedTitle ? (
-              <div className="ui-cluster">
+              <div
+                className="ui-cluster"
+                data-review-control-target={titleControl.target}
+                data-review-control-generation={titleControl.generation}
+              >
                 <TextField id="reviews-pull-request-title" label="Pull request title" aria-label="Pull request title" maxLength={256} value={titleInput} onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
                   if (event.key === 'Escape') {
                     event.preventDefault()
-                    cancelTitle()
+                    void requestTitleControl('title-cancel')
                   } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                     event.preventDefault()
-                    void saveTitle()
+                    void requestTitleControl('title-save')
                   }
                 }} onChange={(event) => {
                   titleField.edit(event.target.value)
                   setActionError(null)
                 }} />
-                <IconButton label="Save pull request title" disabled={active.loading || titleInput.trim() === ''} onClick={() => void saveTitle()}>✓</IconButton>
-                <IconButton label="Cancel title edit" disabled={active.loading} onClick={cancelTitle}>×</IconButton>
+                <IconButton label="Save pull request title" disabled={!canTitleEdit || titleInput.trim() === ''} onClick={() => { void requestTitleControl('title-save') }}>✓</IconButton>
+                <IconButton label="Cancel title edit" disabled={!canTitleEdit} onClick={() => { void requestTitleControl('title-cancel') }}>×</IconButton>
               </div>
             ) : (
-              <Button className="ui-cluster" style={{ flex: '1 1 auto', justifyContent: 'flex-start' }} aria-label="Edit pull request title" onClick={startTitleEdit}>{currentReview.title}</Button>
+              <Button className="ui-cluster" style={{ flex: '1 1 auto', justifyContent: 'flex-start' }} aria-label="Edit pull request title" disabled={!canTitleEdit} onClick={() => { void requestChecksControl('title-edit') }}>{currentReview.title}</Button>
             )}
             <div className="ui-text-muted">{currentReview.baseRefName} ← {currentReview.headRefName}{reviewDate(currentReview) ? ` · ${reviewDate(currentReview)}` : ''}</div>
           </div>
           <span className="ui-text-muted" title={activeWorktree}>Workspace</span>
         </div>
-        {linkOpen && <form className="ui-cluster" onSubmit={(event) => void linkAnother(event)}>
-          <TextField label="Pull request number" aria-label="Pull request number" inputMode="numeric" value={linkNumber} onChange={(event) => setLinkNumber(event.target.value)} />
-          <Button variant="primary" type="submit">Link PR</Button>
-          <Button onClick={() => setLinkOpen(false)}>Cancel</Button>
+        {linkOpen && <form
+          className="ui-cluster"
+          data-review-control-target={linkControl.target}
+          data-review-control-generation={linkControl.generation}
+          onSubmit={(event) => {
+            event.preventDefault()
+            void requestLinkControl('link-submit')
+          }}
+        >
+          <TextField label="Pull request number" aria-label="Pull request number" inputMode="numeric" disabled={active.loading} value={linkNumber} onChange={(event) => {
+            linkNumberRef.current = event.target.value
+            setLinkNumber(event.target.value)
+            setActionError(null)
+          }} />
+          <Button variant="primary" type="submit" disabled={active.loading}>Link PR</Button>
+          <Button type="button" onClick={() => { void requestLinkControl('link-cancel') }}>Cancel</Button>
         </form>}
       </div>
 
@@ -1354,18 +1955,25 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
           <>
             <strong>Stack #{stack.number} · PR #{currentReview.number} at position {stack.position} of {stack.size}</strong>
             <ol className="ui-cluster" style={{ listStyle: 'none', padding: 0 }}>
-              {stack.entries.map((entry) => (
-                <li key={String(entry.number)}>
+              {stack.entries.map((entry) => {
+                const linkUrl = safeHttpUrl(entry.url)
+                return <li key={String(entry.number)}>
                   <Button aria-current={entry.number === currentReview.number ? 'page' : undefined} title={routing.title}
-                    disabled={typeof entry.url !== 'string'} onClick={(event) => typeof entry.url === 'string' && void openLink(entry.url, event)}>
+                    disabled={linkUrl === null} onClick={(event) => {
+                      if (linkUrl !== null) {
+                        void requestChecksControl('open-link', { number: entry.number, invert: routing.invert(event) })
+                      }
+                    }}>
                     #{String(entry.number)} · {String(entry.title ?? 'Pull request')}
                   </Button>
                 </li>
-              ))}
+              })}
             </ol>
             {stack.truncated && <p className="ui-text-muted">Showing the first 100 stack members.</p>}
           </>
-        ) : <p role="status" className="ui-text-muted">{stack.message}</p>}
+        ) : stack.loading
+          ? <NoticeLine>{stack.message}</NoticeLine>
+          : <InlineError message={stack.message ?? 'The canonical stack could not be loaded.'} />}
       </section>}
 
       <div className="ui-stack" style={{ padding: 'var(--ui-space-8) var(--ui-space-12)' }}>
@@ -1375,7 +1983,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
 
       {(hostConflict || localConflict) && <section className="ui-stack" aria-label="Merge conflicts">
         <SectionHeader title="Conflicts block this PR" />
-        {active.conflicts?.status === 'loading' && <p role="status" className="ui-text-muted">Loading conflict paths…</p>}
+        {active.conflicts?.status === 'loading' && <NoticeLine>Loading conflict paths…</NoticeLine>}
         {active.conflicts?.status === 'unavailable' && <p>{typeof active.conflicts.message === 'string' ? active.conflicts.message : 'Conflict paths are unavailable from the read-only preview.'}</p>}
         {active.conflicts?.available === true && active.conflicts.conflicting === false && <p>Git’s read-only preview found no conflicting paths; refresh the review metadata before merging.</p>}
         {Array.isArray(active.conflicts?.files) && active.conflicts.files.length > 0 && <ul className="ui-stack">{active.conflicts.files.map((file, index) => <li key={isRecord(file) && typeof file.path === 'string' ? file.path : index}>{isRecord(file) && typeof file.path === 'string' ? file.path : 'Conflicting file'}</li>)}</ul>}
@@ -1385,12 +1993,12 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
 
       {(hostConflict || broken || pending || queuedCount > 0) && <section className="ui-cluster" aria-label="Review triage" style={{ justifyContent: 'space-between' }}>
         <Badge tone={hostConflict ? 'failing' : broken ? 'failing' : pending ? 'needs-you' : 'needs-you'}>{hostConflict ? 'Conflicts block this PR' : broken ? 'Failing checks' : pending ? 'Checks pending' : `${queuedCount} queued comments`}</Badge>
-        {hostConflict || localConflict ? (
-          <Button variant="primary" onClick={() => void openAgentDialog('conflicts')}>Resolve</Button>
-        ) : broken ? (
-          <Button variant="primary" onClick={() => void openAgentDialog('fix')}>Fix</Button>
-        ) : queuedCount > 0 ? (
-          <Button variant="primary" onClick={() => void openAgentDialog('comments')}>Resolve {queuedCount} Comments With AI</Button>
+        {triageAction === 'conflicts' ? (
+          <Button variant="primary" disabled={!canAgentOpen} onClick={() => { void requestChecksControl('agent-open', { action: 'conflicts' }) }}>Resolve</Button>
+        ) : triageAction === 'fix' ? (
+          <Button variant="primary" disabled={!canAgentOpen} onClick={() => { void requestChecksControl('agent-open', { action: 'fix' }) }}>Fix</Button>
+        ) : triageAction === 'comments' ? (
+          <Button variant="primary" disabled={!canAgentOpen} onClick={() => { void requestChecksControl('agent-open', { action: 'comments' }) }}>Resolve {queuedCount} Comments With AI</Button>
         ) : <span className="ui-text-muted">Orca will refresh checks while this panel stays open.</span>}
       </section>}
 
@@ -1401,14 +2009,14 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       {isRecord(active.conflicts) && active.conflicts.status === 'ready' && active.conflicts.truncated === true && <p className="ui-text-muted">Conflict file list is truncated at 100 entries.</p>}
       {isRecord(active.checks) && active.checks.truncated === true && <p className="ui-text-muted">Showing the first 100 checks.</p>}
       {isRecord(active.comments) && active.comments.truncated === true && <p className="ui-text-muted">Showing the first 100 comments.</p>}
-      {active.error && <p role="alert"><StatusDot status="failing" label="Error" /> {active.error}</p>}
-      {actionError ?? titleField.error ? <p role="alert"><StatusDot status="failing" label="Error" /> {actionError ?? titleField.error}</p> : null}
+      {active.error && <InlineError message={`${active.error} Showing the last known review status.`} />}
+      {(actionError ?? titleField.error) && <InlineError message={actionError ?? titleField.error!} />}
       <div role="separator" aria-orientation="horizontal" aria-label="Resize Checks panel" tabIndex={0}
         onMouseDown={beginResize}
         onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
           if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
             event.preventDefault()
-            void commitHeight((active.height ?? 320) + (event.key === 'ArrowUp' ? 24 : -24))
+            void requestChecksControl('height-set', { height: (active.height ?? 320) + (event.key === 'ArrowUp' ? 24 : -24) })
           }
         }}
         style={{ height: 'var(--ui-space-8)', flex: '0 0 var(--ui-space-8)', cursor: 'row-resize', borderTop: 'var(--ui-border-width) solid var(--ui-border)' }} />
