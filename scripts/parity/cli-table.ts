@@ -483,6 +483,8 @@ const pluginReferences: Array<{ rowId: string; plugin: string; commandId: string
   { rowId: 'worktree-ps', plugin: 'quirky.orchestration', commandId: 'run-list' },
   { rowId: 'worktree-ps', plugin: 'quirky.orchestration', commandId: 'task-list' },
   { rowId: 'worktree-ps', plugin: 'quirky.orchestration', commandId: 'worker-list' },
+  { rowId: 'worktree-ps', plugin: 'quirky.orchestration', commandId: 'ps' },
+  { rowId: 'worktree-ps-summary', plugin: 'quirky.orchestration', commandId: 'ps' },
   { rowId: 'worktree-rm', plugin: 'quirky.worktree', commandId: 'rm' },
   { rowId: 'worktree-set', plugin: 'quirky.worktree', commandId: 'set' },
   { rowId: 'worktree-show', plugin: 'quirky.worktree', commandId: 'show' }
