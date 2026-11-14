@@ -280,25 +280,26 @@ export class TerminalService {
     return { ok: true }
   }
 
-  /** Claims real user input before bytes are sent; query replies and injected prompts do not call it. */
+  /** Reports a human input claim without sending terminal bytes. */
   userInput = async (params: Record<string, unknown>): Promise<{ ok: true }> => {
+    const expectedIncarnation = this.requireExpectedIncarnation(params.expectedIncarnation)
     const session = await this.requireWritable(params.session as string)
-    const identity = await this.context.call('quirky.session/identity', { session: session.id }) as {
-      sessionId: string
-      live: boolean
-      processIncarnation: string
-    }
-    if (!identity.live || identity.sessionId !== session.id || identity.processIncarnation !== params.expectedIncarnation) {
-      throw this.context.error('conflict', 'terminal process changed before user input; reattach before typing')
-    }
-    this.context.pty.reportUserInput({ session: session.id, expectedIncarnation: identity.processIncarnation })
+    const verifiedIncarnation = await this.verifyInputIncarnation(session.id, expectedIncarnation)
+    this.context.pty.reportUserInput({ session: session.id, expectedIncarnation: verifiedIncarnation })
     return { ok: true }
   }
 
   /** Types raw input; the session then counts as touched for the layout's exit rule. */
   write = async (params: Record<string, unknown>, caller: PluginCaller): Promise<{ ok: true }> => {
+    const guarded = Object.prototype.hasOwnProperty.call(params, 'expectedIncarnation')
+    const expectedIncarnation = guarded ? this.requireExpectedIncarnation(params.expectedIncarnation) : undefined
     const session = await this.requireWritable(params.session as string)
     this.mobile.assertCanInput(session.id, caller)
+    if (expectedIncarnation !== undefined) {
+      const verifiedIncarnation = await this.verifyInputIncarnation(session.id, expectedIncarnation)
+      this.mobile.assertCanInput(session.id, caller)
+      this.context.pty.reportUserInput({ session: session.id, expectedIncarnation: verifiedIncarnation })
+    }
     this.inputs.mark(session.id)
     this.input(session.id, encoder.encode(params.data as string))
     return { ok: true }
@@ -877,6 +878,32 @@ export class TerminalService {
         ? `session ${session.id} ended when the terminal host stopped; run quirky session restore ${session.id}`
         : `session ${session.id} has exited`
     )
+  }
+
+  private requireExpectedIncarnation(value: unknown): string {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw this.context.error('invalid-params', 'expectedIncarnation must be a non-empty string')
+    }
+    return value
+  }
+
+  private async verifyInputIncarnation(sessionId: string, expectedIncarnation: string): Promise<string> {
+    const identity = await this.context.call('quirky.session/identity', { session: sessionId }) as unknown
+    if (
+      !identity ||
+      typeof identity !== 'object' ||
+      !('sessionId' in identity) ||
+      identity.sessionId !== sessionId ||
+      !('live' in identity) ||
+      identity.live !== true ||
+      !('processIncarnation' in identity) ||
+      typeof identity.processIncarnation !== 'string' ||
+      identity.processIncarnation.length === 0 ||
+      identity.processIncarnation !== expectedIncarnation
+    ) {
+      throw this.context.error('conflict', 'terminal process changed before user input; reattach before typing')
+    }
+    return identity.processIncarnation
   }
 
   private async killSession(sessionId: string): Promise<void> {
