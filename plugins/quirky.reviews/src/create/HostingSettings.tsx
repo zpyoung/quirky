@@ -258,7 +258,12 @@ function useSettingsControl(options: SettingsControlOptions) {
   return {
     target,
     generation: reported?.target === target ? reported.generation : undefined,
-    request: stableRequest
+    request: stableRequest,
+    invalidate() {
+      const lease = registrationRef.current
+      registrationRef.current = null
+      lease?.dispose()
+    }
   }
 }
 type SettingsOperationKind = 'workspace' | 'defaults' | 'account' | 'provider' | 'budget'
@@ -320,6 +325,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     setRepoHasOverride(value)
   }
   const setDefaultScopeLocal = (value: 'global' | 'repository') => {
+    if (defaultScopeRef.current !== value) defaultsControl.invalidate()
     defaultScopeRef.current = value
     setDefaultScope(value)
   }
@@ -328,6 +334,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       ? repoDefaultsRef.current
       : globalDefaultsRef.current
   const [defaultsError, setDefaultsError] = useState<string | null>(null)
+  const [repositoryDefaultsError, setRepositoryDefaultsError] = useState<string | null>(null)
   const [globalDefaultsReady, setGlobalDefaultsReady] = useState(false)
   const [globalDefaultsLoading, setGlobalDefaultsLoading] = useState(true)
   const [repositoryDefaultsLoading, setRepositoryDefaultsLoading] = useState(false)
@@ -351,6 +358,15 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   }
   currentWorktree.current = worktree
   const worktreeSessionEpoch = worktreeSession.current.epoch
+  function replaceWorktree(next: string | null) {
+    if (currentWorktree.current === next) return
+    workspaceControl.invalidate()
+    defaultsControl.invalidate()
+    hostingControl.invalidate()
+    currentWorktree.current = next
+    worktreeSession.current = { worktree: next, epoch: worktreeSession.current.epoch + 1 }
+    setSelectedWorktree(next)
+  }
   const settingsError = settingsMatches ? settings.error : null
   const providerOwner = operationState.provider
   const budgetOwner = operationState.budget
@@ -398,12 +414,15 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     operation: (owner: SettingsOperationOwner) => Promise<void>,
     onFailure: (message: string) => void
   ) => {
+    if (!isCurrent()) return false
     const key = operationKey(kind, target, scope)
     if (operationLocks.current.has(key)) return false
     const owner: SettingsOperationOwner = { kind, action, worktree: target, scope, token: Symbol(action), isCurrent, forceBudget }
     operationLocks.current.set(key, owner)
     setOperationOwner(kind, owner)
-    void Promise.resolve().then(() => operation(owner))
+    void Promise.resolve().then(() => {
+      if (owner.isCurrent()) return operation(owner)
+    })
       .catch((error: unknown) => {
         if (isCurrent() && mounted.current) onFailure(errorText(error))
       })
@@ -439,11 +458,10 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       const workspaces = workspaceOptions(value)
       if (workspaces === null) throw new Error('The worktree service returned an invalid workspace list.')
       setRegisteredWorktrees(workspaces)
-      setSelectedWorktree((current) => {
-        const requested = selectionTouched.current ? current : current ?? selectedWorktreeId ?? initialSettingsWorktree
-        selectionTouched.current = true
-        return requested !== null && workspaces.some((item) => item.id === requested) ? requested : null
-      })
+      const current = currentWorktree.current
+      const requested = selectionTouched.current ? current : current ?? selectedWorktreeId ?? initialSettingsWorktree
+      selectionTouched.current = true
+      replaceWorktree(requested !== null && workspaces.some((item) => item.id === requested) ? requested : null)
     } catch (error) {
       if (workspaceRequestSequence.current === request && mounted.current && isCurrent()) setWorkspacesError(errorText(error))
     } finally {
@@ -537,6 +555,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     setGlobalDefaultsReady(false)
     setRepositoryDefaultsLoading(false)
     setRepositoryDefaultsFailed(false)
+    setRepositoryDefaultsError(null)
     setRepoDefaultsWorktree(null)
     setRepoOverride(false)
     setRepoId(null)
@@ -570,11 +589,12 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
         setRepoOverride(hasOverride)
         setRepoId(currentRepoId)
         setRepoDefaultsWorktree(target)
+        setRepositoryDefaultsLoading(false)
         setDefaultScopeLocal(hasOverride ? 'repository' : 'global')
       } catch (error) {
         if (isCurrent()) {
           setRepositoryDefaultsFailed(true)
-          setDefaultsError(errorText(error))
+          setRepositoryDefaultsError(errorText(error))
         }
       } finally {
         if (isCurrent()) setRepositoryDefaultsLoading(false)
@@ -629,7 +649,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   const setDefault = (key: keyof CreationDefaults, value: boolean) => {
     const scope = defaultScopeRef.current
     if (!globalDefaultsReady || (scope === 'repository' && !repositoryDefaultsReady)) return
-    const current = scope === 'global' ? globalDefaultsRef.current : repoDefaultsRef.current
+    const current = defaultsForScope(scope, worktree)
     const next = { ...current, [key]: value }
     if (scope === 'global') setGlobalDefaultsLocal(next)
     else {
@@ -668,7 +688,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   const canSaveDefaults = canEditDefaults
   const canResetDefaults = defaultScope === 'repository' && currentRepoHasOverride && !savingDefaults &&
     !repositoryDefaultsLoading && !defaultsReadBusy && !defaultsWriteBusy
-  const defaultsReadFailed = defaultsError !== null && (!globalDefaultsReady || repositoryDefaultsFailed)
+  const defaultsReadFailed = (defaultsError !== null && !globalDefaultsReady) || repositoryDefaultsError !== null
   const canRetryDefaults = defaultsReadFailed && !globalDefaultsLoading && !repositoryDefaultsLoading && !defaultsReadBusy
   const canRecheckProvider = worktree !== null && !loadingProvider && !operationLocked('provider', worktree, 'hosting')
   const canRefreshBudget = worktree !== null && !loadingBudget && !operationLocked('budget', worktree, 'hosting')
@@ -688,7 +708,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       }
       if (!current()) return
       selectionTouched.current = true
-      setSelectedWorktree(selected)
+      replaceWorktree(selected)
       return
     }
     if (request.action === 'workspaces-retry') {
@@ -866,7 +886,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
         !defaultsBusy && !defaultsReadLocked && !defaultsWriteLocked
       const canChangeScope = globalDefaultsReady && !globalDefaultsLoading && !defaultsBusy &&
         !defaultsReadLocked && !defaultsWriteLocked
-      const canRetry = defaultsError !== null && (!globalDefaultsReady || repositoryDefaultsFailed) &&
+      const canRetry = ((defaultsError !== null && !globalDefaultsReady) || repositoryDefaultsError !== null) &&
         !globalDefaultsLoading && !repositoryDefaultsLoading && !defaultsReadLocked
       const hasOverride = repositoryReady && repoHasOverride
       const actions: ControlAction[] = [
@@ -1021,8 +1041,8 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
           }} />
         </FormRow>)}
       </fieldset>
-      {defaultsError && <InlineError
-        message={defaultsError}
+      {(defaultsError ?? repositoryDefaultsError) && <InlineError
+        message={[defaultsError, repositoryDefaultsError].filter(Boolean).join(' ')}
         action={canRetryDefaults ? { label: 'Retry defaults', onAction: () => { void defaultsControl.request('defaults-retry') } } : undefined}
       />}
       <div className="ui-cluster">

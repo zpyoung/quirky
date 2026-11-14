@@ -29,6 +29,7 @@ type CreationControlAction =
   | 'stack-set'
 
 type CreationOperation = { identity: string; isCurrent: () => boolean }
+type CreationGenerationActions = { identity: string; token: object; retire(): void }
 
 type CreationControlSnapshot = {
   worktree: string | null
@@ -171,6 +172,8 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const stackLock = useRef<CreationOperation | null>(null)
   const stopLock = useRef<CreationOperation | null>(null)
   const generationLock = useRef<number | null>(null)
+  const generationActions = useRef<CreationGenerationActions | null>(null)
+  const suppressGenerationRetirementRefresh = useRef(false)
   const draftWrites = useRef<Promise<void>>(Promise.resolve())
   const mounted = useRef(false)
   useEffect(() => {
@@ -217,12 +220,23 @@ export function CreateReview(props: ReviewsSurfaceProps) {
       if (isCurrent()) throw error
     }
   }
+  const refreshDraftFields = () => {
+    if (suppressGenerationRetirementRefresh.current) return Promise.resolve()
+    return props.refresh()
+  }
+  useLayoutEffect(() => {
+    const actionIdentity = sessionIdentity
+    return () => {
+      const actions = generationActions.current
+      if (actions?.identity === actionIdentity) actions.retire()
+    }
+  }, [sessionIdentity])
   const titleField = useDraftField<string>({
     identity,
     remote: creation.title,
     snapshot: props.snapshot,
     write(value) { return sendDraft({ title: value }) },
-    refresh: props.refresh,
+    refresh: refreshDraftFields,
     resend: true,
   })
   const bodyField = useDraftField<string>({
@@ -230,7 +244,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     remote: creation.body,
     snapshot: props.snapshot,
     write(value) { return sendDraft({ body: value }) },
-    refresh: props.refresh,
+    refresh: refreshDraftFields,
     resend: true,
   })
   const baseField = useDraftField<string>({
@@ -451,14 +465,41 @@ export function CreateReview(props: ReviewsSurfaceProps) {
 
   const generateDetails = async (isCurrent: () => boolean) => {
     if (!worktree || !currentTarget || generationRunning || generationLock.current === epoch) return
+    const capturedRemoteTitle = creation.title
+    const capturedRemoteBody = creation.body
+    let draftsSettled = false
     const titleAction = titleField.begin()
     const bodyAction = bodyField.begin()
+    const generationToken = {}
+    const generationOwner: CreationGenerationActions = {
+      identity: sessionIdentity,
+      token: generationToken,
+      retire: () => {
+        if (generationActions.current?.token !== generationToken) return
+        const keepTitle = !draftsSettled || titleAction.status() !== 'same' ||
+          titleField.error !== null || titleField.value !== capturedRemoteTitle
+        const keepBody = !draftsSettled || bodyAction.status() !== 'same' ||
+          bodyField.error !== null || bodyField.value !== capturedRemoteBody
+        suppressGenerationRetirementRefresh.current = true
+        try {
+          if (keepTitle) titleAction.fail()
+          else titleAction.succeed(latestCreation.current.title)
+          if (keepBody) bodyAction.fail()
+          else bodyAction.succeed(latestCreation.current.body)
+        } finally {
+          suppressGenerationRetirementRefresh.current = false
+          if (generationActions.current?.token === generationToken) generationActions.current = null
+        }
+      }
+    }
+    generationActions.current = generationOwner
     generationLock.current = epoch
     publishActionSignature.current()
     setGenerationEpoch(epoch)
     setLocalError(null)
     try {
       if (!await settleDrafts(isCurrent)) return
+      draftsSettled = true
       if (titleAction.status() === 'gone' || bodyAction.status() === 'gone') return
       const priorTitle = titleAction.take()
       const priorBody = bodyAction.take()
@@ -480,6 +521,10 @@ export function CreateReview(props: ReviewsSurfaceProps) {
         setLocalError(errorText(error))
       }
     } finally {
+      if (generationActions.current?.token === generationToken) {
+        if (!isCurrent()) generationOwner.retire()
+        else generationActions.current = null
+      }
       if (generationLock.current === epoch) {
         generationLock.current = null
         publishActionSignature.current()

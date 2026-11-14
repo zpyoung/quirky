@@ -8,6 +8,7 @@ import { HostingSettings } from '../src/create/HostingSettings'
 import { CREATE_VIEW, SETTINGS_VIEW, type ReviewsState } from '../src/contracts'
 import { isRecord, listReviewsUiControls, requestReviewsUiControl, type ReviewsUiControlResult } from '../src/checks/data'
 import { activate } from '../src/ui'
+import { nextDraftTick } from '../src/draft-field'
 const CONTROL_COMMAND = 'command:quirky.reviews/ui-control'
 const ROOTS: Root[] = []
 const SURFACE_CLEANUPS: Array<() => void> = []
@@ -1599,3 +1600,155 @@ for (const bridge of ['ui.window.self', 'ui.window.command.run'] as const) {
     expect(ui.element.querySelector('.ui-inline-error')).toBeNull()
   })
 }
+
+test('repository edits inherit globals saved after the repository read', async () => {
+  const ui = settings(stateFor())
+  await settle()
+  await requestRegisteredControl(ui, SETTINGS_VIEW, 'settings-defaults-global', 'defaults-set', { key: 'draft', value: true })
+  await requestRegisteredControl(ui, SETTINGS_VIEW, 'settings-defaults-global', 'defaults-save')
+  await settle()
+  await requestRegisteredControl(ui, SETTINGS_VIEW, 'settings-defaults-global', 'defaults-scope', { scope: 'repository' })
+  await settle()
+  expect(ui.element.querySelector<HTMLInputElement>('#creation-default-draft')?.checked).toBe(true)
+  await requestRegisteredControl(ui, SETTINGS_VIEW, 'settings-defaults-repository', 'defaults-set', { key: 'useTemplate', value: true })
+  await requestRegisteredControl(ui, SETTINGS_VIEW, 'settings-defaults-repository', 'defaults-save')
+  await settle()
+  expect(ui.calls.filter((call) => call.method === 'quirky.reviews/setCreationDefaults').at(-1)?.params).toEqual({
+    scope: 'repository', worktree: WORKTREE_A,
+    defaults: { draft: true, useTemplate: true, generateDetailsOnOpen: false, openAfterCreate: false }
+  })
+})
+
+test('global editing preserves repository read failure and its retry', async () => {
+  let repositoryReads = 0
+  const ui = settings(stateFor(), WORKTREE_A, (controls) => {
+    controls.setMethod('quirky.reviews/creationDefaults', (params) => {
+      if (params.scope === 'global') return { defaults: DEFAULTS }
+      if (++repositoryReads === 1) throw new Error('repository read remains failed')
+      return { defaults: DEFAULTS, repoId: 'owner/repo', overrides: {} }
+    })
+  })
+  await settle()
+  await requestRegisteredControl(ui, SETTINGS_VIEW, 'settings-defaults-global', 'defaults-set', { key: 'draft', value: true })
+  await settle()
+  expect(ui.element.textContent).toContain('repository read remains failed')
+  expect(registeredControl(ui, SETTINGS_VIEW, 'settings-defaults-global').actions.find((entry) => entry.action === 'defaults-retry')?.enabled).toBe(true)
+  await requestRegisteredControl(ui, SETTINGS_VIEW, 'settings-defaults-global', 'defaults-retry')
+  await settle()
+  expect(repositoryReads).toBe(2)
+  expect(ui.element.textContent).not.toContain('repository read remains failed')
+  expect(ui.element.querySelector<HTMLInputElement>('#creation-default-repository')?.disabled).toBe(false)
+})
+
+for (const replacement of ['scope', 'worktree'] as const) {
+  test(`a same-turn ${replacement} replacement rejects the old defaults descriptor before mutation`, async () => {
+    const ui = settings(stateFor(), WORKTREE_A, (controls) => {
+      controls.setMethod('quirky.worktree/list', () => [
+        { kind: 'git', id: WORKTREE_A, name: 'a', path: WORKTREE_A, branch: 'feature' },
+        { kind: 'git', id: '/work/b', name: 'b', path: '/work/b', branch: 'topic' }
+      ])
+    })
+    await settle()
+    const defaults = registeredControl(ui, SETTINGS_VIEW, 'settings-defaults-global')
+    const selector = replacement === 'scope' ? defaults : registeredControl(ui, SETTINGS_VIEW, 'settings-workspace')
+    const implementation = ui.getProvider(CONTROL_COMMAND)
+    if (typeof implementation !== 'function') throw new Error('Missing actual UI control handler.')
+    const run = implementation as (request: unknown) => Promise<ReviewsUiControlResult>
+    let oldResult: ReviewsUiControlResult | undefined
+    await act(async () => {
+      const first = run({
+        target: selector.target, generation: selector.generation,
+        action: replacement === 'scope' ? 'defaults-scope' : 'workspace-select',
+        value: replacement === 'scope' ? { scope: 'repository' } : { worktree: '/work/b' }
+      })
+      const second = run({ target: defaults.target, generation: defaults.generation, action: 'defaults-save' })
+      expect(await first).toEqual({ delivered: true })
+      oldResult = await second
+    })
+    await settle()
+    expect(oldResult).toEqual({ delivered: false, reason: 'target-unavailable' })
+    expect(ui.calls.filter((call) => call.method === 'quirky.reviews/setCreationDefaults')).toHaveLength(0)
+  })
+}
+
+for (const completion of ['resolve', 'reject'] as const) {
+  test(`a replaced same-worktree generation retires its draft actions after ${completion}`, async () => {
+    const generated = deferred<unknown>()
+    const initial = stateFor({ creation: {
+      eligibility: { eligible: true, confirmedAt: Date.now(), headOid: 'a'.repeat(40) }
+    } })
+    const ui = mount((props) => <CreateReview {...props} snapshot={undefined} />, initial, WORKTREE_A, (controls) => {
+      controls.setMethod('quirky.reviews/createGenerate', () => generated.promise)
+    })
+    await settle()
+    await requestRegisteredControl(ui, CREATE_VIEW, 'creation', 'generate')
+    await settle()
+    expect(ui.calls.filter((call) => call.method === 'quirky.reviews/createGenerate')).toHaveLength(1)
+    const replacement = stateFor({ creation: {
+      generation: 2, title: 'New session title', body: 'New session body',
+      eligibility: { eligible: true, confirmedAt: Date.now(), headOid: 'b'.repeat(40) }
+    } })
+    ui.render(replacement)
+    await settle()
+    const refreshes = ui.refreshes
+    await act(async () => {
+      if (completion === 'resolve') generated.resolve({ title: 'Stale generated title', body: 'Stale generated body' })
+      else generated.reject(new Error('stale generation rejection'))
+      await generated.promise.catch(() => {})
+    })
+    await settle()
+    ui.render({
+      ...replacement,
+      creation: { ...replacement.creation, title: 'Fresh remote title', body: 'Fresh remote body' }
+    })
+    await settle()
+    expect(ui.element.querySelector<HTMLInputElement>('#review-title')?.value).toBe('Fresh remote title')
+    expect(ui.element.querySelector<HTMLTextAreaElement>('#review-body')?.value).toBe('Fresh remote body')
+    expect(ui.refreshes).toBe(refreshes)
+    expect(ui.element.querySelector('.ui-inline-error')).toBeNull()
+  })
+}
+
+test('same-head confirmation renewal preserves a held base draft', async () => {
+  const initial = stateFor({ creation: {
+    eligibility: { eligible: true, confirmedAt: Date.now(), headOid: 'a'.repeat(40) }
+  } })
+  const ui = create(initial)
+  await settle()
+  changeValue(ui.element.querySelector<HTMLInputElement>('#review-base')!, 'rel')
+  await settle()
+  ui.render({ ...initial, creation: { ...initial.creation, generation: 2 } })
+  await settle()
+  expect(ui.element.querySelector<HTMLInputElement>('#review-base')?.value).toBe('rel')
+  expect(ui.calls.filter((call) => call.method === 'quirky.reviews/createBase')).toHaveLength(0)
+})
+
+test('session retirement reconciles its already-fetched numeric replacement snapshot', async () => {
+  const generated = deferred<unknown>()
+  let snapshot = nextDraftTick()
+  const initial = stateFor({ creation: {
+    eligibility: { eligible: true, confirmedAt: Date.now(), headOid: 'a'.repeat(40) }
+  } })
+  const ui = mount((props) => <CreateReview {...props} snapshot={snapshot} />, initial, WORKTREE_A, (controls) => {
+    controls.setMethod('quirky.reviews/createGenerate', () => generated.promise)
+  })
+  await settle()
+  await requestRegisteredControl(ui, CREATE_VIEW, 'creation', 'generate')
+  await settle()
+  snapshot = nextDraftTick()
+  ui.render(stateFor({ creation: {
+    generation: 2, title: 'Accepted replacement title', body: 'Accepted replacement body',
+    eligibility: { eligible: true, confirmedAt: Date.now(), headOid: 'b'.repeat(40) }
+  } }))
+  await settle()
+  expect(ui.element.querySelector<HTMLInputElement>('#review-title')?.value).toBe('Accepted replacement title')
+  expect(ui.element.querySelector<HTMLTextAreaElement>('#review-body')?.value).toBe('Accepted replacement body')
+  const refreshes = ui.refreshes
+  await act(async () => {
+    generated.resolve({ title: 'Discarded generation', body: 'Discarded body' })
+    await generated.promise
+  })
+  await settle()
+  expect(ui.element.querySelector<HTMLInputElement>('#review-title')?.value).toBe('Accepted replacement title')
+  expect(ui.refreshes).toBe(refreshes)
+})
