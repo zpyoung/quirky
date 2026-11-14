@@ -2,6 +2,33 @@
 
 Reader: people and scripts managing worktrees — Decision: choose how the sidebar presents work, sleep or wake a safe subtree, or remove reviewed idle worktrees.
 
+## Ports for each worktree
+
+Each local worktree gets a persistent block of 10 TCP ports. New worktrees receive their block
+before setup and default tabs; existing worktrees, including the primary checkout, receive one
+when their first session starts or when explicitly selected with `quirky wt ports --worktree`.
+Shells and agents receive `PORT` and `WORKTREE_PORT` (the first port) and `WORKTREE_PORT_COUNT`.
+Setup, issue-command and archive scripts also receive `CONDUCTOR_PORT`, equal to `PORT`.
+Agent-configured port variables are replaced by the block; shell rc files can still override them.
+
+The default range is 41000–48999, inclusive. Settings `portRangeStart`, `portRangeEnd` and
+`portBlockSize` control future allocations; held blocks never move when settings change or
+when a worktree's own server listens on them. Allocation chooses the lowest free block and
+checks TCP wildcard and loopback addresses for IPv4 and IPv6. Allocation failure warns
+without blocking creation or session launch.
+
+Removing a worktree or forgetting its stored row releases its block after any archive script.
+Archive scripts use an existing block and never allocate one. Listening processes are not stopped
+by releasing a block. Remote and VM workspaces do not receive local blocks.
+Daemons with separate homes do not coordinate: they can reserve the same ports when none
+are listening yet.
+
+```sh
+quirky wt ports
+quirky wt ports --worktree current
+quirky wt ports --json
+```
+
 ## Sidebar options
 
 Worktrees is the host-managed tool in the left-top slot by default. Add project is a folder-plus
