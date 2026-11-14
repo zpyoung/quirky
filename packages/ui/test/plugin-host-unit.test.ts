@@ -1838,11 +1838,116 @@ test('SC-4: plugin.changed refetches the model and reconciles', async () => {
   await t.host.refresh()
   expect(t.methodCalls('ui.contributions')).toHaveLength(1)
 
-  t.setModel(makeModel())
+  const before = state(t)
+  const updated = makeModel()
+  t.setModel(updated)
   t.emit({ type: 'plugin.changed' })
-  await until(() => state(t).model?.sidebarSections.length === 0)
+  await until(() => state(t).model === updated)
+  expect(state(t)).not.toBe(before)
+  expect(state(t).model?.sidebarSections).toEqual([])
   expect(t.methodCalls('ui.contributions')).toHaveLength(2)
   expect(t.methodCalls('setting.list')).toHaveLength(2)
+})
+
+test('plugin.changed events share one queued refresh behind an active fetch', async () => {
+  const notes = section(NOTES, 'list')
+  const search = section('acme.search', 'list')
+  const size = 'setting:acme.notes/fontSize'
+  const model = makeModel({ sidebarSections: [notes, search] })
+  const firstContributions = Promise.withResolvers<UiModel>()
+  const secondContributions = Promise.withResolvers<UiModel>()
+  let contributionReads = 0
+  const t = setup(model, {
+    settings: [setting(size, 13)],
+    contributions: () => {
+      contributionReads += 1
+      if (contributionReads === 1) return firstContributions.promise
+      if (contributionReads === 2) return secondContributions.promise
+      return Promise.resolve(model)
+    }
+  })
+  const firstSettings = gate()
+  const secondSettings = gate()
+  t.holds.set('setting.list', firstSettings.opened)
+  type ListenerRead = { fetches: number; setting: unknown }
+  const notesReads: ListenerRead[] = []
+  const searchReads: ListenerRead[] = []
+  for (const [plugin, id, reads] of [
+    [NOTES, LIST, notesReads],
+    ['acme.search', 'sidebar-section:acme.search/list', searchReads]
+  ] as const) {
+    t.useModule(plugin, {
+      activate(context) {
+        context.provide(id, () => {})
+        context.subscribe((event) => {
+          if (event.type === 'plugin.changed') {
+            reads.push({ fetches: t.methodCalls('ui.contributions').length, setting: context.getSetting(size) })
+          }
+        })
+      }
+    })
+  }
+
+  const firstRefresh = t.host.refresh()
+  await until(() => contributionReads === 1 && t.methodCalls('setting.list').length === 1)
+  for (let i = 0; i < 10; i++) t.emit({ type: 'plugin.changed' })
+  expect(contributionReads).toBe(1)
+
+  t.setSettings([setting(size, 14)])
+  t.holds.set('setting.list', secondSettings.opened)
+  firstContributions.resolve(model)
+  firstSettings.open()
+  await firstRefresh
+  await until(() => contributionReads === 2 && t.methodCalls('setting.list').length === 2)
+  await until(() => state(t).plugins[NOTES]?.state === 'active' && state(t).plugins['acme.search']?.state === 'active')
+  expect(notesReads).toEqual([])
+  expect(searchReads).toEqual([])
+
+  secondContributions.resolve(model)
+  await tick()
+  expect(notesReads).toEqual([])
+  expect(searchReads).toEqual([])
+  secondSettings.open()
+
+  const expected = Array.from({ length: 10 }, () => ({ fetches: 2, setting: 14 }))
+  await until(() => notesReads.length === 10 && searchReads.length === 10)
+  expect(notesReads).toEqual(expected)
+  expect(searchReads).toEqual(expected)
+  expect(t.methodCalls('ui.contributions')).toHaveLength(2)
+})
+
+test('a refresh with deep-equal model and settings preserves state and mounted contributions', async () => {
+  const model = makeModel({ sidebarSections: [section(NOTES, 'list')] })
+  const settings = [setting('setting:acme.notes/fontSize', 13)]
+  const t = setup(model, { settings })
+  let cleanups = 0
+  let delivered = 0
+  t.useModule(NOTES, {
+    activate(context) {
+      context.provide(LIST, () => () => cleanups++)
+      context.subscribe((event) => {
+        if (event.type === 'plugin.changed') delivered++
+      })
+    }
+  })
+  await t.host.refresh()
+  await loaded(t, NOTES)
+  const release = t.host.mount(LIST, element())
+  await settled(t, LIST)
+
+  const before = state(t)
+  let notifications = 0
+  t.host.subscribe(() => notifications++)
+  t.setModel(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  t.setSettings([setting('setting:acme.notes/fontSize', 13)])
+  t.emit({ type: 'plugin.changed' })
+  await until(() => delivered === 1)
+
+  expect(state(t)).toBe(before)
+  expect(notifications).toBe(0)
+  expect(cleanups).toBe(0)
+  release()
+  expect(cleanups).toBe(1)
 })
 
 test('a change to a setting that shows or hides contributions refetches the model', async () => {
@@ -1942,29 +2047,43 @@ test('host subscribers are notified as canonical tool state changes until they u
 })
 
 test('refresh rejects when the daemon call fails, and the next refresh still works', async () => {
-  const t = setup(makeModel())
-  const original = t.setModel
-  t.setModel(undefined as unknown as UiModel)
-  await t.host.refresh().catch(() => {})
-  original(makeModel())
-  await t.host.refresh()
-  expect(state(t).model).not.toBeNull()
+  const model = makeModel()
+  const firstContributions = Promise.withResolvers<UiModel>()
+  let contributionReads = 0
+  const t = setup(model, {
+    contributions: () => {
+      contributionReads += 1
+      return contributionReads === 1 ? firstContributions.promise : Promise.resolve(model)
+    }
+  })
+  const first = t.host.refresh()
+  await until(() => contributionReads === 1)
+  const queued = t.host.refresh()
+  firstContributions.reject(new Error('daemon unavailable'))
+
+  await expect(first).rejects.toThrow('daemon unavailable')
+  await queued
+  expect(contributionReads).toBe(2)
+  expect(state(t).model).toBe(model)
 })
 
 test('refresh reads have a deadline and a timed-out refresh does not block the next one', async () => {
+  const model = makeModel()
   let contributionReads = 0
-  const t = setup(makeModel(), {
+  const t = setup(model, {
     contributions: (callOptions) => {
       contributionReads += 1
-      if (contributionReads > 1) return Promise.resolve(makeModel())
+      if (contributionReads > 1) return Promise.resolve(model)
       return Promise.reject(new Error(`RPC call timed out after ${callOptions?.timeoutMs ?? 'missing'} ms`))
     }
   })
   const first = t.host.refresh()
-  const second = t.host.refresh()
+  const shared = t.host.refresh()
   await expect(first).rejects.toThrow('RPC call timed out after 30000 ms')
-  await second
+  await expect(shared).rejects.toThrow('RPC call timed out after 30000 ms')
 
+  await t.host.refresh()
+  expect(contributionReads).toBe(2)
   expect(t.methodCalls('ui.window.self').map((call) => call.options)).toEqual([{ timeoutMs: 30000 }])
   for (const method of ['ui.window.state', 'ui.contributions', 'setting.list']) {
     expect(t.methodCalls(method).map((call) => call.options)).toEqual([{ timeoutMs: 30000 }, { timeoutMs: 30000 }])

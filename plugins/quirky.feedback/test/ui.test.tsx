@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
+import type { Comment } from '../src/contract'
 
 type Ui = typeof import('../src/ui')
 type Mount = (element: HTMLElement, props: object) => (() => void) | void
@@ -14,6 +15,16 @@ const root = join(import.meta.dir, '..')
 
 let ui: Ui
 let originalLoad: Ui['modeLoader']['load']
+let restoreClipboard: (() => void) | null = null
+
+function setClipboard(value: unknown) {
+  const descriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value })
+  restoreClipboard = () => {
+    if (descriptor === undefined) Reflect.deleteProperty(navigator, 'clipboard')
+    else Object.defineProperty(navigator, 'clipboard', descriptor)
+  }
+}
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -26,6 +37,8 @@ afterAll(async () => {
 })
 
 afterEach(() => {
+  restoreClipboard?.()
+  restoreClipboard = null
   ui.modeLoader.load = originalLoad
   ui.deactivate()
   setUrl('http://localhost/')
@@ -41,13 +54,14 @@ function harness(initial: { active?: boolean; enabled?: boolean } = {}) {
   const listeners = new Set<(event: QuirkyEvent) => void>()
   const provided = new Map<string, unknown>()
   const calls: Call[] = []
-  const toasts: { title: string; body: string }[] = []
+  const toasts: { title: string; body: string; options?: { kind?: string } }[] = []
   const keys = new Map<string, boolean | undefined>()
   const trace: string[] = []
   const handlers = {
     setWrite: null as null | ((params: Record<string, unknown>) => Promise<unknown>),
     command: null as null | ((params: Record<string, unknown> | undefined) => Promise<unknown>),
-    self: null as null | (() => Promise<unknown>)
+    self: null as null | (() => Promise<unknown>),
+    list: null as null | (() => Promise<unknown>)
   }
   const emit = (id: string, value: boolean) => {
     settings[id.split('/')[1]!] = value
@@ -70,6 +84,7 @@ function harness(initial: { active?: boolean; enabled?: boolean } = {}) {
         trace.push('run')
         return handlers.command ? handlers.command(params) : { result: { started: true } }
       }
+      if (method === 'quirky.feedback/list') return handlers.list ? handlers.list() : { comments: [], recovered: false }
       throw new Error(`unexpected ${method}`)
     },
     subscribe: (listener: (event: QuirkyEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
@@ -78,18 +93,18 @@ function harness(initial: { active?: boolean; enabled?: boolean } = {}) {
       if (!(key in settings)) throw new Error(`no setting ${name}`)
       return settings[key]
     },
-    toast: (title: string, body: string) => { toasts.push({ title, body }) },
+    toast: (title: string, body: string, options?: { kind?: string }) => { toasts.push({ title, body, options }) },
     setContext: (key: string, value: boolean | undefined) => { keys.set(key, value) }
   } as unknown as UiPluginContext
-  const mounts: { context: UiPluginContext; options: { annotate(pane: string): Promise<void> }; unmounted: number }[] = []
+  const mounts: { context: UiPluginContext; unmounted: number }[] = []
   const loads = { count: 0, pending: null as null | Promise<void> }
   const useLoader = (gate?: Promise<void>) => {
     ui.modeLoader.load = async () => {
       loads.count++
       if (gate) await gate
       return {
-        mountFeedbackMode: (ctx: UiPluginContext, options: { annotate(pane: string): Promise<void> }) => {
-          const entry = { context: ctx, options, unmounted: 0 }
+        mountFeedbackMode: (ctx: UiPluginContext) => {
+          const entry = { context: ctx, unmounted: 0 }
           mounts.push(entry)
           trace.push('mode on')
           return () => { entry.unmounted++; trace.push('mode off') }
@@ -136,18 +151,24 @@ describe('manifest', () => {
     expect(enabled.menu).toBeUndefined()
     expect(active).toMatchObject({ id: 'active', title: 'Feedback Mode', type: 'boolean', default: false, menu: 'view', whenSetting: 'enabled', description: 'Turns selection on in the main window.' })
   })
-  test('declares the command and keybinding', () => {
-    expect(manifest.contributes.command).toEqual([{ id: 'toggle', title: 'Toggle Feedback Mode', palette: true, whenSetting: 'enabled' }])
+  test('declares the commands and keybinding', () => {
+    expect(manifest.contributes.command).toEqual([
+      { id: 'toggle', title: 'Toggle Feedback Mode', palette: true, whenSetting: 'enabled' },
+      { id: 'copy', title: 'Copy Feedback Comments as Markdown', description: 'Copies every feedback comment to the clipboard as Markdown.', palette: true, whenSetting: 'enabled' },
+      { id: 'annotate', title: 'Annotate a Browser Pane', description: 'Leaves Feedback mode and starts Browser Annotate in the Native browser pane named by pane.', args: { type: 'object', properties: { pane: { type: 'string' } }, required: ['pane'], additionalProperties: false }, whenSetting: 'enabled' }
+    ])
     expect(manifest.contributes.keybinding).toHaveLength(1)
     expect(manifest.contributes.keybinding[0]).toMatchObject({ key: 'mod+alt+k', command: 'toggle', whenSetting: 'enabled', when: 'terminalFocus || !terminalFocus' })
   })
 })
 
 describe('registration', () => {
-  test('provides the overlay and the toggle command', () => {
+  test('provides the overlay and all window commands', () => {
     const h = harness()
     expect(h.provided.has('overlay:quirky.feedback/mode')).toBe(true)
     expect(h.provided.has('command:quirky.feedback/toggle')).toBe(true)
+    expect(h.provided.has('command:quirky.feedback/copy')).toBe(true)
+    expect(h.provided.has('command:quirky.feedback/annotate')).toBe(true)
   })
 
   test('toggle flips active', async () => {
@@ -163,6 +184,82 @@ describe('registration', () => {
     const h = harness({ enabled: false })
     await (h.provided.get('command:quirky.feedback/toggle') as () => Promise<unknown>)()
     expect(writes(h)).toHaveLength(0)
+  })
+})
+
+describe('copy comments as markdown', () => {
+  function comment(id: string, intent: Comment['intent'], owner: string): Comment {
+    return {
+      id, createdAt: 1, intent, comment: `comment ${id}`,
+      capture: {
+        kind: 'element', owner, elementPath: 'div', selector: `#${id}`, role: null, accessibleName: null,
+        visibleText: null, nearbyText: null, attributes: null, rect: { x: 0, y: 0, width: 1, height: 1 }, computedStyles: {},
+        component: null, source: null, sourceCaller: null, build: { version: '1', commit: 'x', channel: 'dev' }
+      }
+    }
+  }
+
+  const comments = [comment('a', 'change', 'quirky'), comment('b', 'question', 'quirky.terminal')]
+
+  test('writes formatted comments before confirming success', async () => {
+    const h = harness()
+    const writes: string[] = []
+    h.handlers.list = async () => ({ comments, recovered: false })
+    setClipboard({ writeText: async (text: string) => { writes.push(text) } })
+    const copy = h.provided.get('command:quirky.feedback/copy') as () => Promise<{ copied: number }>
+    await expect(copy()).resolves.toEqual({ copied: 2 })
+    expect(h.calls).toEqual([{ method: 'quirky.feedback/list', params: undefined }])
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).toContain('## Quirky UI Feedback')
+    expect(writes[0]).toContain('comment a')
+    expect(writes[0]).toContain('comment b')
+    expect(h.toasts).toEqual([{ title: 'Copied', body: '2 comments copied as Markdown.', options: { kind: 'success' } }])
+  })
+
+  test('uses the singular success message for one comment', async () => {
+    const h = harness()
+    h.handlers.list = async () => ({ comments: [comments[0]!], recovered: false })
+    setClipboard({ writeText: async () => {} })
+    const copy = h.provided.get('command:quirky.feedback/copy') as () => Promise<{ copied: number }>
+    await expect(copy()).resolves.toEqual({ copied: 1 })
+    expect(h.toasts).toEqual([{ title: 'Copied', body: '1 comment copied as Markdown.', options: { kind: 'success' } }])
+  })
+
+  test('toasts and rejects when the clipboard write fails', async () => {
+    const h = harness()
+    h.handlers.list = async () => ({ comments, recovered: false })
+    setClipboard({ writeText: async () => { throw new Error('denied') } })
+    const copy = h.provided.get('command:quirky.feedback/copy') as () => Promise<unknown>
+    await expect(copy()).rejects.toThrow('denied')
+    expect(h.toasts).toEqual([{ title: 'Could not copy the comments', body: 'denied', options: { kind: 'error' } }])
+  })
+
+  test('rejects an empty list with the copy error toast', async () => {
+    const h = harness()
+    h.handlers.list = async () => ({ comments: [], recovered: false })
+    const copy = h.provided.get('command:quirky.feedback/copy') as () => Promise<unknown>
+    await expect(copy()).rejects.toThrow('There are no feedback comments to copy')
+    expect(h.toasts).toEqual([{ title: 'Could not copy the comments', body: 'There are no feedback comments to copy', options: { kind: 'error' } }])
+  })
+
+  test('rejects when the clipboard is unavailable', async () => {
+    const h = harness()
+    h.handlers.list = async () => ({ comments, recovered: false })
+    setClipboard({})
+    const copy = h.provided.get('command:quirky.feedback/copy') as () => Promise<unknown>
+    await expect(copy()).rejects.toThrow('The clipboard is not available in this window')
+    expect(h.toasts).toEqual([{ title: 'Could not copy the comments', body: 'The clipboard is not available in this window', options: { kind: 'error' } }])
+  })
+})
+
+describe('mode actions', () => {
+  test('an annotate command rejects a missing pane before calling anything', async () => {
+    const h = harness()
+    const annotate = h.provided.get('command:quirky.feedback/annotate') as (args?: Record<string, unknown>) => Promise<void>
+    const calls = h.calls.length
+    await expect(annotate()).rejects.toThrow('Annotate needs the id of a browser pane')
+    await expect(annotate({ pane: '' })).rejects.toThrow('Annotate needs the id of a browser pane')
+    expect(h.calls.slice(calls)).toEqual([])
   })
 })
 
@@ -322,13 +419,13 @@ describe('annotate this page', () => {
     h.emit(ACTIVE, true)
     await flush()
     h.trace.length = 0
-    return h.mounts[0]!.options
+    return h.provided.get('command:quirky.feedback/annotate') as (args: { pane: string }) => Promise<void>
   }
 
   test('turns the mode off before it starts Browser Annotate', async () => {
     const h = harness()
-    const options = await started(h)
-    await options.annotate('pane-1')
+    const annotate = await started(h)
+    await annotate({ pane: 'pane-1' })
     expect(h.trace).toEqual(['set false', 'mode off', 'run'])
     const run = h.calls.find((call) => call.method === 'ui.window.command.run')!
     expect(run.params).toEqual({ connId: 7, id: 'command:quirky.browser/design', args: { action: 'annotate', pane: 'pane-1' } })
@@ -337,34 +434,34 @@ describe('annotate this page', () => {
 
   test('shows the error when the window cannot identify itself', async () => {
     const h = harness()
-    const options = await started(h)
+    const annotate = await started(h)
     h.handlers.self = async () => { throw new Error('window gone') }
-    await options.annotate('pane-1')
+    await annotate({ pane: 'pane-1' })
     expect(h.trace).toEqual(['set false', 'mode off'])
     expect(h.toasts[0]!.body).toContain('window gone')
   })
 
   test('shows the reason when annotate does not start', async () => {
     const h = harness()
-    const options = await started(h)
+    const annotate = await started(h)
     h.handlers.command = async () => ({ result: { started: false, reason: 'Pane is not ready.' } })
-    await options.annotate('pane-1')
+    await annotate({ pane: 'pane-1' })
     expect(h.toasts.map((toast) => toast.body)).toEqual(['Pane is not ready.'])
   })
 
   test('shows the error when the command rejects', async () => {
     const h = harness()
-    const options = await started(h)
+    const annotate = await started(h)
     h.handlers.command = async () => { throw new Error('no command') }
-    await options.annotate('pane-1')
+    await annotate({ pane: 'pane-1' })
     expect(h.toasts[0]!.body).toContain('no command')
   })
 
   test('leaves the mode running when the setting write fails', async () => {
     const h = harness()
-    const options = await started(h)
+    const annotate = await started(h)
     h.handlers.setWrite = () => Promise.reject(new Error('denied'))
-    await options.annotate('pane-1')
+    await annotate({ pane: 'pane-1' })
     expect(h.trace).toEqual(['set false'])
     expect(live(h)).toHaveLength(1)
     expect(h.toasts[0]!.body).toContain('denied')

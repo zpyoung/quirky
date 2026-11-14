@@ -223,7 +223,9 @@ async function objective(args: CliArgs, ctx: CliContext): Promise<void> {
   requireNoExtraPositionals(args, 1, ctx)
   const detail = await detailFor(ctx, watcherId)
   if (detail.enrollment.kind !== 'objective') usage(ctx, `watcher ${watcherId} is ${detail.enrollment.kind}, not objective`)
-  const value = await ctx.call(`${PLUGIN_ID}/objectiveDetail`, { target: detail.target })
+  if (detail.target.connectionId) usage(ctx, 'objective detail is available only for local watchers')
+  const value = await ctx.call('quirky.objective/detail', { watcherId: detail.target.watcherId })
+  if (value === null) fail(ctx, `Watcher not found: ${watcherId}`)
   ctx.out.result(value, () => JSON.stringify(value, null, 2))
 }
 

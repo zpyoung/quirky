@@ -1,6 +1,6 @@
 import { useSyncExternalStore, type ReactNode } from 'react'
 import type { AgentListing, PermissionMode } from '../core/types'
-import { Badge, Button, EmptyState, SectionHeader, ToolPanelFrame } from '@quirky/ui'
+import { Badge, Button, EmptyState, InlineError, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'
 import { AgentRow } from './AgentRow'
 import { Segmented, Switch } from './controls'
 import { MODE_LABEL, startable, type AgentsStore } from './model'
@@ -8,6 +8,8 @@ import { s } from './styles'
 
 const TRUST_TITLE = 'Trust the folder when Quirky starts an agent'
 const MODES: PermissionMode[] = ['manual', 'auto', 'yolo']
+
+const NO_EXPANDED: ReadonlySet<string> = new Set()
 
 function Section({ title, hint, badge, action, children }: { title: string; hint?: string; badge?: string; action?: ReactNode; children: ReactNode }) {
   const actions = badge !== undefined || action !== undefined ? (
@@ -70,13 +72,13 @@ function Permissions({ listing, store }: { listing: AgentListing; store: AgentsS
   )
 }
 
-function Listing({ listing, store, refreshing }: { listing: AgentListing; store: AgentsStore; refreshing: boolean }) {
+function Listing({ listing, store, refreshing, expanded }: { listing: AgentListing; store: AgentsStore; refreshing: boolean; expanded: ReadonlySet<string> }) {
   const installed = listing.agents.filter((agent) => agent.installed)
   const available = listing.agents.filter((agent) => !agent.installed)
   const rows = (agents: typeof installed) => (
     <ul style={s.list}>
       {agents.map((agent) => (
-        <AgentRow key={agent.id} info={agent} listing={listing} store={store} />
+        <AgentRow key={agent.id} info={agent} listing={listing} expanded={expanded.has(agent.id)} store={store} />
       ))}
     </ul>
   )
@@ -104,26 +106,26 @@ function Listing({ listing, store, refreshing }: { listing: AgentListing; store:
 
 /** The Agents view: default agent, permissions, installed and installable agents, and the workspace-trust switch. */
 export function AgentsView({ store }: { store: AgentsStore }) {
-  const { status, listing, error, refreshing } = useSyncExternalStore(store.subscribe, store.getSnapshot)
+  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot)
+  const { status, listing, error, refreshing } = snapshot
+  const expanded = snapshot.expanded ?? NO_EXPANDED
   return (
     <div className="agents-ui" style={s.page}>
       <ToolPanelFrame title="Agents">
         <div style={s.column}>
           <p style={s.intro}>Manage AI agents, set a default, and customize commands.</p>
-          {status === 'loading' && <p className="ui-help-text" role="status">Loading agents…</p>}
+          {status === 'loading' && <NoticeLine>Loading agents…</NoticeLine>}
           {status === 'error' && (
-            <div role="alert">
-              <p className="ui-error-text">{error}</p>
-              <Button type="button" onClick={() => store.retry()}>
-                Try again
-              </Button>
-            </div>
+            <InlineError
+              message={error ?? 'Could not load agents'}
+              action={{ label: 'Try again', onAction: () => store.retry() }}
+            />
           )}
           {listing && (
             <>
               <DefaultAgent listing={listing} store={store} />
               <Permissions listing={listing} store={store} />
-              <Listing listing={listing} store={store} refreshing={refreshing} />
+              <Listing listing={listing} store={store} refreshing={refreshing} expanded={expanded} />
               <Section title="This Mac">
                 <Switch checked={listing.workspaceTrust} label={TRUST_TITLE} onChange={(value) => void store.setTrust(value)} />
               </Section>

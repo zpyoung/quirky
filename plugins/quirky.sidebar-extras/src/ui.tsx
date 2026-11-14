@@ -2,8 +2,21 @@ import { Badge, IconButton, StatusDot } from '@quirky/ui'
 import { createElement, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
-import { isPlainRecord } from './daemon/state'
-import type { DirtyResult } from './daemon/dirty'
+
+type DirtyResult = {
+  worktreeId: string | null
+  instanceId: string | null
+  count: number
+  capped: boolean
+  title: string
+  dirty: boolean
+  available: boolean
+  error?: string
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 const SLOT_ID = 'activity-item:quirky.sidebar-extras/source-control'
 const PANEL_ID = 'panel:quirky.git/source-control'
