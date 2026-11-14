@@ -79,6 +79,7 @@ export type CliFilesWorld = {
   worktrees: readonly FixtureWorktree[]
   tools: CliFixtureTools
   buildElapsedMs: number
+  assertLive(options?: CliWorldExecuteOptions): Promise<void>
   execute(argv: string[], options?: CliWorldExecuteOptions): Promise<CliWorldResult>
   prepare(argv: string[], cwd: string, options?: CliWorldExecuteOptions): Promise<CliWorldResult>
   cleanup(): Promise<void>
@@ -110,6 +111,8 @@ type CliFilesWorldDependencies = {
   readRuntime?: typeof readRuntime
   isDaemonAlive?: typeof isDaemonAlive
   processSnapshot?: typeof processSnapshot
+  now?: () => number
+  sleep?: (milliseconds: number) => Promise<void>
   verifyEgressGuard?: (options: {
     env: Record<string, string>
     tools: CliFixtureTools
@@ -499,6 +502,78 @@ async function healthCheck(home: string, daemonPid: number, env: Record<string, 
   const runtime = readRuntime(home)
   if (!runtime || runtime.pid !== daemonPid) return false
   return withOwnedProcessEnvironmentAsync(env, () => isDaemonAlive(runtime, 250))
+}
+
+async function waitForCliFilesDaemonHealth(options: {
+  home: string
+  daemonPid: number
+  expectedRuntime: RuntimeInfo
+  processIdentity?: ProcessIdentity
+  env: Record<string, string>
+  signal: AbortSignal
+  deadline: number
+  readOwnedRuntime: typeof readRuntime
+  probe: typeof isDaemonAlive
+  processTable: typeof processSnapshot
+  now?: () => number
+  sleep?: (milliseconds: number) => Promise<void>
+}): Promise<boolean> {
+  const now = options.now ?? Date.now
+  const sleep = options.sleep ?? ((milliseconds) => Bun.sleep(milliseconds))
+  const retryDeadline = now() + Math.max(0, Math.min(5_000, options.deadline - Date.now()))
+  let processIdentity = options.processIdentity
+  let aborted = options.signal.aborted
+  const stopped = Promise.withResolvers<void>()
+  const onAbort = () => {
+    aborted = true
+    stopped.resolve()
+  }
+  const matchesExpectedRuntime = (runtime: RuntimeInfo | null | undefined): runtime is RuntimeInfo => {
+    const expected = options.expectedRuntime
+    return runtime != null
+      && runtime.pid === options.daemonPid
+      && runtime.pid === expected.pid
+      && runtime.port === expected.port
+      && runtime.token === expected.token
+      && runtime.hookToken === expected.hookToken
+      && runtime.daemonVersion === expected.daemonVersion
+      && runtime.protocolVersion === expected.protocolVersion
+      && runtime.startedAt === expected.startedAt
+      && runtime.socket === expected.socket
+      && runtime.entryHash === expected.entryHash
+      && runtime.port > 0
+  }
+  const hasLiveProcessIdentity = () => {
+    const current = options.processTable(options.home).get(options.daemonPid)
+    if (!current || current.state.includes('Z')) return false
+    if (!processIdentity) processIdentity = current
+    return sameProcess(processIdentity, current)
+  }
+  options.signal.addEventListener('abort', onAbort, { once: true })
+  if (options.signal.aborted) onAbort()
+  try {
+    while (now() < retryDeadline) {
+      if (aborted || options.signal.aborted || Date.now() >= options.deadline) return false
+      const runtime = options.readOwnedRuntime(options.home)
+      if (!matchesExpectedRuntime(runtime) || !hasLiveProcessIdentity()) return false
+      const remaining = Math.min(retryDeadline - now(), options.deadline - Date.now())
+      if (remaining <= 0) return false
+      const alive = await Promise.race([
+        withOwnedProcessEnvironmentAsync(options.env, () => options.probe(runtime, Math.max(1, Math.min(300, remaining)))),
+        stopped.promise.then(() => false)
+      ])
+      if (aborted || options.signal.aborted || Date.now() >= options.deadline || now() >= retryDeadline) return false
+      const afterProbe = options.readOwnedRuntime(options.home)
+      if (!matchesExpectedRuntime(afterProbe) || !hasLiveProcessIdentity()) return false
+      if (alive) return true
+      const pause = Math.min(50, retryDeadline - now(), options.deadline - Date.now())
+      if (pause <= 0) return false
+      await Promise.race([sleep(pause), stopped.promise])
+    }
+    return false
+  } finally {
+    options.signal.removeEventListener('abort', onAbort)
+  }
 }
 
 function redactDiagnostic(text: string, home: string, tokens: readonly string[]): string {
@@ -1229,16 +1304,24 @@ export async function createCliFilesWorld(
     if (soakWorld.home !== home || soakWorld.daemonPid !== daemonPid) {
       throw new CliWorldError('daemon-identity', 'soak world no longer identifies the owned home and daemon')
     }
-    const runtime = (dependencies.readRuntime ?? readRuntime)(home)
-    if (!runtime || runtime.pid !== daemonPid || runtime.port !== expectedRuntime.port
-      || runtime.entryHash !== expectedRuntime.entryHash || runtime.port <= 0) {
-      throw new CliWorldError('daemon-identity', 'runtime.json no longer belongs to the owned daemon and home')
-    }
     const alive = await waitForCliFilesOperation(
-      withOwnedProcessEnvironmentAsync(env, () => (dependencies.isDaemonAlive ?? isDaemonAlive)(runtime, 250)),
+      waitForCliFilesDaemonHealth({
+        home,
+        daemonPid,
+        expectedRuntime,
+        ...(daemonIdentity ? { processIdentity: daemonIdentity } : {}),
+        env,
+        signal: activeSignal,
+        deadline: activeDeadline,
+        readOwnedRuntime: dependencies.readRuntime ?? readRuntime,
+        probe: dependencies.isDaemonAlive ?? isDaemonAlive,
+        processTable,
+        ...(dependencies.now ? { now: dependencies.now } : {}),
+        ...(dependencies.sleep ? { sleep: dependencies.sleep } : {})
+      }),
       activeSignal,
       activeDeadline,
-      1_000,
+      5_000,
       'owned daemon health check'
     )
     if (!alive) throw new CliWorldError('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
@@ -1546,10 +1629,23 @@ export async function createCliFilesWorld(
       throw new CliWorldError('daemon-identity', 'runtime.json does not identify the started daemon in the owned home')
     }
     if (!await waitForCliFilesOperation(
-      withOwnedProcessEnvironmentAsync(env, () => (dependencies.isDaemonAlive ?? isDaemonAlive)(initialRuntime, 250)),
+      waitForCliFilesDaemonHealth({
+        home,
+        daemonPid,
+        expectedRuntime,
+        ...(daemonIdentityAtSpawn ? { processIdentity: daemonIdentityAtSpawn } : {}),
+        env,
+        signal,
+        deadline,
+        readOwnedRuntime: dependencies.readRuntime ?? readRuntime,
+        probe: dependencies.isDaemonAlive ?? isDaemonAlive,
+        processTable,
+        ...(dependencies.now ? { now: dependencies.now } : {}),
+        ...(dependencies.sleep ? { sleep: dependencies.sleep } : {})
+      }),
       signal,
       deadline,
-      1_000,
+      5_000,
       'owned daemon readiness check'
     )) {
       throw new CliWorldError('daemon-exited', 'owned daemon did not remain healthy after startup')
@@ -1677,6 +1773,16 @@ export async function createCliFilesWorld(
     }
     captureOwnedProcessIdentities(true)
 
+    const assertLive = async (liveOptions: CliWorldExecuteOptions = {}) => {
+      if (closed) throw new CliWorldError('world-closed', 'CLI files world has already been cleaned up')
+      const liveSignal = liveOptions.signal ?? signal
+      const liveDeadline = liveOptions.signal ? Number.POSITIVE_INFINITY : deadline
+      ensureCliFilesWork(liveSignal, liveDeadline)
+      await verifyRuntime(liveSignal, liveDeadline)
+      await verifyLiveRenderers(liveSignal, liveDeadline)
+      captureOwnedProcessIdentities(true)
+    }
+
     const world: CliFilesWorld = {
       home: home!,
       env,
@@ -1689,6 +1795,7 @@ export async function createCliFilesWorld(
       get buildElapsedMs() {
         return buildElapsedMs
       },
+      assertLive,
       async execute(argv, executeOptions = {}) {
         if (closed) throw new CliWorldError('world-closed', 'CLI files world has already been cleaned up')
         const executeSignal = executeOptions.signal ?? signal
@@ -1696,9 +1803,7 @@ export async function createCliFilesWorld(
         ensureCliFilesWork(executeSignal, executeDeadline)
         validateCliArgv(argv, cliEntry)
         const cwd = resolveOwnedHomeCwd(executeOptions.cwd ?? home!, home!)
-        await verifyRuntime(executeSignal, executeDeadline)
-        await verifyLiveRenderers(executeSignal, executeDeadline)
-        captureOwnedProcessIdentities(true)
+        await assertLive(executeOptions)
         const timeoutMs = Math.min(
           COMMAND_TIMEOUT_MS,
           executeOptions.timeoutMs ?? COMMAND_TIMEOUT_MS,

@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { delimiter, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { SUPPRESSION_PROMPT } from '../../plugins/quirky.ask/src/core/claude-flags'
-import { createCliEnvironment, createCliWorld } from './cli-world'
+import { createCliEnvironment, createCliWorld, type CliFilesWorld } from './cli-world'
 import { createCliFixtures, installCliFixtureTools } from './cli-fixtures'
 import { createActorReceiptStore, parseActorReceipt, quotePosixShellLiteral } from './cli-actor'
 import { collectBracketedPaste, parseWorkerPreamble } from './cli-worker-actor'
@@ -1577,4 +1577,161 @@ test('renderer evidence reads stop on interruption and retain late rejection han
   controller.abort(new files.CliFilesFailure('interrupted', 'stop renderer read'))
   expect(await result).toMatchObject({ error: { kind: 'interrupted', message: 'stop renderer read' } })
   pending.reject(new Error('late renderer failure'))
+})
+
+function installCliFilesHealthClock(fixture: { dependencies: Record<string, unknown> }) {
+  let currentTime = 0
+  const sleeps: number[] = []
+  fixture.dependencies.now = () => currentTime
+  fixture.dependencies.sleep = async (milliseconds: number) => {
+    sleeps.push(milliseconds)
+    currentTime += milliseconds
+  }
+  return { sleeps, now: () => currentTime }
+}
+
+test('CLI files health retries transient failures during startup', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const clock = installCliFilesHealthClock(fixture)
+  let probes = 0
+  fixture.dependencies.isDaemonAlive = async () => ++probes >= 3
+
+  const world = await createWorld({}, fixture.dependencies)
+  try {
+    expect(probes).toBe(3)
+    expect(clock.sleeps).toEqual([50, 50])
+    expect(fixture.events).toContain('windows.open')
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files health retries transient failures before executing', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const clock = installCliFilesHealthClock(fixture)
+  let probes = 0
+  fixture.dependencies.isDaemonAlive = async () => {
+    probes++
+    return probes === 1 || probes === 4
+  }
+  const world = await createWorld({}, fixture.dependencies)
+  const argv = [process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json']
+  try {
+    await expect(world.execute(argv)).resolves.toMatchObject({ stdout: '{"ok":true}', exitCode: 0 })
+    expect(probes).toBe(4)
+    expect(clock.sleeps).toEqual([50, 50])
+    expect(fixture.cliCalls).toEqual([argv])
+    expect(fixture.events.filter((event) => event === 'windows.open')).toHaveLength(1)
+  } finally {
+    await world.cleanup()
+  }
+})
+
+test('CLI files health exhausts five seconds of false probes without launching renderers or a child', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  const clock = installCliFilesHealthClock(fixture)
+  const probeTimeouts: number[] = []
+  fixture.dependencies.isDaemonAlive = async (_runtime: unknown, timeoutMs: number) => {
+    probeTimeouts.push(timeoutMs)
+    return false
+  }
+
+  await expect(createWorld({}, fixture.dependencies)).rejects.toThrow('did not remain healthy')
+  expect(clock.now()).toBe(5_000)
+  expect(clock.sleeps).toHaveLength(100)
+  expect(probeTimeouts).toHaveLength(100)
+  expect(probeTimeouts.every((timeoutMs) => timeoutMs > 0 && timeoutMs <= 300)).toBe(true)
+  expect(fixture.events).not.toContain('windows.open')
+  expect(fixture.cliCalls).toEqual([])
+  expect(existsSync(fixture.home)).toBe(false)
+})
+
+test('CLI files health rejects a positive probe if daemon or runtime identity changes during it', async () => {
+  const createWorld = requireCliFilesFactory()
+  for (const mutation of ['daemon-pid', 'runtime', 'process'] as const) {
+    const fixture = cliFilesStandIns()
+    installCliFilesHealthClock(fixture)
+    let runtimePort = 43123
+    let changedProcessIdentity = false
+    const snapshot = fixture.dependencies.processSnapshot as () => Map<number, {
+      pid: number; ppid: number; pgid: number; started: string; state: string; command: string
+    }>
+    fixture.dependencies.readRuntime = () => ({
+      pid: fixture.state.runtimePid, home: fixture.home, port: runtimePort,
+      token: 'fixture-token', hookToken: 'fixture-hook-token', entryHash: 'fixture-entry'
+    })
+    fixture.dependencies.processSnapshot = () => new Map([...fixture.state.livePids].map((pid) => {
+      const identity = snapshot().get(pid)!
+      return [pid, {
+        ...identity,
+        started: changedProcessIdentity && pid === 701 ? 'reused-701' : identity.started
+      }] as const
+    }))
+    let probes = 0
+    fixture.dependencies.isDaemonAlive = async () => {
+      probes++
+      if (probes === 2) {
+        if (mutation === 'daemon-pid') fixture.state.runtimePid = 702
+        else if (mutation === 'runtime') runtimePort++
+        else changedProcessIdentity = true
+      }
+      return true
+    }
+    const world = await createWorld({}, fixture.dependencies)
+    const argv = [process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json']
+    try {
+      await expect(world.execute(argv)).rejects.toThrow()
+      expect(probes).toBe(2)
+      expect(fixture.cliCalls).toEqual([])
+    } finally {
+      await world.cleanup()
+    }
+  }
+})
+
+test('CLI files health stops after interruption while a daemon probe is pending', async () => {
+  const createWorld = requireCliFilesFactory()
+  const fixture = cliFilesStandIns()
+  installCliFilesHealthClock(fixture)
+  const controller = new AbortController()
+  const pendingProbe = Promise.withResolvers<boolean>()
+  const probeStarted = Promise.withResolvers<void>()
+  let probes = 0
+  fixture.dependencies.isDaemonAlive = async () => {
+    probes++
+    probeStarted.resolve()
+    return pendingProbe.promise
+  }
+
+  const opening = createWorld({ signal: controller.signal }, fixture.dependencies)
+  await probeStarted.promise
+  controller.abort(new Error('owned daemon health interrupted'))
+  await expect(opening).rejects.toThrow('owned daemon health interrupted')
+  pendingProbe.resolve(true)
+  expect(probes).toBe(1)
+  expect(fixture.events).not.toContain('windows.open')
+  expect(fixture.cliCalls).toEqual([])
+  expect(existsSync(fixture.home)).toBe(false)
+})
+
+test('CLI files health refuses a runtime that disappears during a successful probe', async () => {
+  const fixture = cliFilesStandIns()
+  const read = fixture.dependencies.readRuntime as () => unknown
+  let vanished = false
+  let ready = false
+  fixture.dependencies.readRuntime = () => vanished ? null : read()
+  fixture.dependencies.isDaemonAlive = async () => {
+    if (ready) vanished = true
+    return true
+  }
+  const world = await requireCliFilesFactory()({}, fixture.dependencies)
+  ready = true
+  try {
+    await expect(world.execute([process.execPath, world.cliEntry, 'api', '--runtime', 'local', '--json']))
+      .rejects.toMatchObject({ kind: 'daemon-exited' })
+    expect(fixture.cliCalls).toEqual([])
+  } finally { await world.cleanup() }
 })
