@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import type { ProjectGroup, QuirkyClient, Repo, RepoDetails, Session, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
+import { spawnCli } from '../../../packages/cli/test/fixtures/fake-daemon'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
 import { commitFiles, failure, git, isolateGitConfig, makeRepo } from '../../quirky.repo/test/git-fixtures'
 import { githubUser, useGlobalGitConfig } from './fixtures/repos'
@@ -408,7 +409,8 @@ test('SC-60: Project Settings shows what repo set stored, and saving a change sh
     setupPolicy: 'ask',
     agentStartup: 'wait-for-setup',
     commandSource: 'run-both',
-    setupScript: 'make deps'
+    setupScript: 'make deps',
+    archiveScript: 'echo old'
   })
   await w.win.waitFor(() => projectSection('API'))
 
@@ -423,14 +425,15 @@ test('SC-60: Project Settings shows what repo set stored, and saving a change sh
   expect(field<HTMLSelectElement>(dialog, 'When to run')!.value).toBe('ask')
   expect(field(dialog, 'Wait for setup to complete before starting agent')!.checked).toBe(true)
   expect(field<HTMLSelectElement>(dialog, 'Command Source')!.value).toBe('run-both')
-  expect(field<HTMLTextAreaElement>(dialog, 'Archive Script')!.value).toBe('')
+  expect(field<HTMLTextAreaElement>(dialog, 'Archive Script')!.value).toBe('echo old')
   expect(dialog.textContent).toContain('echo shared-setup')
   expect(dialog.textContent).toContain('quirky.yaml')
 
   await setText(field(dialog, 'Project icon')!, '🧭')
   await setText(field(dialog, 'Display Name')!, 'Api service')
+  await setText(field<HTMLTextAreaElement>(dialog, 'Setup Script')!, '  make deps  \n  ')
   await setText(field(dialog, 'Default Worktree Base')!, '')
-  await setText(field<HTMLTextAreaElement>(dialog, 'Archive Script')!, 'echo bye')
+  await setText(field<HTMLTextAreaElement>(dialog, 'Archive Script')!, '')
   await setSelect(field<HTMLSelectElement>(dialog, 'When to run')!, 'skip-by-default')
   await click(field(dialog, 'Wait for setup to complete before starting agent')!)
   await setSelect(field<HTMLSelectElement>(dialog, 'Command Source')!, 'local-only')
@@ -444,9 +447,8 @@ test('SC-60: Project Settings shows what repo set stored, and saving a change sh
     worktreeLocation: join(w.root, 'api-ws'),
     setupPolicy: 'skip-by-default',
     agentStartup: 'start-immediately',
-    commandSource: 'local-only',
-    setupScript: 'make deps',
-    archiveScript: 'echo bye'
+    setupScript: '  make deps  \n  ',
+    archiveScript: ''
   })
   await w.win.waitFor(() => projectSection('Api service'))
   const metadata = await w.agent.callAny('quirky.worktree/projectMetadata', { repo: repo.id }) as { identity: { icon: string | null } }
@@ -465,6 +467,35 @@ test('SC-60: Project Settings shows what repo set stored, and saving a change sh
     identity: { trackerProject: 'javascript:alert(1)' }
   })).rejects.toThrow(/HTTPS/i)
   expect((await w.agent.callAny('quirky.worktree/projectMetadata', { repo: repo.id }) as { identity: { trackerProject: string | null } }).identity.trackerProject).toBeNull()
+}, SLOW)
+
+test('Project Settings saves metadata without changing repository settings, and project-set remains available in the CLI', async () => {
+  const w = await boot()
+  const { repo } = await addApi(w)
+  const beforeMetadataSave = await w.agent.callAny('quirky.repo/show', { repo: repo.id }) as RepoDetails
+  const settingsBefore = beforeMetadataSave.settings
+  await openProjectMenu(w.win, repo.name)
+  await choose(w.win, 'Project Settings…')
+  const dialog = await w.win.waitFor(() => dialogNamed(`Project Settings > ${repo.name}`))
+  await w.win.waitFor(() => field(dialog, 'Display Name'))
+  await setText(field(dialog, 'Project icon')!, '◇')
+  await click(button(dialog, 'Save')!)
+  await closed(w, `Project Settings > ${repo.name}`)
+
+  const settingsAfterMetadataSave = await w.agent.callAny('quirky.repo/show', { repo: repo.id }) as RepoDetails
+  expect(settingsAfterMetadataSave.settings).toEqual(settingsBefore)
+  const metadataAfterDialog = await w.agent.callAny('quirky.worktree/projectMetadata', { repo: repo.id }) as { identity: { icon: string | null } }
+  expect(metadataAfterDialog.identity.icon).toBe('◇')
+
+  const proc = spawnCli(['worktree', 'project-set', repo.id, '--project-icon', '⌘', '--json'], { home: w.harness.home })
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited
+  ])
+  expect(code).toBe(0)
+  expect(stderr).toBe('')
+  expect(JSON.parse(stdout)).toMatchObject({ identity: { icon: '⌘' } })
 }, SLOW)
 
 async function dirtyAndLocked(w: World) {
