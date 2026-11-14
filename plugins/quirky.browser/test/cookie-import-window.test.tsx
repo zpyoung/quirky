@@ -5,6 +5,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { ImportJob } from '../src/cookies/types'
 import type { CookieImportPanelProps } from '../src/preferences/contract'
+import * as Shared from '../src/preferences-window/shared'
 import { CookieImportPanel } from '../src/preferences-window/CookieImportPanel'
 
 const REVIEW = { id: 'review', label: 'Review' }
@@ -19,6 +20,8 @@ const IMPORTS: NonNullable<CookieImportPanelProps['imports']> = {
 type RpcCall = { method: string; params?: Record<string, unknown> }
 type ToastCall = { title: string; body: string; options?: { kind?: string } }
 
+type CommandCall = { id: string; args?: unknown }
+
 let container: HTMLElement
 let root: Root | null = null
 let createRoot: typeof CreateReactRoot
@@ -30,6 +33,8 @@ let callHandler: (method: string, params?: Record<string, unknown>) => Promise<u
 let confirmHandler: (options: { title: string; body?: string; confirmLabel?: string }) => Promise<boolean>
 let imported: number
 let refreshFailure: Error | null
+let commandCalls: CommandCall[]
+let executeCommandFailure: Error | null
 let context: UiPluginContext
 
 function makeDeferred<T>() {
@@ -38,7 +43,7 @@ function makeDeferred<T>() {
 }
 
 function makeContext(): UiPluginContext {
-  return {
+  const createdContext = {
     pluginId: 'quirky.browser',
     call: async (method: string, params?: Record<string, unknown>) => {
       calls.push({ method, params })
@@ -48,11 +53,19 @@ function makeContext(): UiPluginContext {
       confirmations.push(options)
       return await confirmHandler(options)
     },
+    executeCommand: async (id: string, args?: unknown) => {
+      commandCalls.push({ id, args })
+      if (executeCommandFailure) throw executeCommandFailure
+      if (id === Shared.PREFERENCES_CONTROL_COMMAND) {
+        Shared.dispatchPreferencesControl(createdContext as UiPluginContext, args)
+      }
+    },
     toast: (title: string, body: string, options?: { kind?: string }) => { toasts.push({ title, body, options }) }
-  } as unknown as UiPluginContext
+  }
+  return createdContext as unknown as UiPluginContext
 }
 
-function Host({ destination = REVIEW }: { destination?: typeof REVIEW }) {
+function Host({ destination = REVIEW, loadError }: { destination?: typeof REVIEW; loadError?: string }) {
   const [open, setOpen] = useState(false)
   const onImported = async () => {
     imported += 1
@@ -64,9 +77,28 @@ function Host({ destination = REVIEW }: { destination?: typeof REVIEW }) {
       context={context}
       imports={IMPORTS}
       destination={destination}
+      loadError={loadError}
       onError={(message) => errors.push(message)}
       onImported={onImported}
     />}
+  </>
+}
+
+function TwoPanelHost() {
+  const onImported = async () => {
+    imported += 1
+    if (refreshFailure) throw refreshFailure
+  }
+  const props = {
+    context,
+    imports: IMPORTS,
+    destination: REVIEW,
+    onError: (message: string) => errors.push(message),
+    onImported
+  }
+  return <>
+    <div data-panel-instance="first"><CookieImportPanel {...props} /></div>
+    <div data-panel-instance="second"><CookieImportPanel {...props} /></div>
   </>
 }
 
@@ -91,6 +123,8 @@ beforeEach(() => {
   callHandler = async () => undefined
   confirmHandler = async () => true
   context = makeContext()
+  commandCalls = []
+  executeCommandFailure = null
   container = document.createElement('div')
   document.body.append(container)
 })
@@ -165,6 +199,14 @@ async function waitForText(needle: string, timeoutMs = 1200): Promise<void> {
     await act(async () => { await settle() })
   }
   expect(text()).toContain(needle)
+}
+async function waitForTextWithinAct(needle: string, timeoutMs = 1200): Promise<void> {
+  const started = Date.now()
+  while (!text().includes(needle) && Date.now() - started < timeoutMs) {
+    const { promise, resolve } = Promise.withResolvers<void>()
+    setTimeout(resolve, 10)
+    await promise
+  }
 }
 
 const successJob = (profileId: string, result: NonNullable<ImportJob['result']>, id = 'import-1') => ({
@@ -246,8 +288,11 @@ test('source detection begins only when opened and empty/error states retain fil
   expect(confirmations).toHaveLength(1)
   expect(confirmations[0]?.body).toContain(REVIEW.label)
   expect(callsFor('importStart')).toHaveLength(0)
-  confirming.resolve(true)
-  await waitForText('1 imported')
+  await act(async () => {
+    confirming.resolve(true)
+    await waitForTextWithinAct('1 imported')
+  })
+  expect(text()).toContain('1 imported')
   const started = callsFor('importStart')[0]
   expect(started?.params).toEqual({ profile: 'review', source: { kind: 'json', cookies }, yes: true })
   if (started?.params?.source && typeof started.params.source === 'object') {
@@ -326,7 +371,8 @@ test('browser imports keep the submitted destination through confirmation and po
   expect(confirmations).toHaveLength(1)
   expect(callsFor('importStart')).toHaveLength(1)
 
-  await waitForText('2 imported')
+  await act(async () => { await waitForTextWithinAct('2 imported') })
+  expect(text()).toContain('2 imported')
   expect(text()).toContain('5 total')
   expect(text()).toContain('3 skipped')
   expect(text()).toContain('1 Google')
@@ -455,4 +501,121 @@ test('late browser detection from an unmounted panel cannot replace a reopened p
   await act(async () => { await settle() })
   expect([...container.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'From Firefox')).toBe(true)
   expect([...container.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'From Google Chrome')).toBe(false)
+})
+
+test('detecting browsers uses the shared loading notice', async () => {
+  const detection = makeDeferred<unknown>()
+  callHandler = async (method) => {
+    if (method === 'quirky.browser/detectBrowsers') return await detection.promise
+    return undefined
+  }
+  await mount()
+  await clickButton('Open Import Cookies')
+
+  expect(container.querySelector('[role="status"] .ui-notice-line')?.textContent).toContain('Detecting installed browsers…')
+})
+
+test('a browser with no profiles shows an empty state in its fieldset', async () => {
+  callHandler = async (method) => {
+    if (method === 'quirky.browser/detectBrowsers') return { browsers: [{ family: 'firefox', label: 'Firefox', profiles: [] }] }
+    return undefined
+  }
+  await mount()
+  await clickButton('Open Import Cookies')
+  await waitForText('No profiles were found.')
+
+  const firefoxGroup = [...container.querySelectorAll('fieldset')].find((fieldset) => fieldset.querySelector('legend')?.textContent === 'Firefox')
+  expect(firefoxGroup?.querySelector('.ui-empty-state')?.textContent).toContain('No profiles were found.')
+})
+
+test('a running import uses the shared status notice', async () => {
+  callHandler = async (method) => {
+    if (method === 'quirky.browser/detectBrowsers') return { browsers: [{ family: 'firefox', label: 'Firefox', profiles: [{ name: 'default-release', label: 'Default' }] }] }
+    if (method === 'quirky.browser/importStart') return { id: 'running-import' }
+    if (method === 'quirky.browser/importGet') return { id: 'running-import', profileId: 'review', status: 'running', createdAt: 1 }
+    return undefined
+  }
+  await mount()
+  await clickButton('Open Import Cookies')
+  await waitForText('From Firefox')
+  await clickButton('From Firefox')
+
+  expect(container.querySelector('[role="status"] .ui-notice-line')?.textContent).toContain('Importing to Review')
+})
+
+test('failed imports, detection failures, and load errors use inline errors', async () => {
+  callHandler = async (method) => {
+    if (method === 'quirky.browser/detectBrowsers') return { browsers: [{ family: 'firefox', label: 'Firefox', profiles: [{ name: 'default-release', label: 'Default' }] }] }
+    if (method === 'quirky.browser/importStart') return { id: 'failed-import' }
+    if (method === 'quirky.browser/importGet') {
+      return { id: 'failed-import', profileId: 'review', status: 'failed', createdAt: 1, error: { code: 'source_denied', message: 'Source access was denied.' } }
+    }
+    return undefined
+  }
+  await mount()
+  await clickButton('Open Import Cookies')
+  await clickButton('From Firefox')
+
+  const firstAlert = container.querySelector('[role="alert"]')
+  expect(firstAlert?.classList.contains('ui-inline-error')).toBe(true)
+  expect(firstAlert?.textContent).toContain('Source access was denied.')
+  expect([...container.querySelectorAll('.ui-inline-error')].some((error) => error.textContent?.includes('Import failed for Review.'))).toBe(true)
+
+  await act(async () => {
+    root?.unmount()
+    root = null
+    await settle()
+  })
+  callHandler = async (method) => {
+    if (method === 'quirky.browser/detectBrowsers') throw new Error('Browser source detection failed.')
+    return undefined
+  }
+  await mount(<Host loadError="Preferences offline" />)
+  await clickButton('Open Import Cookies')
+
+  expect([...container.querySelectorAll('.ui-inline-error')].some((error) => error.textContent?.includes('Browser source detection failed.'))).toBe(true)
+  expect([...container.querySelectorAll('.ui-inline-error')].some((error) => error.textContent?.includes('Preferences offline'))).toBe(true)
+})
+
+test('From File opens and closes only the issuing panel through preferences control', async () => {
+  callHandler = async (method) => {
+    if (method === 'quirky.browser/detectBrowsers') return { browsers: [] }
+    return undefined
+  }
+  await mount(<TwoPanelHost />)
+  await clickButton('From File')
+
+  const firstPanel = container.querySelector('[data-panel-instance="first"]')
+  const secondPanel = container.querySelector('[data-panel-instance="second"]')
+  expect(commandCalls).toHaveLength(1)
+  expect(commandCalls[0]?.id).toBe('command:quirky.browser/preferencesControl')
+  expect(commandCalls[0]?.args).toMatchObject({ action: 'open-file-import' })
+  const openArgs = commandCalls[0]?.args as { action: string; instance: string }
+  expect(typeof openArgs.instance).toBe('string')
+  expect(openArgs.instance.length).toBeGreaterThan(0)
+  expect(firstPanel?.querySelector('[role="dialog"][aria-label="Import Cookies"]')).not.toBeNull()
+  expect(secondPanel?.querySelector('[role="dialog"][aria-label="Import Cookies"]')).toBeNull()
+
+  await clickButton('Cancel')
+  expect(commandCalls).toEqual([
+    { id: 'command:quirky.browser/preferencesControl', args: { action: 'open-file-import', instance: openArgs.instance } },
+    { id: 'command:quirky.browser/preferencesControl', args: { action: 'close-file-import', instance: openArgs.instance } }
+  ])
+  expect(container.querySelector('[role="dialog"][aria-label="Import Cookies"]')).toBeNull()
+})
+
+test('a rejected From File command shows an inline error, error toast, and callback', async () => {
+  const failure = new Error('No command: command:quirky.browser/preferencesControl')
+  executeCommandFailure = failure
+  callHandler = async (method) => {
+    if (method === 'quirky.browser/detectBrowsers') return { browsers: [] }
+    return undefined
+  }
+  await mount()
+  await clickButton('Open Import Cookies')
+  await clickButton('From File')
+
+  expect([...container.querySelectorAll('.ui-inline-error')].some((error) => error.textContent?.includes(failure.message))).toBe(true)
+  expect(toasts).toContainEqual({ title: 'Cookie import failed', body: failure.message, options: { kind: 'error' } })
+  expect(errors).toEqual([failure.message])
 })

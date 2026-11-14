@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { Badge, Button, EmptyState, FormRow, SectionHeader, StatusDot } from '@quirky/ui'
+import { useEffect, useId, useRef, useState } from 'react'
+import { Badge, Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, StatusDot } from '@quirky/ui'
 import type { ChangeEvent } from 'react'
 import type { BrowserFamily, ImportJob, ImportSource, ImportSummary } from '../cookies/types'
 import type { DetectedBrowser } from '../cookies/sources'
 import type { CookieImportPanelProps } from '../preferences/contract'
+import { PREFERENCES_CONTROL_COMMAND, registerPreferencesController } from './shared'
+import type { PreferencesControlArgs } from './shared'
 
 const POLL_INTERVAL_MS = 500
 const BROWSER_FAMILIES: readonly BrowserFamily[] = ['chrome', 'edge', 'arc', 'chromium', 'comet', 'helium', 'firefox', 'safari']
@@ -73,6 +75,7 @@ function browserSource(browser: DetectedBrowser, profileName: string): ImportSou
 }
 
 export function CookieImportPanel({ context, imports, destination, loadError, onHideHint, onError, onImported }: CookieImportPanelProps) {
+  const controllerInstance = useId()
   const fileInputId = useId()
   const [browsers, setBrowsers] = useState<DetectedBrowser[]>([])
   const [detecting, setDetecting] = useState(false)
@@ -88,18 +91,28 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelPollWaitRef = useRef<(() => void) | null>(null)
   const contextRef = useRef(context)
-  const callbacksRef = useRef({ onError, onImported, onHideHint })
+  const onErrorRef = useRef(onError)
+  const onImportedRef = useRef(onImported)
+  const detectSourcesRef = useRef<() => Promise<void>>(async () => {})
   contextRef.current = context
-  callbacksRef.current = { onError, onImported, onHideHint }
+  onErrorRef.current = onError
+  onImportedRef.current = onImported
 
   const reportError = (message: string) => {
     if (!mountedRef.current) return
     setError(message)
     contextRef.current.toast('Cookie import failed', message, { kind: 'error' })
-    callbacksRef.current.onError(message)
+    onErrorRef.current(message)
+  }
+  const runPreferencesControl = (action: 'open-file-import' | 'close-file-import') => {
+    const args: PreferencesControlArgs = { action, instance: controllerInstance }
+    void contextRef.current.executeCommand(PREFERENCES_CONTROL_COMMAND, args, { activateOwner: false }).catch((cause: unknown) => {
+      const message = errorMessage(cause, 'Cookie import failed.')
+      reportError(message)
+    })
   }
 
-  const detectSources = useCallback(async () => {
+  const detectSources = async () => {
     if (!mountedRef.current || detectingRef.current) return
     detectingRef.current = true
     const requestId = ++detectionRequestRef.current
@@ -115,18 +128,19 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
       const message = errorMessage(cause, 'Could not detect supported browsers.')
       setDetectionError(message)
       contextRef.current.toast('Browser sources unavailable', message, { kind: 'error' })
-      callbacksRef.current.onError(message)
+      onErrorRef.current(message)
     } finally {
       if (requestId === detectionRequestRef.current) {
         detectingRef.current = false
         if (mountedRef.current) setDetecting(false)
       }
     }
-  }, [])
+  }
+  detectSourcesRef.current = detectSources
 
   useEffect(() => {
     mountedRef.current = true
-    void detectSources()
+    void detectSourcesRef.current()
     return () => {
       mountedRef.current = false
       detectionRequestRef.current += 1
@@ -135,7 +149,11 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
       cancelPollWaitRef.current = null
       cancelPollWait?.()
     }
-  }, [context, detectSources])
+  }, [context])
+  useEffect(() => registerPreferencesController(context, controllerInstance, ({ action }) => {
+    if (action === 'open-file-import') setFileDialogOpen(true)
+    if (action === 'close-file-import') setFileDialogOpen(false)
+  }), [context, controllerInstance])
 
   const waitForNextPoll = () => {
     const { promise, resolve } = Promise.withResolvers<boolean>()
@@ -178,7 +196,7 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
       const body = `Imported from ${sourceLabel}. ${result.importedCookies} imported, ${result.skippedCookies} skipped of ${result.totalCookies} total for managed Chrome profile ${target.label}. Google cookies skipped: ${result.googleCookiesSkipped ?? 0}; partitioned cookies skipped: ${result.partitionSkippedCookies ?? 0}. Native browser sessions remain separate.${warning}`
       contextRef.current.toast(`Cookies imported to ${target.label}`, body, { kind: 'success' })
       try {
-        await callbacksRef.current.onImported()
+        await onImportedRef.current()
       } catch {
         // The import succeeded; a preference refresh failure does not change its result.
       }
@@ -289,11 +307,11 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
     <p style={IMPORT_COPY_STYLE}>Cookies are imported to managed Chrome profile <strong>{currentDestination.label}</strong>. Native browser sessions are separate.</p>
     <p style={IMPORT_COPY_STYLE}>Google cookies are excluded from imports. Sign in to Google directly in Quirky.</p>
     {imports?.reason && <p style={IMPORT_COPY_STYLE}>{imports.reason}</p>}
-    {loadError && <p className="ui-error-text" role="alert" style={IMPORT_MESSAGE_STYLE}>{loadError}</p>}
-    {error && <p className="ui-error-text" role="alert" style={IMPORT_MESSAGE_STYLE}>{error}</p>}
-    {detectionError && <p className="ui-error-text" role="alert" style={IMPORT_MESSAGE_STYLE}>{detectionError}</p>}
-    {activityLabel && <p role="status" aria-live="polite" style={IMPORT_MESSAGE_STYLE}><StatusDot status={activity?.status === 'failed' ? 'failing' : 'working'} label={activity?.status === 'failed' ? 'Import failed' : 'Import in progress'} /> {activityLabel}</p>}
-    {activity?.status === 'failed' && <p role="status" style={IMPORT_MESSAGE_STYLE}>Import failed for {activity.target.label}.</p>}
+    {loadError && <InlineError message={loadError} />}
+    {error && <InlineError message={error} />}
+    {detectionError && <InlineError message={detectionError} />}
+    {activityLabel && <div role="status" aria-live="polite"><NoticeLine><StatusDot status={activity?.status === 'failed' ? 'failing' : 'working'} label={activity?.status === 'failed' ? 'Import failed' : 'Import in progress'} /> {activityLabel}</NoticeLine></div>}
+    {activity?.status === 'failed' && <InlineError message={`Import failed for ${activity.target.label}.`} />}
     {activity?.status === 'succeeded' && result && <div aria-label="Import summary" role="status" style={IMPORT_SUMMARY_STYLE}>
       <h3 style={{ fontSize: 'var(--ui-font-body)', margin: 0 }}>Import complete for {activity.target.label}</h3>
       <p style={IMPORT_COPY_STYLE}>Source: {activity.sourceLabel}</p>
@@ -309,7 +327,7 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
       </div>}
     </div>}
     <div aria-label="Detected cookie sources" style={IMPORT_SOURCES_STYLE}>
-      {detecting && <p role="status" style={IMPORT_MESSAGE_STYLE}><StatusDot status="working" label="Detecting installed browsers" /> Detecting installed browsers…</p>}
+      {detecting && <div role="status" aria-live="polite"><NoticeLine><StatusDot status="working" label="Detecting installed browsers" /> Detecting installed browsers…</NoticeLine></div>}
       {!detecting && !detectionError && browsers.length === 0 && <EmptyState message="No supported browsers were found." />}
       {browsers.map((browser) => browser.profiles.length === 1
         ? <Button
@@ -321,7 +339,7 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
         : <fieldset key={browser.family} style={IMPORT_SOURCE_GROUP_STYLE}>
           <legend style={{ color: 'var(--ui-text)', fontSize: 'var(--ui-font-label)', fontWeight: 600 }}>{browser.label}</legend>
           {browser.profiles.length === 0
-            ? <p style={IMPORT_COPY_STYLE}>No profiles were found.</p>
+            ? <EmptyState message="No profiles were found." />
             : <div style={IMPORT_SOURCE_BUTTONS_STYLE}>{browser.profiles.map((profile) => <Button
               key={profile.name}
               type="button"
@@ -332,14 +350,14 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
     </div>
     <div style={IMPORT_ACTIONS_STYLE}>
       <Button type="button" disabled={busy || detecting} onClick={() => void detectSources()}>{detecting ? 'Refreshing browsers…' : 'Refresh browsers'}</Button>
-      <Button type="button" disabled={busy || !available} onClick={() => setFileDialogOpen(true)}>From File</Button>
+      <Button type="button" disabled={busy || !available} onClick={() => runPreferencesControl('open-file-import')}>From File</Button>
       <Button type="button" onClick={() => {
         void contextRef.current.executeCommand('command:quirky.browser/browserSettings').catch((cause: unknown) => {
           const message = errorMessage(cause, 'Browser Settings could not be opened.')
           reportError(message)
         })
       }}>Browser Settings…</Button>
-      {onHideHint && <Button type="button" onClick={() => callbacksRef.current.onHideHint?.()}>Hide Hint</Button>}
+      {onHideHint && <Button type="button" onClick={onHideHint}>Hide Hint</Button>}
     </div>
     {fileDialogOpen && <div className="ui-dialog-backdrop" role="dialog" aria-modal="true" aria-label="Import Cookies">
       <section className="ui-dialog">
@@ -355,7 +373,7 @@ export function CookieImportPanel({ context, imports, destination, loadError, on
           />
         </FormRow>
         <div style={IMPORT_ACTIONS_STYLE}>
-          <Button type="button" disabled={busy} onClick={() => setFileDialogOpen(false)}>Cancel</Button>
+          <Button type="button" disabled={busy} onClick={() => runPreferencesControl('close-file-import')}>Cancel</Button>
         </div>
       </section>
     </div>}
