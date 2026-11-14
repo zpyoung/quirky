@@ -6,6 +6,7 @@ import type { WorktreeReference } from '../parity-types'
 import type { WorktreeControl } from '../control-types'
 import { migrateRemoteWorkspaces } from './remote'
 import { migrateVmEnvironments } from './vm'
+import { migrateWorktreePorts } from './ports'
 
 /** One `worktrees` row: Quirky's metadata for a workspace, keyed by the workspace ID. */
 export type WorktreeRow = {
@@ -194,7 +195,8 @@ export function openWorktreeStore(context: PluginContext): PluginStore {
           DELETE FROM worktree_tags WHERE worktree_id = OLD.id;
         END;
       `)
-    }
+    },
+    migrateWorktreePorts
   ])
 }
 export type WorktreeOriginCreator = {
