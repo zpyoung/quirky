@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { RpcErrorCode } from '@quirky/protocol';
 import { bootHosting, type HostingTest } from './helpers';
 
 const fixtureGh = String.raw`
@@ -154,7 +155,7 @@ function providerMutations(host: HostingTest) {
   });
 }
 
-function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.repeat(40)): unknown {
+function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.repeat(40), contextsTruncated = false): unknown {
   return {
     data: {
       repository: {
@@ -164,7 +165,7 @@ function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.
             nodes: [{
               commit: {
                 statusCheckRollup: {
-                  contexts: { nodes: contexts },
+                  contexts: { nodes: contexts, ...(contextsTruncated ? { pageInfo: { hasNextPage: true } } : {}) },
                 },
                 checkSuites: { nodes: suites },
               },
@@ -176,7 +177,7 @@ function graphRollup(contexts: unknown[], suites: unknown[] = [], headSha = 'a'.
   };
 }
 
-function checkRun(id: number, name: string, conclusion: string, workflowRunId?: number): unknown {
+function checkRun(id: number, name: string, conclusion: string, workflowRunId?: number, required?: boolean): unknown {
   const url = workflowRunId === undefined
     ? 'https://github.com/test-owner/test-repo/checks/check-' + id
     : 'https://github.com/test-owner/test-repo/actions/runs/' + workflowRunId;
@@ -189,6 +190,7 @@ function checkRun(id: number, name: string, conclusion: string, workflowRunId?: 
     detailsUrl: url,
     checkRunId: id,
     workflowRunId: workflowRunId ?? null,
+    isRequired: required,
   };
 }
 
@@ -210,14 +212,16 @@ describe('hosting detail API', () => {
   test('rolls up check runs, legacy statuses and approval suites without conflating them', async () => {
     const response = graphRollup(
       [
-        checkRun(10, 'build', 'SUCCESS', 41),
-        { __typename: 'StatusContext', context: 'lint', state: 'PENDING', targetUrl: 'https://checks.test/lint' },
+        checkRun(10, 'build', 'SUCCESS', 41, true),
+        { __typename: 'StatusContext', context: 'lint', state: 'PENDING', isRequired: false, targetUrl: 'https://checks.test/lint' },
         { __typename: 'StatusContext', context: 'build', state: 'FAILURE', targetUrl: 'https://checks.test/duplicate' },
       ],
       [{ databaseId: 7, conclusion: 'ACTION_REQUIRED', app: { name: 'Review approval' }, checkRuns: { totalCount: 0 } }],
     );
     await withHosting({ graphqlResponses: { HostingChecksRollup: response } }, async (host) => {
       const result = await host.call('checks', { number: 1 });
+      const graphqlInvocation = host.invocations().find((entry) => entry.args.includes('graphql'));
+      expect(JSON.parse(graphqlInvocation?.input ?? '{}').query).toContain('isRequired(pullRequestNumber: $number)');
       expect(result).toHaveProperty('checks.length', 3);
       expect(result).toMatchObject({
         rollup: 'failure',
@@ -230,6 +234,7 @@ describe('hosting detail API', () => {
             checkRunId: 10,
             workflowRunId: 41,
             suiteId: null,
+            required: true,
           }),
           expect.objectContaining({
             kind: 'status',
@@ -238,6 +243,7 @@ describe('hosting detail API', () => {
             conclusion: null,
             workflowRunId: null,
             suiteId: null,
+            required: false,
           }),
           expect.objectContaining({
             kind: 'approval',
@@ -245,6 +251,7 @@ describe('hosting detail API', () => {
             status: 'action_required',
             conclusion: 'action_required',
             suiteId: 7,
+            required: null,
           }),
         ]),
         partial: false,
@@ -298,9 +305,9 @@ describe('hosting detail API', () => {
         rollup: 'failure',
         partial: true,
         checks: expect.arrayContaining([
-          expect.objectContaining({ kind: 'check_run', workflowRunId: 41 }),
-          expect.objectContaining({ kind: 'status', name: 'legacy' }),
-          expect.objectContaining({ kind: 'approval', suiteId: 7 }),
+          expect.objectContaining({ kind: 'check_run', workflowRunId: 41, required: null }),
+          expect.objectContaining({ kind: 'status', name: 'legacy', required: null }),
+          expect.objectContaining({ kind: 'approval', suiteId: 7, required: null }),
         ]),
       });
     });
@@ -325,6 +332,25 @@ describe('hosting detail API', () => {
     }, async (host) => {
       const result = await host.call('checks', { number: 1 });
       expect(result).toHaveProperty('rollup', 'unknown');
+    });
+  }, 20_000);
+
+  test('marks porcelain fallback requiredness unavailable', async () => {
+    const sha = 'a'.repeat(40);
+    await withHosting({
+      failures: {
+        'graphql HostingChecksRollup': 'GraphQL unavailable',
+        ['GET repos/test-owner/test-repo/commits/' + sha + '/check-runs?per_page=100']: 'REST unavailable',
+        ['GET repos/test-owner/test-repo/commits/' + sha + '/status?per_page=100']: 'REST unavailable',
+        ['GET repos/test-owner/test-repo/commits/' + sha + '/check-suites?per_page=100']: 'REST unavailable',
+      },
+      responses: { 'GET repos/test-owner/test-repo/pulls/1': { head: { sha } } },
+      porcelainChecks: [{ name: 'lint', state: 'failure', link: 'https://checks.test/lint' }],
+    }, async (host) => {
+      const result = await host.call('checks', { number: 1 });
+      expect(result).toMatchObject({
+        checks: [expect.objectContaining({ kind: 'status', name: 'lint', required: null })],
+      });
     });
   }, 20_000);
 
@@ -421,6 +447,7 @@ describe('hosting detail API', () => {
     }, async (host) => {
       const result = await host.call('rerunChecks', { number: 1, failedOnly: false });
       expect(result).toMatchObject({ started: 2, targetCount: 2 });
+      expect(result).not.toHaveProperty('partial');
       const calls = invocations(host);
       expect(calls.filter((args) => args.includes('/actions/runs/51/rerun'))).toHaveLength(1);
       expect(calls.filter((args) => args.includes('/check-runs/22/rerequest'))).toHaveLength(1);
@@ -444,6 +471,46 @@ describe('hosting detail API', () => {
     });
   }, 20_000);
 
+  test('permits only opted-in failed-only reruns of a truncated check list', async () => {
+    const incomplete = graphRollup([checkRun(30, 'build', 'FAILURE', 61)], [], undefined, true);
+    const rerunPath = 'POST repos/test-owner/test-repo/actions/runs/61/rerun-failed-jobs';
+
+    await withHosting({ graphqlResponses: { HostingChecksRollup: incomplete } }, async (host) => {
+      const error = await host.call('rerunChecks', { number: 1, failedOnly: true }).then(() => null, (caught: unknown) => caught);
+      expect(error).toMatchObject({ data: { reason: 'checks_incomplete' } });
+      expect(providerMutations(host)).toHaveLength(0);
+    });
+
+    await withHosting({
+      graphqlResponses: { HostingChecksRollup: incomplete },
+      responses: { [rerunPath]: { ok: true } },
+    }, async (host) => {
+      const result = await host.call('rerunChecks', { number: 1, failedOnly: true, allowPartial: true });
+      expect(result).toMatchObject({
+        started: 1,
+        targetCount: 1,
+        completedSteps: ['workflow:61'],
+        partial: true,
+      });
+      expect(providerMutations(host)).toHaveLength(1);
+    });
+
+    await withHosting({ graphqlResponses: { HostingChecksRollup: incomplete } }, async (host) => {
+      const error = await host.call('rerunChecks', { number: 1, failedOnly: false, allowPartial: true }).then(() => null, (caught: unknown) => caught);
+      expect(error).toMatchObject({ data: { reason: 'checks_incomplete' } });
+      expect(providerMutations(host)).toHaveLength(0);
+    });
+  }, 20_000);
+
+  test('validates allowPartial as an optional boolean before loading checks', async () => {
+    await withHosting({
+      graphqlResponses: { HostingChecksRollup: graphRollup([]) },
+    }, async (host) => {
+      const error = await host.call('rerunChecks', { number: 1, failedOnly: true, allowPartial: 'yes' }).then(() => null, (caught: unknown) => caught);
+      expect(error).toMatchObject({ code: RpcErrorCode.InvalidParams });
+      expect(host.invocations().some((entry) => entry.args.includes('graphql') && entry.input.includes('HostingChecksRollup'))).toBe(false);
+    });
+  }, 20_000);
   test('returns sorted typed conversation, reviews and threads with source-specific partial failures', async () => {
     const graph = {
       data: {

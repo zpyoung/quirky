@@ -216,6 +216,25 @@ if (command === 'auth' && args[1] === 'status') {
           ref: { rules: { nodes: rules } }
         } } })
       }
+    } else if (query.includes('HostingPRMergeQueueEntry')) {
+      const owner = graphqlVariables.owner
+      const name = graphqlVariables.name
+      const number = Number(graphqlVariables.number)
+      if (typeof owner !== 'string' || typeof name !== 'string' || !Number.isSafeInteger(number)) {
+        fail('GitHub merge queue query omitted repository or pull request variables')
+      }
+      if (state.mergeQueueQueryFailure === true) fail('GitHub merge queue query unavailable')
+      const target = prs.find((item) => item.number === number && belongsTo(item, { owner, repo: name }))
+      if (!target) {
+        out({ data: { repository: { pullRequest: null } } })
+      } else {
+        const entries = Array.isArray(state.mergeQueueEntries) ? state.mergeQueueEntries : []
+        const position = entries.indexOf(number)
+        const mergeQueueEntry = Object.hasOwn(target, 'mergeQueueEntry')
+          ? target.mergeQueueEntry
+          : position < 0 ? null : { id: 'QUEUE_ENTRY_' + number, state: 'QUEUED', position: position + 1 }
+        out({ data: { repository: { pullRequest: { mergeQueueEntry } } } })
+      }
     } else {
       fail('Unsupported GitHub GraphQL fixture query')
     }
@@ -562,6 +581,11 @@ function graphqlQuery(invocation: { input: string }): string {
   const query = requestBody(invocation).query
   if (typeof query !== 'string') throw new Error('expected GraphQL query in GitHub request body')
   return query
+}
+
+function mergeQueueQueries(testHost: HostingTest) {
+  return invocationsFor(testHost, (args) => args[0] === 'api' && args.includes('graphql'))
+    .filter((entry) => graphqlQuery(entry).includes('HostingPRMergeQueueEntry'))
 }
 
 async function waitForState(testHost: HostingTest, key: string): Promise<void> {
@@ -1793,4 +1817,79 @@ test('PR detail exposes existing requested reviewers and reviewed state without 
   expect(detail.reviews).toEqual([{ author: 'bob', state: 'APPROVED' }])
   expect(detail.assignees).toEqual(['maintainer'])
   expect(detail.participantsTruncated).toBe(false)
+}, 20_000)
+
+test('review reads live merge queue membership on every provider lookup', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeQueueEntries: [7] }))
+  const first = recordOf(await instance.call('review', { number: 7 }))
+  expect(recordOf(first.review)).toMatchObject({
+    inMergeQueue: true,
+    mergeQueueKnown: true,
+    mergeQueueEntry: { id: 'QUEUE_ENTRY_7', state: 'QUEUED', position: 1 },
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(1)
+  const view = invocationsFor(instance, (args) => args[0] === 'pr' && args[1] === 'view')[0]
+  expect(view?.args[view.args.indexOf('--json') + 1]).not.toContain('mergeQueueEntry')
+  expect(graphqlQuery(mergeQueueQueries(instance)[0]!)).toContain('mergeQueueEntry{id state position}')
+
+  instance.writeState(fixtureState({
+    prs: [pr({ mergeQueueEntry: { id: 'QUEUE_ENTRY_7_NEXT', state: 'AWAITING_CHECKS', position: 2 } })],
+    mergeQueueRequired: true,
+    mergeQueueEntries: [],
+  }))
+  const changed = recordOf(await instance.call('review', { number: 7 }))
+  expect(recordOf(changed.review)).toMatchObject({
+    inMergeQueue: true,
+    mergeQueueKnown: true,
+    mergeQueueEntry: { id: 'QUEUE_ENTRY_7_NEXT', state: 'AWAITING_CHECKS', position: 2 },
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(2)
+
+  instance.writeState(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeQueueEntries: [] }))
+  const removed = recordOf(await instance.call('review', { number: 7 }))
+  expect(recordOf(removed.review)).toMatchObject({
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: true,
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(3)
+}, 20_000)
+
+test('merge queue lookup failure leaves membership unknown without hiding the review', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeQueueQueryFailure: true }))
+  const lookup = recordOf(await instance.call('review', { number: 7 }))
+  expect(lookup.kind).toBe('found')
+  expect(recordOf(lookup.review)).toMatchObject({
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: false,
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(1)
+}, 20_000)
+
+test('known repositories without a required merge queue skip the live queue query', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeQueueRequired: false }))
+  const lookup = recordOf(await instance.call('review', { number: 7 }))
+  expect(recordOf(lookup.review)).toMatchObject({
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: true,
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(0)
+}, 20_000)
+
+test('forBranch propagates the live merge queue entry', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeQueueEntries: [7] }))
+  const lookup = recordOf(await instance.call('forBranch', {
+    worktree: instance.worktree,
+    branch: 'feature',
+    fresh: true,
+  }))
+  expect(lookup.kind).toBe('found')
+  expect(recordOf(lookup.review)).toMatchObject({
+    inMergeQueue: true,
+    mergeQueueKnown: true,
+    mergeQueueEntry: { id: 'QUEUE_ENTRY_7', state: 'QUEUED', position: 1 },
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(1)
 }, 20_000)

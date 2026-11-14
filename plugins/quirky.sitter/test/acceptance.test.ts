@@ -69,6 +69,14 @@ function attempt(detailValue: WatcherDetail, kind: string) {
     (entry as { action?: { kind?: unknown } }).action?.kind === kind)
 }
 
+function attemptEffects(detailValue: WatcherDetail, kind: string): unknown[] {
+  return detailValue.journal.flatMap((entry) => {
+    if (entry.kind !== 'attempt') return []
+    const value = entry as { action?: { kind?: unknown }; effect?: unknown }
+    return value.action?.kind === kind ? [value.effect] : []
+  })
+}
+
 function expectSingleInvocation(
   host: HostingTest,
   matches: (args: string[]) => boolean,
@@ -89,7 +97,7 @@ function watcherIdFrom(value: { enrollment?: { watcherId?: unknown } }): string 
   return watcherId
 }
 
-test('enrollment refuses an unresolvable active worktree, rebase updates, required-check scope and a closed pull request, and the kind\'s hooks refuse any caller but Heimdall', async () => {
+test('enrollment refuses bogus branch-update and check-scope values and closed pull requests while protecting sitter hooks', async () => {
 
   const active = await cli(host, ['create', 'hosted-review', '--json'])
   expect(active.code).not.toBe(0)
@@ -100,23 +108,24 @@ test('enrollment refuses an unresolvable active worktree, rebase updates, requir
   })
   expect(JSON.parse(active.stdout).detail).toContain('--worktree')
 
-  const rebase = await cli(host, ['create', 'hosted-review', '--worktree', `id:${host.worktree}`, '--branch-update', 'rebase', '--json'])
-  expect(rebase.code).not.toBe(0)
-  expect(cliJson<{ kind: string; reason: string; detail: string }>(rebase, 'rebase enrollment')).toMatchObject({
+  const invalidBranchUpdate = await cli(host, [
+    'create', 'hosted-review', '--worktree', `id:${host.worktree}`,
+    '--spec', JSON.stringify({ kindPayload: { branchUpdateMode: 'bogus' } }), '--json',
+  ])
+  expect(invalidBranchUpdate.code).not.toBe(0)
+  expect(cliJson<{ kind: string; reason: string }>(invalidBranchUpdate, 'invalid branch-update enrollment')).toMatchObject({
     kind: 'refused',
     reason: 'owner-not-executable',
-    detail: expect.stringContaining('rebase is not supported'),
   })
 
-  const requiredChecks = await cli(host, [
+  const invalidCheckScope = await cli(host, [
     'create', 'hosted-review', '--worktree', `id:${host.worktree}`,
-    '--spec', JSON.stringify({ kindPayload: { mergeCheckScope: 'required' } }), '--json',
+    '--spec', JSON.stringify({ kindPayload: { mergeCheckScope: 'bogus' } }), '--json',
   ])
-  expect(requiredChecks.code).not.toBe(0)
-  expect(cliJson<{ kind: string; reason: string; detail: string }>(requiredChecks, 'required-check-scope enrollment')).toMatchObject({
+  expect(invalidCheckScope.code).not.toBe(0)
+  expect(cliJson<{ kind: string; reason: string }>(invalidCheckScope, 'invalid check-scope enrollment')).toMatchObject({
     kind: 'refused',
     reason: 'owner-not-executable',
-    detail: expect.stringContaining('all-checks merge scope'),
   })
 
   const state = host.readState() as StandInState
@@ -134,6 +143,7 @@ test('enrollment refuses an unresolvable active worktree, rebase updates, requir
   pull.state = 'OPEN'
   host.writeState(state)
 
+
   const kindPayload = {
     worktreeId: host.worktree,
     branch: 'feature',
@@ -142,9 +152,9 @@ test('enrollment refuses an unresolvable active worktree, rebase updates, requir
     reviewNumber: 7,
     reviewUrl: 'https://github.com/test-owner/test-repo/pull/7',
     repository,
-    branchUpdateMode: 'merge-base-update',
+    branchUpdateMode: 'rebase',
     mergeMethod: null,
-    mergeCheckScope: 'all',
+    mergeCheckScope: 'required',
   }
   await expect(host.client.callAny('quirky.sitter/execute', {
     action: {
@@ -170,9 +180,32 @@ test('enrollment refuses an unresolvable active worktree, rebase updates, requir
 
   const fleet = await host.client.callAny('quirky.heimdall/fleet', {}) as FleetSnapshot
   expect(fleet.rows).toEqual([])
+
   expect(host.invocations().filter(({ args }) =>
     args.some((arg) => arg.endsWith('/rerun-failed-jobs') || arg.endsWith('/update-branch')) ||
     args[0] === 'pr' && args[1] === 'merge')).toEqual([])
+}, 60_000)
+
+test('sitter enrollment accepts rebase branch mode and required-check scope', async () => {
+  const fixture = await startFixFixture()
+  try {
+    const accepted = await cli(fixture, [
+      'create', 'hosted-review', '--worktree', `id:${fixture.worktree}`,
+      '--branch-update', 'rebase',
+      '--spec', JSON.stringify({ kindPayload: { mergeCheckScope: 'required' } }), '--json',
+    ])
+    expect(accepted.code).toBe(0)
+    const acceptedEnrollment = cliJson<{ kind: string; enrollment?: { watcherId?: unknown } }>(accepted, 'supported sitter options')
+    expect(acceptedEnrollment.kind).toBe('enrolled')
+    const watcherId = watcherIdFrom(acceptedEnrollment)
+    expect((await detail(fixture, watcherId)).enrollment.kindPayload).toMatchObject({
+      branchUpdateMode: 'rebase',
+      mergeCheckScope: 'required',
+    })
+    expect((await fixture.client.callAny('quirky.heimdall/fleet', {}) as FleetSnapshot).rows).toHaveLength(1)
+  } finally {
+    await fixture.cleanup()
+  }
 }, 60_000)
 
 test('a GitHub pull request is rerun, brought up to date, held for merge approval the operator grants through the CLI, merged once on the stand-in, and the watcher completes', async () => {
@@ -309,6 +342,333 @@ test('a GitHub pull request is rerun, brought up to date, held for merge approva
   expect(fleet.activeCount).toBe(0)
   expect(host.invocations().filter(({ args }) => args[0] === 'pr' && args[1] === 'merge')).toHaveLength(1)
 }, 60_000)
+test('required-check scope ignores optional failing and pending checks when required metadata is complete', async () => {
+  const fixture = await startFixFixture()
+  try {
+    const state = fixture.readState() as StandInState
+    const pull = state.prs[0]
+    if (!pull) throw new Error('fixture pull request is missing')
+    pull.mergeStateStatus = 'UNSTABLE'
+    state.checkRuns = [
+      checkRun(9711, 'required-build', 'COMPLETED', 'SUCCESS', true),
+      checkRun(9712, 'optional-failure', 'COMPLETED', 'FAILURE', false),
+      checkRun(9713, 'optional-pending', 'IN_PROGRESS', null, false),
+    ]
+    fixture.writeState(state)
+
+    const checks = await fixture.call('checks', { number: 7 }) as {
+      partial: boolean
+      checks: { name: string; required: boolean | null }[]
+    }
+    expect(checks.partial).toBe(false)
+    expect(checks.checks).toHaveLength(3)
+    expect(checks.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'required-build', required: true }),
+      expect.objectContaining({ name: 'optional-failure', required: false }),
+      expect.objectContaining({ name: 'optional-pending', required: false }),
+    ]))
+
+    const watcherId = await enrollFixWatcher(fixture, { merge: 'on' }, { mergeCheckScope: 'required' })
+    await reconcile(fixture, watcherId)
+    const terminal = await waitFor(() => detail(fixture, watcherId), (value) =>
+      value.status?.state === 'terminal' && value.summary?.state === 'merged',
+    'the merged PR despite optional failures and pending checks')
+    expect(terminal).toMatchObject({ status: { state: 'terminal' }, summary: { state: 'merged' } })
+    const invocations = fixture.invocations()
+    const merges = invocations.filter(({ args }) => args[0] === 'pr' && args[1] === 'merge')
+    expect(merges).toHaveLength(1)
+    expect(merges[0]?.args).toContain(fixture.head)
+    expect(invocations.filter(({ args }) => args.some((arg) => arg.endsWith('/rerun-failed-jobs')))).toEqual([])
+    expect(fixture.workerRequests()).toEqual([])
+    const mergedState = fixture.readState() as StandInState
+    expect(mergedState.prs[0]?.state).toBe('MERGED')
+    expect(mergedState.checkRuns.find((check) => check.databaseId === 9712)).toMatchObject({
+      status: 'COMPLETED',
+      conclusion: 'FAILURE',
+      required: false,
+    })
+    expect(mergedState.checkRuns.find((check) => check.databaseId === 9713)).toMatchObject({
+      status: 'IN_PROGRESS',
+      conclusion: null,
+      required: false,
+    })
+  } finally {
+    await fixture.cleanup()
+  }
+}, 60_000)
+
+test('incomplete required-check metadata falls back to all checks and reruns a failing optional check', async () => {
+  for (const incomplete of ['unknown-requiredness', 'truncated'] as const) {
+    const fixture = await startFixFixture()
+    try {
+      const head = fixture.head
+      setCheckFailure(fixture, incomplete === 'unknown-requiredness' ? 9811 : 9812, head,
+        incomplete === 'unknown-requiredness' ? null : false)
+      const state = fixture.readState() as StandInState
+      const pull = state.prs[0]
+      if (!pull) throw new Error('fixture pull request is missing')
+      pull.mergeStateStatus = 'UNSTABLE'
+      state.checksPartial = incomplete === 'truncated'
+      fixture.writeState(state)
+
+      const watcherId = await enrollFixWatcher(fixture, { fixChecks: 'on', merge: 'on' }, { mergeCheckScope: 'required' })
+      await reconcile(fixture, watcherId)
+      const rerun = await waitFor(() => detail(fixture, watcherId), (value) =>
+        attempt(value, 'rerun-check')?.state === 'settled' && attempt(value, 'rerun-check')?.effect === 'landed',
+      `${incomplete} required-check fallback`)
+      expect(attempt(rerun, 'rerun-check')).toMatchObject({
+        state: 'settled',
+        effect: 'landed',
+        action: { kind: 'rerun-check' },
+      })
+      expect(attempt(rerun, 'merge')).toBeUndefined()
+      expect(fixture.workerRequests()).toEqual([])
+      expect((fixture.readState() as StandInState).checkRuns[0]).toMatchObject({
+        status: 'QUEUED',
+        conclusion: null,
+        required: incomplete === 'unknown-requiredness' ? null : false,
+      })
+    } finally {
+      await fixture.cleanup()
+    }
+  }
+}, 60_000)
+
+test('rebase branch updates wait for a clean unoccupied worktree and lease-force-push onto the real base branch', async () => {
+  const fixture = await startFixFixture({ behind: true })
+  try {
+    const headA = fixture.head
+    const baseB = fixture.baseHead
+    const state = fixture.readState() as StandInState
+    state.checkRuns = [checkRun(9821, 'required-build', 'COMPLETED', 'SUCCESS', true)]
+    fixture.writeState(state)
+    const watcherId = await enrollFixWatcher(fixture, { updateBranch: 'on' }, { branchUpdateMode: 'rebase' })
+
+    fixture.makeDirty()
+    await reconcile(fixture, watcherId)
+    const dirty = await waitFor(() => detail(fixture, watcherId), (value) =>
+      value.status?.state === 'held' && value.status.reason === 'worktree-busy', 'the dirty rebase worktree hold')
+    expect(dirty.status?.detail).toContain('uncommitted-changes')
+    expect(fixture.git(['rev-parse', 'HEAD'])).toBe(headA)
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(headA)
+
+    fixture.clearDirty()
+    fixture.setContention({ terminal: true })
+    await reconcile(fixture, watcherId)
+    const terminal = await waitFor(() => detail(fixture, watcherId), (value) =>
+      value.status?.state === 'held' && value.status.reason === 'worktree-busy' &&
+        value.status.detail?.includes('terminal') === true, 'the terminal-occupied rebase worktree hold')
+    expect(terminal.status?.detail).toContain('terminal')
+
+    fixture.setContention({ terminal: false, agent: true })
+    await reconcile(fixture, watcherId)
+    const agent = await waitFor(() => detail(fixture, watcherId), (value) =>
+      value.status?.state === 'held' && value.status.reason === 'worktree-busy' &&
+        value.status.detail?.includes('agent') === true, 'the foreground-agent rebase worktree hold')
+    expect(agent.status?.detail).toContain('agent')
+
+    fixture.setContention({ terminal: false, agent: false })
+    await reconcile(fixture, watcherId)
+    const updated = await waitFor(() => detail(fixture, watcherId), (value) =>
+      attempt(value, 'update-branch')?.state === 'settled' && attempt(value, 'update-branch')?.effect === 'landed',
+    'the real local rebase and guarded push')
+    expect(attempt(updated, 'update-branch')).toMatchObject({
+      state: 'settled',
+      effect: 'landed',
+      action: { kind: 'update-branch', mode: 'rebase', head: headA, base: baseB, baseRefName: 'main' },
+    })
+    const rebasedHead = fixture.git(['rev-parse', 'HEAD'])
+    expect(rebasedHead).not.toBe(headA)
+    expect(fixture.git(['rev-parse', `${rebasedHead}^`])).toBe(baseB)
+    expect(fixture.git(['status', '--porcelain'])).toBe('')
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(rebasedHead)
+    expect((fixture.readState() as StandInState).prs[0]).toMatchObject({
+      headRefOid: rebasedHead,
+      baseRefOid: baseB,
+    })
+    const leasePushes = fixture.gitPushes().filter((command) => command.includes('--force-with-lease'))
+    expect(leasePushes).toHaveLength(1)
+    expect(leasePushes[0]).toContain(headA)
+    expect(receivePackPushes(fixture)).toMatchObject([{ kind: 'receive-pack' }])
+    expect(receivePackPushes(fixture)).toHaveLength(1)
+  } finally {
+    await fixture.cleanup()
+  }
+}, 60_000)
+
+test('a rebase conflict aborts cleanly and hands the pull request to the conflict-resolution worker', async () => {
+  const fixture = await startFixFixture({ rebaseConflict: true, workerMode: 'conflict' })
+  try {
+    const headA = fixture.head
+    const baseB = fixture.baseHead
+    const state = fixture.readState() as StandInState
+    state.checkRuns = [checkRun(9831, 'required-build', 'COMPLETED', 'SUCCESS', true)]
+    fixture.writeState(state)
+    const watcherId = await enrollFixWatcher(
+      fixture,
+      { updateBranch: 'on', resolveConflicts: 'gated' },
+      { branchUpdateMode: 'rebase' },
+    )
+
+    await reconcile(fixture, watcherId)
+    const held = await waitFor(() => detail(fixture, watcherId), (value) =>
+      attempt(value, 'update-branch')?.state === 'settled' &&
+        attempt(value, 'update-branch')?.effect === 'not-landed' &&
+        attempt(value, 'update-branch')?.reason === 'rebase-conflicts' &&
+        value.openEscalations.some((item) => item.approvalScope?.actionKind === 'prepare-conflict-resolution'),
+    'the aborted rebase and conflict-resolution approval')
+    expect(attempt(held, 'update-branch')).toMatchObject({
+      state: 'settled',
+      effect: 'not-landed',
+      reason: 'rebase-conflicts',
+    })
+    expect(fixture.git(['rev-parse', 'HEAD'])).toBe(headA)
+    expect(fixture.git(['status', '--porcelain'])).toBe('')
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(headA)
+    expect(receivePackPushes(fixture)).toEqual([])
+
+    const escalation = held.openEscalations.find((item) =>
+      item.approvalScope?.actionKind === 'prepare-conflict-resolution')
+    if (!escalation) throw new Error('The conflict-resolution worker approval is missing')
+    expect((await cli(fixture, ['approve', watcherId, escalation.escalationId, '--json'])).code).toBe(0)
+    await reconcile(fixture, watcherId)
+    const prepared = await waitFor(() => detail(fixture, watcherId), (value) =>
+      attempt(value, 'prepare-conflict-resolution')?.state === 'settled' &&
+        attempt(value, 'prepare-conflict-resolution')?.effect === 'landed',
+    'the prepared conflict-resolution worker commit')
+    expect(attempt(prepared, 'prepare-conflict-resolution')).toMatchObject({
+      state: 'settled',
+      effect: 'landed',
+      action: { kind: 'prepare-conflict-resolution', expectedHeadSha: headA, baseSha: baseB },
+    })
+    const mergeCommit = fixture.git(['rev-parse', 'HEAD'])
+    expect(fixture.git(['rev-list', '--parents', '-n', '1', mergeCommit]).split(/\s+/u).slice(1)).toEqual([headA, baseB])
+    expect(fixture.workerRequests()).toHaveLength(1)
+    expect(fixture.bareGit(['rev-parse', 'refs/heads/feature'])).toBe(headA)
+    expect(receivePackPushes(fixture)).toEqual([])
+  } finally {
+    await fixture.cleanup()
+  }
+}, 60_000)
+
+test('an ambiguous merge-queue enqueue settles from the live queue entry and completes after merge', async () => {
+  const fixture = await startFixFixture()
+  try {
+    const head = fixture.head
+    const state = fixture.readState() as StandInState
+    const pull = state.prs[0]
+    if (!pull) throw new Error('fixture pull request is missing')
+    pull.mergeStateStatus = 'CLEAN'
+    state.mergeQueueRequired = true
+    state.mergeAsyncOutcome = 'ambiguous-enqueued'
+    state.checkRuns = [checkRun(9841, 'required-build', 'COMPLETED', 'SUCCESS', true)]
+    fixture.writeState(state)
+
+    const before = await fixture.call('review', { number: 7 }) as { review: Record<string, unknown> }
+    expect(before.review).toMatchObject({
+      inMergeQueue: false,
+      mergeQueueEntry: null,
+      mergeQueueKnown: true,
+    })
+    const watcherId = await enrollFixWatcher(fixture, { merge: 'on' })
+    await reconcile(fixture, watcherId)
+    const settled = await waitFor(() => detail(fixture, watcherId), (value) =>
+      attempt(value, 'enqueue')?.state === 'settled' &&
+        attempt(value, 'enqueue')?.effect === 'landed' &&
+        attemptEffects(value, 'enqueue').includes('indeterminate') &&
+        value.traces.some((trace) =>
+          (trace.decision as { reason?: unknown } | undefined)?.reason === 'awaiting-merge-queue' &&
+          (trace.pacing as { tier?: unknown } | undefined)?.tier === 'rapid'),
+    'the ambiguous enqueue settlement and rapid queue wait')
+    expect(attempt(settled, 'enqueue')).toMatchObject({
+      state: 'settled',
+      effect: 'landed',
+      action: { kind: 'enqueue', head, method: 'squash' },
+    })
+    expect(attemptEffects(settled, 'enqueue')).toContain('indeterminate')
+    expect((fixture.readState() as StandInState).prs[0]?.mergeQueueEntry).toEqual({
+      id: 'MQ_test_7',
+      state: 'QUEUED',
+      position: 1,
+    })
+
+    const queued = await fixture.call('review', { number: 7 }) as { review: Record<string, unknown> }
+    expect(queued.review).toMatchObject({
+      inMergeQueue: true,
+      mergeQueueEntry: { id: 'MQ_test_7', state: 'QUEUED', position: 1 },
+      mergeQueueKnown: true,
+    })
+    await reconcile(fixture, watcherId)
+    expect(attempt(await detail(fixture, watcherId), 'enqueue')).toMatchObject({
+      state: 'settled',
+      effect: 'landed',
+    })
+    const mergeAsync = 'repos/test-owner/test-repo/pulls/7/merge-async'
+    const queueCalls = fixture.invocations().filter((invocation) => invocation.args.includes(mergeAsync))
+    expect(queueCalls).toHaveLength(1)
+    expect(queueCalls[0]?.input).toBe(JSON.stringify({ merge_action: 'merge_queue', sha: head }))
+
+    const mergedState = fixture.readState() as StandInState
+    mergedState.prs[0]!.state = 'MERGED'
+    mergedState.prs[0]!.mergeQueueEntry = null
+    mergedState.mergeVisible = true
+    fixture.writeState(mergedState)
+    await reconcile(fixture, watcherId)
+    const terminal = await waitFor(() => detail(fixture, watcherId), (value) =>
+      value.status?.state === 'terminal' && value.summary?.state === 'merged',
+    'merge after the queued commit settles')
+    expect(terminal).toMatchObject({ status: { state: 'terminal' }, summary: { state: 'merged' } })
+    expect(fixture.invocations().filter((invocation) => invocation.args.includes(mergeAsync))).toHaveLength(1)
+  } finally {
+    await fixture.cleanup()
+  }
+}, 60_000)
+
+test('a pull request ejected from the merge queue parks instead of enqueuing again', async () => {
+  const fixture = await startFixFixture()
+  try {
+    const state = fixture.readState() as StandInState
+    const pull = state.prs[0]
+    if (!pull) throw new Error('fixture pull request is missing')
+    pull.mergeStateStatus = 'CLEAN'
+    state.mergeQueueRequired = true
+    state.mergeAsyncOutcome = 'enqueued'
+    state.checkRuns = [checkRun(9851, 'required-build', 'COMPLETED', 'SUCCESS', true)]
+    fixture.writeState(state)
+
+    const watcherId = await enrollFixWatcher(fixture, { merge: 'on' })
+    await reconcile(fixture, watcherId)
+    const queued = await waitFor(() => detail(fixture, watcherId), (value) =>
+      attempt(value, 'enqueue')?.state === 'settled' && attempt(value, 'enqueue')?.effect === 'landed',
+    'the initial merge-queue enqueue')
+    expect(attempt(queued, 'enqueue')).toMatchObject({ state: 'settled', effect: 'landed' })
+    expect((await fixture.call('review', { number: 7 }) as { review: Record<string, unknown> }).review).toMatchObject({
+      inMergeQueue: true,
+      mergeQueueEntry: { id: 'MQ_test_7', state: 'QUEUED', position: 1 },
+      mergeQueueKnown: true,
+    })
+
+    const ejectedState = fixture.readState() as StandInState
+    ejectedState.prs[0]!.mergeQueueEntry = null
+    fixture.writeState(ejectedState)
+    expect((await fixture.call('review', { number: 7 }) as { review: Record<string, unknown> }).review).toMatchObject({
+      inMergeQueue: false,
+      mergeQueueEntry: null,
+      mergeQueueKnown: true,
+    })
+    await reconcile(fixture, watcherId)
+    const parked = await waitFor(() => detail(fixture, watcherId), (value) =>
+      value.status?.state === 'parked' && value.status.reason === 'stop-predicate',
+    'the non-merged queue ejection park')
+    expect(parked.status?.detail).toContain('merge-queue-ejected:')
+    expect(attempt(parked, 'enqueue')).toMatchObject({ state: 'settled', effect: 'landed' })
+    expect(fixture.invocations().filter((invocation) =>
+      invocation.args.includes('repos/test-owner/test-repo/pulls/7/merge-async'))).toHaveLength(1)
+  } finally {
+    await fixture.cleanup()
+  }
+}, 60_000)
+
 test('a persisted check failure is dispatched to a worker, published to the validated bare target, and parked when it repeats', async () => {
   const fixture = await startFixFixture()
   try {
@@ -602,6 +962,7 @@ type FixFixture = HostingTest & {
   bareGit(args: string[]): string
   workerRequests(): Record<string, unknown>[]
   forcePushes(): unknown[]
+  gitPushes(): string[]
   dropNextPushReply(): void
   injectConcurrentCommitAfterPublicationLookup(): void
   amendPreparedCommit(): void
@@ -610,7 +971,19 @@ type FixFixture = HostingTest & {
   setContention(value: { terminal: boolean; agent?: boolean }): void
 }
 
-type FixFixtureOptions = { conflict?: boolean; workerMode?: 'fix' | 'conflict' | 'policy' }
+function receivePackPushes(fixture: FixFixture): unknown[] {
+  return fixture.forcePushes().filter((entry) => {
+    if (typeof entry !== 'object' || entry === null || !('kind' in entry)) return false
+    return entry.kind === 'receive-pack'
+  })
+}
+
+type FixFixtureOptions = {
+  conflict?: boolean
+  rebaseConflict?: boolean
+  behind?: boolean
+  workerMode?: 'fix' | 'conflict' | 'policy'
+}
 
 const FIXTURE_ENV = [
   'HOME', 'QUIRKY_HOME', 'XDG_CONFIG_HOME', 'GH_CONFIG_DIR', 'PATH', 'GH_TOKEN', 'GITHUB_TOKEN',
@@ -618,7 +991,7 @@ const FIXTURE_ENV = [
   'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM', 'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS',
   'GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_TERMINAL_PROMPT', 'GIT_SSH', 'GIT_SSH_VARIANT',
   'QUIRKY_AGENT_SEARCH_DIRS', 'QUIRKY_TEST_FIXTURE_DIR', 'QUIRKY_TEST_GH_SOURCE', 'QUIRKY_TEST_GH_LOG',
-  'QUIRKY_TEST_BARE_REMOTE', 'QUIRKY_TEST_WORKTREE_PATH', 'QUIRKY_TEST_ORIGINAL_PATH'
+  'QUIRKY_TEST_GIT_PUSH_LOG', 'QUIRKY_TEST_BARE_REMOTE', 'QUIRKY_TEST_WORKTREE_PATH', 'QUIRKY_TEST_ORIGINAL_PATH'
 ] as const
 
 async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixture> {
@@ -637,6 +1010,7 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
   const workerStatePath = join(root, 'worker-state.json')
   const contentionPath = join(root, 'contention.json')
   const pushLog = join(root, 'pushes.jsonl')
+  const gitPushLog = join(root, 'git-pushes.log')
   const dropReplyPath = join(root, 'drop-next-push-reply')
   const armConcurrentCommitPath = join(root, 'arm-concurrent-commit-after-lookup')
   const gitConfig = join(home, '.gitconfig')
@@ -649,6 +1023,7 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
   writeFileSync(gitConfig, '')
   writeFileSync(ghLog, '')
   writeFileSync(pushLog, '')
+  writeFileSync(gitPushLog, '')
   writeFileSync(ghSource, GITHUB_STAND_IN)
   writeFileSync(ghPath, GH_FIXTURE_WRAPPER)
   writeFileSync(gitPath, GIT_FIXTURE_WRAPPER)
@@ -690,6 +1065,7 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
     process.env.QUIRKY_TEST_FIXTURE_DIR = root
     process.env.QUIRKY_TEST_GH_SOURCE = ghSource
     process.env.QUIRKY_TEST_GH_LOG = ghLog
+    process.env.QUIRKY_TEST_GIT_PUSH_LOG = gitPushLog
     process.env.QUIRKY_TEST_BARE_REMOTE = bareRemote
     process.env.QUIRKY_TEST_WORKTREE_PATH = repoPath
     process.env.GH_TOKEN = 'isolated-test-token'
@@ -712,10 +1088,14 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
     writeFileSync(join(repoPath, 'conflict.txt'), 'feature version\n')
     runGit(repoPath, ['commit', '--quiet', '-am', 'feature change'])
     const head = runGit(repoPath, ['rev-parse', 'HEAD'])
-    if (options.conflict) {
+    if (options.conflict || options.rebaseConflict || options.behind) {
       runGit(repoPath, ['checkout', '--quiet', 'main'])
-      writeFileSync(join(repoPath, 'conflict.txt'), 'base update\n')
-      runGit(repoPath, ['commit', '--quiet', '-am', 'base update'])
+      const baseUpdatePath = options.behind && !options.rebaseConflict && !options.conflict
+        ? 'base-update.txt'
+        : 'conflict.txt'
+      writeFileSync(join(repoPath, baseUpdatePath), 'base update\n')
+      runGit(repoPath, ['add', baseUpdatePath])
+      runGit(repoPath, ['commit', '--quiet', '-m', 'base update'])
     }
     const baseHead = runGit(repoPath, ['rev-parse', 'main'])
     runGit(repoPath, ['checkout', '--quiet', 'feature'])
@@ -732,7 +1112,9 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
     state.prs[0]!.headRefOid = head
     state.prs[0]!.baseRefOid = baseHead
     state.prs[0]!.mergeable = options.conflict ? 'CONFLICTING' : 'MERGEABLE'
-    state.prs[0]!.mergeStateStatus = options.conflict ? 'DIRTY' : 'CLEAN'
+    state.prs[0]!.mergeStateStatus = options.conflict
+      ? 'DIRTY'
+      : options.rebaseConflict || options.behind ? 'BEHIND' : 'CLEAN'
     state.checkRuns = []
     state.checkDetails = {}
     writeFileSync(statePath, JSON.stringify(state))
@@ -741,7 +1123,7 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
       requests: [],
       workers: [],
       messages: [],
-      workerMode: options.workerMode ?? (options.conflict ? 'conflict' : 'fix'),
+      workerMode: options.workerMode ?? (options.conflict || options.rebaseConflict ? 'conflict' : 'fix'),
       deliverySent: false
     }))
     writeFileSync(contentionPath, JSON.stringify({ worktreeId: null, terminal: false, agent: false }))
@@ -818,6 +1200,9 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
       forcePushes() {
         return readFileSync(pushLog, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line))
       },
+      gitPushes() {
+        return readFileSync(gitPushLog, 'utf8').split('\n').filter(Boolean)
+      },
       dropNextPushReply() { writeFileSync(dropReplyPath, 'drop') },
       injectConcurrentCommitAfterPublicationLookup() { writeFileSync(armConcurrentCommitPath, 'armed') },
       amendPreparedCommit() {
@@ -845,15 +1230,27 @@ async function startFixFixture(options: FixFixtureOptions = {}): Promise<FixFixt
   }
 }
 
-async function enrollFixWatcher(fixture: FixFixture, capabilities: Record<string, 'off' | 'gated' | 'on'>): Promise<string> {
+async function enrollFixWatcher(
+  fixture: FixFixture,
+  capabilities: Record<string, 'off' | 'gated' | 'on'>,
+  kindPayload?: Record<string, unknown>
+): Promise<string> {
   const capArgs = Object.entries({ fixChecks: 'off', resolveConflicts: 'off', merge: 'off', ...capabilities })
     .flatMap(([key, value]) => ['--cap', `${key}=${value}`])
-  const result = await cli(fixture, ['create', 'hosted-review', '--worktree', `id:${fixture.worktree}`, ...capArgs, '--json'])
+  const args = ['create', 'hosted-review', '--worktree', `id:${fixture.worktree}`, ...capArgs]
+  if (kindPayload) args.push('--spec', JSON.stringify({ kindPayload }))
+  args.push('--json')
+  const result = await cli(fixture, args)
   if (result.code !== 0) throw new Error(`hosted-review enrollment failed: ${result.stdout}\n${result.stderr}`)
   return watcherIdFrom(cliJson<{ enrollment?: { watcherId?: unknown } }>(result, 'fixture watcher enrollment'))
 }
 
-function setCheckFailure(fixture: FixFixture, checkRunId: number, head: string): void {
+function setCheckFailure(
+  fixture: FixFixture,
+  checkRunId: number,
+  head: string,
+  required: boolean | null = true
+): void {
   const state = fixture.readState() as StandInState
   const pull = state.prs[0]
   if (!pull) throw new Error('fixture pull request is missing')
@@ -866,7 +1263,8 @@ function setCheckFailure(fixture: FixFixture, checkRunId: number, head: string):
     status: 'COMPLETED',
     conclusion: 'FAILURE',
     detailsUrl: `https://github.com/test-owner/test-repo/actions/runs/41/job/${checkRunId}`,
-    workflowRunId: 41
+    workflowRunId: 41,
+    required
   }]
   state.checkDetails ??= {}
   state.checkDetails[String(checkRunId)] = {
@@ -881,6 +1279,25 @@ function setCheckFailure(fixture: FixFixture, checkRunId: number, head: string):
     }
   }
   fixture.writeState(state)
+}
+
+function checkRun(
+  databaseId: number,
+  name: string,
+  status: string,
+  conclusion: string | null,
+  required: boolean | null
+): StandInState['checkRuns'][number] {
+  return {
+    __typename: 'CheckRun',
+    databaseId,
+    name,
+    status,
+    conclusion,
+    detailsUrl: `https://github.com/test-owner/test-repo/actions/runs/41/job/${databaseId}`,
+    workflowRunId: 41,
+    required,
+  }
 }
 
 async function persistRerunFailure(fixture: FixFixture, watcherId: string, head: string, checkRunId: number): Promise<void> {
@@ -1018,6 +1435,9 @@ process.exitCode = exitCode
 const GIT_FIXTURE_WRAPPER = String.raw`#!/bin/sh
 REAL_GIT=$(PATH="$QUIRKY_TEST_ORIGINAL_PATH" command -v git)
 RACE_MARKER="$QUIRKY_TEST_FIXTURE_DIR/concurrent-commit-after-lookup"
+case " $* " in
+  *" push "*) printf '%s\n' "$*" >> "$QUIRKY_TEST_GIT_PUSH_LOG" ;;
+esac
 if [ -f "$RACE_MARKER" ] && [ "$1" = "diff" ]; then
   case " $* " in
     *" --numstat "*) ;;
