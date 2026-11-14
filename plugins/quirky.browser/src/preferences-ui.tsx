@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { BrowserSettings } from './preferences-window/BrowserSettings'
+import { PREFERENCES_CONTROL_COMMAND, dispatchPreferencesControl } from './preferences-window/shared'
 
 /** Preference contributions share the ordinary settings and window-command hosts. */
 export function registerPreferencesUi(context: UiPluginContext): void {
@@ -16,6 +17,7 @@ export function registerPreferencesUi(context: UiPluginContext): void {
   context.provide('command:quirky.browser/browserSettings', async () => {
     await context.call('ui.view.open', { id: 'view:quirky.browser/browser-settings' })
   })
+  context.provide(PREFERENCES_CONTROL_COMMAND, (args: unknown) => dispatchPreferencesControl(context, args))
   context.provide('command:quirky.browser/profileClearNative', async (args: unknown) => {
     if (args === null || typeof args !== 'object' || !('request' in args) || typeof args.request !== 'string') {
       throw new Error('A pending confirmed profile clear request is required.')

@@ -19,6 +19,67 @@ export const BROWSER_SETTING_IDS = {
 } as const
 
 export const BROWSER_SETTINGS_COMMAND = 'command:quirky.browser/browserSettings'
+export const PREFERENCES_CONTROL_COMMAND = 'command:quirky.browser/preferencesControl'
+export type PreferencesControlAction = 'open-create-profile' | 'close-create-profile' | 'toggle-import' | 'open-file-import' | 'close-file-import'
+export type PreferencesControlArgs = { action: PreferencesControlAction; instance: string; profile?: string }
+
+type PreferencesController = (args: PreferencesControlArgs) => void
+type PreferencesControllerRegistration = { token: symbol; handler: PreferencesController }
+const preferencesControllers = new WeakMap<UiPluginContext, Map<string, PreferencesControllerRegistration>>()
+const PREFERENCES_CONTROL_ACTIONS: Readonly<Record<PreferencesControlAction, true>> = {
+  'open-create-profile': true,
+  'close-create-profile': true,
+  'toggle-import': true,
+  'open-file-import': true,
+  'close-file-import': true
+}
+
+export function registerPreferencesController(
+  context: UiPluginContext,
+  instance: string,
+  handler: (args: PreferencesControlArgs) => void
+): () => void {
+  let controllers = preferencesControllers.get(context)
+  if (!controllers) {
+    controllers = new Map()
+    preferencesControllers.set(context, controllers)
+  }
+  const registrations = controllers
+  const token = Symbol()
+  registrations.set(instance, { token, handler })
+  return () => {
+    if (registrations.get(instance)?.token !== token) return
+    registrations.delete(instance)
+    if (registrations.size === 0) preferencesControllers.delete(context)
+  }
+}
+
+export function dispatchPreferencesControl(context: UiPluginContext, args: unknown): void {
+  if (!isRecord(args) || Array.isArray(args)) {
+    throw new Error('Browser preferences control needs a known action and a non-empty instance.')
+  }
+  const action = args.action
+  const instance = args.instance
+  if (
+    typeof action !== 'string' ||
+    !Object.hasOwn(PREFERENCES_CONTROL_ACTIONS, action) ||
+    typeof instance !== 'string' ||
+    instance.length === 0
+  ) {
+    throw new Error('Browser preferences control needs a known action and a non-empty instance.')
+  }
+  const normalizedAction = action as PreferencesControlAction
+  let normalizedArgs: PreferencesControlArgs
+  if (normalizedAction === 'toggle-import') {
+    if (typeof args.profile !== 'string' || args.profile.length === 0) {
+      throw new Error('Browser preferences control toggle-import needs a profile.')
+    }
+    normalizedArgs = { action: normalizedAction, instance, profile: args.profile }
+  } else {
+    normalizedArgs = { action: normalizedAction, instance }
+  }
+  preferencesControllers.get(context)?.get(instance)?.handler(normalizedArgs)
+}
 const PROFILE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   chrome: 'Google Chrome',
   edge: 'Microsoft Edge',

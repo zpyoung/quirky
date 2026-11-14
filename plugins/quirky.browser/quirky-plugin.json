@@ -253,6 +253,7 @@
     ],
     "command": [
       {"id":"browserSettings","title":"Browser Settings","args":{"type":"object","properties":{},"additionalProperties":false}},
+      {"id":"preferencesControl","title":"Browser Preferences UI Control","description":"Open or close a Browser settings dialog or import panel.","palette":false,"args":{"type":"object","additionalProperties":false,"properties":{"action":{"type":"string","enum":["open-create-profile","close-create-profile","toggle-import","open-file-import","close-file-import"]},"instance":{"type":"string"},"profile":{"type":"string"}},"required":["action","instance"]}},
       {"id":"profileClearNative","title":"Complete confirmed Browser profile clear","palette":false,"args":{"type":"object","properties":{"request":{"type":"string"}},"required":["request"],"additionalProperties":false}},
       {"id":"new-tab","title":"New Browser Tab","description":"Open a browser pane in the exact worktree or floating tab group.","args":{"type":"object","properties":{"worktree":{"type":"string"},"workspace":{"type":"string"},"group":{"type":"string"},"url":{"type":"string"},"page":{"type":"string"},"mode":{"type":"string","enum":["native","watch"]},"profile":{"type":"string"}},"additionalProperties":false}},
       {"id":"focus-address","title":"Focus Browser Address Bar","description":"Focus the address and search field in the active browser pane."},
