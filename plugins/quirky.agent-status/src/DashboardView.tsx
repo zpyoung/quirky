@@ -1,26 +1,15 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
-import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, SectionHeader, StatusDot, TextField, ToolPanelActions, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'
+import { useEffect, useState, useSyncExternalStore, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
+import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, SectionHeader, StatusDot, TextField, ToolPanelActions, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ActivityThread } from './activity-types'
-import type { DashboardBucket, DashboardQuery, DashboardSnapshot } from './dashboard-types'
+import type { DashboardBucket, DashboardSnapshot } from './dashboard-types'
+import { DashboardModel, dashboardViewInput, REVIEW_STATUSES, WORKSPACE_STATUSES } from './dashboard-model'
 
 const PLUGIN_ID = 'quirky.agent-status'
-const VIEW_ID = `view:${PLUGIN_ID}/dashboard`
-const OPEN_THREAD_COMMAND = `command:${PLUGIN_ID}/openActivityThread`
-const TOGGLE_COMMAND = `command:${PLUGIN_ID}/toggleDashboard`
-const WORKSPACE_STATUSES = [
-  { value: 'todo', label: 'Todo' },
-  { value: 'in-progress', label: 'In progress' },
-  { value: 'in-review', label: 'In review' },
-  { value: 'done', label: 'Done' }
-] as const
-const REVIEW_STATUSES = [
-  { value: 'open', label: 'Open' },
-  { value: 'draft', label: 'Draft' },
-  { value: 'merged', label: 'Merged' },
-  { value: 'closed', label: 'Closed' },
-  { value: 'no-review', label: 'No review' }
-] as const
+const VIEW_ID = 'view:quirky.agent-status/dashboard'
+const OPEN_THREAD_COMMAND = 'command:quirky.agent-status/openActivityThread'
+const TOGGLE_COMMAND = 'command:quirky.agent-status/toggleDashboard'
+const OPEN_DASHBOARD_WINDOW_COMMAND = 'command:quirky.agent-status/openDashboardWindow'
 
 const PAGE_STYLE: CSSProperties = {
   display: 'flex',
@@ -63,11 +52,6 @@ const CARD_LIST_STYLE: CSSProperties = {
   margin: 0,
   padding: 0
 }
-const MESSAGE_STYLE: CSSProperties = {
-  margin: 0,
-  padding: 'var(--ui-space-8) var(--ui-space-12)',
-  overflowWrap: 'anywhere'
-}
 
 function statusForDisplay(display: ActivityThread['display']): UiStatus {
   switch (display) {
@@ -92,37 +76,24 @@ function statusForDisplay(display: ActivityThread['display']): UiStatus {
   }
 }
 
-export function dashboardViewInput(input: unknown): DashboardQuery {
-  const value = typeof input === 'object' && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {}
-  const text = typeof value.text === 'string' ? value.text.trim() : ''
-  const project = typeof value.project === 'string' ? value.project.trim() : ''
-  const workspaceStatus = typeof value.workspaceStatus === 'string' ? value.workspaceStatus : ''
-  const reviewStatus = typeof value.reviewStatus === 'string' ? value.reviewStatus : ''
-  return {
-    ...(text ? { text } : {}),
-    ...(project ? { project } : {}),
-    ...(WORKSPACE_STATUSES.some((entry) => entry.value === workspaceStatus) ? { workspaceStatus } : {}),
-    ...(REVIEW_STATUSES.some((entry) => entry.value === reviewStatus) ? { reviewStatus } : {}),
-    ...(typeof value.showIdle === 'boolean' ? { showIdle: value.showIdle } : {})
-  }
-}
 
 const activityChanged = (event: QuirkyEvent) => event.type === `${PLUGIN_ID}/changed` || event.type === `${PLUGIN_ID}/activityChanged`
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause)
+}
 
 function DashboardCardView({ context, thread, bucket }: { context: UiPluginContext; thread: ActivityThread; bucket: DashboardBucket }) {
+  const openDashboardCard = () => {
+    void context.executeCommand(OPEN_THREAD_COMMAND, { sessionId: thread.sessionId, worktreeId: thread.worktreeId, turn: thread.turn }).catch((cause: unknown) => {
+      context.toast('Could not open Dashboard thread', errorMessage(cause))
+    })
+  }
   return (
     <div data-dashboard-bucket={bucket} data-session-id={thread.sessionId}>
       <InlineAgentCard
         title={thread.sessionName}
         status={statusForDisplay(thread.display)}
-        action={{
-          label: 'Open',
-          onAction: () => {
-            void context.executeCommand(OPEN_THREAD_COMMAND, { sessionId: thread.sessionId, worktreeId: thread.worktreeId, turn: thread.turn }).catch((cause) => {
-              context.toast('Could not open Dashboard thread', cause instanceof Error ? cause.message : String(cause))
-            })
-          }
-        }}
+        action={{ label: 'Open', onAction: openDashboardCard }}
         description={
           <div className="ui-stack">
             <div className="ui-cluster">
@@ -151,22 +122,21 @@ export function DashboardNavigation({ context }: { context: UiPluginContext }) {
   const [attention, setAttention] = useState(0)
   const [working, setWorking] = useState(0)
 
-  const refresh = useCallback(async () => {
-    if (!enabled) {
-      setAttention(0)
-      setWorking(0)
-      return
-    }
-    try {
-      const snapshot = (await context.call('quirky.agent-status/dashboard', {})) as DashboardSnapshot
-      setAttention(snapshot.cards.filter((card) => card.bucket === 'attention').length)
-      setWorking(snapshot.cards.filter((card) => card.bucket === 'working').length)
-    } catch (error) {
-      context.log(`could not load Dashboard count: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }, [context, enabled])
-
   useEffect(() => {
+    const refresh = async () => {
+      if (!enabled) {
+        setAttention(0)
+        setWorking(0)
+        return
+      }
+      try {
+        const snapshot = await context.call('quirky.agent-status/dashboard', {}) as DashboardSnapshot
+        setAttention(snapshot.cards.filter((card) => card.bucket === 'attention').length)
+        setWorking(snapshot.cards.filter((card) => card.bucket === 'working').length)
+      } catch (error) {
+        context.log(`could not load Dashboard count: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'setting.changed' && event.id === `setting:${PLUGIN_ID}/dashboard-enabled`) {
         setEnabled(event.value === true)
@@ -183,20 +153,24 @@ export function DashboardNavigation({ context }: { context: UiPluginContext }) {
       unsubscribe()
       unsubscribeConnection()
     }
-  }, [context, refresh])
+  }, [context, enabled])
+
+  const toggleDashboard = () => {
+    const layoutView = context.getLayout().view
+    const input = layoutView?.id === VIEW_ID ? dashboardViewInput(layoutView.input) : {}
+    void context.executeCommand(TOGGLE_COMMAND, input).catch((cause: unknown) => {
+      context.toast('Could not toggle Agent Dashboard', cause instanceof Error ? cause.message : String(cause))
+    })
+  }
 
   if (!enabled) return null
   const total = attention + working
-  const layoutView = context.getLayout().view
-  const input = layoutView?.id === VIEW_ID ? dashboardViewInput(layoutView.input) : {}
   return (
     <Button
       className="ui-cluster"
       style={{ width: '100%', justifyContent: 'flex-start' }}
       aria-label={total > 0 ? `Agent Dashboard, ${attention} need you and ${working} working` : 'Agent Dashboard'}
-      onClick={() => void context.executeCommand(TOGGLE_COMMAND, input).catch((error) => {
-        context.toast('Could not toggle Agent Dashboard', error instanceof Error ? error.message : String(error))
-      })}
+      onClick={toggleDashboard}
     >
       <StatusDot status={attention > 0 ? 'needs-you' : working > 0 ? 'working' : 'idle'} />
       <span>Agent Dashboard</span>
@@ -206,71 +180,58 @@ export function DashboardNavigation({ context }: { context: UiPluginContext }) {
 }
 
 export function DashboardView({ context, input }: { context: UiPluginContext; input?: unknown }) {
-  const [view, setView] = useState(() => dashboardViewInput(input))
+  const [model] = useState(() => new DashboardModel(context, input))
+  const state = useSyncExternalStore(model.subscribe, model.getSnapshot, model.getSnapshot)
+  const { view, snapshot, loading, error } = state
   const [draftText, setDraftText] = useState(() => view.text ?? '')
   const [draftProject, setDraftProject] = useState(() => view.project ?? '')
   const [draftWorkspaceStatus, setDraftWorkspaceStatus] = useState(() => view.workspaceStatus ?? '')
   const [draftReviewStatus, setDraftReviewStatus] = useState(() => view.reviewStatus ?? '')
-  const [snapshot, setSnapshot] = useState<DashboardSnapshot | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const generation = useRef(0)
-
-  const refresh = useCallback(async () => {
-    const current = ++generation.current
-    setLoading(true)
-    setError(null)
-    try {
-      const result = (await context.call('quirky.agent-status/dashboard', view)) as DashboardSnapshot
-      if (current !== generation.current) return
-      setSnapshot(result)
-    } catch (cause) {
-      if (current !== generation.current) return
-      setError(cause instanceof Error ? cause.message : String(cause))
-    } finally {
-      if (current === generation.current) setLoading(false)
-    }
-  }, [context, view.text, view.project, view.workspaceStatus, view.reviewStatus, view.showIdle])
 
   useEffect(() => {
-    const unsubscribe = context.subscribe((event) => {
-      if (activityChanged(event) || event.type === 'quirky.worktree/changed' || event.type === 'quirky.hosting/reviewCacheChanged') void refresh()
-    })
-    const unsubscribeConnection = context.onConnection((status) => {
-      if (status === 'connected') void refresh()
-    })
-    void refresh()
-    return () => {
-      generation.current += 1
-      unsubscribe()
-      unsubscribeConnection()
-    }
-  }, [context, refresh])
+    model.start()
+    return () => model.dispose()
+  }, [model])
 
-  const updateView = (patch: Partial<DashboardQuery>) => {
-    const next = dashboardViewInput({ ...view, ...patch })
-    setView(next)
-    context.openView(VIEW_ID, next)
-  }
+  useEffect(() => {
+    const previous = model.getSnapshot().view
+    model.syncInput(input)
+    const next = model.getSnapshot().view
+    if (previous === next) return
+    setDraftText(next.text ?? '')
+    setDraftProject(next.project ?? '')
+    setDraftWorkspaceStatus(next.workspaceStatus ?? '')
+    setDraftReviewStatus(next.reviewStatus ?? '')
+  }, [input, model])
 
-  const applyFilters = (event: FormEvent<HTMLFormElement>) => {
+  const showIdleThreads = () => model.updateView({ showIdle: true })
+  const hideIdleThreads = () => model.updateView({ showIdle: false })
+  const applyDashboardFilters = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    updateView({
+    model.updateView({
       text: draftText,
       project: draftProject,
       workspaceStatus: draftWorkspaceStatus || undefined,
       reviewStatus: draftReviewStatus || undefined
     })
   }
-
-  const clearFilters = () => {
-    const next = view.showIdle === true ? { showIdle: true } : {}
+  const clearDashboardFilters = () => {
     setDraftText('')
     setDraftProject('')
     setDraftWorkspaceStatus('')
     setDraftReviewStatus('')
-    setView(next)
-    context.openView(VIEW_ID, next)
+    model.clearFilters()
+  }
+  const retryDashboard = () => {
+    void model.retry()
+  }
+  const retryUnavailableDashboard = () => {
+    void model.retry()
+  }
+  const popOutDashboard = () => {
+    void context.executeCommand(OPEN_DASHBOARD_WINDOW_COMMAND, view).catch((cause: unknown) => {
+      context.toast('Could not pop out the Dashboard', errorMessage(cause))
+    })
   }
 
   const columns: { bucket: DashboardBucket; label: string }[] = [
@@ -284,25 +245,17 @@ export function DashboardView({ context, input }: { context: UiPluginContext; in
   return (
     <ToolPanelFrame title="Agent Dashboard">
       <ToolPanelActions>
-        <IconButton
-          label="Pop out"
-          title="Pop out"
-          onClick={() => {
-            void context.executeCommand(`command:${PLUGIN_ID}/openDashboardWindow`, view).catch((cause: unknown) => {
-              context.toast('Could not pop out the Dashboard', cause instanceof Error ? cause.message : String(cause))
-            })
-          }}
-        >
+        <IconButton label="Pop out" title="Pop out" onClick={popOutDashboard}>
           <ControlIcon name="arrows-out" />
         </IconButton>
       </ToolPanelActions>
       <ToolPanelTools>
         {snapshot && snapshot.hiddenIdle > 0 ? (
-          <IconButton label={`Show idle threads (${snapshot.hiddenIdle})`} title={`Show idle (${snapshot.hiddenIdle})`} onClick={() => updateView({ showIdle: true })}>
+          <IconButton label={`Show idle threads (${snapshot.hiddenIdle})`} title={`Show idle (${snapshot.hiddenIdle})`} onClick={showIdleThreads}>
             <ControlIcon name="funnel" />
           </IconButton>
         ) : view.showIdle === true ? (
-          <IconButton label="Hide idle threads" title="Hide idle" onClick={() => updateView({ showIdle: false })}>
+          <IconButton label="Hide idle threads" title="Hide idle" onClick={hideIdleThreads}>
             <ControlIcon name="funnel" />
           </IconButton>
         ) : null}
@@ -315,7 +268,7 @@ export function DashboardView({ context, input }: { context: UiPluginContext; in
             </Badge>
           </div>
         ) : null}
-        <form style={FILTERS_STYLE} onSubmit={applyFilters}>
+        <form style={FILTERS_STYLE} onSubmit={applyDashboardFilters}>
           <TextField
             id="dashboard-search"
             label="Search"
@@ -358,15 +311,19 @@ export function DashboardView({ context, input }: { context: UiPluginContext; in
           </FormRow>
           <div style={ACTIONS_STYLE}>
             <Button type="submit" aria-label="Apply dashboard filters" variant="primary">Apply</Button>
-            <Button aria-label="Clear dashboard filters" onClick={clearFilters}>Clear all filters</Button>
+            <Button aria-label="Clear dashboard filters" onClick={clearDashboardFilters}>Clear all filters</Button>
           </div>
         </form>
         <div style={RESULTS_STYLE}>
-          {error ? <div className="ui-error-text" role="alert" style={MESSAGE_STYLE}>{error}</div> : null}
+          {error ? <InlineError message={error} action={{ label: 'Retry', onAction: retryDashboard }} /> : null}
           {snapshot?.unavailable.map((message) => (
-            <div className="ui-error-text" role="alert" style={MESSAGE_STYLE} key={message}>Unavailable: {message}</div>
+            <InlineError
+              key={message}
+              message={`Unavailable: ${message}`}
+              action={{ label: 'Retry', onAction: retryUnavailableDashboard }}
+            />
           ))}
-          {loading && snapshot === null ? <p className="ui-text-muted" role="status" style={MESSAGE_STYLE}>Loading Agent Dashboard…</p> : null}
+          {loading && snapshot === null ? <EmptyState message="Loading Agent Dashboard…" /> : null}
           {!loading && !error && snapshot?.total === 0 ? (
             <div role="status">
               <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />

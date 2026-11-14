@@ -1,0 +1,8 @@
+{
+  "name": "@quirky/plugin-navigation",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@quirky/protocol": "workspace:*"
+  }
+}

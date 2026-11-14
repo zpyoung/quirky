@@ -10,6 +10,7 @@ type PluginOptions = {
   contributes?: Record<string, Array<Record<string, unknown>>>
   sources?: Record<string, string>
   coverage?: string
+  coverageFragments?: Record<string, string>
 }
 
 const roots: string[] = []
@@ -49,6 +50,9 @@ function addPlugin(root: string, directory: string, id = directory, options: Plu
   putFile(root, `plugins/${directory}/quirky-plugin.json`, `${JSON.stringify(manifest, null, 2)}\n`)
   for (const [path, content] of Object.entries(options.sources ?? {})) putFile(root, `plugins/${directory}/${path}`, content)
   if (options.coverage !== undefined) putFile(root, `plugins/${directory}/ui-scoreboard.json`, options.coverage)
+  for (const [file, content] of Object.entries(options.coverageFragments ?? {})) {
+    putFile(root, `plugins/${directory}/ui-scoreboard/${file}`, content)
+  }
 }
 
 function createRepository(options: { plugins?: boolean } = {}): string {
@@ -168,6 +172,215 @@ describe('collectInventory', () => {
     expect(plugin?.coverage).toEqual({ file: 'plugins/acme.app/ui-scoreboard.json', content })
     expect(plugin?.sources.map(({ file }) => file)).not.toContain('plugins/acme.app/ui-scoreboard.json')
   })
+
+  test('loads fragments without a root coverage file in name order', () => {
+    const root = createRepository({ plugins: false })
+    const states = '{"part":"states"}\n'
+    const actions = '{"part":"actions"}\n'
+    addPlugin(root, 'acme.app', 'acme.app', {
+      ui: 'src/ui.tsx',
+      sources: { 'src/ui.tsx': 'export const App = () => null\n' },
+      coverageFragments: { 'b-actions.json': actions, 'a-states.json': states }
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'coverage fragments fixture')
+    const inventory = collect(root)
+    const plugin = inventory.plugins.find(({ id }) => id === 'acme.app')
+
+    expect(plugin?.coverage).toBeUndefined()
+    expect(plugin?.coverageFragments).toEqual([
+      { file: 'plugins/acme.app/ui-scoreboard/a-states.json', content: states },
+      { file: 'plugins/acme.app/ui-scoreboard/b-actions.json', content: actions }
+    ])
+    expect(plugin?.sources.map(({ file }) => file)).not.toContain('plugins/acme.app/ui-scoreboard/a-states.json')
+    expect(plugin?.sources.map(({ file }) => file)).not.toContain('plugins/acme.app/ui-scoreboard/b-actions.json')
+    expect(inventory.failures).toEqual([])
+  })
+
+  test('loads root coverage and fragments independently', () => {
+    const root = createRepository({ plugins: false })
+    const coverage = '{"schemaVersion":1}\n'
+    const fragment = '{"part":"states"}\n'
+    addPlugin(root, 'acme.app', 'acme.app', {
+      ui: 'src/ui.tsx',
+      sources: { 'src/ui.tsx': 'export const App = () => null\n' },
+      coverage,
+      coverageFragments: { 'part.json': fragment }
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'root and fragments fixture')
+    const plugin = collect(root).plugins.find(({ id }) => id === 'acme.app')
+
+    expect(plugin?.coverage).toEqual({ file: 'plugins/acme.app/ui-scoreboard.json', content: coverage })
+    expect(plugin?.coverageFragments).toEqual([{ file: 'plugins/acme.app/ui-scoreboard/part.json', content: fragment }])
+  })
+
+  test('omits coverageFragments when the fragment directory is absent', () => {
+    const root = createRepository({ plugins: false })
+    const coverage = '{"schemaVersion":1}\n'
+    addPlugin(root, 'acme.app', 'acme.app', {
+      ui: 'src/ui.tsx',
+      sources: { 'src/ui.tsx': 'export const App = () => null\n' },
+      coverage
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'root-only coverage fixture')
+    const plugin = collect(root).plugins.find(({ id }) => id === 'acme.app')
+
+    expect(plugin?.coverage).toEqual({ file: 'plugins/acme.app/ui-scoreboard.json', content: coverage })
+    expect(plugin).toBeDefined()
+    expect(Object.hasOwn(plugin!, 'coverageFragments')).toBe(false)
+  })
+
+  test('reports every invalid fragment-directory entry and excludes them from sources', () => {
+    const root = createRepository({ plugins: false })
+    addPlugin(root, 'acme.app', 'acme.app', {
+      ui: 'src/ui.tsx',
+      sources: { 'src/ui.tsx': 'export const App = () => null\n' },
+      coverageFragments: {
+        'good.json': '{"part":"good"}\n',
+        'Notes.json': '{"part":"invalid name"}\n',
+        'notes.txt': 'invalid extension\n',
+        'helper.ts': 'export const helper = true\n'
+      }
+    })
+    putFile(root, 'plugins/acme.app/ui-scoreboard/sub/part.json', '{"part":"nested"}\n')
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'invalid coverage entries fixture')
+    const inventory = collect(root)
+    const plugin = inventory.plugins.find(({ id }) => id === 'acme.app')
+    const invalid = inventory.failures.filter(({ code }) => code === 'invalid-coverage-file')
+
+    expect(invalid).toHaveLength(4)
+    for (const path of [
+      'plugins/acme.app/ui-scoreboard/Notes.json',
+      'plugins/acme.app/ui-scoreboard/notes.txt',
+      'plugins/acme.app/ui-scoreboard/helper.ts',
+      'plugins/acme.app/ui-scoreboard/sub'
+    ]) {
+      expect(invalid.some(({ message }) => message.includes(path))).toBe(true)
+    }
+    expect(plugin?.coverageFragments).toEqual([
+      { file: 'plugins/acme.app/ui-scoreboard/good.json', content: '{"part":"good"}\n' }
+    ])
+    expect(plugin?.sources.map(({ file }) => file)).not.toContain('plugins/acme.app/ui-scoreboard/helper.ts')
+  })
+
+  test('ignores hidden fragment-directory entries', () => {
+    const root = createRepository({ plugins: false })
+    const content = '{"part":"good"}\n'
+    addPlugin(root, 'acme.app', 'acme.app', {
+      ui: 'src/ui.tsx',
+      sources: { 'src/ui.tsx': 'export const App = () => null\n' },
+      coverageFragments: { 'good.json': content, '.DS_Store': 'Finder metadata\n' }
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'hidden coverage entry fixture')
+    const inventory = collect(root)
+    const plugin = inventory.plugins.find(({ id }) => id === 'acme.app')
+
+    expect(inventory.failures).toEqual([])
+    expect(plugin?.coverageFragments).toEqual([{ file: 'plugins/acme.app/ui-scoreboard/good.json', content }])
+  })
+
+  test('rejects fragment symlinks without reading their target', () => {
+    const root = createRepository({ plugins: false })
+    const target = join(root, 'outside/fragment.json')
+    putFile(root, 'outside/fragment.json', '{"part":"before"}\n')
+    addPlugin(root, 'acme.app', 'acme.app', { ui: 'src/ui.tsx', sources: { 'src/ui.tsx': 'export const App = () => null\n' } })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'symlink target fixture')
+    const link = join(root, 'plugins/acme.app/ui-scoreboard/link.json')
+    mkdirSync(dirname(link), { recursive: true })
+    symlinkSync(target, link)
+    const before = collect(root)
+    putFile(root, 'outside/fragment.json', '{"part":"after"}\n')
+    const after = collect(root)
+    const plugin = after.plugins.find(({ id }) => id === 'acme.app')
+
+    expect(after.failures).toContainEqual(expect.objectContaining({
+      code: 'source-symlink',
+      message: expect.stringContaining('plugins/acme.app/ui-scoreboard/link.json')
+    }))
+    expect(plugin?.coverageFragments).toEqual([])
+    expect(after.sourceDigest).toBe(before.sourceDigest)
+  })
+
+  test('rejects a symlinked fragment directory without reading its target', () => {
+    const root = createRepository({ plugins: false })
+    const targetDirectory = join(root, 'outside/ui-scoreboard')
+    mkdirSync(targetDirectory, { recursive: true })
+    writeFileSync(join(targetDirectory, 'part.json'), '{"part":"before"}\n')
+    addPlugin(root, 'acme.app', 'acme.app', { ui: 'src/ui.tsx', sources: { 'src/ui.tsx': 'export const App = () => null\n' } })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'fragment directory symlink target fixture')
+    symlinkSync(targetDirectory, join(root, 'plugins/acme.app/ui-scoreboard'))
+    const before = collect(root)
+    writeFileSync(join(targetDirectory, 'part.json'), '{"part":"after"}\n')
+    const after = collect(root)
+    const plugin = after.plugins.find(({ id }) => id === 'acme.app')
+
+    expect(after.failures).toContainEqual(expect.objectContaining({
+      code: 'source-symlink',
+      message: expect.stringContaining('plugins/acme.app/ui-scoreboard')
+    }))
+    expect(plugin).toBeDefined()
+    expect(Object.hasOwn(plugin!, 'coverageFragments')).toBe(false)
+    expect(after.sourceDigest).toBe(before.sourceDigest)
+  })
+
+  test('rejects a non-directory fragment path', () => {
+    const root = createRepository({ plugins: false })
+    addPlugin(root, 'acme.app', 'acme.app', { ui: 'src/ui.tsx', sources: { 'src/ui.tsx': 'export const App = () => null\n' } })
+    putFile(root, 'plugins/acme.app/ui-scoreboard', 'not a directory\n')
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'non-directory coverage path fixture')
+    const inventory = collect(root)
+
+    expect(inventory.failures).toContainEqual(expect.objectContaining({
+      code: 'invalid-coverage-file',
+      message: expect.stringContaining('plugins/acme.app/ui-scoreboard')
+    }))
+  })
+
+  test('reports fragments on plugins without UI or targets', () => {
+    const root = createRepository({ plugins: false })
+    addPlugin(root, 'acme.daemon', 'acme.daemon', { coverageFragments: { 'part.json': '{"part":"daemon"}\n' } })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'unexpected fragment fixture')
+    const inventory = collect(root)
+
+    expect(inventory.failures).toContainEqual(expect.objectContaining({
+      code: 'unexpected-coverage-file',
+      message: expect.stringContaining('plugins/acme.daemon/ui-scoreboard')
+    }))
+  })
+
+  test('digests edited fragments and marks new untracked fragments dirty', () => {
+    const root = createRepository({ plugins: false })
+    addPlugin(root, 'acme.app', 'acme.app', {
+      ui: 'src/ui.tsx',
+      sources: { 'src/ui.tsx': 'export const App = () => null\n' },
+      coverageFragments: { 'part.json': '{"part":"before"}\n' }
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'coverage fragment digest fixture')
+    const before = collect(root)
+    putFile(root, 'plugins/acme.app/ui-scoreboard/part.json', '{"part":"edited"}\n')
+    const edited = collect(root)
+    putFile(root, 'plugins/acme.app/ui-scoreboard/part.json', '{"part":"before"}\n')
+    const clean = collect(root)
+    putFile(root, 'plugins/acme.app/ui-scoreboard/extra.json', '{"part":"untracked"}\n')
+    const withUntracked = collect(root)
+
+    expect(edited.sourceDigest).not.toBe(before.sourceDigest)
+    expect(edited.dirty).toBe(true)
+    expect(clean.dirty).toBe(false)
+    expect(clean.sourceDigest).toBe(before.sourceDigest)
+    expect(withUntracked.dirty).toBe(true)
+    expect(withUntracked.sourceDigest).not.toBe(before.sourceDigest)
+  })
+
 
   test('leaves coverage undefined when the optional file is absent', () => {
     const plugin = collect(createRepository()).plugins.find(({ id }) => id === 'acme.service')

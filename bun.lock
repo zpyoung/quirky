@@ -465,6 +465,12 @@
         "@types/ws": "8.18.1",
       },
     },
+    "plugins/quirky.navigation": {
+      "name": "@quirky/plugin-navigation",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "plugins/quirky.notifications": {
       "name": "@quirky/plugin-notifications",
       "version": "0.1.0",
@@ -1176,6 +1182,8 @@
     "@quirky/plugin-loops": ["@quirky/plugin-loops@workspace:plugins/quirky.loops"],
 
     "@quirky/plugin-mobile": ["@quirky/plugin-mobile@workspace:plugins/quirky.mobile"],
+
+    "@quirky/plugin-navigation": ["@quirky/plugin-navigation@workspace:plugins/quirky.navigation"],
 
     "@quirky/plugin-notifications": ["@quirky/plugin-notifications@workspace:plugins/quirky.notifications"],
 
