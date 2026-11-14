@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Badge, Button, FormRow, SectionHeader, StatusDot, TextField } from '@quirky/ui'
+import { Badge, Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, StatusDot, TextField } from '@quirky/ui'
 import type { BrowserPreferencesProps, PreferencesState, ProfileUsage } from '../preferences/contract'
-import { BROWSER_SETTING_IDS, ProfileCreator, errorMessage, profileSourceLabel, useBrowserPreferenceData } from './shared'
+import { BROWSER_SETTING_IDS, PREFERENCES_CONTROL_COMMAND, ProfileCreator, errorMessage, profileSourceLabel, registerPreferencesController, useBrowserPreferenceData } from './shared'
 import { CookieImportPanel } from './CookieImportPanel'
-import type { BrowserWindowSettings } from './shared'
+import type { BrowserWindowSettings, PreferencesControlArgs } from './shared'
 
 const SEARCH_ENGINES = [
   { value: 'google', label: 'Google' },
@@ -39,6 +39,7 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
   const { context, onError, embedded = false } = props
   const { settings, preferences, loading, stateError, refresh, saveSetting } = useBrowserPreferenceData(context, onError)
   const settingsId = useId()
+  const controlInstance = useId()
   const [savingSettings, setSavingSettings] = useState<ReadonlySet<string>>(() => new Set())
   const [profilePending, setProfilePending] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
@@ -49,6 +50,15 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
   const [homePageDirty, setHomePageDirty] = useState(false)
   const homePageDraftRef = useRef(homePageDraft)
   const homePageDirtyRef = useRef(false)
+
+  useEffect(() => registerPreferencesController(context, controlInstance, (args) => {
+    if (args.action === 'open-create-profile') setCreateOpen(true)
+    else if (args.action === 'close-create-profile') setCreateOpen(false)
+    else if (args.action === 'toggle-import') {
+      const profile = args.profile
+      if (profile) setImportOpenProfile((current) => current === profile ? null : profile)
+    }
+  }), [context, controlInstance])
 
   useEffect(() => {
     if (homePageDirtyRef.current) return
@@ -75,6 +85,16 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
       })
     }
   }
+  const runPreferencesControl = async (args: Omit<PreferencesControlArgs, 'instance'>) => {
+    try {
+      await context.executeCommand(PREFERENCES_CONTROL_COMMAND, { ...args, instance: controlInstance }, { activateOwner: false })
+    } catch (cause) {
+      const message = errorMessage(cause)
+      setActionError(message)
+      onError(message)
+    }
+  }
+
   const saveHomePage = async () => {
     const id = BROWSER_SETTING_IDS.homePage
     if (savingSettings.has(id)) return
@@ -94,10 +114,8 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
     setSuccessMessage(`Profile "${name}" created.`)
   }
 
-  const profileAction = async (row: ProfileUsage) => {
-    const isDefault = isDefaultProfile(row.profile)
-    if (!isDefault && row.active) return
-    const remove = !isDefault
+  const profileAction = async (row: ProfileUsage, remove: boolean, perform: () => Promise<unknown>) => {
+    if (remove && row.active) return
     setActionError(null)
     setProfilePending(row.profile.id)
     let succeeded = false
@@ -110,7 +128,7 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
         confirmLabel: remove ? 'Remove Profile' : 'Clear Data'
       })
       if (!confirmed) return
-      await context.call(remove ? 'quirky.browser/profileDelete' : 'quirky.browser/profileClear', { profile: row.profile.id, yes: true })
+      await perform()
       succeeded = true
     } catch (cause) {
       const message = errorMessage(cause)
@@ -121,6 +139,16 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
     }
     if (succeeded) await refresh().catch(() => {})
   }
+  const clearProfile = (row: ProfileUsage) => profileAction(
+    row,
+    false,
+    () => context.call('quirky.browser/profileClear', { profile: row.profile.id, yes: true })
+  )
+  const removeProfile = (row: ProfileUsage) => profileAction(
+    row,
+    true,
+    () => context.call('quirky.browser/profileDelete', { profile: row.profile.id, yes: true })
+  )
 
   const identitySelection = settings.identityMode
   const activeIdentity = preferences?.identity.active ?? preferences?.identity.selected ?? identitySelection
@@ -128,10 +156,10 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
 
   return <div className="browser-settings" aria-label="Browser settings" style={SETTINGS_LAYOUT_STYLE}>
     <h1 style={{ fontSize: 'var(--ui-font-title)', margin: 0 }}>Browser</h1>
-    {stateError && <p className="ui-error-text" role="alert" style={SETTINGS_MESSAGE_STYLE}>{stateError}</p>}
-    {actionError && <p className="ui-error-text" role="alert" style={SETTINGS_MESSAGE_STYLE}>{actionError}</p>}
+    {stateError && <InlineError message={stateError} action={{ label: 'Retry', onAction: () => { void refresh().catch(() => {}) } }} />}
+    {actionError && <InlineError message={actionError} />}
     {successMessage && <p role="status" style={SETTINGS_MESSAGE_STYLE}>{successMessage}</p>}
-    {loading && !preferences && <p role="status" style={SETTINGS_MESSAGE_STYLE}>Loading Browser preferences…</p>}
+    {loading && !preferences && <div role="status"><NoticeLine>Loading Browser preferences…</NoticeLine></div>}
 
     {!embedded && <>
       <section aria-label="Browser Defaults" style={SETTINGS_SECTION_STYLE}>
@@ -210,12 +238,13 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
     <section aria-label="Session &amp; Cookies" style={SETTINGS_SECTION_STYLE}>
       <SectionHeader
         title="Session & Cookies"
-        actions={<Button type="button" variant="primary" disabled={profilePending !== null} onClick={() => { setCreateOpen(true); setActionError(null); setSuccessMessage(null) }}>Add Profile</Button>}
+        actions={<Button type="button" variant="primary" disabled={profilePending !== null} onClick={() => { setActionError(null); setSuccessMessage(null); void runPreferencesControl({ action: 'open-create-profile' }) }}>Add Profile</Button>}
       />
       <p style={SETTINGS_COPY_STYLE}>{context.nativeBrowser.clearPartitionAvailable
         ? 'Clearing or removing a profile deletes its cookies and site data in both browser engines. Profiles in use cannot be cleared.'
         : 'Clearing or removing profile data needs the Quirky desktop app on macOS 14 or later, which confirms native website-data removal. It is unavailable here; failed requests preserve profile data and metadata.'}</p>
-      {preferences && <ul aria-label="Browser profiles" style={SETTINGS_LIST_STYLE}>
+      {preferences?.profiles.length === 0 && <EmptyState message="No browser profiles are available." />}
+      {preferences && preferences.profiles.length > 0 && <ul aria-label="Browser profiles" style={SETTINGS_LIST_STYLE}>
         {preferences.profiles.map((row) => {
           const importOpen = importOpenProfile === row.profile.id
           const sourceLabel = profileSourceLabel(row.profile)
@@ -228,15 +257,15 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
             {row.active && !isDefaultProfile(row.profile) && <small style={PROFILE_ROW_STYLE}>This profile is in use and cannot be removed.</small>}
             <div style={PROFILE_ACTIONS_STYLE}>
               {isDefaultProfile(row.profile)
-                ? <Button type="button" variant="destructive" disabled={profilePending !== null || savingSettings.size > 0} onClick={() => void profileAction(row)}>Clear cookies &amp; site data</Button>
-                : <Button type="button" variant="destructive" disabled={row.active || profilePending !== null || savingSettings.size > 0} onClick={() => void profileAction(row)}>Remove</Button>}
-              <Button type="button" aria-expanded={importOpen} onClick={() => setImportOpenProfile((current) => current === row.profile.id ? null : row.profile.id)}>Import Cookies</Button>
+                ? <Button type="button" variant="destructive" disabled={profilePending !== null || savingSettings.size > 0} onClick={() => void clearProfile(row)}>Clear cookies &amp; site data</Button>
+                : <Button type="button" variant="destructive" disabled={row.active || profilePending !== null || savingSettings.size > 0} onClick={() => void removeProfile(row)}>Remove</Button>}
+              <Button type="button" aria-expanded={importOpen} onClick={() => void runPreferencesControl({ action: 'toggle-import', profile: row.profile.id })}>Import Cookies</Button>
             </div>
             {importOpen && <CookieImportPanel context={context} imports={preferences.imports} destination={{ id: row.profile.id, label: row.profile.label }} loadError={stateError} onHideHint={() => void writeSetting(BROWSER_SETTING_IDS.browserImportHintHidden, true)} onError={onError} onImported={refresh} />}
           </li>
         })}
       </ul>}
-      {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => setCreateOpen(false)} onError={onError} />}
+      {createOpen && <ProfileCreator context={context} onCreated={profileCreated} onCancel={() => { void runPreferencesControl({ action: 'close-create-profile' }) }} onError={onError} />}
     </section>
   </div>
 }
