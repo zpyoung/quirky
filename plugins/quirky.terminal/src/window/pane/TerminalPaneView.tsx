@@ -550,11 +550,15 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     let inputClaimAt: number | null = null
     let inputBlocked = false
     let inputIntent = false
+    let compositionStartLength: number | null = null
+    let compositionPending = false
     const resetInput = () => {
       inputEpoch += 1
       inputClaim = null
       inputClaimAt = null
       inputIntent = false
+      compositionStartLength = null
+      compositionPending = false
     }
     const prepareIdentity = (live: boolean) => {
       resetInput()
@@ -578,11 +582,22 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       inputIntent = true
       queueMicrotask(() => { inputIntent = false })
     }
-    const sendInput = (data: string, human = false, wanted = () => true): Promise<boolean> => {
-      if (!canSend() || !gate.allows() || !wanted()) return Promise.resolve(false)
+    const onDomInputIntent = (event: Event) => {
+      if (event.type === 'input' && (event as InputEvent).inputType === 'insertCompositionText') return
+      onInputIntent()
+    }
+    const onCompositionStart = () => {
+      compositionStartLength = term.textarea?.value.length ?? 0
+      compositionPending = false
+    }
+    const onCompositionEnd = () => {
+      compositionPending = true
+    }
+    const sendInput = (data: string, human = false, wanted = () => true, ignoreReplayGate = false): Promise<boolean> => {
+      if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted()) return Promise.resolve(false)
       const epoch = inputEpoch
       const write = () => {
-        if (!canSend() || !gate.allows() || !wanted() || epoch !== inputEpoch || inputBlocked) return Promise.resolve(false)
+        if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted() || epoch !== inputEpoch || inputBlocked) return Promise.resolve(false)
         return context.call('quirky.terminal/write', { session: sessionId, data }).then(() => true)
       }
       if (inputClaim) return inputClaim.then((accepted) => accepted ? write() : false)
@@ -630,8 +645,14 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     term.onKey(onInputIntent)
 
     term.onData((data) => {
-      const human = inputIntent
+      const compositionCommit = compositionPending && compositionStartLength !== null && data.length > 0 &&
+        (term.textarea?.value.slice(compositionStartLength) ?? '') === data
+      const human = inputIntent || compositionCommit
       inputIntent = false
+      if (compositionCommit) {
+        compositionPending = false
+        compositionStartLength = null
+      }
       void sendInput(latest.current.settings['jis-yen-backslash'] && data === '¥' ? '\\' : data, human).catch(() => {})
     })
     const graphics = createKittyGraphics(term, sendGenerated, initial['inline-images'])
@@ -639,6 +660,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     let pasteQueue: Promise<void> = Promise.resolve()
     const pasteNow = async (text: string, epoch: number) => {
       if (epoch !== inputEpoch || !canSend() || !gate.allows()) return
+      const pasteAttachment = attachment
       const plan = planPaste(text, term.modes.bracketedPasteMode)
       if (plan.kind === 'refused') {
         context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')
@@ -648,14 +670,19 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       let first = true
       let blocked = false
       let cancelled = false
+      let bracketOpen = false
       const outcome = await runPaste(plan.chunks, async (data) => {
-        if (blocked || cancelled) throw new Error('Paste input was cancelled.')
-        const accepted = await sendInput(data, first, () => !cancelled)
+        const cleanupCloser = blocked && bracketOpen && data === plan.closer
+        if ((blocked && !cleanupCloser) || cancelled) throw new Error('Paste input was cancelled.')
+        const wanted = () => !cancelled && attachment === pasteAttachment && (cleanupCloser || inputEpoch === epoch)
+        const openingBracket = first && plan.closer !== null
+        const accepted = await sendInput(data, first, wanted, cleanupCloser)
         first = false
         if (!accepted) {
           blocked = true
           throw new Error('Paste input was blocked.')
         }
+        if (openingBracket) bracketOpen = true
       }, { closer: plan.closer })
       cancelled = true
       if (blocked) return
@@ -782,8 +809,9 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     // IME and virtual keyboards can commit text without onKey. Their real DOM
     // input intent is guarded before xterm's data callback; parser replies do
     // not dispatch these events.
-    textarea?.addEventListener('compositionstart', onInputIntent, true)
-    textarea?.addEventListener('input', onInputIntent, true)
+    host.addEventListener('compositionstart', onCompositionStart, true)
+    host.addEventListener('compositionend', onCompositionEnd, true)
+    host.addEventListener('input', onDomInputIntent, true)
     textarea?.addEventListener('blur', releaseFocusContext)
 
     let fitFrame = 0
@@ -1075,8 +1103,9 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       releaseFocusContext()
       textarea?.removeEventListener('focus', onTextareaFocus)
       textarea?.removeEventListener('blur', releaseFocusContext)
-      textarea?.removeEventListener('compositionstart', onInputIntent, true)
-      textarea?.removeEventListener('input', onInputIntent, true)
+      host.removeEventListener('compositionstart', onCompositionStart, true)
+      host.removeEventListener('compositionend', onCompositionEnd, true)
+      host.removeEventListener('input', onDomInputIntent, true)
       element.removeEventListener('paste', onPaste, true)
       element.removeEventListener('copy', onCopy, true)
       host.removeEventListener('mousedown', onMouseDown, true)
