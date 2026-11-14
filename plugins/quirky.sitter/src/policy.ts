@@ -122,6 +122,10 @@ export type SitterEnrollment = { capabilities: Record<string, CapabilityMode>; k
 const CHECK_RUN_FAILURES: Record<string, true> = {
   failure: true, timed_out: true, action_required: true, startup_failure: true, stale: true, error: true, cancelled: true
 }
+
+const CHECK_RUN_RERUN_FAILURES: Record<string, true> = {
+  failure: true, timed_out: true, startup_failure: true, cancelled: true
+}
 const CHECK_RUN_PENDING: Record<string, true> = {
   queued: true, in_progress: true, requested: true, waiting: true, pending: true, expected: true
 }
@@ -172,13 +176,15 @@ function mapCheck(value: unknown): SitterCheck | null {
   const conclusion = asString(value.conclusion)
   const checkRunId = nullableNumber(value.checkRunId)
   const workflowRunId = nullableNumber(value.workflowRunId)
-  const rerunTarget = kind === 'check_run'
+  const state = checkState(kind, status, conclusion)
+  const rerunTarget = kind === 'check_run' &&
+    (state !== 'failed' || Object.hasOwn(CHECK_RUN_RERUN_FAILURES, conclusion))
     ? workflowRunId !== null ? `workflow:${workflowRunId}` : checkRunId !== null ? `check:${checkRunId}` : null
     : null
   return {
     name,
     kind,
-    state: checkState(kind, status, conclusion),
+    state,
     observation: `${kind}:${checkRunId ?? ''}:${workflowRunId ?? ''}:${status}:${conclusion}`,
     rerunTarget,
     workflowRunId
@@ -197,6 +203,14 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
   const rawChecks = isRecord(checks) ? checks : null
   const checkRows = rawChecks !== null && Array.isArray(rawChecks.checks) ? rawChecks.checks : []
   const mappedChecks = checkRows.map(mapCheck).filter((value): value is SitterCheck => value !== null)
+
+  const checksComplete = checks === null || (
+    rawChecks !== null &&
+    Array.isArray(rawChecks.checks) &&
+    mappedChecks.length === checkRows.length &&
+    rawChecks.partial !== true &&
+    rawChecks.headSha === headRefOid
+  )
   const mergeable = rawReview.mergeable === 'MERGEABLE' || rawReview.mergeable === 'CONFLICTING' || rawReview.mergeable === 'UNKNOWN'
     ? rawReview.mergeable
     : 'UNKNOWN'
@@ -218,7 +232,7 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
     mergeMetadataKnown: rawReview.mergeMetadataKnown === true,
     defaultMergeMethod,
     allowedMergeMethods,
-    checksComplete: rawChecks === null || (rawChecks.partial !== true && rawChecks.headSha === headRefOid),
+    checksComplete,
     checks: mappedChecks
   }
 }

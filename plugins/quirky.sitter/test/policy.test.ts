@@ -248,6 +248,33 @@ test('maps hosting results to a world and its content identity', () => {
   })
 })
 
+test('only an explicit null hosting checks result is complete', () => {
+  const malformedChecks: unknown[] = ['x', [], undefined, 17, false]
+  for (const checks of malformedChecks) {
+    const current = worldFromHosting(review(), checks, payload)
+    expect(current.checksComplete).toBe(false)
+    expect(decide(snapshot(current), [], enrollment())).toMatchObject({
+      action: null, reason: 'merge-gates-unsatisfied', detail: 'checks'
+    })
+  }
+
+  const malformedLists: unknown[] = [
+    { headSha: H1, partial: false, checks: 'x' },
+    { headSha: H1, partial: false, checks: [null] }
+  ]
+  for (const checks of malformedLists) {
+    const current = worldFromHosting(review(), checks, payload)
+    expect(current.checksComplete).toBe(false)
+    expect(decide(snapshot(current), [], enrollment())).toMatchObject({
+      action: null, reason: 'merge-gates-unsatisfied', detail: 'checks'
+    })
+  }
+
+  const complete = worldFromHosting(review(), null, payload)
+  expect(complete.checksComplete).toBe(true)
+  expect(decide(snapshot(complete), [], enrollment()).action).toMatchObject({ kind: 'merge' })
+})
+
 test('a closed or merged review takes no action and stops', () => {
   for (const [lifecycle, state, reason] of [
     ['merged', 'merged', 'review merged'], ['closed', 'closed', 'review closed']
@@ -288,6 +315,26 @@ test('a failed rerunnable check proposes one rerun with exact identity', () => {
     head: H1,
     ordinal: 1
   })
+})
+
+test('an incomplete failed rerunnable check prevents a rerun', () => {
+  const failed = check({ state: 'failed', observation: 'check_run:9001:41:completed:failure' })
+  const decision = decide(
+    snapshot(world({ checksComplete: false, checks: [failed] })),
+    [],
+    enrollment(caps({ fixChecks: 'on' }))
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'checks-incomplete' })
+})
+
+test('an incomplete behind branch with passed checks is not updated', () => {
+  const passed = check({ state: 'passed' })
+  const decision = decide(
+    snapshot(world({ mergeStateStatus: 'BEHIND', checksComplete: false, checks: [passed] })),
+    [],
+    enrollment()
+  )
+  expect(decision).toMatchObject({ action: null, reason: 'checks-incomplete' })
 })
 
 test('a rerun waits for the workflow run, then for its result, and is not repeated on the same head', () => {
@@ -590,26 +637,43 @@ test('a refused action is retried twice on the same head, two minutes apart, the
   expect(stop(snapshot(updateWorld, T + 4 * RETRY_DELAY_MS), updateFailures, enrollment(caps({ updateBranch: 'off' })))).toBeNull()
 })
 
-test('hosting-refused action-required, stale and error reruns exhaust retries and park with the refusal', () => {
-  const reason = 'no_failed_checks: No failed GitHub Actions checks to rerun.'
+test('hosting-refused action-required, stale and error checks stay failed and cannot be rerun', () => {
   for (const conclusion of ['action_required', 'stale', 'error']) {
     const current = worldFromHosting(review(), hostingChecks([{
       kind: 'check_run', name: 'build', status: 'completed', conclusion, checkRunId: 9001, workflowRunId: 41
     }]), payload)
-    const action = actionFor(current)!
-    expect(action).toMatchObject({ kind: 'rerun-check', checkNames: ['build'], ordinal: 1 })
-    for (let count = 1; count < RETRY_LIMIT; count++) {
-      const failures = failedAttempts(action, count).map((entry) => ({ ...entry, reason }))
-      expect(decide(snapshot(current, T + count * RETRY_DELAY_MS), failures, enrollment()).action).toMatchObject({
-        kind: 'rerun-check', ordinal: count + 1
-      })
-    }
-    const failures = failedAttempts(action, RETRY_LIMIT).map((entry) => ({ ...entry, reason }))
-    const exhausted = snapshot(current, T + RETRY_LIMIT * RETRY_DELAY_MS)
-    const detail = `rerun-check failed 3 times on ${H1.slice(0, 12)}: ${reason}`
-    expect(stop(exhausted, failures, enrollment())).toEqual({ kind: 'park', reason: 'stop-predicate', detail })
-    expect(decide(exhausted, failures, enrollment())).toMatchObject({ action: null, reason: 'retries-exhausted', detail })
+    expect(current.checks).toMatchObject([{ state: 'failed', rerunTarget: null }])
+    expect(decide(snapshot(current), [], enrollment())).toMatchObject({
+      action: null, reason: 'merge-gates-unsatisfied', detail: 'checks'
+    })
   }
+})
+
+test('a refused check run does not hold a rerun open after the selected check passes', () => {
+  const before = worldFromHosting(review(), hostingChecks([
+    { kind: 'check_run', name: 'build', status: 'completed', conclusion: 'failure', checkRunId: 9001, workflowRunId: 41 },
+    { kind: 'check_run', name: 'lint', status: 'completed', conclusion: 'stale', checkRunId: 9002, workflowRunId: 42 }
+  ]), payload)
+  const rerun = actionFor(before)!
+  expect(rerun).toMatchObject({
+    kind: 'rerun-check',
+    checkNames: ['build'],
+    observations: ['check_run:9001:41:completed:failure']
+  })
+
+  const after = worldFromHosting(review(), hostingChecks([
+    { kind: 'check_run', name: 'build', status: 'completed', conclusion: 'success', checkRunId: 9001, workflowRunId: 41 },
+    { kind: 'check_run', name: 'lint', status: 'completed', conclusion: 'stale', checkRunId: 9002, workflowRunId: 42 }
+  ]), payload)
+  expect(after.checks[0]).toMatchObject({ name: 'build', state: 'passed' })
+  expect(after.checks[0]?.observation).not.toBe(rerun.observations[0])
+  expect(after.checks[1]).toMatchObject({ name: 'lint', state: 'failed', rerunTarget: null })
+
+  const landed = attempt(rerun, { effect: 'landed' })
+  expect(decide(snapshot(after), [landed], enrollment())).toMatchObject({
+    action: null, reason: 'merge-gates-unsatisfied', detail: 'checks'
+  })
+  expect(pace(snapshot(after), [landed])).toBe('active')
 })
 
 test('pacing follows one ordered rule list; the first match wins', () => {
