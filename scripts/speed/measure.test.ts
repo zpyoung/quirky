@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import {
+  captureObservedFrameTiming,
   installBrowserObserver,
   waitForBrowserObserver,
   waitForDiagnosticStatusProbe,
@@ -7,6 +8,7 @@ import {
   diagnosticFinding,
   summarizeFrameIntervals,
   measureBrowserFrameIntervals,
+  coordinateStartupAttempt,
   pairSides,
   floodBlocks
 } from './measure.ts'
@@ -97,6 +99,7 @@ let clock: {
   cancelledFrames: Set<number>
   tasks: Array<() => void>
   mutations: Array<() => void>
+  marks: Map<string, number>
   nextFrameId: number
 }
 const savedGlobals = new Map<string, PropertyDescriptor | undefined>()
@@ -108,9 +111,13 @@ function replaceGlobal(name: string, value: unknown): void {
 
 function environment(): void {
   document = new FakeDocument()
-  clock = { now: 10, frames: [], cancelledFrames: new Set(), tasks: [], mutations: [], nextFrameId: 1 }
+  clock = { now: 10, frames: [], cancelledFrames: new Set(), tasks: [], mutations: [], marks: new Map(), nextFrameId: 1 }
   replaceGlobal('document', document)
-  replaceGlobal('performance', { now: () => clock.now })
+  replaceGlobal('performance', {
+    now: () => clock.now,
+    mark: (name: string, options?: { startTime?: number }) => clock.marks.set(name, options?.startTime ?? clock.now),
+    clearMarks: (name: string) => { clock.marks.delete(name) }
+  })
   replaceGlobal('requestAnimationFrame', function (this: unknown, callback: (time: number) => void) {
     if (this !== globalThis) throw new TypeError('Illegal invocation')
     const id = clock.nextFrameId++
@@ -199,7 +206,7 @@ function fakePage() {
   } as never
 }
 
-test('uses one frame scheduler for the full measurement and cleans up its probe', async () => {
+test('discards duplicate timestamps and captures sixty positive native intervals with one scheduler', async () => {
   environment()
   const probe = {
     id: '',
@@ -212,25 +219,84 @@ test('uses one frame scheduler for the full measurement and cleans up its probe'
     createElement: () => probe,
     documentElement: { append(): void {} }
   })
-  let initialSchedulerCalls = 0
-  let replacementSchedulerCalls = 0
-  const replacementScheduler = (callback: (timestamp: number) => void) => {
-    replacementSchedulerCalls++
-    callback(1 + replacementSchedulerCalls * 16)
-    return replacementSchedulerCalls
-  }
+  const timestamps = [0, 0, ...Array.from({ length: 60 }, (_, index) => (index + 1) * 16)]
+  let schedulerCalls = 0
   replaceGlobal('requestAnimationFrame', (callback: (timestamp: number) => void) => {
-    initialSchedulerCalls++
-    callback(1)
-    if (initialSchedulerCalls === 2) replaceGlobal('requestAnimationFrame', replacementScheduler)
-    return initialSchedulerCalls
+    callback(timestamps[schedulerCalls++]!)
+    return schedulerCalls
   })
   const page = { evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument) } as never
 
-  const intervals = await measureBrowserFrameIntervals(page, new AbortController().signal)
+  const capture = await measureBrowserFrameIntervals(page, new AbortController().signal)
 
-  expect(intervals).toEqual(Array<number>(60).fill(0))
-  expect(replacementSchedulerCalls).toBe(0)
+  expect(capture).toEqual({
+    intervalsMs: Array<number>(60).fill(16),
+    duplicateTimestamps: 1,
+    invalidTimestamps: 0
+  })
+  expect(schedulerCalls).toBe(62)
+  expect(summarizeFrameIntervals(capture.intervalsMs)).toEqual({
+    frames: 60, medianIntervalMs: 16, p90IntervalMs: 16, maxIntervalMs: 16
+  })
+  expect(probe.removed).toBe(true)
+})
+
+test('bounds a frozen native pacing probe at 120 callbacks and reports unavailable capture counters', async () => {
+  environment()
+  const probe = {
+    id: '',
+    style: {} as Record<string, string>,
+    removed: false,
+    setAttribute(): void {},
+    remove(): void { this.removed = true }
+  }
+  replaceGlobal('document', {
+    createElement: () => probe,
+    documentElement: { append(): void {} }
+  })
+  let schedulerCalls = 0
+  replaceGlobal('requestAnimationFrame', (callback: (timestamp: number) => void) => {
+    schedulerCalls++
+    callback(1)
+    return schedulerCalls
+  })
+  const page = { evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument) } as never
+
+  const capture = await measureBrowserFrameIntervals(page, new AbortController().signal)
+
+  expect(capture).toEqual({ intervalsMs: [], duplicateTimestamps: 119, invalidTimestamps: 0 })
+  expect(schedulerCalls).toBe(120)
+  expect(() => summarizeFrameIntervals(capture.intervalsMs)).toThrow('frame pacing needs positive finite intervals')
+  expect(probe.removed).toBe(true)
+})
+
+test('counts negative and non-finite native timestamp intervals without admitting them', async () => {
+  environment()
+  const probe = {
+    id: '',
+    style: {} as Record<string, string>,
+    removed: false,
+    setAttribute(): void {},
+    remove(): void { this.removed = true }
+  }
+  replaceGlobal('document', {
+    createElement: () => probe,
+    documentElement: { append(): void {} }
+  })
+  const timestamps = [5, Number.NaN, 2, ...Array.from({ length: 60 }, (_, index) => 10 + index * 16)]
+  let schedulerCalls = 0
+  replaceGlobal('requestAnimationFrame', (callback: (timestamp: number) => void) => {
+    callback(timestamps[schedulerCalls++]!)
+    return schedulerCalls
+  })
+  const page = { evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument) } as never
+
+  const capture = await measureBrowserFrameIntervals(page, new AbortController().signal)
+
+  expect(capture.intervalsMs).toHaveLength(60)
+  expect(capture.intervalsMs.every((interval) => interval > 0 && Number.isFinite(interval))).toBe(true)
+  expect(capture.duplicateTimestamps).toBe(0)
+  expect(capture.invalidTimestamps).toBe(2)
   expect(probe.removed).toBe(true)
 })
 
@@ -255,11 +321,246 @@ test('uses a supplied fixed timestamp while scheduling every frame', async () =>
   })
   const page = { evaluate: async (fn: (argument: unknown) => unknown, argument: unknown) => await fn(argument) } as never
 
-  const intervals = await measureBrowserFrameIntervals(page, new AbortController().signal, 1)
+  const capture = await measureBrowserFrameIntervals(page, new AbortController().signal, 1)
 
-  expect(intervals).toEqual(Array<number>(60).fill(0))
-  expect(schedulerCalls).toBe(61)
+  expect(capture).toEqual({ intervalsMs: [], duplicateTimestamps: 119, invalidTimestamps: 0 })
+  expect(schedulerCalls).toBe(120)
   expect(probe.removed).toBe(true)
+})
+test('observes app-rAF readiness only across a wrapped request and retains unique action/candidate/paint marks', async () => {
+  environment()
+  const { rows, input } = pane('session-app-frame')
+  const id = 'echo-app-frame'
+  installBrowserObserver({ id, kind: 'echo', workerId: 'worker-a', sessionId: 'session-app-frame', sequence: 1, key: 'a' })
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('keydown', input, 'a')
+  globalThis.requestAnimationFrame(() => {
+    rows.textContent = 'SPEED_ECHO worker-a session-app-frame 1 a'
+    mutate()
+  })
+
+  runFrameCallbacks()
+  runPostFrameTask()
+  const observation = await result
+
+  expect(observation.marks.candidate?.kind).toBe('application-raf')
+  expect(observation.marks.candidate?.requested).not.toBe(observation.marks.candidate?.delivered)
+  expect(clock.marks.get(observation.marks.action)).toBe(10)
+  expect(clock.marks.get(observation.marks.candidate!.requested)).toBe(10)
+  expect(clock.marks.get(observation.marks.candidate!.delivered)).toBe(26)
+  expect(clock.marks.get(observation.marks.end)).toBe(26)
+})
+
+test('uses the first stable ready DOM observation through the next native frame when readiness is task-created', async () => {
+  environment()
+  const { rows, input } = pane('session-ready-dom')
+  const id = 'echo-ready-dom'
+  installBrowserObserver({ id, kind: 'echo', workerId: 'worker-a', sessionId: 'session-ready-dom', sequence: 2, key: 'b' })
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('keydown', input, 'b')
+  clock.now = 20
+  rows.textContent = 'SPEED_ECHO worker-a session-ready-dom 2 b'
+  mutate()
+  expect(observerIsPresent(id)).toBe(true)
+
+  runFrameCallbacks()
+  runPostFrameTask()
+  const observation = await result
+
+  expect(observation.marks.candidate?.kind).toBe('ready-to-frame')
+  expect(clock.marks.get(observation.marks.candidate!.requested)).toBe(20)
+  expect(clock.marks.get(observation.marks.candidate!.delivered)).toBe(36)
+  expect(clock.marks.get(observation.marks.end)).toBe(36)
+})
+test('clears a stale app-rAF candidate when readiness is invalidated before the paint task', async () => {
+  environment()
+  const { rows, input } = pane('session-invalidated-frame')
+  const id = 'echo-invalidated-frame'
+  installBrowserObserver({ id, kind: 'echo', workerId: 'worker-a', sessionId: 'session-invalidated-frame', sequence: 3, key: 'c' })
+  const result = waitForBrowserObserver(fakePage(), id, 50)
+  document.dispatch('keydown', input, 'c')
+  globalThis.requestAnimationFrame(() => {
+    rows.textContent = 'SPEED_ECHO worker-a session-invalidated-frame 3 c'
+    mutate()
+  })
+  globalThis.requestAnimationFrame(() => {
+    rows.textContent = ''
+    mutate()
+  })
+
+  runFrameCallbacks()
+  runPostFrameTask()
+  await Promise.resolve()
+  expect(observerIsPresent(id)).toBe(true)
+
+  clock.now = 30
+  rows.textContent = 'SPEED_ECHO worker-a session-invalidated-frame 3 c'
+  mutate()
+  runFrameCallbacks()
+  runPostFrameTask()
+  const observation = await result
+
+  expect(observation.marks.candidate?.kind).toBe('ready-to-frame')
+  expect(clock.marks.get(observation.marks.candidate!.requested)).toBe(30)
+})
+
+test('trace setup and flush errors preserve a completed raw observation as unavailable frame timing', async () => {
+  const raw = {
+    observation: {
+      id: 'raw-80', kind: 'echo', startedAt: 10, endedAt: 90, durationMs: 80,
+      marks: { action: 'action', end: 'end' },
+      pacing: { intervalsMs: [16], duplicateTimestamps: 0, invalidTimestamps: 0 },
+      trace: []
+    }
+  }
+  let setupActionRuns = 0
+  const setupFallback = await captureObservedFrameTiming({
+    startTrace: async () => { throw new Error('trace setup unavailable') },
+    observe: async () => { setupActionRuns++; return raw as never },
+    signal: new AbortController().signal
+  })
+  expect(setupActionRuns).toBe(1)
+  expect(setupFallback.frameTiming).toMatchObject({
+    status: 'unavailable', wallMs: 80, effectiveMs: 80, deductionMs: 0, candidate: null
+  })
+  expect(setupFallback.frameTiming.reason).toContain('trace setup unavailable')
+
+  const flushFallback = await captureObservedFrameTiming({
+    startTrace: async () => ({ stop: async () => { throw new Error('trace flush unavailable') } }),
+    observe: async () => raw as never,
+    signal: new AbortController().signal
+  })
+  expect(flushFallback.frameTiming).toMatchObject({
+    status: 'unavailable', wallMs: 80, effectiveMs: 80, deductionMs: 0, candidate: null
+  })
+  expect(flushFallback.frameTiming.reason).toContain('trace flush unavailable')
+})
+
+test('trace resource cleanup failures remain fatal after a completed raw observation', async () => {
+  const cleanupFailure = Object.assign(new Error('trace detach failed'), { name: 'TraceCleanupError' })
+  await expect(captureObservedFrameTiming({
+    startTrace: async () => ({ stop: async () => { throw cleanupFailure } }),
+    observe: async () => ({
+      observation: {
+        id: 'raw-80', kind: 'echo', startedAt: 10, endedAt: 90, durationMs: 80,
+        marks: { action: 'action', end: 'end' },
+        pacing: { intervalsMs: [], duplicateTimestamps: 0, invalidTimestamps: 0 },
+        trace: []
+      }
+    } as never),
+    signal: new AbortController().signal
+  })).rejects.toThrow('trace detach failed')
+})
+
+test('startup navigation begins at runtime publication and success waits for health and post-paint verification', async () => {
+  let now = 100
+  const runtimeGate = Promise.withResolvers<unknown>()
+  const restartGate = Promise.withResolvers<unknown>()
+  const navigationGate = Promise.withResolvers<{ value: unknown; paintedAt: number }>()
+  const verificationGate = Promise.withResolvers<void>()
+  const runtime = runtimeGate.promise
+  const restart = restartGate.promise
+  const navigation = navigationGate.promise
+  const verification = verificationGate.promise
+  const navigationStarted = Promise.withResolvers<void>()
+  const verificationStarted = Promise.withResolvers<void>()
+  let disposed = 0
+  const watcher = {
+    expectSpawn(spawn: { spawnedAt: number; pid: number }) { expect(spawn).toEqual({ spawnedAt: 100, pid: 42 }) },
+    runtime,
+    dispose() { disposed++ }
+  }
+
+  const resultPromise = coordinateStartupAttempt({
+    signal: new AbortController().signal,
+    watch: () => watcher,
+    restart: (_signal, onSpawn) => {
+      onSpawn({ spawnedAt: 100, pid: 42 })
+      return restart
+    },
+    navigate: async () => {
+      expect(now).toBe(200)
+      navigationStarted.resolve()
+      return navigation
+    },
+    verify: async () => {
+      expect(now).toBe(600)
+      verificationStarted.resolve()
+      return verification
+    },
+    now: () => now
+  })
+
+  now = 200
+  runtimeGate.resolve({ pid: 42, port: 1234, token: 'fixture' })
+  await navigationStarted.promise
+  now = 400
+  navigationGate.resolve({ value: 'painted', paintedAt: 400 })
+  now = 600
+  restartGate.resolve('healthy')
+  await verificationStarted.promise
+  now = 900
+  verificationGate.resolve()
+  const result = await resultPromise
+
+  expect(result).toMatchObject({
+    spawnedAt: 100, runtimeAt: 200, paintedAt: 400, verifiedAt: 900,
+    navigation: 'painted', restart: 'healthy'
+  })
+  expect(result.paintedAt - result.spawnedAt).toBe(300)
+  expect(disposed).toBe(1)
+})
+test('startup failure after early paint rejects instead of publishing a fast sample and disposes the watcher', async () => {
+  const runtimeGate = Promise.withResolvers<unknown>()
+  const restartGate = Promise.withResolvers<unknown>()
+  const verifyStarted = Promise.withResolvers<void>()
+  let disposeCount = 0
+  const watcher = {
+    expectSpawn(): void {},
+    runtime: runtimeGate.promise,
+    dispose() { disposeCount++ }
+  }
+  const controller = new AbortController()
+  const attempt = coordinateStartupAttempt({
+    signal: controller.signal,
+    watch: () => watcher,
+    restart: (_signal, onSpawn) => { onSpawn({ spawnedAt: 100, pid: 42 }); return restartGate.promise },
+    navigate: async () => ({ value: 'painted', paintedAt: 400 }),
+    verify: async () => {
+      verifyStarted.resolve()
+      throw new Error('preserved session verification failed')
+    },
+    now: () => 900
+  })
+  runtimeGate.resolve({ pid: 42, port: 1234, token: 'fixture' })
+  restartGate.resolve('healthy')
+  await verifyStarted.promise
+
+  await expect(attempt).rejects.toThrow('preserved session verification failed')
+  expect(disposeCount).toBe(1)
+})
+
+test('replacement exit settles the pending renderer runtime waiter and disposes startup observation', async () => {
+  const runtimeGate = Promise.withResolvers<unknown>()
+  const restartGate = Promise.withResolvers<unknown>()
+  let disposed = 0
+  const watcher = {
+    expectSpawn(): void {},
+    runtime: runtimeGate.promise,
+    dispose() { disposed++; runtimeGate.reject(new Error('runtime watch disposed')) }
+  }
+  const result = coordinateStartupAttempt({
+    signal: new AbortController().signal,
+    watch: () => watcher,
+    restart: (_signal, onSpawn) => { onSpawn({ spawnedAt: 100, pid: 42 }); return restartGate.promise },
+    navigate: async () => { throw new Error('navigation should not start before runtime') },
+    verify: async () => { throw new Error('verification should not run after exit') },
+    now: () => 100
+  })
+  restartGate.reject(new Error('replacement exited'))
+
+  await expect(result).rejects.toThrow('replacement exited')
+  expect(disposed).toBe(1)
 })
 
 test('echo waits for its fresh worker/session/sequence/key acknowledgement, not stale replay', async () => {

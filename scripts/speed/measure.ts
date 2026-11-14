@@ -3,12 +3,14 @@ import { Buffer } from 'node:buffer'
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Browser, BrowserContext, CDPSession, Page, Route } from 'playwright'
-import { BUDGETS, METRICS, PAIR_COUNTS, type Failure, type Metric, type PairSide } from './contracts.ts'
+import { BUDGETS, METRICS, PAIR_COUNTS, type Failure, type FrameTiming, type Metric, type PairSide } from './contracts.ts'
+import { extractFrameTiming, type FrameTimingObservation } from './frame-timing.ts'
 import { median } from './report.ts'
+import { watchReplacementRuntime } from './startup.ts'
 import { startProbe, type Probe } from '../soak/probe.ts'
 import type { ProbeRecord } from '../soak/contracts.ts'
 import type { SoakWindows } from '../soak/windows.ts'
-import type { SoakWorld } from '../soak/world.ts'
+import type { DaemonSpawn, SoakWorld } from '../soak/world.ts'
 import type { FloodStart, FloodStats, SpeedFixture, SpeedFixtureWorktree } from './fixtures.ts'
 const MAX_BROWSER_TRACE_BYTES = 32 * 1024 * 1024
 
@@ -32,6 +34,12 @@ export function floodBlocks(count: number): { side: PairSide; first: number; cou
   if (secondHalf > 0) blocks.push({ side: 'base', first: firstHalf + 1, count: secondHalf })
   if (secondHalf > 0) blocks.push({ side: 'head', first: firstHalf + 1, count: secondHalf })
   return blocks
+}
+
+export type FrameIntervalCapture = {
+  intervalsMs: number[]
+  duplicateTimestamps: number
+  invalidTimestamps: number
 }
 
 export type FramePacing = { frames: number; medianIntervalMs: number; p90IntervalMs: number; maxIntervalMs: number }
@@ -69,6 +77,8 @@ type BrowserObservationSpec = {
   offeredBytes?: number
 }
 
+type BrowserObservationMarks = FrameTimingObservation['marks']
+
 type BrowserObservationResult = {
   id: string
   kind: BrowserObservationSpec['kind']
@@ -77,7 +87,11 @@ type BrowserObservationResult = {
   durationMs: number
   counter?: number
   trace: { event: string; at: number }[]
+  pacing: FrameIntervalCapture
+  marks: BrowserObservationMarks
 }
+
+type BrowserObservation = { observation: BrowserObservationResult }
 
 function echoTimingPhases(observation: BrowserObservationResult): { eventToDomMs: number; domToPaintMs: number } {
   const eventAt = observation.trace.find(({ event }) => event === 'keydown')?.at
@@ -100,7 +114,7 @@ type ObserverEntry = {
 type BrowserTraceSession = { stop(): Promise<string> }
 type TraceComplete = { stream?: string; dataLossOccurred: boolean }
 
-type SpeedSample = {
+export type SpeedSample = {
   metric: Metric
   phase: 'warmup' | 'sample' | 'diagnostic'
   sample: number
@@ -116,6 +130,8 @@ type SpeedSample = {
   daemonPid: number | null
   ptyHostPid: number | null
   ownedPids: number[]
+  pacing: FrameIntervalCapture
+  frameTiming?: FrameTiming
   flood?: Record<string, number | string | null>
 }
 
@@ -233,7 +249,9 @@ function diffRowSelector(path: string): string {
 /** Installs a browser-local event and DOM observer; Playwright serializes this self-contained function into the page. */
 export function installBrowserObserver(spec: BrowserObservationSpec): void {
   type FrameObserver = {
-    afterFrame(frame: number): void
+    beforeApplicationFrame(): boolean | null
+    afterApplicationFrame(requestedAt: number, deliveredAt: number, wasReady: boolean | null): void
+    afterFrame(frame: number, timestamp: number, nativeFrame: boolean, deliveredAt: number): void
     afterTask(frame: number): void
   }
   type FrameHook = {
@@ -246,7 +264,7 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     callbackSequence: number
     taskPending: boolean
     active: boolean
-    afterCallback(): void
+    afterCallback(timestamp: number, nativeFrame: boolean, deliveredAt: number): void
     ensureFrame(): void
   }
   const root = globalThis as typeof globalThis & {
@@ -289,10 +307,10 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       callbackSequence: 0,
       taskPending: false,
       active: true,
-      afterCallback() {
+      afterCallback(timestamp, nativeFrame, deliveredAt) {
         if (!created.active) return
         const sequence = ++created.callbackSequence
-        for (const observer of created.observers) observer.afterFrame(sequence)
+        for (const observer of created.observers) observer.afterFrame(sequence, timestamp, nativeFrame, deliveredAt)
         if (!created.taskPending && created.active) {
           created.taskPending = true
           created.channel.port2.postMessage(null)
@@ -300,9 +318,9 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       },
       ensureFrame() {
         if (!created.active || created.frameId !== null) return
-        created.frameId = created.originalRequestAnimationFrame.call(root, () => {
+        created.frameId = created.originalRequestAnimationFrame.call(root, (timestamp) => {
           created.frameId = null
-          created.afterCallback()
+          created.afterCallback(timestamp, true, root.performance.now())
           created.ensureFrame()
         })
       }
@@ -314,11 +332,18 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       for (const observer of created.observers) observer.afterTask(created.callbackSequence)
     }
     created.wrappedRequestAnimationFrame = (callback: FrameRequestCallback) => {
-      return created.originalRequestAnimationFrame.call(root, (time) => {
+      const requestedAt = root.performance.now()
+      return created.originalRequestAnimationFrame.call(root, (timestamp) => {
+        const deliveredAt = root.performance.now()
+        const readiness = new Map<FrameObserver, boolean | null>()
+        for (const observer of created.observers) readiness.set(observer, observer.beforeApplicationFrame())
         try {
-          callback(time)
+          callback(timestamp)
         } finally {
-          created.afterCallback()
+          for (const observer of created.observers) {
+            observer.afterApplicationFrame(requestedAt, deliveredAt, readiness.get(observer) ?? null)
+          }
+          created.afterCallback(timestamp, false, deliveredAt)
         }
       })
     }
@@ -327,11 +352,40 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     created.ensureFrame()
   }
 
-  let startAt: number | null = spec.kind === 'flood' ? root.performance.now() : null
+  const marks: BrowserObservationMarks = {
+    action: `quirky-speed-${spec.id}-action`,
+    end: `quirky-speed-${spec.id}-paint`
+  }
+  const addPerformanceMark = (name: string, startTime?: number) => {
+    try {
+      if (startTime === undefined) root.performance.mark(name)
+      else root.performance.mark(name, { startTime })
+    } catch {
+      return
+    }
+  }
+  const clearPerformanceMark = (name: string) => {
+    try {
+      root.performance.clearMarks(name)
+    } catch {
+      return
+    }
+  }
+  let startAt: number | null = null
+  if (spec.kind === 'flood') {
+    startAt = root.performance.now()
+    addPerformanceMark(marks.action, startAt)
+  }
   let finished = false
   let readyFrame: number | null = null
   let domAtFrame: number | null = null
   let counterAtFrame: number | undefined
+  let domReadyAt: number | null = null
+  let lastReady = false
+  let candidateMarkSequence = 0
+  let candidate: NonNullable<BrowserObservationMarks['candidate']> | null = null
+  let pacingPrevious: number | null = null
+  const pacing: FrameIntervalCapture = { intervalsMs: [], duplicateTimestamps: 0, invalidTimestamps: 0 }
   const trace: BrowserObservationResult['trace'] = []
   const { promise, resolve: resolveResult, reject: rejectResult } = Promise.withResolvers<BrowserObservationResult>()
   void promise.catch(() => undefined)
@@ -390,6 +444,40 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     const counter = floodCounter()
     return { ready: counter !== null && counter > (spec.afterCounter ?? 0), ...(counter === null ? {} : { counter }) }
   }
+  const markCandidate = (
+    kind: NonNullable<BrowserObservationMarks['candidate']>['kind'],
+    requestedAt: number,
+    deliveredAt: number
+  ) => {
+    if (!Number.isFinite(requestedAt) || !Number.isFinite(deliveredAt) || deliveredAt < requestedAt) return
+    if (candidate) {
+      clearPerformanceMark(candidate.requested)
+      clearPerformanceMark(candidate.delivered)
+    }
+    const suffix = `${spec.id}-candidate-${++candidateMarkSequence}`
+    const requested = `quirky-speed-${suffix}-requested`
+    const delivered = `quirky-speed-${suffix}-delivered`
+    addPerformanceMark(requested, requestedAt)
+    addPerformanceMark(delivered, deliveredAt)
+    candidate = { kind, requested, delivered }
+    marks.candidate = candidate
+  }
+  const clearCandidate = () => {
+    if (!candidate) return
+    clearPerformanceMark(candidate.requested)
+    clearPerformanceMark(candidate.delivered)
+    candidate = null
+    delete marks.candidate
+  }
+  const resetReadiness = () => {
+    readyFrame = null
+    domAtFrame = null
+    counterAtFrame = undefined
+    domReadyAt = null
+    lastReady = false
+    clearCandidate()
+  }
+  let mutationObserver: MutationObserver | undefined
   const releaseHook = () => {
     if (hook.observers.size > 0) return
     hook.active = false
@@ -403,6 +491,7 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
   }
   const cleanup = () => {
     if (spec.kind !== 'flood') document.removeEventListener(spec.kind === 'echo' ? 'keydown' : 'click', onAction, true)
+    mutationObserver?.disconnect()
     hook.observers.delete(frameObserver)
     releaseHook()
   }
@@ -420,6 +509,7 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       rejectResult(new Error(`browser observer ${spec.id} returned invalid timing boundaries`))
       return
     }
+    addPerformanceMark(marks.end, endedAt)
     trace.push({ event: 'paint', at: endedAt })
     resolveResult({
       id: spec.id,
@@ -428,23 +518,67 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       endedAt,
       durationMs: endedAt - startedAt,
       ...(counter === undefined ? {} : { counter }),
-      trace
+      trace,
+      pacing,
+      marks
     })
   }
   const frameObserver: FrameObserver = {
-    afterFrame(frame) {
-      if (finished || startAt === null) return
+    beforeApplicationFrame() {
+      if (finished || startAt === null) return null
+      try {
+        return condition().ready
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)))
+        return null
+      }
+    },
+    afterApplicationFrame(requestedAt, deliveredAt, wasReady) {
+      if (finished || startAt === null || wasReady === null) return
       try {
         const current = condition()
         if (!current.ready) {
-          readyFrame = null
-          domAtFrame = null
-          counterAtFrame = undefined
+          resetReadiness()
           return
         }
+        lastReady = true
+        if (!wasReady) {
+          domReadyAt = null
+          markCandidate('application-raf', requestedAt, deliveredAt)
+        }
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)))
+      }
+    },
+    afterFrame(frame, timestamp, nativeFrame, deliveredAt) {
+      if (finished || startAt === null) return
+      if (nativeFrame) {
+        if (!Number.isFinite(timestamp)) {
+          pacing.invalidTimestamps++
+        } else {
+          if (pacingPrevious !== null) {
+            const interval = timestamp - pacingPrevious
+            if (interval > 0) pacing.intervalsMs.push(interval)
+            else if (interval === 0) pacing.duplicateTimestamps++
+            else pacing.invalidTimestamps++
+          }
+          pacingPrevious = timestamp
+        }
+      }
+      try {
+        const current = condition()
+        if (!current.ready) {
+          resetReadiness()
+          return
+        }
+        lastReady = true
         readyFrame = frame
-        domAtFrame = root.performance.now()
+        domAtFrame = deliveredAt
         counterAtFrame = current.counter
+        if (!candidate && domReadyAt !== null) {
+          markCandidate('ready-to-frame', domReadyAt, deliveredAt)
+          domReadyAt = null
+        }
       } catch (error) {
         finish(error instanceof Error ? error : new Error(String(error)))
       }
@@ -458,7 +592,10 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       counterAtFrame = undefined
       try {
         const afterFrame = condition()
-        if (!afterFrame.ready) return
+        if (!afterFrame.ready) {
+          resetReadiness()
+          return
+        }
         trace.push({ event: 'dom', at: domAt })
         finish(undefined, counter ?? afterFrame.counter)
       } catch (error) {
@@ -466,12 +603,36 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
       }
     }
   }
+  mutationObserver = new root.MutationObserver(() => {
+    if (finished || startAt === null) return
+    try {
+      const current = condition()
+      if (!current.ready) {
+        resetReadiness()
+        return
+      }
+      if (!lastReady && candidate?.kind !== 'application-raf') domReadyAt = root.performance.now()
+      lastReady = true
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)))
+    }
+  })
+  mutationObserver.observe(document.documentElement, {
+    attributes: true, childList: true, characterData: true, subtree: true
+  })
   const onAction = (event: Event & { key?: string }) => {
     const target = event.target
     if (!target || typeof (target as Element).closest !== 'function' || !(target as Element).closest(actionSelector)) return
     if (spec.kind === 'echo' && event.key !== spec.key) return
     if (startAt !== null) return
     startAt = root.performance.now()
+    addPerformanceMark(marks.action, startAt)
+    try {
+      lastReady = condition().ready
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)))
+      return
+    }
     trace.push({ event: spec.kind === 'echo' ? 'keydown' : 'click', at: startAt })
   }
   const entry: ObserverEntry = {
@@ -494,7 +655,8 @@ export async function waitForBrowserObserver(
   timeoutMs = DEADLINE_MS,
   signal?: AbortSignal,
   closeOwnedContext?: () => Promise<void>,
-  cleanupTimeoutMs = OBSERVER_CLEANUP_MS
+  cleanupTimeoutMs = OBSERVER_CLEANUP_MS,
+  onObservation?: () => void
 ): Promise<BrowserObservationResult> {
   const pending = page.evaluate((observerId) => {
     const root = globalThis as typeof globalThis & { __quirkySpeedObservers?: Map<string, ObserverEntry> }
@@ -513,7 +675,9 @@ export async function waitForBrowserObserver(
       if (signal.aborted) abort()
       else signal.addEventListener('abort', abort, { once: true })
     })
-    return await Promise.race([pending, timeout, interrupted])
+    const observation = await Promise.race([pending, timeout, interrupted])
+    onObservation?.()
+    return observation
   } finally {
     clearTimeout(timer)
     if (abort) signal?.removeEventListener('abort', abort)
@@ -564,6 +728,217 @@ function withDeadline<T>(task: Promise<T>, timeoutMs: number, label: string, sig
   else signal?.addEventListener('abort', onAbort, { once: true })
   task.then((value) => finish(null, value), (error: unknown) => finish(error instanceof Error ? error : new Error(String(error))))
   return promise
+}
+class TraceCleanupError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'TraceCleanupError'
+  }
+}
+
+class TraceSetupError extends Error {
+  constructor(message: string, readonly cleanup: Promise<void>) {
+    super(message)
+    this.name = 'TraceSetupError'
+  }
+}
+
+function isTraceCleanupError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TraceCleanupError'
+}
+
+function frameTimingFallback(observation: BrowserObservationResult, reason: string): FrameTiming {
+  const wallMs = observation.endedAt - observation.startedAt
+  if (!Number.isFinite(wallMs) || wallMs <= 0
+    || !Number.isFinite(observation.durationMs) || Math.abs(observation.durationMs - wallMs) > 0.001) {
+    throw new Error('browser observation returned invalid raw frame-timing boundaries')
+  }
+  return { status: 'unavailable', wallMs, effectiveMs: wallMs, deductionMs: 0, candidate: null, reason }
+}
+
+export async function captureObservedFrameTiming<T extends BrowserObservation>(
+  options: {
+    startTrace(): Promise<BrowserTraceSession>
+    observe(): Promise<T>
+    signal?: AbortSignal
+  }
+): Promise<T & { frameTiming: FrameTiming }> {
+  if (options.signal?.aborted) throw options.signal.reason instanceof Error ? options.signal.reason : new Error('speed measurement interrupted')
+  let trace: BrowserTraceSession | undefined
+  let traceError: unknown
+  let setupCleanup: Promise<void> | undefined
+  try {
+    trace = await options.startTrace()
+  } catch (error) {
+    traceError = error
+    if (error instanceof TraceSetupError) setupCleanup = error.cleanup
+  }
+  const awaitSetupCleanup = async () => {
+    if (!setupCleanup) return
+    try {
+      await withDeadline(setupCleanup, OBSERVER_CLEANUP_MS, 'late Chromium trace setup cleanup')
+    } catch (error) {
+      throw new TraceCleanupError(errorText(error))
+    }
+  }
+
+  let result: T
+  try {
+    result = await options.observe()
+  } catch (rawError) {
+    if (trace) {
+      try {
+        await trace.stop()
+      } catch (cleanupError) {
+        if (isTraceCleanupError(cleanupError)) throw new Error(`${errorText(rawError)}; ${errorText(cleanupError)}`)
+      }
+    }
+    try {
+      await awaitSetupCleanup()
+    } catch (cleanupError) {
+      throw new Error(`${errorText(rawError)}; ${errorText(cleanupError)}`)
+    }
+    throw rawError
+  }
+
+  if (options.signal?.aborted) {
+    if (trace) {
+      try {
+        await trace.stop()
+      } catch (cleanupError) {
+        if (isTraceCleanupError(cleanupError)) throw cleanupError
+      }
+    }
+    await awaitSetupCleanup()
+    throw options.signal.reason instanceof Error ? options.signal.reason : new Error('speed measurement interrupted')
+  }
+
+  if (!trace) {
+    if (isTraceCleanupError(traceError)) throw traceError
+    await awaitSetupCleanup()
+    if (options.signal?.aborted) throw options.signal.reason instanceof Error ? options.signal.reason : new Error('speed measurement interrupted')
+    const frameTiming = frameTimingFallback(result.observation, `trace-start-failed: ${errorText(traceError)}`)
+    return { ...result, frameTiming }
+  }
+
+  let traceContents: string
+  try {
+    traceContents = await trace.stop()
+  } catch (error) {
+    if (isTraceCleanupError(error)) throw error
+    if (options.signal?.aborted) throw options.signal.reason instanceof Error ? options.signal.reason : new Error('speed measurement interrupted')
+    const frameTiming = frameTimingFallback(result.observation, `trace-flush-failed: ${errorText(error)}`)
+    return { ...result, frameTiming }
+  }
+  if (options.signal?.aborted) throw options.signal.reason instanceof Error ? options.signal.reason : new Error('speed measurement interrupted')
+  const frameTiming = extractFrameTiming(traceContents, {
+    startedAt: result.observation.startedAt,
+    endedAt: result.observation.endedAt,
+    marks: result.observation.marks
+  })
+  return { ...result, frameTiming }
+}
+
+type StartupWatch<T> = {
+  expectSpawn(spawn: DaemonSpawn): void
+  runtime: Promise<T>
+  dispose(): void
+}
+
+export async function coordinateStartupAttempt<TRuntime, TRestart, TNavigation>(
+  options: {
+    signal: AbortSignal
+    watch(signal: AbortSignal): StartupWatch<TRuntime>
+    restart(signal: AbortSignal, onSpawn: (spawn: DaemonSpawn) => void): Promise<TRestart>
+    navigate(runtime: TRuntime, signal: AbortSignal): Promise<{ value: TNavigation; paintedAt: number }>
+    verify(restart: TRestart, navigation: TNavigation, signal: AbortSignal): Promise<void>
+    onRuntime?(runtime: TRuntime): void
+    onSpawn?(spawn: DaemonSpawn): void
+    now?: () => number
+  }
+): Promise<{
+  spawnedAt: number
+  runtimeAt: number
+  restartAt: number
+  paintedAt: number
+  verifiedAt: number
+  restart: TRestart
+  navigation: TNavigation
+}> {
+  if (options.signal.aborted) throw options.signal.reason instanceof Error ? options.signal.reason : new Error('speed measurement interrupted')
+  const now = options.now ?? (() => performance.now())
+  const attemptController = new AbortController()
+  const forwardAbort = () => attemptController.abort(
+    options.signal.reason instanceof Error ? options.signal.reason : new Error('speed measurement interrupted')
+  )
+  options.signal.addEventListener('abort', forwardAbort, { once: true })
+  if (options.signal.aborted) forwardAbort()
+  let watcher: StartupWatch<TRuntime> | undefined
+  let restartPromise: Promise<TRestart> | undefined
+  let navigationPromise: Promise<{ value: TNavigation; paintedAt: number }> | undefined
+  let disposed = false
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    watcher?.dispose()
+  }
+  let spawnedAt: number | undefined
+  let runtimeAt: number | undefined
+  let restartAt: number | undefined
+  try {
+    watcher = options.watch(attemptController.signal)
+    const onSpawn = (spawn: DaemonSpawn) => {
+      if (spawnedAt !== undefined) throw new Error('daemon restart notified more than one replacement spawn')
+      watcher!.expectSpawn(spawn)
+      spawnedAt = spawn.spawnedAt
+      options.onSpawn?.(spawn)
+    }
+    try {
+      restartPromise = options.restart(attemptController.signal, onSpawn).then((value) => {
+        restartAt = now()
+        return value
+      })
+    } catch (error) {
+      restartPromise = Promise.reject(error)
+    }
+    void restartPromise.catch(() => undefined)
+    navigationPromise = watcher.runtime.then(async (runtime) => {
+      runtimeAt = now()
+      if (spawnedAt === undefined) throw new Error('replacement runtime arrived before spawn notification')
+      options.onRuntime?.(runtime)
+      return await options.navigate(runtime, attemptController.signal)
+    })
+    void navigationPromise.catch(() => undefined)
+
+    const [restart, navigation] = await Promise.all([restartPromise, navigationPromise])
+    if (spawnedAt === undefined || runtimeAt === undefined || restartAt === undefined) {
+      throw new Error('startup race completed without spawn, runtime, or health timestamps')
+    }
+    await options.verify(restart, navigation.value, attemptController.signal)
+    if (attemptController.signal.aborted) {
+      throw attemptController.signal.reason instanceof Error
+        ? attemptController.signal.reason
+        : new Error('speed measurement interrupted')
+    }
+    return {
+      spawnedAt, runtimeAt, restartAt, paintedAt: navigation.paintedAt, verifiedAt: now(),
+      restart, navigation: navigation.value
+    }
+  } catch (error) {
+    if (!attemptController.signal.aborted) attemptController.abort(error)
+    let cleanupError: unknown
+    try {
+      dispose()
+    } catch (caught) {
+      cleanupError = caught
+    }
+    await Promise.allSettled([restartPromise, navigationPromise].filter((promise): promise is Promise<unknown> => promise !== undefined))
+    if (cleanupError !== undefined) throw new Error(`${errorText(error)}; startup watcher cleanup failed: ${errorText(cleanupError)}`)
+    throw error
+  } finally {
+    options.signal.removeEventListener('abort', forwardAbort)
+    dispose()
+  }
 }
 
 function fixtureDescriptor(fixture: SpeedFixture): SpeedSample['fixture'] {
@@ -621,8 +996,9 @@ async function observeAction(
   spec: BrowserObservationSpec,
   action: () => Promise<unknown>,
   signal: AbortSignal,
-  timeoutMs = DEADLINE_MS
-): Promise<{ observation: BrowserObservationResult; controllerActionMs: number }> {
+  timeoutMs = DEADLINE_MS,
+  traceMode: 'none' | 'active' | 'owned' = 'none'
+): Promise<{ observation: BrowserObservationResult; controllerActionMs: number; controllerEndpointAt: number; frameTiming?: FrameTiming }> {
   if (signal.aborted) throw new Error('speed measurement interrupted')
   const browser = page.context().browser()
   if (!browser) throw new Error('Chromium page is disconnected from its browser')
@@ -634,26 +1010,34 @@ async function observeAction(
     await cancelBrowserObserver(page, spec.id, errorText(error), closeContext)
     throw error
   }
-  const beganAt = performance.now()
-  const observationPromise = waitForBrowserObserver(page, spec.id, timeoutMs, signal, closeContext)
-  try {
-    await withDeadline(action(), timeoutMs, `${spec.kind} action`, signal)
-    const observation = await observationPromise
-    await ensurePageAlive(page, browser)
-    const controllerActionMs = performance.now() - beganAt
-    if (!Number.isFinite(controllerActionMs) || controllerActionMs <= 0) throw new Error(`${spec.kind} controller phase returned invalid timing`)
-    return { observation, controllerActionMs }
-  } catch (error) {
-    let cleanupError: unknown
+  const observe = async () => {
+    const beganAt = performance.now()
+    let controllerEndpointAt = Number.NaN
+    const observationPromise = waitForBrowserObserver(
+      page, spec.id, timeoutMs, signal, closeContext, OBSERVER_CLEANUP_MS,
+      () => { controllerEndpointAt = performance.now() }
+    )
     try {
-      await cancelBrowserObserver(page, spec.id, errorText(error), closeContext)
-    } catch (caught) {
-      cleanupError = caught
+      await withDeadline(action(), timeoutMs, `${spec.kind} action`, signal)
+      const observation = await observationPromise
+      await ensurePageAlive(page, browser)
+      const controllerActionMs = controllerEndpointAt - beganAt
+      if (!Number.isFinite(controllerActionMs) || controllerActionMs <= 0) throw new Error(`${spec.kind} controller phase returned invalid timing`)
+      return { observation, controllerActionMs, controllerEndpointAt }
+    } catch (error) {
+      let cleanupError: unknown
+      try {
+        await cancelBrowserObserver(page, spec.id, errorText(error), closeContext)
+      } catch (caught) {
+        cleanupError = caught
+      }
+      await withDeadline(observationPromise, OBSERVER_CLEANUP_MS, `${spec.kind} observer waiter cleanup`).catch(() => undefined)
+      if (cleanupError !== undefined) throw new Error(`${errorText(error)}; ${errorText(cleanupError)}`)
+      throw error
     }
-    await withDeadline(observationPromise, OBSERVER_CLEANUP_MS, `${spec.kind} observer waiter cleanup`).catch(() => undefined)
-    if (cleanupError !== undefined) throw new Error(`${errorText(error)}; ${errorText(cleanupError)}`)
-    throw error
   }
+  if (traceMode !== 'owned') return await observe()
+  return await captureObservedFrameTiming({ startTrace: () => startBrowserTrace(browser, signal), observe, signal })
 }
 
 async function waitForTerminalVisible(page: Page, worktree: SpeedWorktree, sessionIndex = 0, timeoutMs = DEADLINE_MS): Promise<void> {
@@ -679,8 +1063,9 @@ async function echoTrial(
   sequence: number,
   key: string,
   signal: AbortSignal,
-  timeoutMs = DEADLINE_MS
-): Promise<{ observation: BrowserObservationResult; controllerActionMs: number }> {
+  timeoutMs = DEADLINE_MS,
+  traceMode: 'none' | 'active' | 'owned' = 'none'
+): Promise<{ observation: BrowserObservationResult; controllerActionMs: number; controllerEndpointAt: number; frameTiming?: FrameTiming }> {
   await waitForTerminalVisible(page, worktree, 0, timeoutMs)
   await focusEcho(page, worktree, timeoutMs)
   const sessionId = worktree.sessions[0]
@@ -688,20 +1073,21 @@ async function echoTrial(
     id: randomUUID(), kind: 'echo', workerId: worktree.workerIds[0], sessionId,
     sequence, key
   }
-  return await observeAction(page, spec, () => page.keyboard.press(key), signal, timeoutMs)
+  return await observeAction(page, spec, () => page.keyboard.press(key), signal, timeoutMs, traceMode)
 }
 
 async function switchTrial(
   page: Page,
   worktree: SpeedWorktree,
-  signal: AbortSignal
-): Promise<{ observation: BrowserObservationResult; controllerActionMs: number }> {
+  signal: AbortSignal,
+  traceMode: 'none' | 'active' | 'owned' = 'none'
+): Promise<{ observation: BrowserObservationResult; controllerActionMs: number; controllerEndpointAt: number; frameTiming?: FrameTiming }> {
   const selector = worktreeButtonSelector(worktree.id)
   await page.locator(selector).waitFor({ state: 'visible', timeout: DEADLINE_MS })
   const spec: BrowserObservationSpec = {
     id: randomUUID(), kind: 'switch', targetId: worktree.id, sessionId: worktree.sessions[0]
   }
-  return await observeAction(page, spec, () => page.locator(selector).click({ timeout: DEADLINE_MS }), signal)
+  return await observeAction(page, spec, () => page.locator(selector).click({ timeout: DEADLINE_MS }), signal, DEADLINE_MS, traceMode)
 }
 
 async function reviewTabs(world: RestartableWorld, worktreeId: string): Promise<string[]> {
@@ -914,64 +1300,132 @@ async function startupTrial(
   const page = opened.page
   context.page = page
 
-  const restart = await withDeadline(context.world.restartDaemon(signal), DEADLINE_MS + 10_000, 'daemon restart', signal)
-  const daemonReadyAt = performance.now()
-  if (!Number.isFinite(restart.spawnedAt) || restart.spawnedAt <= 0 || restart.spawnedAt > daemonReadyAt) {
-    throw new Error('daemon restart returned an invalid spawn boundary')
-  }
-  const startupDeadline = restart.spawnedAt + DEADLINE_MS
+  let startupDeadline: number | undefined
+  let spawn: DaemonSpawn | undefined
+  let after: SessionSnapshot | undefined
+  let ptyAfter: number | null = null
+  let postPaintVerificationMs: number | undefined
   const remaining = () => {
+    if (startupDeadline === undefined) throw new Error('startup deadline is unavailable before replacement spawn')
     const milliseconds = Math.ceil(startupDeadline - performance.now())
     if (milliseconds <= 0) throw new Error(`startup timed out after ${DEADLINE_MS}ms`)
     return milliseconds
   }
-  if (daemonReadyAt > startupDeadline) throw new Error(`startup timed out after ${DEADLINE_MS}ms during daemon health and connection`)
 
-  const runtime = context.world.runtime
-  collectRuntimeSecrets(context.redactions, runtime)
-  const after = await withDeadline(
-    sessionSnapshot(context.world, sessionIds, before.pids),
-    remaining(),
-    'startup session verification',
-    signal
-  )
-  const ptyAfter = context.world.ptyHostPid()
-  if (ptyAfter === null || ptyAfter !== ptyBefore) throw new Error('persistent PTY host changed during daemon restart')
-  if (after.ownedPids.length === 0) throw new Error('startup did not preserve any owned session processes')
+  const coordinated = await coordinateStartupAttempt({
+    signal,
+    watch: (watchSignal) => watchReplacementRuntime({
+      home: context.world.home, signal: watchSignal, timeoutMs: DEADLINE_MS
+    }),
+    restart: (restartSignal, onSpawn) => withDeadline(
+      context.world.restartDaemon(restartSignal, onSpawn),
+      DEADLINE_MS + 10_000,
+      'daemon restart',
+      restartSignal
+    ),
+    onSpawn: (value) => {
+      spawn = value
+      startupDeadline = value.spawnedAt + DEADLINE_MS
+      if (!Number.isFinite(value.spawnedAt) || value.spawnedAt <= 0) throw new Error('daemon restart returned an invalid spawn boundary')
+    },
+    onRuntime: (runtime) => collectRuntimeSecrets(context.redactions, runtime),
+    navigate: async (runtime, navigationSignal) => {
+      const endpoint = async () => {
+        const navigationBeganAt = performance.now()
+        await page.goto(`http://127.0.0.1:${runtime.port}/#token=${encodeURIComponent(runtime.token)}`, {
+          waitUntil: 'domcontentloaded',
+          timeout: remaining()
+        })
+        await page.locator('.shell-workspace').waitFor({ state: 'visible', timeout: remaining() })
+        await ensureSelectedWorktree(page, worktree, remaining())
+        const rendererReadyAt = performance.now()
+        const sequence = (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1
+        const readyEcho = await echoTrial(page, worktree, sequence, 'z', navigationSignal, remaining())
+        context.sessionSequence.set(worktree.sessions[0], sequence)
+        const paintedAt = readyEcho.controllerEndpointAt
+        if (paintedAt > (startupDeadline ?? Number.NEGATIVE_INFINITY)) {
+          throw new Error(`startup timed out after ${DEADLINE_MS}ms`)
+        }
+        return {
+          value: { navigationBeganAt, rendererReadyAt, readyEcho },
+          paintedAt
+        }
+      }
+      try {
+        return await withDeadline(endpoint(), remaining(), 'startup renderer readiness', navigationSignal)
+      } catch (error) {
+        try {
+          await withDeadline(context.context.close(), OBSERVER_CLEANUP_MS, 'startup renderer cleanup')
+          contextSet.delete(context.context)
+        } catch (cleanupError) {
+          throw new Error(`${errorText(error)}; startup renderer cleanup failed: ${errorText(cleanupError)}`)
+        }
+        throw error
+      }
+    },
+    verify: async (restart, navigation, verifySignal) => {
+      const verificationBeganAt = performance.now()
+      if (!spawn || !Number.isFinite(restart.spawnedAt) || restart.spawnedAt !== spawn.spawnedAt) {
+        throw new Error('daemon restart returned an invalid spawn boundary')
+      }
+      if (context.world.runtime.pid !== context.world.daemonPid) {
+        throw new Error('replacement runtime and daemon process identity do not match')
+      }
+      if (navigation.readyEcho.observation.startedAt >= navigation.readyEcho.observation.endedAt) {
+        throw new Error('startup readiness echo returned invalid painted observation timing')
+      }
+      after = await withDeadline(
+        sessionSnapshot(context.world, sessionIds, before.pids),
+        remaining(),
+        'startup post-paint session verification',
+        verifySignal
+      )
+      ptyAfter = context.world.ptyHostPid()
+      if (ptyAfter === null || ptyAfter !== ptyBefore) throw new Error('persistent PTY host changed during daemon restart')
+      if (after.ownedPids.length === 0) throw new Error('startup did not preserve any owned session processes')
+      postPaintVerificationMs = performance.now() - verificationBeganAt
+    }
+  })
 
-  const endpoint = async () => {
-    const navigationBeganAt = performance.now()
-    await page.goto(`http://127.0.0.1:${runtime.port}/#token=${encodeURIComponent(runtime.token)}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: remaining()
-    })
-    await page.locator('.shell-workspace').waitFor({ state: 'visible', timeout: remaining() })
-    await ensureSelectedWorktree(page, worktree, remaining())
-    const rendererReadyAt = performance.now()
-    const sequence = (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1
-    const readyEcho = await echoTrial(page, worktree, sequence, 'z', signal, remaining())
-    context.sessionSequence.set(worktree.sessions[0], sequence)
-    const endedAt = performance.now()
-    if (endedAt > startupDeadline) throw new Error(`startup timed out after ${DEADLINE_MS}ms`)
-    return { navigationBeganAt, rendererReadyAt, readyEcho, endedAt }
-  }
-  const ready = await withDeadline(endpoint(), remaining(), 'startup renderer readiness', signal)
-  const durationMs = ready.endedAt - restart.spawnedAt
+  const ready = coordinated.navigation
+  const durationMs = coordinated.paintedAt - coordinated.spawnedAt
   if (!Number.isFinite(durationMs) || durationMs <= 0 || durationMs > DEADLINE_MS) {
     throw new Error(`startup timed out after ${DEADLINE_MS}ms`)
   }
+  if (!after || ptyAfter === null || postPaintVerificationMs === undefined) {
+    throw new Error('startup completed without post-paint preservation verification')
+  }
   const phases = {
-    daemonHealthAndControlMs: daemonReadyAt - restart.spawnedAt,
+    runtimePublicationMs: coordinated.runtimeAt - coordinated.spawnedAt,
+    daemonHealthAndControlMs: coordinated.restartAt - coordinated.spawnedAt,
     rendererNavigationAndAttachMs: ready.rendererReadyAt - ready.navigationBeganAt,
     readinessInputToPaintMs: ready.readyEcho.observation.durationMs,
+    postPaintVerificationMs,
     controllerUntilFreshPaintMs: durationMs
   }
   context.currentWorktreeIndex = 0
   return {
-    durationMs, startedAt: restart.spawnedAt, endedAt: ready.endedAt, phases,
+    durationMs, startedAt: coordinated.spawnedAt, endedAt: coordinated.paintedAt, phases,
     daemonPid: context.world.daemonPid, ptyPid: ptyAfter,
     ownedPids: [...new Set([context.world.daemonPid, ptyAfter, context.browserPid, ...after.ownedPids])],
     observation: ready.readyEcho.observation
+  }
+}
+
+function emptyFrameIntervalCapture(): FrameIntervalCapture {
+  return { intervalsMs: [], duplicateTimestamps: 0, invalidTimestamps: 0 }
+}
+
+function recordObservationEvidence(
+  row: SpeedSample,
+  observation: BrowserObservationResult,
+  frameTiming?: FrameTiming
+): void {
+  row.pacing = observation.pacing
+  if (row.metric === 'echo' || row.metric === 'switch' || row.metric === 'floodEcho') {
+    row.frameTiming = frameTiming ?? frameTimingFallback(observation, 'frame-timing-capture-missing')
+  } else if (frameTiming) {
+    row.frameTiming = frameTiming
   }
 }
 
@@ -987,6 +1441,7 @@ function attempt(
     worktreeId: null, sessionId: null, destinationWorktreeId: null, destinationSessionId: null,
     phases: {}, fixture: fixtureDescriptor(context.fixture), daemonPid: context.world.daemonPid,
     ptyHostPid: context.world.ptyHostPid(), ownedPids: [...new Set([context.world.daemonPid, context.world.ptyHostPid() ?? -1, context.browserPid, ...context.sessionPids.values()])].filter((pid) => pid > 1),
+    pacing: emptyFrameIntervalCapture(),
     ...details,
     ...(context.side === undefined ? {} : { side: context.side })
   }
@@ -996,12 +1451,23 @@ function recordTimed(context: MetricContext, row: SpeedSample, duration: number,
   if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
     throw new Error(`${row.metric} sample returned a nonfinite or nonpositive duration`)
   }
+  if (row.frameTiming && (row.frameTiming.status !== 'complete' && row.frameTiming.status !== 'unavailable'
+    || !Number.isFinite(row.frameTiming.wallMs) || Math.abs(row.frameTiming.wallMs - duration) > 0.001
+    || !Number.isFinite(row.frameTiming.effectiveMs) || row.frameTiming.effectiveMs <= 0 || row.frameTiming.effectiveMs > duration
+    || !Number.isFinite(row.frameTiming.deductionMs) || row.frameTiming.deductionMs < 0
+    || Math.abs(row.frameTiming.effectiveMs + row.frameTiming.deductionMs - duration) > 0.001
+    || row.frameTiming.status === 'unavailable' && (row.frameTiming.deductionMs !== 0 || row.frameTiming.effectiveMs !== duration || row.frameTiming.candidate !== null || !row.frameTiming.reason))) {
+    row.frameTiming = frameTimingFallback(
+      { startedAt: start, endedAt: end, durationMs: duration } as BrowserObservationResult,
+      'invalid-frame-timing-result'
+    )
+  }
   row.durationMs = duration
   row.startedAt = start
   row.endedAt = end
   row.phases = phases
   context.attempts.push(row)
-  if (row.phase === 'sample') context.samples[row.metric].push(duration)
+  if (row.phase === 'sample') context.samples[row.metric].push(row.frameTiming?.effectiveMs ?? duration)
 }
 
 function recordFailedAttempt(context: MetricContext, row: SpeedSample): void {
@@ -1021,6 +1487,7 @@ async function recordStartupAttempt(
   })
   try {
     const trial = await startupTrial(context, signal, contextSet)
+    row.pacing = trial.observation.pacing
     row.ownedPids = trial.ownedPids
     row.phases = trial.phases
     row.daemonPid = trial.daemonPid
@@ -1035,12 +1502,13 @@ async function recordStartupAttempt(
 async function runEchoAttempt(context: MetricContext, phase: SpeedSample['phase'], sample: number, key: string, signal: AbortSignal): Promise<void> {
   const worktree = context.fixture.target
   const sequence = (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1
-  const row = attempt(context, phase === 'diagnostic' ? 'echo' : 'echo', phase, sample, {
+  const row = attempt(context, 'echo', phase, sample, {
     worktreeId: worktree.id, sessionId: worktree.sessions[0]
   })
   try {
     const startedController = performance.now()
-    const result = await echoTrial(context.page, worktree, sequence, key, signal)
+    const result = await echoTrial(context.page, worktree, sequence, key, signal, DEADLINE_MS, 'owned')
+    recordObservationEvidence(row, result.observation, result.frameTiming)
     const endedController = performance.now()
     context.sessionSequence.set(worktree.sessions[0], sequence)
     const timing = echoTimingPhases(result.observation)
@@ -1063,7 +1531,8 @@ async function runSwitchAttempt(context: MetricContext, phase: SpeedSample['phas
   const row = attempt(context, 'switch', phase, sample, { destinationWorktreeId: worktree.id, destinationSessionId: worktree.sessions[0] })
   try {
     const beganAt = performance.now()
-    const result = await switchTrial(context.page, worktree, signal)
+    const result = await switchTrial(context.page, worktree, signal, 'owned')
+    recordObservationEvidence(row, result.observation, result.frameTiming)
     const endedAt = performance.now()
     context.currentWorktreeIndex = context.fixture.worktrees.findIndex((candidate) => candidate.id === worktree.id)
     recordTimed(context, row, result.observation.durationMs, result.observation.startedAt, result.observation.endedAt, {
@@ -1082,6 +1551,7 @@ async function runDiffAttempt(context: MetricContext, phase: SpeedSample['phase'
   try {
     const beganAt = performance.now()
     const result = await diffTrial(context, signal)
+    recordObservationEvidence(row, result.observation)
     const endedAt = performance.now()
     row.worktreeId = context.fixture.target.id
     recordTimed(context, row, result.observation.durationMs, result.observation.startedAt, result.observation.endedAt, {
@@ -1162,7 +1632,8 @@ async function runFloodEchoAttempt(context: MetricContext, phase: SpeedSample['p
     const busyPane = `${terminalPaneSelector(worktree.sessions[1])} .xterm-rows`
     await context.page.locator(busyPane).waitFor({ state: 'visible', timeout: DEADLINE_MS })
     const beganAt = performance.now()
-    const result = await echoTrial(context.page, worktree, (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1, key, signal)
+    const result = await echoTrial(context.page, worktree, (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1, key, signal, DEADLINE_MS, 'owned')
+    recordObservationEvidence(row, result.observation, result.frameTiming)
     const endedAt = performance.now()
     context.sessionSequence.set(worktree.sessions[0], (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1)
     const timing = echoTimingPhases(result.observation)
@@ -1283,17 +1754,30 @@ async function writeDiagnosticTrace(out: string, metric: Metric, page: Page, obs
   return relativePath
 }
 
+function traceWithDataLoss(trace: string, dataLossOccurred: boolean): string {
+  const trimmed = trace.trimEnd()
+  const closingBrace = trimmed.lastIndexOf('}')
+  if (closingBrace !== trimmed.length - 1 || closingBrace < 0) return trace
+  const prefix = trimmed.slice(0, closingBrace).trimEnd()
+  const comma = prefix.endsWith('{') ? '' : ','
+  return `${prefix}${comma}"dataLossOccurred":${dataLossOccurred}${trimmed.slice(closingBrace)}`
+}
+
 async function startBrowserTrace(browser: Browser, signal?: AbortSignal): Promise<BrowserTraceSession> {
   const creation = browser.newBrowserCDPSession()
   let session: CDPSession
   try {
     session = await withDeadline(creation, DEADLINE_MS, 'Chromium diagnostic CDP session creation', signal)
   } catch (error) {
-    void creation.then(
-      (late) => withDeadline(late.detach(), OBSERVER_CLEANUP_MS, 'late Chromium CDP session detach').catch(() => undefined),
-      () => undefined
-    )
-    throw error
+    const cleanup = creation.then(async (late) => {
+      try {
+        await withDeadline(late.detach(), OBSERVER_CLEANUP_MS, 'late Chromium CDP session detach')
+      } catch (cleanupError) {
+        throw new TraceCleanupError(errorText(cleanupError))
+      }
+    }, () => undefined)
+    void cleanup.catch(() => undefined)
+    throw new TraceSetupError(errorText(error), cleanup)
   }
 
   const completed = Promise.withResolvers<TraceComplete>()
@@ -1307,28 +1791,56 @@ async function startBrowserTrace(browser: Browser, signal?: AbortSignal): Promis
     traceConfig: {
       recordMode: 'recordUntilFull',
       traceBufferSizeInKb: 16_384,
-      includedCategories: ['devtools.timeline', 'blink.user_timing', 'loading']
+      includedCategories: ['devtools.timeline', 'blink.user_timing', 'loading', 'toplevel']
     }
   })
   try {
     await withDeadline(tracingStart, DEADLINE_MS, 'Chromium diagnostic trace start', signal)
   } catch (error) {
-    void tracingStart.then(async () => {
+    const cleanup = tracingStart.then(async () => {
+      let stream: string | undefined
       try {
         await withDeadline(session.send('Tracing.end'), OBSERVER_CLEANUP_MS, 'late Chromium trace stop')
-        const result = await withDeadline(completed.promise, OBSERVER_CLEANUP_MS, 'late Chromium trace flush')
-        if (result.stream) await withDeadline(session.send('IO.close', { handle: result.stream }), OBSERVER_CLEANUP_MS, 'late Chromium trace stream close')
+        stream = (await withDeadline(completed.promise, OBSERVER_CLEANUP_MS, 'late Chromium trace flush')).stream
       } catch {
-        return
-      } finally {
-        session.off('Tracing.tracingComplete', onComplete)
-        await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'late Chromium trace session detach').catch(() => undefined)
+        // A late flush failure is telemetry-only; resource closure below remains mandatory.
       }
+      const cleanupErrors: string[] = []
+      if (stream) {
+        try {
+          await withDeadline(session.send('IO.close', { handle: stream }), OBSERVER_CLEANUP_MS, 'late Chromium trace stream close')
+        } catch (cleanupError) {
+          cleanupErrors.push(errorText(cleanupError))
+        }
+      }
+      try {
+        session.off('Tracing.tracingComplete', onComplete)
+      } catch (cleanupError) {
+        cleanupErrors.push(errorText(cleanupError))
+      }
+      try {
+        await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'late Chromium trace session detach')
+      } catch (cleanupError) {
+        cleanupErrors.push(errorText(cleanupError))
+      }
+      if (cleanupErrors.length > 0) throw new TraceCleanupError(cleanupErrors.join('; '))
     }, async () => {
-      session.off('Tracing.tracingComplete', onComplete)
-      await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'failed Chromium trace session detach').catch(() => undefined)
-    }).catch(() => undefined)
-    throw error
+      const cleanupErrors: string[] = []
+      try {
+        session.off('Tracing.tracingComplete', onComplete)
+      } catch (cleanupError) {
+        cleanupErrors.push(errorText(cleanupError))
+      }
+      try {
+        await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'failed Chromium trace session detach')
+      } catch (cleanupError) {
+        cleanupErrors.push(errorText(cleanupError))
+      }
+      if (cleanupErrors.length > 0) throw new TraceCleanupError(cleanupErrors.join('; '))
+    })
+    const boundedCleanup = withDeadline(cleanup, OBSERVER_CLEANUP_MS * 4, 'late Chromium trace setup cleanup')
+    void boundedCleanup.catch(() => undefined)
+    throw new TraceSetupError(errorText(error), boundedCleanup)
   }
 
   let stopped = false
@@ -1337,6 +1849,8 @@ async function startBrowserTrace(browser: Browser, signal?: AbortSignal): Promis
       if (stopped) throw new Error('Chromium diagnostic trace was already stopped')
       stopped = true
       let stream: string | undefined
+      let traceText: string | undefined
+      let traceError: unknown
       const deadline = performance.now() + DEADLINE_MS
       const remaining = () => {
         const milliseconds = Math.ceil(deadline - performance.now())
@@ -1346,33 +1860,51 @@ async function startBrowserTrace(browser: Browser, signal?: AbortSignal): Promis
       try {
         await withDeadline(session.send('Tracing.end'), remaining(), 'Chromium diagnostic trace stop')
         const result = await withDeadline(completed.promise, remaining(), 'Chromium diagnostic trace flush')
-        if (result.dataLossOccurred) throw new Error('Chromium diagnostic trace reported data loss')
         stream = result.stream
         if (!stream) throw new Error('Chromium diagnostic trace returned no stream')
         const chunks: string[] = []
         let byteCount = 0
         let eof = false
-        try {
-          while (!eof) {
-            const chunk = await withDeadline(session.send('IO.read', { handle: stream, size: 256 * 1024 }), remaining(), 'Chromium diagnostic trace read')
-            const text = chunk.base64Encoded ? Buffer.from(chunk.data, 'base64').toString('utf8') : chunk.data
-            byteCount += Buffer.byteLength(text, 'utf8')
-            if (byteCount > MAX_BROWSER_TRACE_BYTES) throw new Error(`Chromium diagnostic trace exceeded ${MAX_BROWSER_TRACE_BYTES} bytes`)
-            chunks.push(text)
-            eof = chunk.eof
-          }
-        } finally {
-          await withDeadline(session.send('IO.close', { handle: stream }), OBSERVER_CLEANUP_MS, 'Chromium trace stream close').catch(() => undefined)
-          stream = undefined
+        while (!eof) {
+          const chunk = await withDeadline(session.send('IO.read', { handle: stream, size: 256 * 1024 }), remaining(), 'Chromium diagnostic trace read')
+          const text = chunk.base64Encoded ? Buffer.from(chunk.data, 'base64').toString('utf8') : chunk.data
+          byteCount += Buffer.byteLength(text, 'utf8')
+          if (byteCount > MAX_BROWSER_TRACE_BYTES) throw new Error(`Chromium diagnostic trace exceeded ${MAX_BROWSER_TRACE_BYTES} bytes`)
+          chunks.push(text)
+          eof = chunk.eof
         }
-        const trace = chunks.join('')
-        if (!trace.includes('\"traceEvents\"')) throw new Error('Chromium diagnostic trace contained no timeline events')
-        return trace
-      } finally {
-        if (stream) await withDeadline(session.send('IO.close', { handle: stream }), OBSERVER_CLEANUP_MS, 'Chromium trace stream close').catch(() => undefined)
-        session.off('Tracing.tracingComplete', onComplete)
-        await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'Chromium trace session detach').catch(() => undefined)
+        traceText = traceWithDataLoss(chunks.join(''), result.dataLossOccurred)
+        if (Buffer.byteLength(traceText) > MAX_BROWSER_TRACE_BYTES) {
+          throw new Error(`Chromium diagnostic trace exceeded ${MAX_BROWSER_TRACE_BYTES} bytes`)
+        }
+        if (!traceText.includes('"traceEvents"')) throw new Error('Chromium diagnostic trace contained no timeline events')
+      } catch (error) {
+        traceError = error
       }
+
+      const cleanupErrors: string[] = []
+      if (stream) {
+        try {
+          await withDeadline(session.send('IO.close', { handle: stream }), OBSERVER_CLEANUP_MS, 'Chromium trace stream close')
+        } catch (cleanupError) {
+          cleanupErrors.push(errorText(cleanupError))
+        }
+      }
+      try {
+        session.off('Tracing.tracingComplete', onComplete)
+      } catch (cleanupError) {
+        cleanupErrors.push(errorText(cleanupError))
+      }
+      try {
+        await withDeadline(session.detach(), OBSERVER_CLEANUP_MS, 'Chromium diagnostic trace session detach')
+      } catch (cleanupError) {
+        cleanupErrors.push(errorText(cleanupError))
+      }
+      if (cleanupErrors.length > 0) {
+        throw new TraceCleanupError([...(traceError === undefined ? [] : [errorText(traceError)]), ...cleanupErrors].join('; '))
+      }
+      if (traceError !== undefined) throw traceError
+      return traceText!
     }
   }
 }
@@ -1432,6 +1964,10 @@ async function diagnosticTrial(
   }
   let floodStart: FloodStart | undefined
   let browserTrace: BrowserTraceSession | undefined
+  let traceStartCleanup: Promise<void> | undefined
+  let traceFault: string | null = null
+  let traceContents: string | undefined
+  let frameTiming: FrameTiming | undefined
   let tracePath: string | undefined
   let timelinePath: string | undefined
   let floodRunId: string | undefined
@@ -1440,7 +1976,13 @@ async function diagnosticTrial(
   const resultPath = `diagnostics/${metric}.json`
   mkdirSync(join(context.out, 'diagnostics'), { recursive: true })
   try {
-    browserTrace = await startBrowserTrace(context.browser, signal)
+    try {
+      browserTrace = await startBrowserTrace(context.browser, signal)
+    } catch (error) {
+      if (signal.aborted || isTraceCleanupError(error)) throw error
+      traceFault = `trace-start-failed: ${errorText(error)}`
+      if (error instanceof TraceSetupError) traceStartCleanup = error.cleanup
+    }
     if (metric !== 'startup') startStatusProbe()
     if (metric === 'startup') {
       const trial = await startupTrial(context, signal, contextSet)
@@ -1456,7 +1998,7 @@ async function diagnosticTrial(
       context.currentWorktreeIndex = 0
       const sequence = (context.sessionSequence.get(worktree.sessions[0]) ?? 0) + 1
       const startAt = performance.now()
-      const trial = await echoTrial(context.page, worktree, sequence, 'y', signal)
+      const trial = await echoTrial(context.page, worktree, sequence, 'y', signal, DEADLINE_MS, 'active')
       const endAt = performance.now()
       context.sessionSequence.set(worktree.sessions[0], sequence)
       observation = trial.observation
@@ -1475,7 +2017,7 @@ async function diagnosticTrial(
       const worktrees = context.fixture.worktrees
       const next = (context.currentWorktreeIndex + 1) % worktrees.length
       const startAt = performance.now()
-      const trial = await switchTrial(context.page, worktrees[next]!, signal)
+      const trial = await switchTrial(context.page, worktrees[next]!, signal, 'active')
       const endAt = performance.now()
       context.currentWorktreeIndex = next
       observation = trial.observation
@@ -1498,7 +2040,7 @@ async function diagnosticTrial(
       floodRunId = flood.start.runId
       const sequence = (context.sessionSequence.get(context.fixture.target.sessions[0]) ?? 0) + 1
       const startAt = performance.now()
-      const trial = await echoTrial(context.page, context.fixture.target, sequence, 'x', signal)
+      const trial = await echoTrial(context.page, context.fixture.target, sequence, 'x', signal, DEADLINE_MS, 'active')
       const endAt = performance.now()
       context.sessionSequence.set(context.fixture.target.sessions[0], sequence)
       const endProgress = await waitForFloodProgressAfterSnapshot(
@@ -1533,12 +2075,33 @@ async function diagnosticTrial(
     if (probeDaemonPid !== context.world.daemonPid) throw new Error('daemon changed during the diagnostic status.get probe')
     if (statusProbePtyHostPid !== context.world.ptyHostPid()) throw new Error('status.get probe did not confirm the fixture PTY host')
     if (!observation) throw new Error(`${metric} diagnostic produced no browser observation`)
-    const activeTrace = browserTrace
-    if (!activeTrace) throw new Error('Chromium diagnostic trace was not started')
-    browserTrace = undefined
-    const traceContents = await activeTrace.stop()
-    tracePath = writeBrowserTrace(context.out, metric, traceContents)
-    diagnosticPaths.push(tracePath)
+    if (traceStartCleanup) {
+      try {
+        await withDeadline(traceStartCleanup, OBSERVER_CLEANUP_MS * 4, 'late Chromium trace setup cleanup')
+      } catch (error) {
+        throw new TraceCleanupError(errorText(error))
+      }
+      traceStartCleanup = undefined
+    }
+    if (browserTrace) {
+      const activeTrace = browserTrace
+      browserTrace = undefined
+      try {
+        traceContents = await activeTrace.stop()
+      } catch (error) {
+        if (isTraceCleanupError(error)) throw error
+        traceFault = `trace-flush-failed: ${errorText(error)}`
+      }
+    }
+    if (traceContents) {
+      tracePath = writeBrowserTrace(context.out, metric, traceContents)
+      diagnosticPaths.push(tracePath)
+    }
+    if (metric === 'echo' || metric === 'switch' || metric === 'floodEcho') {
+      frameTiming = traceContents
+        ? extractFrameTiming(traceContents, { startedAt: observation.startedAt, endedAt: observation.endedAt, marks: observation.marks })
+        : frameTimingFallback(observation, traceFault ?? 'diagnostic-trace-unavailable')
+    }
     timelinePath = await writeDiagnosticTrace(context.out, metric, context.page, observation, phases, signal)
     diagnosticPaths.push(timelinePath)
     const probeEvidence = {
@@ -1554,9 +2117,11 @@ async function diagnosticTrial(
       observation,
       phases,
       ...(floodRunId === undefined ? {} : { floodRunId }),
+      ...(frameTiming === undefined ? {} : { frameTiming }),
+      ...(traceFault === null ? {} : { traceError: traceFault }),
       probe: probeEvidence,
       finding: diagnosticFinding(metric, observation.durationMs, phases, activeProbe.probes),
-      trace: tracePath,
+      ...(tracePath === undefined ? {} : { trace: tracePath }),
       timeline: timelinePath
     }
     writeFileSync(join(context.out, resultPath), `${JSON.stringify(diagnostic, null, 2)}\n`)
@@ -1566,11 +2131,30 @@ async function diagnosticTrial(
       const activeTrace = browserTrace
       browserTrace = undefined
       try {
-        tracePath = writeBrowserTrace(context.out, metric, await activeTrace.stop())
-        diagnosticPaths.push(tracePath)
+        traceContents = await activeTrace.stop()
       } catch (traceError) {
-        diagnosticErrors.push(`${metric} browser trace: ${sanitizeText(errorText(traceError), context.redactions)}`)
+        if (isTraceCleanupError(traceError)) {
+          diagnosticErrors.push(`${metric} browser trace cleanup: ${sanitizeText(errorText(traceError), context.redactions)}`)
+        } else {
+          traceFault = `trace-flush-failed: ${errorText(traceError)}`
+        }
       }
+      if (traceContents) {
+        try {
+          tracePath = writeBrowserTrace(context.out, metric, traceContents)
+          diagnosticPaths.push(tracePath)
+        } catch (traceError) {
+          diagnosticErrors.push(`${metric} browser trace artifact: ${sanitizeText(errorText(traceError), context.redactions)}`)
+        }
+      }
+    }
+    if (traceStartCleanup) {
+      try {
+        await withDeadline(traceStartCleanup, OBSERVER_CLEANUP_MS * 4, 'late Chromium trace setup cleanup')
+      } catch (cleanupError) {
+        diagnosticErrors.push(`${metric} browser trace cleanup: ${sanitizeText(errorText(cleanupError), context.redactions)}`)
+      }
+      traceStartCleanup = undefined
     }
     const message = sanitizeText(errorText(error), context.redactions)
     diagnosticErrors.push(`${metric}: ${message}`)
@@ -1581,6 +2165,7 @@ async function diagnosticTrial(
       error: message,
       finding: `Diagnostic evidence error: ${message}`,
       ...(floodRunId === undefined ? {} : { floodRunId }),
+      ...(traceFault === null ? {} : { traceError: traceFault }),
       ...(tracePath === undefined ? {} : { trace: tracePath }),
       probe: {
         probes: probe?.probes ?? [],
@@ -1591,7 +2176,6 @@ async function diagnosticTrial(
     }
     writeFileSync(join(context.out, resultPath), `${JSON.stringify(failureEvidence, null, 2)}\n`)
     diagnosticPaths.push(resultPath)
-  } finally {
     probe?.finish()
     probe?.stop()
     if (floodStart) {
@@ -1674,6 +2258,68 @@ async function runMeasuredSeries(context: MetricContext, count: number, signal: 
 function emptyMetricSamples(): Record<Metric, number[]> {
   return { startup: [], echo: [], switch: [], diff: [], floodEcho: [] }
 }
+type FramePacingAggregate = {
+  observedAttempts: number
+  intervalsMs: number[]
+  duplicateTimestamps: number
+  invalidTimestamps: number
+  frames: number
+  medianIntervalMs: number | null
+  p90IntervalMs: number | null
+  maxIntervalMs: number | null
+  unavailableSamples: number
+}
+
+function aggregateFramePacing(metric: Metric, rows: readonly SpeedSample[]): FramePacingAggregate {
+  const completed = rows.filter((row) => row.metric === metric && row.phase === 'sample'
+    && typeof row.durationMs === 'number' && Number.isFinite(row.durationMs))
+  const intervalsMs = completed.flatMap((row) => row.pacing.intervalsMs)
+  const summary = intervalsMs.length > 0 ? summarizeFrameIntervals(intervalsMs) : null
+  const accountsFrames = metric === 'echo' || metric === 'switch' || metric === 'floodEcho'
+  return {
+    observedAttempts: completed.length,
+    intervalsMs,
+    duplicateTimestamps: completed.reduce((sum, row) => sum + row.pacing.duplicateTimestamps, 0),
+    invalidTimestamps: completed.reduce((sum, row) => sum + row.pacing.invalidTimestamps, 0),
+    frames: intervalsMs.length,
+    medianIntervalMs: summary?.medianIntervalMs ?? null,
+    p90IntervalMs: summary?.p90IntervalMs ?? null,
+    maxIntervalMs: summary?.maxIntervalMs ?? null,
+    unavailableSamples: accountsFrames ? completed.filter((row) => row.frameTiming?.status === 'unavailable').length : 0
+  }
+}
+
+function framePacingDiagnostic(
+  gpuCompositing: string,
+  preflight: FrameIntervalCapture,
+  preflightError: string | null,
+  soloAttempts: readonly SpeedSample[],
+  pairAttempts: readonly PairAttempt[]
+): Record<string, unknown> {
+  const summary = preflight.intervalsMs.length > 0 ? summarizeFrameIntervals(preflight.intervalsMs) : null
+  const metrics = Object.fromEntries(METRICS.map((metric) => [
+    metric,
+    {
+      solo: aggregateFramePacing(metric, soloAttempts),
+      head: aggregateFramePacing(metric, pairAttempts.filter((row) => row.side === 'head')),
+      base: aggregateFramePacing(metric, pairAttempts.filter((row) => row.side === 'base'))
+    }
+  ]))
+  return {
+    version: 2,
+    gpuCompositing,
+    preflight: {
+      ...preflight,
+      frames: preflight.intervalsMs.length,
+      medianIntervalMs: summary?.medianIntervalMs ?? null,
+      p90IntervalMs: summary?.p90IntervalMs ?? null,
+      maxIntervalMs: summary?.maxIntervalMs ?? null,
+      error: preflightError
+    },
+    metrics
+  }
+}
+
 
 async function runPairedSeries(
   contexts: Record<PairSide, MetricContext>,
@@ -1799,10 +2445,38 @@ async function readGpuCompositing(browser: Browser, signal: AbortSignal): Promis
   return status
 }
 
-export async function measureBrowserFrameIntervals(page: Page, signal: AbortSignal, frameTimestamp?: number): Promise<number[]> {
+export async function measureBrowserFrameIntervals(page: Page, signal: AbortSignal, frameTimestamp?: number): Promise<FrameIntervalCapture> {
   const elementId = `quirky-speed-frame-pacing-${randomUUID()}`
   const measurement = page.evaluate(async ({ id, fixedTimestamp }) => {
     const probe = document.createElement('div')
+    const cleanupKey = `__${id}`
+    const root = globalThis
+    const requestFrame = root.requestAnimationFrame.bind(root)
+    const cancelFrame = root.cancelAnimationFrame.bind(root)
+    let frameId: number | null = null
+    let cancelPending: (() => void) | undefined
+    let cancelled = false
+    const cancel = () => {
+      if (cancelled) return
+      cancelled = true
+      if (frameId !== null) cancelFrame(frameId)
+      frameId = null
+      cancelPending?.()
+    }
+    Reflect.set(root, cleanupKey, { cancel })
+    const waitForFrame = () => {
+      const { promise, resolve, reject } = Promise.withResolvers<number>()
+      cancelPending = () => reject(new Error('browser frame-pacing probe was cancelled'))
+      frameId = requestFrame((timestamp) => {
+        frameId = null
+        cancelPending = undefined
+        resolve(fixedTimestamp ?? timestamp)
+      })
+      return promise
+    }
+    const capture: FrameIntervalCapture = { intervalsMs: [], duplicateTimestamps: 0, invalidTimestamps: 0 }
+    let previous: number | null = null
+    let callbacks = 0
     try {
       probe.id = id
       probe.setAttribute('aria-hidden', 'true')
@@ -1815,22 +2489,30 @@ export async function measureBrowserFrameIntervals(page: Page, signal: AbortSign
       probe.style.zIndex = '2147483647'
       probe.style.backgroundColor = 'rgb(0, 0, 0)'
       document.documentElement.append(probe)
-      const requestFrame = globalThis.requestAnimationFrame.bind(globalThis)
-      const waitForFrame = () => {
-        const { promise, resolve } = Promise.withResolvers<number>()
-        requestFrame((time) => resolve(fixedTimestamp ?? time))
-        return promise
-      }
-      let previous = await waitForFrame()
-      const intervals: number[] = []
-      for (let frame = 0; frame < 60; frame++) {
-        probe.style.backgroundColor = frame % 2 === 0 ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)'
+      const first = await waitForFrame()
+      callbacks++
+      if (Number.isFinite(first)) previous = first
+      else capture.invalidTimestamps++
+      while (capture.intervalsMs.length < 60 && callbacks < 120) {
+        probe.style.backgroundColor = callbacks % 2 === 0 ? 'rgb(255, 255, 255)' : 'rgb(0, 0, 0)'
         const current = await waitForFrame()
-        intervals.push(current - previous)
+        callbacks++
+        if (!Number.isFinite(current)) {
+          capture.invalidTimestamps++
+          continue
+        }
+        if (previous !== null) {
+          const interval = current - previous
+          if (interval > 0) capture.intervalsMs.push(interval)
+          else if (interval === 0) capture.duplicateTimestamps++
+          else capture.invalidTimestamps++
+        }
         previous = current
       }
-      return intervals
+      return capture
     } finally {
+      cancel()
+      Reflect.deleteProperty(root, cleanupKey)
       probe.remove()
     }
   }, { id: elementId, fixedTimestamp: frameTimestamp })
@@ -1839,6 +2521,11 @@ export async function measureBrowserFrameIntervals(page: Page, signal: AbortSign
   } catch (error) {
     try {
       await withDeadline(page.evaluate((id) => {
+        const root = globalThis as typeof globalThis & Record<string, unknown>
+        const probeState = Reflect.get(root, `__${id}`)
+        if (probeState && typeof probeState === 'object' && 'cancel' in probeState && typeof probeState.cancel === 'function') {
+          probeState.cancel()
+        }
         document.getElementById(id)?.remove()
       }, elementId), OBSERVER_CLEANUP_MS, 'frame-pacing probe cleanup')
     } catch (cleanupError) {
@@ -1872,6 +2559,9 @@ export async function measureSpeed(options: {
   const diagnosticErrors: string[] = []
   const redactions = new Set<string>()
   const contexts = new Set<BrowserContext>()
+  let gpuCompositing = 'unavailable'
+  let preflightCapture = emptyFrameIntervalCapture()
+  let preflightError: string | null = 'frame pacing preflight did not run'
   if (sampleCount < 1 || !Number.isSafeInteger(sampleCount)) throw new Error('speed sample count must be a positive integer')
   if (signal.aborted) throw new Error('speed measurement interrupted')
 
@@ -1899,23 +2589,17 @@ export async function measureSpeed(options: {
 
   try {
     try {
-      const gpuCompositing = await readGpuCompositing(context.browser, signal)
+      gpuCompositing = await readGpuCompositing(context.browser, signal)
       if (gpuCompositing !== 'disabled_software') {
         throw new Error(`browser is not compositing in software: ${gpuCompositing}`)
       }
-      let intervalsMs: number[] = []
-      let pacing: FramePacing | { frames: number; error: string }
       try {
-        intervalsMs = await measureBrowserFrameIntervals(context.page, signal, frameTimestamp)
-        pacing = summarizeFrameIntervals(intervalsMs)
+        preflightCapture = await measureBrowserFrameIntervals(context.page, signal, frameTimestamp)
+        preflightError = preflightCapture.intervalsMs.length > 0 ? null : 'no positive native frame intervals were observed'
       } catch (error) {
-        pacing = { frames: intervalsMs.length, error: errorText(error) }
+        if (errorText(error).includes('frame-pacing probe cleanup failed')) throw error
+        preflightError = errorText(error)
       }
-      const framePacing = { version: 1, ...pacing, gpuCompositing, intervalsMs }
-      mkdirSync(join(out, 'diagnostics'), { recursive: true })
-      const pacingJson = JSON.stringify(framePacing, (_key, value: unknown) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
-      writeFileSync(join(out, 'diagnostics', 'frame-pacing.json'), `${pacingJson}\n`)
-      diagnostics.push('diagnostics/frame-pacing.json')
       await runMeasuredSeries(context, sampleCount, signal, contexts)
       if (!metricSampleCountsValid(sampleValues, sampleCount)) {
         const missing = METRICS.find((metric) => sampleValues[metric].length !== sampleCount) ?? 'startup'
@@ -2032,6 +2716,17 @@ export async function measureSpeed(options: {
   }
 
   const pairAttempts = pairResult?.attempts ?? []
+  try {
+    mkdirSync(join(out, 'diagnostics'), { recursive: true })
+    const pacing = framePacingDiagnostic(gpuCompositing, preflightCapture, preflightError, attempts, pairAttempts)
+    writeFileSync(join(out, 'diagnostics', 'frame-pacing.json'), `${JSON.stringify(pacing, null, 2)}\n`)
+    diagnostics.push('diagnostics/frame-pacing.json')
+  } catch (error) {
+    failures.push({
+      kind: 'diagnostic-evidence-error',
+      message: sanitizeText(`frame pacing diagnostic: ${errorText(error)}`, redactions)
+    })
+  }
   const ownedPids = [...new Set([
     ...attempts.flatMap((sample) => sample.ownedPids),
     ...pairAttempts.flatMap((sample) => sample.ownedPids),
