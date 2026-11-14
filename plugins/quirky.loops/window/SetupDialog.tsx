@@ -40,6 +40,7 @@ type UiState = {
   createdLoop: LoopSnapshot | null
   queueComposer: string
 }
+type DraftOverlay<T> = { version: object; value: T; acknowledged: boolean }
 
 const presetSession = (preset: LoopDraft['preset']): LoopDraft['sessionPolicy'] =>
   preset === 'until-done' ? 'fresh' : 'continue'
@@ -173,6 +174,28 @@ function validatePatch(value: unknown, agents: AgentChoice[]): Partial<LoopDraft
   return patch
 }
 
+function applyDraftPatch(current: LoopDraft, value: unknown, agents: AgentChoice[]): LoopDraft {
+  const patch = validatePatch(value, agents)
+  const changedPreset = patch.preset !== undefined && patch.preset !== current.preset
+  const next = { ...current, ...patch, pacingKind: presetPacing(patch.preset ?? current.preset) }
+  return changedPreset ? presetDefault(next) : next
+}
+
+function replaceQueueItemBody(items: readonly string[], index: number, body: string): string[] {
+  return items.map((itemBody, itemIndex) => itemIndex === index ? body : itemBody)
+}
+
+function sameQueueItems(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((body, index) => body === right[index])
+}
+
+
+function matchesDraftOverlay(draft: LoopDraft, overlay: Partial<LoopDraft>): boolean {
+  return Object.entries(overlay).every(([key, value]) => key === 'queueItems' && Array.isArray(value)
+    ? sameQueueItems(draft.queueItems, value)
+    : Object.is(draft[key as keyof LoopDraft], value))
+}
+
 export function SetupDialog(props: SetupDialogProps) {
   const checkboxId = useId()
   const [draft, setDraft] = useState<LoopDraft>(() => initialDraft())
@@ -188,6 +211,10 @@ export function SetupDialog(props: SetupDialogProps) {
   const [alreadyCreated, setAlreadyCreated] = useState(false)
   const [createdLoop, setCreatedLoop] = useState<LoopSnapshot | null>(null)
   const [queueComposer, setQueueComposer] = useState('')
+  const [optimisticDraft, setOptimisticDraft] = useState<DraftOverlay<Partial<LoopDraft>> | null>(null)
+  const [optimisticQueueItems, setOptimisticQueueItems] = useState<DraftOverlay<string[]> | null>(null)
+  const commandQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const setupGenerationRef = useRef(0)
   const draftRef = useRef(draft)
   const agentsRef = useRef(agents)
   const workspaceRef = useRef(workspace)
@@ -201,15 +228,32 @@ export function SetupDialog(props: SetupDialogProps) {
   const loadErrorsRef = useRef(loadErrors)
   const warningRef = useRef(warning)
   const serverErrorRef = useRef(serverError)
+  const optimisticDraftRef = useRef(optimisticDraft)
+  const optimisticQueueItemsRef = useRef(optimisticQueueItems)
+  const unsyncedDraftRef = useRef(false)
   const showCost = workspace !== null && agents.some((agent) => agent.id === draft.agent)
   const validation = useMemo(() => validateDraft(draft, {
     workspaceKind: workspace?.kind ?? 'folder',
     showCost
   }), [draft, showCost, workspace?.kind])
+  const displayDraft = useMemo<LoopDraft>(() => ({
+    ...draft,
+    ...(optimisticDraft?.value ?? {}),
+    queueItems: optimisticQueueItems?.value ?? optimisticDraft?.value.queueItems ?? draft.queueItems
+  }), [draft, optimisticDraft, optimisticQueueItems])
+  const displayShowCost = workspace !== null && agents.some((agent) => agent.id === displayDraft.agent)
+  const displayValidation = useMemo(() => validateDraft(displayDraft, {
+    workspaceKind: workspace?.kind ?? 'folder',
+    showCost: displayShowCost
+  }), [displayDraft, displayShowCost, workspace?.kind])
+  const hasDraftMismatch = optimisticDraft !== null && Object.entries(optimisticDraft.value)
+    .some(([key, value]) => !Object.is(draft[key as keyof LoopDraft], value))
+  const hasQueueMismatch = optimisticQueueItems !== null && !sameQueueItems(draft.queueItems, optimisticQueueItems.value)
+  const hasUnsyncedDraft = hasDraftMismatch || hasQueueMismatch
   const loading = workspaceLoading || agentsLoading || loopsLoading
   const loadError = Object.entries(loadErrors).map(([source, message]) => `${source}: ${message}`).join('\n') || null
   const canStart = validation.input !== null && workspace !== null && !workspaceLoading && !agentsLoading &&
-    !loopsLoading && agents.some((agent) => agent.id === draft.agent) && !busy && !alreadyCreated
+    !loopsLoading && agents.some((agent) => agent.id === draft.agent) && !busy && !alreadyCreated && !hasUnsyncedDraft
   draftRef.current = draft
   agentsRef.current = agents
   workspaceRef.current = workspace
@@ -221,6 +265,9 @@ export function SetupDialog(props: SetupDialogProps) {
   loopsLoadingRef.current = loopsLoading
   loadErrorsRef.current = loadErrors
   warningRef.current = warning
+  optimisticDraftRef.current = optimisticDraft
+  optimisticQueueItemsRef.current = optimisticQueueItems
+  unsyncedDraftRef.current = hasUnsyncedDraft
   serverErrorRef.current = serverError
   propsRef.current = props
 
@@ -248,12 +295,17 @@ export function SetupDialog(props: SetupDialogProps) {
     setBusy(next)
   }, [])
 
+  const refreshUnsyncedDraft = useCallback((): boolean => {
+    const draftOverlay = optimisticDraftRef.current
+    const queueOverlay = optimisticQueueItemsRef.current
+    const unsynced = (draftOverlay !== null && !matchesDraftOverlay(draftRef.current, draftOverlay.value)) ||
+      (queueOverlay !== null && !sameQueueItems(draftRef.current.queueItems, queueOverlay.value))
+    unsyncedDraftRef.current = unsynced
+    return unsynced
+  }, [])
+
   const updateDraft = useCallback((patchValue: unknown) => {
-    const current = draftRef.current
-    const patch = validatePatch(patchValue, agentsRef.current)
-    const changedPreset = patch.preset !== undefined && patch.preset !== current.preset
-    const next = { ...current, ...patch, pacingKind: presetPacing(patch.preset ?? current.preset) }
-    commitDraft(changedPreset ? presetDefault(next) : next)
+    commitDraft(applyDraftPatch(draftRef.current, patchValue, agentsRef.current))
   }, [commitDraft])
 
   const updateQueue = useCallback((operation: 'add' | 'edit' | 'move' | 'remove', params: Record<string, unknown>) => {
@@ -273,8 +325,7 @@ export function SetupDialog(props: SetupDialogProps) {
     if (operation === 'edit') {
       const body = params.body
       if (typeof body !== 'string') throw new Error('Queue edit requires a text body.')
-      const queueItems = current.queueItems.map((itemBody, itemIndex) => itemIndex === index ? body : itemBody)
-      commitDraft({ ...current, queueItems })
+      commitDraft({ ...current, queueItems: replaceQueueItemBody(current.queueItems, index, body) })
       return
     }
     if (operation === 'remove') {
@@ -302,8 +353,112 @@ export function SetupDialog(props: SetupDialogProps) {
     commitDraft({ ...current, queueItems })
   }, [commitDraft])
 
+  const stageDraftUpdate = (patch: Partial<LoopDraft>): DraftOverlay<Partial<LoopDraft>> => {
+    const previous = optimisticDraftRef.current?.value ?? {}
+    const baseDraft = {
+      ...draftRef.current,
+      ...previous,
+      queueItems: optimisticQueueItemsRef.current?.value ?? draftRef.current.queueItems
+    }
+    const nextDraft = applyDraftPatch(baseDraft, patch, agentsRef.current)
+    const value: Partial<LoopDraft> = { ...previous, ...patch }
+    if (patch.preset !== undefined || patch.pacingKind !== undefined) value.pacingKind = nextDraft.pacingKind
+    if (patch.preset !== undefined || patch.sessionPolicy !== undefined) value.sessionPolicy = nextDraft.sessionPolicy
+    const overlay = { version: {}, value, acknowledged: false }
+    optimisticDraftRef.current = overlay
+    setOptimisticDraft(overlay)
+    refreshUnsyncedDraft()
+    return overlay
+  }
+
+  const stageQueueItemEdit = (index: number, body: string): DraftOverlay<string[]> => {
+    const items = optimisticQueueItemsRef.current?.value ?? draftRef.current.queueItems
+    const overlay = {
+      version: {},
+      value: replaceQueueItemBody(items, index, body),
+      acknowledged: false
+    }
+    optimisticQueueItemsRef.current = overlay
+    setOptimisticQueueItems(overlay)
+    refreshUnsyncedDraft()
+    return overlay
+  }
+
+  const reconcileQueueOverlay = useCallback((
+    action: 'queue-add' | 'queue-edit' | 'queue-move' | 'queue-remove',
+    params: Record<string, unknown>
+  ) => {
+    const current = optimisticQueueItemsRef.current
+    if (current === null) return
+    let value = current.value
+    if (action === 'queue-add') {
+      if (typeof params.body !== 'string') return
+      value = [...value, params.body]
+    } else {
+      const index = params.index
+      if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index >= value.length) return
+      if (action === 'queue-edit') {
+        if (typeof params.body !== 'string') return
+        value = replaceQueueItemBody(value, index, params.body)
+      } else if (action === 'queue-remove') {
+        value = value.filter((_, itemIndex) => itemIndex !== index)
+      } else {
+        const direction = params.position
+        const target = direction === 'up'
+          ? index - 1
+          : direction === 'down'
+            ? index + 1
+            : typeof direction === 'number' && Number.isInteger(direction)
+              ? direction
+              : null
+        if (target === null || target < 0 || target >= value.length || target === index) return
+        const next = [...value]
+        const moved = next.splice(index, 1)[0]
+        if (moved === undefined) return
+        next.splice(target, 0, moved)
+        value = next
+      }
+    }
+    if (sameQueueItems(current.value, value)) return
+    const next = { ...current, value }
+    optimisticQueueItemsRef.current = next
+    setOptimisticQueueItems(next)
+    refreshUnsyncedDraft()
+  }, [refreshUnsyncedDraft])
+
+  const stageAdvanced = (open: boolean): DraftOverlay<Partial<LoopDraft>> => {
+    const overlay = {
+      version: {},
+      value: { ...(optimisticDraftRef.current?.value ?? {}), advanced: open },
+      acknowledged: false
+    }
+    optimisticDraftRef.current = overlay
+    setOptimisticDraft(overlay)
+    refreshUnsyncedDraft()
+    return overlay
+  }
+
+  const acknowledgeDraftOverlay = (version: object) => {
+    const current = optimisticDraftRef.current
+    if (current?.version !== version) return
+    const next = { ...current, acknowledged: true }
+    optimisticDraftRef.current = next
+    setOptimisticDraft(next)
+    refreshUnsyncedDraft()
+  }
+
+  const acknowledgeQueueOverlay = (version: object) => {
+    const current = optimisticQueueItemsRef.current
+    if (current?.version !== version) return
+    const next = { ...current, acknowledged: true }
+    optimisticQueueItemsRef.current = next
+    setOptimisticQueueItems(next)
+    refreshUnsyncedDraft()
+  }
+
   const createLoop = useCallback(async (): Promise<unknown> => {
     if (busyRef.current) return { ok: false, busy: true }
+    if (unsyncedDraftRef.current) throw new Error('Wait for pending setup edits to finish before starting.')
     if (alreadyCreatedRef.current) return { ok: false, alreadyCreated: true }
     const currentDraft = draftRef.current
     const currentWorkspace = workspaceRef.current
@@ -381,7 +536,8 @@ export function SetupDialog(props: SetupDialogProps) {
       error: serverErrorRef.current,
       valid: currentValidation.config !== null,
       canStart: currentValidation.input !== null && currentWorkspace !== null && !currentLoading &&
-        currentAgents.some((agent) => agent.id === currentDraft.agent) && !busyRef.current && !alreadyCreatedRef.current,
+        currentAgents.some((agent) => agent.id === currentDraft.agent) && !busyRef.current && !alreadyCreatedRef.current &&
+        !unsyncedDraftRef.current,
       alreadyCreated: alreadyCreatedRef.current,
       createdLoopId: createdLoopRef.current?.id ?? null,
       group: propsRef.current.group ?? null
@@ -398,6 +554,7 @@ export function SetupDialog(props: SetupDialogProps) {
     }
     if (action === 'queue-add' || action === 'queue-edit' || action === 'queue-move' || action === 'queue-remove') {
       updateQueue(action.slice('queue-'.length) as 'add' | 'edit' | 'move' | 'remove', params)
+      reconcileQueueOverlay(action, params)
       return readSurface()
     }
     if (action === 'advanced') {
@@ -422,7 +579,7 @@ export function SetupDialog(props: SetupDialogProps) {
       return { ok: canCancel }
     }
     throw new Error(`Unknown setup action "${action}".`)
-  }, [createLoop, readSurface, setServerErrorState, updateDraft, updateQueue])
+  }, [createLoop, readSurface, reconcileQueueOverlay, setServerErrorState, updateDraft, updateQueue])
 
   const stateForConsumer = useMemo<SetupRead>(() => ({
     draft: { ...draft, queueItems: [...draft.queueItems] },
@@ -444,6 +601,14 @@ export function SetupDialog(props: SetupDialogProps) {
 
   useEffect(() => {
     let current = true
+    setupGenerationRef.current += 1
+    optimisticDraftRef.current = null
+    commandQueueRef.current = Promise.resolve()
+    optimisticQueueItemsRef.current = null
+    unsyncedDraftRef.current = false
+    setOptimisticDraft(null)
+    setOptimisticQueueItems(null)
+    setQueueComposer('')
     workspaceLoadingRef.current = true
     agentsLoadingRef.current = true
     loopsLoadingRef.current = true
@@ -518,6 +683,7 @@ export function SetupDialog(props: SetupDialogProps) {
     void loadWorkspaceAndAgents()
     return () => {
       current = false
+      setupGenerationRef.current += 1
     }
   }, [props.context, props.workspace, setLoadErrorState, setWarningState])
 
@@ -533,25 +699,72 @@ export function SetupDialog(props: SetupDialogProps) {
     props.report?.(stateForConsumer)
   }, [props.report, stateForConsumer])
 
+  useEffect(() => {
+    const current = optimisticDraftRef.current
+    if (current?.acknowledged && matchesDraftOverlay(draft, current.value)) {
+      optimisticDraftRef.current = null
+      setOptimisticDraft(null)
+      const queueOverlay = optimisticQueueItemsRef.current
+      unsyncedDraftRef.current = queueOverlay !== null && !sameQueueItems(draft.queueItems, queueOverlay.value)
+    }
+  }, [draft, optimisticDraft])
+
+  useEffect(() => {
+    const current = optimisticQueueItemsRef.current
+    if (current?.acknowledged && sameQueueItems(draft.queueItems, current.value)) {
+      optimisticQueueItemsRef.current = null
+      setOptimisticQueueItems(null)
+      const draftOverlay = optimisticDraftRef.current
+      unsyncedDraftRef.current = draftOverlay !== null && !matchesDraftOverlay(draft, draftOverlay.value)
+    }
+  }, [draft.queueItems, optimisticQueueItems])
+
   const runSetupAction = async (
     action: string,
     params: Record<string, unknown> = {},
     onSuccess?: () => void
   ): Promise<void> => {
-    try {
-      await propsRef.current.context.executeCommand('command:quirky.loops/setup-action', { action, params })
-      onSuccess?.()
-    } catch (error) {
-      setServerErrorState(messageOf(error))
+    const generation = setupGenerationRef.current
+    const execute = async () => {
+      if (generation !== setupGenerationRef.current) return
+      if (action === 'start' && unsyncedDraftRef.current) {
+        setServerErrorState('Wait for pending setup edits to finish before starting.')
+        return
+      }
+      try {
+        await propsRef.current.context.executeCommand('command:quirky.loops/setup-action', { action, params })
+        if (generation === setupGenerationRef.current) onSuccess?.()
+      } catch (error) {
+        if (generation === setupGenerationRef.current) setServerErrorState(messageOf(error))
+      }
     }
+    const orderedWithDraft = action === 'update' || action === 'advanced' || action.startsWith('queue-') || action === 'start'
+    if (orderedWithDraft) {
+      const pending = commandQueueRef.current.then(execute, execute)
+      commandQueueRef.current = pending.then(() => undefined, () => undefined)
+      await pending
+      return
+    }
+    await execute()
+  }
+  const updateDraftFromDom = async (patch: Partial<LoopDraft>) => {
+    const overlay = stageDraftUpdate(patch)
+    await runSetupAction('update', { patch }, () => acknowledgeDraftOverlay(overlay.version))
+  }
+  const updateQueueItemFromDom = (index: number, body: string) => {
+    const overlay = stageQueueItemEdit(index, body)
+    void runSetupAction('queue-edit', { index, body }, () => acknowledgeQueueOverlay(overlay.version))
   }
   const onConfigChange = async (patch: Partial<LoopDraft>) => {
     const { advanced, ...fields } = patch
-    if (Object.keys(fields).length > 0) await runSetupAction('update', { patch: fields })
-    if (advanced !== undefined) await runSetupAction('advanced', { open: advanced })
+    if (Object.keys(fields).length > 0) await updateDraftFromDom(fields)
+    if (advanced !== undefined) {
+      const overlay = stageAdvanced(advanced)
+      await runSetupAction('advanced', { open: advanced }, () => acknowledgeDraftOverlay(overlay.version))
+    }
   }
   const changeText = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    void runSetupAction('update', { patch: { prompt: event.currentTarget.value } })
+    void updateDraftFromDom({ prompt: event.currentTarget.value })
   }
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -564,10 +777,12 @@ export function SetupDialog(props: SetupDialogProps) {
   const addQueuePrompt = () => {
     const body = queueComposer
     void runSetupAction('queue-add', { body }, () => {
+      const draft = readSurface().draft
+      if (!isRecord(draft) || !Array.isArray(draft.queueItems) || draft.queueItems[draft.queueItems.length - 1] !== body) return
       setQueueComposer((current) => current === body ? '' : current)
     })
   }
-  const namePlaceholder = presetName(draft)
+  const namePlaceholder = presetName(displayDraft)
   const agentLoadError = loadErrors.agents
   const workspaceLoadError = loadErrors.workspace
   const loopLoadError = loadErrors.loops
@@ -587,14 +802,14 @@ export function SetupDialog(props: SetupDialogProps) {
             label="Loop name"
             aria-label="Loop name"
             type="text"
-            value={draft.name}
+            value={displayDraft.name}
             placeholder={namePlaceholder}
             disabled={!canEdit}
-            onChange={(event) => void runSetupAction('update', { patch: { name: event.currentTarget.value } })}
+            onChange={(event) => void updateDraftFromDom({ name: event.currentTarget.value })}
           />
-          {draft.preset === 'queue' ? (
+          {displayDraft.preset === 'queue' ? (
             <div className="ui-stack" aria-label="Queue prompts">
-              {draft.queueItems.map((body, index) => (
+              {displayDraft.queueItems.map((body, index) => (
                 <div className="ui-stack" key={index}>
                   <TextArea
                     id={`loop-queue-item-${index}`}
@@ -603,19 +818,19 @@ export function SetupDialog(props: SetupDialogProps) {
                     value={body}
                     rows={3}
                     disabled={!canEdit}
-                    error={validation.errors[`queueItems.${index}`]}
-                    onChange={(event) => void runSetupAction('queue-edit', { index, body: event.currentTarget.value })}
+                    error={displayValidation.errors[`queueItems.${index}`]}
+                    onChange={(event) => updateQueueItemFromDom(index, event.currentTarget.value)}
                   />
                   <div className="ui-cluster">
                     <Button type="button" aria-label={`Move queue item ${index + 1} up`} disabled={!canEdit || index === 0} onClick={() => { void runSetupAction('queue-move', { index, position: 'up' }) }}>↑</Button>
-                    <Button type="button" aria-label={`Move queue item ${index + 1} down`} disabled={!canEdit || index === draft.queueItems.length - 1} onClick={() => { void runSetupAction('queue-move', { index, position: 'down' }) }}>↓</Button>
+                    <Button type="button" aria-label={`Move queue item ${index + 1} down`} disabled={!canEdit || index === displayDraft.queueItems.length - 1} onClick={() => { void runSetupAction('queue-move', { index, position: 'down' }) }}>↓</Button>
                     <Button type="button" variant="destructive" aria-label={`Remove queue item ${index + 1}`} disabled={!canEdit} onClick={() => { void runSetupAction('queue-remove', { index }) }}>Remove</Button>
                   </div>
                 </div>
               ))}
-              {draft.queueItems.length === 0 && <EmptyState message="Add at least one prompt to the queue." />}
-              {validation.errors.queueItems && draft.queueItems.length > 0 && (
-                <InlineError message={validation.errors.queueItems} />
+              {displayDraft.queueItems.length === 0 && <EmptyState message="Add at least one prompt to the queue." />}
+              {displayValidation.errors.queueItems && displayDraft.queueItems.length > 0 && (
+                <InlineError message={displayValidation.errors.queueItems} />
               )}
               <div className="ui-stack">
                 <TextArea
@@ -639,9 +854,9 @@ export function SetupDialog(props: SetupDialogProps) {
                 <input
                   id={`${checkboxId}-repeat-queue`}
                   type="checkbox"
-                  checked={draft.repeatQueue}
+                  checked={displayDraft.repeatQueue}
                   disabled={!canEdit}
-                  onChange={(event) => void runSetupAction('update', { patch: { repeatQueue: event.currentTarget.checked } })}
+                  onChange={(event) => void updateDraftFromDom({ repeatQueue: event.currentTarget.checked })}
                 />
               </FormRow>
             </div>
@@ -650,9 +865,9 @@ export function SetupDialog(props: SetupDialogProps) {
               id="loop-setup-prompt"
               label="Prompt"
               aria-label="Prompt"
-              value={draft.prompt}
+              value={displayDraft.prompt}
               disabled={!canEdit}
-              error={validation.errors.prompt}
+              error={displayValidation.errors.prompt}
               onChange={changeText}
             />
           )}
@@ -668,19 +883,19 @@ export function SetupDialog(props: SetupDialogProps) {
           <SelectField
             label="Agent"
             aria-label="Agent"
-            value={draft.agent}
+            value={displayDraft.agent}
             disabled={!canEdit || agentsLoading || agents.length === 0}
-            onChange={(event) => void runSetupAction('update', { patch: { agent: event.currentTarget.value } })}
+            onChange={(event) => void updateDraftFromDom({ agent: event.currentTarget.value as LoopDraft['agent'] })}
           >
-            {agents.length === 0 && <option value={draft.agent}>Unavailable</option>}
+            {agents.length === 0 && <option value={displayDraft.agent}>Unavailable</option>}
             {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}
           </SelectField>
           <ConfigFields
-            draft={draft}
+            draft={displayDraft}
             onChange={onConfigChange}
-            errors={validation.errors}
+            errors={displayValidation.errors}
             workspaceKind={workspace?.kind ?? 'folder'}
-            showCost={showCost}
+            showCost={displayShowCost}
             disabled={!canEdit}
           />
         </section>

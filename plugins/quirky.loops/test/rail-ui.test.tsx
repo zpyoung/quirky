@@ -105,6 +105,7 @@ function harness(initial = loop(), options: {
   failEdit?: Error
   failQueue?: Error
   failCommandAction?: string
+  commandGates?: Promise<void>[]
   queueConflictItem?: string
 } = {}) {
   let current = initial
@@ -118,23 +119,51 @@ function harness(initial = loop(), options: {
   let getCalls = 0
   let failSteer = options.failSteer
   let failQueue = options.failQueue
+  let commandGateIndex = 0
+  const pendingCommands = new Set<{ promise: Promise<void>; gatePending: boolean }>()
+  const flushCommands = async () => {
+    while (true) {
+      const ready = [...pendingCommands].filter((command) => !command.gatePending)
+      if (ready.length === 0) return
+      await Promise.allSettled(ready.map((command) => command.promise))
+    }
+  }
 
   const context = {
-    async executeCommand(id: string, args?: unknown) {
-      commandCalls.push({ id, args })
-      if (args === null || typeof args !== 'object' || Array.isArray(args)) {
-        throw new Error('Loop command arguments must be an object.')
-      }
-      const command = args as { action?: unknown; params?: unknown }
-      if (options.failCommandAction === command.action) throw new Error('bridge refused')
-      if (id !== 'command:quirky.loops/action' || typeof command.action !== 'string') {
-        throw new Error(`Unexpected UI command ${id}`)
-      }
-      const params = typeof command.params === 'object' && command.params !== null && !Array.isArray(command.params)
-        ? command.params as Record<string, unknown>
-        : {}
-      if (handle === null) throw new Error('Loop surface is unavailable.')
-      await handle.dispatch(command.action, params)
+    executeCommand(id: string, args?: unknown) {
+      const pendingCommand = { promise: Promise.resolve(), gatePending: false }
+      const commandTask = (async () => {
+        commandCalls.push({ id, args })
+        if (args === null || typeof args !== 'object' || Array.isArray(args)) {
+          throw new Error('Loop command arguments must be an object.')
+        }
+        const command = args as { action?: unknown; params?: unknown }
+        if (options.failCommandAction === command.action) throw new Error('bridge refused')
+        if (id !== 'command:quirky.loops/action' || typeof command.action !== 'string') {
+          throw new Error(`Unexpected UI command ${id}`)
+        }
+        const params = typeof command.params === 'object' && command.params !== null && !Array.isArray(command.params)
+          ? command.params as Record<string, unknown>
+          : {}
+        if (handle === null) throw new Error('Loop surface is unavailable.')
+        const commandGate = options.commandGates?.[commandGateIndex++]
+        if (commandGate) {
+          pendingCommand.gatePending = true
+          try {
+            await commandGate
+          } finally {
+            pendingCommand.gatePending = false
+          }
+        }
+        await handle.dispatch(command.action, params)
+      })()
+      pendingCommand.promise = commandTask
+      pendingCommands.add(pendingCommand)
+      void commandTask.then(
+        () => pendingCommands.delete(pendingCommand),
+        () => pendingCommands.delete(pendingCommand)
+      )
+      return commandTask
     },
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
@@ -229,6 +258,7 @@ function harness(initial = loop(), options: {
     container,
     calls,
     commandCalls,
+    flushCommands,
     get handle() { return handle },
     setLoop(value: LoopSnapshot) { current = value },
     setMessages(value: unknown[]) { messages = value },
@@ -255,11 +285,12 @@ function harness(initial = loop(), options: {
   }
 }
 
-async function settle() {
+async function settle(flushCommands?: () => Promise<void>) {
   await act(async () => {
     const { promise, resolve } = Promise.withResolvers<void>()
     setTimeout(resolve, 0)
     await promise
+    await flushCommands?.()
   })
 }
 
@@ -272,6 +303,16 @@ function button(container: HTMLElement, label: string): HTMLButtonElement {
 function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
   const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+function typeAtCaret(element: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+  const start = element.selectionStart ?? element.value.length
+  const end = element.selectionEnd ?? start
+  const next = `${element.value.slice(0, start)}${text}${element.value.slice(end)}`
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, next)
+  element.setSelectionRange(start + text.length, start + text.length)
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
@@ -520,6 +561,34 @@ test('routes DOM pause through the public command once while explicit dispatch s
   expect(direct.handle!.read()).toMatchObject({ snapshot: { state: 'paused' } })
 })
 
+test('keeps the busy guard for rapid lifecycle commands instead of serializing them', async () => {
+  const pendingPause = Promise.withResolvers<unknown>()
+  const h = harness(loop(), { pendingPause: pendingPause.promise })
+  unmountCurrent = h.unmount
+  await h.mount()
+  const pause = button(h.container, 'Pause after this iteration')
+  await act(async () => {
+    pause.click()
+    pause.disabled = false
+    pause.click()
+  })
+  await settle()
+
+  expect(h.commandCalls).toEqual([
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'pause', params: {} } },
+    { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'pause', params: {} } }
+  ])
+  expect(h.calls.filter(({ method }) => method === 'quirky.loops/pause')).toEqual([{
+    method: 'quirky.loops/pause',
+    params: { loopId: 'loop-1', mode: 'after-iteration' }
+  }])
+  expect(h.handle!.read()).toMatchObject({ errors: { action: 'Another loop action is already in progress.' } })
+
+  pendingPause.resolve(loop({ state: 'paused', pauseReason: 'user' }))
+  await pendingPause.promise
+  await settle()
+})
+
 test('routes stop opening and cancellation through the public command', async () => {
   const h = harness()
   unmountCurrent = h.unmount
@@ -577,6 +646,110 @@ test('a rejected bridge action shows a shared error without dispatching or losin
   })
 })
 
+test('keeps rail guidance caret stable while command acknowledgements are deferred', async () => {
+  const firstCommand = Promise.withResolvers<void>()
+  const secondCommand = Promise.withResolvers<void>()
+  const h = harness(loop(), { commandGates: [firstCommand.promise, secondCommand.promise] })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => { await h.handle!.dispatch('steer-open') })
+  await settle()
+  await act(async () => { await h.handle!.dispatch('steer-update', { text: 'Do it' }) })
+  await settle()
+  const guidance = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Guidance for the next iteration"]')!
+  guidance.focus()
+  guidance.setSelectionRange(2, 2)
+
+  try {
+    await act(async () => typeAtCaret(guidance, 'X'))
+    await settle(h.flushCommands)
+    await act(async () => typeAtCaret(guidance, 'Y'))
+    await settle(h.flushCommands)
+
+    expect(guidance.value).toBe('DoXY it')
+    expect(guidance.selectionStart).toBe(4)
+    expect(h.commandCalls).toEqual([{
+      id: 'command:quirky.loops/action',
+      args: { loopId: 'loop-1', action: 'steer-update', params: { text: 'DoX it' } }
+    }])
+
+    await act(async () => {
+      firstCommand.resolve()
+      await firstCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+    expect(h.commandCalls).toEqual([
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'steer-update', params: { text: 'DoX it' } } },
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'steer-update', params: { text: 'DoXY it' } } }
+    ])
+    expect(guidance.value).toBe('DoXY it')
+    expect(guidance.selectionStart).toBe(4)
+
+    await act(async () => {
+      secondCommand.resolve()
+      await secondCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+    expect(h.handle!.read()).toMatchObject({ steerDraft: 'DoXY it' })
+    expect(guidance.value).toBe('DoXY it')
+    expect(guidance.selectionStart).toBe(4)
+  } finally {
+    await act(async () => {
+      firstCommand.resolve()
+      secondCommand.resolve()
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+  }
+})
+
+test('does not send guidance after its form is canceled and reopened', async () => {
+  const draftCommand = Promise.withResolvers<void>()
+  const h = harness(loop(), { commandGates: [draftCommand.promise] })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => { await h.handle!.dispatch('steer-open') })
+  await settle()
+  await act(async () => { await h.handle!.dispatch('steer-update', { text: 'Keep this guidance' }) })
+  await settle()
+  const guidance = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Guidance for the next iteration"]')!
+
+  try {
+    await act(async () => typeAtCaret(guidance, 'X'))
+    await settle(h.flushCommands)
+    await act(async () => button(h.container, 'Send').click())
+    await act(async () => button(h.container, 'Cancel').click())
+    await settle(h.flushCommands)
+    await act(async () => button(h.container, 'Steer').click())
+    await settle(h.flushCommands)
+    const reopenedGuidance = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Guidance for the next iteration"]')!
+    await act(async () => setValue(reopenedGuidance, 'New guidance'))
+    await settle(h.flushCommands)
+
+    await act(async () => {
+      draftCommand.resolve()
+      await draftCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+
+    expect(h.calls.filter(({ method }) => method === 'quirky.loops/steer')).toHaveLength(0)
+    expect(reopenedGuidance.value).toBe('New guidance')
+  } finally {
+    await act(async () => {
+      draftCommand.resolve()
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+  }
+})
 test('resumes a capped paused loop with the positive requested iteration increase', async () => {
   const capped = loop({ state: 'paused', pauseReason: 'cap-iterations', iterationsCompleted: 10 })
   const h = harness(capped)
@@ -827,6 +1000,70 @@ test('a rejected queue bridge action displays the error and retains the add draf
   })
 })
 
+
+test('keeps the queue composer caret stable while public draft commands are deferred', async () => {
+  const firstCommand = Promise.withResolvers<void>()
+  const secondCommand = Promise.withResolvers<void>()
+  const initial = loop({
+    preset: 'queue',
+    config: { ...config, promptSource: { kind: 'queue', repeatQueue: false } },
+    queueItems: []
+  })
+  const h = harness(initial, { commandGates: [firstCommand.promise, secondCommand.promise] })
+  unmountCurrent = h.unmount
+  await h.mount()
+  await act(async () => { await h.handle!.dispatch('queue-draft', { body: 'Do it' }) })
+  const composer = h.container.querySelector<HTMLTextAreaElement>('[aria-label="Describe the next task"]')!
+  composer.focus()
+  composer.setSelectionRange(2, 2)
+
+  try {
+    await act(async () => typeAtCaret(composer, 'X'))
+    await settle(h.flushCommands)
+    await act(async () => typeAtCaret(composer, 'Y'))
+    await settle(h.flushCommands)
+
+    expect(composer.value).toBe('DoXY it')
+    expect(composer.selectionStart).toBe(4)
+    expect(h.commandCalls).toEqual([{
+      id: 'command:quirky.loops/action',
+      args: { loopId: 'loop-1', action: 'queue-draft', params: { body: 'DoX it' } }
+    }])
+
+    await act(async () => {
+      firstCommand.resolve()
+      await firstCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+    expect(h.commandCalls).toEqual([
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'queue-draft', params: { body: 'DoX it' } } },
+      { id: 'command:quirky.loops/action', args: { loopId: 'loop-1', action: 'queue-draft', params: { body: 'DoXY it' } } }
+    ])
+    expect(composer.value).toBe('DoXY it')
+    expect(composer.selectionStart).toBe(4)
+
+    await act(async () => {
+      secondCommand.resolve()
+      await secondCommand.promise
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+    expect(h.handle!.read()).toMatchObject({ queueDraft: { addDraft: 'DoXY it' } })
+    expect(composer.selectionStart).toBe(4)
+    expect(h.calls.filter(({ method }) => method === 'quirky.loops/queue')).toEqual([])
+  } finally {
+    await act(async () => {
+      firstCommand.resolve()
+      secondCommand.resolve()
+      await Promise.resolve()
+      await h.flushCommands()
+    })
+    await settle(h.flushCommands)
+  }
+})
 test('queue add forms prevent native submission and route once for the button or Enter', async () => {
   for (const submitMode of ['button', 'enter'] as const) {
     const initial = loop({

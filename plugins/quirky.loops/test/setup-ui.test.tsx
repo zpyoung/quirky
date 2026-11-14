@@ -103,6 +103,15 @@ function setValue(element: HTMLInputElement | HTMLTextAreaElement, value: string
   Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value)
   element.dispatchEvent(new Event('input', { bubbles: true }))
 }
+function typeAtCaret(element: HTMLInputElement | HTMLTextAreaElement, text: string): void {
+  const start = element.selectionStart ?? element.value.length
+  const end = element.selectionEnd ?? start
+  const next = `${element.value.slice(0, start)}${text}${element.value.slice(end)}`
+  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+  Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, next)
+  element.setSelectionRange(start + text.length, start + text.length)
+  element.dispatchEvent(new Event('input', { bubbles: true }))
+}
 
 function setSelectValue(element: HTMLSelectElement, value: string) {
   element.value = value
@@ -121,6 +130,8 @@ function setup(options: {
   failAgents?: Error
   failLoops?: Error
   failCommandAction?: string
+  commandGates?: Promise<void>[]
+  commandTarget?: { current: SurfaceHandle | null }
   pendingWorkspace?: Promise<unknown>
   pendingAgents?: Promise<unknown>
   noAgents?: boolean
@@ -130,20 +141,50 @@ function setup(options: {
 } = {}) {
   const commandCalls: CommandCall[] = []
   let handle: SurfaceHandle | null = null
+  let commandGateIndex = 0
+  let failCommandAction = options.failCommandAction
+  const pendingCommands = new Set<{ promise: Promise<void>; gatePending: boolean }>()
+  const flushCommands = async () => {
+    while (true) {
+      const ready = [...pendingCommands].filter((command) => !command.gatePending)
+      if (ready.length === 0) return
+      await Promise.allSettled(ready.map((command) => command.promise))
+    }
+  }
   const calls: Call[] = []
   const toasts: { title: string; body: string }[] = []
   const reports: unknown[] = []
   const created = { id: 'loop-1', name: 'Do the work', worktreeId: 'wt-1', state: 'running' }
   const context = {
-    async executeCommand(id: string, args?: unknown) {
-      commandCalls.push({ id, args })
-      const command = isRecord(args) ? args : {}
-      if (options.failCommandAction === command.action) throw new Error('bridge refused')
-      if (id !== 'command:quirky.loops/setup-action' || typeof command.action !== 'string') {
-        throw new Error(`Unexpected UI command ${id}`)
-      }
-      if (handle === null) throw new Error('Setup surface is unavailable.')
-      await handle.dispatch(command.action, isRecord(command.params) ? command.params : {})
+    executeCommand(id: string, args?: unknown) {
+      const pendingCommand = { promise: Promise.resolve(), gatePending: false }
+      const commandTask = (async () => {
+        commandCalls.push({ id, args })
+        const command = isRecord(args) ? args : {}
+        if (failCommandAction === command.action) throw new Error('bridge refused')
+        if (id !== 'command:quirky.loops/setup-action' || typeof command.action !== 'string') {
+          throw new Error(`Unexpected UI command ${id}`)
+        }
+        const commandHandle = options.commandTarget === undefined ? handle : options.commandTarget.current
+        if (commandHandle === null) throw new Error('Setup surface is unavailable.')
+        const commandGate = options.commandGates?.[commandGateIndex++]
+        if (commandGate) {
+          pendingCommand.gatePending = true
+          try {
+            await commandGate
+          } finally {
+            pendingCommand.gatePending = false
+          }
+        }
+        await commandHandle.dispatch(command.action, isRecord(command.params) ? command.params : {})
+      })()
+      pendingCommand.promise = commandTask
+      pendingCommands.add(pendingCommand)
+      void commandTask.then(
+        () => pendingCommands.delete(pendingCommand),
+        () => pendingCommands.delete(pendingCommand)
+      )
+      return commandTask
     },
     pluginId: 'quirky.loops',
     log() {},
@@ -199,6 +240,7 @@ function setup(options: {
     },
     onHandle(value) {
       handle = value
+      if (options.commandTarget !== undefined) options.commandTarget.current = value
     },
     report(state) {
       reports.push(state)
@@ -212,12 +254,16 @@ function setup(options: {
 
   return {
     commandCalls,
+    flushCommands,
     calls,
     toasts,
     reports,
     created,
     get handle() {
       return handle!
+    },
+    setFailCommandAction(action: string | undefined) {
+      failCommandAction = action
     },
     get closes() {
       return closes
@@ -629,6 +675,134 @@ test('submits setup through the public command once and prevents native navigati
     .toMatchObject({ name: 'Do it', config: { promptSource: { kind: 'repeat', body: 'Do it' } } })
   expect(view.createdCalls).toBe(1)
   expect(view.closes).toBe(1)
+})
+
+test('keeps setup prompt caret stable while command acknowledgements are deferred', async () => {
+  const firstCommand = Promise.withResolvers<void>()
+  const secondCommand = Promise.withResolvers<void>()
+  const view = setup({ commandGates: [firstCommand.promise, secondCommand.promise] })
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { prompt: 'Do it' } })
+  })
+  const prompt = host.querySelector<HTMLTextAreaElement>('[aria-label="Prompt"]')!
+  prompt.focus()
+  prompt.setSelectionRange(2, 2)
+
+  try {
+    await act(async () => typeAtCaret(prompt, 'X'))
+    await view.ready()
+    await act(async () => typeAtCaret(prompt, 'Y'))
+    await view.ready()
+
+    expect(prompt.value).toBe('DoXY it')
+    expect(prompt.selectionStart).toBe(4)
+    expect(view.commandCalls).toEqual([{
+      id: 'command:quirky.loops/setup-action',
+      args: { action: 'update', params: { patch: { prompt: 'DoX it' } } }
+    }])
+
+    await act(async () => {
+      firstCommand.resolve()
+      await firstCommand.promise
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await view.ready()
+    expect(view.commandCalls).toEqual([
+      { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { prompt: 'DoX it' } } } },
+      { id: 'command:quirky.loops/setup-action', args: { action: 'update', params: { patch: { prompt: 'DoXY it' } } } }
+    ])
+    expect(prompt.value).toBe('DoXY it')
+    expect(prompt.selectionStart).toBe(4)
+
+    await act(async () => {
+      secondCommand.resolve()
+      await secondCommand.promise
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await view.ready()
+    expect(readSetup(view.handle).draft.prompt).toBe('DoXY it')
+    expect(prompt.value).toBe('DoXY it')
+    expect(prompt.selectionStart).toBe(4)
+  } finally {
+    await act(async () => {
+      firstCommand.resolve()
+      secondCommand.resolve()
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await view.ready()
+  }
+})
+
+test('does not run queued setup updates after the dialog unmounts', async () => {
+  const firstCommand = Promise.withResolvers<void>()
+  const commandTarget: { current: SurfaceHandle | null } = { current: null }
+  const view = setup({ commandGates: [firstCommand.promise], commandTarget })
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { prompt: 'Do it' } })
+  })
+  const prompt = host.querySelector<HTMLTextAreaElement>('[aria-label="Prompt"]')!
+  prompt.focus()
+  prompt.setSelectionRange(2, 2)
+  await act(async () => typeAtCaret(prompt, 'X'))
+  await view.ready()
+  await act(async () => typeAtCaret(prompt, 'Y'))
+  await view.ready()
+  expect(view.commandCalls).toHaveLength(1)
+
+  await unmount()
+  const replacement = setup({ commandTarget })
+  await replacement.ready()
+
+  try {
+    await act(async () => {
+      firstCommand.resolve()
+      await firstCommand.promise
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await replacement.ready()
+
+    expect(view.commandCalls).toHaveLength(1)
+    expect(readSetup(replacement.handle).draft.prompt).not.toBe('DoXY it')
+  } finally {
+    await act(async () => {
+      firstCommand.resolve()
+      await Promise.resolve()
+      await view.flushCommands()
+    })
+    await replacement.ready()
+  }
+})
+
+test('reconciles an unsynced queue edit when an earlier item is removed', async () => {
+  const view = setup()
+  await view.ready()
+  await act(async () => {
+    await view.handle.dispatch('update', { patch: { preset: 'queue' } })
+    await view.handle.dispatch('queue-add', { body: 'first' })
+    await view.handle.dispatch('queue-add', { body: 'second' })
+  })
+  await view.ready()
+  view.setFailCommandAction('queue-edit')
+  const edited = host.querySelector<HTMLTextAreaElement>('[aria-label="Queue item 2"]')!
+  await act(async () => setValue(edited, 'Edited second'))
+  await view.ready()
+  expect(edited.value).toBe('Edited second')
+  expect(readSetup(view.handle).draft.queueItems).toEqual(['first', 'second'])
+
+  view.setFailCommandAction(undefined)
+  await act(async () => button(host, 'Remove queue item 1').click())
+  await view.ready()
+
+  const remaining = host.querySelectorAll<HTMLTextAreaElement>('textarea[aria-label^="Queue item "]')
+  expect(remaining).toHaveLength(1)
+  expect(remaining[0]?.value).toBe('Edited second')
+  expect(button(host, 'Start loop').disabled).toBe(true)
 })
 
 test('a rejected queue-add bridge keeps the local composer draft visible', async () => {
