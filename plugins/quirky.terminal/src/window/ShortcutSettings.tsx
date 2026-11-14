@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, EmptyState, FormRow, ToolPanelFrame } from '@quirky/ui'
+import { Button, EmptyState, FormRow, InlineError, NoticeLine, ToolPanelFrame } from '@quirky/ui'
 import type { UiKeybinding, UiModel, UiPluginContext } from '@quirky/protocol'
 
 /** Edits the same daemon-owned binding overrides the public keybinding API exposes. */
@@ -46,10 +46,12 @@ export function ShortcutSettings({ context, report }: { context: UiPluginContext
     setPending(binding.id)
     setError(null)
     try {
-      const rows = await context.call(action === 'reset' ? 'keybinding.reset' : 'keybinding.set', {
-        id: binding.id,
-        ...(action === 'reset' ? {} : { key: action === 'disable' ? null : drafts[binding.id] ?? binding.key })
-      }) as UiKeybinding[]
+      const rows = (action === 'reset'
+        ? await context.call('keybinding.reset', { id: binding.id })
+        : await context.call('keybinding.set', {
+            id: binding.id,
+            key: action === 'disable' ? null : drafts[binding.id] ?? binding.key
+          })) as UiKeybinding[]
       if (!mounted.current) return
       setBindings(rows.filter((row) => row.plugin === 'quirky.terminal'))
       setDrafts((current) => { const next = { ...current }; delete next[binding.id]; return next })
@@ -64,9 +66,9 @@ export function ShortcutSettings({ context, report }: { context: UiPluginContext
     <section className="tt-tool-panel-fill tt-shortcut-settings">
       <ToolPanelFrame title="Terminal Shortcuts">
         <p className="ui-text-muted">Remap terminal shortcuts for this profile. Context conditions and Terminal-first policy remain in effect. Reset restores the current plugin or distro default.</p>
-        {loading ? <p className="ui-text-muted" role="status">Loading shortcuts…</p> : null}
-        {error ? <div className="ui-error-text" role="alert">{error}</div> : null}
-        {!loading && bindings.length === 0 ? <EmptyState message="No terminal shortcuts are available." /> : null}
+        {loading ? <div role="status"><NoticeLine>Loading shortcuts…</NoticeLine></div> : null}
+        {error ? <InlineError message={error} /> : null}
+        {!loading && !error && bindings.length === 0 ? <EmptyState message="No terminal shortcuts are available." /> : null}
         <div className="tt-shortcut-list">
           {bindings.map((binding) => {
             const inputId = `terminal-shortcut-${binding.id}`
