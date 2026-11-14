@@ -10,6 +10,7 @@ import { createCliFixtures, installCliFixtureTools } from './cli-fixtures'
 import { createActorReceiptStore, parseActorReceipt, quotePosixShellLiteral } from './cli-actor'
 import { collectBracketedPaste, parseWorkerPreamble } from './cli-worker-actor'
 import * as runner from './cli-run'
+import * as files from './cli-files'
 import { CLI_FILE_OBSERVATION_BINDINGS, loadCliTable, type CliTableRow } from './cli-table'
 import * as probes from './cli-checks'
 import { captureCliChild } from './cli-world'
@@ -1279,3 +1280,301 @@ test('CLI files world aborts renderer acquisition when startup times out before 
   }
 })
 
+type FixtureTab = {
+  kind: string; id: string; viewId: string; title: string; key: string; input: Record<string, unknown>
+}
+type FixtureBuffer = {
+  id: string; worktreeId: string; root: string; path: string; mode: string; tabId: string
+  view?: { byTabId: Record<string, { cursor?: { line: number; column: number }; line?: number; column?: number }> }
+}
+type FixturePublicWindow = {
+  connId: number
+  receiptIds: { window: string; workspace: string; editor: string }
+  windowState: { connId: number; layout: { worktree: string; view: { id: string } } }
+  workspace: { workspace: { id: string; activeGroup: string; root: { kind: string; id: string; activeTab: string; tabs: FixtureTab[] } } }
+  editor: { buffers: FixtureBuffer[]; tabs: Array<{ tabId: string; bufferId: string; mode: string }> }
+}
+type EditorFixtureEvidence = {
+  request: { worktreeId: string; relativePath: string; absolutePath: string; content: string; mode: string; focus: boolean; line: number; column: number }
+  public: { before: FixturePublicWindow[]; after: FixturePublicWindow[] }
+  dom: { before: files.CliFileDomWindow[]; after: files.CliFileDomWindow[] }
+  background: { public: FixturePublicWindow[]; dom: files.CliFileDomWindow[] }
+}
+type EditorEvidenceFixture = {
+  receipts: CliReceipt[]
+  observation: Omit<files.CliFileObservation, 'evidence'> & { evidence: EditorFixtureEvidence }
+}
+
+function editorEvidenceFixture(): EditorEvidenceFixture {
+  const root = '/tmp/cli-fixture/worktrees'
+  const receipts: CliReceipt[] = []
+  const receipt = (id: string, argv: string[], result: unknown, exitCode = 0) => {
+    receipts.push({ id, command: argv.slice(0, 2).join(' '), argv: [...argv, '--runtime', 'local', '--json'], exitCode, format: 'json', stdoutBytes: JSON.stringify(result).length, elapsedMs: 1, evidence: { result: structuredClone(result) } })
+  }
+  const makeSample = (phase: string, focused: boolean, background = false) => {
+    const publicWindows: FixturePublicWindow[] = []
+    const dom: files.CliFileDomWindow[] = []
+    const snapshots: files.CliFileSnapshot[] = []
+    for (const [index, label] of ['A', 'B'].entries()) {
+      const connId = 11 + index
+      const workspaceId = `wt-${label}`
+      const groupId = `grp-${label}`
+      const sentinel = `sentinel-${label}`
+      const hasTarget = label === 'A' && (focused || background)
+      const selected = label === 'A' && focused ? 'tab-A' : sentinel
+      const path = `${root}/${label.toLowerCase()}/${selected === 'tab-A' ? 'src/app.ts' : 'docs/review-notes.md'}`
+      const sentinelBuffer = { id: `buf-s-${label}`, worktreeId: workspaceId, root: `${root}/${label.toLowerCase()}`, path: `${root}/${label.toLowerCase()}/docs/review-notes.md`, mode: 'source', tabId: sentinel }
+      const targetBuffer = { id: 'buf-A', worktreeId: 'wt-A', root: `${root}/a`, path: `${root}/a/src/app.ts`, mode: 'source', tabId: 'tab-A', view: { byTabId: { 'tab-A': focused ? { cursor: { line: 2, column: 3 } } : { line: 2, column: 3 } } } }
+      const tabs: FixtureTab[] = [{ kind: 'view', id: sentinel, viewId: 'view:quirky.editor/document', title: 'Review notes', key: `buf-s-${label}`, input: { bufferId: `buf-s-${label}`, mode: 'source' } }]
+      if (hasTarget) tabs.push({ kind: 'view', id: 'tab-A', viewId: 'view:quirky.editor/document', title: 'app.ts', key: 'buf-A', input: { bufferId: 'buf-A', mode: 'source' } })
+      const windowState = { connId, layout: { worktree: workspaceId, view: { id: 'view:quirky.session/worktree' } } }
+      const workspace = { workspace: { id: workspaceId, activeGroup: groupId, root: { kind: 'group', id: groupId, activeTab: selected, tabs } } }
+      const editor: FixturePublicWindow['editor'] = { buffers: [sentinelBuffer, ...(hasTarget ? [targetBuffer] : [])], tabs: [{ tabId: sentinel, bufferId: sentinelBuffer.id, mode: 'edit' }, ...(hasTarget ? [{ tabId: 'tab-A', bufferId: 'buf-A', mode: 'edit' }] : [])] }
+      const ids = { window: `${phase}-${label}-window`, workspace: `${phase}-${label}-workspace`, editor: `${phase}-${label}-editor` }
+      receipt(ids.window, ['api', 'call', 'ui.window.state', '--conn-id', String(connId)], windowState)
+      receipt(ids.workspace, ['api', 'call', 'quirky.terminal/workspace', '--workspace', workspaceId], workspace)
+      receipt(ids.editor, ['editor', 'state', '--worktree', workspaceId], editor)
+      publicWindows.push({ connId, receiptIds: ids, windowState, workspace, editor })
+      const sample: files.CliFileDomWindow = { connId, workspaceId, groupId, selectedTabId: selected, renderedTabId: selected, path, documentHasFocus: label === 'A', activeElement: { tag: 'DIV', role: 'textbox', inDocument: true }, activeElementHostedTabId: selected, activeElementIsSource: true, reviewTabMounted: false, caret: selected === 'tab-A' ? { line: 2, column: 3 } : null, lines: selected === 'tab-A' ? ['first A', 'second A', ''] : [`notes ${label}`, ''], reviewCards: [] }
+      dom.push(sample)
+      const { lines, reviewCards, activeElementHostedTabId, activeElementIsSource, reviewTabMounted, ...snapshot } = sample
+      snapshots.push({ ...snapshot, windowWorktree: workspaceId, windowViewId: 'view:quirky.session/worktree' })
+    }
+    return { public: publicWindows, dom, snapshots }
+  }
+  const before = makeSample('before', false)
+  const background = makeSample('background', false, true)
+  const after = makeSample('after', true)
+  const open = { id: 'buf-A', worktreeId: 'wt-A', root: `${root}/a`, path: `${root}/a/src/app.ts`, openedTabId: 'tab-A' }
+  const argv = ['editor', 'open', 'src/app.ts', '--worktree', 'wt-A', '--mode', 'source', '--line', '2', '--column', '3']
+  receipt('open-a-bg', argv, open)
+  receipt('open-a-focus', [...argv, '--focus'], open)
+  receipt('read-a', ['editor', 'read', '--buffer-id', 'buf-A', '--action', 'buffer'], { buffer: { id: 'buf-A', worktreeId: 'wt-A', path: open.path, content: 'first A\nsecond A\n' }, eof: true, size: Buffer.byteLength('first A\nsecond A\n') })
+  return {
+    receipts,
+    observation: {
+      id: 'files-editor-local', status: 'observed', receiptIds: receipts.map(entry => entry.id),
+      before: before.snapshots, after: after.snapshots,
+      evidence: {
+        request: { worktreeId: 'wt-A', relativePath: 'src/app.ts', absolutePath: open.path, content: 'first A\nsecond A\n', mode: 'source', focus: true, line: 2, column: 3 },
+        public: { before: before.public, after: after.public },
+        dom: { before: before.dom, after: after.dom },
+        background: { public: background.public, dom: background.dom }
+      }
+    }
+  }
+}
+
+test('file evidence rejects independent identity, content, focus, and visible-caret corruption', async () => {
+  const fixture = editorEvidenceFixture()
+  expect(() => files.assertCliFileObservation(fixture.observation as never, fixture.receipts as never)).not.toThrow()
+  const mutations: Array<(value: EditorEvidenceFixture) => void> = [
+    value => { value.observation.after[0].windowWorktree = 'wt-B' },
+    value => { value.observation.after[0].connId = 99 },
+    value => { value.observation.after[0].groupId = 'grp-wrong' },
+    value => { value.observation.after[0].renderedTabId = 'another-tab' },
+    value => { value.observation.evidence.public.after[0].workspace.workspace.root.tabs[1].viewId = 'view:quirky.git/diff' },
+    value => { value.observation.evidence.public.after[0].workspace.workspace.root.tabs[1].input.bufferId = 'another-buffer' },
+    value => { value.observation.evidence.dom.after[0].path = '/tmp/cli-fixture/worktrees/b/src/app.ts' },
+    value => { value.observation.evidence.dom.after[0].selectedTabId = 'sentinel-A' },
+    value => { value.observation.evidence.background.dom[0].activeElement.inDocument = false },
+    value => { value.observation.evidence.background.dom[0].activeElementHostedTabId = 'tab-A' },
+    value => { value.observation.evidence.dom.after[0].lines[1] = 'second B' },
+    value => { value.observation.evidence.request.line = 3 },
+    value => { value.observation.evidence.dom.after[0].caret = null },
+    value => { value.observation.evidence.dom.after[0].caret = { line: 2, column: 1 } },
+    value => {
+      value.observation.evidence.dom.after[0].caret = null
+      value.observation.after[0].caret = null
+      const window = value.observation.evidence.public.after[0]
+      window.editor.buffers[1].view!.byTabId['tab-A'] = { line: 2, column: 3 }
+      value.receipts.find(entry => entry.id === window.receiptIds.editor)!.evidence.result = structuredClone(window.editor)
+    },
+    value => {
+      value.observation.evidence.dom.after[0].renderedTabId = 'wrong-tab-with-correct-text'
+      value.observation.after[0].renderedTabId = 'wrong-tab-with-correct-text'
+    },
+    value => {
+      value.observation.evidence.dom.after[0].path = '/tmp/cli-fixture/worktrees/b/src/app.ts'
+      value.observation.after[0].path = '/tmp/cli-fixture/worktrees/b/src/app.ts'
+    },
+    value => { value.observation.evidence.dom.after[0] = { ...value.observation.evidence.dom.after[1], lines: ['first A', 'second A', ''] } },
+    value => { value.receipts[0].exitCode = 1 },
+    value => { value.receipts.push(structuredClone(value.receipts[0])) },
+    value => { value.receipts.splice(value.receipts.findIndex(entry => entry.id === 'read-a'), 1) },
+    value => { value.observation.receiptIds.push(value.observation.receiptIds[0]) },
+    value => { value.observation.evidence = { observed: true } as never }
+  ]
+  for (const [index, mutate] of mutations.entries()) {
+    const corrupted = structuredClone(fixture)
+    mutate(corrupted)
+    expect(() => files.assertCliFileObservation(corrupted.observation as never, corrupted.receipts as never), `corruption ${index}`).toThrow()
+  }
+})
+
+test('file evidence script rejects caller runtimes and refuses receipt-only certification', async () => {
+  expect(files.parseCliFilesArgs(['--json'])).toEqual({ json: true, help: false })
+  for (const argv of [['--home', '/tmp/other'], ['--runtime', 'remote'], ['--out', '/tmp/out'], ['--command', 'echo secret'], ['extra'], ['--json', '--json'], ['--help', '--json']]) expect(() => files.parseCliFilesArgs(argv)).toThrow()
+  expect(() => files.assertCliFileObservation({ id: 'files-editor-local', status: 'observed', receiptIds: [], before: [], after: [], evidence: { observed: true } } as never, [])).toThrow()
+})
+
+test('file evidence reduction cannot promote no observations or an observed-only claim', async () => {
+  const rows = loadCliTable()
+  const expectedRows = rows.filter(row => Object.hasOwn(CLI_FILE_OBSERVATION_BINDINGS, row.id))
+  const absent = files.reduceCliFilesRows(rows, [], [])
+  expect(absent.map(row => row.id)).toEqual(expectedRows.map(row => row.id))
+  expect(absent.every(row => row.status === 'not-run' && row.executed === false)).toBe(true)
+  const claimed = files.reduceCliFilesRows(rows, [{
+    id: 'files-editor-local', status: 'observed', receiptIds: [], before: [], after: [], evidence: { observed: true }
+  } as never], [])
+  expect(claimed.some(row => row.status === 'failed')).toBe(true)
+  expect(claimed.every(row => row.status !== 'observed')).toBe(true)
+})
+
+test('file Git path readback preserves literal Unicode and shell-looking bytes in NUL framing', () => {
+  const literal = "cli-parity/open '$(touch cli-injected); λ.txt"
+  expect(files.parseCliFilesGitPaths(`?? ${literal}\0 M src/app.ts\0`)).toEqual([literal, 'src/app.ts'])
+  expect(files.parseCliFilesGitPaths('R  new name\0old name\0')).toEqual(['new name'])
+  for (const malformed of [' M missing terminator', 'bad\0', 'R  new\0']) expect(() => files.parseCliFilesGitPaths(malformed)).toThrow()
+})
+
+function reviewEvidenceFixture(id: 'files-review-diff' | 'files-review-reuse' | 'files-review-changed') {
+  const editor = editorEvidenceFixture()
+  const receipts: CliReceipt[] = []
+  const worktree = 'wt-B'
+  const tabId = 'review-B'
+  const key = `git-diff:${JSON.stringify([worktree, 'review'])}`
+  const path = id === 'files-review-diff' ? 'src/app.ts' : id === 'files-review-reuse' ? 'docs/review-notes.md' : null
+  const receipt = (name: string, argv: string[], result: unknown) => {
+    receipts.push({ id: name, command: argv.slice(0, 2).join(' '), argv: [...argv, '--runtime', 'local', '--json'], exitCode: 0, format: 'json', stdoutBytes: JSON.stringify(result).length, elapsedMs: 1, evidence: { result: structuredClone(result) } })
+  }
+  const reviewWindow = (connId: number): FixturePublicWindow => {
+    const window = structuredClone(editor.observation.evidence.public.before[1])
+    window.connId = connId
+    window.windowState.connId = connId
+    window.workspace.workspace.root.activeTab = tabId
+    window.workspace.workspace.root.tabs.push({
+      kind: 'view', id: tabId, viewId: 'view:quirky.git/diff', title: 'Review', key,
+      input: { mode: 'review', worktree, reveal: 'src/app.ts' }
+    })
+    return window
+  }
+  const reviewDom = (connId: number): files.CliFileDomWindow => ({
+    ...structuredClone(editor.observation.evidence.dom.before[1]), connId, selectedTabId: tabId, renderedTabId: tabId,
+    path: null, caret: null, lines: [], activeElement: { tag: 'DIV', role: null, inDocument: false },
+    activeElementHostedTabId: null, activeElementIsSource: false, reviewTabMounted: true,
+    reviewCards: [
+      { path: 'src/app.ts', expanded: true, loaded: true, text: 'first\nsecond λ\n' },
+      { path: 'docs/review-notes.md', expanded: true, loaded: true, text: 'review notes B changed\n' }
+    ]
+  })
+  const sample = (phase: string, windows: FixturePublicWindow[], dom: files.CliFileDomWindow[]): files.CliFileSnapshot[] =>
+    windows.map((window, index) => {
+      const ids = { window: `${id}-${phase}-${index}-window`, workspace: `${id}-${phase}-${index}-workspace`, editor: `${id}-${phase}-${index}-editor` }
+      window.receiptIds = ids
+      receipt(ids.window, ['api', 'call', 'ui.window.state', '--conn-id', String(window.connId)], window.windowState)
+      receipt(ids.workspace, ['api', 'call', 'quirky.terminal/workspace', '--workspace', window.windowState.layout.worktree], window.workspace)
+      receipt(ids.editor, ['editor', 'state', '--worktree', window.windowState.layout.worktree], window.editor)
+      const { lines, reviewCards, activeElementHostedTabId, activeElementIsSource, reviewTabMounted, ...snapshot } = dom[index]
+      return { ...snapshot, windowWorktree: window.windowState.layout.worktree, windowViewId: window.windowState.layout.view.id }
+    })
+  const beforePublic = id === 'files-review-reuse' ? [reviewWindow(11), reviewWindow(12)] : structuredClone(editor.observation.evidence.public.before)
+  const beforeDom = id === 'files-review-reuse' ? [reviewDom(11), reviewDom(12)] : structuredClone(editor.observation.evidence.dom.before)
+  const publicAfter = [reviewWindow(11), reviewWindow(12)]
+  const domAfter = [reviewDom(11), reviewDom(12)]
+  const before = sample('before', beforePublic, beforeDom)
+  const after = sample('after', publicAfter, domAfter)
+  const command = id === 'files-review-changed' ? 'command:quirky.git/open-changes' : 'command:quirky.git/open-diff'
+  const args = { worktree, ...(path === null ? {} : { path }) }
+  receipt(`${id}-command`, ['api', 'call', 'ui.window.command.run', '--conn-id', '11', '--id', command, '--args', JSON.stringify(args)], {})
+  const review: Record<string, unknown> = { worktreeId: worktree, path, targetConnectionId: 11, reviewKey: key, tabId }
+  const evidence: files.CliFileObservationEvidence = {
+    request: { worktreeId: worktree, path, absolutePath: `/tmp/cli-fixture/worktrees/b${path === null ? '' : `/${path}`}`, content: path === 'docs/review-notes.md' ? 'review notes B changed\n' : 'first\nsecond λ\n', targetConnectionId: 11, mode: 'review' },
+    public: { before: beforePublic, after: publicAfter }, dom: { before: beforeDom, after: domAfter }, review
+  }
+  let repeat: FixturePublicWindow | undefined
+  if (id === 'files-review-changed') {
+    repeat = reviewWindow(11)
+    const repeatDom = reviewDom(11)
+    sample('repeat', [repeat], [repeatDom])
+    review.repeatBefore = { public: repeat, dom: repeatDom }
+    review.tabBeforeRepeat = tabId
+    review.changedPaths = ['src/app.ts', 'docs/review-notes.md']
+    review.supportingReceiptIds = []
+    const status = { entries: [{ path: 'src/app.ts' }, { path: 'docs/review-notes.md' }] }
+    receipt(`${id}-git-before`, ['api', 'call', 'quirky.git/status', '--worktree', worktree], status)
+    receipt(`${id}-git-after`, ['api', 'call', 'quirky.git/status', '--worktree', worktree], status)
+    evidence.git = { beforeReceiptId: `${id}-git-before`, afterReceiptId: `${id}-git-after`, before: status, after: status }
+    receipt(`${id}-repeat-command`, ['api', 'call', 'ui.window.command.run', '--conn-id', '11', '--id', command, '--args', JSON.stringify(args)], {})
+  }
+  const observation: files.CliFileObservation = { id, status: 'observed', receiptIds: receipts.map(entry => entry.id), before, after, evidence }
+  return { receipts, observation, publicAfter, repeat }
+}
+
+for (const id of ['files-review-diff', 'files-review-reuse', 'files-review-changed'] as const) {
+  test(`file Review evidence rejects extra non-Review tabs from ${id}`, () => {
+    const fixture = reviewEvidenceFixture(id)
+    expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).not.toThrow()
+    for (const window of [...fixture.publicAfter, ...(fixture.repeat ? [fixture.repeat] : [])]) {
+      window.workspace.workspace.root.tabs.push({
+        kind: 'view', id: 'unrequested-editor', viewId: 'view:quirky.editor/document', title: 'Unrequested', key: 'extra', input: { bufferId: 'extra' }
+      })
+      fixture.receipts.find(entry => entry.id === window.receiptIds.workspace)!.evidence.result = structuredClone(window.workspace)
+    }
+    expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).toThrow()
+  })
+}
+
+test('file Review reuse proves the loaded revealed card even when stored reveal stays unchanged', () => {
+  const fixture = reviewEvidenceFixture('files-review-reuse')
+  expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).not.toThrow()
+  for (const dom of fixture.observation.evidence.dom.after) {
+    dom.reviewCards = dom.reviewCards.filter(card => card.path !== 'docs/review-notes.md')
+  }
+  expect(() => files.assertCliFileObservation(fixture.observation, fixture.receipts)).toThrow()
+})
+
+test('file runner retains startup and cleanup failures without certifying any observation', async () => {
+  const failure = new cliWorldModule.CliWorldError('owned-startup', 'owned startup failed')
+  failure.cleanupError = 'owned teardown failed'
+  const report = await files.runCliFilesParity({ createWorld: async () => { throw failure } })
+  expect(report).toMatchObject({
+    ok: false, parityComplete: false,
+    error: { stage: 'setup', kind: 'owned-startup', message: 'owned startup failed' },
+    cleanup: { ok: false, error: expect.stringContaining('owned teardown failed') }
+  })
+  expect(report.observations.every(observation => observation.status === 'not-run')).toBe(true)
+  expect(report.rows.every(row => !row.executed)).toBe(true)
+})
+
+test('file runner validates script arguments before constructing an owned world', async () => {
+  let allocations = 0
+  const createWorld = async (): Promise<never> => {
+    allocations++
+    throw new Error('world allocation must not run')
+  }
+  const diagnostic = console.error
+  console.error = () => {}
+  try {
+    for (const args of [['--home', '/tmp/not-owned'], ['--runtime', 'remote'], ['--out', '/tmp/out'], ['extra']]) {
+      expect(await files.main(args, { createWorld })).toBe(2)
+    }
+    expect(allocations).toBe(0)
+  } finally {
+    console.error = diagnostic
+  }
+})
+
+test('renderer evidence reads stop on interruption and retain late rejection handling', async () => {
+  const controller = new AbortController()
+  const pending = Promise.withResolvers<string>()
+  const started = Promise.withResolvers<void>()
+  const result = files.captureCliFilesRenderer(() => {
+    started.resolve()
+    return pending.promise
+  }, controller.signal, 15_000).then(value => ({ value }), error => ({ error }))
+  await started.promise
+  controller.abort(new files.CliFilesFailure('interrupted', 'stop renderer read'))
+  expect(await result).toMatchObject({ error: { kind: 'interrupted', message: 'stop renderer read' } })
+  pending.reject(new Error('late renderer failure'))
+})

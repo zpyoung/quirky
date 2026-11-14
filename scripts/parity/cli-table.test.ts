@@ -284,7 +284,7 @@ test('table parser rejects malformed observations and wrong acceptance commands'
 test('the four file rows bind renderer observations without changing their dispositions or partial mappings', () => {
   const rows = loadCliTable()
   for (const [id, observations] of Object.entries(fileObservationIds)) {
-    expect(rowObservations(rows.find(row => row.id === id)!)).toEqual(observations)
+    expect(rowObservations(rows.find(row => row.id === id)!)).toEqual([...observations])
   }
 
   expect(rows.find(row => row.id === 'file-open')).toMatchObject({
