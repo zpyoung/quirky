@@ -24,3 +24,4 @@ plugins/quirky.terminal/test/emulator.test.ts  simulator list and frame APIs int
 apps/desktop/test/allow-label-hosts.test.ts  edits an Info.plist with macOS plutil, which Linux lacks
 scripts/parity/browser.test.ts  real CLI browser parity uses installed macOS Chrome; remote Linux host has no Chrome/Chromium
 scripts/parity/browser-pane.test.ts  runs Watch pane parity against installed macOS Chrome; the remote Linux host has no Chrome/Chromium
+scripts/parity/cli-files.test.ts  real two-window CLI renderer observations require installed macOS Chrome; the remote Linux host has no Chrome/Chromium
