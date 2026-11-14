@@ -89,6 +89,16 @@ class FakeServer implements NavigationServer {
   }
 }
 
+class DelayedStopServer extends FakeServer {
+  readonly finishStop = deferred<void>()
+
+  override async stop(): Promise<void> {
+    this.stopCalls++
+    await this.finishStop.promise
+    this.exit(0)
+  }
+}
+
 type PoolSetup = {
   pool: ServerPool
   clock: FakeTimers
@@ -187,6 +197,36 @@ describe('ServerPool', () => {
     await Promise.all([requestA, requestB])
   })
 
+  test('waits for an idle server stop before admitting work at capacity', async () => {
+    const servers: FakeServer[] = []
+    const { pool, clock } = createPool({
+      limits: { typescript: 1 },
+      idleMs: 10,
+      factory: async () => {
+        const server = servers.length === 0 ? new DelayedStopServer(301) : new FakeServer(302)
+        servers.push(server)
+        return server
+      }
+    })
+    await runOnce(pool, worktree('expiring'))
+    const expiring = servers[0] as DelayedStopServer
+    await clock.advanceBy(10)
+    expect(expiring.stopCalls).toBe(1)
+
+    const pending = pool.use(worktree('waiting'), 'typescript', async () => undefined)
+    void pending.catch(() => {})
+    try {
+      await flushPromises()
+      expect(servers).toHaveLength(1)
+    } finally {
+      expiring.finishStop.resolve()
+    }
+
+    await expect(pending).resolves.toBeUndefined()
+    expect(servers).toHaveLength(2)
+    expect(pool.status().map((server) => server.worktreeId)).toEqual(['waiting'])
+  })
+
   test('stops a server after its idle timeout and resets the timeout on use', async () => {
     const { pool, clock, created } = createPool({ idleMs: 10 })
     await runOnce(pool, worktree('idle'))
@@ -218,6 +258,29 @@ describe('ServerPool', () => {
     await runOnce(pool, wt)
     expect(created).toHaveLength(2)
     expect(pool.status()[0].pid).not.toBe(firstServer.pid)
+  })
+
+  test('preserves exit details when a server exits before startup resolves', async () => {
+    const servers: FakeServer[] = []
+    const { pool } = createPool({
+      factory: async () => {
+        const server = new FakeServer(401 + servers.length)
+        if (servers.length === 0) server.exit(23, 'startup stderr')
+        servers.push(server)
+        return server
+      }
+    })
+    const wt = worktree('startup-crash')
+
+    const error = await pool.use(wt, 'typescript', async () => undefined).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain(wt.path)
+    expect((error as Error).message).toContain('23')
+    expect((error as Error).message).toContain('startup stderr')
+    await runOnce(pool, wt)
+    expect(servers).toHaveLength(2)
+    expect(pool.status().map((server) => server.pid)).toEqual([402])
   })
 
   test('stops matching worktrees and all remaining servers idempotently', async () => {

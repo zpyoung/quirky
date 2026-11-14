@@ -99,9 +99,8 @@ type Entry = {
   startPromise: Promise<NavigationServer>
   resolveStart(server: NavigationServer): void
   rejectStart(error: unknown): void
-  signal: Promise<PoolSignal>
-  resolveSignal(signal: PoolSignal): void
-  signalSent: boolean
+  signal?: PoolSignal
+  cancellationListeners: Set<(signal: PoolSignal) => void>
   exit?: { exitCode: number | null; stderrTail: string }
   stopPromise?: Promise<void>
   idleTimer?: ReturnType<typeof setTimeout>
@@ -155,17 +154,16 @@ export class ServerPool {
       }, this.requestTimeoutMs)
       const operation = (async () => {
         const server = await entry.startPromise
+        if (entry.exit) throw this.exitError(entry, entry.exit)
         if (entry.state !== 'running') throw this.stoppedError(entry)
         return await run(server)
       })()
-      const cancellation = entry.signal.then((signal) => {
-        if (signal.type === 'exit') throw this.exitError(entry, signal.exit)
-        throw this.stoppedError(entry)
-      })
+      const cancellation = this.registerCancellation(entry)
       try {
-        return await Promise.race([operation, timeout.promise, cancellation])
+        return await Promise.race([operation, timeout.promise, cancellation.promise])
       } finally {
         this.timers.clearTimeout(timeoutTimer)
+        cancellation.unregister()
       }
     } finally {
       entry.inFlight--
@@ -232,6 +230,14 @@ export class ServerPool {
           if (this.disposed) throw new Error('server pool is disposed')
           const victim = this.leastRecentlyUsedIdle(language)
           if (!victim) {
+            const stopping = [...this.entries.values()].filter((entry) =>
+              entry.language === language && entry.state === 'stopping'
+            )
+            if (stopping.length > 0) {
+              waitForStop = Promise.allSettled(stopping.map((entry) => entry.stopPromise ?? Promise.resolve()))
+                .then(() => undefined)
+              return undefined
+            }
             throw new ServerPoolError('conflict', `all ${language} servers are busy; cannot start one for worktree ${worktree.path}`)
           }
           await this.requestStop(victim).promise
@@ -241,7 +247,6 @@ export class ServerPool {
         const factory = this.factories[language]
         if (!factory) throw new Error(`no server factory configured for ${language}`)
         const start = Promise.withResolvers<NavigationServer>()
-        const signal = Promise.withResolvers<PoolSignal>()
         const entry: Entry = {
           key,
           worktree,
@@ -250,9 +255,7 @@ export class ServerPool {
           startPromise: start.promise,
           resolveStart: start.resolve,
           rejectStart: start.reject,
-          signal: signal.promise,
-          resolveSignal: signal.resolve,
-          signalSent: false,
+          cancellationListeners: new Set(),
           startedAt: this.now(),
           lastUsedAt: this.now(),
           requests: 0,
@@ -355,10 +358,24 @@ export class ServerPool {
     this.resolveSignal(entry, { type: 'exit', exit })
   }
 
+  private registerCancellation(entry: Entry): { promise: Promise<never>; unregister(): void } {
+    const { promise, reject } = Promise.withResolvers<never>()
+    const listener = (signal: PoolSignal) => {
+      reject(signal.type === 'exit' ? this.exitError(entry, signal.exit) : this.stoppedError(entry))
+    }
+    if (entry.signal) listener(entry.signal)
+    else entry.cancellationListeners.add(listener)
+    return {
+      promise,
+      unregister: () => entry.cancellationListeners.delete(listener)
+    }
+  }
+
   private resolveSignal(entry: Entry, signal: PoolSignal): void {
-    if (entry.signalSent) return
-    entry.signalSent = true
-    entry.resolveSignal(signal)
+    if (entry.signal) return
+    entry.signal = signal
+    for (const listener of entry.cancellationListeners) listener(signal)
+    entry.cancellationListeners.clear()
   }
 
   private exitError(entry: Entry, exit: { exitCode: number | null; stderrTail: string }): Error {
