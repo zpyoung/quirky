@@ -793,7 +793,8 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
   const failedChecks = checks.filter((check) => check.state === 'failed')
   const runnableChecks = failedChecks.filter((check) => check.kind === 'check_run' && check.rerunTarget !== null)
   const rerunNames = [...new Set(runnableChecks.map((check) => check.name))].sort((left, right) => left.localeCompare(right))
-  if (runnableChecks.length > 0 && !world.checksComplete && world.checksCurrentHead !== true) {
+  if (runnableChecks.length > 0 && !world.checksComplete &&
+    (world.checksCurrentHead !== true || enrollment.kindPayload.mergeCheckScope !== 'required')) {
     considered[considered.length - 1] = 'fix-checks: checks-incomplete'
     return noAction('checks-incomplete', considered)
   }

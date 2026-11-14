@@ -636,7 +636,8 @@ export async function execute(
         }
         const result = asRecord(await call('quirky.hosting/rerunChecks', {
           ...apiParams(payload),
-          failedOnly: true
+          failedOnly: true,
+          ...(payload.mergeCheckScope === 'required' ? { allowPartial: true } : {})
         }))
         const started = result.started
         const targetCount = result.targetCount

@@ -1064,3 +1064,17 @@ test('a force-push error after the remote may have changed remains indeterminate
   }, HEIMDALL_CALLER)
   expect(result).toMatchObject({ effect: 'indeterminate', reason: 'push-uncertain' })
 })
+
+test('required-scope recovery opts into rerunning observed failed checks from a partial read', async () => {
+  const enrolled = enrollment()
+  ;(enrolled.kindPayload as Record<string, unknown>).mergeCheckScope = 'required'
+  const run = directCall(async (method, params) => {
+    if (method === 'quirky.hosting/review') return foundReview()
+    if (method === 'quirky.hosting/rerunChecks') {
+      if (params.allowPartial !== true) throw failure('The check list is incomplete.', 'checks_incomplete')
+      return { started: 1, targetCount: 1, partial: true }
+    }
+    throw new Error(`unexpected call: ${method}`)
+  })
+  await expect(execute(run.call, action('rerun-check') as never, enrolled as never)).resolves.toMatchObject({ effect: 'landed' })
+})

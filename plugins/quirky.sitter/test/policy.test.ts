@@ -1689,6 +1689,8 @@ test('required-check scope fails closed on partial or missing required metadata'
     }
     expect(pace(snapshot(current), [])).toBe('active')
   }
+  const defaultScope = worldFromHosting(review(), hostingChecks([optionalFailure], { partial: true }), payload)
+  expect(decide(snapshot(defaultScope), [], enrollment())).toMatchObject({ action: null, reason: 'checks-incomplete' })
 })
 
 test('rebase updates carry their base ref and same-head/base conflicts hand off or park', () => {
