@@ -6,6 +6,24 @@ export interface PlannerReport { plan: { tasks: PlanTask[] }; assumptions: Assum
 export interface PlanTask { taskKey: string; title: string; spec: string; deps: string[]; criteria: Criterion[]; territory: string[] }
 export interface Criterion { body: string; shellCheckable: boolean; checkCommand: string | null }
 export interface Assumption { claim: string; dependentTaskKeys: string[]; evidence?: { command: string; observed: string } }
+export interface RepairPlannerReport {
+  repair: { upsertTasks: PlanTask[]; dropTaskKeys: string[] }
+  assumptions: Assumption[]
+}
+export interface ReviewerCriterionResult {
+  taskKey: string
+  criterionIndex: number
+  result: 'pass' | 'block'
+  note: string
+}
+export interface ReviewerReport {
+  verdict: 'approve' | 'block'
+  criteriaResults: ReviewerCriterionResult[]
+  summary: string
+}
+export interface IntegratorReport extends ReviewerReport {
+  checksRun: { command: string; exitCode: number }[]
+}
 export interface ImplementerReport {
   taskKey: string
   summary: string
@@ -321,6 +339,305 @@ export function plannerReportProblems(report: unknown): string[] {
     }
   }
   return problems
+}
+
+const REVIEWER_RESULTS = new Set(['pass', 'block'])
+const VERDICTS = new Set(['approve', 'block'])
+
+function validateReviewerCriterionResultShape(
+  value: unknown,
+  problems: string[],
+  path: string
+): value is ReviewerCriterionResult {
+  if (!isRecord(value)) {
+    problems.push(`${path} must be an object`)
+    return false
+  }
+  let valid = true
+  if (typeof value.taskKey !== 'string') {
+    problems.push(`${path}.taskKey must be a string`)
+    valid = false
+  }
+  if (typeof value.criterionIndex !== 'number') {
+    problems.push(`${path}.criterionIndex must be a number`)
+    valid = false
+  }
+  if (typeof value.result !== 'string' || !REVIEWER_RESULTS.has(value.result)) {
+    problems.push(`${path}.result must be pass or block`)
+    valid = false
+  }
+  if (typeof value.note !== 'string') {
+    problems.push(`${path}.note must be a string`)
+    valid = false
+  }
+  return valid
+}
+
+function validateReviewerReportShape(value: unknown, problems: string[]): value is ReviewerReport {
+  if (!isRecord(value)) {
+    problems.push('report must be an object')
+    return false
+  }
+  let valid = true
+  if (typeof value.verdict !== 'string' || !VERDICTS.has(value.verdict)) {
+    problems.push('verdict must be approve or block')
+    valid = false
+  }
+  if (!isUnknownArray(value.criteriaResults)) {
+    problems.push('criteriaResults must be an array')
+    valid = false
+  } else {
+    for (let index = 0; index < value.criteriaResults.length; index++) {
+      if (!validateReviewerCriterionResultShape(value.criteriaResults[index], problems, `criteriaResults[${index}]`)) {
+        valid = false
+      }
+    }
+  }
+  if (typeof value.summary !== 'string') {
+    problems.push('summary must be a string')
+    valid = false
+  } else if (value.summary.length === 0 || value.summary.length > 16_384) {
+    problems.push('summary must contain 1 to 16,384 characters')
+    valid = false
+  }
+  return valid
+}
+
+function validateIntegratorReportShape(value: unknown, problems: string[]): value is IntegratorReport {
+  let valid = validateReviewerReportShape(value, problems)
+  if (!isRecord(value)) return false
+  if (!isUnknownArray(value.checksRun)) {
+    problems.push('checksRun must be an array')
+    return false
+  }
+  for (let index = 0; index < value.checksRun.length; index++) {
+    const check = value.checksRun[index]
+    if (!isRecord(check)) {
+      problems.push(`checksRun[${index}] must be an object`)
+      valid = false
+      continue
+    }
+    if (typeof check.command !== 'string') {
+      problems.push(`checksRun[${index}].command must be a string`)
+      valid = false
+    }
+    if (typeof check.exitCode !== 'number' || !Number.isInteger(check.exitCode)) {
+      problems.push(`checksRun[${index}].exitCode must be an integer`)
+      valid = false
+    }
+  }
+  return valid
+}
+
+function verdictReportProblems(report: unknown, plan: PlannerReport, integrator: boolean): string[] {
+  const problems: string[] = []
+  const planProblems = plannerReportProblems(plan)
+  for (const problem of planProblems) problems.push(`plan: ${problem}`)
+
+  const reportValid = integrator
+    ? validateIntegratorReportShape(report, problems)
+    : validateReviewerReportShape(report, problems)
+  if (!reportValid || planProblems.length > 0 || !isRecord(report)) return problems
+
+  const tasksByKey = new Map<string, PlanTask>()
+  for (const task of plan.plan.tasks) tasksByKey.set(task.taskKey, task)
+  const assessed = new Set<string>()
+  const results = report.criteriaResults as ReviewerCriterionResult[]
+  for (let index = 0; index < results.length; index++) {
+    const result = results[index]
+    const task = tasksByKey.get(result.taskKey)
+    if (!task) {
+      problems.push(`criteriaResults[${index}] names unknown task ${result.taskKey}`)
+      continue
+    }
+    if (!Number.isInteger(result.criterionIndex) || result.criterionIndex < 0) {
+      problems.push(`criterion index ${result.criterionIndex} for task ${result.taskKey} must be a non-negative integer`)
+      continue
+    }
+    if (result.criterionIndex >= task.criteria.length) {
+      problems.push(`criterion index ${result.criterionIndex} is out of range for task ${result.taskKey}`)
+      continue
+    }
+    const key = `${result.taskKey.length}:${result.taskKey}:${result.criterionIndex}`
+    if (assessed.has(key)) {
+      problems.push(`criterion ${result.taskKey}:${result.criterionIndex} is repeated`)
+      continue
+    }
+    assessed.add(key)
+  }
+
+  for (const task of plan.plan.tasks) {
+    for (let criterionIndex = 0; criterionIndex < task.criteria.length; criterionIndex++) {
+      const key = `${task.taskKey.length}:${task.taskKey}:${criterionIndex}`
+      if (!assessed.has(key)) problems.push(`missing criterion result for ${task.taskKey}:${criterionIndex}`)
+    }
+  }
+
+  const hasBlockedCriterion = results.some((result) => result.result === 'block')
+  if (report.verdict === 'block' && !hasBlockedCriterion) {
+    problems.push('verdict must be approve when no criteria are blocked')
+  } else if (report.verdict === 'approve' && hasBlockedCriterion) {
+    problems.push('verdict must be block when a criterion is blocked')
+  }
+  if (integrator && report.verdict === 'approve') {
+    const checksRun = report.checksRun as { command: string; exitCode: number }[]
+    for (let index = 0; index < checksRun.length; index++) {
+      if (checksRun[index].exitCode !== 0) {
+        problems.push(`checksRun[${index}].exitCode must be 0 for an approved integrator report`)
+      }
+    }
+  }
+  return problems
+}
+
+export function reviewerReportProblems(report: unknown, plan: PlannerReport): string[] {
+  return verdictReportProblems(report, plan, false)
+}
+
+export function integratorReportProblems(report: unknown, plan: PlannerReport): string[] {
+  return verdictReportProblems(report, plan, true)
+}
+
+function validateRepairPlannerReportShape(value: unknown, problems: string[]): value is RepairPlannerReport {
+  if (!isRecord(value)) {
+    problems.push('report must be an object')
+    return false
+  }
+  let valid = true
+  const repair = value.repair
+  if (!isRecord(repair)) {
+    problems.push('repair must be an object')
+    valid = false
+  } else {
+    if (!isUnknownArray(repair.upsertTasks)) {
+      problems.push('repair.upsertTasks must be an array')
+      valid = false
+    } else {
+      for (let index = 0; index < repair.upsertTasks.length; index++) {
+        if (!validatePlanTaskShape(repair.upsertTasks[index], problems, `repair.upsertTasks[${index}]`)) valid = false
+      }
+    }
+    if (!isStringArray(repair.dropTaskKeys)) {
+      problems.push('repair.dropTaskKeys must be an array of strings')
+      valid = false
+    }
+  }
+
+  if (!isUnknownArray(value.assumptions)) {
+    problems.push('assumptions must be an array')
+    valid = false
+  } else {
+    for (let index = 0; index < value.assumptions.length; index++) {
+      if (!validateAssumptionShape(value.assumptions[index], problems, `assumptions[${index}]`)) valid = false
+    }
+  }
+  return valid
+}
+
+function sameStringArray(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] !== right[index]) return false
+  }
+  return true
+}
+
+function samePlannerContent(left: PlannerReport, right: PlannerReport): boolean {
+  if (left.plan.tasks.length !== right.plan.tasks.length || left.assumptions.length !== right.assumptions.length) return false
+  for (let taskIndex = 0; taskIndex < left.plan.tasks.length; taskIndex++) {
+    const first = left.plan.tasks[taskIndex]
+    const second = right.plan.tasks[taskIndex]
+    if (
+      first.taskKey !== second.taskKey ||
+      first.title !== second.title ||
+      first.spec !== second.spec ||
+      !sameStringArray(first.deps, second.deps) ||
+      !sameStringArray(first.territory, second.territory) ||
+      first.criteria.length !== second.criteria.length
+    ) return false
+    for (let criterionIndex = 0; criterionIndex < first.criteria.length; criterionIndex++) {
+      const firstCriterion = first.criteria[criterionIndex]
+      const secondCriterion = second.criteria[criterionIndex]
+      if (
+        firstCriterion.body !== secondCriterion.body ||
+        firstCriterion.shellCheckable !== secondCriterion.shellCheckable ||
+        firstCriterion.checkCommand !== secondCriterion.checkCommand
+      ) return false
+    }
+  }
+  for (let assumptionIndex = 0; assumptionIndex < left.assumptions.length; assumptionIndex++) {
+    const first = left.assumptions[assumptionIndex]
+    const second = right.assumptions[assumptionIndex]
+    if (
+      first.claim !== second.claim ||
+      !sameStringArray(first.dependentTaskKeys, second.dependentTaskKeys) ||
+      (first.evidence === undefined) !== (second.evidence === undefined) ||
+      (first.evidence !== undefined && second.evidence !== undefined &&
+        (first.evidence.command !== second.evidence.command || first.evidence.observed !== second.evidence.observed))
+    ) return false
+  }
+  return true
+}
+
+export function repairReportProblems(
+  report: unknown,
+  plan: PlannerReport,
+  frozenTaskKeys: string[]
+): string[] {
+  const problems: string[] = []
+  const baseProblems = plannerReportProblems(plan)
+  for (const problem of baseProblems) problems.push(`plan: ${problem}`)
+  if (!isStringArray(frozenTaskKeys)) problems.push('frozenTaskKeys must be an array of strings')
+
+  const validReport = validateRepairPlannerReportShape(report, problems)
+  if (!validReport || baseProblems.length > 0 || !isStringArray(frozenTaskKeys)) return problems
+
+  const upsertTasks = report.repair.upsertTasks
+  const dropTaskKeys = report.repair.dropTaskKeys
+  if (upsertTasks.length === 0 && dropTaskKeys.length === 0 && report.assumptions.length === 0) {
+    problems.push('empty-repair-patch')
+  }
+
+  const frozen = new Set(frozenTaskKeys)
+  const existingTaskKeys = new Set(plan.plan.tasks.map((task) => task.taskKey))
+  const upsertKeys = new Set<string>()
+  for (const task of upsertTasks) {
+    if (frozen.has(task.taskKey)) problems.push(`changes-frozen-node:${task.taskKey}`)
+    if (upsertKeys.has(task.taskKey)) problems.push(`duplicate upsert task key ${task.taskKey}`)
+    upsertKeys.add(task.taskKey)
+  }
+
+  const dropped = new Set<string>()
+  for (const taskKey of dropTaskKeys) {
+    if (frozen.has(taskKey)) problems.push(`changes-frozen-node:${taskKey}`)
+    if (!existingTaskKeys.has(taskKey)) problems.push(`unknown drop task key ${taskKey}`)
+    if (dropped.has(taskKey)) problems.push(`duplicate drop task key ${taskKey}`)
+    dropped.add(taskKey)
+  }
+
+  if (problems.length > 0) return problems
+  const merged = applyRepairPatchToRevision(plan, report)
+  const mergedProblems = plannerReportProblems(merged)
+  problems.push(...mergedProblems)
+  if (mergedProblems.length === 0 && samePlannerContent(plan, merged)) problems.push('empty-repair-patch')
+  return problems
+}
+
+export function applyRepairPatchToRevision(
+  plan: PlannerReport,
+  repair: RepairPlannerReport
+): PlannerReport {
+  const dropped = new Set(repair.repair.dropTaskKeys)
+  const tasks = plan.plan.tasks.filter((task) => !dropped.has(task.taskKey))
+  for (const upsert of repair.repair.upsertTasks) {
+    const existingIndex = tasks.findIndex((task) => task.taskKey === upsert.taskKey)
+    if (existingIndex === -1) tasks.push(upsert)
+    else tasks[existingIndex] = upsert
+  }
+  return {
+    plan: { tasks },
+    assumptions: [...plan.assumptions, ...repair.assumptions]
+  }
 }
 
 function isSafeModifiedPath(path: string): boolean {

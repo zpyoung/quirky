@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import type { ObjectivePayload } from './contract'
 import type { PlanTask } from './plan'
 
@@ -13,25 +14,160 @@ Use the exact assigned taskKey. Assess every criterion once, using zero-based in
 List only safe relative paths within the write territory, never .git or .quirky paths. Keep the full report at most 262144 bytes.
 Self-assessment is not independent verification; report failures and unknowns honestly.`
 
-/** Gives a worker its bounded role and the exact report channel that can settle its dispatch. */
-export function objectivePrompt(payload: ObjectivePayload, role: 'planner' | 'implementer', reportPath: string,
-  task?: PlanTask, progress?: unknown): string {
-  const sections = [
-    `ROLE: ${role}`,
-    `OBJECTIVE:\n${payload.objectiveText}`,
-    `TIER: ${payload.tier}`,
-    `LANDING BAR: ${payload.landingBar}`,
-    `WRITE TERRITORY:\n${JSON.stringify(payload.writeTerritory)}`
-  ]
-  if (role === 'planner') {
-    if (payload.existingPlan !== undefined) sections.push(`EXISTING PLAN:\n${payload.existingPlan}`)
-  } else {
-    sections.push(`ASSIGNED TASK:\n${JSON.stringify(task)}`, `PLAN PROGRESS:\n${JSON.stringify(progress)}`)
+const MAX_PROMPT_BYTES = 262_144
+const SECTION_SEPARATOR = '\n\n'
+const TRUNCATION_MARKER = '… [truncated]'
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  if (maxBytes <= 0) return ''
+  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value
+
+  const markerBytes = Buffer.byteLength(TRUNCATION_MARKER, 'utf8')
+  const contentBudget = Math.max(0, maxBytes - markerBytes)
+  let contentBytes = 0
+  let contentLength = 0
+  for (const character of value) {
+    const characterBytes = Buffer.byteLength(character, 'utf8')
+    if (contentBytes + characterBytes > contentBudget) break
+    contentBytes += characterBytes
+    contentLength += character.length
   }
-  sections.push(
+  return value.slice(0, contentLength) + (maxBytes >= markerBytes ? TRUNCATION_MARKER : '')
+}
+
+function jsonPromptValue(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? 'null'
+  } catch {
+    return '[unserializable context]'
+  }
+}
+
+function promptSection(label: string, value: string, maxBytes: number): string {
+  const heading = `${label}:\n`
+  const valueBudget = Math.max(0, maxBytes - Buffer.byteLength(heading, 'utf8'))
+  return heading + truncateUtf8(value, valueBudget)
+}
+
+function jsonPromptSection(label: string, value: unknown, maxBytes: number): string {
+  return promptSection(label, jsonPromptValue(value), maxBytes)
+}
+
+function boundedPrompt(contextSections: string[], finalSections: string[]): string {
+  const final = finalSections.join(SECTION_SEPARATOR)
+  const context = contextSections.join(SECTION_SEPARATOR)
+  if (context.length === 0) return truncateUtf8(final, MAX_PROMPT_BYTES)
+
+  const contextBudget = MAX_PROMPT_BYTES -
+    Buffer.byteLength(final, 'utf8') -
+    Buffer.byteLength(SECTION_SEPARATOR, 'utf8')
+  if (contextBudget < 0) return truncateUtf8(final, MAX_PROMPT_BYTES)
+  return `${truncateUtf8(context, contextBudget)}${SECTION_SEPARATOR}${final}`
+}
+
+function commonRoleSections(payload: ObjectivePayload, role: string): string[] {
+  return [
+    `ROLE: ${role}`,
+    promptSection('OBJECTIVE', payload.objectiveText, 16_384),
+    promptSection('TIER', payload.tier, 128),
+    promptSection('LANDING BAR', payload.landingBar, 128),
+    jsonPromptSection('WRITE TERRITORY', payload.writeTerritory, 8_192)
+  ]
+}
+
+function workerFinish(reportPath: string, additionalInstructions: string): string {
+  const prefix = additionalInstructions.length > 0 ? `${additionalInstructions} ` : ''
+  return `${prefix}Write the JSON report atomically to the exact REPORT PATH: write a temporary file beside it, then rename it. Send the worker_done command from the CLI commands section with --report-path ${JSON.stringify(reportPath)} added. If the task cannot be completed, send --outcome failed without a report. Keep the full report at most 262144 bytes.`
+}
+
+/** Gives a worker its bounded role and the exact report channel that can settle its dispatch. */
+export function objectivePrompt(
+  payload: ObjectivePayload,
+  role: 'planner' | 'implementer',
+  reportPath: string,
+  task?: PlanTask,
+  progress?: unknown,
+  rejectedDraft?: unknown
+): string {
+  const sections = commonRoleSections(payload, role)
+  if (role === 'planner') {
+    if (payload.existingPlan !== undefined) sections.push(promptSection('EXISTING PLAN', payload.existingPlan, 65_536))
+  } else {
+    sections.push(jsonPromptSection('ASSIGNED TASK', task, 16_384), jsonPromptSection('PLAN PROGRESS', progress, 32_768))
+  }
+  if (rejectedDraft !== undefined) {
+    sections.push(jsonPromptSection('REJECTED DRAFT', rejectedDraft, 8_192))
+  }
+  const finish = workerFinish(
+    reportPath,
+    `${role === 'planner' ? 'Change no workspace file except your report. ' : ''}Do not run checks, review, commit or land work beyond your assigned task.`
+  )
+  return boundedPrompt(sections, [
     `REPORT CONTRACT:\n${role === 'planner' ? plannerContract : implementerContract}`,
     `REPORT PATH: ${reportPath}`,
-    `FINISH:\n${role === 'planner' ? 'Change no workspace file except your report. ' : ''}Write the JSON report atomically to the exact REPORT PATH: write a temporary file beside it, then rename it. Send the worker_done command from the CLI commands section with --report-path ${JSON.stringify(reportPath)} added. If the task cannot be completed, send --outcome failed without a report. Do not run checks, review, commit or land work beyond your assigned task.`
-  )
-  return sections.join('\n\n')
+    `FINISH:\n${finish}`
+  ])
+}
+
+const repairPlannerContract = `Write one JSON object with repair: {upsertTasks: PlanTask[], dropTaskKeys: string[]} and assumptions: Assumption[].
+PlanTask = {taskKey: string, title: string, spec: string, deps: string[], criteria: Criterion[], territory: string[]}.
+Criterion = {body: string, shellCheckable: boolean, checkCommand: string | null}.
+Assumption = {claim: string, dependentTaskKeys: string[], evidence?: {command: string, observed: string}}.
+Use valid unique task keys and acyclic dependencies across the merged plan. Upsert complete task objects to add or replace tasks; drop only existing non-frozen task keys. Include only new assumptions to merge with existing assumptions.
+Do not return a full replacement plan. Produce a non-empty repair patch and keep each task JSON under 16384 bytes. Keep the full report at most 262144 bytes.`
+
+const reviewerContract = `Write one JSON object with verdict: 'approve' | 'block', criteriaResults: {taskKey: string, criterionIndex: number, result: 'pass' | 'block', note: string}[], and summary: string.
+Assess every criterion exactly once across every active task using its taskKey and zero-based criterionIndex. verdict must be 'block' if and only if at least one criterion result is 'block'. Explain the review in a concise summary.`
+
+const integratorContract = `Write one JSON object with verdict: 'approve' | 'block', criteriaResults: {taskKey: string, criterionIndex: number, result: 'pass' | 'block', note: string}[], summary: string, and checksRun: {command: string, exitCode: number}[].
+Assess every criterion exactly once across every active task using its taskKey and zero-based criterionIndex. verdict must be 'block' if and only if at least one criterion result is 'block'. Before reporting, run checks and enrollment gates, then list each command and exit code in checksRun. An 'approve' verdict requires every checksRun exitCode to be 0.`
+
+export function repairPlannerSpec(
+  payload: ObjectivePayload,
+  reportPath: string,
+  frozenTasks: unknown[],
+  openTasks: PlanTask[],
+  failureContext: unknown,
+  rejectedDraft?: unknown
+): string {
+  const sections = [
+    ...commonRoleSections(payload, 'planner (repair)'),
+    'REPAIR MODE:\nKeep every frozen task unchanged. Frozen task evidence includes its key, title, state, summary, and filesModified. Patch only open tasks and retain all valid existing work.',
+    jsonPromptSection('FROZEN TASKS', frozenTasks, 32_768),
+    jsonPromptSection('OPEN TASKS', openTasks, 131_072),
+    jsonPromptSection('FAILURE CONTEXT', failureContext, 32_768)
+  ]
+  if (rejectedDraft !== undefined) {
+    sections.push(jsonPromptSection('REJECTED DRAFT', rejectedDraft, 8_192))
+  }
+  return boundedPrompt(sections, [
+    `REPORT CONTRACT:\n${repairPlannerContract}`,
+    `REPORT PATH: ${reportPath}`,
+    `FINISH:\n${workerFinish(reportPath, 'Change no workspace file except your report.')}`
+  ])
+}
+
+export function reviewerSpec(payload: ObjectivePayload, reportPath: string, plan: PlannerReport): string {
+  const sections = [
+    ...commonRoleSections(payload, 'reviewer'),
+    jsonPromptSection('ACTIVE PLAN AND CRITERIA', plan, 200_000)
+  ]
+  return boundedPrompt(sections, [
+    `REPORT CONTRACT:\n${reviewerContract}`,
+    `REPORT PATH: ${reportPath}`,
+    `FINISH:\n${workerFinish(reportPath, 'Do not modify any workspace files. Do not commit or land changes.')}`
+  ])
+}
+
+export function integratorSpec(payload: ObjectivePayload, reportPath: string, plan: PlannerReport): string {
+  const sections = [
+    ...commonRoleSections(payload, 'integrator'),
+    jsonPromptSection('ACTIVE PLAN AND CRITERIA', plan, 192_000),
+    jsonPromptSection('ENROLLMENT GATES', payload.gates, 16_384)
+  ]
+  return boundedPrompt(sections, [
+    `REPORT CONTRACT:\n${integratorContract}`,
+    `REPORT PATH: ${reportPath}`,
+    `FINISH:\n${workerFinish(reportPath, 'Edit only files inside WRITE TERRITORY. Do not commit or land changes.')}`
+  ])
 }

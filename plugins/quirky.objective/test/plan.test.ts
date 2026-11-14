@@ -1,13 +1,19 @@
 import { createHash } from 'node:crypto'
 import { expect, test } from 'bun:test'
 import {
+  applyRepairPatchToRevision,
   implementerReportProblems,
+  integratorReportProblems,
   plannerReportProblems,
+  repairReportProblems,
   reportDigest,
+  reviewerReportProblems,
   type ImplementerReport,
   type PlanTask,
-  type PlannerReport
+  type PlannerReport,
+  type RepairPlannerReport
 } from '../src/plan'
+import { integratorSpec, objectivePrompt, repairPlannerSpec, reviewerSpec } from '../src/prompts'
 
 const baseCriterion = {
   body: 'The task result is correct.',
@@ -273,4 +279,209 @@ test('accepts an implementer report only for its task with every criterion asses
     ])
   }
   for (const [name, value, expected, territory] of invalidReports) expectImplementerProblem(name, value, assignedTask, expected, territory)
+})
+
+test('validates reviewer and integrator verdicts and requires verdict=block to match blocking criteria', () => {
+  const plan = plannerReport({
+    plan: {
+      tasks: [
+        task({ criteria: [{ ...baseCriterion }, { ...baseCriterion, body: 'A second criterion.' }] }),
+        task({ taskKey: 'test', title: 'Verify the change' })
+      ]
+    }
+  })
+  const criteriaResults = [
+    { taskKey: 'add', criterionIndex: 0, result: 'pass', note: 'Implemented.' },
+    { taskKey: 'add', criterionIndex: 1, result: 'block', note: 'Missing behavior.' },
+    { taskKey: 'test', criterionIndex: 0, result: 'pass', note: 'Checked.' }
+  ]
+  const blockedReview = { verdict: 'block', criteriaResults, summary: 'One criterion remains blocked.' }
+  expect(reviewerReportProblems(null, plan).some((problem) => problem.includes('report must be an object'))).toBe(true)
+  expect(reviewerReportProblems({
+    ...blockedReview,
+    criteriaResults: [{ ...criteriaResults[0], result: 'maybe' }, ...criteriaResults.slice(1)]
+  }, plan).some((problem) => problem.includes('result must be pass or block'))).toBe(true)
+  expect(reviewerReportProblems(blockedReview, plan)).toEqual([])
+  expect(integratorReportProblems({
+    ...blockedReview,
+    checksRun: [{ command: 'pnpm test', exitCode: 0 }]
+  }, plan)).toEqual([])
+
+  expect(reviewerReportProblems({
+    ...blockedReview,
+    verdict: 'approve'
+  }, plan).some((problem) => problem.includes('verdict') && problem.includes('block'))).toBe(true)
+  expect(reviewerReportProblems({
+    ...blockedReview,
+    verdict: 'block',
+    criteriaResults: criteriaResults.map((result) => ({ ...result, result: 'pass' }))
+  }, plan).some((problem) => problem.includes('verdict') && problem.includes('approve'))).toBe(true)
+  expect(reviewerReportProblems({
+    ...blockedReview,
+    criteriaResults: criteriaResults.slice(1)
+  }, plan).some((problem) => problem.includes('missing criterion'))).toBe(true)
+  expect(reviewerReportProblems({
+    ...blockedReview,
+    criteriaResults: [...criteriaResults, criteriaResults[0]]
+  }, plan).some((problem) => problem.includes('repeated'))).toBe(true)
+  expect(reviewerReportProblems({
+    ...blockedReview,
+    criteriaResults: [{ ...criteriaResults[0], taskKey: 'unknown' }, ...criteriaResults.slice(1)]
+  }, plan).some((problem) => problem.includes('unknown task'))).toBe(true)
+
+  expect(integratorReportProblems({
+    ...blockedReview,
+    verdict: 'approve',
+    criteriaResults: criteriaResults.map((result) => ({ ...result, result: 'pass' })),
+    checksRun: [{ command: 'pnpm test', exitCode: 1 }]
+  }, plan).some((problem) => problem.includes('exitCode'))).toBe(true)
+  expect(integratorReportProblems({
+    ...blockedReview,
+    checksRun: [{ command: 'pnpm test', exitCode: '0' }]
+  }, plan).some((problem) => problem.includes('checksRun'))).toBe(true)
+  expect(integratorReportProblems({
+    ...blockedReview,
+    checksRun: [{ command: 1, exitCode: 0 }]
+  }, plan).some((problem) => problem.includes('command must be a string'))).toBe(true)
+})
+
+test('rejects repair patches that touch frozen tasks, break dependencies, or overflow assumptions', () => {
+  const base = plannerReport({
+    plan: {
+      tasks: [
+        task({ taskKey: 'done' }),
+        task({ taskKey: 'open', deps: ['done'] }),
+        task({ taskKey: 'obsolete' })
+      ]
+    }
+  })
+  const validPatch: RepairPlannerReport = {
+    repair: { upsertTasks: [task({ taskKey: 'open', deps: ['done'], spec: 'Revise the open task.' })], dropTaskKeys: [] },
+    assumptions: []
+  }
+  expect(repairReportProblems(validPatch, base, ['done'])).toEqual([])
+  expect(repairReportProblems({
+    ...validPatch,
+    repair: { upsertTasks: [task({ taskKey: 'done' })], dropTaskKeys: [] }
+  }, base, ['done']).some((problem) => problem.includes('changes-frozen-node:done'))).toBe(true)
+  expect(repairReportProblems({
+    ...validPatch,
+    repair: { upsertTasks: [], dropTaskKeys: ['done'] }
+  }, base, ['done']).some((problem) => problem.includes('changes-frozen-node:done'))).toBe(true)
+  expect(repairReportProblems({
+    ...validPatch,
+    repair: { upsertTasks: [], dropTaskKeys: ['unknown'] }
+  }, base, ['done']).some((problem) => problem.includes('unknown drop task key'))).toBe(true)
+  expect(repairReportProblems({
+    ...validPatch,
+    repair: {
+      upsertTasks: [
+        task({ taskKey: 'open', deps: ['new'] }),
+        task({ taskKey: 'new', deps: ['open'] })
+      ],
+      dropTaskKeys: []
+    }
+  }, base, ['done']).some((problem) => problem.includes('dependency cycle'))).toBe(true)
+
+  const fullAssumptions = plannerReport({
+    assumptions: Array.from({ length: 64 }, (_, index) => ({
+      claim: `Existing assumption ${index}.`,
+      dependentTaskKeys: ['add']
+    }))
+  })
+  expect(repairReportProblems({
+    repair: { upsertTasks: [], dropTaskKeys: [] },
+    assumptions: [{ claim: 'One more assumption.', dependentTaskKeys: ['add'] }]
+  }, fullAssumptions, []).some((problem) => problem.includes('assumptions must contain no more than 64 entries'))).toBe(true)
+  expect(repairReportProblems({
+    repair: { upsertTasks: [], dropTaskKeys: [] },
+    assumptions: []
+  }, base, []).some((problem) => problem.includes('empty-repair-patch'))).toBe(true)
+  expect(repairReportProblems({
+    repair: { upsertTasks: [], dropTaskKeys: [1] },
+    assumptions: []
+  }, base, []).some((problem) => problem.includes('dropTaskKeys must be an array of strings'))).toBe(true)
+  expect(repairReportProblems({
+    repair: { upsertTasks: [null], dropTaskKeys: [] },
+    assumptions: []
+  }, base, []).some((problem) => problem.includes('repair.upsertTasks[0] must be an object'))).toBe(true)
+  expect(repairReportProblems({
+    repair: { upsertTasks: [task({ taskKey: 'done' })], dropTaskKeys: [] },
+    assumptions: []
+  }, base, []).some((problem) => problem.includes('empty-repair-patch'))).toBe(true)
+
+  const applied = applyRepairPatchToRevision(base, {
+    repair: {
+      upsertTasks: [
+        task({ taskKey: 'open', deps: ['done'], spec: 'Revised open task.' }),
+        task({ taskKey: 'new', deps: ['done'] })
+      ],
+      dropTaskKeys: ['obsolete']
+    },
+    assumptions: [{ claim: 'New assumption.', dependentTaskKeys: ['new'] }]
+  })
+  expect(applied.plan.tasks.map((item) => item.taskKey)).toEqual(['done', 'open', 'new'])
+  expect(applied.plan.tasks[1].spec).toBe('Revised open task.')
+  expect(applied.assumptions).toHaveLength(base.assumptions.length + 1)
+})
+
+test('builds bounded repair-planner, reviewer, and integrator prompts', () => {
+  const payload = {
+    objectiveText: 'Add the requested behavior.',
+    tier: 'full' as const,
+    landingBar: 'files-on-disk' as const,
+    lanesEnabled: false,
+    maxConcurrency: 1,
+    writeTerritory: ['src/**'],
+    roleAgents: {},
+    gates: [],
+    worktree: '/workspace'
+  }
+  const plan = plannerReport()
+  const reportPath = '/workspace/.quirky/objective/watcher/attempt.json'
+  const rejectedInitialPrompt = objectivePrompt(
+    payload,
+    'planner',
+    reportPath,
+    undefined,
+    undefined,
+    { digest: 'abc123', reason: 'Please provide a clearer plan. '.repeat(10_000) }
+  )
+  expect(rejectedInitialPrompt).toContain('REJECTED DRAFT:')
+  expect(rejectedInitialPrompt).toContain('abc123')
+  const repairPrompt = repairPlannerSpec(
+    payload,
+    reportPath,
+    [{ taskKey: 'done', title: 'Completed', state: 'succeeded', summary: 'Implemented.', filesModified: ['src/a.ts'] }],
+    [task({ taskKey: 'open' })],
+    { reason: 'The acceptance check failed.', command: 'pnpm test', exitCode: 1 },
+    { digest: 'abc123', reason: 'Please make the patch narrower.' }
+  )
+  const reviewerPrompt = reviewerSpec(payload, reportPath, plan)
+  const integratorPrompt = integratorSpec(payload, reportPath, plan)
+
+  expect(repairPrompt).toContain('FROZEN TASKS:')
+  expect(repairPrompt).toContain('OPEN TASKS:')
+  expect(repairPrompt).toContain('FAILURE CONTEXT:')
+  expect(repairPrompt).toContain('REJECTED DRAFT:')
+  expect(repairPrompt).toContain(reportPath)
+  expect(reviewerPrompt).toContain('ROLE: reviewer')
+  expect(reviewerPrompt).toContain('every criterion exactly once')
+  expect(reviewerPrompt).toContain('Do not modify any workspace files')
+  expect(integratorPrompt).toContain('ROLE: integrator')
+  expect(integratorPrompt).toContain('WRITE TERRITORY:')
+  expect(integratorPrompt).toContain('checksRun')
+  expect(integratorPrompt).toContain('run checks')
+
+  const largePayload = { ...payload, objectiveText: 'objective '.repeat(40_000) }
+  const boundedPrompts = [
+    repairPlannerSpec(largePayload, reportPath, [], [], { details: 'failure '.repeat(40_000) }),
+    reviewerSpec(largePayload, reportPath, plan),
+    integratorSpec(largePayload, reportPath, plan)
+  ]
+  for (const prompt of [...boundedPrompts, repairPrompt, reviewerPrompt, integratorPrompt, rejectedInitialPrompt]) {
+    expect(byteLength(prompt)).toBeLessThanOrEqual(262_144)
+    expect(prompt).toContain('REPORT PATH:')
+    expect(prompt).toContain('REPORT CONTRACT:')
+  }
 })
