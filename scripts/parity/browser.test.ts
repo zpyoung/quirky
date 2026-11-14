@@ -40,21 +40,35 @@ test('one isolated real CLI run records every browser command and removes its pr
   const { code, report, stderr } = await childRun([process.execPath, 'scripts/parity/browser.ts', '--json'], 490_000)
   expect({ code, error: report.error, failed: report.rows.filter(row => row.status === 'failed'), stderr }).toEqual({ code: 0, error: undefined, failed: [], stderr })
   expect(report.ok).toBe(true)
-  expect(report.parityComplete).toBe(false)
+  expect(report.parityComplete).toBe(true)
   const rows = readBrowserTable()
   expect(report.rows.map(row => row.id).sort()).toEqual(rows.map(row => row.id).sort())
   for (const row of report.rows) {
     const source = rows.find(source => source.id === row.id)!
-    if (source.deferred) expect(row).toMatchObject({ status: 'gap', executed: false, reason: source.reason })
-    else if (source.disposition === 'excluded') expect(row.status).toBe('excluded')
+    if (source.disposition === 'excluded') expect(row.status).toBe('excluded')
     else {
-      expect(['passed', 'gap']).toContain(row.status)
-      expect(row.executed).toBe(true)
+      expect(row).toMatchObject({ status: 'passed', executed: true })
       expect(row.evidence.receipts).toBeArray()
-      expect(Object.keys(row.evidence).some(key => !['receipts', 'gap'].includes(key))).toBe(true)
-      if (row.status === 'gap') expect(row.reason).toBeTruthy()
+      expect(Object.keys(row.evidence).some(key => key !== 'receipts')).toBe(true)
     }
   }
+  for (const id of ['intercept-enable', 'intercept-list', 'intercept-disable']) {
+    expect(report.rows.find(row => row.id === id)?.evidence).toMatchObject({
+      pendingBeforeDisable: true, listedPending: true, serverRequestsBeforeDisable: 0, released: true
+    })
+  }
+  expect(report.rows.find(row => row.id === 'wait-url')?.evidence).toMatchObject({
+    pendingBeforeRelease: true, waitResult: { waited: true }
+  })
+  expect(report.rows.find(row => row.id === 'tab-profile-delete')?.evidence).toMatchObject({
+    deleted: true, metadataRemoved: true, chromeRemoved: true
+  })
+  expect(report.rows.find(row => row.id === 'tab-switch-focus')?.evidence).toMatchObject({
+    first: { focused: true, paneOpened: true }
+  })
+  expect(report.rows.find(row => row.id === 'open-url')?.evidence).toMatchObject({
+    routed: { client: expect.any(Number) }
+  })
   const watch = report.rows.find(row => row.id === 'worktree-watch-page')!
   expect(watch).toMatchObject({ status: 'passed', executed: true })
   const beforeSample = watch.evidence.beforeSample as { r: number; g: number; b: number; digest: string }
