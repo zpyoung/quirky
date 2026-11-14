@@ -1,5 +1,6 @@
 {
   "host": ["compatibility-tokens"],
+  "quirky.handoff": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.session": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.cli": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }
