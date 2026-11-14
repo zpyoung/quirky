@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MobileDevice, MobileNetworkInterface, MobileState, UiPluginContext } from '@quirky/protocol'
 import { configureMobile, getMobileDevices, getMobileInterfaces, getMobileState, type MobileConfigure } from './api'
 
@@ -23,50 +23,46 @@ export function useMobileState(context: UiPluginContext): MobileData {
   const [error, setError] = useState<string | null>(null)
   const alive = useRef(false)
 
-  const refresh = useCallback(async () => {
-    try {
-      const next = await getMobileState(context)
-      if (alive.current) {
-        setState(next)
-        setError(null)
+  const actions = useMemo(() => ({
+    async refresh() {
+      try {
+        const next = await getMobileState(context)
+        if (alive.current) {
+          setState(next ?? null)
+          setError(null)
+        }
+      } catch (reason) {
+        if (alive.current) setError(messageOf(reason))
+      } finally {
+        if (alive.current) setLoading(false)
       }
-    } catch (reason) {
-      if (alive.current) setError(messageOf(reason))
-    } finally {
-      if (alive.current) setLoading(false)
-    }
-  }, [context])
-
-  const refreshDevices = useCallback(async () => {
-    const devices = await getMobileDevices(context)
-    if (alive.current) setState((current) => (current ? { ...current, devices } : current))
-    return devices
-  }, [context])
-
-  const refreshInterfaces = useCallback(async () => {
-    const interfaces = await getMobileInterfaces(context)
-    if (alive.current) setState((current) => (current ? { ...current, interfaces } : current))
-    return interfaces
-  }, [context])
-
-  const configure = useCallback(
-    async (changes: MobileConfigure) => {
+    },
+    async refreshDevices() {
+      const devices = await getMobileDevices(context)
+      if (alive.current) setState((current) => (current ? { ...current, devices } : current))
+      return devices
+    },
+    async refreshInterfaces() {
+      const interfaces = await getMobileInterfaces(context)
+      if (alive.current) setState((current) => (current ? { ...current, interfaces } : current))
+      return interfaces
+    },
+    async configure(changes: MobileConfigure) {
       const next = await configureMobile(context, changes)
       if (alive.current) {
         setState(next)
         setError(null)
       }
       return next
-    },
-    [context]
-  )
+    }
+  }), [context])
 
   useEffect(() => {
     alive.current = true
-    void refresh()
+    void actions.refresh()
     const unsubscribe = context.subscribe(async (event) => {
       if (event.type !== 'quirky.mobile/changed') return
-      await Promise.all([refresh(), refreshDevices()]).catch((reason: unknown) => {
+      await Promise.all([actions.refresh(), actions.refreshDevices()]).catch((reason: unknown) => {
         if (alive.current) setError(messageOf(reason))
       })
     })
@@ -74,7 +70,7 @@ export function useMobileState(context: UiPluginContext): MobileData {
       alive.current = false
       unsubscribe()
     }
-  }, [context, refresh, refreshDevices])
+  }, [context, actions.refresh, actions.refreshDevices])
 
-  return { state, loading, error, refresh, refreshDevices, refreshInterfaces, configure }
+  return { state, loading, error, ...actions }
 }

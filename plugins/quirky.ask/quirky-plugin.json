@@ -518,6 +518,25 @@
         }
       }
     ],
+    "command": [
+      {
+        "id": "toggle-preview",
+        "title": "Toggle Ask Option Preview",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "askId": { "type": "string" },
+            "questionId": { "type": "string" },
+            "option": { "type": "string" },
+            "open": { "type": "boolean" }
+          },
+          "required": ["askId", "questionId", "option"],
+          "additionalProperties": false
+        }
+      }
+    ],
+
     "panel": [
       {
         "id": "questions",

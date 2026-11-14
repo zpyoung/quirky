@@ -1,29 +1,31 @@
-import { Button, EmptyState, SelectField, TextField } from '@quirky/ui'
+import { Button, EmptyState, InlineError, SelectField, TextField } from '@quirky/ui'
 import { useState } from 'react'
 import type { MobileNetworkInterface } from '@quirky/protocol'
+import type { MobileData } from './useMobileState'
 
 type Props = {
+  mobile: Pick<MobileData, 'refreshInterfaces' | 'configure'>
   interfaces: MobileNetworkInterface[]
   customAddresses: string[]
   selectedAddress: string
   busy?: boolean
-  onSelect(address: string): void
-  onRefresh(): Promise<void>
-  onAdd(address: string): Promise<void>
-  onRemove(address: string): Promise<void>
+  onAddressChange(address: string): void
 }
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-export function NetworkPicker({ interfaces, customAddresses, selectedAddress, busy = false, onSelect, onRefresh, onAdd, onRemove }: Props) {
+export function NetworkPicker({ mobile, interfaces, customAddresses, selectedAddress, busy = false, onAddressChange }: Props) {
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
   const uniqueCustom = customAddresses.filter((address) => !interfaces.some((network) => network.address === address))
-
+  const full = customAddresses.length >= 50
   const refresh = async () => {
     try {
-      await onRefresh()
+      const nextInterfaces = await mobile.refreshInterfaces()
+      if (!nextInterfaces.some((item) => item.address === selectedAddress) && !customAddresses.includes(selectedAddress)) {
+        onAddressChange(nextInterfaces[0]?.address ?? customAddresses[0] ?? '')
+      }
       setError(null)
     } catch (reason) {
       setError(messageOf(reason))
@@ -32,9 +34,18 @@ export function NetworkPicker({ interfaces, customAddresses, selectedAddress, bu
 
   const add = async () => {
     const address = draft.trim()
-    if (!address || busy || customAddresses.length >= 50) return
+    const current = customAddresses
+    if (!address || busy || full) return
+    if (current.includes(address)) {
+      onAddressChange(address)
+      setDraft('')
+      setError(null)
+      return
+    }
     try {
-      await onAdd(address)
+      const next = await mobile.configure({ customAddresses: [...current, address] })
+      if (!next.customAddresses.includes(address)) throw new Error('The address was not saved.')
+      onAddressChange(address)
       setDraft('')
       setError(null)
     } catch (reason) {
@@ -44,13 +55,15 @@ export function NetworkPicker({ interfaces, customAddresses, selectedAddress, bu
 
   const remove = async () => {
     try {
-      await onRemove(selectedAddress)
+      const next = await mobile.configure({
+        customAddresses: customAddresses.filter((address) => address !== selectedAddress)
+      })
+      onAddressChange(next.interfaces[0]?.address ?? next.customAddresses[0] ?? '')
       setError(null)
     } catch (reason) {
       setError(messageOf(reason))
     }
   }
-
   return (
     <div className="ui-stack">
       <SelectField
@@ -58,7 +71,7 @@ export function NetworkPicker({ interfaces, customAddresses, selectedAddress, bu
         aria-label="Network address"
         value={selectedAddress}
         disabled={busy}
-        onChange={(event) => onSelect(event.target.value)}
+        onChange={(event) => onAddressChange(event.target.value)}
       >
         <option value="">Choose an address</option>
         {interfaces.map((network, index) => (
@@ -84,15 +97,15 @@ export function NetworkPicker({ interfaces, customAddresses, selectedAddress, bu
         aria-label="Custom address"
         maxLength={16384}
         value={draft}
-        disabled={busy || customAddresses.length >= 50}
+        disabled={busy || full}
         onChange={(event) => setDraft(event.target.value)}
         placeholder="host, host:port, or ws(s):// URL"
       />
       <div className="ui-cluster">
-        <Button disabled={busy || !draft.trim() || customAddresses.length >= 50} onClick={() => void add()}>Add custom address</Button>
+        <Button disabled={busy || !draft.trim() || full} onClick={() => void add()}>Add custom address</Button>
       </div>
-      {customAddresses.length >= 50 && <p className="ui-text-muted">You can save up to 50 custom addresses. Remove one before adding another.</p>}
-      {error && <p className="ui-error-text" role="alert">{error}</p>}
+      {full && <p className="ui-text-muted">You can save up to 50 custom addresses. Remove one before adding another.</p>}
+      {error && <InlineError message={error} />}
     </div>
   )
 }
