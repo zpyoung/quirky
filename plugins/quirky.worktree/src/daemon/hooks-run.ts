@@ -2,6 +2,7 @@ import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { gitApi } from '@quirky/git'
 import type { ProcessRunner } from '@quirky/protocol'
+import { portEnvironment, type PortBlock } from './ports'
 
 export const HOOK_TIMEOUT_MS = 2 * 60 * 1000
 export const HOOK_KILL_GRACE_MS = 5000
@@ -10,7 +11,7 @@ export const HOOK_OUTPUT_LIMIT = 10 * 1024 * 1024
 export type HookKind = 'setup' | 'archive' | 'issue'
 
 /** The checkout a hook runs against: the project's primary folder and the workspace it acts on. */
-export type HookTarget = { rootPath: string; worktreePath: string }
+export type HookTarget = { rootPath: string; worktreePath: string; ports?: PortBlock | null }
 
 export type HookRunResult = {
   /** The script's exit status; null when it was killed by a signal. */
@@ -41,7 +42,8 @@ export function hookEnvironment(target: HookTarget): Record<string, string> {
     CONDUCTOR_ROOT_PATH: target.rootPath,
     CONDUCTOR_WORKSPACE_PATH: target.worktreePath,
     CONDUCTOR_WORKSPACE_NAME: name,
-    GHOSTX_ROOT_PATH: target.rootPath
+    GHOSTX_ROOT_PATH: target.rootPath,
+    ...(target.ports ? { ...portEnvironment(target.ports), CONDUCTOR_PORT: String(target.ports.base) } : {})
   }
 }
 
