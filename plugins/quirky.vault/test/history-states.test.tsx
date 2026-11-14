@@ -538,3 +538,98 @@ test('History has no unresolved spread, template operation, or propagation suppr
   const source = readFileSync(new URL('../src/window/HistoryPanel.tsx', import.meta.url), 'utf8')
   for (const unsupported of ['stopPropagation', '...(promoting ?', '`quirky.vault/${operation}`']) expect(source).not.toContain(unsupported)
 })
+
+test('pending expanded details use shared notices for each outstanding field', async () => {
+  const pending = () => Promise.withResolvers<never>().promise
+  const { context } = makeContext({ rows: [{ ...rows[0]!, previewMessages: [], subagentTranscriptCount: 1 }], view: { expandedIds: ['A'] }, rpc: { 'quirky.vault/get': pending, 'quirky.vault/firstPrompt': pending, 'quirky.vault/subagents': pending } })
+  const { container } = await mountPanel(context)
+  const detail = container.querySelector('[data-vault-session-details="A"]')!
+  expect([...detail.querySelectorAll('p.ui-notice-line')].map((notice) => notice.textContent)).toEqual(['Loading first prompt…', 'Loading latest turns…', 'Loading subagents…'])
+  expect(detail.querySelector('div.qvh-muted[role="status"]')).toBeNull()
+})
+
+test('the scanning strip retains its progress and uses a shared notice', async () => {
+  const { context } = makeContext({ rpc: { 'quirky.vault/list': () => Promise.withResolvers<never>().promise } })
+  const { container } = await mountPanel(context)
+  const strip = container.querySelector('.qvh-scan-strip[data-vault-scan-status="scanning"]')!
+  expect(strip.querySelector('.qvh-progress')).not.toBeNull()
+  expect(strip.querySelector('p.ui-notice-line')?.textContent).toContain('Scanning 0 files')
+})
+
+test('remote owner lookup renders a shared pending notice', async () => {
+  const { context } = makeContext({ rows: [{ ...rows[0]!, hostId: 'owner-A' }], rpc: { 'quirky.worktree/remoteHostList': () => Promise.withResolvers<never>().promise } })
+  const { container } = await mountPanel(context)
+  await click(namedButton(container, 'Resume session'))
+  expect(container.querySelector('[data-vault-remote-resume] p.ui-notice-line')?.textContent).toBe('Checking registered owner workspaces…')
+})
+
+test('detail errors use InlineError and Retry routes once to reload the source', async () => {
+  const { context, commands, calls } = makeContext({ view: { expandedIds: ['A'] }, rpc: { 'quirky.vault/get': () => { throw new Error('boom') } } })
+  const { container } = await mountPanel(context)
+  const error = container.querySelector('[data-vault-session-details="A"] div.ui-inline-error[role="alert"]')!
+  expect(error?.textContent).toContain('Could not inspect this source. get: boom')
+  const count = calls.filter((call) => call.method === 'quirky.vault/get').length
+  await click(namedButton(error, 'Retry'))
+  expect(controlCalls(commands)).toEqual([{ instance: 'history-1', action: 'retry-details', id: 'A' }])
+  expect(calls.filter((call) => call.method === 'quirky.vault/get')).toHaveLength(count + 1)
+})
+
+test.each([['missing', 'The source transcript is no longer available.'], ['unverifiable', 'The source transcript availability could not be verified.']] as const)('%s sources use shared error feedback', async (presence, message) => {
+  const row = { ...rows[0]!, source: { ...rows[0]!.source, presence } }
+  const { context } = makeContext({ rows: [row], view: { expandedIds: ['A'] } })
+  const { container } = await mountPanel(context)
+  expect(container.querySelector('[data-vault-session-details="A"] div.ui-inline-error[role="alert"]')?.textContent).toBe(`${message} Resume and file actions are unavailable.`)
+})
+
+test('list failures use shared errors instead of an empty view and Retry rescans', async () => {
+  const { context, calls } = makeContext({ rpc: { 'quirky.vault/list': () => { throw new Error('history unavailable') } } })
+  const { container } = await mountPanel(context)
+  expect(container.querySelector('.qvh-list div.ui-inline-error[role="alert"]')?.textContent).toBe('history unavailable')
+  expect(container.querySelector('.ui-empty-state')).toBeNull()
+  const banner = [...container.querySelectorAll('div.ui-inline-error[role="alert"]')].find((error) => error.querySelector('button'))!
+  const before = calls.filter((call) => call.method === 'quirky.vault/list').length
+  await click(namedButton(banner, 'Retry'))
+  expect(calls.filter((call) => call.method === 'quirky.vault/list')).toHaveLength(before + 1)
+})
+
+test('list failure banners coexist with usable search result rows', async () => {
+  const { context } = makeContext({ view: { query: 'Session' }, rpc: {
+    'quirky.vault/list': () => { throw new Error('history unavailable') },
+    'quirky.vault/searchStatus': () => ({ status: { enabled: true, phase: 'current' }, hosts: [] }),
+    'quirky.vault/search': () => ({ kind: 'results', hits: rows.map((row) => ({ ...row, score: 1, duplicateCount: 1, evidence: null })), page: { cursor: null, hasMore: false }, generation: 1, truncated: { candidates: false, snippets: false, query: false, freshness: false }, durationMs: 1 })
+  } })
+  const { container } = await mountPanel(context)
+  const deadline = Date.now() + 2000
+  while (!container.querySelector('[data-vault-session-row="A"]') && Date.now() < deadline) await act(async () => { await Bun.sleep(10) })
+  expect(container.querySelector('[data-vault-session-row="A"]')).not.toBeNull()
+  const banner = [...container.querySelectorAll('div.ui-inline-error[role="alert"]')].find((error) => error.querySelector('button'))
+  expect(banner?.textContent).toContain('history unavailable')
+  expect(namedButton(banner!, 'Retry')).toBeDefined()
+})
+
+test('action failures render shared alert feedback with the existing text', async () => {
+  const { context } = makeContext({ rpc: { 'quirky.vault/resume': () => { throw new Error('resume unavailable') } } })
+  const { container } = await mountPanel(context)
+  await click(namedButton(container, 'Resume session'))
+  expect([...container.querySelectorAll('div.ui-inline-error[role="alert"]')].some((error) => error.textContent === 'resume unavailable')).toBe(true)
+})
+
+test('remote owner failures render a shared error inside confirmation', async () => {
+  const { context } = makeContext({ rows: [{ ...rows[0]!, hostId: 'owner-A' }] })
+  const { container } = await mountPanel(context)
+  await click(namedButton(container, 'Resume session'))
+  expect(container.querySelector('[data-vault-remote-resume] div.ui-inline-error[role="alert"]')?.textContent).toContain('No remote owner is registered.')
+})
+
+test('an empty history has one shared empty state and no wrapper status role', async () => {
+  const { context } = makeContext({ rows: [] })
+  const { container } = await mountPanel(context)
+  expect(container.querySelectorAll('.qvh-empty .ui-empty-state')).toHaveLength(1)
+  expect(container.querySelector('.qvh-empty')?.hasAttribute('role')).toBe(false)
+})
+
+test('History removes bespoke error classes', () => {
+  const source = readFileSync(new URL('../src/window/HistoryPanel.tsx', import.meta.url), 'utf8')
+  expect(source).not.toContain('qvh-error')
+  expect(source).not.toContain('qvh-error-inline')
+})

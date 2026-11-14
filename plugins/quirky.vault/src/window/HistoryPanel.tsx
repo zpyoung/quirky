@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { createPortal } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import type { OwnerSessionHostRef, OwnerSessionWorkspaceRef, Session, UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, SectionHeader, SelectField, Tabs, TextField, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, type ContextMenuItem } from '@quirky/ui'
+import { Badge, Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, InlineError, NoticeLine, SectionHeader, SelectField, Tabs, TextField, ToolPanelFrame, ToolPanelTabs, ToolPanelTools, type ContextMenuItem } from '@quirky/ui'
 import { HISTORY_AGENTS } from '../agents'
 import type { HostedSession, ViewState } from '../types'
 import { EvidenceText } from './evidence'
@@ -461,11 +461,11 @@ function SessionDetails({
       <Button className="qvh-action-button" data-vault-retry-details onClick={onRetry}>Retry source details</Button>
       <Button className="qvh-action-button" onClick={onClose}>Hide details</Button>
     </div>
-    {!detail.firstPromptLoaded ? <div className="qvh-muted" role="status">Loading first prompt…</div> : null}
-    {!detail.sessionLoaded && previewMessages.length === 0 ? <div className="qvh-muted" role="status">Loading latest turns…</div> : null}
-    {!detail.subagentsLoaded && (row.subagentTranscriptCount ?? 0) > 0 ? <div className="qvh-muted" role="status">Loading subagents…</div> : null}
-    {detail.errors.length ? <div className="qvh-error" role="alert">Could not inspect this source. {detail.errors.join('; ')} <Button className="qvh-action-button" onClick={onRetry}>Retry</Button></div> : null}
-    {row.presence !== 'present' ? <div className="qvh-error" role="status">{row.presence === 'missing' ? 'The source transcript is no longer available.' : 'The source transcript availability could not be verified.'} Resume and file actions are unavailable.</div> : null}
+    {!detail.firstPromptLoaded ? <NoticeLine>Loading first prompt…</NoticeLine> : null}
+    {!detail.sessionLoaded && previewMessages.length === 0 ? <NoticeLine>Loading latest turns…</NoticeLine> : null}
+    {!detail.subagentsLoaded && (row.subagentTranscriptCount ?? 0) > 0 ? <NoticeLine>Loading subagents…</NoticeLine> : null}
+    {detail.errors.length ? <InlineError message={`Could not inspect this source. ${detail.errors.join('; ')}`} action={{ label: 'Retry', onAction: onRetry }} /> : null}
+    {row.presence !== 'present' ? <InlineError message={`${row.presence === 'missing' ? 'The source transcript is no longer available.' : 'The source transcript availability could not be verified.'} Resume and file actions are unavailable.`} /> : null}
     {detail.firstPromptLoaded && detail.firstPrompt !== null ? <section className="qvh-detail-section"><span className="qvh-detail-label">First prompt</span><div className="qvh-first-prompt" data-vault-first-prompt>{detail.firstPrompt}</div><Button className="qvh-action-button" onClick={onCopy}>Copy first prompt</Button></section> : detail.firstPromptLoaded ? <div className="qvh-muted" data-vault-first-prompt-unavailable>No first prompt is available.</div> : null}
     <section className="qvh-detail-section"><span className="qvh-detail-label">Latest turns</span>
       {previewMessages.length ? previewMessages.slice(-5).map((message, index) => <div className="qvh-turn" key={`${message.timestamp ?? 'none'}:${index}`}><span className="qvh-role">{messageRole(message.role)}</span>{message.text}</div>) : detail.sessionLoaded ? <div className="qvh-muted">No conversation preview available.</div> : null}
@@ -1192,8 +1192,8 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
       <SectionHeader
         title={`Resume ${agentLabel(remoteResume.row.agent)} on ${snapshot.hostOutcomes.find((host) => host.hostId === remoteResume.row.hostId)?.label ?? remoteResume.row.hostId}`}
       />
-      {remoteResume.loading ? <div role="status">Checking registered owner workspaces…</div> : null}
-      {remoteResume.error ? <div className="qvh-error-inline" role="alert">{remoteResume.error}</div> : null}
+      {remoteResume.loading ? <NoticeLine>Checking registered owner workspaces…</NoticeLine> : null}
+      {remoteResume.error ? <InlineError message={remoteResume.error} /> : null}
       {remoteResume.choices.length === 1 ? <p data-vault-remote-resume-target>{remoteResume.choices[0]!.label}</p> : null}
       {remoteResume.choices.length > 1 ? <SelectField
         label="Owner workspace"
@@ -1216,11 +1216,11 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
       </div>
     </section> : null}
     <div className="qvh-scan-strip" data-vault-scan-status={snapshot.list.loading ? 'scanning' : 'settled'}>
-      {snapshot.list.loading ? <><span>Scanning {snapshot.scanProgress?.scannedFiles ?? 0} files{snapshot.scanProgress?.current ? ` · ${snapshot.scanProgress.current}` : ''}</span><span className="qvh-progress"><span /></span><span>{model.scanElapsed(now)}</span></> : <><span>Scanned {snapshot.list.result?.scannedFiles ?? 0} files</span><span>{model.ageText(now)}</span><span>{snapshot.list.result?.total ?? 0} sessions</span></>}
+      {snapshot.list.loading ? <><NoticeLine>Scanning {snapshot.scanProgress?.scannedFiles ?? 0} files{snapshot.scanProgress?.current ? ` · ${snapshot.scanProgress.current}` : ''}</NoticeLine><span className="qvh-progress"><span /></span><span>{model.scanElapsed(now)}</span></> : <><span>Scanned {snapshot.list.result?.scannedFiles ?? 0} files</span><span>{model.ageText(now)}</span><span>{snapshot.list.result?.total ?? 0} sessions</span></>}
     </div>
     {snapshot.hostOutcomes.filter((host) => host.kind !== 'ok').map((host) => <div className="qvh-issue" role="status" key={host.hostId}>{host.label}: {host.reason ?? (host.kind === 'unavailable' ? 'This host does not provide history search.' : 'This host could not be reached.')}</div>)}
     {snapshot.list.result?.issues.map((issue, index) => <div className="qvh-issue" role="status" key={`${issue.hostId}:${issue.filePath ?? issue.root ?? index}`}>{issue.kind === 'notice' ? 'Notice: ' : 'History source issue: '}{issue.reason}</div>)}
-    {snapshot.list.error ? <div className="qvh-error" role="alert">{snapshot.list.error} <Button onClick={() => snapshot.viewReady ? void model.refreshList(true) : void model.retryView()}>Retry</Button></div> : null}
+    {snapshot.list.error ? <InlineError message={snapshot.list.error} action={{ label: 'Retry', onAction: () => snapshot.viewReady ? void model.refreshList(true) : void model.retryView() }} /> : null}
     <div className="qvh-sortbar">
       <strong>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? `${snapshot.search.response?.kind === 'results' ? snapshot.search.response.hits.length : 0} matches` : `${allRows.length} of ${snapshot.list.result?.total ?? 0} sessions`}</strong>
       <SelectField label="Sort" id="qvh-sort" aria-label="Sort sessions" value={snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? snapshot.view.searchSort : snapshot.view.browseSort} onChange={(event) => {
@@ -1267,8 +1267,8 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
           /></div>
         })}
       </div> : snapshot.list.error
-        ? <div className="qvh-error" role="alert">{emptyListText(snapshot, noAgents, allRows)}</div>
-        : <div className="qvh-empty" role="status"><EmptyState
+        ? <InlineError message={emptyListText(snapshot, noAgents, allRows)} />
+        : <div className="qvh-empty"><EmptyState
           message={emptyListText(snapshot, noAgents, allRows)}
           action={!noAgents && !snapshot.list.loading && allRows.length === 0 && snapshot.view.query.trim() ? { label: 'Clear search', onAction: () => setQuery('') } : undefined}
         /></div>}
@@ -1282,7 +1282,7 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
       }} disabled={snapshot.list.loading || snapshot.search.loading}>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? 'Load more matches' : 'Show more sessions'}</Button> : null}
       {snapshot.view.sessionLimit === null ? <div className="qvh-footer-count">Unlimited history can take longer to scan and may slow the app.</div> : null}
     </div>
-    {snapshot.actionError ? <div className="qvh-error" role="alert">{snapshot.actionError}</div> : null}
+    {snapshot.actionError ? <InlineError message={snapshot.actionError} /> : null}
   </div>
 }
 
