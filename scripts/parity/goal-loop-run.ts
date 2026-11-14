@@ -37,7 +37,7 @@ export type GoalLoopRunOptions = {
   deadlineMs?: number
 }
 
-const DEFAULT_DEADLINE_MS = 120_000
+const DEFAULT_DEADLINE_MS = 180_000
 const PRODUCT_CLEANUP_RESERVE_MAX_MS = 5_000
 const FINAL_TEARDOWN_RESERVE_MAX_MS = 10_000
 const CLI_TIMEOUT_MS = 15_000
@@ -46,6 +46,7 @@ const STDOUT_LIMIT_BYTES = 16 * 1024 * 1024
 const SHELL_COMMAND = `printf 'fixture-shell-ready\\n'; read line; printf 'ACK:%s\\n' "$line"; exec /bin/sh`
 const LOOP_PROMPT = 'fixture-loop-tick'
 const HELD_LOOP_PROMPT = 'fixture-loop-hold [hold]'
+const CLAUDE_LOOP_PROMPT = 'fixture-claude-loop-tick'
 const EXPECTED_RESET_MS = 1_893_456_000_000
 
 type ObjectValue = Record<string, unknown>
@@ -68,6 +69,7 @@ type WorkflowState = {
   worktrees: OwnedWorktree[]
   sessions: OwnedSession[]
   shellSessionId?: string
+  pendingInterruptSessionId?: string
   tabs: OwnedTab[]
   loops: string[]
   loopSessionIds: string[]
@@ -413,7 +415,7 @@ async function cliJson(
 async function poll<T>(
   ctx: RunContext,
   label: string,
-  read: () => Promise<T>,
+  read: (deadlineAt: number) => Promise<T>,
   ready: (value: T) => boolean,
   timeoutMs = 15_000
 ): Promise<T> {
@@ -421,7 +423,15 @@ async function poll<T>(
   let last: T | undefined
   while (Date.now() < end) {
     checkAbort(ctx)
-    last = await read()
+    try {
+      last = await read(end)
+    } catch (error) {
+      checkAbort(ctx)
+      if (Date.now() >= end) break
+      throw error
+    }
+    checkAbort(ctx)
+    if (Date.now() >= end) break
     if (ready(last)) return last
     const remaining = end - Date.now()
     if (remaining > 0) await sleep(Math.min(100, remaining), ctx.signal)
@@ -553,8 +563,8 @@ function inputLines(text: string, sessionId: string): string[] {
     .map((entry, index) => requiredString(entry, 'line', `OMP input ${index}`))
 }
 
-async function readSession(ctx: RunContext, sessionId: string): Promise<string> {
-  return textFromTerminal(await cliJson(ctx, ['terminal', 'read', sessionId, '--lines', '100']), `terminal read ${sessionId}`)
+async function readSession(ctx: RunContext, sessionId: string, deadlineAt = ctx.deadlineAt): Promise<string> {
+  return textFromTerminal(await cliJson(ctx, ['terminal', 'read', sessionId, '--lines', '100'], ctx.signal, deadlineAt), `terminal read ${sessionId}`)
 }
 
 async function terminalRoundtrip(ctx: RunContext): Promise<Record<string, unknown>> {
@@ -610,6 +620,58 @@ async function terminalRoundtrip(ctx: RunContext): Promise<Record<string, unknow
       ctx.state.tabs.push({ id: pane.tabId, sessionId: session.id, worktreeId: session.worktreeId })
     }
   }
+  const interruptMarker = `INTERRUPT:${sessionA.id}`
+  ctx.state.pendingInterruptSessionId = sessionA.id
+  object(await cliJson(ctx, [
+    'api', 'call', 'quirky.terminal/write', '--params', JSON.stringify({ session: sessionA.id, data: '\u0003' })
+  ]), 'raw terminal interrupt receipt')
+  let signalCountA = 0
+  let signalCountB = 0
+  let markerCountA = 0
+  let markerCountB = 0
+  try {
+    await poll(ctx, 'A terminal SIGINT', async deadlineAt => {
+      const [log, textA, textB] = await Promise.all([
+        ctx.world.readLog('omp-signal'), readSession(ctx, sessionA.id, deadlineAt), readSession(ctx, sessionB.id, deadlineAt)
+      ])
+      const signals = parseJsonLines(log, 'OMP signal log')
+      signalCountA = signals.filter(record => record.sessionId === sessionA.id && record.signal === 'SIGINT').length
+      signalCountB = signals.filter(record => record.sessionId === sessionB.id && record.signal === 'SIGINT').length
+      markerCountA = occurrences(textA, interruptMarker)
+      markerCountB = occurrences(textB, 'INTERRUPT:')
+      return signalCountA === 1 && signalCountB === 0 && markerCountA === 1 && markerCountB === 0
+    }, ready => ready)
+  } catch (error) {
+    if (!(error instanceof GoalLoopFailure) || error.kind !== 'timeout') throw error
+    throw new GoalLoopFailure('missing-terminal-interrupt', 'Accepted raw write did not produce the isolated OMP SIGINT', undefined, {
+      signalCountA, signalCountB, markerCountA, markerCountB
+    })
+  }
+  ctx.state.pendingInterruptSessionId = undefined
+  equal(inputLines(await ctx.world.readLog('omp-input'), sessionA.id), [nudge], 'OMP input after interrupt')
+  const aliveB = sessionIds(await cliJson(ctx, ['session', 'list', '--worktree', b.id]), 'B after interrupt')
+  ensure(aliveB.has(sessionB.id), 'B disappeared during A interrupt', 'missing-terminal-interrupt')
+  const tabA = ctx.state.tabs.find(tab => tab.sessionId === sessionA.id)
+  ensure(tabA && beforePanesA.filter(pane => pane.tabId === tabA.id).length === 1,
+    'A did not have its own single-agent tab', 'terminal-close-unobserved')
+  await cliJson(ctx, ['terminal', 'tab', 'close', tabA.id, '--yes'])
+  try {
+    await poll(ctx, 'A terminal tab closure', async deadlineAt => {
+      const [sessions, layout, other] = await Promise.all([
+        cliJson(ctx, ['session', 'list', '--worktree', a.id], ctx.signal, deadlineAt),
+        cliJson(ctx, ['terminal', 'layout', '--worktree', a.id], ctx.signal, deadlineAt),
+        cliJson(ctx, ['session', 'list', '--worktree', b.id], ctx.signal, deadlineAt)
+      ])
+      return !sessionIds(sessions, 'A close readback').has(sessionA.id) &&
+        terminalPanes(layout, 'A close layout').every(pane => pane.sessionId !== sessionA.id && pane.tabId !== tabA.id) &&
+        sessionIds(other, 'B close readback').has(sessionB.id)
+    }, ready => ready)
+  } catch (error) {
+    if (!(error instanceof GoalLoopFailure) || error.kind !== 'timeout') throw error
+    throw new GoalLoopFailure('terminal-close-unobserved', 'Accepted tab close left A present or removed B')
+  }
+  tabA.closed = true
+  sessionA.closed = true
   const beforeTabs = new Set(beforePanes.map(pane => pane.tabId))
   const createdLayout = await cliJson(ctx, [
     'terminal', 'tab', 'new', '--worktree', b.id, '--agent', 'shell', '--command', `/bin/sh -c ${quotePosixShellLiteral(SHELL_COMMAND)}`
@@ -640,6 +702,8 @@ async function terminalRoundtrip(ctx: RunContext): Promise<Record<string, unknow
   return {
     scopedSessionLists: { aContainsOnlyA: true, bContainsOnlyB: true, listedA: [...listedA], listedB: [...listedB] },
     nudge: { text: nudge, sendReceiptReceived, inputLines: inputsA, rawInputLines, ackQuote: ack, ackCountA: afterAckCount, ackCountB },
+    interrupt: { sessionId: sessionA.id, signalCountA, signalCountB, marker: interruptMarker, markerCountA, markerCountB },
+    close: { sessionId: sessionA.id, tabId: tabA.id, sessionAbsent: true, tabAbsent: true, otherSessionPresent: true },
     shell: { tabId: shellTabId, sessionId: shellSessionId, input: shellInput, sendReceiptReceived: true, ackQuote: shellAck, ackCount: shellAckCount },
     initialReadContainedPrompt: before.includes('PROMPT:fixture-initial-a:')
   }
@@ -676,6 +740,139 @@ function trackLoopSession(ctx: RunContext, worktree: OwnedWorktree, loop: Object
   if (!ctx.state.loopSessionIds.includes(sessionId)) ctx.state.loopSessionIds.push(sessionId)
   return sessionId
 }
+
+async function claudeCheckLoop(ctx: RunContext, worktree: OwnedWorktree): Promise<Record<string, unknown>> {
+  const checkCommand = `${quotePosixShellLiteral(process.execPath)} ${quotePosixShellLiteral(ctx.world.paths.loopCheck)}`
+  const created = loopSnapshot(await cliJson(ctx, [
+    'loop', 'create', '--agent', 'claude', '--worktree', worktree.id,
+    '--preset', 'interval', '--every', '1', '--anchor', 'from-end', '--session', 'fresh',
+    '--check', checkCommand, '--check-timeout', '5', '--resume-at-reset', '--prompt', CLAUDE_LOOP_PROMPT
+  ]), 'Claude check-loop create')
+  const id = requiredString(created, 'id', 'Claude check-loop create')
+  ctx.state.loops.push(id)
+  const observe = (snapshot: ObjectValue): ObjectValue => {
+    equal(snapshot.id, id, 'Claude loop ID')
+    equal(snapshot.worktreeId, worktree.id, 'Claude loop worktree')
+    const attempts = arrayField(snapshot, 'recentIterations', 'Claude loop')
+    for (const sessionId of [snapshot.sessionId, ...attempts.map(attempt => object(attempt, 'Claude attempt').sessionId)]) {
+      if (typeof sessionId === 'string' && !ctx.state.loopSessionIds.includes(sessionId)) ctx.state.loopSessionIds.push(sessionId)
+    }
+    return snapshot
+  }
+  const read = async (deadlineAt = ctx.deadlineAt) =>
+    observe(loopSnapshot(await cliJson(ctx, ['loop', 'show', id], ctx.signal, deadlineAt), 'Claude loop show'))
+  try {
+    observe(created)
+    equal(created.agent, 'claude', 'Claude check-loop agent')
+    equal(created.preset, 'interval', 'Claude check-loop preset')
+    const config = nestedRecord(created, 'config', 'Claude check-loop')
+    equal(config.pacing, { kind: 'interval', minutes: 1, anchor: 'from-end' }, 'Claude pacing')
+    equal(config.sessionPolicy, 'fresh', 'Claude session policy')
+    equal(config.caps, {}, 'Claude caps')
+    equal(config.resumeAtLimitReset, true, 'Claude quota reset flag')
+    equal(nestedRecord(config, 'done', 'Claude config').check, {
+      command: checkCommand, timeoutSeconds: 5, runWhen: 'every-iteration'
+    }, 'Claude check definition')
+    const first = await poll(ctx, 'first failed Claude check', read, snapshot => {
+      ensure(snapshot.state === 'running', `Claude loop ended or paused before its second turn (${snapshot.state}/${snapshot.pauseReason})`, 'claude-loop-evidence')
+      ensure(Number(snapshot.iterationsCompleted) <= 1, 'Claude loop skipped first-check observation', 'claude-loop-evidence')
+      return snapshot.iterationsCompleted === 1 && typeof snapshot.nextIterationAt === 'number' && snapshot.phase === 'waiting'
+    })
+    const firstAttempts = arrayField(first, 'recentIterations', 'first Claude loop')
+    equal(firstAttempts.length, 1, 'first Claude attempt count')
+    const firstAttempt = object(firstAttempts[0], 'first Claude attempt')
+    const firstCheck = nestedRecord(firstAttempt, 'check', 'first Claude attempt')
+    equal(firstCheck.ran, true, 'first Claude check ran')
+    equal(firstCheck.exitCode, 1, 'first Claude check exit')
+    equal(firstCheck.pass, false, 'first Claude check pass')
+    ensure(typeof firstAttempt.endedAt === 'number' && Number.isFinite(firstAttempt.endedAt), 'First Claude end timestamp missing', 'claude-loop-evidence')
+    const firstEndedAt = firstAttempt.endedAt
+    const nextIterationAt = first.nextIterationAt
+    equal(nextIterationAt, firstEndedAt + 60_000, 'from-end Claude interval timestamp')
+    const pauseReceipt = observe(loopSnapshot(await cliJson(ctx, ['loop', 'pause', id]), 'Claude pause receipt'))
+    equal(pauseReceipt.config, config, 'Claude pause config')
+    const paused = await poll(ctx, 'paused Claude loop readback', read,
+      snapshot => snapshot.state === 'paused' && snapshot.pauseReason === 'user' && snapshot.iterationsCompleted === 1)
+    equal(paused.nextIterationAt, nextIterationAt, 'Claude pause preserved interval')
+    const resumed = observe(loopSnapshot(await cliJson(ctx, ['loop', 'resume', id]), 'Claude resume receipt'))
+    equal(resumed.state, 'running', 'Claude resume receipt state')
+    equal(resumed.pauseReason, null, 'Claude resume receipt reason')
+    equal(resumed.config, config, 'Claude resume receipt config')
+    equal(resumed.nextIterationAt, nextIterationAt, 'Claude resume receipt interval')
+    const readback = await read()
+    equal(readback.state, 'running', 'Claude resume readback state')
+    equal(readback.pauseReason, null, 'Claude resume readback reason')
+    equal(readback.config, config, 'Claude resume readback config')
+    equal(readback.nextIterationAt, nextIterationAt, 'Claude resume readback interval')
+    const completed = await poll(ctx, 'two-turn Claude check completion', read, snapshot => {
+      ensure(snapshot.state === 'running' || snapshot.state === 'completed',
+        `Claude loop stopped or paused while awaiting check completion (${snapshot.state}/${snapshot.pauseReason})`, 'claude-loop-evidence')
+      ensure(Number(snapshot.iterationsCompleted) <= 2, 'Claude loop exceeded two turns', 'claude-loop-evidence')
+      const attempts = arrayField(snapshot, 'recentIterations', 'Claude completion')
+      ensure(attempts.every(value => {
+        const attempt = object(value, 'Claude completion attempt')
+        return attempt.endReason === null || attempt.endReason === 'settled'
+      }), 'Claude loop had an unsuccessful attempt', 'claude-loop-evidence')
+      if (snapshot.state !== 'completed') return false
+      ensure(snapshot.iterationsCompleted === 2, 'Claude check completed before two turns', 'claude-loop-evidence')
+      return true
+    }, 90_000)
+    equal(completed.pauseReason, null, 'completed Claude pause reason')
+    equal(completed.nextIterationAt, null, 'completed Claude next iteration')
+    equal(completed.config, config, 'completed Claude config')
+    const attempts = arrayField(completed, 'recentIterations', 'completed Claude loop')
+      .map(value => object(value, 'completed Claude attempt')).sort((a, b) => Number(a.n) - Number(b.n))
+    equal(attempts.length, 2, 'completed Claude attempt count')
+    equal(attempts.map(attempt => attempt.n), [1, 2], 'Claude iteration sequence')
+    equal(attempts.map(attempt => attempt.attempt), [1, 1], 'Claude attempt sequence')
+    equal(attempts.map(attempt => attempt.endReason), ['settled', 'settled'], 'Claude attempt outcomes')
+    const checks = attempts.map(attempt => nestedRecord(attempt, 'check', 'Claude attempt'))
+    equal(checks.map(check => check.exitCode), [1, 0], 'Claude check exits')
+    equal(checks.map(check => check.pass), [false, true], 'Claude check results')
+    ensure(checks.every(check => check.ran === true && check.timedOut === false && check.aborted === false && check.error === undefined),
+      'Claude checks were not executed successfully', 'claude-loop-evidence')
+    for (let index = 0; index < checks.length; index++) {
+      equal(occurrences(string(checks[index]!.stdoutTail, 'Claude check stdout'), `fixture-check:${index + 1}`), 1, 'Claude check stdout marker count')
+      equal(attempts[index]!.error, undefined, 'Claude attempt error')
+    }
+    const checkLog = parseJsonLines(await ctx.world.readLog('loop-check'), 'Claude check invocation log')
+    equal(checkLog.map(entry => entry.invocation), [1, 2], 'owned check invocation order')
+    equal(checkLog.map(entry => entry.exitCode), [1, 0], 'owned check process exits')
+    const turns = parseJsonLines(await ctx.world.readLog('claude'), 'Claude fixture log')
+      .filter(entry => entry.type === 'user' && typeof entry.prompt === 'string' && entry.prompt.includes(CLAUDE_LOOP_PROMPT))
+    equal(turns.length, 2, 'native Claude turn start count')
+    const sessionIds = attempts.map(attempt => requiredString(attempt, 'sessionId', 'Claude attempt'))
+    const nativeSessionIds = attempts.map(attempt => {
+      const matching = turns.filter(turn => turn.prompt === attempt.promptSent)
+      equal(matching.length, 1, 'Claude native prompt correlation')
+      const turn = matching[0]!
+      equal(occurrences(string(turn.prompt, 'Claude native prompt'), CLAUDE_LOOP_PROMPT), 1, 'Claude loop-body count')
+      const nativeId = requiredString(turn, 'sessionId', 'Claude fixture turn')
+      const marker = `CLAUDE_ACK:${CLAUDE_LOOP_PROMPT}:${nativeId}`
+      equal(occurrences(string(attempt.outputTail, 'Claude output'), marker), 1, 'Claude assistant marker count')
+      return nativeId
+    })
+    equal(new Set(sessionIds).size, 2, 'fresh Claude session count')
+    equal(new Set(nativeSessionIds).size, 2, 'fresh native Claude session count')
+    const secondStartedAt = attempts[1]!.startedAt
+    ensure(typeof secondStartedAt === 'number' && Number.isFinite(secondStartedAt) && secondStartedAt >= Number(nextIterationAt),
+      'Second Claude turn bypassed its pending interval', 'claude-loop-evidence')
+    return {
+      id, agent: completed.agent, state: completed.state, pauseReason: completed.pauseReason,
+      iterationsCompleted: completed.iterationsCompleted, sessionIds, nativeSessionIds, turnStartCount: turns.length,
+      checkExitCodes: checks.map(check => check.exitCode), checkPasses: checks.map(check => check.pass),
+      firstEndedAt, nextIterationAt, secondStartedAt, intervalWaitMs: secondStartedAt - firstEndedAt,
+      resume: { beforeState: paused.state, beforeReason: paused.pauseReason, afterState: readback.state },
+      config: { pacing: config.pacing, sessionPolicy: config.sessionPolicy, caps: config.caps, resumeAtLimitReset: config.resumeAtLimitReset }
+    }
+  } catch (error) {
+    if (error instanceof GoalLoopFailure && error.kind === 'assertion') {
+      throw new GoalLoopFailure('claude-loop-evidence', error.message)
+    }
+    throw error
+  }
+}
+
 async function loops(ctx: RunContext): Promise<Record<string, unknown>> {
   const b = worktreeByName(ctx, 'goal-fixture-b')
   const createdValue = await cliJson(ctx, [
@@ -738,7 +935,9 @@ async function loops(ctx: RunContext): Promise<Record<string, unknown>> {
   ensure(isObject(stoppedIteration), 'Stopped held loop did not record an iteration outcome')
   const turnOutcome = string(stoppedIteration.endReason, 'stopped held loop iteration endReason')
   ensure(turnOutcome === 'interrupted' || turnOutcome === 'stopped', 'Held loop iteration did not record an interrupted or stopped outcome')
+  const checkCompleted = await claudeCheckLoop(ctx, b)
   return {
+    checkCompleted,
     capped: {
       id: cappedId, sessionId: cappedSessionId, prompt: LOOP_PROMPT, iterationsCompleted: capped.iterationsCompleted,
       state: capped.state, pauseReason: capped.pauseReason, turnStartCount: promptTurns.length,
@@ -843,20 +1042,33 @@ async function accountsUsage(ctx: RunContext): Promise<Record<string, unknown>> 
   const codexCallsBefore = parseJsonLines(await ctx.world.readLog('codex'), 'Codex fixture log')
   const codexReadsBefore = codexCallsBefore.filter(entry => entry.method === 'account/rateLimits/read').length
   const agyCallsBefore = parseJsonLines(await ctx.world.readLog('agy'), 'Antigravity argv log').length
+  const claudeTurnsBefore = parseJsonLines(await ctx.world.readLog('claude'), 'Claude fixture log').filter(entry => entry.type === 'user').length
+  const claudeUsageBefore = parseJsonLines(await ctx.world.readLog('claude-usage'), 'Claude usage log').length
   await cliJson(ctx, ['accounts', 'refresh', '--provider', 'codex'])
   await cliJson(ctx, ['accounts', 'refresh', '--provider', 'antigravity'])
   const claudeRefresh = providerList(await cliJson(ctx, ['accounts', 'refresh', '--provider', 'claude']))
   const refreshedClaude = usageProvider('claude', claudeRefresh, 'Claude refresh')
-  equal(refreshedClaude.status, 'unavailable', 'Claude refresh status')
-  equal(refreshedClaude.session, null, 'Claude refresh session')
-  equal(refreshedClaude.weekly, null, 'Claude refresh weekly')
+  const expectedSession = { usedPercent: 17, resetsAt: EXPECTED_RESET_MS }
+  const expectedWeekly = { usedPercent: 43, resetsAt: EXPECTED_RESET_MS }
+  ensure(refreshedClaude.status === 'ok' && isObject(refreshedClaude.session) && isObject(refreshedClaude.weekly) &&
+    refreshedClaude.session.usedPercent === 17 && refreshedClaude.session.resetsAt === EXPECTED_RESET_MS &&
+    refreshedClaude.weekly.usedPercent === 43 && refreshedClaude.weekly.resetsAt === EXPECTED_RESET_MS,
+  'Claude refresh did not report the fixture quota windows', 'usage-evidence')
+  const claudeUsageCalls = parseJsonLines(await ctx.world.readLog('claude-usage'), 'Claude usage log').slice(claudeUsageBefore)
+  const claudeUsageRequests = claudeUsageCalls.filter(entry =>
+    entry.method === 'GET' && entry.path === '/api/oauth/usage' &&
+    entry.authorizationMatches === true && entry.betaMatches === true && entry.ok === true).length
+  ensure(claudeUsageRequests > 0, 'Explicit Claude refresh made no successful authenticated fixture request', 'usage-evidence')
   const providers = providerList(await cliJson(ctx, ['accounts', 'usage']))
   const codex = usageProvider('codex', providers, 'Codex')
   const antigravity = usageProvider('antigravity', providers, 'Antigravity')
   const claude = usageProvider('claude', providers, 'Claude')
   equal(codex.status, 'ok', 'Codex usage status')
   equal(antigravity.status, 'ok', 'Antigravity usage status')
-  equal(claude.status, 'unavailable', 'Claude usage status')
+  ensure(claude.status === 'ok' && isObject(claude.session) && isObject(claude.weekly) &&
+    claude.session.usedPercent === 17 && claude.session.resetsAt === EXPECTED_RESET_MS &&
+    claude.weekly.usedPercent === 43 && claude.weekly.resetsAt === EXPECTED_RESET_MS,
+  'Claude usage did not retain the refreshed quota windows', 'usage-evidence')
   const codexSession = usageWindow(codex, 'session', 'Codex')
   const codexWeekly = usageWindow(codex, 'weekly', 'Codex')
   const agySession = usageWindow(antigravity, 'session', 'Antigravity')
@@ -868,8 +1080,8 @@ async function accountsUsage(ctx: RunContext): Promise<Record<string, unknown>> 
     equal(window.usedPercent, percent, `${label} percentage`)
     equal(window.resetsAt, EXPECTED_RESET_MS, `${label} reset timestamp`)
   }
-  equal(claude.session, null, 'Claude usage session')
-  equal(claude.weekly, null, 'Claude usage weekly')
+  const claudeTurnsAfter = parseJsonLines(await ctx.world.readLog('claude'), 'Claude fixture log').filter(entry => entry.type === 'user').length
+  equal(claudeTurnsAfter, claudeTurnsBefore, 'Claude turns during quota refresh')
   const resetCredits = object(codex.rateLimitResetCredits, 'Codex rate-limit reset credits')
   equal(resetCredits.availableCount, 1, 'Codex reset-credit availability')
   const agyCalls = parseJsonLines(await ctx.world.readLog('agy'), 'Antigravity argv log')
@@ -909,12 +1121,14 @@ async function accountsUsage(ctx: RunContext): Promise<Record<string, unknown>> 
         weekly: { usedPercent: agyWeekly.usedPercent, resetsAt: agyWeekly.resetsAt }
       },
       claude: {
-        status: claude.status, session: claude.session, weekly: claude.weekly,
-        refreshedStatus: refreshedClaude.status, refreshedSession: refreshedClaude.session,
-        refreshedWeekly: refreshedClaude.weekly
+        status: claude.status, session: expectedSession, weekly: expectedWeekly,
+        refreshedStatus: refreshedClaude.status, refreshedSession: expectedSession,
+        refreshedWeekly: expectedWeekly
       }
     },
     codexRateLimitReads: rateLimitReads,
+    claudeUsageRequests,
+    claudeTurnsDuringRefresh: claudeTurnsAfter - claudeTurnsBefore,
     codexConsumeCalls: consumeCalls,
     antigravityArgv: agyArgv,
     egressAttempts: 0,
@@ -961,7 +1175,7 @@ async function worktreesRemove(ctx: RunContext): Promise<Record<string, unknown>
   const b = worktreeByName(ctx, 'goal-fixture-b')
   const repoId = ctx.state.repoId
   ensure(repoId, 'Fixture repository was not registered')
-  for (const tab of [...ctx.state.tabs]) await closeOwnedTab(ctx, tab)
+  for (const tab of ctx.state.tabs) if (!tab.closed) await closeOwnedTab(ctx, tab)
   let listedA = sessionIds(await cliJson(ctx, ['session', 'list', '--worktree', a.id]), 'sessions before A cleanup')
   let listedB = sessionIds(await cliJson(ctx, ['session', 'list', '--worktree', b.id]), 'sessions before B cleanup')
   for (const session of ctx.state.sessions) {
@@ -1046,6 +1260,10 @@ async function cleanupProducts(ctx: RunContext, cleanupSignal: AbortSignal, clea
     if (value === undefined) continue
     const state = loopSnapshot(value, 'cleanup loop snapshot').state
     if (state !== 'stopped' && state !== 'completed') await attempt(['loop', 'stop', loopId, '--now'])
+  }
+  if (ctx.state.pendingInterruptSessionId) {
+    await attempt(['api', 'call', 'quirky.terminal/write', '--params',
+      JSON.stringify({ session: ctx.state.pendingInterruptSessionId, data: '\u0003' })])
   }
   for (const tab of ctx.state.tabs) {
     if (!tab.closed) await attempt(['terminal', 'tab', 'close', tab.id, '--yes'])

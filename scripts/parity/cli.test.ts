@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { createProcessScope } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import type { CliParityReport, CliParityRow, CliReceipt } from './cli-run'
+import { loadCliTable } from './cli-table'
 
 const checkout = join(import.meta.dir, '../..')
 
@@ -31,7 +32,7 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
       'account-add', 'account-rm', 'agent-hooks-on', 'agent-hooks-off', 'agent-hooks-status',
       'project-setup-clone', 'project-setup-create', 'project-setup-delete', 'project-setup-update',
       'repo-search-refs', 'terminal-list', 'terminal-rename', 'terminal-set-pane-title', 'terminal-show',
-      'terminal-split', 'terminal-switch', 'worktree-current', 'worktree-ps',
+      'terminal-split', 'terminal-switch', 'worktree-current', 'worktree-ps', 'worktree-ps-summary',
       'orchestration-run-use', 'orchestration-dispatch', 'orchestration-dispatch-show',
       'orchestration-worker-start', 'orchestration-worker-show',
       'orchestration-worker-list', 'orchestration-worker-stop', 'orchestration-worker-abandon',
@@ -47,12 +48,15 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
       expect(rows.get(id)).not.toHaveProperty('followUp')
     }
     expect(report.receipts.filter(receipt => excludedIds.includes(receipt.id))).toEqual([])
-    const gapIds = ['file-diff', 'file-open-changed', 'file-open-render', 'worktree-ps-summary', 'orchestration-worker-read']
+    const gapIds = ['file-diff', 'file-open-changed', 'file-open-render', 'orchestration-worker-read']
     for (const id of gapIds) {
       expect(rows.get(id), id).toMatchObject({ status: 'gap', executed: false })
       expect(rows.get(id)!.reason).toBeTruthy()
     }
-    expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(90)
+    const predecessorCoveredCount = loadCliTable().filter(row =>
+      row.disposition === 'covered' && row.id !== 'worktree-ps-summary'
+    ).length
+    expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(predecessorCoveredCount + 1)
     expect(report.rows.filter(row => row.status === 'mapped-only')).toHaveLength(0)
     expect(report.rows.filter(row => row.status === 'gap').map(row => row.id).sort()).toEqual([...gapIds].sort())
     expect(report.rows.some(row => row.status === 'delegated')).toBe(true)
@@ -103,10 +107,29 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     expect(receipt('workers-ps-tasks')).toMatchObject({
       correlation: { worktreeToSession: true, sessionToWorker: true, taskToDispatch: true, cardToTask: false, worktreePath: false, hostScope: false }
     })
+    receipt('workers-ps-worktrees')
+    receipt('workers-ps-sessions')
+    const summaryEvidence = receipt('workers-ps-summary')
+    expect(summaryEvidence).toMatchObject({
+      worktreeId: expect.any(String),
+      metadataMatched: true,
+      sessionsMatched: true,
+      displaysMatched: true,
+      runsMatched: true,
+      tasksMatched: true,
+      dispatchesMatched: true,
+      workerStatesMatched: true,
+      terminalStatesMatched: true,
+      scope: 'local'
+    })
+    const summaryReceipt = report.receipts.find(item => item.id === 'workers-ps-summary')!
+    expect(summaryReceipt.argv).toEqual(expect.arrayContaining(['orchestration', 'ps', '--limit', '100', '--json']))
     expect(receipt('workers-start-abandon')).toMatchObject({
       workerLog: '7 --dangerously-skip-permissions --disallowedTools --append-system-prompt --settings\n'.repeat(3)
     })
-    expect(rows.get('worktree-ps-summary')).toMatchObject({ status: 'gap', followUp: 'Add a compact orchestration summary command' })
+    expect(rows.get('worktree-ps-summary')).toMatchObject({
+      status: 'passed', executed: true, checks: ['workers-ps-summary']
+    })
     expect(rows.get('orchestration-worker-read')).toMatchObject({
       status: 'gap', checks: [], followUp: 'Include the visible viewport in live worker-read output'
     })
