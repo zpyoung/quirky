@@ -1275,7 +1275,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       {layout === 'ROADMAP' && <ProjectRoadmap model={roadmapModel} items={tableItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={(key) => setCollapsedGroups((previous) => toggleSet(previous, key))} sort={sort} onSort={toggleSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} zoom={zoom} onZoom={(value) => { setZoom(value); saveZoom(value) }} onToday={() => scrollToToday(roadmapScroller.current, roadmapModel.todayIndex, roadmapModel.tickWidth)} scroller={roadmapScroller} onOpen={openItem} actions={openItemActions} project={project} />}
       {layout !== 'TABLE' && layout !== 'BOARD' && layout !== 'ROADMAP' && <div role="alert">{renderProjectError(new Error('unsupported_layout'))}</div>}
     </div>}
-    {!loadingTable && !loadingViews && table === null && !mainError && !chooseView && <div className="ui-text-muted">Choose a project view to load its items.</div>}
+    {!loadingTable && !loadingViews && table === null && !mainError && !chooseView && <EmptyState message="Choose a project view to load its items." />}
     {actionHelp && <Dialog
       open
       title="GitHub project item guidance"

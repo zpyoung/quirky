@@ -30,6 +30,7 @@ let createRoot: (element: HTMLElement) => Root
 let activate: typeof Activate
 const mounted: Array<{ root: Root; container: HTMLElement }> = []
 const reactGlobal = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+const previousActEnvironment = reactGlobal.IS_REACT_ACT_ENVIRONMENT
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -50,6 +51,8 @@ afterEach(async () => {
 
 afterAll(async () => {
   await GlobalRegistrator.unregister()
+  if (previousActEnvironment === undefined) delete reactGlobal.IS_REACT_ACT_ENVIRONMENT
+  else reactGlobal.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment
 })
 
 const PROJECT: ProjectTarget = { id: 'PVT_1', owner: 'acme', ownerType: 'organization', number: 4, url: 'https://github.com/orgs/acme/projects/4', host: 'github.com', title: 'Roadmap' }
@@ -473,6 +476,7 @@ test('21. Back from the chooser routes to the picker', async () => {
   expect(controlArgs(h)).toEqual([{ action: 'back-to-picker' }])
   expect(container.querySelector('[role="dialog"]')?.textContent).toContain('Choose a project')
   expect(container.textContent).not.toContain('Choose a view')
+  expect(container.querySelector('.ui-empty-state__message')?.textContent).toBe('Choose a project view to load its items.')
 })
 
 test('22. window dispatch delivers only to matching mounted views and cleans registrations on unmount', async () => {
