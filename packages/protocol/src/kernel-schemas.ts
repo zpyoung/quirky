@@ -391,6 +391,27 @@ export type KernelMethodSchema = {
   readOnly?: true
   destructive?: { confirm: string }
 }
+const nullableMemoryTree: Schema = {
+  description: 'A memory tree, or null when the process table is unavailable.',
+  properties: {
+    processCount: integer(0),
+    rssBytes: integer(0),
+    processes: listOf(
+      object(
+        { pid: integer(1), ppid: integer(0), rssBytes: integer(0), name: string() },
+        ['pid', 'ppid', 'rssBytes', 'name']
+      )
+    ),
+    omitted: integer(0)
+  },
+  required: ['processCount', 'rssBytes', 'processes', 'omitted']
+}
+
+const nullableMemoryTotals: Schema = {
+  description: 'The unique process total, or null when the process table is unavailable.',
+  properties: { processCount: integer(0), rssBytes: integer(0) },
+  required: ['processCount', 'rssBytes']
+}
 
 /** Every kernel method's params and result schema; `params` never rejects what the handler accepts. */
 export const KERNEL_METHOD_SCHEMAS = {
@@ -436,6 +457,59 @@ export const KERNEL_METHOD_SCHEMAS = {
         socket: { description: 'The unix socket path, or null when none is listening.' }
       },
       ['daemonVersion', 'pid', 'startedAt', 'home', 'ptyHost', 'clients', 'safeMode', 'socket']
+    )
+  },
+  'diagnostics.memory': {
+    description: 'The daemon, PTY host and each running session process tree memory usage.',
+    readOnly: true,
+    params: noParams,
+    result: object(
+      {
+        schemaVersion: { type: 'integer', enum: [1] },
+        takenAt: { type: 'number' },
+        daemon: object(
+          {
+            pid: integer(1),
+            rssBytes: { description: 'RSS bytes, or null when the process table or daemon row is unavailable.' },
+            heapUsedBytes: integer(0),
+            heapTotalBytes: integer(0),
+            externalBytes: integer(0),
+            descendants: nullableMemoryTree
+          },
+          ['pid', 'rssBytes', 'heapUsedBytes', 'heapTotalBytes', 'externalBytes', 'descendants']
+        ),
+        ptyHost: object(
+          {
+            pid: { description: 'The PTY host pid, or null when unknown.' },
+            alive: boolean(),
+            rssBytes: { description: 'RSS bytes, or null when the process table or host row is unavailable.' }
+          },
+          ['pid', 'alive', 'rssBytes']
+        ),
+        sessions: listOf(
+          object(
+            {
+              sessionId: string(),
+              pid: integer(1),
+              title: { description: 'The session title, or null.' },
+              cwd: string(),
+              tree: nullableMemoryTree
+            },
+            ['sessionId', 'pid', 'title', 'cwd', 'tree']
+          )
+        ),
+        totals: nullableMemoryTotals,
+        unavailable: listOf(
+          object(
+            {
+              part: { type: 'string', enum: ['process-table', 'pty-host', 'pty-sessions'] },
+              reason: string()
+            },
+            ['part', 'reason']
+          )
+        )
+      },
+      ['schemaVersion', 'takenAt', 'daemon', 'ptyHost', 'sessions', 'totals', 'unavailable']
     )
   },
   'daemon.stop': {

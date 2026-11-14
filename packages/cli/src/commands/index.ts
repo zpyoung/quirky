@@ -18,6 +18,7 @@ import {
 import { settingGet, settingList, settingReset, settingSet } from './setting'
 import { skillInstall, skillShow, skillStatus } from './skill'
 import { status } from './status'
+import { diagnosticsMemory } from './diagnostics'
 import { themeList, themeSet } from './theme'
 import {
   uiClosePanel,
@@ -53,6 +54,7 @@ const help: Command = {
 
 export const COMMANDS: Command[] = [
   status,
+  diagnosticsMemory,
   pluginList,
   pluginContributions,
   pluginEnable,
