@@ -13,7 +13,7 @@ export const WORKER_CHECK_IDS = [
   'workers-show', 'workers-list',
   'workers-stop', 'workers-retain', 'workers-abandon', 'workers-release',
   'workers-reset-messages', 'workers-reset-all',
-  'workers-ps-dashboard', 'workers-ps-runs', 'workers-ps-tasks'
+  'workers-ps-dashboard', 'workers-ps-runs', 'workers-ps-tasks', 'workers-ps-summary'
 ] as const
 
 type ObjectValue = Record<string, unknown>
@@ -52,7 +52,7 @@ function equal(actual: unknown, expected: unknown, label: string): void {
   if (!isDeepStrictEqual(actual, expected)) throw new Error(`${label} did not match the expected value`)
 }
 
-function field(value: unknown, key: string, label: string): unknown {
+function field(value: unknown, key: string, label = key): unknown {
   return object(value, label)[key]
 }
 
@@ -376,6 +376,187 @@ export function assertWorktreeTaskEvidence(value: {
     hostScope: false as const
   }
   return { correlation }
+}
+
+export function assertWorktreeSummaryEvidence(value: {
+  summary: unknown; worktrees: unknown; sessions: unknown; dashboard: unknown
+  runList: unknown; taskList: unknown; workers: unknown
+  worktreeId: string; runId: string; coordinatorSessionId: string
+  contextTaskId: string; contextDispatchId: string; assigneeSessionId: string
+  workerTaskId: string; completeDispatchId: string; stopDispatchId: string; abandonDispatchId: string
+}): {
+  worktreeId: string
+  metadataMatched: true
+  sessionsMatched: true
+  displaysMatched: true
+  runsMatched: true
+  tasksMatched: true
+  dispatchesMatched: true
+  workerStatesMatched: true
+  terminalStatesMatched: true
+  scope: 'local'
+} {
+  const summaryResult = object(value.summary, 'worktree summary result')
+  equal(summaryResult.scope, 'local', 'worktree summary scope')
+  const summaryRows = listObjects(summaryResult.rows, 'worktree summary rows')
+  const summaryMatches = summaryRows.filter(row => isObject(row.worktree) && row.worktree.id === value.worktreeId)
+  equal(summaryMatches.length, 1, 'worktree summary target row count')
+  const summaryRow = summaryMatches[0]!
+  const summaryWorktree = object(summaryRow.worktree, 'worktree summary metadata')
+
+  const worktreeRows = listObjects(value.worktrees, 'worktree-list result')
+  const worktreeMatches = worktreeRows.filter(worktree => worktree.id === value.worktreeId)
+  equal(worktreeMatches.length, 1, 'worktree-list target row count')
+  const listedWorktree = worktreeMatches[0]!
+  equal(nonEmptyText(summaryWorktree.id, 'summary worktree ID'), value.worktreeId, 'summary worktree ID')
+  for (const key of ['name', 'path', 'repoId'] as const) {
+    equal(nonEmptyText(summaryWorktree[key], `summary worktree ${key}`), nonEmptyText(listedWorktree[key], `worktree-list ${key}`), `summary worktree ${key}`)
+  }
+
+  const sessionRows = listObjects(value.sessions, 'session-list result')
+  const sessionsForWorktree = sessionRows.filter(session => stringField(session, 'worktreeId', 'session-list row') === value.worktreeId)
+  const listedSessions = new Map<string, ObjectValue>()
+  for (const session of sessionsForWorktree) {
+    const id = nonEmptyText(session.id, 'session-list session ID')
+    ensure(!listedSessions.has(id), `session-list repeated session ${id}`)
+    listedSessions.set(id, session)
+  }
+  const summarySessions = listObjects(summaryRow.sessions, 'worktree summary sessions')
+  const summarySessionsById = new Map<string, ObjectValue>()
+  for (const session of summarySessions) {
+    const id = nonEmptyText(session.id, 'summary session ID')
+    ensure(!summarySessionsById.has(id), `worktree summary repeated session ${id}`)
+    summarySessionsById.set(id, session)
+  }
+  equal([...summarySessionsById.keys()].sort(), [...listedSessions.keys()].sort(), 'summary session IDs')
+
+  const cards = listObjects(object(value.dashboard, 'worktree dashboard').cards, 'worktree dashboard cards')
+  for (const [id, session] of summarySessionsById) {
+    const listed = listedSessions.get(id)!
+    equal(stringField(session, 'agent', `summary session ${id}`), nonEmptyText(listed.agent, `session-list ${id} agent`), `session ${id} agent`)
+    const status = nonEmptyText(listed.status, `session-list ${id} status`)
+    equal(stringField(session, 'status', `summary session ${id}`), status, `session ${id} status`)
+    equal(field(session, 'live'), status !== 'exited', `session ${id} liveness`)
+    const matchingCards = cards.filter(card => isObject(card.thread) &&
+      card.thread.sessionId === id && card.thread.worktreeId === value.worktreeId)
+    ensure(matchingCards.length <= 1, `dashboard repeated session card ${id} for ${value.worktreeId}`)
+    if (matchingCards.length === 0) {
+      equal(field(session, 'display'), null, `session ${id} missing dashboard display`)
+    } else {
+      const thread = object(matchingCards[0]!.thread, `dashboard session ${id} thread`)
+      equal(field(session, 'display'), nonEmptyText(thread.display, `dashboard session ${id} display`), `session ${id} display`)
+    }
+  }
+
+  const taskList = object(value.taskList, 'worktree task-list result')
+  equal(taskList.runId, value.runId, 'summary task-list Run ID')
+  const taskRows = listObjects(taskList.tasks, 'worktree task-list tasks')
+  const workerList = object(value.workers, 'worktree worker-list result')
+  const workerScope = object(workerList.scope, 'worktree worker-list scope')
+  equal(workerScope.runId, value.runId, 'summary worker-list Run scope')
+  const workerRows = listObjects(workerList.workers, 'worktree worker-list workers')
+  const summaryDispatches = listObjects(summaryRow.dispatches, 'worktree summary dispatches')
+  const summaryDispatchesById = new Map<string, ObjectValue>()
+  for (const dispatch of summaryDispatches) {
+    const id = nonEmptyText(dispatch.id, 'summary Dispatch ID')
+    ensure(!summaryDispatchesById.has(id), `worktree summary repeated Dispatch ${id}`)
+    summaryDispatchesById.set(id, dispatch)
+  }
+
+  const expectedDispatches = [
+    value.contextDispatchId, value.completeDispatchId, value.stopDispatchId, value.abandonDispatchId
+  ]
+  const verifiedWorkerRows: ObjectValue[] = []
+  for (const dispatchId of expectedDispatches) {
+    const dispatch = summaryDispatchesById.get(dispatchId)
+    ensure(dispatch !== undefined, `worktree summary omitted Dispatch ${dispatchId}`)
+    const matches = workerRows.filter(worker => worker.dispatchId === dispatchId)
+    equal(matches.length, 1, `worker-list row count for ${dispatchId}`)
+    const worker = matches[0]!
+    equal(stringField(worker, 'dispatchId', `worker-list ${dispatchId}`), dispatchId, `${dispatchId} identity`)
+    equal(stringField(worker, 'runId', `worker-list ${dispatchId}`), value.runId, `${dispatchId} worker-list Run`)
+    equal(stringField(dispatch, 'runId', `summary ${dispatchId}`), stringField(worker, 'runId', `worker-list ${dispatchId}`), `${dispatchId} Run`)
+    const taskId = nonEmptyText(worker.taskId, `worker-list ${dispatchId} Task ID`)
+    equal(stringField(object(dispatch.task, `summary ${dispatchId} Task`), 'id', `summary ${dispatchId} Task`), taskId, `${dispatchId} Task ID`)
+    equal(stringField(dispatch, 'status', `summary ${dispatchId}`), nonEmptyText(worker.dispatchStatus, `worker-list ${dispatchId} status`), `${dispatchId} status`)
+    equal(field(dispatch, 'currentAssignment'), field(worker, 'currentAssignment'), `${dispatchId} current assignment`)
+    equal(field(dispatch, 'workerState'), field(worker, 'workerState'), `${dispatchId} worker state`)
+    equal(stringField(dispatch, 'terminalState', `summary ${dispatchId}`), nonEmptyText(worker.terminalState, `worker-list ${dispatchId} terminal state`), `${dispatchId} terminal state`)
+    const workerSessionId = field(worker, 'agentTerminalHandle')
+    equal(field(dispatch, 'workerSessionId'), workerSessionId, `${dispatchId} worker session`)
+    verifiedWorkerRows.push(worker)
+  }
+  equal(field(summaryDispatchesById.get(value.completeDispatchId)!, 'workerState'), 'succeeded', 'completed worker state')
+  equal(field(summaryDispatchesById.get(value.stopDispatchId)!, 'workerState'), 'stopped', 'stopped worker state')
+  equal(field(summaryDispatchesById.get(value.abandonDispatchId)!, 'workerState'), 'abandoned', 'abandoned worker state')
+  equal(field(summaryDispatchesById.get(value.contextDispatchId)!, 'workerState'), null, 'context Dispatch worker state')
+  equal(field(summaryDispatchesById.get(value.contextDispatchId)!, 'terminalState'), 'released', 'context Dispatch terminal state')
+
+  const compareTask = (taskId: string, dispatchId: string, checkAssignment: boolean): ObjectValue => {
+    const matches = taskRows.filter(task => task.id === taskId)
+    equal(matches.length, 1, `task-list row count for ${taskId}`)
+    const task = matches[0]!
+    const dispatch = summaryDispatchesById.get(dispatchId)!
+    equal(stringField(task, 'runId', `task-list ${taskId}`), value.runId, `${taskId} Run`)
+    const summaryTask = object(dispatch.task, `summary ${dispatchId} Task`)
+    equal(stringField(summaryTask, 'id', `summary ${dispatchId} Task`), taskId, `${dispatchId} Task identity`)
+    equal(stringField(summaryTask, 'title', `summary ${dispatchId} Task`), nonEmptyText(task.taskTitle, `task-list ${taskId} title`), `${taskId} title`)
+    equal(stringField(summaryTask, 'status', `summary ${dispatchId} Task`), nonEmptyText(task.status, `task-list ${taskId} status`), `${taskId} status`)
+    equal(field(dispatch, 'creatorSessionId'), field(task, 'createdBySessionId'), `${dispatchId} creator session`)
+    if (checkAssignment) {
+      equal(field(dispatch, 'assigneeSessionId'), field(task, 'assigneeSessionId'), `${dispatchId} assignee session`)
+      equal(field(task, 'dispatchId'), dispatchId, `${taskId} Dispatch association`)
+    }
+    return task
+  }
+  const contextTask = compareTask(value.contextTaskId, value.contextDispatchId, true)
+  equal(field(contextTask, 'assigneeSessionId'), value.assigneeSessionId, 'context Task assignee')
+  equal(field(contextTask, 'createdBySessionId'), value.coordinatorSessionId, 'context Task creator')
+  compareTask(value.workerTaskId, value.completeDispatchId, false)
+
+  const runRows = listObjects(object(value.runList, 'worktree run-list result').runs, 'worktree run-list runs')
+  const matchingRun = runRows.filter(run => run.id === value.runId)
+  equal(matchingRun.length, 1, 'summary run-list target count')
+  equal(field(matchingRun[0]!, 'coordinatorSessionId'), value.coordinatorSessionId, 'summary run-list coordinator')
+  ensure(summarySessionsById.has(value.coordinatorSessionId), 'summary omitted the current Run coordinator session')
+  const summaryRunIds = array(summaryRow.runIds, 'worktree summary Run IDs')
+    .map((runId, index) => nonEmptyText(runId, `worktree summary Run ID ${index}`))
+  ensure(new Set(summaryRunIds).size === summaryRunIds.length, 'worktree summary repeated a Run ID')
+  equal(summaryRunIds, [...summaryRunIds].sort(), 'worktree summary Run ID ordering')
+  ensure(summaryRunIds.includes(value.runId), 'worktree summary omitted the fixture Run')
+  const associatedRunIds = new Set<string>()
+  for (const run of runRows) {
+    const coordinator = field(run, 'coordinatorSessionId')
+    if (typeof coordinator === 'string' && summarySessionsById.has(coordinator)) {
+      associatedRunIds.add(nonEmptyText(run.id, 'worktree run-list Run ID'))
+    }
+  }
+  for (const task of taskRows) {
+    const creator = field(task, 'createdBySessionId')
+    if (typeof creator === 'string' && summarySessionsById.has(creator)) {
+      associatedRunIds.add(nonEmptyText(task.runId, 'worktree task-list Run ID'))
+    }
+  }
+  for (const worker of verifiedWorkerRows) associatedRunIds.add(nonEmptyText(worker.runId, 'worktree worker-list Run ID'))
+  for (const runId of associatedRunIds) {
+    ensure(summaryRunIds.includes(runId), `worktree summary omitted associated Run ${runId}`)
+  }
+  for (const runId of summaryRunIds) {
+    equal(runRows.filter(run => run.id === runId).length, 1, `run-list row count for ${runId}`)
+  }
+
+  return {
+    worktreeId: value.worktreeId,
+    metadataMatched: true,
+    sessionsMatched: true,
+    displaysMatched: true,
+    runsMatched: true,
+    tasksMatched: true,
+    dispatchesMatched: true,
+    workerStatesMatched: true,
+    terminalStatesMatched: true,
+    scope: 'local'
+  }
 }
 
 function stateString(context: CliCheckContext, key: string): string {
@@ -894,6 +1075,17 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
     workerTaskId: taskWorkerId, workerDispatchId: completeDispatchId
   })
   context.prove('workers-ps-tasks', correlation)
+
+  const summary = await productCall(context, 'workers-ps-summary', ['orchestration', 'ps', '--limit', '100'], 'workers-ps-summary')
+  const worktrees = await context.call('workers-ps-worktrees', ['worktree', 'list'], 'json')
+  const sessions = await context.call('workers-ps-sessions', ['session', 'list'], 'json')
+  const summaryEvidence = assertWorktreeSummaryEvidence({
+    summary, worktrees, sessions, dashboard, runList, taskList, workers: listResult,
+    worktreeId, runId, coordinatorSessionId,
+    contextTaskId, contextDispatchId, assigneeSessionId: targetSessionId,
+    workerTaskId: taskWorkerId, completeDispatchId, stopDispatchId, abandonDispatchId
+  })
+  context.prove('workers-ps-summary', summaryEvidence)
 
   const messagesRefusal = await productRefusal(context, 'workers-unauthorized-reset', ['orchestration', 'reset', '--messages', '--yes'], 'workers-reset-messages')
   const releaseTrigger = await productCall(context, 'workers-release-trigger', ['terminal', 'send', coordinatorSessionId, 'cli-parity-release', '--enter'], 'workers-ps-tasks')
