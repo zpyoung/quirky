@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { CaptureTarget } from './contracts'
-import { captureCells, discoverCaptureTargets, fixtureViewInput, hostingToolFor, openSurfaceTool, selectCaptureTargets, waitForStateShown } from './capture'
+import { captureCells, discoverCaptureTargets, ensureHandoffTerminalContext, fixtureViewInput, hostingToolFor, openSurfaceTool, selectCaptureTargets, targetSlotSelector, waitForStateShown } from './capture'
 import { goldenFor } from './goldens'
 import { seedRows, type SceneRuntime } from './shell-scenes'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
@@ -43,6 +43,15 @@ describe('UI capture inventory', () => {
       'host:shell', 'host:scoped', 'host:popups', 'host:settings', 'host:palette'
     ])
     expect(targets.map((target) => target.id)).toContain('settings-section:acme.settings/accounts')
+  })
+
+  test('matches an overridden contribution by its logical surface namespace', () => {
+    const inventory = model()
+    inventory.views.push(slot('view:quirky.session/worktree', 'quirky.terminal'))
+    const targets = discoverCaptureTargets(inventory)
+
+    expect(targets.find((target) => target.id === 'view:quirky.session/worktree')).toMatchObject({ plugin: 'quirky.session' })
+    expect(selectCaptureTargets(targets, ['quirky.session']).map((target) => target.id)).toContain('view:quirky.session/worktree')
   })
 
   test('matches exact contribution IDs and exact plugin IDs without partial matches', () => {
@@ -120,6 +129,20 @@ function toolModel(): UiModel {
 
 const target = (id: string, plugin: string, kind: CaptureTarget['kind']): CaptureTarget => ({ id, plugin, title: id, kind })
 
+describe('capture target DOM selectors', () => {
+  test('uses mounted portal roots for feedback and floating overlays', () => {
+    expect(targetSlotSelector(target('overlay:quirky.feedback/mode', 'quirky.feedback', 'overlay'))).toBe('[data-quirky-feedback]')
+    expect(targetSlotSelector(target('overlay:quirky.terminal/floating', 'quirky.terminal', 'overlay'))).toBe('[data-floating-panel]')
+  })
+
+  test('uses plugin mount attributes for non-portal targets', () => {
+    expect(targetSlotSelector(target('overlay:quirky.handoff/dialog', 'quirky.handoff', 'overlay')))
+      .toBe('[data-plugin-overlay="overlay:quirky.handoff/dialog"]')
+    expect(targetSlotSelector(target('view:quirky.accounts/session-accessory', 'quirky.accounts', 'view')))
+      .toBe('[data-plugin-slot="view:quirky.accounts/session-accessory"]')
+  })
+})
+
 function fakeRuntime(state: () => unknown) {
   const calls: Array<{ method: string; params: unknown }> = []
   const runtime = {
@@ -191,6 +214,69 @@ describe('review fixtures', () => {
     expect(input).toMatchObject({ worktree: 'wt-1', mode: 'review' })
     expect(input).not.toHaveProperty('path')
     expect(input).not.toHaveProperty('source')
+  })
+
+  test('the accounts accessory view receives its terminal session and pane fixture', () => {
+    const fixtures = { primaryWorktree: { id: 'wt-1' }, repo: { id: 'repo-1' } } as Parameters<typeof fixtureViewInput>[0]
+    const terminalFixture = { sessionId: 'session-1', tabId: 'tab-1', paneId: 'pane-1' }
+    const input = fixtureViewInput(
+      fixtures,
+      { id: 'view:quirky.accounts/session-accessory', plugin: 'quirky.accounts', kind: 'view', title: 'Session' } as CaptureTarget,
+      null,
+      terminalFixture
+    )
+    expect(input).toMatchObject({ sessionId: 'session-1', paneId: 'pane-1' })
+  })
+
+  test('structured and worktree session views receive fixtures of the matching kind', () => {
+    const fixtures = { primaryWorktree: { id: 'wt-1' }, repo: { id: 'repo-1' } } as Parameters<typeof fixtureViewInput>[0]
+    const terminalFixture = { sessionId: 'shell-1', tabId: 'tab-1', paneId: 'pane-1' }
+    const structured = fixtureViewInput(
+      fixtures,
+      { id: 'view:quirky.session/structured', plugin: 'quirky.session', kind: 'view', title: 'Structured session' } as CaptureTarget,
+      null,
+      terminalFixture,
+      'structured-1'
+    )
+    const worktree = fixtureViewInput(
+      fixtures,
+      { id: 'view:quirky.session/worktree', plugin: 'quirky.session', kind: 'view', title: 'Worktree sessions' } as CaptureTarget,
+      null,
+      terminalFixture,
+      'structured-1'
+    )
+    expect(structured).toMatchObject({ session: 'structured-1' })
+    expect(structured).not.toHaveProperty('sessionId')
+    expect(worktree).toMatchObject({ session: 'shell-1', sessionId: 'shell-1', paneId: 'pane-1' })
+  })
+
+  test.each(['ready', 'unsupported'])('Handoff seeds scrollback with a POSIX shell whose integration is %s', async (shellState) => {
+    let output: string[] = []
+    const runtime = {
+      terminalFixture: { sessionId: 'shell-1', tabId: 'tab-1', paneId: 'pane-1' },
+      options: { timeoutMs: 1_000 },
+      client: {
+        async callAny(method: string, params: Record<string, unknown> = {}) {
+          if (method === 'quirky.terminal/history') {
+            return { lines: output.slice(0, Math.max(0, output.length - 24)), cursor: null }
+          }
+          if (method === 'quirky.terminal/snapshot') return { shellState, rows: 24 }
+          if (method === 'quirky.terminal/write') {
+            const command = Bun.spawnSync(['/bin/sh', '-c', String(params.data)], {
+              env: { PATH: '/usr/bin:/bin', QUIRKY_HOME: process.env.QUIRKY_HOME! }
+            })
+            expect(command.exitCode).toBe(0)
+            output = command.stdout.toString().trim().split('\n')
+            return { ok: true }
+          }
+          throw new Error(`unexpected RPC ${method}`)
+        }
+      }
+    } as unknown as Parameters<typeof ensureHandoffTerminalContext>[0]
+
+    await ensureHandoffTerminalContext(runtime)
+    expect(output.length).toBeGreaterThan(24)
+    expect(new Set(output)).toEqual(new Set(['UI review handoff fixture']))
   })
 
   test('seeding marks two changed files reviewed and leaves one of them changed since review', async () => {
