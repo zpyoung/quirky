@@ -1,3 +1,5 @@
+import type { UiPluginContext } from '@quirky/protocol'
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -306,4 +308,209 @@ export function consumePendingSitterOpen(worktree: string | null): boolean {
 export function subscribeOpenSitter(listener: (worktree: string | null) => void): () => void {
   openSitterListeners.add(listener)
   return () => openSitterListeners.delete(listener)
+}
+export const REVIEWS_UI_CONTROL = 'command:quirky.reviews/ui-control'
+
+export type ReviewsUiControlRequest = {
+  target: string
+  generation: number
+  action: string
+  value?: Record<string, unknown>
+}
+
+export type ReviewsUiControlResult =
+  | { delivered: true; result?: unknown }
+  | { delivered: false; reason: 'target-unavailable' | 'disabled' | 'unknown-action' }
+
+export type ReviewsUiControlDescriptor = {
+  surface: string
+  slot: string
+  target: string
+  generation: number
+  actions: Array<{ action: string; enabled: boolean }>
+}
+
+export type ReviewsUiControlRegistration = {
+  surface: string
+  slot: string
+  target: string
+  actions(): Array<{ action: string; enabled: boolean }>
+  run(request: ReviewsUiControlRequest, isCurrent: () => boolean): unknown | Promise<unknown>
+}
+
+type ReviewsUiControlLease = {
+  registration: ReviewsUiControlRegistration
+  generation: number
+  active: boolean
+}
+
+type ReviewsUiControlRegistry = {
+  nextGeneration: number
+  leases: Map<string, ReviewsUiControlLease>
+  listeners: Set<() => void>
+}
+
+const reviewsUiControlRegistries = new WeakMap<UiPluginContext, ReviewsUiControlRegistry>()
+
+function reviewsUiControlRegistry(context: UiPluginContext): ReviewsUiControlRegistry {
+  let registry = reviewsUiControlRegistries.get(context)
+  if (!registry) {
+    registry = { nextGeneration: 1, leases: new Map(), listeners: new Set() }
+    reviewsUiControlRegistries.set(context, registry)
+  }
+  return registry
+}
+
+function notifyReviewsUiControls(registry: ReviewsUiControlRegistry): void {
+  for (const listener of [...registry.listeners]) listener()
+}
+
+function reviewsUiControlActions(registration: ReviewsUiControlRegistration): ReviewsUiControlDescriptor['actions'] {
+  const actions = registration.actions()
+  if (!Array.isArray(actions)) throw new Error('A Reviews UI control returned invalid actions.')
+  return actions.map((item) => {
+    if (!isRecord(item) || typeof item.action !== 'string' || item.action.trim() === '' || typeof item.enabled !== 'boolean') {
+      throw new Error('A Reviews UI control returned an invalid action.')
+    }
+    return { action: item.action, enabled: item.enabled }
+  })
+}
+
+function reviewsUiControlRequest(input: unknown): ReviewsUiControlRequest {
+  if (!isRecord(input)
+    || Object.keys(input).some((key) => !['target', 'generation', 'action', 'value'].includes(key))
+    || typeof input.target !== 'string' || input.target.trim() === ''
+    || typeof input.generation !== 'number' || !Number.isSafeInteger(input.generation) || input.generation < 1
+    || typeof input.action !== 'string' || input.action.trim() === ''
+    || (Object.hasOwn(input, 'value') && !isRecord(input.value))) {
+    throw new Error('Invalid Reviews UI control request.')
+  }
+  return {
+    target: input.target,
+    generation: input.generation,
+    action: input.action,
+    ...(Object.hasOwn(input, 'value') ? { value: input.value as Record<string, unknown> } : {})
+  }
+}
+
+export function registerReviewsUiControl(
+  context: UiPluginContext,
+  registration: ReviewsUiControlRegistration
+): { generation: number; changed(): void; dispose(): void } {
+  if (!isRecord(registration)
+    || typeof registration.surface !== 'string' || registration.surface.trim() === ''
+    || typeof registration.slot !== 'string' || registration.slot.trim() === ''
+    || typeof registration.target !== 'string' || registration.target.trim() === ''
+    || typeof registration.actions !== 'function' || typeof registration.run !== 'function') {
+    throw new Error('Invalid Reviews UI control registration.')
+  }
+  const registry = reviewsUiControlRegistry(context)
+  if (!Number.isSafeInteger(registry.nextGeneration) || registry.nextGeneration < 1) {
+    throw new Error('Reviews UI control generations are exhausted.')
+  }
+  const generation = registry.nextGeneration
+  registry.nextGeneration += 1
+  const previous = registry.leases.get(registration.target)
+  if (previous) previous.active = false
+  const lease: ReviewsUiControlLease = { registration, generation, active: true }
+  registry.leases.set(registration.target, lease)
+  notifyReviewsUiControls(registry)
+
+  const isCurrent = () => lease.active && registry.leases.get(registration.target) === lease
+  return {
+    generation,
+    changed() {
+      if (isCurrent()) notifyReviewsUiControls(registry)
+    },
+    dispose() {
+      if (!lease.active) return
+      lease.active = false
+      if (registry.leases.get(registration.target) === lease) {
+        registry.leases.delete(registration.target)
+        notifyReviewsUiControls(registry)
+      }
+    }
+  }
+}
+
+export function listReviewsUiControls(context: UiPluginContext, surface: string): ReviewsUiControlDescriptor[] {
+  return [...reviewsUiControlRegistry(context).leases.values()]
+    .filter((lease) => lease.active && lease.registration.surface === surface)
+    .map((lease) => ({
+      surface: lease.registration.surface,
+      slot: lease.registration.slot,
+      target: lease.registration.target,
+      generation: lease.generation,
+      actions: reviewsUiControlActions(lease.registration)
+    }))
+}
+
+export function subscribeReviewsUiControls(context: UiPluginContext, listener: () => void): () => void {
+  const registry = reviewsUiControlRegistry(context)
+  registry.listeners.add(listener)
+  return () => registry.listeners.delete(listener)
+}
+
+export async function runReviewsUiControl(context: UiPluginContext, input: unknown): Promise<ReviewsUiControlResult> {
+  const request = reviewsUiControlRequest(input)
+  const registry = reviewsUiControlRegistry(context)
+  const lease = registry.leases.get(request.target)
+  const isCurrent = () => lease !== undefined
+    && lease.active
+    && lease.generation === request.generation
+    && registry.leases.get(request.target) === lease
+  if (!isCurrent() || !lease) return { delivered: false, reason: 'target-unavailable' }
+
+  const action = reviewsUiControlActions(lease.registration).find((item) => item.action === request.action)
+  if (!isCurrent()) return { delivered: false, reason: 'target-unavailable' }
+  if (!action) return { delivered: false, reason: 'unknown-action' }
+  if (!action.enabled) return { delivered: false, reason: 'disabled' }
+
+  const result = await lease.registration.run(request, isCurrent)
+  if (!isCurrent()) return { delivered: false, reason: 'target-unavailable' }
+  return result === undefined ? { delivered: true } : { delivered: true, result }
+}
+
+export function reviewsUiControlDescriptor(args: ReviewsUiControlRequest): {
+  command: typeof REVIEWS_UI_CONTROL
+  args: ReviewsUiControlRequest
+} {
+  return { command: REVIEWS_UI_CONTROL, args }
+}
+
+export async function requestReviewsUiControl(
+  context: UiPluginContext,
+  args: ReviewsUiControlRequest
+): Promise<ReviewsUiControlResult> {
+  const request = reviewsUiControlRequest(args)
+  const identity = await context.call('ui.window.self', {})
+  if (!isRecord(identity) || typeof identity.connId !== 'number' || !Number.isSafeInteger(identity.connId) || identity.connId < 1) {
+    throw new Error('The daemon did not identify this window.')
+  }
+  const descriptor = reviewsUiControlDescriptor(request)
+  const response = await context.call('ui.window.command.run', {
+    connId: identity.connId,
+    id: descriptor.command,
+    args: descriptor.args
+  })
+  if (!isRecord(response) || !Object.hasOwn(response, 'result') || !isRecord(response.result)) {
+    throw new Error('The UI control command returned an invalid result envelope.')
+  }
+  const result = response.result
+  if (result.delivered === false) {
+    if (result.reason === 'target-unavailable' || result.reason === 'disabled' || result.reason === 'unknown-action') {
+      return { delivered: false, reason: result.reason }
+    }
+    throw new Error('The UI control command returned an invalid delivery result.')
+  }
+  if (result.delivered !== true) throw new Error('The UI control command did not report delivery.')
+  return Object.hasOwn(result, 'result') ? { delivered: true, result: result.result } : { delivered: true }
+}
+
+export async function copyReviewsText(text: unknown): Promise<void> {
+  if (typeof text !== 'string' || text.length > 1_048_576) throw new Error('Invalid clipboard text.')
+  if (typeof navigator === 'undefined' || typeof navigator.clipboard?.writeText !== 'function') {
+    throw new Error('Clipboard access is unavailable in this window.')
+  }
+  await navigator.clipboard.writeText(text)
 }
