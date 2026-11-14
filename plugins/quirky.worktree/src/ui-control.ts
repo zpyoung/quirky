@@ -34,7 +34,7 @@ export type ScopedUiControlInput = Omit<ScopedUiControlArgs, 'payload'> & {
 
 export type UiControlArgs = LegacyUiControlArgs | ScopedUiControlInput
 type NormalizedUiControlArgs = LegacyUiControlArgs | ScopedUiControlArgs
-export type UiControlResult = NormalizedUiControlArgs & { delivered: number }
+export type UiControlResult = UiControlArgs & { delivered: number }
 export type UiControlTarget = 'remote-workspaces' | 'vm-environments' | 'worktree-details'
 
 type UiControlHandler = (args: UiControlArgs) => boolean

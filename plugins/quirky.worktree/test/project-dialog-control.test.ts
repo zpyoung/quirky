@@ -298,7 +298,7 @@ describe('scoped Worktree UI control', () => {
     const contextB = makeWindow(9, callsB)
     registerUiControlScope(contextA, 'create-dialog', (args) => { receivedA.push(args); return true })
     registerUiControlScope(contextB, 'create-dialog', (args) => { receivedB.push(args); return true })
-    const request: ScopedUiControlInput = scoped('create-dialog', 'r1', 'set-advanced', { open: true })
+    const request = createEnvelope('set-advanced', { open: true })
     const resultA = await requestUiControl(contextA, request)
     const resultB = await requestUiControl(contextB, request)
 
