@@ -37,6 +37,24 @@ async function mount(daemon = fakeDaemon(conceptualWorkspace()), options = {}) {
   return mounted
 }
 
+const ACCESSORY_ID = 'terminal-accessory:test.accessory/account'
+const ACCESSORY_VIEW_ID = 'view:test.accessory/account'
+
+function accessoryHandlers() {
+  return {
+    'plugin.contributions': () => [
+      {
+        id: ACCESSORY_ID,
+        kind: 'terminal-accessory',
+        plugin: 'test.accessory',
+        status: 'effective',
+        data: { title: 'Account', order: 10, view: ACCESSORY_VIEW_ID }
+      }
+    ],
+    'ui.contributions': () => ({ views: [{ id: ACCESSORY_VIEW_ID, module: 'fixture.js' }] })
+  }
+}
+
 describe('rendering from the daemon workspace', () => {
   test('loads the workspace for the input worktree with ensure', async () => {
     const view = await mount()
@@ -207,6 +225,76 @@ describe('rendering from the daemon workspace', () => {
     expect(overlay.textContent).toContain('Terminal exited')
     expect(overlay.textContent).toContain('The shell process ended with exit code 3. Its output is preserved.')
     expect([...overlay.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Close', 'Restart'])
+  })
+
+  test('shares discovery across four panes and keeps each accessory mounted on an equal refresh', async () => {
+    const view = await mount(fakeDaemon(conceptualWorkspace()), { extra: accessoryHandlers() })
+    await settle()
+
+    expect(view.fake.callsTo('plugin.contributions')).toHaveLength(1)
+    expect(view.fake.callsTo('ui.contributions')).toHaveLength(1)
+    expect(view.fake.mountedViews.map(({ input }) => input)).toEqual([
+      { sessionId: 's-2', paneId: 'pane-2' },
+      { sessionId: 's-3', paneId: 'pane-3' },
+      { sessionId: 's-4', paneId: 'pane-4' },
+      { sessionId: 's-5', paneId: 'pane-5' }
+    ])
+    expect(view.last().mountedAccessories).toEqual({
+      'pane-2': [ACCESSORY_ID],
+      'pane-3': [ACCESSORY_ID],
+      'pane-4': [ACCESSORY_ID],
+      'pane-5': [ACCESSORY_ID]
+    })
+    const originalElements = view.fake.mountedViews.map(({ element }) => element)
+
+    await view.fake.emit({ type: 'plugin.changed' })
+    await settle()
+
+    expect(view.fake.callsTo('plugin.contributions')).toHaveLength(2)
+    expect(view.fake.callsTo('ui.contributions')).toHaveLength(2)
+    expect(view.fake.mountedViews).toHaveLength(4)
+    expect(view.fake.mountedViews.map(({ element }) => element)).toEqual(originalElements)
+    expect(view.fake.mountedViews.every(({ unmounted }) => !unmounted)).toBe(true)
+  })
+
+  test('retains the catalog while switching panes and unmounts views removed from the pane tree', async () => {
+    const ws = makeWorkspace(
+      group(
+        'grp-1',
+        [
+          tab('tab-1', paneSplit('split-1', 'right', pane('pane-1', 's-1'), pane('pane-2', 's-2'))),
+          tab('tab-2', pane('pane-3', 's-3'))
+        ],
+        { activeTab: 'tab-1' }
+      )
+    )
+    const view = await mount(fakeDaemon(ws), { extra: accessoryHandlers() })
+    await settle()
+    expect(view.fake.callsTo('plugin.contributions')).toHaveLength(1)
+    expect(view.fake.callsTo('ui.contributions')).toHaveLength(1)
+    expect(view.fake.mountedViews.map(({ input }) => input)).toEqual([
+      { sessionId: 's-1', paneId: 'pane-1' },
+      { sessionId: 's-2', paneId: 'pane-2' }
+    ])
+    const firstTabMounts = [...view.fake.mountedViews]
+
+    await act(async () => view.controller().activateTab('tab-2'))
+    await settle()
+    expect(firstTabMounts.every(({ unmounted }) => unmounted)).toBe(true)
+    expect(view.fake.mountedViews.at(-1)?.input).toEqual({ sessionId: 's-3', paneId: 'pane-3' })
+    expect(view.last().mountedAccessories).toEqual({ 'pane-3': [ACCESSORY_ID] })
+
+    await act(async () => view.controller().activateTab('tab-1'))
+    await settle()
+    expect(view.fake.callsTo('plugin.contributions')).toHaveLength(1)
+    expect(view.fake.callsTo('ui.contributions')).toHaveLength(1)
+    expect(view.fake.mountedViews.at(-2)?.input).toEqual({ sessionId: 's-1', paneId: 'pane-1' })
+    expect(view.fake.mountedViews.at(-1)?.input).toEqual({ sessionId: 's-2', paneId: 'pane-2' })
+    expect(view.fake.mountedViews[2]?.unmounted).toBe(true)
+    expect(view.last().mountedAccessories).toEqual({
+      'pane-1': [ACCESSORY_ID],
+      'pane-2': [ACCESSORY_ID]
+    })
   })
 })
 

@@ -75,6 +75,7 @@ describe('SC-21: New Template saves the steering note', () => {
     await v.click(v.button('Save template'))
     await settle()
     expect(fake.callsTo('templateMutate')[0]!.params).toEqual({ op: 'add', template: { name: 'Repro', body: 'Reproduce first, then fix' } })
+    expect(fake.executions.at(-1)).toEqual({ id: 'command:quirky.handoff/save-template', args: undefined })
     expect(overlay.last().controls.templateId).toBe('handoff-template-4')
     expect(overlay.last().controls.note).toBe('')
     expect(overlay.last().templateEditor).toBeNull()
@@ -127,6 +128,7 @@ describe('SC-33 and SC-34: a busy source', () => {
     expect(overlay.last().busy).toEqual({ working: true, waiting: false })
 
     await v.click(v.button('Wait for idle'))
+    expect(fake.executions.at(-1)).toEqual({ id: 'command:quirky.handoff/wait-idle', args: undefined })
     expect(v.text()).toContain('Waiting for the source session to go idle. You can still start now.')
     expect(overlay.last().busy).toEqual({ working: true, waiting: true })
     const before = fake.callsTo('preview').length
@@ -156,6 +158,7 @@ describe('SC-33 and SC-34: a busy source', () => {
     })
     await overlay.view.click(overlay.view.button('Capture anyway'))
     await settle()
+    expect(fake.executions.at(-1)).toEqual({ id: 'command:quirky.handoff/capture', args: undefined })
     expect(fake.callsTo('preview').at(-1)!.params.recapture).toBe(true)
     expect(overlay.last().busy).toEqual({ working: false, waiting: false })
     expect(overlay.view.q('[data-busy]')).toBeNull()
@@ -195,6 +198,7 @@ describe('SC-36 and SC-37: editing detaches and regenerating reattaches', () => 
 
     await v.click(v.button('Regenerate from controls'))
     await settle()
+    expect(fake.executions.at(-1)).toEqual({ id: 'command:quirky.handoff/regenerate', args: undefined })
     expect(overlay.last().preview).toMatchObject({ detached: false, stale: [], text: fresh })
     expect(mutableControls().map((control) => control.disabled)).toEqual([false, false, false, false, false, false])
     expect(v.text()).not.toContain('Regenerating discards your edits.')
@@ -323,8 +327,8 @@ describe('SC-39 and SC-40: secrets are marked in the editor', () => {
 describe('SC-42: Start is disabled until the dialog can start', () => {
   test('SC-42: while the first preview is loading Start is disabled for the probe and the repo state', async () => {
     const world = makeWorld()
-    let release!: () => void
-    world.previewGate = new Promise<void>((resolve) => void (release = resolve))
+    const { promise, resolve: release } = Promise.withResolvers<void>()
+    world.previewGate = promise
     const fake = fakeContext(daemon(world))
     const overlay = await mountOverlay(ui, fake)
     const pending = fake.run('open', { session: 's_1' })
@@ -333,6 +337,7 @@ describe('SC-42: Start is disabled until the dialog can start', () => {
     expect(overlay.last().canStart).toBe(false)
     expect(overlay.last().disabled).toEqual(expect.arrayContaining(['start:probe-loading', 'start:repo-state-loading']))
     expect(overlay.view.button('Start New Session')!.disabled).toBe(true)
+    expect(overlay.view.q('.ui-notice-line')?.textContent).toBe('Composing handoff preview…')
     release()
     await pending
     await settle()
