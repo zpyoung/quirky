@@ -2,6 +2,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { TasksState } from '../src/contracts'
+import { runRowMenu } from '../src/list/row-menu'
 
 type Mount = (element: HTMLElement, props: { report?: (state: unknown) => void }) => () => void
 type Handler = (params: Record<string, unknown>) => unknown
@@ -80,6 +81,7 @@ type Mounted = {
   calls: { method: string; params: Record<string, unknown> }[]
   opened: { id: string; input: unknown }[]
   commands: { id: string; args: unknown }[]
+  rowMenus: { id: string; args: unknown }[]
   toasts: string[]
   reports: unknown[]
   emit(event: Event): Promise<void>
@@ -95,6 +97,7 @@ async function mountCompact(options: { state?: TasksState; handlers?: Record<str
   const calls: Mounted['calls'] = []
   const opened: Mounted['opened'] = []
   const commands: Mounted['commands'] = []
+  const rowMenus: Mounted['rowMenus'] = []
   const toasts: string[] = []
   const reports: unknown[] = []
   const listeners = new Set<(event: Event) => void>()
@@ -108,7 +111,8 @@ async function mountCompact(options: { state?: TasksState; handlers?: Record<str
     'quirky.hosting/viewer': () => ({ login: 'zach' }),
     ...options.handlers
   }
-  const context = {
+  let context: UiPluginContext
+  context = {
     provide: (id: string, implementation: unknown) => void provided.set(id, implementation),
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
@@ -118,7 +122,13 @@ async function mountCompact(options: { state?: TasksState; handlers?: Record<str
     },
     subscribe: (listener: (event: Event) => void) => { listeners.add(listener); return () => listeners.delete(listener) },
     toast: (title: string) => void toasts.push(title),
-    executeCommand: async (id: string, args: unknown) => { commands.push({ id, args }) },
+    async executeCommand(id: string, args: unknown) {
+      if (id === 'command:quirky.tasks/row-menu') {
+        rowMenus.push({ id, args })
+        return runRowMenu(context, args)
+      }
+      commands.push({ id, args })
+    },
     openView: (id: string, input: unknown) => void opened.push({ id, input })
   } as unknown as UiPluginContext
   activate(context)
@@ -129,7 +139,7 @@ async function mountCompact(options: { state?: TasksState; handlers?: Record<str
   })
   await settle()
   return {
-    element, calls, opened, commands, toasts, reports, settle,
+    element, calls, opened, commands, rowMenus, toasts, reports, settle,
     async emit(event) {
       await act(async () => { for (const listener of listeners) listener(event) })
       await settle()
@@ -560,7 +570,7 @@ test('a pending Collapse focus expires when the first list read fails with nothi
       'quirky.tasks/list': () => { throw new Error('list unavailable') }
     }
   })
-  expect(element.querySelector('[role="alert"].tasks-compact__problem')?.textContent).toContain('list unavailable')
+  expect(element.querySelector('.tasks-compact__problem [role=\"alert\"]')?.textContent).toContain('list unavailable')
   expect(rowTitles(element)).toEqual([])
 
   await seedSnapshot([pr(274), pr(275)])

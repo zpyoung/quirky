@@ -3426,6 +3426,24 @@
             "text"
           ]
         }
+      },
+      {
+        "id": "row-menu",
+        "title": "Open Task Row Menu",
+        "palette": false,
+        "description": "Open the actions menu for a task row shown in the Tasks sidebar. Name the row by the worktree, kind and number that quirky tasks list reports; x and y place the menu at a point instead of under the row's More actions button.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktree": { "type": "string" },
+            "kind": { "type": "string", "enum": ["issue", "pullRequest"] },
+            "number": { "type": "integer", "minimum": 1 },
+            "x": { "type": "number" },
+            "y": { "type": "number" }
+          },
+          "required": ["worktree", "kind", "number"]
+        }
       }
     ],
     "cli-command": [

@@ -2,18 +2,20 @@ import { createRoot } from 'react-dom/client'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { TasksState } from '../src/contracts'
 import { CompactTasks } from '../src/list/CompactTasks'
+import { runRowMenu } from '../src/list/row-menu'
 
 type Fixture = { firstNumber: number; rowCount: number }
 type Call = { method: string; params: Record<string, unknown> }
 type MenuMock = {
   calls: Call[]
   commands: { id: string; args: unknown }[]
+  rowMenus: { id: string; args: unknown }[]
   opened: { id: string; input: unknown }[]
   toasts: string[]
 }
 
 const { compactMenuFixture } = window as unknown as { compactMenuFixture: Fixture }
-const mock: MenuMock = { calls: [], commands: [], opened: [], toasts: [] }
+const mock: MenuMock = { calls: [], commands: [], rowMenus: [], opened: [], toasts: [] }
 Object.assign(window, { compactMenuMock: mock })
 
 const state: TasksState = {
@@ -53,7 +55,8 @@ const items = Array.from({ length: compactMenuFixture.rowCount }, (_, index) => 
   }
 })
 
-const context = {
+let context: UiPluginContext
+context = {
   provide: () => undefined,
   async call(method: string, params: Record<string, unknown> = {}) {
     mock.calls.push({ method, params })
@@ -92,6 +95,10 @@ const context = {
   subscribe: () => () => undefined,
   toast: (title: string) => { mock.toasts.push(title) },
   async executeCommand(id: string, args: unknown) {
+    if (id === 'command:quirky.tasks/row-menu') {
+      mock.rowMenus.push({ id, args })
+      return runRowMenu(context, args)
+    }
     mock.commands.push({ id, args })
   },
   openView(id: string, input: unknown) {
