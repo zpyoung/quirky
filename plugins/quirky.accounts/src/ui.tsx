@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { AccountsSettings } from './window/AccountsSettings'
 import { AccountSwitchDialog, SessionAccessory, StatusBarUsage } from './window/Usage'
-import { AccountsUiStore, COPY_LOGIN_LINK_COMMAND_ID, PROVIDERS, REFRESH_COMMAND_ID, SELECT_ACCOUNT_COMMAND_ID, type ManagedProvider, type PendingLogin, type ProviderId } from './window/model'
+import { AccountsUiStore, COPY_LOGIN_LINK_COMMAND_ID, PROVIDERS, REFRESH_COMMAND_ID, SELECT_ACCOUNT_COMMAND_ID, type ManagedProvider, type ProviderId } from './window/model'
 
 const STATUS_BAR_ID = 'status-bar:quirky.accounts/usage'
 const SETTINGS_ID = 'view:quirky.accounts/settings'
@@ -16,7 +16,7 @@ let activeStore: AccountsUiStore | null = null
 type CommandRefusal = { ok: false; reason: 'invalid-args' | 'owner-unavailable' | 'remote-owner' | 'login-changed' | 'clipboard-failed' }
 type SelectAccountArgs = { provider: ManagedProvider; accountId: string | null; connId?: number }
 type RefreshArgs = { provider?: ProviderId; connId?: number }
-type CopyLoginLinkArgs = Pick<PendingLogin, 'id' | 'provider' | 'url'> & { connId?: number }
+type CopyLoginLinkArgs = { id: string; provider: ManagedProvider; url: string; connId?: number }
 type RoutedCommandId = typeof SELECT_ACCOUNT_COMMAND_ID | typeof REFRESH_COMMAND_ID | typeof COPY_LOGIN_LINK_COMMAND_ID
 type OriginRoute =
   | { kind: 'local' }
@@ -190,7 +190,7 @@ export function activate(context: UiPluginContext): void {
     if (!pending || pending.id !== parsed.id || pending.provider !== parsed.provider || pending.url !== parsed.url) {
       return { ok: false, reason: 'login-changed' }
     }
-    function currentLoginMatches(): boolean {
+    const currentLoginMatches = (): boolean => {
       if (activeStore !== store) return false
       const currentSnapshot = store.getSnapshot()
       if (currentSnapshot.scope.kind === 'remote') return false
