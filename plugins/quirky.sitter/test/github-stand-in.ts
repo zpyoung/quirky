@@ -30,6 +30,11 @@ export interface StandInState {
     detailsUrl: string
     workflowRunId: number
   }[]
+  checkDetails?: Record<string, {
+    annotations: Record<string, unknown>[]
+    jobs: Record<string, unknown>[]
+    logs: Record<string, string>
+  }>
   defaultBranch: string
   updatedHead: string
   mergeQueueRequired: boolean
@@ -69,6 +74,7 @@ export function standInState(overrides: Partial<StandInState> = {}): StandInStat
       detailsUrl: 'https://github.com/test-owner/test-repo/actions/runs/41/job/9001',
       workflowRunId: 41
     }],
+    checkDetails: {},
     defaultBranch: 'main',
     updatedHead: '2'.repeat(40),
     mergeQueueRequired: false,
@@ -232,6 +238,36 @@ if (command === 'version' && args.length === 1) {
         belongsTo(item, apiRepo) && (stateFilter === 'all' || stateFilter === itemState)
     })
     out(matches.map(restPull))
+  } else if (apiRepo && apiRepo.owner === 'test-owner' && apiRepo.repo === 'test-repo' &&
+    /^repos\/[^/]+\/[^/]+\/check-runs\/\d+\/annotations(?:\?|$)/.test(endpoint) && method === 'GET') {
+    const checkRunId = endpoint.match(/\/check-runs\/(\d+)\/annotations/)?.[1]
+    out(state.checkDetails?.[checkRunId ?? '']?.annotations ?? [])
+  } else if (apiRepo && apiRepo.owner === 'test-owner' && apiRepo.repo === 'test-repo' &&
+    /^repos\/[^/]+\/[^/]+\/check-runs\/\d+$/.test(endpoint) && method === 'GET') {
+    const checkRunId = Number(endpoint.match(/\/check-runs\/(\d+)$/)?.[1])
+    const check = (state.checkRuns ?? []).find((candidate) => candidate.databaseId === checkRunId)
+    const pull = prs.find((candidate) => belongsTo(candidate, apiRepo))
+    if (!check || !pull) fail('HTTP 404: Check run not found')
+    out({
+      id: check.databaseId,
+      head_sha: pull.headRefOid,
+      run_id: check.workflowRunId,
+      name: check.name,
+      status: check.status.toLowerCase(),
+      conclusion: check.conclusion?.toLowerCase() ?? null,
+      details_url: check.detailsUrl
+    })
+  } else if (apiRepo && apiRepo.owner === 'test-owner' && apiRepo.repo === 'test-repo' &&
+    /^repos\/[^/]+\/[^/]+\/actions\/runs\/\d+\/jobs(?:\?|$)/.test(endpoint) && method === 'GET') {
+    const workflowRunId = Number(endpoint.match(/\/actions\/runs\/(\d+)\/jobs/)?.[1])
+    const check = (state.checkRuns ?? []).find((candidate) => candidate.workflowRunId === workflowRunId)
+    out({ jobs: check ? state.checkDetails?.[String(check.databaseId)]?.jobs ?? [] : [] })
+  } else if (apiRepo && apiRepo.owner === 'test-owner' && apiRepo.repo === 'test-repo' &&
+    /^repos\/[^/]+\/[^/]+\/actions\/jobs\/\d+\/logs$/.test(endpoint) && method === 'GET') {
+    const jobId = Number(endpoint.match(/\/actions\/jobs\/(\d+)\/logs$/)?.[1])
+    const detail = Object.values(state.checkDetails ?? {}).find((candidate) =>
+      candidate.jobs.some((job) => job.id === jobId))
+    out(detail?.logs[String(jobId)] ?? '')
   } else if (apiRepo && apiRepo.owner === 'test-owner' && apiRepo.repo === 'test-repo' && /^repos\/[^/]+\/[^/]+\/pulls\/\d+\/update-branch$/.test(endpoint)) {
     const number = endpoint.match(/\/pulls\/(\d+)\/update-branch$/)?.[1]
     const item = byNumber(number)

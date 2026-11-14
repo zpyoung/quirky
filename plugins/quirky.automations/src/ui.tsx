@@ -4,14 +4,14 @@ import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { API, AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationUiState } from './ui-contracts'
 import { AutomationEditor } from './editor/AutomationEditor'
 import { AutomationsPage } from './list/AutomationsPage'
-import { Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, ToolPanelFrame } from '@quirky/ui'
+import { Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, InlineError, ToolPanelFrame } from '@quirky/ui'
 
 function message(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause) }
 function useAutomationState(context: UiPluginContext) {
   const [state, setState] = useState<AutomationUiState | null>(null)
   const [error, setError] = useState('')
   const request = useRef(0)
-  const refresh = useCallback(async () => {
+  const reload = async () => {
     const ticket = ++request.current
     try {
       const next = await context.call(`${API}uiState`, {}) as AutomationUiState
@@ -19,18 +19,21 @@ function useAutomationState(context: UiPluginContext) {
       setState(previous => !previous || previous.revision <= next.revision ? next : previous)
       setError('')
     } catch (cause) { if (ticket === request.current) setError(message(cause)) }
-  }, [context])
+  }
+  const reloadRef = useRef(reload)
+  reloadRef.current = reload
+  const refresh = useCallback(() => reloadRef.current(), [])
   useEffect(() => {
     void refresh()
     const off = context.subscribe(event => { if (event.type.startsWith(API) || event.type.startsWith('setting.')) void refresh() })
     return () => { request.current++; off() }
   }, [context, refresh])
-  return { state, error, refresh }
+  return { state, error, refresh, reload }
 }
 
 type SurfaceProps = { context: UiPluginContext; report?: (state: unknown) => void }
 function AutomationApp({ context, report }: SurfaceProps) {
-  const { state, error, refresh } = useAutomationState(context)
+  const { state, error, refresh, reload } = useAutomationState(context)
   const notify = useCallback((text: string, kind: 'success' | 'error' | 'info' = 'info') => context.toast('Automations', text, { kind }), [context])
   const current = useRef({ state, error })
   current.current = { state, error }
@@ -53,7 +56,7 @@ function AutomationApp({ context, report }: SurfaceProps) {
       <IconButton label="Automation settings" title="Automation settings" onClick={() => void context.call(`${API}settings`, {}).catch(cause => notify(message(cause), 'error'))}><ControlIcon name="gear" /></IconButton>
     </>}>
       <div className="auto-app-body">
-        {error && <div className="auto-shell-error" role="alert">{error} <Button onClick={() => void refresh()}>Retry</Button></div>}
+        {error && <div className="auto-shell-error"><InlineError message={error} action={{ label: 'Retry', onAction: () => void reload() }} /></div>}
         {!state ? <div className="auto-shell-loading" role="status"><EmptyState message="Loading Automations…" /></div> : <>
           <AutomationsPage context={context} state={state} refresh={refresh} notify={notify} report={reportPage} />
           {state.editor && <AutomationEditor context={context} state={state} refresh={refresh} notify={notify} report={reportEditor} />}
@@ -92,7 +95,7 @@ function AutomationSettings({ context, report }: SurfaceProps) {
         <FormRow label="Ask Before Deleting Automations" htmlFor="auto-setting-delete" help="Show a confirmation before deleting automations and their run history.">
           <input id="auto-setting-delete" type="checkbox" checked={ask} onChange={event => void save('ask-before-delete', event.target.checked)} />
         </FormRow>
-        {error && <p role="alert" className="auto-error">{error}</p>}
+        {error && <InlineError message={error} />}
       </div>
     </ToolPanelFrame>
   </section>
@@ -101,13 +104,13 @@ function AutomationSettings({ context, report }: SurfaceProps) {
 function AutomationSidebar({ context, report }: SurfaceProps) {
   const [visible, setVisible] = useState(context.getSetting('show-automations-button') !== false)
   const [menu, setMenu] = useState(false)
-  const [error, setError] = useState('')
+  const [sidebarError, setSidebarError] = useState('')
   const menuTrigger = useRef<HTMLButtonElement | null>(null)
   useEffect(() => context.subscribe(event => { if (event.type.startsWith('setting.')) setVisible(context.getSetting('show-automations-button') !== false) }), [context])
-  useEffect(() => { report?.({ visible, menu, error }) }, [visible, menu, error, report])
+  useEffect(() => { report?.({ visible, menu, error: sidebarError }) }, [visible, menu, sidebarError, report])
   if (!visible) return null
   return <div className="auto-sidebar" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setMenu(false) }}>
-    <Button className="auto-sidebar__trigger" onClick={() => void context.call(`${API}open`, {}).catch(cause => setError(message(cause)))} onContextMenu={event => {
+    <Button className="auto-sidebar__trigger" onClick={() => void context.call(`${API}open`, {}).catch(cause => setSidebarError(message(cause)))} onContextMenu={event => {
       event.preventDefault()
       menuTrigger.current = event.currentTarget
       setMenu(true)
@@ -118,14 +121,14 @@ function AutomationSidebar({ context, report }: SurfaceProps) {
       onChoose={(item) => {
         if (item.id !== 'hide') return
         setMenu(false)
-        void context.call('setting.set', { id: 'setting:quirky.automations/show-automations-button', value: false }).then(() => setVisible(false)).catch(cause => setError(message(cause)))
+        void context.call('setting.set', { id: 'setting:quirky.automations/show-automations-button', value: false }).then(() => setVisible(false)).catch(cause => setSidebarError(message(cause)))
       }}
       onClose={() => {
         setMenu(false)
         menuTrigger.current?.focus()
       }}
     /></div>}
-    {error && <span role="alert">{error}</span>}
+    {sidebarError && <InlineError message={sidebarError} />}
   </div>
 }
 
