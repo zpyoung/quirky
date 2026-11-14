@@ -2,6 +2,20 @@ import type { Ask, AskEnvelope, QuirkyEvent, UiPluginContext } from '@quirky/pro
 import { ASK_RESULT_FLASH_MS, type AskResolutionFlash } from './presentation-types'
 
 export const PANEL_ID = 'panel:quirky.ask/questions'
+/** Public command used to set or toggle one option preview. */
+export const TOGGLE_PREVIEW_COMMAND = 'command:quirky.ask/toggle-preview'
+
+/** The initial list request state shown by the Questions panel. */
+export type AskLoadState =
+  | { status: 'loading' }
+  | { status: 'ready' }
+  | { status: 'failed'; message: string }
+
+/** Identifies one ask's preview for one question option. */
+export function previewKeyOf(askId: string, questionId: string, option: string): string {
+  return `${askId}\0${questionId}\0${option}`
+}
+
 
 export type AskStoreClock = {
   now(): number
@@ -12,11 +26,19 @@ export type AskStoreClock = {
 export type AskStore = {
   /** The asks to show as cards: pending and not queued behind another ask of their session. */
   get(): readonly Ask[]
+  /** The initial list request state, with background failures left out after success. */
+  loadState(): AskLoadState
   /** Terminal summaries retained in the panel without affecting the pending badge. */
   flashes(): readonly AskResolutionFlash[]
   /** How many pending asks wait behind another ask of their session. */
   queued(): number
+  /** Stable set of currently open option preview keys. */
+  previews(): ReadonlySet<string>
   subscribe(listener: () => void): () => void
+  /** Retries the initial ask list after a load failure. */
+  retry(): void
+  /** Toggles or sets one option preview and returns its resulting open state. */
+  togglePreview(askId: string, questionId: string, option: string, open?: boolean): boolean
   /** Removes an ask from the pending view and retains its returned terminal envelope for four seconds. */
   resolve(askId: string, envelope: AskEnvelope): void
   dispose(): void
@@ -59,12 +81,14 @@ const systemClock: AskStoreClock = {
  */
 export function createAskStore(context: UiPluginContext, clock: AskStoreClock = systemClock): AskStore {
   let asks: readonly Ask[] = []
+  let loadState: AskLoadState = { status: 'loading' }
   let flashes: readonly AskResolutionFlash[] = []
   let queuedCount = 0
   let watermark = 0
   let generation = 0
   let appliedGeneration = 0
   let disposed = false
+  let openPreviews: ReadonlySet<string> = new Set()
   const removedDuringRefresh = new Set<Set<string>>()
   const flashTimers = new Map<string, unknown>()
   const resolvedIds = new Set<string>()
@@ -78,6 +102,21 @@ export function createAskStore(context: UiPluginContext, clock: AskStoreClock = 
     context.setPanelBadge(PANEL_ID, next.length === 0 ? null : next.length)
     for (const listener of [...listeners]) listener()
   }
+
+  const prunePreviewsForAsk = (askId: string) => {
+    const prefix = `${askId}\0`
+    const next = new Set([...openPreviews].filter((key) => !key.startsWith(prefix)))
+    if (next.size !== openPreviews.size) openPreviews = next
+  }
+
+  const prunePreviewsForList = (askIds: ReadonlySet<string>) => {
+    const next = new Set([...openPreviews].filter((key) => {
+      const separator = key.indexOf('\0')
+      return separator !== -1 && askIds.has(key.slice(0, separator))
+    }))
+    if (next.size !== openPreviews.size) openPreviews = next
+  }
+
 
   const hideFromPendingRefreshes = (askId: string) => {
     for (const removed of removedDuringRefresh) removed.add(askId)
@@ -111,16 +150,17 @@ export function createAskStore(context: UiPluginContext, clock: AskStoreClock = 
       recovering.delete(askId)
     }
   }
-
   const resolve = (askId: string, envelope: AskEnvelope) => {
     if (envelope.status === 'pending' || disposed) return
     hideFromPendingRefreshes(askId)
+    prunePreviewsForAsk(askId)
     const ask = asks.find((candidate) => candidate.id === askId)
     const next = asks.filter((candidate) => candidate.id !== askId)
     const flash = ask ? makeFlash(ask, envelope) : null
     publish(next, queuedCount, flash ? [...flashes, flash] : flashes)
     if (!ask && !resolvedIds.has(askId)) void recoverResolvedAsk(askId, envelope)
   }
+
 
   /** Refetches the pending list; the watermark advances to `eventSeq` only once the list is applied. */
   const refresh = async (eventSeq = 0) => {
@@ -134,12 +174,19 @@ export function createAskStore(context: UiPluginContext, clock: AskStoreClock = 
       watermark = Math.max(watermark, eventSeq)
       for (const ask of list) watermark = Math.max(watermark, ask.seq)
       const live = list.filter((ask) => !removed.has(ask.id) && !resolvedIds.has(ask.id))
+      prunePreviewsForList(new Set(live.map((ask) => ask.id)))
+      if (loadState.status !== 'ready') loadState = { status: 'ready' }
       publish(
         live.filter((ask) => !ask.queued).sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id)),
         live.filter((ask) => ask.queued).length
       )
     } catch (error) {
-      context.log(`could not list asks: ${error instanceof Error ? error.message : String(error)}`)
+      const message = error instanceof Error ? error.message : String(error)
+      context.log(`could not list asks: ${message}`)
+      if (!disposed && mine === generation && mine >= appliedGeneration && loadState.status !== 'ready') {
+        loadState = { status: 'failed', message }
+        publish(asks)
+      }
     } finally {
       removedDuringRefresh.delete(removed)
     }
@@ -166,14 +213,38 @@ export function createAskStore(context: UiPluginContext, clock: AskStoreClock = 
   })
   void refresh()
 
+  const retry = () => {
+    if (disposed || loadState.status === 'ready') return
+    loadState = { status: 'loading' }
+    publish(asks)
+    void refresh()
+  }
+
+  const togglePreview = (askId: string, questionId: string, option: string, open?: boolean): boolean => {
+    const key = previewKeyOf(askId, questionId, option)
+    const wasOpen = openPreviews.has(key)
+    const isOpen = open ?? !wasOpen
+    if (wasOpen === isOpen) return isOpen
+    const next = new Set(openPreviews)
+    if (isOpen) next.add(key)
+    else next.delete(key)
+    openPreviews = next
+    publish(asks)
+    return isOpen
+  }
+
   return {
     get: () => asks,
+    loadState: () => loadState,
     flashes: () => flashes,
     queued: () => queuedCount,
+    previews: () => openPreviews,
     subscribe(listener) {
       listeners.add(listener)
       return () => void listeners.delete(listener)
     },
+    retry,
+    togglePreview,
     resolve,
     dispose() {
       disposed = true
