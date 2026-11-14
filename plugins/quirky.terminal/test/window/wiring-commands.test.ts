@@ -982,4 +982,3 @@ describe('agent command catalog freshness', () => {
     expect(wired.fake.callsTo('quirky.structured/create')).toEqual([])
   })
 })
-
