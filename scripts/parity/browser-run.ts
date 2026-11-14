@@ -6,11 +6,14 @@ import { tabChecks } from './browser-checks-tabs'
 import { actionChecks } from './browser-checks-actions'
 import { stateChecks } from './browser-checks-state'
 import { networkChecks } from './browser-checks-network'
+import { paneChecks } from './browser-pane'
 
 export type Evidence = Record<string, unknown>
 export type BrowserCheck = { id: string; run(c: CheckContext): Promise<Evidence> }
 export type CheckContext = {
   world: BrowserWorld
+  signal: AbortSignal
+  deadline: number
   state: { profileA: string; profileB: string; pageA: string; pageB: string; peer: string; [key: string]: unknown }
   call<T = Record<string, unknown>>(words: string, flags?: Record<string, string | number | boolean>, page?: string): Promise<T>
   probe(words: string, flags?: Record<string, string | number | boolean>, page?: string): Promise<CliReceipt>
@@ -27,7 +30,7 @@ export type BrowserParityReport = {
   cleanup: { ok: boolean; error?: string; evidence?: Evidence }; elapsedMs: number
   error?: { kind: string; message: string; stderrTail?: string }
 }
-export const browserChecks: BrowserCheck[] = [...tabChecks, ...actionChecks, ...stateChecks, ...networkChecks]
+export const browserChecks: BrowserCheck[] = [...tabChecks, ...actionChecks, ...stateChecks, ...networkChecks, ...paneChecks]
 
 function summarize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(summarize)
@@ -58,11 +61,23 @@ export function validateOutcomes(rows: BrowserRow[], outcomes: BrowserRowResult[
   }
 }
 
+async function cleanupCheckState(c: CheckContext): Promise<void> {
+  const candidate = c.state.watchRenderer as { close?: () => Promise<void> } | undefined
+  if (candidate && typeof candidate.close === 'function') {
+    delete c.state.watchRenderer
+    try { await candidate.close() } catch { }
+  }
+  if (c.state.identityNeedsRestore === true) {
+    c.state.identityNeedsRestore = false
+    try { await c.world.cli(['browser', 'identity', 'set', '--mode', 'clean'], { allowFailure: true }) } catch { }
+  }
+}
 export async function runBrowserParity(options: {
-  rows?: BrowserRow[]; checks?: BrowserCheck[]; signal?: AbortSignal
+  rows?: BrowserRow[]; checks?: BrowserCheck[]; signal?: AbortSignal; deadline?: number
   startWorld?: typeof startBrowserWorld
 } = {}): Promise<BrowserParityReport> {
   const started = Date.now()
+  const deadline = options.deadline ?? started + 460_000
   const rows = options.rows ?? readBrowserTable()
   const checks = options.checks ?? browserChecks
   const results = new Map<string, BrowserRowResult>()
@@ -70,13 +85,14 @@ export async function runBrowserParity(options: {
   const abort = () => controller.abort(options.signal?.reason ?? new BrowserFailure('deadline', 'run interrupted'))
   options.signal?.addEventListener('abort', abort, { once: true })
   if (options.signal?.aborted) abort()
-  const timer = setTimeout(() => controller.abort(new BrowserFailure('deadline', '460 second work deadline reached')), 460_000)
+  const timer = setTimeout(() => controller.abort(new BrowserFailure('deadline', 'browser parity work deadline reached')), Math.max(0, deadline - Date.now()))
   let world: BrowserWorld | undefined
+  let context: CheckContext | undefined
   let operationError: BrowserParityReport['error']
   let cleanup: BrowserParityReport['cleanup'] = { ok: true }
   try {
     if (!options.rows) validateBrowserTable(rows, checks.map(check => check.id))
-    world = await (options.startWorld ?? startBrowserWorld)({ signal: controller.signal, deadline: started + 460_000 })
+    world = await (options.startWorld ?? startBrowserWorld)({ signal: controller.signal, deadline })
     let receipts: CliReceipt[] = []
     const state: CheckContext['state'] = { profileA: '', profileB: '', pageA: '', pageB: '', peer: '' }
     const probe: CheckContext['probe'] = async (words, flags = {}, page = state.pageA) => {
@@ -96,11 +112,12 @@ export async function runBrowserParity(options: {
       // The world validates successful CLI payloads against their public method schema.
       return receipt.result as T
     }
-    const c: CheckContext = { world, state, probe, call,
+    const c: CheckContext = { world, signal: controller.signal, deadline, state, probe, call,
       observe: async <T>(expression: string, page?: string): Promise<T> => (await call<{ value: T }>('eval', { expression }, page)).value,
       assert(condition, message) { if (!condition) throw new BrowserFailure('wrong-page', message) },
       equal(actual, expected, message = 'unexpected observed state') { if (!isDeepStrictEqual(actual, expected)) throw new BrowserFailure('wrong-page', `${message}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`) }
     }
+    context = c
     for (const check of checks) {
       const row = rows.find(row => row.check === check.id)
       if (!row || row.deferred || row.disposition === 'excluded') continue
@@ -133,6 +150,7 @@ export async function runBrowserParity(options: {
   finally {
     clearTimeout(timer)
     options.signal?.removeEventListener('abort', abort)
+    if (context) await cleanupCheckState(context)
     if (world) {
       try { cleanup = await world.cleanup() }
       catch (error) { cleanup = { ok: false, error: failure(error, world.home).message } }

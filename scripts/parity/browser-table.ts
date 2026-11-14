@@ -60,15 +60,11 @@ const EXPECTED_EXTRA_IDS = new Set([
 ])
 const DEFERRED_IDS = new Set([
   'native-profile-persistence',
-  'native-profile-clear',
-  'browser-identity-set-activation-after-restart',
-  'worktree-watch-page',
-  'daemon-restart-profile'
+  'native-profile-clear'
 ])
 const DECLARED_FOLLOWUPS = {
   routing: 'Reveal the selected browser page and route browser URLs to the intended client',
   interception: 'Keep intercepted requests pending until explicitly released',
-  restart: 'Prove CLI page identity in a worktree Watch pane across daemon restart',
   waitNavigation: 'Let a pending browser wait finish when the navigation it waits for lands',
   waitNavigationCause: 'a wait fulfilled by a navigation is rejected with browser_tab_changed'
 }
@@ -287,7 +283,7 @@ function deferredRowValid(row: BrowserRow): boolean {
   if (row.id === 'native-profile-persistence' || row.id === 'native-profile-clear') {
     return row.reason.includes('WKWebView')
   }
-  return row.reason.includes(DECLARED_FOLLOWUPS.restart)
+  return false
 }
 
 function executableExtraValid(row: BrowserRow): boolean {
@@ -296,6 +292,13 @@ function executableExtraValid(row: BrowserRow): boolean {
       row.reason.includes(DECLARED_FOLLOWUPS.routing)
   }
   if (row.id === 'wait-selector' || row.id === 'wait-text' || row.id === 'wait-js') {
+    return row.check === row.id && !row.deferred && row.disposition === 'covered'
+  }
+  if (
+    row.id === 'browser-identity-set-activation-after-restart' ||
+    row.id === 'worktree-watch-page' ||
+    row.id === 'daemon-restart-profile'
+  ) {
     return row.check === row.id && !row.deferred && row.disposition === 'covered'
   }
   if (row.id === 'wait-url' || row.id === 'wait-load') {
@@ -360,6 +363,9 @@ export function validateBrowserTable(rows: BrowserRow[], checkIds?: Iterable<str
   const declaredCheckIds = new Set([
     ...capture.commands.map((command) => command.words.replaceAll(' ', '-')),
     'tab-switch-focus',
+    'browser-identity-set-activation-after-restart',
+    'worktree-watch-page',
+    'daemon-restart-profile',
     'wait-selector',
     'wait-text',
     'wait-js',

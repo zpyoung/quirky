@@ -306,7 +306,7 @@ describe('the worktree view', () => {
     const openBadge = [...view.element.querySelectorAll('button')].find((button) => button.textContent === 'Open')!
 
     await view.click(openBadge)
-    expect(fake.executed).toEqual([{
+    expect(fake.executed).toStrictEqual([{
       id: 'command:quirky.session/run-badge',
       args: { session: 's1', badge: 'acme.tools/k' }
     }])
@@ -316,7 +316,7 @@ describe('the worktree view', () => {
       badges: { 'acme.tools/k': { label: 'Open', command: 'command:acme.tools/open-latest', args: { latest: true } } }
     }
     await fake.command('run-badge', { session: 's1', badge: 'acme.tools/k' })
-    expect(fake.executed.at(-1)).toEqual({ id: 'command:acme.tools/open-latest', args: { latest: true } })
+    expect(fake.executed.at(-1)).toStrictEqual({ id: 'command:acme.tools/open-latest', args: { latest: true } })
     await expect(fake.command('run-badge', { session: 's1', badge: 'acme.tools/none' })).rejects.toThrow(
       'session s1 has no badge acme.tools/none with a command'
     )

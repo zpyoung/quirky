@@ -236,18 +236,47 @@ describe('artifacts', () => {
 })
 
 describe('speed evidence', () => {
-  test('uses a dedicated macOS runner and sequential smoke then benchmark', () => {
-    expect(jobs.speed).toMatchObject({ 'runs-on': 'macos-15', 'timeout-minutes': 30 })
+  test('compares a prepared base on the same runner after the solo benchmark', () => {
+    expect(jobs.speed).toMatchObject({ 'runs-on': 'macos-15', 'timeout-minutes': 60 })
     expect(jobs.speed!.if).toBeUndefined()
+    const headInstall = steps('speed').find(step => step.run === 'bun install --frozen-lockfile')
+    expect(headInstall).toBeDefined()
+    expect(steps('speed').indexOf(headInstall!)).toBeLessThan(steps('speed').findIndex(step => step.name === 'Check real-daemon smoke'))
+    const prepare = steps('speed').find(step => step.name === 'Prepare speed base')!
+    expect((prepare as Step & { 'continue-on-error'?: boolean })['continue-on-error']).toBe(true)
+    expect(prepare.env).toEqual({
+      EVENT_NAME: '${{ github.event_name }}',
+      HEAD_SHA: '${{ github.event.pull_request.head.sha || github.sha }}',
+    })
+    expect(prepare.run).toContain('if [ "$EVENT_NAME" = "pull_request" ]')
+    expect(prepare.run).toContain('git merge-base "$HEAD_SHA" origin/main')
+    expect(prepare.run).toContain('git rev-parse "$HEAD_SHA^"')
+    expect(prepare.run).toContain('git worktree add --detach "$RUNNER_TEMP/speed-base" "$BASE_SHA"')
+    expect(prepare.run).toContain('(cd "$RUNNER_TEMP/speed-base" && bun install --frozen-lockfile)')
+    expect(prepare.run!.indexOf('git worktree add')).toBeLessThan(prepare.run!.indexOf('bun install --frozen-lockfile'))
+    expect(prepare.run!.indexOf('bun install --frozen-lockfile')).toBeLessThan(prepare.run!.indexOf('>> "$GITHUB_ENV"'))
+
+    const measure = steps('speed').find(step => step.name === 'Measure speed')!
+    expect(measure.run).toContain('measure_args=(--out speed --samples 20)')
+    expect(measure.run).toContain('if [ -n "${SPEED_BASE_ROOT:-}" ]')
+    expect(measure.run).toContain('measure_args+=(--base-root "$SPEED_BASE_ROOT" --base-basis "$SPEED_BASE_BASIS")')
+    expect(measure.run).toContain('bun scripts/speed.ts "${measure_args[@]}"')
+    expect(steps('speed').indexOf(prepare)).toBeLessThan(steps('speed').indexOf(measure))
+
     const commands = runs('speed').join('\n')
-    expect(commands).toContain('bun install --frozen-lockfile')
     expect(commands).toContain('QUIRKY_SPEED_IMAGE_VERSION=')
     expect(commands).toContain('bun node_modules/playwright/cli.js install chromium')
     expect(commands).toContain('bun test scripts/speed/run.e2e.test.ts')
-    expect(commands).toContain('bun scripts/speed.ts --out speed --samples 20')
-    expect(commands.indexOf('bun test scripts/speed/run.e2e.test.ts')).toBeLessThan(commands.indexOf('bun scripts/speed.ts --out speed --samples 20'))
+    expect(commands.indexOf('bun test scripts/speed/run.e2e.test.ts')).toBeLessThan(commands.indexOf('bun scripts/speed.ts'))
     expect(commands).not.toContain('run-shard')
-    expect(effectivePermissions('speed')).toEqual({ contents: 'read', actions: 'read' })
+    expect(effectivePermissions('speed')).toEqual({ contents: 'read' })
+  })
+
+  test('compares local paired evidence without a GitHub token', () => {
+    const compare = steps('speed').find(step => step.name === 'Compare speed')!
+    expect(compare.run).toBe('bun scripts/speed/ci.ts compare --current speed/report.json --pair speed/pair.json --out speed --head "$HEAD_SHA"')
+    expect(compare.env).toEqual({ HEAD_SHA: '${{ github.event.pull_request.head.sha || github.sha }}' })
+    expect(compare.env).not.toHaveProperty('GH_TOKEN')
   })
 
   test('always retains partial evidence and publishes only qualified main evidence', () => {

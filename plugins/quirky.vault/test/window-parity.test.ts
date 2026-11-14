@@ -20,6 +20,7 @@ import type { PublicListResult, SearchResponse, SearchStatus } from '../src/type
 import { createWindowVaultHostForwarder, removeWindowVaultHostForwarder } from './window-parity-host'
 import { TrashVolume } from './support/trash-volume'
 import { VaultRig } from './support/harness'
+import { quietHistoryReport } from './support/history-window'
 
 afterEach(stopAll)
 
@@ -475,19 +476,29 @@ test(
         fault.restore()
       }
 
+      await quietHistoryReport<HistoryReport>(features, HISTORY_PANEL, 'source A selected and automatically expanded', (state) => state.selectedId === rowA.id && state.expandedIds.includes(rowA.id))
       const rowAElement = await until(features, () => document.querySelector<HTMLElement>(`[data-vault-session-row="${rowA.id}"]`))
-      rowAElement.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"]')!.click()
+      await until(features, () => rowAElement.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Hide details"]'))
       const detailsA = await until(features, () => document.querySelector<HTMLElement>(`[data-vault-session-details="${rowA.id}"]`))
-      document.querySelector<HTMLButtonElement>('[aria-label=\"View options\"]')!.click()
+      await until(features, () => detailsA.isConnected && detailsA.querySelector('[data-vault-first-prompt]')?.textContent === promptA)
+      const viewOptions = await until(features, () => document.querySelector<HTMLButtonElement>('[aria-label="View options"]'))
+      viewOptions.click()
       await until(features, () => document.querySelector('[data-vault-view-options]'))
-      await until(features, () => detailsA.querySelector<HTMLElement>('[data-vault-first-prompt]'))
+      await until(features, () => detailsA.isConnected && detailsA.querySelector('[data-vault-first-prompt]')?.textContent === promptA)
+      expect(detailsA.isConnected).toBe(true)
       expect(detailsA.querySelector('[data-vault-first-prompt]')?.textContent).toBe(promptA)
 
+      await quietHistoryReport<HistoryReport>(features, HISTORY_PANEL, 'source B still collapsed beside expanded A', (state) => state.selectedId === rowA.id && state.expandedIds.includes(rowA.id) && !state.expandedIds.includes(rowB.id))
       const rowBElement = await until(features, () => document.querySelector<HTMLElement>(`[data-vault-session-row="${rowB.id}"]`))
-      rowBElement.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"]')!.click()
+      const expandB = await until(features, () => rowBElement.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Show details"]'))
+      expandB.click()
+      await quietHistoryReport<HistoryReport>(features, HISTORY_PANEL, 'source B selected with both sources expanded', (state) => state.selectedId === rowB.id && state.expandedIds.includes(rowA.id) && state.expandedIds.includes(rowB.id))
       const detailsB = await until(features, () => document.querySelector<HTMLElement>(`[data-vault-session-details="${rowB.id}"]`))
-      await until(features, () => detailsB.querySelector<HTMLElement>('[data-vault-first-prompt]'))
+      await until(features, () => detailsB.isConnected && detailsB.querySelector('[data-vault-first-prompt]')?.textContent === promptB)
+      await until(features, () => detailsA.isConnected && detailsA.querySelector('[data-vault-first-prompt]')?.textContent === promptA)
       expect(detailsB.querySelector('[data-vault-first-prompt]')?.textContent).toBe(promptB)
+      expect(detailsA.isConnected).toBe(true)
+      expect(detailsA.querySelector('[data-vault-first-prompt]')?.textContent).toBe(promptA)
 
     } finally {
       await features?.stop()

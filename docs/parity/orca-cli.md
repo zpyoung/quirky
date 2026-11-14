@@ -83,7 +83,7 @@ Each primary captured command has exactly one row, with ID formed by joining its
 | repo-set | orca: `repo set` — Set whether non-Orca worktrees are shown for a repo | `repo set` | check:repo-set; `bun test scripts/parity/cli.test.ts` | covered: Behavioral coverage is declared for default-base readback; covered does not claim a historical passing run. |
 | repo-set-base-ref | orca: `repo set-base-ref` — Set the repo's default base ref for future worktrees | `repo set --default-base main` | check:repo-set; `bun test scripts/parity/cli.test.ts` | covered: Behavioral coverage is declared for same base-setting receipt; covered does not claim a historical passing run. |
 | repo-show | orca: `repo show` — Show one registered repo | `repo show` | check:repo-show; `bun test scripts/parity/cli.test.ts` | covered: Behavioral coverage is declared for repo; covered does not claim a historical passing run. |
-| serve | orca: `serve` — Start an Orca runtime server without opening a desktop window | No public owned foreground JSON startup command | none | gap: Missing behavior: an owned foreground headless startup command with a JSON readiness contract is not available. Follow-up: Expose owned foreground headless startup with JSON readiness. |
+| serve | orca: `serve` — Start an Orca runtime server without opening a desktop window | `serve`; owned foreground daemon with JSON readiness, `--port` and safe mode | check:startup-ready,startup-already-running,startup-port-in-use,startup-concurrent,startup-parent-loss; `bun test scripts/parity/cli.test.ts` | covered: serve starts and owns one daemon for its home, prints a readiness record once runtime.json, health and status name that daemon, refuses a home another daemon owns and an occupied port without starting anything, and its daemon exits when serve is killed. Pairing flags, project-root and recipe output, and supervise have no counterpart in this row; supervision belongs to the serve service rows. |
 | serve-restore-resume | orca: `serve restore resume` — Resume automatic terminal restores that this host paused | Partial `session restore` / `session wake`; no host-wide automatic-restore resume control established | none | gap: Missing behavior: host-wide automatic-restore resume control is not established; session restore/wake are partial candidates and are catalog-checked, not executed. Follow-up: Expose owned background-service and restore controls. |
 | serve-service-install | orca: `serve service install` — Run orca serve as a per-user background service that restarts itself | No per-user daemon service installation command established | none | gap: Missing behavior: per-user daemon service installation is not established. Follow-up: Expose owned background-service and restore controls. |
 | serve-service-status | orca: `serve service status` — Show whether this profile's orca serve service is running | `status` is daemon health, not service-manager state | none | gap: Missing behavior: service-manager state is not exposed; daemon health status is not a substitute. Follow-up: Expose owned background-service and restore controls. |
@@ -190,7 +190,7 @@ Each primary captured command has exactly one row, with ID formed by joining its
 ## Scope notes
 
 - Local `project list`, `setups`, and `setup-*` commands map to `repo` operations. `project-remote-hosts` excludes per-host selectors and setup state under BRIEF.md:67–68; no separate local project identity or store migration is proposed.
-- The `serve` startup gap is **Expose owned foreground headless startup with JSON readiness**. CLI autostart and a headless daemon entrypoint are not equivalent to an owned foreground command with JSON readiness. This item does not invoke `daemon restart`.
+- `serve` never borrows or stops a daemon it did not start. It leaves the PTY host and its terminal sessions running, as Orca's service leaves its terminal daemon. It does not invoke `daemon restart`.
 - File diff, open-changed, and open-render gaps are **Prove file and review CLI targeting in the real UI**. The candidate UI commands open a combined Review tab; the planning evidence does not establish Orca's per-file/background-tab/focus contract. This is not a claim that Git diff is absent.
 - Agent launch covers terminal launch, not native chat. Codex hook setup, status and removal run only in the owned home and preserve a user-owned hook. Managed-account coverage is Claude/Codex local stand-in sign-in and removal; OpenCode/Devin selection is excluded by a scope inference, not a product capability assertion.
 - Terminal IDs are Quirky session IDs, not Orca handles. `agent-status wait --until exited` proves exit only; idle semantics differ from Orca's TUI-idle wait. `agent-status send` exists, but raw terminal-send receipts do not prove agent prompt delivery.
@@ -205,6 +205,7 @@ bun scripts/parity/cli.ts --json
 bun test scripts/parity/cli-table.test.ts
 bun test scripts/parity/cli-failures.test.ts
 bun test scripts/parity/cli-workers.test.ts
+bun test scripts/parity/cli-startup.test.ts
 bun test scripts/parity/cli.test.ts
 bun run typecheck
 ```
@@ -215,4 +216,4 @@ Children use explicit local JSON mode, an owned no-profile shell, fixture-only a
 
 Work aborts by 340 seconds, with 20 seconds reserved for cleanup. Command output is bounded at 16 MiB stdout and an 8 KiB stderr tail. Each ordinary command has a 15-second deadline.
 
-Remaining shared table/registry follow-ups are serialized: **Include the visible viewport in live worker-read output** → **Add a compact orchestration summary command** → **Expose owned foreground headless startup with JSON readiness** → **Expose owned background-service and restore controls** → **Prove file and review CLI targeting in the real UI**. The last waits for g9-1 and g10-1. These titles are references, not invented queue IDs.
+Remaining shared table/registry follow-ups are serialized: **Include the visible viewport in live worker-read output** → **Add a compact orchestration summary command** → **Expose owned background-service and restore controls** → **Prove file and review CLI targeting in the real UI**. The last waits for g9-1 and g10-1. These titles are references, not invented queue IDs.
