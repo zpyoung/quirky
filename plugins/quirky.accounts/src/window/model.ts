@@ -1,7 +1,7 @@
 import type { OwnerSessionHostRef, OwnerSessionWorkspaceRef, QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
 import type { AccountState, AccountSummary, AccountUiState, ConfigWarning, ManagedProvider, OwnerCallOperation, PendingLogin, Preferences, StaleSession, SystemAccount } from '../types'
 import { DEFAULT_PREFERENCES } from '../types'
-import type { CredentialStatus, ExtraUsage as MeterExtraUsage, RateLimitResetCredits as MeterResetCredits, UsageBucket as MeterBucket, UsageProvider, UsageWindow } from '../usage'
+import type { CredentialStatus, ExtraUsage as MeterExtraUsage, RateLimitResetCredits as MeterResetCredits, UsageBucket as MeterBucket, UsageProvider, UsageWindow } from '../usage/types'
 export type { AccountState, AccountSummary, AccountUiState, ConfigWarning, ManagedProvider, PendingLogin, Preferences, StaleSession, SystemAccount }
 export type { CredentialStatus }
 
@@ -175,11 +175,10 @@ export function parseUsageState(value: unknown): UsageState | null {
     const snapshot = parseSnapshot(candidate)
     return snapshot ? [snapshot] : []
   })
-  const inactive: Record<string, ProviderSnapshot> = {}
-  for (const [id, candidate] of Object.entries(value.inactive)) {
+  const inactive = Object.fromEntries(Object.entries(value.inactive).flatMap(([id, candidate]) => {
     const snapshot = parseSnapshot(candidate)
-    if (snapshot) inactive[id] = snapshot
-  }
+    return snapshot ? [[id, snapshot] as const] : []
+  }))
   return { providers, inactive, updatedAt: value.updatedAt }
 }
 
@@ -816,7 +815,7 @@ export class AccountsUiStore {
       }
       if (usage && this.usageMatchesSelection(usage)) {
         this.usageMismatchReloaded = false
-        this.commit({ usage, loading: this.snapshot.accounts === null ? this.snapshot.loading : false, error: null })
+        this.commit({ usage, loading: this.snapshot.accounts === null ? this.snapshot.loading : false })
       } else if (usage && !this.usageMismatchReloaded) {
         this.usageMismatchReloaded = true
         this.scheduleUsageReload()
@@ -851,9 +850,9 @@ export class AccountsUiStore {
     this.context.toast(title, body)
   }
 
-  private async act(title: string, method: string, params: Record<string, unknown>, errorCopy?: (error: unknown) => string | null): Promise<unknown | null> {
+  private async act(title: string, request: () => Promise<unknown>, errorCopy?: (error: unknown) => string | null): Promise<unknown | null> {
     try {
-      return await this.context.call(method, params)
+      return await request()
     } catch (error) {
       this.context.toast(title, errorCopy?.(error) ?? 'The request could not be completed. Please try again.')
       return null
@@ -908,7 +907,7 @@ export class AccountsUiStore {
   async setUiState(patch: Partial<AccountUiState>): Promise<void> {
     this.uiQueue = this.uiQueue.then(async () => {
       if (this.stopped) return
-      const result = await this.act('Could not update Usage', 'quirky.accounts/setUiState', { ...patch })
+      const result = await this.act('Could not update Usage', () => this.context.call('quirky.accounts/setUiState', { ...patch }))
       if (result === null) return
       const ui = parseUiState(result)
       if (ui) this.commit({ ui })
@@ -926,7 +925,7 @@ export class AccountsUiStore {
     this.preferencesQueue = this.preferencesQueue.then(async () => {
       if (this.stopped) return
       const generation = ++this.accountGeneration
-      const result = await this.act('Could not save account preferences', 'quirky.accounts/setPreferences', { ...patch })
+      const result = await this.act('Could not save account preferences', () => this.context.call('quirky.accounts/setPreferences', { ...patch }))
       if (result === null) return
       const state = parseAccountState(result)
       if (state) {
@@ -980,7 +979,7 @@ export class AccountsUiStore {
     const confirmed = await this.context.confirm({ title: `Remove ${providerName} Account?`, body, confirmLabel: 'Remove Account' })
     if (!confirmed || !account) return
     const generation = ++this.accountGeneration
-    const result = await this.act(`Could not remove ${providerName} account`, 'quirky.accounts/remove', { provider, accountId, yes: true })
+    const result = await this.act(`Could not remove ${providerName} account`, () => this.context.call('quirky.accounts/remove', { provider, accountId, yes: true }))
     if (result !== null) {
       this.applyAccountResult(result, generation)
       void this.loadUsage()
@@ -995,7 +994,7 @@ export class AccountsUiStore {
       this.loginGeneration += 1
       const generation = this.loginGeneration
       const params = { provider, ...options }
-      const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, 'quirky.accounts/beginLogin', params)
+      const result = await this.act(`Could not start ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in`, () => this.context.call('quirky.accounts/beginLogin', params))
       if (result === null || generation !== this.loginGeneration) return
       const id = isRecord(result) && typeof result.id === 'string' ? result.id : typeof result === 'string' ? result : null
       if (!id) {
@@ -1075,7 +1074,7 @@ export class AccountsUiStore {
     clearTimeout(this.loginTimer ?? undefined)
     this.loginTimer = null
     try {
-      const result = await this.act('Could not cancel sign-in', 'quirky.accounts/cancelLogin', { id: pending.id })
+      const result = await this.act('Could not cancel sign-in', () => this.context.call('quirky.accounts/cancelLogin', { id: pending.id }))
       if (result !== null && generation === this.loginGeneration && this.snapshot.login?.id === pending.id) {
         this.loginGeneration += 1
         clearTimeout(this.loginTimer ?? undefined)
@@ -1171,7 +1170,7 @@ export class AccountsUiStore {
     if (this.snapshot.scope.kind === 'remote') return 'failed'
     const generation = ++this.accountGeneration
     let selectionChanged = false
-    const result = await this.act('Could not restart sessions', 'quirky.accounts/restart', { sessions, selectionRevision, ...(yes ? { yes: true } : {}) }, (error) => {
+    const result = await this.act('Could not restart sessions', () => this.context.call('quirky.accounts/restart', { sessions, selectionRevision, ...(yes ? { yes: true } : {}) }), (error) => {
       const message = isRecord(error) && typeof error.message === 'string' ? error.message : ''
       if (message !== 'The selected account changed. Refresh the account state and choose again.' && message !== 'A requested session is no longer stale at this account revision.') return null
       selectionChanged = true
@@ -1190,7 +1189,7 @@ export class AccountsUiStore {
     if (this.snapshot.scope.kind === 'remote') return 'failed'
     const generation = ++this.accountGeneration
     let selectionChanged = false
-    const result = await this.act('Could not keep the current account', 'quirky.accounts/keep', { sessions, selectionRevision }, (error) => {
+    const result = await this.act('Could not keep the current account', () => this.context.call('quirky.accounts/keep', { sessions, selectionRevision }), (error) => {
       const message = isRecord(error) && typeof error.message === 'string' ? error.message : ''
       if (message !== 'The selected account changed. Refresh the account state and choose again.' && message !== 'A requested session is no longer stale at this account revision.') return null
       selectionChanged = true
@@ -1216,7 +1215,7 @@ export class AccountsUiStore {
   async setCredential(provider: string, kind: string, value: string): Promise<boolean> {
     if (this.snapshot.scope.kind === 'remote') return false
     if (!value) return false
-    const result = await this.act('Could not save provider credential', 'quirky.accounts/setCredential', { provider, kind, value })
+    const result = await this.act('Could not save provider credential', () => this.context.call('quirky.accounts/setCredential', { provider, kind, value }))
     if (result === null) return false
     const status = parseCredentialStatus(result)
     if (status) this.updateCredential(status)
@@ -1227,7 +1226,7 @@ export class AccountsUiStore {
 
   async clearCredential(provider: string, kind: string): Promise<boolean> {
     if (this.snapshot.scope.kind === 'remote') return false
-    const result = await this.act('Could not clear provider credential', 'quirky.accounts/clearCredential', { provider, kind })
+    const result = await this.act('Could not clear provider credential', () => this.context.call('quirky.accounts/clearCredential', { provider, kind }))
     if (result === null) return false
     const status = parseCredentialStatus(result)
     if (status) this.updateCredential(status)
@@ -1253,7 +1252,7 @@ export class AccountsUiStore {
   async consumeResetCredit(idempotencyKey: string, expectedScope: ResetExpectedScope): Promise<ResetCreditResult> {
     if (this.snapshot.scope.kind === 'remote') return 'failed'
     let scopeChanged = false
-    const result = await this.act('Could not reset Codex limits', 'quirky.accounts/consumeResetCredit', { idempotencyKey, expectedScope, yes: true }, (error) => {
+    const result = await this.act('Could not reset Codex limits', () => this.context.call('quirky.accounts/consumeResetCredit', { idempotencyKey, expectedScope, yes: true }), (error) => {
       const message = isRecord(error) && typeof error.message === 'string' ? error.message : ''
       if (message !== 'Codex reset offer is no longer current' && message !== 'Codex reset offer changed; refresh usage and confirm again') return null
       scopeChanged = true
