@@ -201,6 +201,7 @@ export async function main(argv: string[]): Promise<number> {
     const daemonLog = readFileSync(join(config.out, 'daemon.log'), 'utf8')
     const skippedBeatCount = countSkippedBeats(world.workers)
     const evidence = {
+      startedAt: startedIso,
       durationSeconds,
       windows: windowEvidence.records.filter(windowAlive).length,
       windowBeats: windowEvidence.records,

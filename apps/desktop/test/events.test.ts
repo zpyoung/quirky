@@ -172,6 +172,26 @@ describe('createBadgeUpdater', () => {
     expect(applied).toEqual([])
   })
 
+  test('a Conflict status refresh preserves the previously applied badge', async () => {
+    const applied: number[] = []
+    let loads = 0
+    const updater = createBadgeUpdater({
+      load: async () => {
+        loads += 1
+        return loadBadge(async () => {
+          if (loads === 1) return { badge: 4, label: '4' }
+          throw new RpcError(RpcErrorCode.Conflict, 'worktree status is temporarily unavailable')
+        })
+      },
+      apply: (count) => applied.push(count)
+    })
+
+    await updater.refresh()
+    await updater.refresh()
+
+    expect(applied).toEqual([4])
+  })
+
   test('reset clears the badge', () => {
     const applied: number[] = []
     const updater = createBadgeUpdater({ load: async () => 0, apply: (c) => applied.push(c) })
