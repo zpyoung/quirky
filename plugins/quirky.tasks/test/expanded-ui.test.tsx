@@ -265,6 +265,7 @@ async function mountExpanded(options: { state?: TasksState; handlers?: Record<st
       return handler(params)
     },
     subscribe: (listener: (event: Event) => void) => { listeners.add(listener); return () => listeners.delete(listener) },
+    onConnection: () => () => undefined,
     toast: (title: string) => void toasts.push(title),
     confirm: async (request: { title: string }) => { confirms.push(request); return true },
     executeCommand: async (id: string, args: unknown) => { commands.push({ id, args }) },

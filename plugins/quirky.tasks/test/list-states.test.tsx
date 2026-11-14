@@ -12,6 +12,7 @@ type Mounted = {
   toasts: string[]
   provided: Map<string, unknown>
   current(): TasksState
+  connection(status: 'connected' | 'reconnecting'): Promise<void>
   mountAnother(): Promise<HTMLElement>
   unmount(element: HTMLElement): Promise<void>
   callProvided(id: string, input: unknown): unknown
@@ -130,6 +131,7 @@ async function mountList(options: { state?: TasksState; handlers?: Record<string
   const calls: Mounted['calls'] = []
   const toasts: string[] = []
   const listeners = new Set<(event: UiEvent) => void>()
+  const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   let state = options.state ?? prsState
   const current = () => state
   const defaultHandlers: Record<string, Handler> = {
@@ -164,6 +166,7 @@ async function mountList(options: { state?: TasksState; handlers?: Record<string
       return handler(params)
     },
     subscribe: (listener: (event: UiEvent) => void) => { listeners.add(listener); return () => listeners.delete(listener) },
+    onConnection: (listener: (status: 'connected' | 'reconnecting') => void) => { connectionListeners.add(listener); return () => connectionListeners.delete(listener) },
     toast: (title: string) => void toasts.push(title),
     confirm: async () => true,
     executeCommand: async () => undefined,
@@ -199,6 +202,10 @@ async function mountList(options: { state?: TasksState; handlers?: Record<string
     toasts,
     provided,
     current,
+    async connection(status) {
+      await act(async () => { for (const listener of connectionListeners) listener(status) })
+      await settle()
+    },
     mountAnother: mountOne,
     unmount,
     callProvided(id, input) {
@@ -514,13 +521,81 @@ test('Filters and repository-picker clicks target their own window through the c
   await click(filters)
   expect(element.querySelector('[role="dialog"][aria-label="GitHub task filters"]')).toBeNull()
   expect(calls.filter((call) => call.method === 'ui.window.command.run')).toHaveLength(2)
-  expect(calls.filter((call) => call.method === 'ui.window.self')).toHaveLength(1)
+  expect(calls.filter((call) => call.method === 'ui.window.self')).toHaveLength(2)
   expect(calls.filter((call) => call.method === 'ui.window.command.run').at(-1)?.params.args).toEqual({ control: 'filters', open: false })
 
   await click(element.querySelector('.tasks-list__repo-picker button'))
   expect(element.querySelector('[role="group"][aria-label="Select repositories"]')).not.toBeNull()
   expect(calls.filter((call) => call.method === 'ui.window.command.run')).toHaveLength(3)
+  expect(calls.filter((call) => call.method === 'ui.window.self')).toHaveLength(3)
   expect(calls.filter((call) => call.method === 'ui.window.command.run').at(-1)?.params.args).toEqual({ control: 'repositories', open: true })
+})
+
+test('a retained Tasks context resolves the live window for every click after reconnect', async () => {
+  let liveConnId = 7
+  const mounted = await mountList({ handlers: {
+    'ui.window.self': () => ({ connId: liveConnId }),
+    'ui.window.command.run': (params) => {
+      if (params.connId !== liveConnId) throw new Error(`no connected window ${params.connId}`)
+      return { result: mounted.callProvided(String(params.id), params.args) }
+    }
+  } })
+  const filters = mounted.element.querySelector('.tasks-list__toolbar button[aria-haspopup="dialog"]')
+  await click(filters)
+  expect(mounted.element.querySelector('[role="dialog"][aria-label="GitHub task filters"]')).not.toBeNull()
+  await mounted.connection('reconnecting')
+  liveConnId = 22
+  await mounted.connection('connected')
+  await click(filters)
+  expect(mounted.element.querySelector('[role="dialog"][aria-label="GitHub task filters"]')).toBeNull()
+  await click(mounted.element.querySelector('.tasks-list__repo-picker button'))
+  expect(mounted.element.querySelector('[role="group"][aria-label="Select repositories"]')).not.toBeNull()
+  expect(mounted.calls.filter((call) => call.method === 'ui.window.command.run').map((call) => call.params.connId)).toEqual([7, 22, 22])
+  expect(mounted.calls.filter((call) => call.method === 'ui.window.self')).toHaveLength(3)
+  expect(inlineMessages(mounted.element.querySelector('.tasks-list')!)).toEqual([])
+})
+
+test('Select projects resolves the replacement window in the same retained context', async () => {
+  let liveConnId = 7
+  const mounted = await mountList({ state: withNavigation({ repoIds: [] }), handlers: {
+    'ui.window.self': () => ({ connId: liveConnId }),
+    'ui.window.command.run': (params) => {
+      if (params.connId !== liveConnId) throw new Error(`no connected window ${params.connId}`)
+      return { result: mounted.callProvided(String(params.id), params.args) }
+    }
+  } })
+  await click(mounted.element.querySelector('.tasks-list__empty .ui-empty-state button'))
+  await click(mounted.element.querySelector('.tasks-list__repo-picker button'))
+  await mounted.connection('reconnecting')
+  liveConnId = 22
+  await mounted.connection('connected')
+  await click(mounted.element.querySelector('.tasks-list__empty .ui-empty-state button'))
+  expect(mounted.element.querySelector('[role="group"][aria-label="Select repositories"]')).not.toBeNull()
+  expect(mounted.calls.filter((call) => call.method === 'ui.window.command.run').map((call) => call.params.connId)).toEqual([7, 7, 22])
+  expect(inlineMessages(mounted.element.querySelector('.tasks-list')!)).toEqual([])
+})
+
+test.each([7, 22])('a pre-reconnect identity response of %i cannot dispatch or block a fresh lookup', async (oldConnId) => {
+  const oldLookup = hold<unknown>()
+  let selfReads = 0
+  const mounted = await mountList({ handlers: {
+    'ui.window.self': () => ++selfReads === 1 ? oldLookup.promise : { connId: 22 }
+  } })
+  await click(mounted.element.querySelector('.tasks-list__toolbar button[aria-haspopup="dialog"]'))
+  expect(mounted.calls.filter((call) => call.method === 'ui.window.command.run')).toHaveLength(0)
+  await mounted.connection('reconnecting')
+  await mounted.connection('connected')
+  await click(mounted.element.querySelector('.tasks-list__repo-picker button'))
+  expect(mounted.element.querySelector('[role="group"][aria-label="Select repositories"]')).not.toBeNull()
+  expect(selfReads).toBe(2)
+  await act(async () => { oldLookup.resolve({ connId: oldConnId }) })
+  await settle()
+  expect(mounted.element.querySelector('[role="dialog"][aria-label="GitHub task filters"]')).toBeNull()
+  expect(inlineMessages(mounted.element.querySelector('.tasks-list')!)).toEqual(['The UI connection changed before the action could be sent. Try again.'])
+  await click(mounted.element.querySelector('.tasks-list__toolbar button[aria-haspopup="dialog"]'))
+  expect(mounted.element.querySelector('[role="dialog"][aria-label="GitHub task filters"]')).not.toBeNull()
+  expect(selfReads).toBe(3)
+  expect(mounted.calls.filter((call) => call.method === 'ui.window.command.run').map((call) => call.params.connId)).toEqual([22, 22])
 })
 
 test('Select projects in the empty state opens the repository picker through the command bridge', async () => {

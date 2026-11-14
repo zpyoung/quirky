@@ -9,8 +9,7 @@ export type ListControlResult = { delivered: number }
 export type ListControlHandler = (request: ListControlRequest) => boolean
 const identityError = 'list-control needs a control of repositories or filters, and open as true or false.'
 const handlersByContext = new WeakMap<UiPluginContext, Set<ListControlHandler>>()
-const connIdsByContext = new WeakMap<UiPluginContext, number>()
-const pendingConnIdsByContext = new WeakMap<UiPluginContext, Promise<number>>()
+const epochsByContext = new WeakMap<UiPluginContext, { value: number }>()
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
@@ -59,31 +58,25 @@ export function listControlDescriptor(request: ListControlRequest): { command: t
   return { command: LIST_CONTROL_COMMAND, args: request }
 }
 
-async function windowConnId(context: UiPluginContext): Promise<number> {
-  const cached = connIdsByContext.get(context)
-  if (cached !== undefined) return cached
-  const pending = pendingConnIdsByContext.get(context)
-  if (pending) return pending
-
-  const read = Promise.resolve().then(async () => {
-    const self = record(await context.call('ui.window.self', {}))
-    const connId = self?.connId
-    if (typeof connId !== 'number' || !Number.isSafeInteger(connId) || connId < 1) {
-      throw new Error('The daemon did not identify this UI connection.')
-    }
-    connIdsByContext.set(context, connId)
-    return connId
-  })
-  pendingConnIdsByContext.set(context, read)
-  try {
-    return await read
-  } finally {
-    if (pendingConnIdsByContext.get(context) === read) pendingConnIdsByContext.delete(context)
-  }
+function windowConnectionEpoch(context: UiPluginContext): { value: number } {
+  const existing = epochsByContext.get(context)
+  if (existing) return existing
+  const epoch = { value: 0 }
+  context.onConnection(() => { epoch.value += 1 })
+  epochsByContext.set(context, epoch)
+  return epoch
 }
 
+/** Resolves this window for each action and rejects identity lookups that span a reconnect. */
 export async function dispatchListControl(context: UiPluginContext, request: ListControlRequest): Promise<void> {
-  const connId = await windowConnId(context)
+  const epoch = windowConnectionEpoch(context)
+  const started = epoch.value
+  const self = record(await context.call('ui.window.self', {}))
+  if (epoch.value !== started) throw new Error('The UI connection changed before the action could be sent. Try again.')
+  const connId = self?.connId
+  if (typeof connId !== 'number' || !Number.isSafeInteger(connId) || connId < 1) {
+    throw new Error('The daemon did not identify this UI connection.')
+  }
   const descriptor = listControlDescriptor(request)
   await context.call('ui.window.command.run', { connId, id: descriptor.command, args: descriptor.args })
 }
