@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readdir, rm } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { copyFile, cp, mkdir, readdir, rm } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
 import { jsxSourcePlugin } from './jsx-source-plugin'
 
 const root = import.meta.dir
@@ -111,7 +111,20 @@ for (const id of pluginIds) {
   }
 }
 
-await copyFile(join(root, 'src/index.html'), join(dist, 'index.html'))
+
+const katexCss = Bun.resolveSync('katex/dist/katex.min.css', root)
+const katexDist = join(dist, 'katex')
+await mkdir(katexDist, { recursive: true })
+await copyFile(katexCss, join(katexDist, 'katex.min.css'))
+await cp(join(dirname(katexCss), 'fonts'), join(katexDist, 'fonts'), { recursive: true })
+
+const indexHtml = await Bun.file(join(root, 'src/index.html')).text()
+const importMapEnd = indexHtml.indexOf('</script>') + '</script>'.length
+const vendorPreloads = (await readdir(join(dist, 'vendor')))
+  .filter(name => name.endsWith('.js'))
+  .sort()
+  .map(name => `<link rel="modulepreload" href="./vendor/${name}" />`)
+await Bun.write(join(dist, 'index.html'), `${indexHtml.slice(0, importMapEnd)}\n    ${vendorPreloads.join('\n    ')}${indexHtml.slice(importMapEnd)}`)
 await copyFile(join(root, 'src/gallery.html'), join(dist, 'gallery.html'))
 await copyFile(Bun.resolveSync('@xterm/xterm/css/xterm.css', root), join(dist, 'xterm.css'))
 
