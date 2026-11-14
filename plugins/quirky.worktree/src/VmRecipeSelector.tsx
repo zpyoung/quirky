@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Checkbox, SelectField } from '@quirky/ui'
+import { Checkbox, InlineError, NoticeLine, SelectField } from '@quirky/ui'
 import { isRecord } from './loop-status'
 
 export type VmRecipeSelection = { id: string; trustHash: string; checkoutMode: 'orca-worktree' | 'provisioned-root'; approved: boolean }
@@ -48,7 +48,8 @@ export function VmRecipeSelector({ context, repo, value, disabled, onChange }: {
   const selected = current?.recipes.find((recipe) => recipe.id === value?.id && recipe.trustHash === value.trustHash)
 
   return <fieldset className="vm-recipe remote-form" disabled={disabled}>
-    {current?.error && <p className="ui-error-text" role="alert">{current.error}</p>}
+    {current === null && <div role="status"><NoticeLine>Loading VM recipes…</NoticeLine></div>}
+    {current?.error && <InlineError message={current.error} />}
     <SelectField label="Environment recipe" aria-label="Environment recipe" value={value?.id ?? ''} disabled={disabled || current === null || current.error !== null} onChange={(event) => {
       const recipe = current?.recipes.find((candidate) => candidate.id === event.currentTarget.value)
       onChange(recipe ? { id: recipe.id, trustHash: recipe.trustHash, checkoutMode: recipe.checkoutMode, approved: false } : null)
@@ -66,6 +67,6 @@ export function VmRecipeSelector({ context, repo, value, disabled, onChange }: {
         onChange={(approved) => onChange({ id: selected.id, trustHash: selected.trustHash, checkoutMode: selected.checkoutMode, approved })}
       />
     </>}
-    {value && !selected && <p className="ui-error-text" role="alert">The selected recipe changed. Select it again and review its current lifecycle.</p>}
+    {value && current && current.error === null && !selected && <InlineError message="The selected recipe changed. Select it again and review its current lifecycle." />}
   </fieldset>
 }
