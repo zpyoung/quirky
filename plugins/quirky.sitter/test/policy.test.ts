@@ -614,6 +614,9 @@ test('pacing follows one ordered rule list; the first match wins', () => {
 
   const oneFailure = failedAttempts(merge, 1)
   expect(pace(snapshot(world(), T + 60_000), oneFailure)).toBe('active')
+  const movedBase = snapshot(world({ baseSha: B2 }), T + 60_000)
+  expect(decide(movedBase, oneFailure, enrollment())).toMatchObject({ action: null, reason: 'retry-waiting' })
+  expect(pace(movedBase, oneFailure)).toBe('active')
   expect(pace(snapshot(world(), T + 60_000), [
     attempt(merge, { state: 'running', effect: undefined }),
     ...oneFailure

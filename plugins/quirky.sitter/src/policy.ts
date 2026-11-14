@@ -545,7 +545,8 @@ export function resolveOutcome(attempt: Attempt, snapshot: Snapshot<SitterWorld>
 function retryIsWaiting(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[]): boolean {
   return latestAttempts(journal).some((attempt) =>
     attempt.state === 'settled' && attempt.effect === 'not-landed' &&
-    attempt.action.contentIdentity === snapshot.contentIdentity &&
+    attempt.action.head === snapshot.world.headSha &&
+    (attempt.action.kind !== 'update-branch' || attempt.action.base === snapshot.world.baseSha) &&
     snapshot.observedAtMs < attempt.atMs + RETRY_DELAY_MS
   )
 }
