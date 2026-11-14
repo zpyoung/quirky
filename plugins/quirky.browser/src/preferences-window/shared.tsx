@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, TextField } from '@quirky/ui'
+import { useEffect, useRef, useState } from 'react'
+import { Button, InlineError, NoticeLine, TextField } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { BrowserProfile } from '../profiles/store'
 import type { BrowserPreferencesProps, PreferencesState, ProfileUsage } from '../preferences/contract'
@@ -19,6 +19,67 @@ export const BROWSER_SETTING_IDS = {
 } as const
 
 export const BROWSER_SETTINGS_COMMAND = 'command:quirky.browser/browserSettings'
+export const PREFERENCES_CONTROL_COMMAND = 'command:quirky.browser/preferencesControl'
+export type PreferencesControlAction = 'open-create-profile' | 'close-create-profile' | 'toggle-import' | 'open-file-import' | 'close-file-import'
+export type PreferencesControlArgs = { action: PreferencesControlAction; instance: string; profile?: string }
+
+type PreferencesController = (args: PreferencesControlArgs) => void
+type PreferencesControllerRegistration = { token: symbol; handler: PreferencesController }
+const preferencesControllers = new WeakMap<UiPluginContext, Map<string, PreferencesControllerRegistration>>()
+const PREFERENCES_CONTROL_ACTIONS: Readonly<Record<PreferencesControlAction, true>> = {
+  'open-create-profile': true,
+  'close-create-profile': true,
+  'toggle-import': true,
+  'open-file-import': true,
+  'close-file-import': true
+}
+
+export function registerPreferencesController(
+  context: UiPluginContext,
+  instance: string,
+  handler: (args: PreferencesControlArgs) => void
+): () => void {
+  let controllers = preferencesControllers.get(context)
+  if (!controllers) {
+    controllers = new Map()
+    preferencesControllers.set(context, controllers)
+  }
+  const registrations = controllers
+  const token = Symbol()
+  registrations.set(instance, { token, handler })
+  return () => {
+    if (registrations.get(instance)?.token !== token) return
+    registrations.delete(instance)
+    if (registrations.size === 0) preferencesControllers.delete(context)
+  }
+}
+
+export function dispatchPreferencesControl(context: UiPluginContext, args: unknown): void {
+  if (!isRecord(args) || Array.isArray(args)) {
+    throw new Error('Browser preferences control needs a known action and a non-empty instance.')
+  }
+  const action = args.action
+  const instance = args.instance
+  if (
+    typeof action !== 'string' ||
+    !Object.hasOwn(PREFERENCES_CONTROL_ACTIONS, action) ||
+    typeof instance !== 'string' ||
+    instance.length === 0
+  ) {
+    throw new Error('Browser preferences control needs a known action and a non-empty instance.')
+  }
+  const normalizedAction = action as PreferencesControlAction
+  let normalizedArgs: PreferencesControlArgs
+  if (normalizedAction === 'toggle-import') {
+    if (typeof args.profile !== 'string' || args.profile.length === 0) {
+      throw new Error('Browser preferences control toggle-import needs a profile.')
+    }
+    normalizedArgs = { action: normalizedAction, instance, profile: args.profile }
+  } else {
+    normalizedArgs = { action: normalizedAction, instance }
+  }
+  preferencesControllers.get(context)?.get(instance)?.handler(normalizedArgs)
+}
 const PROFILE_SOURCE_LABELS: Readonly<Record<string, string>> = {
   chrome: 'Google Chrome',
   edge: 'Microsoft Edge',
@@ -135,12 +196,13 @@ export function useBrowserPreferenceData(context: UiPluginContext, onError: Brow
   const [loading, setLoading] = useState(true)
   const [stateError, setStateError] = useState<string | null>(null)
   const onErrorRef = useRef(onError)
+  const refreshRef = useRef<(() => Promise<void>) | null>(null)
   const sequence = useRef(0)
   const mounted = useRef(false)
 
   useEffect(() => { onErrorRef.current = onError }, [onError])
 
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
     const request = ++sequence.current
     setLoading(true)
     try {
@@ -161,7 +223,9 @@ export function useBrowserPreferenceData(context: UiPluginContext, onError: Brow
     } finally {
       if (mounted.current && sequence.current === request) setLoading(false)
     }
-  }, [context])
+  }
+
+  useEffect(() => { refreshRef.current = refresh }, [refresh])
 
   useEffect(() => {
     mounted.current = true
@@ -171,21 +235,25 @@ export function useBrowserPreferenceData(context: UiPluginContext, onError: Brow
         if (key) setSettings((current) => Object.assign({}, current, { [key]: normalizeSetting(key, event.value) }))
       }
       const eventType: string = event.type
-      if (eventType === 'quirky.browser/preferencesChanged') void refresh().catch(() => {})
+      if (eventType === 'quirky.browser/preferencesChanged') {
+        const latestRefresh = refreshRef.current
+        if (latestRefresh) void latestRefresh().catch(() => {})
+      }
     })
-    void refresh().catch(() => {})
+    const initialRefresh = refreshRef.current
+    if (initialRefresh) void initialRefresh().catch(() => {})
     return () => {
       mounted.current = false
       sequence.current += 1
       unsubscribe()
     }
-  }, [context, refresh])
+  }, [context])
 
-  const saveSetting = useCallback(async (id: string, value: unknown) => {
+  const saveSetting = async (id: string, value: unknown) => {
     await context.call('setting.set', { id, value })
     const key = SETTING_KEY_BY_ID.get(id)
     if (key) setSettings((current) => ({ ...current, [key]: normalizeSetting(key, value) }))
-  }, [context])
+  }
 
   return { settings, preferences, loading, stateError, refresh, saveSetting }
 }
@@ -231,7 +299,8 @@ export function ProfileCreator({ context, onCreated, onCancel, onError }: {
       onChange={(event) => setName(event.currentTarget.value)}
       onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }}
     />
-    {error && <p className="ui-error-text" role="alert" style={{ margin: 0, overflowWrap: 'anywhere' }}>{error}</p>}
+    {saving && <div role="status"><NoticeLine>Creating profile…</NoticeLine></div>}
+    {error && <InlineError message={error} />}
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--ui-space-8)' }}>
       <Button type="button" variant="primary" disabled={saving} onClick={() => void submit()}>{saving ? 'Creating…' : 'Create Profile'}</Button>
       <Button type="button" disabled={saving} onClick={onCancel}>Cancel</Button>

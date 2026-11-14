@@ -1,13 +1,14 @@
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { BrowserSettings } from './preferences-window/BrowserSettings'
+import { PREFERENCES_CONTROL_COMMAND, dispatchPreferencesControl } from './preferences-window/shared'
 
 /** Preference contributions share the ordinary settings and window-command hosts. */
 export function registerPreferencesUi(context: UiPluginContext): void {
   const mountSettings = (embedded: boolean): MountFunction => (element, props) => {
     Object.assign(element.style, { minWidth: '0', width: '100%', overflow: 'auto' })
     const root = createRoot(element)
-    root.render(<BrowserSettings context={context} embedded={embedded} onError={(message) => context.toast('Browser settings', message)} />)
+    root.render(<BrowserSettings context={context} embedded={embedded} onError={(message) => context.toast('Browser settings', message, { kind: 'error' })} />)
     props.report?.({ section: 'browser' })
     return () => root.unmount()
   }
@@ -16,6 +17,7 @@ export function registerPreferencesUi(context: UiPluginContext): void {
   context.provide('command:quirky.browser/browserSettings', async () => {
     await context.call('ui.view.open', { id: 'view:quirky.browser/browser-settings' })
   })
+  context.provide(PREFERENCES_CONTROL_COMMAND, (args: unknown) => dispatchPreferencesControl(context, args))
   context.provide('command:quirky.browser/profileClearNative', async (args: unknown) => {
     if (args === null || typeof args !== 'object' || !('request' in args) || typeof args.request !== 'string') {
       throw new Error('A pending confirmed profile clear request is required.')
