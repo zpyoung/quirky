@@ -208,6 +208,225 @@ function createEnvelope(operation: string, payload: Record<string, unknown>, tar
   return { action: 'control', scope: 'create-dialog', target, operation, payload }
 }
 
+async function dispatchCreateControl(h: Mounted, operation: string, payload: Record<string, unknown>): Promise<number> {
+  let delivered = -1
+  await act(async () => {
+    delivered = dispatchUiControl(h.context, createEnvelope(operation, payload)).delivered
+  })
+  await flush()
+  return delivered
+}
+
+function createControlSnapshot(h: Mounted) {
+  const drafts = [...h.element.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+    'input[id^="create-"], textarea[id^="create-"], select[id^="create-"]'
+  )].map((field) => [field.id, field.value] as const)
+  return {
+    drafts,
+    selectedSource: h.element.querySelector('section[aria-label="Chosen GitHub source"]')?.textContent?.trim() ?? null,
+    advanced: button(h.element, 'Advanced')?.getAttribute('aria-expanded') ?? null,
+    setup: [
+      button(h.element, 'Run setup now')?.getAttribute('aria-pressed') ?? null,
+      button(h.element, 'Skip for now')?.getAttribute('aria-pressed') ?? null
+    ]
+  }
+}
+
+function sourceAndMutationCalls(h: Mounted): Call[] {
+  return h.calls.filter((call) => call.method.startsWith('quirky.') && call.method !== 'quirky.worktree/prefetchCreate')
+}
+
+async function expectCreateControlRefused(h: Mounted, operation: string, payload: Record<string, unknown>): Promise<void> {
+  const before = createControlSnapshot(h)
+  const calls = sourceAndMutationCalls(h)
+  expect(await dispatchCreateControl(h, operation, payload)).toBe(0)
+  expect(createControlSnapshot(h)).toEqual(before)
+  expect(sourceAndMutationCalls(h)).toEqual(calls)
+}
+
+async function startCreate(h: Mounted): Promise<void> {
+  await click(button(h.element, 'Create'))
+  await waitFor(() => h.calls.some((call) => call.method === 'quirky.worktree/create') ? true : null)
+  await waitFor(() => button(h.element, 'Advanced')?.disabled === true ? true : null)
+}
+
+async function finishCreate(h: Mounted, result: Deferred<unknown>): Promise<void> {
+  result.resolve({
+    worktree: { id: 'w-created', name: 'busy-create', path: '/worktrees/busy-create' },
+    warnings: [],
+    setup: { ran: 'none' }
+  })
+  await waitFor(() => button(h.element, 'Advanced')?.disabled === false ? true : null)
+}
+
+
+test('applies valid direct Create controls to the mounted form', async () => {
+  const h = mountCreate()
+  await h.ready
+
+  expect(await dispatchCreateControl(h, 'set-advanced', { open: true })).toBe(1)
+  expect(button(h.element, 'Advanced')?.getAttribute('aria-expanded')).toBe('true')
+  expect(await dispatchCreateControl(h, 'set-advanced', { open: false })).toBe(1)
+  expect(button(h.element, 'Advanced')?.getAttribute('aria-expanded')).toBe('false')
+
+  await setText(input(h.element, 'create-smart-name')!, 'feature name')
+  expect(await dispatchCreateControl(h, 'use-smart-text', { text: 'feature name', mode: 'name' })).toBe(1)
+  expect(input(h.element, 'create-name')?.value).toBe('feature name')
+
+  await click(button(h.element, 'Smart'))
+  await waitFor(() => input(h.element, 'create-smart-name'))
+  await setText(input(h.element, 'create-smart-name')!, 'release')
+  expect(await dispatchCreateControl(h, 'use-smart-text', { text: 'release', mode: 'branch' })).toBe(1)
+  await waitFor(() => buttonContaining(h.element, 'release/next'))
+  expect(input(h.element, 'create-branch')?.value).toBe('release')
+  expect(await dispatchCreateControl(h, 'choose-branch', { query: 'release', branch: 'release/next' })).toBe(1)
+  expect(input(h.element, 'create-branch')?.value).toBe('release/next')
+
+  await click(button(h.element, 'Smart'))
+  await waitFor(() => input(h.element, 'create-smart-name'))
+  await setText(input(h.element, 'create-smart-name')!, 'multiply')
+  expect(await dispatchCreateControl(h, 'use-smart-text', { text: 'multiply', mode: 'github' })).toBe(1)
+  await waitFor(() => buttonContaining(h.element, 'Issue #4'))
+  expect(input(h.element, 'create-github-query')?.value).toBe('multiply')
+  expect(await dispatchCreateControl(h, 'choose-work-item', { query: 'multiply', url: ISSUE_URL })).toBe(1)
+  await waitFor(() => h.element.querySelector('section[aria-label="Chosen GitHub source"]'))
+  expect(h.element.querySelector('section[aria-label="Chosen GitHub source"]')?.textContent).toContain('Issue #4')
+  expect(await dispatchCreateControl(h, 'clear-source', { url: ISSUE_URL })).toBe(1)
+  await waitFor(() => h.element.querySelector('section[aria-label="Chosen GitHub source"]') === null ? true : null)
+  expect(h.element.querySelector('section[aria-label="Chosen GitHub source"]')).toBeNull()
+  expect(sourceAndMutationCalls(h).filter((call) => call.method === 'quirky.hosting/worktreeSource')).toHaveLength(1)
+})
+
+test('applies valid direct setup choices when setup is applicable', async () => {
+  const setupHooks: EffectiveHooks = { ...noHooks, setup: { text: 'echo setup', source: 'local', badge: 'local', shared: null } }
+  const h = mountCreate({ hooks: setupHooks, settings: { ...settings, setupPolicy: 'ask' } })
+  await h.ready
+  expect(await dispatchCreateControl(h, 'set-advanced', { open: true })).toBe(1)
+  await waitFor(() => button(h.element, 'Run setup now'))
+
+  expect(await dispatchCreateControl(h, 'set-setup', { choice: 'run' })).toBe(1)
+  expect(button(h.element, 'Run setup now')?.getAttribute('aria-pressed')).toBe('true')
+  expect(await dispatchCreateControl(h, 'set-setup', { choice: 'skip' })).toBe(1)
+  expect(button(h.element, 'Skip for now')?.getAttribute('aria-pressed')).toBe('true')
+  expect(button(h.element, 'Run setup now')?.getAttribute('aria-pressed')).toBe('false')
+})
+
+test('refuses occupied, absent, and stale direct branch choices', async () => {
+  const h = mountCreate()
+  await h.ready
+  await click(button(h.element, 'Branch'))
+
+  await setText(input(h.element, 'create-branch')!, 'feat/used')
+  await waitFor(() => buttonContaining(h.element, 'feat/used'))
+  await expectCreateControlRefused(h, 'choose-branch', { query: 'feat/used', branch: 'feat/used' })
+
+  await setText(input(h.element, 'create-branch')!, 'release')
+  await waitFor(() => buttonContaining(h.element, 'release/next'))
+  await expectCreateControlRefused(h, 'choose-branch', { query: 'release', branch: 'missing/branch' })
+
+  await setText(input(h.element, 'create-branch')!, 'release/next')
+  await waitFor(() => buttonContaining(h.element, 'release/next'))
+  await expectCreateControlRefused(h, 'choose-branch', { query: 'release', branch: 'release/next' })
+})
+
+test('refuses absent GitHub results and clearing a removed source', async () => {
+  const h = mountCreate()
+  await h.ready
+  await click(button(h.element, 'GitHub'))
+  await setText(input(h.element, 'create-github-query')!, 'multiply')
+  await waitFor(() => buttonContaining(h.element, 'Issue #4'))
+
+  await expectCreateControlRefused(h, 'choose-work-item', {
+    query: 'multiply', url: 'https://github.com/acme/api/issues/99'
+  })
+  expect(await dispatchCreateControl(h, 'choose-work-item', { query: 'multiply', url: ISSUE_URL })).toBe(1)
+  await waitFor(() => h.element.querySelector('section[aria-label="Chosen GitHub source"]'))
+  expect(await dispatchCreateControl(h, 'clear-source', { url: ISSUE_URL })).toBe(1)
+  await waitFor(() => h.element.querySelector('section[aria-label="Chosen GitHub source"]') === null ? true : null)
+
+  await expectCreateControlRefused(h, 'clear-source', { url: ISSUE_URL })
+})
+
+test('refuses setup choices while advanced is closed or setup is not applicable', async () => {
+  const setupHooks: EffectiveHooks = { ...noHooks, setup: { text: 'echo setup', source: 'local', badge: 'local', shared: null } }
+  const closed = mountCreate({ hooks: setupHooks, settings: { ...settings, setupPolicy: 'ask' } })
+  await closed.ready
+  expect(button(closed.element, 'Advanced')?.getAttribute('aria-expanded')).toBe('false')
+  expect(button(closed.element, 'Run setup now')).toBeUndefined()
+  await expectCreateControlRefused(closed, 'set-setup', { choice: 'run' })
+
+  const inapplicable = mountCreate()
+  await inapplicable.ready
+  expect(await dispatchCreateControl(inapplicable, 'set-advanced', { open: true })).toBe(1)
+  expect(button(inapplicable.element, 'Run setup now')).toBeUndefined()
+  await expectCreateControlRefused(inapplicable, 'set-setup', { choice: 'skip' })
+})
+
+test('refuses direct advanced and Smart-text changes while busy', async () => {
+  const result = deferred<unknown>()
+  const h = mountCreate({ onCall: (method) => method === 'quirky.worktree/create' ? result.promise : undefined })
+  await h.ready
+  await setText(input(h.element, 'create-smart-name')!, 'ready name')
+  await startCreate(h)
+
+  await expectCreateControlRefused(h, 'set-advanced', { open: true })
+  await expectCreateControlRefused(h, 'use-smart-text', { text: 'ready name', mode: 'name' })
+  await finishCreate(h, result)
+})
+
+test('refuses direct GitHub selection and source clearing while busy', async () => {
+  const result = deferred<unknown>()
+  const h = mountCreate({ onCall: (method) => method === 'quirky.worktree/create' ? result.promise : undefined })
+  await h.ready
+  await click(button(h.element, 'GitHub'))
+  await setText(input(h.element, 'create-github-query')!, 'multiply')
+  await waitFor(() => buttonContaining(h.element, 'Issue #4'))
+  expect(await dispatchCreateControl(h, 'choose-work-item', { query: 'multiply', url: ISSUE_URL })).toBe(1)
+  await waitFor(() => h.element.querySelector('section[aria-label="Chosen GitHub source"]'))
+  await startCreate(h)
+
+  await expectCreateControlRefused(h, 'choose-work-item', { query: 'multiply', url: PR_URL })
+  await expectCreateControlRefused(h, 'clear-source', { url: ISSUE_URL })
+  await finishCreate(h, result)
+})
+
+test('refuses a direct branch choice while busy with a current free result', async () => {
+  const result = deferred<unknown>()
+  const h = mountCreate({ onCall: (method) => method === 'quirky.worktree/create' ? result.promise : undefined })
+  await h.ready
+  await click(button(h.element, 'Branch'))
+  await setText(input(h.element, 'create-branch')!, 'release')
+  await waitFor(() => buttonContaining(h.element, 'release/next'))
+  expect(await dispatchCreateControl(h, 'choose-branch', { query: 'release', branch: 'release/next' })).toBe(1)
+  await waitFor(() => input(h.element, 'create-branch')?.value === 'release/next' ? true : null)
+  await waitFor(() => buttonContaining(h.element, 'release/next'))
+  await startCreate(h)
+
+  await expectCreateControlRefused(h, 'choose-branch', { query: 'release/next', branch: 'release/next' })
+  await finishCreate(h, result)
+})
+
+test('refuses direct setup and advanced changes while busy', async () => {
+  const result = deferred<unknown>()
+  const setupHooks: EffectiveHooks = { ...noHooks, setup: { text: 'echo setup', source: 'local', badge: 'local', shared: null } }
+  const h = mountCreate({
+    onCall: (method) => method === 'quirky.worktree/create' ? result.promise : undefined,
+    hooks: setupHooks,
+    settings: { ...settings, setupPolicy: 'ask' }
+  })
+  await h.ready
+  await click(button(h.element, 'Advanced'))
+  await waitFor(() => button(h.element, 'Run setup now'))
+  expect(await dispatchCreateControl(h, 'set-setup', { choice: 'run' })).toBe(1)
+  await setText(input(h.element, 'create-smart-name')!, 'ready name')
+  await startCreate(h)
+
+  await expectCreateControlRefused(h, 'set-setup', { choice: 'skip' })
+  await expectCreateControlRefused(h, 'set-advanced', { open: false })
+  await finishCreate(h, result)
+})
+
+
 describe('scoped Worktree UI control', () => {
   test('registers arbitrary operations independently by context and scope', () => {
     const contextA = emptyContext()
@@ -559,4 +778,5 @@ describe('scoped Worktree UI control', () => {
     ]
     for (const args of malformed) expectInvalidArgs(context, args)
   })
+
 })
