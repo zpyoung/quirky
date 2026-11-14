@@ -1,3 +1,4 @@
+import type { CommandRequest, WatcherCommand, WatcherDetail, WatcherTarget, WorkerIdentity } from './control-contracts'
 import type { FleetRow, FleetSnapshot } from './control-contracts'
 import type { TickTrace } from './contracts'
 
@@ -62,6 +63,106 @@ function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
   const record = value as Record<string, unknown>
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`).join(',')}}`
+}
+
+
+function workerIdentityKey(identity: WorkerIdentity): string {
+  return canonical({
+    dispatchId: identity.dispatchId,
+    sessionId: identity.sessionId,
+    processIncarnation: identity.processIncarnation,
+    pid: identity.pid,
+    startTime: identity.startTime,
+    terminalHandle: identity.terminalHandle
+  })
+}
+
+function targetIdentityKey(target: WatcherTarget): string {
+  return canonical([target.watcherId, target.connectionId ?? null, target.pairingRevision ?? null])
+}
+
+function ownerFenceKey(ownerFence: WatcherDetail['ownerFence']): string {
+  return canonical({
+    executionHostId: ownerFence.executionHostId,
+    schedulerOwner: ownerFence.schedulerOwner,
+    workspaceKey: ownerFence.workspaceKey,
+    revision: ownerFence.revision
+  })
+}
+
+/** Host, scheduler, workspace and remote incarnation; excludes ownerFence.revision (enrollment.commandRevision). */
+export function ownerEpochKey(detail: Pick<WatcherDetail, 'target' | 'ownerFence' | 'ownerIncarnation'>): string {
+  return canonical({
+    executionHostId: detail.ownerFence.executionHostId,
+    schedulerOwner: detail.ownerFence.schedulerOwner,
+    workspaceKey: detail.ownerFence.workspaceKey,
+    ownerIncarnation: detail.ownerIncarnation
+  })
+}
+
+/** Partitions answer drafts by exact worker session, process and question (dispatchId, sessionId, processIncarnation, messageId). */
+export function answerDraftKey(identity: WorkerIdentity, messageId: string): string {
+  return canonical([
+    identity.dispatchId,
+    identity.sessionId,
+    identity.processIncarnation,
+    identity.pid,
+    identity.startTime,
+    identity.terminalHandle,
+    messageId
+  ])
+}
+
+/** UI-private capture taken when the user acts; never sent to the daemon. */
+export type CommandReceipt =
+  | { kind: 'answer'; worker: WorkerIdentity; messageId: string }
+  | { kind: 'none' }
+
+/**
+ * Null when the command may still be sent against `latest`; otherwise the user-facing reason:
+ * 'The worker's question changed', 'The worker's process changed' or 'The approval scope changed'.
+ */
+export function commandEligibility(command: WatcherCommand, receipt: CommandReceipt, latest: WatcherDetail): string | null {
+  if (command.kind === 'approve') {
+    const escalation = latest.openEscalations.find((candidate) => candidate.escalationId === command.escalationId)
+    if (
+      !escalation || escalation.status !== 'open' || !escalation.approvalScope ||
+      canonical(escalation.approvalScope) !== canonical(command.scope)
+    ) return 'The approval scope changed'
+    return null
+  }
+
+  if (command.kind === 'stop-worker') {
+    const worker = latest.workers.find((candidate) => candidate.identity.dispatchId === command.identity.dispatchId)
+    if (!worker || worker.state !== 'live' || workerIdentityKey(worker.identity) !== workerIdentityKey(command.identity)) {
+      return "The worker's process changed"
+    }
+    return null
+  }
+
+  if (command.kind === 'answer-question') {
+    if (receipt.kind !== 'answer' || receipt.messageId !== command.messageId) return "The worker's question changed"
+    const worker = latest.workers.find((candidate) => candidate.identity.dispatchId === receipt.worker.dispatchId)
+    if (!worker) return "The worker's question changed"
+    if (workerIdentityKey(worker.identity) !== workerIdentityKey(receipt.worker)) return "The worker's process changed"
+    if (
+      !worker.question || worker.question.answered ||
+      worker.question.messageId !== receipt.messageId || worker.question.messageId !== command.messageId
+    ) return "The worker's question changed"
+    return null
+  }
+
+  return null
+}
+
+/** True only when target key, every ownerFence field (including revision) and ownerIncarnation all match. */
+export function sameCommandOwner(
+  captured: CommandRequest & { expectedIncarnation?: string },
+  latest: WatcherDetail
+): boolean {
+  return targetIdentityKey(captured.target) === targetIdentityKey(latest.target) &&
+    ownerFenceKey(captured.expectedOwner) === ownerFenceKey(latest.ownerFence) &&
+    captured.expectedIncarnation === latest.ownerIncarnation
 }
 
 function gateHeldIdentity(trace: TickTrace): string {
