@@ -163,8 +163,8 @@ function LiveActivityContent({ activity }: { activity: LiveActivity }) {
 function PlanWindowRow({ label, plan }: { label: string; plan: PlanWindow }) {
   const percentage = formatPercentage(plan.usedPercentage)
   const reset = formatTimestamp(plan.resetsAt)
-  const value = `${percentage === null ? '—' : `${percentage}%`}${reset ? ` · resets ${reset}` : ''}`
-  return <Row label={label}>{value}</Row>
+  const value = percentage === null ? '—' : `${percentage}%`
+  return <Row label={label}>{value}{reset ? ` · resets ${reset}` : ''}</Row>
 }
 
 function ContextContent({ detail }: { detail: ContextInfo }) {
