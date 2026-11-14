@@ -13,6 +13,7 @@ import { NewIssueDialog } from './issue/NewIssueDialog'
 import { ProjectsSurface } from './projects/ProjectsSurface'
 import { ROW_MENU_COMMAND, runRowMenu } from './list/row-menu'
 import { LIST_CONTROL_COMMAND, runListControl } from './list/list-control'
+import { ISSUE_CONTROL_COMMAND, runIssueControl } from './issue/issue-control'
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error) }
 function object(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === 'object' && !Array.isArray(value) }
@@ -293,6 +294,7 @@ export function activate(context: UiPluginContext): void {
   })
   context.provide(ROW_MENU_COMMAND, (input: unknown) => runRowMenu(context, input))
   context.provide(LIST_CONTROL_COMMAND, (input: unknown) => runListControl(context, input))
+  context.provide(ISSUE_CONTROL_COMMAND, (input: unknown) => runIssueControl(context, input))
   context.provide('command:quirky.tasks/open', async (raw: unknown) => {
     if (context.getLayout().view?.id === 'view:quirky.notifications/settings') return { opened: false }
     const repositories = await context.call('quirky.tasks/repositories', {})

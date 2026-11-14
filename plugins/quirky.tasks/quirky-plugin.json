@@ -3459,6 +3459,22 @@
           },
           "required": ["control", "open"]
         }
+      },
+      {
+        "id": "issue-control",
+        "title": "Control Task Issue Page",
+        "palette": false,
+        "description": "Start or cancel editing the description, or cancel the close-as-duplicate form, on the issue page shown in the Tasks view. Name the issue by the worktree and number that quirky tasks state reports as navigation.detail.",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktree": { "type": "string" },
+            "number": { "type": "integer", "minimum": 1 },
+            "action": { "type": "string", "enum": ["edit-description", "cancel-description", "cancel-duplicate"] }
+          },
+          "required": ["worktree", "number", "action"]
+        }
       }
     ],
     "cli-command": [
