@@ -28,9 +28,31 @@ The registered command is `command:quirky.terminal/fork-agent-session({ session 
 
 Terminal Settings exposes each declared shortcut's inherited, remapped, disabled or shadowed state. Save changes the binding by contribution ID; Disable removes its key; Reset restores the current inherited key. The public `keybinding.list`, `keybinding.set` and `keybinding.reset` APIs use the same persisted profile overrides. Commands retain their original context and terminal-input policy, and menu hints follow the effective binding.
 
+The CLI exposes the same overrides:
+
+```sh
+quirky keybinding list
+quirky keybinding set keybinding:quirky.terminal/clear mod+shift+k
+quirky keybinding disable keybinding:quirky.terminal/clear
+quirky keybinding reset keybinding:quirky.terminal/clear
+```
+
 Visible panes load bounded image and font-ligature renderers. Images support SIXEL/iTerm and direct Kitty PNG/RGB/RGBA transmission, chunking, deflate, static placement and basic deletion. Kitty animation, Unicode virtual placements, file/shared-memory transmission and advanced delete selectors are unsupported; no graphics command reads the filesystem. Kitty image storage and placement canvases have independent 8 MiB budgets, with bounded uploads and cancellable decoding. Hidden panes dispose these resources and replay the existing PTY history on return.
 
 Panes attach to their session as soon as they mount, without waiting for optional renderer chunks. History replay waits for those renderers so inline images are decoded correctly; closing a pane during that load still detaches its stream.
+
+## Quick Commands
+
+Add and Edit share one dialog per window. Its public command accepts an optional saved command ID and repo; toggles act on the open dialog. Disabling Terminal closes that dialog and prevents pending lookups from reopening it. Copy addresses a saved command by ID and reports clipboard failures.
+
+```sh
+quirky terminal quick-command list --all
+quirky ui run command:quirky.terminal/quick-command-dialog --args '{"action":"open","repo":"api"}'
+quirky ui run command:quirky.terminal/quick-command-dialog --args '{"action":"toggle-advanced"}'
+quirky ui run command:quirky.terminal/copy-quick-command --args '{"command":"hello"}'
+```
+
+Sessions and Quick Commands distinguish a pending first read, an empty result and a failed read. Failed refreshes keep the last rows visible and offer Retry; the emulator preview offers Retry after a failed read or capture too.
 
 ## Documents in a terminal group
 

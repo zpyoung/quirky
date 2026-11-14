@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, EmptyState, FormRow, ToolPanelFrame } from '@quirky/ui'
+import { Button, EmptyState, FormRow, InlineError, NoticeLine, ToolPanelFrame } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { EmulatorDevice, EmulatorFrame, EmulatorListing } from '../emulator'
 
@@ -13,22 +13,35 @@ export function EmulatorView({ context, input, report }: { context: UiPluginCont
   const [loading, setLoading] = useState(true)
   const [revision, setRevision] = useState(0)
   const sequence = useRef(0)
+  const listSequence = useRef(0)
   const device = devices.find((entry) => entry.id === selected)
 
-  useEffect(() => {
-    let active = true
+  async function loadDevices() {
+    const attempt = ++listSequence.current
     setLoading(true)
     setError(null)
-    void context.call('quirky.terminal/emulators', {}).then((value) => {
-      if (!active) return
-      const listing = value as EmulatorListing
+    try {
+      const listing = await context.call('quirky.terminal/emulators', {}) as EmulatorListing
+      if (attempt !== listSequence.current) return
       setDevices(listing.devices)
       if (!listing.available) setError(listing.reason ?? 'iOS Simulator is unavailable.')
-    }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : String(reason))
-    }).finally(() => { if (active) setLoading(false) })
-    return () => { active = false }
-  }, [context, revision])
+    } catch (reason: unknown) {
+      if (attempt === listSequence.current) setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      if (attempt === listSequence.current) setLoading(false)
+    }
+  }
+
+  function refresh() {
+    setFrame(null)
+    setRevision((value) => value + 1)
+    void loadDevices()
+  }
+
+  useEffect(() => {
+    void loadDevices()
+    return () => { listSequence.current++ }
+  }, [context])
 
   useEffect(() => {
     const attempt = ++sequence.current
@@ -56,7 +69,7 @@ export function EmulatorView({ context, input, report }: { context: UiPluginCont
 
   return (
     <div className="tt-tool-panel-fill tt-emulator-panel" data-terminal-emulator>
-      <ToolPanelFrame title="Mobile Emulator" actions={<Button disabled={loading} onClick={() => setRevision((value) => value + 1)}>Refresh</Button>}>
+      <ToolPanelFrame title="Mobile Emulator" actions={<Button disabled={loading} onClick={refresh}>Refresh</Button>}>
         <div className="tt-emulator-layout">
           <FormRow label="iOS Simulator" htmlFor="terminal-emulator-device">
             <select
@@ -72,17 +85,17 @@ export function EmulatorView({ context, input, report }: { context: UiPluginCont
             </select>
           </FormRow>
           <p className="ui-text-muted">Read-only preview of the exact selected Xcode simulator. Start it in Simulator; agents keep their own control tools. Hidden tabs stop polling.</p>
-          {loading ? <p className="ui-text-muted" role="status">Loading simulators…</p> : null}
-          {error ? <div className="ui-error-text" role="alert">{error}</div> : null}
+          {loading ? <div role="status"><NoticeLine>Loading simulators…</NoticeLine></div> : null}
+          {error ? <InlineError message={error} action={{ label: 'Retry', onAction: refresh }} /> : null}
           {!loading && devices.length === 0 && !error ? (
             <EmptyState
               message="No available iOS simulators. Install a simulator runtime in Xcode, then Refresh."
-              action={{ label: 'Refresh', onAction: () => setRevision((value) => value + 1) }}
+              action={{ label: 'Refresh', onAction: refresh }}
             />
           ) : null}
           {selected && !device && !loading ? <p className="ui-text-muted">The selected simulator is no longer available. Choose another device explicitly.</p> : null}
           {device && device.state !== 'Booted' ? <p className="ui-text-muted">{device.name} is {device.state}. Start this exact device in Simulator, then Refresh.</p> : null}
-          {device?.state === 'Booted' && !frame && !error ? <p className="ui-text-muted" role="status">Capturing {device.name}…</p> : null}
+          {device?.state === 'Booted' && !frame && !error ? <div role="status"><NoticeLine>Capturing {device.name}…</NoticeLine></div> : null}
           {frame ? <small className="ui-text-muted">Last frame: {new Date(frame.capturedAt).toLocaleTimeString()}{error ? ' · Preview paused; Refresh to retry.' : ''}</small> : null}
           {frame ? <img className="tt-emulator-frame" alt={`Preview of ${device?.name ?? frame.device}`} src={`data:image/png;base64,${frame.data}`} /> : null}
         </div>

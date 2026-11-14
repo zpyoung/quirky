@@ -123,15 +123,15 @@ const RESTORE = 'M4 4h5.5v5.5H4zM4 4V2.5h5.5V8'
 const PANELS = 'M1.5 2.5h9v7h-9zM1.5 5h9M4.5 5v4.5'
 
 /** The workspace inside the panel: the main view's components over the `floating` workspace. */
-function PanelBody({ context, options, onReport }: { context: UiPluginContext; options: () => WorkspaceOptions; onReport(report: ViewReport | null): void }) {
+function PanelBody({ context, options, report }: { context: UiPluginContext; options: () => WorkspaceOptions; report(report: ViewReport | null): void }) {
   const element = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const target = element.current!
-    const unmount = mountWorkspace(context, target, { report: (state) => onReport(state as ViewReport) }, { ...options(), workspace: FLOATING_WORKSPACE })
+    const unmount = mountWorkspace(context, target, { report: (state) => report(state as ViewReport) }, { ...options(), workspace: FLOATING_WORKSPACE })
     return () => {
       // unmounting a root while React commits another one is refused, so it waits a tick
       queueMicrotask(unmount)
-      onReport(null)
+      report(null)
     }
   }, [context])
   return <div ref={element} className="qf-body" data-floating-body />
@@ -171,7 +171,7 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
           const read = next as FloatingState
           setState(settingAtStart === settingSeq ? read : { ...read, enabled: settingEnabled })
         })
-        .catch((error) => context.log(`floating state: ${messageOf(error)}`))
+        .catch((error) => { if (live) context.toast('Could not load the floating workspace', messageOf(error)) })
     }
     load()
     const unsubscribe = context.subscribe((event: QuirkyEvent) => {
@@ -336,7 +336,7 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
               </IconButton>
             </div>
           </div>
-          <PanelBody context={context} options={workspaceOptions} onReport={setBody} />
+          <PanelBody context={context} options={workspaceOptions} report={setBody} />
           {state.maximized ? null : EDGES.map((edge) => <div key={edge} className={`qf-edge qf-edge-${edge}`} data-edge={edge} onMouseDown={(event) => resizePanel(edge, event)} />)}
         </div>
       ) : null}
