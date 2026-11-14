@@ -300,6 +300,7 @@ export function installSpeedSocketObserver(): void {
     key: string
     onMarker(workerReadEpochMs: number | null, receivedAt: number, source: object): void
     onOverflow(): void
+    onUnavailable(reason: string): void
   }
   type StreamBuffer = {
     text: string
@@ -326,6 +327,8 @@ export function installSpeedSocketObserver(): void {
   if (typeof NativeWebSocket !== 'function') return
 
   const states = new WeakMap<WebSocket, SocketState>()
+  const untrackedSockets = new WeakSet<WebSocket>()
+  const unavailableSessions = new Map<string, string>()
   const liveSockets = new Set<SocketState>()
   const observers = new Set<CaptureObserver>()
   let bindingCount = 0
@@ -334,6 +337,13 @@ export function installSpeedSocketObserver(): void {
     if (typeof id === 'string') return `s:${id}`
     if (typeof id === 'number' && Number.isFinite(id)) return `n:${id}`
     return null
+  }
+  const rejectSession = (sessionId: string, reason: string) => {
+    if (!unavailableSessions.has(sessionId) && unavailableSessions.size === 128) {
+      unavailableSessions.delete(unavailableSessions.keys().next().value!)
+    }
+    unavailableSessions.set(sessionId, reason)
+    for (const observer of observers) if (observer.sessionId === sessionId) observer.onUnavailable(reason)
   }
   const matchingStreams = (state: SocketState): Set<number> => {
     const result = new Set<number>()
@@ -433,6 +443,9 @@ export function installSpeedSocketObserver(): void {
             bindings.add(streamId)
             if (!state.sources.has(streamId)) state.sources.set(streamId, {})
             state.bindings.set(sessionId, bindings)
+            unavailableSessions.delete(sessionId)
+          } else {
+            rejectSession(sessionId, 'stream-limit-exceeded')
           }
         }
         updateCapture(state)
@@ -442,6 +455,21 @@ export function installSpeedSocketObserver(): void {
     }
     state.messageHandler = handler
     state.socket.addEventListener('message', handler, true)
+  }
+  const detachStream = (state: SocketState, streamId: number) => {
+    let removed = false
+    for (const [sessionId, bindings] of state.bindings) {
+      if (!bindings.delete(streamId)) continue
+      bindingCount--
+      removed = true
+      if (bindings.size === 0) state.bindings.delete(sessionId)
+      state.sources.delete(streamId)
+      state.buffers.delete(streamId)
+      for (const observer of observers) {
+        if (observer.sessionId === sessionId) observer.onUnavailable('terminal-stream-detached')
+      }
+    }
+    if (removed) updateCapture(state)
   }
   const clearSocket = (state: SocketState) => {
     removeCapture(state)
@@ -455,7 +483,10 @@ export function installSpeedSocketObserver(): void {
     liveSockets.delete(state)
   }
   const trackSocket = (socket: WebSocket) => {
-    if (liveSockets.size >= 32) return
+    if (liveSockets.size >= 32) {
+      untrackedSockets.add(socket)
+      return
+    }
     const state: SocketState = {
       socket, bindings: new Map(), sources: new Map(), pending: new Map(), messageHandler: null, closeHandler: null, buffers: new Map()
     }
@@ -468,6 +499,14 @@ export function installSpeedSocketObserver(): void {
 
   const hook: SocketHook = {
     add(observer) {
+      const bound = [...liveSockets].some(state => state.bindings.has(observer.sessionId))
+      const reason = unavailableSessions.get(observer.sessionId)
+        ?? (!bound && liveSockets.size >= 32 ? 'socket-limit-exceeded'
+          : !bound && bindingCount >= 128 ? 'stream-limit-exceeded' : null)
+      if (reason) {
+        observer.onUnavailable(reason)
+        return
+      }
       observers.add(observer)
       for (const state of liveSockets) updateCapture(state)
     },
@@ -484,24 +523,36 @@ export function installSpeedSocketObserver(): void {
     const wrappedSend = function (this: WebSocket, data: string | ArrayBufferLike | Blob | ArrayBufferView) {
       const state = states.get(this)
       let pending: { key: string; sessionId: string } | null = null
-      if (state && typeof data === 'string') {
+      let detachedStreamId: number | null = null
+      if (typeof data === 'string' && (state || untrackedSockets.has(this))) {
         try {
           const request = JSON.parse(data) as Record<string, unknown>
           const params = request.params
           const key = requestKey(request.id)
-          const existing = key !== null && state.pending.has(key)
-          if (request.method === 'quirky.terminal/attach' && key !== null
-            && params !== null && typeof params === 'object' && typeof (params as Record<string, unknown>).session === 'string'
-            && (existing || pendingCount < 128)) {
-            pending = { key, sessionId: (params as Record<string, string>).session! }
-            if (!existing) pendingCount++
-            state.pending.set(pending.key, pending.sessionId)
-            updateCapture(state)
+          if (params !== null && typeof params === 'object') {
+            const sessionId = (params as Record<string, unknown>).session
+            const streamId = (params as Record<string, unknown>).streamId
+            if (request.method === 'quirky.terminal/attach' && key !== null && typeof sessionId === 'string') {
+              const existing = state?.pending.has(key) ?? false
+              if (!state) rejectSession(sessionId, 'socket-limit-exceeded')
+              else if (!existing && pendingCount >= 128) rejectSession(sessionId, 'stream-limit-exceeded')
+              else {
+                pending = { key, sessionId }
+                if (!existing) pendingCount++
+                state.pending.set(key, sessionId)
+                updateCapture(state)
+              }
+            } else if (request.method === 'quirky.terminal/detach'
+              && typeof streamId === 'number' && Number.isInteger(streamId) && streamId >= 0 && streamId <= 0xffffffff) {
+              detachedStreamId = streamId
+            }
           }
         } catch {}
       }
       try {
-        return Reflect.apply(nativeSend, this, [data])
+        const result = Reflect.apply(nativeSend, this, [data])
+        if (state && detachedStreamId !== null) detachStream(state, detachedStreamId)
+        return result
       } catch (error) {
         if (state && pending) {
           state.pending.delete(pending.key)
@@ -553,6 +604,7 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
     key: string
     onMarker(workerReadEpochMs: number | null, receivedAt: number, source: object): void
     onOverflow(): void
+    onUnavailable(reason: string): void
   }
   type SocketCaptureHook = { add(observer: SocketCaptureObserver): void; remove(observer: SocketCaptureObserver): void }
   const root = globalThis as typeof globalThis & {
@@ -666,6 +718,7 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
   let echoSource: object | null = null
   let echoUnavailableReason: string | null = null
   let echoAmbiguous = false
+  let echoCaptureStopped = false
   let socketCaptureActive = false
   const socketCaptureHook = root.__quirkySpeedSocketHook
   const socketCaptureObserver: SocketCaptureObserver | null = spec.kind === 'echo' && spec.sessionId !== undefined
@@ -675,7 +728,7 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
         sequence: spec.sequence ?? -1,
         key: spec.key ?? '',
         onMarker(workerReadEpochMs, receivedAt, source) {
-          if (echoAmbiguous) return
+          if (echoAmbiguous || echoCaptureStopped) return
           if (echoSource !== null) {
             if (echoSource !== source) {
               echoAmbiguous = true
@@ -701,6 +754,21 @@ export function installBrowserObserver(spec: BrowserObservationSpec): void {
         },
         onOverflow() {
           if (echoUnavailableReason === null) echoUnavailableReason = 'terminal-marker-buffer-overflow'
+        },
+        onUnavailable(reason) {
+          echoCaptureStopped = true
+          echoUnavailableReason = reason
+          echoReadEpochMs = null
+          echoReceivedAt = null
+          echoSource = null
+          if (marks.echoReceived) {
+            clearPerformanceMark(marks.echoReceived)
+            delete marks.echoReceived
+          }
+          if (socketCaptureActive && socketCaptureObserver) {
+            socketCaptureHook?.remove(socketCaptureObserver)
+            socketCaptureActive = false
+          }
         }
       }
     : null

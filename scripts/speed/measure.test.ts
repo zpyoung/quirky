@@ -268,6 +268,12 @@ function bindStream(socket: FakeWebSocket, sessionId: string, streamId: number, 
   }))
 }
 
+function detachStream(socket: FakeWebSocket, streamId: unknown): string {
+  const request = JSON.stringify({ jsonrpc: '2.0', id: 'detach', method: 'quirky.terminal/detach', params: { streamId } })
+  socket.send(request)
+  return request
+}
+
 function terminalFrame(streamId: number, payload: string, kind = 1): ArrayBuffer {
   const bytes = new TextEncoder().encode(payload)
   const frame = new Uint8Array(5 + bytes.length)
@@ -1462,6 +1468,66 @@ test('a 4096-byte marker line is accepted, an overlong fragment is unavailable, 
   expect((await recovered.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
 })
 
+test('detached streams give capacity back across more than 128 pane mounts on one socket', async () => {
+  environment()
+  const socket = observedSocket()
+  for (let streamId = 1; streamId <= 160; streamId++) {
+    bindStream(socket, 'session-a', streamId)
+    detachStream(socket, streamId)
+  }
+  bindStream(socket, 'session-a', 161)
+  const echo = armSocketEcho(socket, { id: 'stream-churn', streamId: 161 })
+  clock.now = 18
+  socket.emit('message', terminalFrame(161, echoMarker('worker-a', 'session-a', 5, 'b', '100012')))
+  await paintEcho()
+  expect((await echo.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+})
+
+for (const received of [false, true]) {
+  test(`detaching an active stream invalidates ${received ? 'received' : 'partial'} arrival evidence`, async () => {
+    environment()
+    const socket = observedSocket()
+    bindStream(socket, 'session-a', 17)
+    const echo = armSocketEcho(socket, { id: `stream-detach-${received}`, streamId: 17 })
+    const marker = echoMarker('worker-a', 'session-a', 5, 'b', '100012')
+    clock.now = 18
+    socket.emit('message', terminalFrame(17, received ? marker : marker.slice(0, 20)))
+    clock.now = 19
+    const request = detachStream(socket, 17)
+    expect(socket.sent.at(-1)).toBe(request)
+    const captureListeners = socket.listeners.get('message')?.filter(listener => listener.capture)
+    bindStream(socket, 'session-a', 18)
+    socket.emit('message', terminalFrame(18, marker))
+    socket.emit('message', terminalFrame(17, received ? marker : marker.slice(20)))
+    await paintEcho()
+    const observation = await echo.result
+    expect(observation.durationMs).toBe(20)
+    expect(observation.echoTiming).toMatchObject({
+      status: 'unavailable', reason: 'terminal-stream-detached', receivedAt: null,
+      keystrokeToWorkerMs: null, workerToPageMs: null, pageToPaintMs: null
+    })
+    expect(observation.marks.echoReceived).toBeUndefined()
+    expect(captureListeners).toEqual([])
+  })
+}
+
+test('unknown and malformed detaches preserve active stream evidence and forwarded traffic', async () => {
+  environment()
+  const socket = observedSocket()
+  bindStream(socket, 'session-a', 17)
+  const echo = armSocketEcho(socket, { id: 'invalid-detach', streamId: 17 })
+  const marker = echoMarker('worker-a', 'session-a', 5, 'b', '100012')
+  socket.emit('message', terminalFrame(17, marker.slice(0, 20)))
+  for (const streamId of [999, undefined, null, -1, 1.5, '17', 0x1_0000_0000, {}]) {
+    const request = detachStream(socket, streamId)
+    expect(socket.sent.at(-1)).toBe(request)
+  }
+  clock.now = 18
+  socket.emit('message', terminalFrame(17, marker.slice(20)))
+  await paintEcho()
+  expect((await echo.result).echoTiming).toMatchObject({ status: 'complete', receivedAt: 18 })
+})
+
 test('socket and stream tracking caps accept their exact bounds and reject beyond-bound arrivals', async () => {
   for (const limit of ['sockets', 'streams'] as const) {
     environment()
@@ -1499,6 +1565,7 @@ test('socket and stream tracking caps accept their exact bounds and reject beyon
     await paintEcho()
     expect((await beyond.result).echoTiming).toMatchObject({
       status: 'unavailable',
+      reason: limit === 'sockets' ? 'socket-limit-exceeded' : 'stream-limit-exceeded',
       keystrokeToWorkerMs: null
     })
   }
