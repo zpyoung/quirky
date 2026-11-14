@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GitStatus, UiPluginContext } from '@quirky/protocol'
 import { messageOf } from '../panel/format'
-import { POLL_MS, useRefreshTriggers } from '../view/data'
+import { POLL_MS } from '../view/data'
 
 export type SourceEntriesData = {
   status: GitStatus | null
@@ -60,7 +60,6 @@ export function useSourceEntries(context: UiPluginContext, worktree: string, ena
       clearInterval(timer)
     }
   }, [enabled, refresh, worktree])
-  useRefreshTriggers(context, refresh, null, worktree)
 
   return { status, error, refresh }
 }

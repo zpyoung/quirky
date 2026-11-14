@@ -73,6 +73,8 @@ For Markdown files, **Preview** shows only the rendered modified content and hid
 
 `open-changes` defaults to `mode: 'diff'`. `edit` opens changed files in editor tabs; `both` opens those files and the Review. Edit and both skip deleted files and refuse a capped Git status. A diff result reports `statusComplete: false` when status is capped. Both commands return structured results describing focus and scope; `open-changes` also lists opened and skipped files, and `statusComplete` says whether the status was complete. Focused commands wait for their Review or editor action and any worktree navigation to be acknowledged before replying. `open-commit` also waits for its hosted-tab operation. A dirty Review refuses a command's scope change without opening a discard dialog.
 
+Staged rename cards compare the old path in HEAD with the new path in the index. A panel request that asks to discard unsaved edits keeps any newly requested card and note reveal when the discard is accepted.
+
 Conflict review's **Open** opens the file in a normal worktree tab. Switching between review and file tabs keeps the original review snapshot and any unsaved resolution. After the merge, rebase, or cherry-pick finishes, the file tab shows “Git operation ended” instead of a load error. File-read failures remain visible alongside a retained draft until a successful refresh.
 
 While conflict review is open, Git change events and periodic status checks update its original snapshot, including resolutions staged outside the app. Once the last conflict is resolved, it shows “All conflicts resolved” and removes the file-opening actions.

@@ -772,6 +772,53 @@ describe('quirky.git review tab', () => {
     expectDraftPreserved(element)
   })
 
+  for (const target of ['b.ts', APP]) {
+    test(`legacy scope acceptance reveals the newly requested ${target} card and note`, async () => {
+      fake.handlers['quirky.git/notes'] = () => ({
+        notes: [{ id: 'target-note', worktreeId: 'w1', path: target, startLine: 1, line: 1, body: 'Reveal this note', createdAt: 1, updatedAt: null }]
+      })
+      fake.handlers['quirky.git/commitFiles'] = () => ({
+        commit: COMMIT,
+        entries: ['a.ts', target].map((path) => ({ path, status: 'modified', added: 1, removed: 1, binary: false }))
+      })
+      const element = await draftReview()
+      const confirmation = Promise.withResolvers<boolean>()
+      fake.context.confirm = () => confirmation.promise
+      const handle = reviewViewFor('w1')!
+      act(() => {
+        handle.setScope(COMMIT)
+        handle.reveal(target, 'target-note')
+      })
+      await settle()
+      scrolled.length = 0
+      await act(async () => confirmation.resolve(true))
+      await settle()
+
+      expect(element.querySelector('.ui-scope-chip')?.textContent).toContain('Commit f5429a1')
+      expect(card(element, target).hasAttribute('data-active')).toBe(true)
+      expect(scrolled).toContain(card(element, target))
+      expect(card(element, target).querySelector('[data-note-card="saved"]')?.textContent).toContain('Reveal this note')
+    })
+  }
+
+  test('scope acceptance clears a reveal requested before the scope change', async () => {
+    const element = await draftReview()
+    const confirmation = Promise.withResolvers<boolean>()
+    fake.context.confirm = () => confirmation.promise
+    const handle = reviewViewFor('w1')!
+    act(() => {
+      handle.reveal('b.ts', 'obsolete-note')
+      handle.setScope(COMMIT)
+    })
+    await settle()
+    scrolled.length = 0
+    await act(async () => confirmation.resolve(true))
+    await settle()
+
+    expect(card(element, 'b.ts').hasAttribute('data-active')).toBe(false)
+    expect(scrolled).not.toContain(card(element, 'b.ts'))
+  })
+
   test('SC-33: a commit scope shows the commit chip and no review controls, and removing the chip returns', async () => {
     const element = await open()
     const handle = reviewViewFor('w1')!

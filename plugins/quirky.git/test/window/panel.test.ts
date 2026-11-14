@@ -240,11 +240,13 @@ test('quirky.git/changed events refresh the panel and an open diff before the ne
 
   expect((await w.cli(['git', 'stage', '--paths', 'math.ts']).done).code).toBe(0)
   await quickly(() => rowOf('math.ts', 'staged'))
+  await quickly(() => card() === null)
   expect((await w.cli(['git', 'unstage', '--paths', 'math.ts']).done).code).toBe(0)
   await quickly(() => rowOf('math.ts') && !rowOf('math.ts', 'staged'))
+  await quickly(() => card() && q('[contenteditable]', card()!))
   expect((await w.cli(['git', 'discard', '--paths', 'math.ts', '--yes']).done).code).toBe(0)
   await quickly(() => !rowOf('math.ts'))
-  await quickly(() => card() === null && text(q('[data-review-scroll]')).includes('Nothing changed against'))
+  await quickly(() => card() === null && text(q('[data-review-scroll]')).includes('No unstaged changes'))
   expect(w.problems()).toEqual([])
 }, SLOW)
 

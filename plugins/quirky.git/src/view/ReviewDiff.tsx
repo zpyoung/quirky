@@ -122,6 +122,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const forced = useRef(new Set<string>())
   const pendingNav = useRef<{ key: string; go: (pane: PaneHandle) => void } | null>(null)
   const pendingReveal = useRef<string | null>(mountInput.reveal ?? null)
+  const latestReveal = useRef<{ path: string; noteId?: string } | null>(null)
   const scrollRef = useRef<HTMLElement | null>(null)
   scrollRef.current = scrollEl
 
@@ -211,7 +212,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       return fetchDiff(context, worktree, { path: item.path, source: 'commit', oldPath: item.oldPath, commit: currentCommit.commit })
     }
     if (activeScope !== null && 'source' in activeScope) {
-      return fetchDiff(context, worktree, { path: item.path, source: activeScope.source })
+      return fetchDiff(context, worktree, { path: item.path, source: activeScope.source, oldPath: item.oldPath })
     }
     return fetchDiff(context, worktree, { path: item.path, source: 'review', oldPath: item.oldPath, against })
   }
@@ -374,6 +375,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     context,
     () => {
       if (commit !== null) return
+      sourceData.refresh()
       for (const item of itemsRef.current) {
         versionOf(item).wanted++
         catchUp(item.key)
@@ -446,6 +448,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   }
 
   const reveal = useCallback((path: string, noteId?: string) => {
+    latestReveal.current = { path, noteId }
     pendingReveal.current = path
     if (noteId !== undefined) setNoteTarget({ path, noteId })
     setRevealTick((tick) => tick + 1)
@@ -487,6 +490,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     pending?.reject(new Error('The Review tab is no longer mounted.'))
   }, [])
   const applyScope = async (nextScope: ReviewScope, ifDirty: 'ask' | 'refuse'): Promise<ScopeOutcome> => {
+    const revealAtRequest = latestReveal.current
     while (pendingScope.current !== null) await pendingScope.current.promise
     if (askingScope.current) return 'busy'
     const currentScope = scopeRef.current
@@ -514,8 +518,9 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       }
       if (!discard) return 'cancelled'
     }
-    pendingReveal.current = null
-    setNoteTarget(null)
+    const nextReveal = latestReveal.current !== revealAtRequest ? latestReveal.current : null
+    pendingReveal.current = nextReveal?.path ?? null
+    setNoteTarget(nextReveal?.noteId === undefined ? null : { path: nextReveal.path, noteId: nextReveal.noteId })
     const applied = Promise.withResolvers<void>()
     pendingScope.current = { scope: nextScope, ...applied }
     setScopeState(nextScope)
@@ -527,6 +532,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
 
   useEffect(() => {
     const scrollToTop = () => {
+      latestReveal.current = null
       pendingReveal.current = null
       setNoteTarget(null)
       if (scrollRef.current) scrollRef.current.scrollTop = 0

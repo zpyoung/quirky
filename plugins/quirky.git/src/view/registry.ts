@@ -72,7 +72,7 @@ export type ReviewViewHandle = {
   reveal(path: string, noteId?: string): void
   /** Scrolls the stack to its first card. */
   scrollToTop(): void
-  /** Shows a commit or staged/unstaged scope, or returns to the worktree review (null). */
+  /** Shows a commit or returns to the worktree review (null), asking before discarding drafts. */
   setScope(commit: string | null): void
   applyScope?(scope: ReviewScope, ifDirty: 'ask' | 'refuse'): Promise<ScopeOutcome>
   /**

@@ -467,6 +467,29 @@ test('staged and unstaged scopes filter one Review tab and reject paths outside 
   expect((await viewTabs(w, DIFF_VIEW)).map((tab) => tab.id)).toEqual([staged.tabId])
 }, SLOW)
 
+test('staged rename Review card loads HEAD:old.ts and index:new.ts content', async () => {
+  const originalContent = numbered(20)
+  const modifiedContent = numbered(20, { 2: 'changed line 2' })
+  const w = await boot(scratch, { files: { ...BASE_FILES, 'old.ts': originalContent }, noPanel: true })
+  sc1(w)
+  w.write('new.ts', modifiedContent)
+  w.git('add', 'new.ts')
+  await w.run('open-diff', { path: 'new.ts', source: 'staged' })
+  const renamedCard = await w.win.waitFor(() => {
+    const card = cardOf('new.ts')
+    return card && q('[data-diff-editor]', card) ? card : undefined
+  })
+  await click(q('[data-git-view-root] button[aria-label="Switch to side-by-side diff"]'))
+  await w.win.waitFor(() =>
+    q('.cm-merge-a [contenteditable]', renamedCard) &&
+    q('.cm-merge-b [contenteditable]', renamedCard)
+  )
+  const original = EditorView.findFromDOM(q('.cm-merge-a [contenteditable]', renamedCard)!)
+  const modified = EditorView.findFromDOM(q('.cm-merge-b [contenteditable]', renamedCard)!)
+  expect(original?.state.doc.toString()).toBe(originalContent)
+  expect(modified?.state.doc.toString()).toBe(modifiedContent)
+}, SLOW)
+
 test('edit and both open sorted changed files, skip deletions, reuse tabs and leave clean worktrees alone', async () => {
   const w = await boot(scratch, { noPanel: true })
   sc1(w)
