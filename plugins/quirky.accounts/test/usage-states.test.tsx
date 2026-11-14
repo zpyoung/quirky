@@ -139,7 +139,10 @@ test.each(['Fixture owner', null])('remote loading and unavailable states identi
   await click('Retry'); expectRefresh()
 })
 test('local load errors offer command retry without configuration', async () => {
-  await renderBar({ error: 'Usage service is temporarily unavailable.' })
+  const reports: unknown[] = []
+  store.getSnapshot().error = 'Usage service is temporarily unavailable.'
+  await act(async () => root.render(<Usage.StatusBarUsage store={store} report={(value) => reports.push(value)} />))
+  expect(reports.at(-1)).toMatchObject({ emptyCtaVisible: false })
   expect(container.querySelector('.ui-inline-error')?.textContent).toContain('Usage service is temporarily unavailable.')
   expect(container.textContent).not.toContain('Configure usage tracking')
   await click('Retry'); expectRefresh()
@@ -208,6 +211,25 @@ test('signed-out empty provider offers one local Sign in action and none remotel
   store.getSnapshot().scope = remote('ready', 'Fixture owner')
   await details(signedOut)
   expect([...container.querySelectorAll('button')].some((element) => element.textContent === 'Sign in')).toBe(false)
+})
+test.each(['claude', 'codex'] as const)('signed-out managed %s errors retain exactly one Sign in recovery action', async (managedProvider) => {
+  state.active[managedProvider] = 'managed-account'
+  state.accounts = [{ id: 'managed-account', provider: managedProvider, label: 'Managed account', email: null, organization: null, createdAt: 1, updatedAt: 1, lastAuthenticatedAt: null, active: true, needsSignIn: true }]
+  const signedOut = provider({
+    provider: managedProvider, accountId: 'managed-account', status: 'error', session: null,
+    error: 'Sign in again to use this account.', usageMetadata: { failureKind: 'missing-credentials' }
+  })
+  await details(signedOut)
+  expect(container.querySelector('.info-line .ui-inline-error[role="alert"]')).not.toBeNull()
+  const signIn = [...container.querySelectorAll<HTMLButtonElement>('button')].filter((element) => element.textContent === 'Sign in')
+  expect(signIn).toHaveLength(1)
+  expect(signIn[0]!.disabled).toBe(false)
+  await click('Sign in')
+  expect(calls.some((call) => call.method === 'quirky.accounts/setUiState' && call.params?.settingsSection === managedProvider)).toBe(true)
+  store.getSnapshot().scope = remote('ready', 'Fixture owner')
+  await details(signedOut)
+  const remoteSignIn = [...container.querySelectorAll<HTMLButtonElement>('button')].filter((element) => element.textContent === 'Sign in')
+  expect(remoteSignIn.every((element) => element.disabled)).toBe(true)
 })
 test('balance-only providers do not duplicate empty usage states', async () => {
   await details(provider({ provider: 'cursor', session: null, extraUsage: { unit: 'credits', enabled: true, disabledReason: null, resetsAt: null, balance: 7, unlimited: false } }))

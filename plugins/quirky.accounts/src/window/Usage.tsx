@@ -445,7 +445,7 @@ function ProviderDetails({ store, provider, usage, accounts }: { store: Accounts
       {remoteOwner && <NoticeLine>Restart and keep actions are available only on this device.</NoticeLine>}
       <div className="stale-list">{stale.map((session) => <div className="stale-row" key={session.sessionId}><span>{session.accountLabel} → {session.selectedLabel}{session.busy ? ' · Busy' : ''}</span><StaleSessionActions store={store} session={session} disabled={remoteOwner || scopeUnavailable} />{session.error && <InlineError message="Restart failed. Retry when the session is available." />}</div>)}</div>
     </section>}
-    {windows.length > 0 && status?.signedOut && managed && <Button type="button" disabled={remoteOwner} onClick={openSignIn}>Sign in</Button>}
+    {(windows.length > 0 || providerSnapshot?.status === 'error') && status?.signedOut && managed && <Button type="button" disabled={remoteOwner} onClick={openSignIn}>Sign in</Button>}
   </div>
 }
 
@@ -661,7 +661,7 @@ export function StatusBarUsage({ store, report }: { store: AccountsUiStore; repo
     visibleProviders: hidden ? [] : visibleChips.map((provider) => provider.provider),
     visibleProviderStatus: hidden ? [] : visibleChips.map((provider) => ({ provider: provider.provider, label: PROVIDER_LABELS[provider.provider], status: snapshotStatus(provider).label, usedPercent: maxUsed(provider) })),
     collapsedProviders: hidden ? [] : collapsed.map((provider) => provider.provider),
-    emptyCtaVisible: !hidden && showEmptyCta && snapshot.ui.open,
+    emptyCtaVisible: !hidden && showEmptyCta && snapshot.ui.open && !snapshot.error,
     ui: { popoverOpen: snapshot.ui.open, provider: snapshot.ui.provider && isProvider(snapshot.ui.provider) ? snapshot.ui.provider : null, expanded: snapshot.ui.expanded }
   }
   useStableReport(report, reportState)
