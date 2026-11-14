@@ -28,9 +28,9 @@ export function activate(context: UiPluginContext): void {
     }
     const { askId, questionId, option, open } = input as Record<string, unknown>
     if (
-      typeof askId !== 'string' || !askId.trim() ||
-      typeof questionId !== 'string' || !questionId.trim() ||
-      typeof option !== 'string' || !option.trim()
+      typeof askId !== 'string' || askId.length === 0 ||
+      typeof questionId !== 'string' || questionId.length === 0 ||
+      typeof option !== 'string' || option.length === 0
     ) {
       throw new Error('askId, questionId, and option must be non-empty strings.')
     }

@@ -843,7 +843,7 @@ describe('the Questions panel module', () => {
       null,
       {},
       { askId: '', questionId: 'framework', option: 'react' },
-      { askId: 'ask_preview', questionId: ' ', option: 'react' },
+      { askId: 'ask_preview', questionId: '', option: 'react' },
       { askId: 'ask_preview', questionId: 'framework', option: '' },
       { askId: 'ask_preview', questionId: 'framework', option: 'react', open: 'true' }
     ]) {
@@ -861,6 +861,29 @@ describe('the Questions panel module', () => {
     pruningStore.resolve('ask_preview', declined('ask_preview'))
     expect(pruningStore.previews().has('ask_preview\0framework\0react')).toBe(false)
     pruningStore.dispose()
+  })
+
+  test('preview commands preserve non-empty whitespace question and option identities', async () => {
+    const ask: Ask = {
+      ...selectAsk('ask_space', 'Whitespace identities', 1),
+      spec: {
+        questions: [{
+          id: ' ',
+          type: 'select',
+          question: 'Which value?',
+          options: [{ value: ' ', label: 'Space', preview: { format: 'markdown', content: 'Space preview' } }]
+        }]
+      }
+    }
+    const fake = fakeContext([ask])
+    await activated(fake)
+    const { element } = await mount(fake)
+    const togglePreview = fake.provided.get(TOGGLE_PREVIEW_COMMAND) as (args: unknown) => { open: boolean }
+
+    await act(async () => {
+      expect(togglePreview({ askId: ask.id, questionId: ' ', option: ' ' })).toEqual({ open: true })
+    })
+    expect(element.querySelector('iframe[title="Question preview"]')).not.toBeNull()
   })
 
   test('a mounted option preview follows the root theme while keeping links inert and the frame sandboxed', async () => {
