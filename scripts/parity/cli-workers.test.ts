@@ -18,10 +18,195 @@ import {
   assertWorkerStopEvidence,
   assertWorktreeDashboardEvidence,
   assertWorktreeRunEvidence,
+  assertWorktreeSummaryEvidence,
   assertWorktreeTaskEvidence,
   cleanupWorkerChecks,
-  WORKER_CHECK_IDS,
+  WORKER_CHECK_IDS
 } from './cli-workers'
+type SummaryFixture = {
+  worktreeId: string; runId: string; coordinatorSessionId: string
+  contextTaskId: string; contextDispatchId: string; assigneeSessionId: string
+  workerTaskId: string; completeDispatchId: string; stopDispatchId: string; abandonDispatchId: string
+  worktrees: Array<{ id: string; name: string; path: string; repoId: string }>
+  sessions: Array<{ id: string; agent: string; kind: string; status: string; worktreeId: string }>
+  dashboard: { cards: Array<{ thread: { sessionId: string; worktreeId: string; display: string; live: boolean } }> }
+  runList: { runs: Array<{ id: string; coordinatorSessionId: string | null }> }
+  taskList: { runId: string; tasks: Array<{
+    id: string; runId: string; createdBySessionId: string; taskTitle: string; status: string
+    dispatchId?: string; assigneeSessionId?: string
+  }> }
+  workers: { scope: { runId: string; source: 'flag' }; workers: Array<{
+    dispatchId: string; taskId: string; runId: string; dispatchStatus: string
+    workerState: string | null; terminalState: string; currentAssignment: boolean; agentTerminalHandle: string | null
+  }> }
+  summary: {
+    scope: string
+    rows: Array<{
+      worktree: { id: string; name: string; path: string; repoId: string }
+      sessions: Array<{ id: string; agent: string; kind: string; status: string; display: string | null; live: boolean }>
+      runIds: string[]
+      dispatches: Array<{
+        id: string; runId: string; task: { id: string; title: string; status: string }; status: string
+        creatorSessionId: string | null; assigneeSessionId: string | null; workerSessionId: string | null
+        currentAssignment: boolean; workerState: string | null; terminalState: string
+      }>
+    }>
+  }
+}
+
+function summaryEvidenceFixture(): SummaryFixture {
+  const worktree = { id: 'wt-a', name: 'Alpha', path: '/fixture/a', repoId: 'repo-a' }
+  const sessions = [
+    { id: 's-coordinator', agent: 'shell', kind: 'terminal', status: 'working', worktreeId: 'wt-a' },
+    { id: 's-target', agent: 'shell', kind: 'terminal', status: 'running', worktreeId: 'wt-a' },
+    { id: 's-complete', agent: 'claude', kind: 'terminal', status: 'done', worktreeId: 'wt-a' },
+    { id: 's-stop', agent: 'claude', kind: 'terminal', status: 'exited', worktreeId: 'wt-a' },
+    { id: 's-abandon', agent: 'claude', kind: 'terminal', status: 'working', worktreeId: 'wt-a' },
+    { id: 's-other', agent: 'shell', kind: 'terminal', status: 'working', worktreeId: 'wt-b' }
+  ]
+  const task = (id: string, taskTitle: string, status: string, dispatchId?: string, assigneeSessionId?: string) => ({
+    id, runId: 'run-a', createdBySessionId: 's-coordinator', taskTitle, status,
+    ...(dispatchId === undefined ? {} : { dispatchId, assigneeSessionId })
+  })
+  const taskRows = [
+    task('task-context', 'Context task', 'dispatched', 'ctx-context', 's-target'),
+    task('task-complete', 'Completed task', 'completed'),
+    task('task-stop', 'Stopped task', 'failed', 'ctx-stop', 's-stop'),
+    task('task-abandon', 'Abandoned task', 'dispatched', 'ctx-abandon', 's-abandon')
+  ]
+  const dispatch = (id: string, taskId: string, title: string, taskStatus: string, status: string, assignee: string, worker: string | null, workerState: string | null, terminalState: string) => ({
+    id, runId: 'run-a', task: { id: taskId, title, status: taskStatus }, status,
+    creatorSessionId: 's-coordinator', assigneeSessionId: assignee, workerSessionId: worker,
+    currentAssignment: false, workerState, terminalState
+  })
+  const dispatches = [
+    dispatch('ctx-context', 'task-context', 'Context task', 'dispatched', 'dispatched', 's-target', null, null, 'released'),
+    dispatch('ctx-complete', 'task-complete', 'Completed task', 'completed', 'completed', 's-complete', 's-complete', 'succeeded', 'active'),
+    dispatch('ctx-stop', 'task-stop', 'Stopped task', 'failed', 'failed', 's-stop', 's-stop', 'stopped', 'released'),
+    dispatch('ctx-abandon', 'task-abandon', 'Abandoned task', 'dispatched', 'dispatched', 's-abandon', 's-abandon', 'abandoned', 'retained')
+  ]
+  const worker = (dispatchId: string, taskId: string, dispatchStatus: string, workerState: string | null, terminalState: string, agentTerminalHandle: string | null) => ({
+    dispatchId, taskId, runId: 'run-a', dispatchStatus, workerState, terminalState, currentAssignment: false, agentTerminalHandle
+  })
+  const workers = [
+    worker('ctx-context', 'task-context', 'dispatched', null, 'released', null),
+    worker('ctx-complete', 'task-complete', 'completed', 'succeeded', 'active', 's-complete'),
+    worker('ctx-stop', 'task-stop', 'failed', 'stopped', 'released', 's-stop'),
+    worker('ctx-abandon', 'task-abandon', 'dispatched', 'abandoned', 'retained', 's-abandon')
+  ]
+  const displays: Record<string, string> = { 's-coordinator': 'working', 's-complete': 'done', 's-abandon': 'working' }
+  return {
+    worktreeId: 'wt-a', runId: 'run-a', coordinatorSessionId: 's-coordinator',
+    contextTaskId: 'task-context', contextDispatchId: 'ctx-context', assigneeSessionId: 's-target',
+    workerTaskId: 'task-complete', completeDispatchId: 'ctx-complete', stopDispatchId: 'ctx-stop', abandonDispatchId: 'ctx-abandon',
+    worktrees: [worktree, { id: 'wt-b', name: 'Beta', path: '/fixture/b', repoId: 'repo-b' }],
+    sessions,
+    dashboard: { cards: Object.entries(displays).map(([sessionId, display]) => ({ thread: { sessionId, worktreeId: 'wt-a', display, live: true } })) },
+    runList: { runs: [{ id: 'run-a', coordinatorSessionId: 's-coordinator' }] },
+    taskList: { runId: 'run-a', tasks: taskRows },
+    workers: { scope: { runId: 'run-a', source: 'flag' }, workers },
+    summary: {
+      scope: 'local',
+      rows: [{
+        worktree: { ...worktree },
+        sessions: sessions.filter(row => row.worktreeId === 'wt-a').map(row => ({
+          id: row.id, agent: row.agent, kind: row.kind, status: row.status,
+          display: displays[row.id] ?? null, live: row.status !== 'exited'
+        })),
+        runIds: ['run-a'], dispatches
+      }]
+    }
+  }
+}
+
+function assertSummaryEvidence(value: SummaryFixture) {
+  const { summary, worktrees, sessions, dashboard, runList, taskList, workers } = value
+  return assertWorktreeSummaryEvidence({
+    summary, worktrees, sessions, dashboard, runList, taskList, workers,
+    worktreeId: value.worktreeId, runId: value.runId, coordinatorSessionId: value.coordinatorSessionId,
+    contextTaskId: value.contextTaskId, contextDispatchId: value.contextDispatchId,
+    assigneeSessionId: value.assigneeSessionId, workerTaskId: value.workerTaskId,
+    completeDispatchId: value.completeDispatchId, stopDispatchId: value.stopDispatchId,
+    abandonDispatchId: value.abandonDispatchId
+  })
+}
+
+test('worktree summary comparison proves local metadata, session, Run, task and fleet associations', () => {
+  const value = summaryEvidenceFixture()
+  expect(WORKER_CHECK_IDS).toContain('workers-ps-summary')
+  expect(assertSummaryEvidence(value)).toEqual({
+    worktreeId: 'wt-a', metadataMatched: true, sessionsMatched: true, displaysMatched: true,
+    runsMatched: true, tasksMatched: true, dispatchesMatched: true, workerStatesMatched: true,
+    terminalStatesMatched: true, scope: 'local'
+  })
+})
+
+test('worktree summary comparison rejects missing and corrupted independent evidence', () => {
+  const corruptions: Array<(value: SummaryFixture) => void> = [
+    value => { value.summary.rows = [] },
+    value => { value.worktrees = value.worktrees.filter(row => row.id !== 'wt-a') },
+    value => { value.summary.rows[0]!.worktree.name = 'Wrong name' },
+    value => { value.summary.rows[0]!.worktree.path = '/fixture/wrong' },
+    value => { value.summary.rows[0]!.worktree.repoId = 'repo-wrong' },
+    value => { value.summary.rows[0]!.sessions = value.summary.rows[0]!.sessions.filter(row => row.id !== 's-target') },
+    value => { value.summary.rows[0]!.sessions[0]!.id = 's-wrong' },
+    value => { value.summary.rows[0]!.sessions[0]!.agent = 'claude' },
+    value => { value.summary.rows[0]!.sessions[0]!.status = 'exited' },
+    value => { value.summary.rows[0]!.sessions[0]!.live = false },
+    value => { value.summary.rows[0]!.sessions.find(row => row.id === 's-complete')!.display = 'unknown' },
+    value => { value.dashboard.cards[1]!.thread.display = 'working' },
+    value => { value.dashboard.cards[1]!.thread.worktreeId = 'wt-b' },
+    value => { value.summary.scope = 'remote' },
+    value => { value.summary.rows[0]!.runIds = ['run-other'] },
+    value => {
+      value.runList.runs.push({ id: 'run-b', coordinatorSessionId: 's-other' })
+      value.summary.rows[0]!.runIds.push('run-b')
+    },
+    value => { value.runList.runs[0]!.coordinatorSessionId = 's-other' },
+    value => { value.summary.rows[0]!.dispatches = value.summary.rows[0]!.dispatches.filter(row => row.id !== 'ctx-abandon') },
+    value => { value.summary.rows[0]!.dispatches[0]!.id = 'ctx-wrong' },
+    value => { value.summary.rows[0]!.dispatches[0]!.status = 'completed' },
+    value => { value.summary.rows[0]!.dispatches[0]!.currentAssignment = true },
+    value => { value.summary.rows[0]!.dispatches.find(row => row.id === 'ctx-complete')!.workerState = 'stopped' },
+    value => { value.summary.rows[0]!.dispatches.find(row => row.id === 'ctx-abandon')!.workerState = 'stopped' },
+    value => { value.summary.rows[0]!.dispatches.find(row => row.id === 'ctx-complete')!.terminalState = 'released' },
+    value => { value.summary.rows[0]!.dispatches.find(row => row.id === 'ctx-abandon')!.terminalState = 'released' },
+    value => { value.workers.workers = value.workers.workers.filter(row => row.dispatchId !== 'ctx-abandon') },
+    value => { value.workers.workers.find(row => row.dispatchId === 'ctx-complete')!.dispatchStatus = 'failed' },
+    value => { value.workers.workers.find(row => row.dispatchId === 'ctx-complete')!.workerState = 'stopped' },
+    value => { value.workers.workers.find(row => row.dispatchId === 'ctx-complete')!.terminalState = 'released' },
+    value => { value.workers.workers.find(row => row.dispatchId === 'ctx-complete')!.agentTerminalHandle = 's-other' }
+  ]
+  for (const corrupt of corruptions) {
+    const value = summaryEvidenceFixture()
+    corrupt(value)
+    expectRejected(() => assertSummaryEvidence(value))
+  }
+})
+
+test('worktree summary rejects task mismatches and matching-looking tasks from another worktree', () => {
+  const corruptions: Array<(value: SummaryFixture) => void> = [
+    value => { value.summary.rows[0]!.dispatches[0]!.task.id = 'task-other' },
+    value => { value.summary.rows[0]!.dispatches[0]!.task.title = 'Wrong title' },
+    value => { value.summary.rows[0]!.dispatches[0]!.task.status = 'completed' },
+    value => { value.summary.rows[0]!.dispatches[1]!.task.id = 'task-other' },
+    value => { value.summary.rows[0]!.dispatches[1]!.task.title = 'Wrong title' },
+    value => { value.summary.rows[0]!.dispatches[1]!.task.status = 'failed' },
+    value => { value.taskList.tasks[0]!.assigneeSessionId = 's-other' }
+  ]
+  const otherWorktreeTask = summaryEvidenceFixture()
+  otherWorktreeTask.taskList.tasks.push({
+    id: 'task-other', runId: 'run-other', createdBySessionId: 's-other',
+    taskTitle: 'Context task', status: 'dispatched', dispatchId: 'ctx-other', assigneeSessionId: 's-target'
+  })
+  otherWorktreeTask.summary.rows[0]!.dispatches[0]!.task.id = 'task-other'
+  expectRejected(() => assertSummaryEvidence(otherWorktreeTask))
+  for (const corrupt of corruptions) {
+    const value = summaryEvidenceFixture()
+    corrupt(value)
+    expectRejected(() => assertSummaryEvidence(value))
+  }
+})
 
 
 function expectRejected(assertion: () => void): void {

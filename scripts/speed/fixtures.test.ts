@@ -299,8 +299,10 @@ test('does not spawn a replacement daemon when owned shutdown fails', async () =
   try {
     const world = await harness.start({ workers: false })
     world.preserveSessions(liveSessions)
+    let notifications = 0
 
-    await expect(world.restartDaemon()).rejects.toThrow('shutdown failed')
+    await expect(world.restartDaemon(undefined, () => { notifications++ })).rejects.toThrow('shutdown failed')
+    expect(notifications).toBe(0)
     expect(harness.spawnedCount()).toBe(1)
     await world.stop()
     expect(harness.cleanupCount()).toBe(1)
@@ -308,6 +310,56 @@ test('does not spawn a replacement daemon when owned shutdown fails', async () =
     harness.cleanup()
   }
 })
+test('notifies exactly once for the replacement after ownership and before health waiting', async () => {
+  const harness = fakeWorldHarness()
+  try {
+    const world = await harness.start({ workers: false })
+    world.preserveSessions(liveSessions)
+    const notifications: Array<{ spawnedAt: number; pid: number }> = []
+    expect(notifications).toEqual([])
+
+    const restart = await world.restartDaemon(undefined, (spawn) => {
+      notifications.push(spawn)
+      harness.recordEvent(`notify:${spawn.pid}`)
+      expect(harness.ownedPids()).toContain(spawn.pid)
+    })
+
+    expect(notifications).toHaveLength(1)
+    expect(notifications[0]).toMatchObject({ pid: 101 })
+    expect(restart.spawnedAt).toBe(notifications[0]?.spawnedAt)
+    expect(harness.events()).toEqual([
+      'spawn:100',
+      'health:100',
+      'shutdown:100',
+      'spawn:101',
+      'notify:101',
+      'health:101'
+    ])
+    await world.stop()
+  } finally {
+    harness.cleanup()
+  }
+})
+
+test('keeps the replacement owned when its spawn callback throws', async () => {
+  const harness = fakeWorldHarness()
+  try {
+    const world = await harness.start({ workers: false })
+    world.preserveSessions(liveSessions)
+
+    await expect(world.restartDaemon(undefined, () => {
+      throw new Error('spawn observer failed')
+    })).rejects.toThrow('spawn observer failed')
+    expect(harness.ownedPids()).toContain(101)
+    expect(harness.events()).not.toContain('health:101')
+
+    await world.stop()
+    expect(harness.killedPids()).toContain(101)
+  } finally {
+    harness.cleanup()
+  }
+})
+
 
 test('keeps stop usable after a replacement daemon fails to connect', async () => {
   const harness = fakeWorldHarness({ failConnectionAt: 2 })
@@ -443,6 +495,8 @@ function fakeWorldHarness(options: { shutdownFails?: boolean; failConnectionAt?:
   const home = mkdtempSync(join(tmpdir(), 'quirky-speed-world-'))
   const processes: Array<{ pid: number; exited: Promise<number>; kill(signal?: string | number): void }> = []
   const spawnedCommands: string[][] = []
+  const events: string[] = []
+  const killedPids: number[] = []
   let cleanupCount = 0
   let connections = 0
   let liveSessionChecks = 0
@@ -455,10 +509,13 @@ function fakeWorldHarness(options: { shutdownFails?: boolean; failConnectionAt?:
       spawnedCommands.push(command)
       let resolveExit!: (code: number) => void
       const exited = new Promise<number>((resolve) => { resolveExit = resolve })
+      const pid = 100 + processes.length
+      events.push(`spawn:${pid}`)
       const child = {
-        pid: 100 + processes.length,
+        pid,
         exited,
         kill() {
+          killedPids.push(pid)
           if (!options.shutdownFails) resolveExit(0)
         }
       }
@@ -466,7 +523,10 @@ function fakeWorldHarness(options: { shutdownFails?: boolean; failConnectionAt?:
       return child
     },
     track() { trackedPids++ },
-    async cleanup() { cleanupCount++ }
+    async cleanup() {
+      cleanupCount++
+      for (const process of processes) process.kill()
+    }
   }
   const captureWorktrees = Array.from({ length: 7 }, (_, index) => ({
     id: `soak-worktree-${index + 1}`,
@@ -501,16 +561,20 @@ function fakeWorldHarness(options: { shutdownFails?: boolean; failConnectionAt?:
     createScope: () => scope,
     prepareCaptureFixtureHome: async () => prepared,
     registerCaptureFixtures: async () => captureFixtures,
-    waitForDaemon: async (_home: string, process: { pid: number }) => ({
-      pid: process.pid,
-      port: 4000 + process.pid,
-      token: 'fixture-token',
-      hookToken: 'fixture-hook-token',
-      daemonVersion: 'test',
-      protocolVersion: 1,
-      startedAt: Date.now()
-    }),
-    waitForShutdown: async (process: { exited: Promise<number> }) => {
+    waitForDaemon: async (_home: string, process: { pid: number }) => {
+      events.push(`health:${process.pid}`)
+      return {
+        pid: process.pid,
+        port: 4000 + process.pid,
+        token: 'fixture-token',
+        hookToken: 'fixture-hook-token',
+        daemonVersion: 'test',
+        protocolVersion: 1,
+        startedAt: Date.now()
+      }
+    },
+    waitForShutdown: async (process: { pid: number; exited: Promise<number> }) => {
+      events.push(`shutdown:${process.pid}`)
       if (options.shutdownFails) throw new Error('shutdown failed')
       await process.exited
     },
@@ -546,6 +610,10 @@ function fakeWorldHarness(options: { shutdownFails?: boolean; failConnectionAt?:
     liveSessionChecks: () => liveSessionChecks,
     newTabCount: () => newTabs,
     trackedPids: () => trackedPids,
+    ownedPids: () => processes.map((process) => process.pid),
+    killedPids: () => [...killedPids],
+    events: () => [...events],
+    recordEvent: (event: string) => events.push(event),
     cleanup: () => rmSync(home, { recursive: true, force: true })
   }
 }

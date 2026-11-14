@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button, EmptyState, IconButton } from '@quirky/ui'
-import { parseContributionId, type MountCleanup } from '@quirky/protocol'
+import type { MountCleanup } from '@quirky/protocol'
 
 import { paneLeaves, paneRects, roundRatio } from '../../layout/tree'
 import type { DividerRect, PaneRect } from '../../layout/tree'
@@ -11,6 +11,7 @@ import type { ControllerState, PaneDropTarget, WorkspaceController } from './con
 import { isViewTab } from '../../layout/types'
 import { useBoxSize } from './useBoxSize'
 import { byPaneId, px, STRUCTURED_VIEW_ID } from './model'
+import { getTerminalAccessorySource, type TerminalAccessory } from './accessories'
 
 /** The minimum pane width and terminal-content height, before a vertical header band. */
 export const MIN_PANE_PX = 50
@@ -141,61 +142,6 @@ function HostedViewLayer({ controller, tab }: { controller: WorkspaceController;
   )
 }
 
-type TerminalAccessory = { id: string; plugin: string; title: string; order: number; view: string }
-
-function terminalAccessoriesOf(contributions: unknown, model: unknown): TerminalAccessory[] {
-  if (!Array.isArray(contributions) || typeof model !== 'object' || model === null || Array.isArray(model) || !('views' in model)) {
-    return []
-  }
-  const rawViews: unknown = model.views
-  if (!Array.isArray(rawViews)) return []
-  const views: unknown[] = rawViews
-  const accessories: TerminalAccessory[] = []
-  const entries: unknown[] = contributions
-  for (const raw of entries) {
-    if (
-      typeof raw !== 'object' ||
-      raw === null ||
-      Array.isArray(raw) ||
-      !('id' in raw) ||
-      !('kind' in raw) ||
-      !('plugin' in raw) ||
-      !('status' in raw) ||
-      !('data' in raw)
-    ) {
-      continue
-    }
-    const id = raw.id
-    if (typeof id !== 'string') continue
-    const parsedId = parseContributionId(id)
-    if (parsedId?.kind !== 'terminal-accessory' || raw.kind !== 'terminal-accessory' || raw.status !== 'effective') continue
-    if (typeof raw.plugin !== 'string') continue
-    const data = raw.data
-    if (typeof data !== 'object' || data === null || Array.isArray(data)) continue
-    if (Object.keys(data).some((key) => !['title', 'order', 'view'].includes(key))) continue
-    const title = Reflect.get(data, 'title')
-    const view = Reflect.get(data, 'view')
-    const rawOrder = Reflect.get(data, 'order')
-    if (typeof title !== 'string' || title.trim() === '' || typeof view !== 'string') continue
-    const order = rawOrder === undefined ? 100 : rawOrder
-    if (typeof order !== 'number' || !Number.isFinite(order) || parseContributionId(view)?.kind !== 'view') continue
-    const available = views.some(
-      (candidate) =>
-        typeof candidate === 'object' &&
-        candidate !== null &&
-        !Array.isArray(candidate) &&
-        'id' in candidate &&
-        candidate.id === view &&
-        'module' in candidate &&
-        typeof candidate.module === 'string' &&
-        candidate.module !== ''
-    )
-    if (!available) continue
-    accessories.push({ id, plugin: raw.plugin, title, order, view })
-  }
-  accessories.sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-  return accessories
-}
 
 function PaneAccessoryMount({
   controller,
@@ -227,34 +173,8 @@ function PaneAccessoryMount({
 }
 
 function PaneAccessories({ controller, sessionId, paneId }: { controller: WorkspaceController; sessionId: string; paneId: string }) {
-  const [accessories, setAccessories] = useState<TerminalAccessory[]>([])
-  useEffect(() => {
-    let active = true
-    let generation = 0
-    const refresh = async () => {
-      const request = ++generation
-      try {
-        const [contributions, model] = await Promise.all([
-          controller.context.call('plugin.contributions', { kind: 'terminal-accessory' }),
-          controller.context.call('ui.contributions', {})
-        ])
-        if (active && request === generation) setAccessories(terminalAccessoriesOf(contributions, model))
-      } catch (error) {
-        if (active && request === generation) {
-          controller.context.log(`terminal accessory refresh failed: ${error instanceof Error ? error.message : String(error)}`)
-        }
-      }
-    }
-    const unsubscribe = controller.context.subscribe((event) => {
-      if (event.type === 'plugin.changed') void refresh()
-    })
-    void refresh()
-    return () => {
-      active = false
-      generation++
-      unsubscribe()
-    }
-  }, [controller])
+  const source = getTerminalAccessorySource(controller.context)
+  const accessories = useSyncExternalStore(source.subscribe, source.getSnapshot, source.getSnapshot)
   useEffect(() => {
     controller.setMountedAccessories(paneId, accessories.map((accessory) => accessory.id))
   }, [controller, paneId, accessories])

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
-import { daemon, fakeContext, makeWorld, mountSettings, teardown, type Ui } from './support'
+import { command, daemon, fakeContext, makeWorld, mountSettings, settle, teardown, type Ui } from './support'
 
 let ui: Ui
 
@@ -171,4 +171,128 @@ describe('SC-24: the Session handoff settings page', () => {
     expect(page.view.text()).toContain('24 of 24 templates')
     expect(page.view.button('Add template')!.disabled).toBe(true)
   })
+  test('shows a loading state with controls disabled while the initial catalog request is pending', async () => {
+    const world = makeWorld()
+    type CatalogResponse = { templates: typeof world.templates; custom: boolean; limit: number }
+    const { promise: catalog, resolve: resolveCatalog } = Promise.withResolvers<CatalogResponse>()
+    const fake = fakeContext(daemon(world, { 'quirky.handoff/templates': () => catalog }))
+    const page = await mountSettings(ui, fake)
+
+    expect(fake.callsTo('templates')).toHaveLength(1)
+    expect(page.view.q('.ui-empty-state')?.textContent).toBe('Loading handoff templates…')
+    expect(page.view.text()).not.toContain('0 of 24 templates')
+    expect(page.view.button('Reset to defaults')?.disabled).toBe(true)
+    expect(page.view.button('Add template')?.disabled).toBe(true)
+
+    resolveCatalog({ templates: world.templates, custom: world.custom, limit: 24 })
+    await settle()
+  })
+
+  test('shows an initial load error without a toast and recovers when Retry reloads the catalog', async () => {
+    const world = makeWorld()
+    let attempts = 0
+    const recovered = [{ id: 'recovered', name: 'Recovered template', body: 'Recovered body' }]
+    const fake = fakeContext(daemon(world, {
+      'quirky.handoff/templates': () => {
+        attempts += 1
+        if (attempts === 1) throw new Error('ECONNREFUSED')
+        return { templates: recovered, custom: true, limit: 24 }
+      }
+    }))
+    const page = await mountSettings(ui, fake)
+    const alert = page.view.q('[role="alert"].ui-inline-error')
+
+    expect(alert?.textContent).toContain('Could not load handoff templates: ECONNREFUSED')
+    expect(alert?.querySelector('.ui-inline-error__action')?.textContent?.trim()).toBe('Retry')
+    expect(page.view.text()).not.toContain('0 of 24 templates')
+    expect(fake.toasts).toHaveLength(0)
+
+    await page.view.click(page.view.button('Retry'))
+    await settle()
+
+    expect(fake.callsTo('templates')).toHaveLength(2)
+    expect(page.view.text()).toContain('Recovered template')
+    expect(page.view.q('[role="alert"].ui-inline-error')).toBeNull()
+    expect(page.last()).toMatchObject({ custom: true, count: 1, limit: 24 })
+  })
+
+  test('shows the empty state and ready controls for an empty custom catalog', async () => {
+    const world = makeWorld()
+    world.templates = []
+    world.custom = true
+    const fake = fakeContext(daemon(world))
+    const page = await mountSettings(ui, fake)
+    const v = page.view
+
+    expect(v.q('.ui-empty-state')?.textContent).toBe('No handoff templates yet.')
+    expect(v.text()).toContain('0 of 24 templates')
+    expect(v.button('Reset to defaults')?.disabled).toBe(false)
+    expect(v.button('Add template')?.disabled).toBe(false)
+  })
+
+  test('routes settings actions through commands while canceling editor drafts and saving via the template RPC', async () => {
+    const { page, fake, world } = await opened()
+    const v = page.view
+
+    await v.click(v.q('[aria-label="Edit Debug the failure"]'))
+    await settle()
+    expect(fake.executions.at(-1)).toEqual({ id: command('template-edit'), args: { id: 'debug-failure' } })
+    expect(page.last().editor).toMatchObject({ id: 'debug-failure', name: 'Debug the failure' })
+    await v.type(v.q('input[aria-label="Name"]') as HTMLInputElement, 'Unsaved draft')
+    await v.click(v.button('Cancel'))
+    await settle()
+    expect(page.last().editor).toBeNull()
+    expect(world.templates.find((template) => template.id === 'debug-failure')?.name).toBe('Debug the failure')
+    expect(fake.callsTo('templateMutate')).toHaveLength(0)
+
+    await v.click(v.button('Add template'))
+    await settle()
+    expect(fake.executions.at(-1)).toEqual({ id: command('template-add'), args: undefined })
+    await v.type(v.q('input[aria-label="Name"]') as HTMLInputElement, 'Saved from UI')
+    await v.type(v.q('textarea[aria-label="Instructions"]') as HTMLTextAreaElement, 'Body from UI')
+    await v.click(v.button('Save template'))
+    await settle()
+    expect(fake.callsTo('templateMutate').at(-1)?.params).toEqual({
+      op: 'add',
+      template: { name: 'Saved from UI', body: 'Body from UI' }
+    })
+    const saved = world.templates.find((template) => template.name === 'Saved from UI')!
+
+    await v.click(v.q('[aria-label="Remove Saved from UI"]'))
+    await settle()
+    expect(fake.executions.at(-1)).toEqual({ id: command('template-remove'), args: { id: saved.id } })
+    expect(world.templates.some((template) => template.id === saved.id)).toBe(false)
+
+    await v.click(v.button('Reset to defaults'))
+    await settle()
+    expect(fake.executions.at(-1)).toEqual({ id: command('templates-reset'), args: undefined })
+    expect(fake.callsTo('templateMutate').at(-1)?.params).toEqual({ op: 'reset' })
+    expect(page.last()).toMatchObject({ custom: false, count: 3 })
+  })
+
+  test('keeps loaded templates visible and toasts when a background refresh fails', async () => {
+    const world = makeWorld()
+    let failRefresh = false
+    const fake = fakeContext(daemon(world, {
+      'quirky.handoff/templates': () => {
+        if (failRefresh) throw new Error('background offline')
+        return { templates: world.templates, custom: world.custom, limit: 24 }
+      }
+    }))
+    const page = await mountSettings(ui, fake)
+
+    expect(page.view.text()).toContain('3 of 24 templates')
+    failRefresh = true
+    await fake.emit({ type: 'quirky.handoff/changed', data: { kind: 'templates' } } as never)
+    await settle()
+
+    expect(page.view.text()).toContain('3 of 24 templates')
+    expect(page.view.text()).toContain('Continue implementation')
+    expect(page.view.q('.ui-inline-error')).toBeNull()
+    expect(fake.toasts.map(({ title, body }) => ({ title, body }))).toEqual([
+      { title: 'Could not read the handoff templates', body: 'background offline' }
+    ])
+  })
+
+
 })

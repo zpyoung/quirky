@@ -14,6 +14,10 @@
 - 2026-10-27, Accounts integration: SC-25 uses the source session's recorded effective provider
   home when available, including managed/custom homes and explicitly unset overrides. Account
   selection changes do not retarget an existing source's transcript root.
+- 2026-11-13, shared UI states: the template settings page distinguishes initial loading, load
+  failure with Retry, and an empty catalog. Initial failures stay inline; refresh failures keep
+  the loaded catalog and toast. Dialog and settings actions use declared commands or public RPCs;
+  controlled text drafts remain synchronous.
 
 ## Conceptual model
 

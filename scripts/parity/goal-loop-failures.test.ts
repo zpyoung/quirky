@@ -73,7 +73,7 @@ for (const fault of ['inspection', 'tracking'] as const) {
         rmSync(world.root, { recursive: true, force: true })
       }
     }
-  }, 150_000)
+  }, 195_000)
 }
 
 test('agent launch waits for delayed OMP argv and terminal observations exactly once', async () => {
@@ -119,7 +119,7 @@ test('agent launch waits for delayed OMP argv and terminal observations exactly 
   }
   expect(ownedRoot).not.toBe('')
   expect(existsSync(ownedRoot)).toBe(false)
-}, 150_000)
+}, 195_000)
 
 test('product cleanup stall leaves the reserved hard-deadline window for real teardown', async () => {
   type CleanupOptions = { signal?: AbortSignal; deadline?: number }
@@ -359,16 +359,25 @@ test('invalid public CLI arguments exit 2 without allocating runtime state', asy
   }
 })
 
-for (const fault of ['missing-agent', 'provider-malformed', 'daemon-exited', 'startup'] as const) {
+for (const fault of ['missing-agent', 'provider-malformed', 'claude-usage-malformed', 'daemon-exited', 'startup'] as const) {
   test(`real isolated ${fault} cannot become passing evidence`, async () => {
     let ownedRoot = ''
     let daemonPid = 0
+    let ptyPid = 0
+    let usageUrl = ''
     const report = await runGoalLoop({
       createWorld: async (options) => {
         const world = await createGoalLoopWorld({ ...options, faults: {
-          missingAgent: fault === 'missing-agent', malformedProvider: fault === 'provider-malformed', failedStartup: fault === 'startup'
+          missingAgent: fault === 'missing-agent', malformedProvider: fault === 'provider-malformed',
+          malformedClaudeUsage: fault === 'claude-usage-malformed', failedStartup: fault === 'startup'
         } })
         ownedRoot = world.root
+        const cleanup = world.cleanup.bind(world)
+        world.cleanup = async (cleanupOptions) => {
+          ptyPid = world.ptyPid ?? 0
+          usageUrl = world.env.GOAL_LOOP_CLAUDE_USAGE_URL ?? ''
+          return cleanup(cleanupOptions)
+        }
         return world
       },
       beforeStep: async (id, world) => {
@@ -391,8 +400,15 @@ for (const fault of ['missing-agent', 'provider-malformed', 'daemon-exited', 'st
     expect(ownedRoot).not.toBe('')
     expect(existsSync(ownedRoot)).toBe(false)
     if (daemonPid) expect(() => process.kill(daemonPid, 0)).toThrow()
+    if (ptyPid) expect(() => process.kill(ptyPid, 0)).toThrow()
+    expect(usageUrl).not.toBe('')
+    await expect(fetch(usageUrl)).rejects.toThrow()
+    if (fault === 'claude-usage-malformed') {
+      expect(report.steps.find(step => step.id === 'accounts-usage')?.error?.kind, JSON.stringify(report)).toBe('usage-evidence')
+      expect(report.steps.find(step => step.id === 'worktrees-remove')?.status).toBe('not-run')
+    }
     if (fault === 'provider-malformed') expect(report.steps.find((step) => step.id === 'accounts-usage')?.status, JSON.stringify(report)).toBe('failed')
-  }, 150_000)
+  }, fault === 'provider-malformed' || fault === 'claude-usage-malformed' ? 195_000 : 150_000)
 }
 
 test('SIGTERM during a real active turn reaps the owned tree without killing an unrelated process', async () => {
@@ -429,3 +445,157 @@ console.log(JSON.stringify(report));process.exitCode=report.ok?0:1;`
     rmSync(temporary, { recursive: true, force: true })
   }
 }, 150_000)
+
+for (const operation of ['interrupt', 'close'] as const) {
+  test(`accepted ${operation} receipt without its terminal effect fails and cleanup retries`, async () => {
+    let world: GoalLoopWorld | undefined
+    let suppressed = false
+    let closeCalls = 0
+    let interruptCalls = 0
+    let targetSessionId = ''
+    let targetTabId = ''
+    let daemonPid = 0
+    let ptyPid = 0
+    let usageUrl = ''
+    const report = await runGoalLoop({
+      createWorld: async options => {
+        world = await createGoalLoopWorld(options)
+        const cli = world.cli.bind(world)
+        world.cli = async (args, cliOptions) => {
+          const interrupt = args[0] === 'api' && args[1] === 'call' && args[2] === 'quirky.terminal/write'
+          const close = args[0] === 'terminal' && args[1] === 'tab' && args[2] === 'close'
+          if (interrupt) {
+            interruptCalls++
+            const params = JSON.parse(args[args.indexOf('--params') + 1]!)
+            expect(params.data).toBe('\u0003')
+            targetSessionId = params.session
+          }
+          if (close) {
+            targetTabId ||= args[3]!
+            if (args[3] === targetTabId) closeCalls++
+          }
+          if (!suppressed && ((operation === 'interrupt' && interrupt) || (operation === 'close' && close))) {
+            suppressed = true
+            if (interrupt) return { exitCode: 0, stdout: JSON.stringify({ ok: true }), stderr: '' }
+            const session = JSON.parse((await cli(['session', 'get', targetSessionId], cliOptions)).stdout)
+            const layout = await cli(['terminal', 'layout', '--worktree', session.worktreeId], cliOptions)
+            return layout
+          }
+          return cli(args, cliOptions)
+        }
+        const cleanup = world.cleanup.bind(world)
+        world.cleanup = async options => {
+          daemonPid = world!.daemonPid
+          ptyPid = world!.ptyPid ?? 0
+          usageUrl = world!.env.GOAL_LOOP_CLAUDE_USAGE_URL ?? ''
+          await cleanup(options)
+        }
+        return world
+      }
+    })
+    expect(suppressed, JSON.stringify(report)).toBe(true)
+    expect(report.ok).toBe(false)
+    expect(report.steps[2]!.error?.kind, JSON.stringify(report)).toBe(operation === 'interrupt' ? 'missing-terminal-interrupt' : 'terminal-close-unobserved')
+    expect(report.steps.slice(3).every(step => step.status === 'not-run')).toBe(true)
+    expect(report.cleanup.ok, JSON.stringify(report)).toBe(true)
+    if (operation === 'close') expect(closeCalls).toBe(2)
+    if (operation === 'interrupt') expect(interruptCalls).toBe(2)
+    expect(existsSync(world!.root)).toBe(false)
+    expect(() => process.kill(daemonPid, 0)).toThrow()
+    expect(() => process.kill(ptyPid, 0)).toThrow()
+    expect(usageUrl).not.toBe('')
+    await expect(fetch(usageUrl)).rejects.toThrow()
+  }, 60_000)
+}
+
+test('a one-turn passing Claude check fails without waiting for a second interval', async () => {
+  let world: GoalLoopWorld | undefined
+  let claudeTurns = 0
+  let daemonPid = 0
+  let ptyPid = 0
+  let usageUrl = ''
+  const report = await runGoalLoop({
+    createWorld: async options => {
+      world = await createGoalLoopWorld(options)
+      const cleanup = world.cleanup.bind(world)
+      world.cleanup = async options => {
+        claudeTurns = (await world!.readLog('claude')).trim().split('\n').filter(Boolean).filter(line => {
+          const record = JSON.parse(line)
+          return record.type === 'user' && record.prompt.includes('fixture-claude-loop-tick')
+        }).length
+        daemonPid = world!.daemonPid
+        ptyPid = world!.ptyPid ?? 0
+        usageUrl = world!.env.GOAL_LOOP_CLAUDE_USAGE_URL ?? ''
+        await cleanup(options)
+      }
+      return world
+    },
+    beforeStep: async (id, world) => {
+      if (id === 'loop-run-stop') {
+        writeFileSync(world.paths.loopCheck, `import {appendFileSync} from 'node:fs'; appendFileSync(${JSON.stringify(world.paths.loopCheckLog)}, JSON.stringify({invocation:1,exitCode:0})+'\\n'); process.exit(0);\n`, { mode: 0o600 })
+      }
+    }
+  })
+  expect(claudeTurns, JSON.stringify(report)).toBe(1)
+  expect(report.ok).toBe(false)
+  expect(report.steps[3]!.error?.kind, JSON.stringify(report)).toBe('claude-loop-evidence')
+  expect(report.steps[3]!.elapsedMs).toBeLessThan(30_000)
+  expect(report.steps.slice(4).every(step => step.status === 'not-run')).toBe(true)
+  expect(report.cleanup.ok, JSON.stringify(report)).toBe(true)
+  expect(existsSync(world!.root)).toBe(false)
+  expect(() => process.kill(daemonPid, 0)).toThrow()
+  expect(() => process.kill(ptyPid, 0)).toThrow()
+  expect(usageUrl).not.toBe('')
+  await expect(fetch(usageUrl)).rejects.toThrow()
+}, 60_000)
+
+test('a paused Claude loop fails its observation without waiting out the interval', async () => {
+  let world: GoalLoopWorld | undefined
+  let claudeLoopId = ''
+  let paused = false
+  let daemonPid = 0
+  let ptyPid = 0
+  let usageUrl = ''
+  const report = await runGoalLoop({
+    createWorld: async options => {
+      world = await createGoalLoopWorld(options)
+      const cli = world.cli.bind(world)
+      world.cli = async (args, options) => {
+        const result = await cli(args, options)
+        if (args[0] === 'loop' && args[1] === 'create' && args[args.indexOf('--agent') + 1] === 'claude') {
+          const created = JSON.parse(result.stdout)
+          claudeLoopId = (created.loop ?? created).id
+        }
+        if (!paused && claudeLoopId && args[0] === 'loop' && args[1] === 'show' && args[2] === claudeLoopId) {
+          const shown = JSON.parse(result.stdout)
+          const snapshot = shown.loop ?? shown
+          if (snapshot.state === 'running' && snapshot.iterationsCompleted === 1) {
+            paused = true
+            await cli(['loop', 'pause', claudeLoopId], options)
+            return cli(args, options)
+          }
+        }
+        return result
+      }
+      const cleanup = world.cleanup.bind(world)
+      world.cleanup = async options => {
+        daemonPid = world!.daemonPid
+        ptyPid = world!.ptyPid ?? 0
+        usageUrl = world!.env.GOAL_LOOP_CLAUDE_USAGE_URL ?? ''
+        await cleanup(options)
+      }
+      return world
+    }
+  })
+  expect(paused, JSON.stringify(report)).toBe(true)
+  expect(report.ok).toBe(false)
+  expect(report.steps[3]!.error?.kind, JSON.stringify(report)).toBe('claude-loop-evidence')
+  expect(report.steps[3]!.elapsedMs).toBeLessThan(30_000)
+  expect(report.steps.slice(4).every(step => step.status === 'not-run')).toBe(true)
+  expect(report.cleanup.ok, JSON.stringify(report)).toBe(true)
+  expect(existsSync(world!.root)).toBe(false)
+  expect(() => process.kill(daemonPid, 0)).toThrow()
+  expect(() => process.kill(ptyPid, 0)).toThrow()
+  expect(usageUrl).not.toBe('')
+  await expect(fetch(usageUrl)).rejects.toThrow()
+}, 60_000)
