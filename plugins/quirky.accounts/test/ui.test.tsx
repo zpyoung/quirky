@@ -872,3 +872,128 @@ test('origin-routed void commands remain successful after daemon null-result nor
   expect(await commandHandler(REFRESH_COMMAND_ID)({ provider: 'grok', connId: 0 }))
     .toEqual({ ok: false, reason: 'invalid-args' })
 })
+
+const lifecycleCommands = [
+  { name: 'copy', id: COPY_LOGIN_LINK_COMMAND_ID, args: { id: 'login-a', provider: 'codex', url: LOGIN_A_URL } },
+  { name: 'select', id: SELECT_ACCOUNT_COMMAND_ID, args: { provider: 'claude', accountId: null } },
+  { name: 'refresh', id: REFRESH_COMMAND_ID, args: { provider: 'grok' } }
+] as const
+
+for (const transition of ['deactivated', 'replaced'] as const) {
+  for (const connId of [undefined, 7, 8] as const) {
+    for (const command of lifecycleCommands) {
+      test(`${command.name} refuses a ${transition} activation before routing to ${connId ?? 'local'}`, async () => {
+        listResponse = () => pendingCodexState()
+        const context = makeContext()
+        activate(context)
+        await settle()
+        const handler = commandHandler(command.id)
+        const identity = Promise.withResolvers<unknown>()
+        const identityStarted = Promise.withResolvers<void>()
+        const effects: string[] = []
+        const originalCall = context.call.bind(context)
+        context.call = (method, params) => {
+          if (method === 'ui.window.self') {
+            identityStarted.resolve()
+            return identity.promise
+          }
+          effects.push(method)
+          return originalCall(method, params)
+        }
+        const running = handler({ ...command.args, ...(connId === undefined ? {} : { connId }) })
+        if (connId !== undefined) await identityStarted.promise
+        deactivate()
+        if (transition === 'replaced') {
+          activate(makeContext())
+          await settle()
+        }
+        identity.resolve({ connId: 7 })
+        const result = await running
+        expect(effects).toEqual([])
+        expect(clipboardWrites).toEqual([])
+        expect(result).toMatchObject({ ok: false })
+      })
+    }
+  }
+}
+
+for (const transition of ['deactivated', 'replaced'] as const) {
+  for (const command of lifecycleCommands) {
+    test(`${command.name} preserves already-started forwarding after its activation is ${transition}`, async () => {
+      listResponse = () => pendingCodexState()
+      const context = makeContext()
+      activate(context)
+      await settle()
+      const handler = commandHandler(command.id)
+      const started = Promise.withResolvers<void>()
+      const completion = Promise.withResolvers<unknown>()
+      const effects: string[] = []
+      const originalCall = context.call.bind(context)
+      context.call = (method, params) => {
+        if (method === 'ui.window.command.run') {
+          effects.push(method)
+          started.resolve()
+          return completion.promise
+        }
+        if (method !== 'ui.window.self') effects.push(method)
+        return originalCall(method, params)
+      }
+      const running = handler({ ...command.args, connId: 8 })
+      await started.promise
+      deactivate()
+      if (transition === 'replaced') {
+        activate(makeContext())
+        await settle()
+      }
+      completion.resolve({ result: command.name === 'copy' ? { ok: true } : null })
+      const result = await running
+      if (command.name === 'copy') expect(result).toEqual({ ok: true })
+      else expect(result).toBeUndefined()
+      expect(effects).toEqual(['ui.window.command.run'])
+      expect(clipboardWrites).toEqual([])
+    })
+  }
+}
+
+for (const transition of ['deactivated', 'replaced'] as const) {
+  for (const outcome of ['success', 'failure'] as const) {
+    test(`already-started clipboard ${outcome} retains its result without notifying a ${transition} activation`, async () => {
+      listResponse = () => pendingCodexState()
+      const context = makeContext()
+      activate(context)
+      await settle()
+      const started = Promise.withResolvers<void>()
+      const completion = Promise.withResolvers<void>()
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: async (url: string) => {
+          clipboardWrites.push(url)
+          started.resolve()
+          await completion.promise
+        }
+      } })
+      const running = commandHandler(COPY_LOGIN_LINK_COMMAND_ID)({ id: 'login-a', provider: 'codex', url: LOGIN_A_URL })
+      await started.promise
+      deactivate()
+      if (transition === 'replaced') {
+        activate(makeContext())
+        await settle()
+      }
+      if (outcome === 'success') completion.resolve()
+      else completion.reject(new Error('fixture clipboard refusal'))
+      expect(await running).toEqual(outcome === 'success' ? { ok: true } : { ok: false, reason: 'clipboard-failed' })
+      expect(clipboardWrites).toEqual([LOGIN_A_URL])
+      expect(toastCalls).toEqual([])
+    })
+  }
+}
+
+test('copy provider mismatch refuses the same current ID and URL without clipboard or Accounts RPC', async () => {
+  listResponse = () => pendingCodexState()
+  activate(makeContext())
+  await settle()
+  calls = []
+  const result = await commandHandler(COPY_LOGIN_LINK_COMMAND_ID)({ id: 'login-a', provider: 'claude', url: LOGIN_A_URL })
+  expect(result).toEqual({ ok: false, reason: 'login-changed' })
+  expect(clipboardWrites).toEqual([])
+  expect(calls).toEqual([])
+})

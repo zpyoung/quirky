@@ -99,7 +99,8 @@ async function routeCommandToOrigin(
   context: UiPluginContext,
   connId: number | undefined,
   id: RoutedCommandId,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  isCurrent: () => boolean
 ): Promise<OriginRoute> {
   if (connId === undefined) return { kind: 'local' }
   let identity: unknown
@@ -108,6 +109,7 @@ async function routeCommandToOrigin(
   } catch {
     return { kind: 'refused', refusal: { ok: false, reason: 'owner-unavailable' } }
   }
+  if (!isCurrent()) return { kind: 'refused', refusal: { ok: false, reason: 'owner-unavailable' } }
   if (identity === null || typeof identity !== 'object' || Array.isArray(identity) ||
       !('connId' in identity) || typeof identity.connId !== 'number' ||
       !Number.isSafeInteger(identity.connId) || identity.connId < 1) {
@@ -143,6 +145,7 @@ export function activate(context: UiPluginContext): void {
   const store = new AccountsUiStore(context)
   activeStore = store
   store.start()
+  const isCurrent = () => activeStore === store
   async function selectAccountCommand(args?: unknown): Promise<void | CommandRefusal> {
     const parsed = parseSelectAccountArgs(args)
     if (!parsed) return { ok: false, reason: 'invalid-args' }
@@ -150,9 +153,10 @@ export function activate(context: UiPluginContext): void {
     const route = await routeCommandToOrigin(context, parsed.connId, SELECT_ACCOUNT_COMMAND_ID, {
       provider: parsed.provider,
       accountId: parsed.accountId
-    })
+    }, isCurrent)
     if (route.kind === 'refused') return route.refusal
     if (route.kind === 'routed') return routeResult(route.result)
+    if (!isCurrent()) return { ok: false, reason: 'owner-unavailable' }
     const scope = store.getSnapshot().scope
     if (scope.kind === 'remote' && scope.status !== 'ready') return { ok: false, reason: 'owner-unavailable' }
     await store.selectAccount(parsed.provider, parsed.accountId)
@@ -164,9 +168,10 @@ export function activate(context: UiPluginContext): void {
     if (activeStore !== store) return { ok: false, reason: 'owner-unavailable' }
     const route = await routeCommandToOrigin(context, parsed.connId, REFRESH_COMMAND_ID, {
       ...(parsed.provider === undefined ? {} : { provider: parsed.provider })
-    })
+    }, isCurrent)
     if (route.kind === 'refused') return route.refusal
     if (route.kind === 'routed') return routeResult(route.result)
+    if (!isCurrent()) return { ok: false, reason: 'owner-unavailable' }
     await store.refresh(parsed.provider)
   }
 
@@ -178,12 +183,13 @@ export function activate(context: UiPluginContext): void {
       id: parsed.id,
       provider: parsed.provider,
       url: parsed.url
-    })
+    }, isCurrent)
     if (route.kind === 'refused') return route.refusal
     if (route.kind === 'routed') {
       if (isCommandRefusal(route.result)) return route.result
       return isCopySuccess(route.result) ? { ok: true } : { ok: false, reason: 'owner-unavailable' }
     }
+    if (!isCurrent()) return { ok: false, reason: 'login-changed' }
     const snapshot = store.getSnapshot()
     if (snapshot.scope.kind === 'remote') return { ok: false, reason: 'remote-owner' }
     const pending = snapshot.login ?? snapshot.accounts?.pendingLogin
