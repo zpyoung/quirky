@@ -62,6 +62,46 @@ function report(options: {
     },
   }
 }
+function version3Report(options: {
+  samples?: Partial<Record<Metric, number[]>>
+  wallSamples?: Partial<Record<Metric, number[]>>
+  unavailableSamples?: Partial<Record<Metric, number>>
+} = {}): SpeedReport {
+  const value = structuredClone(report({ samples: options.samples })) as unknown as {
+    profile: Record<string, unknown>
+    metrics: Record<Metric, { samplesMs: number[]; [key: string]: unknown }>
+  }
+  Object.assign(value.profile, {
+    workloadVersion: 3,
+    compositor: 'software',
+    frameTiming: 'native-final-frame-idle-cap-60hz',
+  })
+  for (const metric of METRICS) {
+    const result = value.metrics[metric]
+    result.wallSamplesMs = options.wallSamples?.[metric] ?? [...result.samplesMs]
+    result.unavailableSamples = options.unavailableSamples?.[metric] ?? 0
+  }
+  return value as unknown as SpeedReport
+}
+
+function mutableProfile(value: SpeedReport): Record<string, unknown> {
+  const mutable = value as unknown as { profile: Record<string, unknown> }
+  return mutable.profile
+}
+
+function mutableMetric(value: SpeedReport, metric: Metric): Record<string, unknown> {
+  const mutable = value as unknown as { metrics: Record<Metric, Record<string, unknown>> }
+  return mutable.metrics[metric]
+}
+
+function setEffectiveSamples(value: SpeedReport, metric: Metric, samples: number[]): void {
+  const result = mutableMetric(value, metric)
+  const medianMs = median(samples)
+  result.samplesMs = samples
+  result.medianMs = medianMs
+  result.budgetMiss = medianMs === null ? null : medianMs > BUDGETS[metric]
+}
+
 
 function pair(options: {
   status?: SpeedPair['status']
@@ -259,6 +299,136 @@ describe('report validation', () => {
     expect(validateReport(withoutCompositor)).toBeNull()
     expect(validateReport(v1WithCompositor)).toBeNull()
   })
+  test('accepts a strict v3 report with raw and effective samples', () => {
+    const value = version3Report({
+      samples: { echo: Array(20).fill(45) },
+      wallSamples: { echo: Array(20).fill(80) },
+    })
+    expect(validateReport(value)).toEqual(value)
+  })
+
+  test('bounds unavailable accounting counts by identical raw/effective samples', () => {
+    const unsupportedAllFallback = version3Report({
+      samples: { echo: Array(20).fill(45) },
+      wallSamples: { echo: Array(20).fill(80) },
+      unavailableSamples: { echo: 20 },
+    })
+    expect(validateReport(unsupportedAllFallback)).toBeNull()
+
+    const wallSamples = [45, ...Array(19).fill(80)]
+    const oneFallbackOfOneEqual = version3Report({
+      samples: { echo: Array(20).fill(45) },
+      wallSamples: { echo: wallSamples },
+      unavailableSamples: { echo: 1 },
+    })
+    expect(validateReport(oneFallbackOfOneEqual)).toEqual(oneFallbackOfOneEqual)
+
+    const tooManyFallbacks = version3Report({
+      samples: { echo: Array(20).fill(45) },
+      wallSamples: { echo: wallSamples },
+      unavailableSamples: { echo: 2 },
+    })
+    expect(validateReport(tooManyFallbacks)).toBeNull()
+  })
+
+  test('rejects malformed v3 clocks, counters, and frame timing modes', () => {
+    const invalid: SpeedReport[] = []
+
+    const missingWallSamples = version3Report()
+    delete mutableMetric(missingWallSamples, 'echo').wallSamplesMs
+    invalid.push(missingWallSamples)
+
+    const missingUnavailableCount = version3Report()
+    delete mutableMetric(missingUnavailableCount, 'echo').unavailableSamples
+    invalid.push(missingUnavailableCount)
+
+    const unequalArrays = version3Report()
+    mutableMetric(unequalArrays, 'echo').wallSamplesMs = [1]
+    invalid.push(unequalArrays)
+
+    const nonFiniteWallSample = version3Report()
+    mutableMetric(nonFiniteWallSample, 'echo').wallSamplesMs = [Number.NaN, ...Array(19).fill(1)]
+    invalid.push(nonFiniteWallSample)
+
+    const nonPositiveWallSample = version3Report()
+    mutableMetric(nonPositiveWallSample, 'echo').wallSamplesMs = [0, ...Array(19).fill(1)]
+    invalid.push(nonPositiveWallSample)
+
+    const nonFiniteEffectiveSample = version3Report()
+    setEffectiveSamples(nonFiniteEffectiveSample, 'echo', [Number.POSITIVE_INFINITY, ...Array(19).fill(1)])
+    invalid.push(nonFiniteEffectiveSample)
+
+    const nonPositiveEffectiveSample = version3Report()
+    setEffectiveSamples(nonPositiveEffectiveSample, 'echo', [0, ...Array(19).fill(1)])
+    invalid.push(nonPositiveEffectiveSample)
+
+    const effectiveExceedsWall = version3Report({
+      samples: { echo: Array(20).fill(80) },
+      wallSamples: { echo: Array(20).fill(80) },
+    })
+    setEffectiveSamples(effectiveExceedsWall, 'echo', Array(20).fill(81))
+    invalid.push(effectiveExceedsWall)
+
+    const differentStartupClocks = version3Report({
+      wallSamples: { startup: [2, ...Array(19).fill(1)] },
+    })
+    invalid.push(differentStartupClocks)
+
+    const differentDiffClocks = version3Report({
+      wallSamples: { diff: [2, ...Array(19).fill(1)] },
+    })
+    invalid.push(differentDiffClocks)
+
+    for (const unavailableSamples of [-1, 0.5, 21]) {
+      invalid.push(version3Report({ unavailableSamples: { echo: unavailableSamples } }))
+    }
+
+    invalid.push(version3Report({ unavailableSamples: { startup: 1 } }))
+    invalid.push(version3Report({ unavailableSamples: { diff: 1 } }))
+
+    const wrongFrameTiming = version3Report()
+    mutableProfile(wrongFrameTiming).frameTiming = 'native'
+    invalid.push(wrongFrameTiming)
+
+    const missingFrameTiming = version3Report()
+    delete mutableProfile(missingFrameTiming).frameTiming
+    invalid.push(missingFrameTiming)
+
+    const missingCompositor = version3Report()
+    delete mutableProfile(missingCompositor).compositor
+    invalid.push(missingCompositor)
+
+    for (const value of invalid) expect(validateReport(value)).toBeNull()
+  })
+
+  test('forbids v3 profile and metric fields on legacy reports', () => {
+    for (const workloadVersion of [1, 2] as const) {
+      const profileField = structuredClone(report()) as unknown as { profile: Record<string, unknown> }
+      profileField.profile.workloadVersion = workloadVersion
+      if (workloadVersion === 2) profileField.profile.compositor = 'software'
+      profileField.profile.frameTiming = 'native-final-frame-idle-cap-60hz'
+      expect(validateReport(profileField)).toBeNull()
+
+      const metricField = structuredClone(report()) as unknown as {
+        profile: Record<string, unknown>
+        metrics: Record<Metric, Record<string, unknown>>
+      }
+      metricField.profile.workloadVersion = workloadVersion
+      if (workloadVersion === 2) metricField.profile.compositor = 'software'
+      metricField.metrics.echo.unavailableSamples = 0
+      expect(validateReport(metricField)).toBeNull()
+
+      const wallMetricField = structuredClone(report()) as unknown as {
+        profile: Record<string, unknown>
+        metrics: Record<Metric, Record<string, unknown>>
+      }
+      wallMetricField.profile.workloadVersion = workloadVersion
+      if (workloadVersion === 2) wallMetricField.profile.compositor = 'software'
+      wallMetricField.metrics.echo.wallSamplesMs = Array(20).fill(1)
+      expect(validateReport(wallMetricField)).toBeNull()
+    }
+  })
+
 })
 
 
@@ -551,4 +721,59 @@ describe('Speed markdown and misses', () => {
     expect(markdown.startsWith('### Speed')).toBe(true)
     expect(markdown.length).toBeLessThan(20_000)
   })
+  test('keeps version 2 reports on the legacy rendering contract', () => {
+    const legacy = report()
+    const value: SpeedReport = {
+      ...legacy,
+      profile: { ...legacy.profile, workloadVersion: 2, compositor: 'software' },
+    }
+    const markdown = renderSpeed(value)
+
+    expect(validateReport(value)).toEqual(value)
+    expect(markdown).toContain('| Metric | Median (ms) | Samples | Budget (ms) | Budget result |')
+    expect(markdown).not.toContain('Raw wall median (ms)')
+    expect(markdown).not.toContain('Echo, switch and floodEcho budget values')
+  })
+
+  test('scenario 8: renders v3 clocks in parent and merge-base comparisons', () => {
+    const head = version3Report({
+      samples: { echo: Array(20).fill(45) },
+      wallSamples: { echo: Array(20).fill(80) },
+    })
+    head.commit = SHA_B
+    const explanation = 'Echo, switch and floodEcho budget values cap only demonstrated final-frame idle wait at 16.667 ms; native wall latency is shown separately. Startup and diff use wall time. Unavailable accounting uses wall time without a deduction.'
+
+    for (const basis of ['parent', 'merge-base'] as const) {
+      const comparison = comparePair(head, pair({ headCommit: SHA_B, baseCommit: SHA_A, basis }))
+      const markdown = renderSpeed(head, comparison)
+      expect(comparison.status).toBe('compared')
+      expect(markdown).toContain('| Metric | Raw wall median (ms) | Budget median (ms) | Unavailable accounting samples | Samples | Budget (ms) | Budget result |')
+      expect(markdown).toContain('| echo | 80 | 45 | 0 | 20 | 50 | pass |')
+      expect(markdown).toContain(explanation)
+    }
+  })
+
+  test('keeps a complete qualified 20-sample all-fallback report budgeted on wall time', () => {
+    const value = version3Report({
+      samples: {
+        startup: Array(20).fill(1000),
+        echo: Array(20).fill(45),
+        switch: Array(20).fill(150),
+        diff: Array(20).fill(500),
+        floodEcho: Array(20).fill(60),
+      },
+      unavailableSamples: { echo: 20, switch: 20, floodEcho: 20 },
+    })
+    const markdown = renderSpeed(value)
+
+    expect(validateReport(value)).toEqual(value)
+    expect(value.status).toBe('complete')
+    expect(value.qualified).toBe(true)
+    expect(markdown).toContain('| echo | 45 | 45 | 20 | 20 | 50 | pass |')
+    expect(markdown).toContain('| switch | 150 | 150 | 20 | 20 | 200 | pass |')
+    expect(markdown).toContain('| floodEcho | 60 | 60 | 20 | 20 | 100 | pass |')
+    expect(markdown).toContain('Echo, switch and floodEcho budget values cap only demonstrated final-frame idle wait at 16.667 ms; native wall latency is shown separately. Startup and diff use wall time. Unavailable accounting uses wall time without a deduction.')
+    expect(markdown).not.toContain('not measured:')
+  })
+
 })

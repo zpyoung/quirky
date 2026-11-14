@@ -263,6 +263,93 @@ describe('compatibility token scanning', () => {
       )
     }
   })
+  test('ignores escaped CSS-looking syntax in non-style CLI, markdown, and method-call literals', () => {
+    const content = [
+      "const args = ['tool --query=\\${filter}']",
+      "const prompt = `Use --spec\\u0060 as the markdown delimiter`",
+      "text.replace('var(\\x2d\\x2dcompat-px-40)', 'replacement')",
+      "array.append('var(\\x2d\\x2dcompat-px-40)')"
+    ].join('\n')
+
+    expect(scanTokens(source('plugins/acme.app/src/prompts.ts', content))).toEqual([])
+  })
+  test('reports escaped CSS in multiline JSX style text at its source location', () => {
+    const file = 'plugins/acme.app/src/style-text.tsx'
+    const content = [
+      'const prefix = 1',
+      'const View = () => (',
+      '  <style>',
+      '    .button {',
+      '      color: var(\\2d\\2dcompat-px-40);',
+      '    }',
+      '  </style>',
+      ')'
+    ].join('\n')
+    const offset = content.indexOf('\\2d\\2dcompat-px-40')
+    const evidence = scanTokens(source(file, content))
+
+    expect(evidence).toContainEqual(expect.objectContaining({
+      code: 'unresolved-style-token',
+      source: locationAt(file, content, offset)
+    }))
+  })
+
+
+  test('scans escaped CSS tokens throughout named style contexts', () => {
+    const slash = '\\'
+    const escapedToken = `var(${slash}x2d${slash}x2dcompat-px-40)`
+    const cssEscapedToken = `var(${slash}2d${slash}2dcompat-px-40)`
+    const escapedClass = `--ui-${slash}x66oo`
+    const jsString = (value: string) => `'${value}'`
+    const tagged = (tag: string, body: string) => `const themed = ${tag}\`${body}\``
+    const cases: [string, string][] = [
+      ['JSX style prop', `const View = () => <div style={{ color: ${jsString(escapedToken)} }} />`],
+      ['JSX className prop', `<div className="button ${escapedClass}" />`],
+      ['SVG presentation prop', `<svg><path fill="var(${slash}2d${slash}2dcompat-px-40)" /></svg>`],
+      ['style element text', `<style>.x { color: ${cssEscapedToken}; }</style>`],
+      ['css tagged template', tagged('css', `.x { color: ${cssEscapedToken}; }`)],
+      ['style tagged template', tagged('style', `.x { color: ${cssEscapedToken}; }`)],
+      ['stylesheet tagged template', tagged('stylesheet', `.x { color: ${cssEscapedToken}; }`)],
+      ['keyframes tagged template', tagged('keyframes', `from { color: ${cssEscapedToken}; }`)],
+      ['styled component template', tagged('styled.button', `.x { color: ${cssEscapedToken}; }`)],
+      ['style object property', `const options = { style: { color: ${jsString(escapedToken)} } }`],
+      ['nested styles object', `const options = { styles: { root: { color: ${jsString(escapedToken)} } } }`],
+      ['custom property object key', `const options = { '--ui-theme': { color: ${jsString(escapedToken)} } }`],
+      ...['style', 'styles', 'css', 'cssText', 'className', 'classes', 'stylesheet', 'paneStyles', 'rootStyle', 'buttonClassName', '_style']
+        .map((name): [string, string] => [`${name} variable binding`, `const ${name} = { color: ${jsString(escapedToken)} }`]),
+      ['JSX-bound style variable', `const custom = { color: ${jsString(escapedToken)} }; const View = () => <div style={custom} />`],
+      ['Object.assign-bound style variable', `const custom = { color: ${jsString(escapedToken)} }; Object.assign(element.style, custom)`],
+      ['createElement-bound style variable', `const custom = { color: ${jsString(escapedToken)} }; React.createElement('div', { style: custom })`],
+      ['CSSProperties annotation', `const themed: CSSProperties = { color: ${jsString(escapedToken)} }`],
+      ['CSSProperties satisfies expression', `const themed = { color: ${jsString(escapedToken)} } satisfies CSSProperties`],
+      ['CSSProperties assertion', `const themed = ({ color: ${jsString(escapedToken)} } as CSSProperties)`],
+      ['Record CSSProperties expression', `const themes = { root: { color: ${jsString(escapedToken)} } } satisfies Record<string, CSSProperties>`],
+      ['DOM style property', `element.style.color = ${jsString(escapedToken)}`],
+      ['CSSStyleDeclaration setProperty', `element.style.setProperty('color', ${jsString(escapedToken)})`],
+      ['Object.assign DOM style', `Object.assign(element.style, { color: ${jsString(escapedToken)} })`],
+      ['style setAttribute', `element.setAttribute('style', ${jsString(`color: ${escapedToken}`)})`],
+      ['fill setAttribute', `element.setAttribute('fill', ${jsString(escapedToken)})`],
+      ['className assignment', `element.className = '${escapedClass}'`],
+      ['classList method', `element.classList.add('${escapedClass}')`],
+      ['style element textContent', `const sheet = document.createElement('style'); sheet.textContent = ${jsString(`.x { color: ${escapedToken}; }`)}`],
+      ['style element innerHTML', `const sheet = document.createElement('style'); sheet.innerHTML = ${jsString(`.x { color: ${escapedToken}; }`)}`],
+      ['style element append', `const sheet = document.createElement('style'); sheet.append(${jsString(`.x { color: ${escapedToken}; }`)})`],
+      ['CSSStyleSheet replace', `sheet.replace(${jsString(`.x { color: ${escapedToken}; }`)})`],
+      ['CSSStyleSheet replaceSync', `sheet.replaceSync(${jsString(`.x { color: ${escapedToken}; }`)})`],
+      ['CSSStyleSheet insertRule', `sheet.insertRule(${jsString(`.x { color: ${escapedToken}; }`)})`],
+      ['CSSStyleSheet addRule', `sheet.addRule('.x', ${jsString(`color: ${escapedToken};`)})`],
+      ['constructed CSSStyleSheet', `const theme = new CSSStyleSheet(); theme.replaceSync(${jsString(escapedToken)})`],
+      ['EditorView.theme', `EditorView.theme({ '&': { color: ${jsString(escapedToken)} } })`],
+      ['HighlightStyle.define', `HighlightStyle.define([{ tag: tags.keyword, color: ${jsString(escapedToken)} }])`]
+    ]
+
+    for (const [context, content] of cases) {
+      expect(scanTokens(source('plugins/acme.app/src/style-context.tsx', content)), context).toContainEqual(
+        expect.objectContaining({ code: 'unresolved-style-token' })
+      )
+    }
+  })
+
 
   test('rejects visible dynamic custom-property prefixes but accepts numeric interpolation', () => {
     for (const content of ['const property = `--${prefix}`', 'const property = ` --${x}`', 'const style = `{--${x}: 1}`']) {

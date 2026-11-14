@@ -351,7 +351,15 @@ export function notRunVisuals(inventory: Inventory, code = 'not-run'): VisualRes
 }
 
 export async function measureVisuals(inventory: Inventory, options: VisualOptions, dependencies: VisualDependencies): Promise<VisualResult> {
-  const { result, cells } = initialResult(inventory, 'review-not-completed', 'Visual review has not completed.')
+  const measurementInventory = options.plugin
+    ? {
+        ...inventory,
+        plugins: inventory.plugins.filter((plugin) => plugin.id === options.plugin),
+        targets: inventory.targets.filter((target) => target.plugin === options.plugin)
+      }
+    : inventory
+  const scopedTargetIds = options.plugin ? new Set(measurementInventory.targets.map((target) => target.id)) : undefined
+  const { result, cells } = initialResult(measurementInventory, 'review-not-completed', 'Visual review has not completed.')
   if (inventory.dirty) {
     setAllFailure(cells, result.targets, 'dirty-source', 'Production source is dirty; visual capture was not started.')
     result.failures.push(evidence('dirty-source', 'Production source is dirty; visual capture was not started.'))
@@ -365,7 +373,7 @@ export async function measureVisuals(inventory: Inventory, options: VisualOption
     const captureOptions: CaptureOptions = {
       repoRoot: inventory.repoRoot,
       outputDir: options.outputDir,
-      only: [],
+      only: options.plugin ? [options.plugin] : [],
       skipBuild: false,
       themes: THEMES,
       timeoutMs: CAPTURE_TIMEOUT_MS,
@@ -395,16 +403,21 @@ export async function measureVisuals(inventory: Inventory, options: VisualOption
       setAllFailure(cells, result.targets, 'invalid-capture-manifest', detail)
     } else {
       appendManifestFailures(result, captured.failures)
-      const targets = fullTargets(inventory, captured)
-      result.targets.splice(0, result.targets.length, ...targets.targets)
+      const targets = fullTargets(measurementInventory, captured)
+      result.targets.splice(0, result.targets.length, ...targets.targets.filter((target) => !scopedTargetIds || scopedTargetIds.has(target.id)))
       for (const [targetId, detail] of targets.invalid) {
         result.failures.push(evidence('target-ownership', detail, targetId))
         result.operationalError = true
-        const target = targets.targets.find((candidate) => candidate.id === targetId)
+        const target = result.targets.find((candidate) => candidate.id === targetId)
         if (target) for (const theme of THEMES) cells.set(key(targetId, theme), failedCell(target, theme, 'target-ownership', detail))
       }
-      if (captured.scope !== 'full' || captured.selectors.length !== 0) {
-        const detail = 'Capture must cover the full unfiltered target inventory.'
+      const invalidScope = options.plugin
+        ? captured.scope !== 'filtered' || captured.selectors.length !== 1 || captured.selectors[0] !== options.plugin
+        : captured.scope !== 'full' || captured.selectors.length !== 0
+      if (invalidScope) {
+        const detail = options.plugin
+          ? `Capture must be filtered to exactly ${options.plugin}.`
+          : 'Capture must cover the full unfiltered target inventory.'
         result.failures.push(evidence('filtered-capture', detail))
         result.operationalError = true
         setAllFailure(cells, result.targets, 'filtered-capture', detail)

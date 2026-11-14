@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
-import { InlineAgentCard } from '@quirky/ui'
+import { InlineError } from '@quirky/ui'
 import { Composer, type ComposerActions } from './window/Composer'
 import { registerDockCommands } from './window/commands'
 import { DockSettings } from './window/Settings'
@@ -36,11 +36,7 @@ export function activate(context: UiPluginContext): void {
     const root = createRoot(element)
     const resolved = viewInput(input)
     if (resolved === null) {
-      root.render(
-        <div role="alert">
-          <InlineAgentCard title="Terminal dock unavailable" description="The terminal dock requires a pane and session." status="failing" />
-        </div>
-      )
+      root.render(<InlineError message="Terminal dock unavailable: the terminal dock requires a pane and session." />)
     } else {
       root.render(<Composer context={context} pane={resolved.pane} session={resolved.session} registerActions={registerActions} />)
     }
