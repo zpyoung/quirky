@@ -157,12 +157,15 @@ function validMetricResult(value: unknown, metric: Metric, version3: boolean): b
   if (!version3) return true
   if (!validReportSamples(value.wallSamplesMs) || value.wallSamplesMs.length !== value.samplesMs.length) return false
   if (typeof value.unavailableSamples !== 'number' || !Number.isSafeInteger(value.unavailableSamples) || value.unavailableSamples < 0 || value.unavailableSamples > value.samplesMs.length) return false
+  let identicalSamples = 0
   for (let index = 0; index < value.samplesMs.length; index += 1) {
     const sample = value.samplesMs[index]
     const wallSample = value.wallSamplesMs[index]
     if (sample === undefined || wallSample === undefined || sample > wallSample) return false
+    if (sample === wallSample) identicalSamples += 1
     if ((metric === 'startup' || metric === 'diff') && sample !== wallSample) return false
   }
+  if (value.unavailableSamples > identicalSamples) return false
   return (metric !== 'startup' && metric !== 'diff') || value.unavailableSamples === 0
 }
 

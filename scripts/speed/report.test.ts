@@ -307,6 +307,30 @@ describe('report validation', () => {
     expect(validateReport(value)).toEqual(value)
   })
 
+  test('bounds unavailable accounting counts by identical raw/effective samples', () => {
+    const unsupportedAllFallback = version3Report({
+      samples: { echo: Array(20).fill(45) },
+      wallSamples: { echo: Array(20).fill(80) },
+      unavailableSamples: { echo: 20 },
+    })
+    expect(validateReport(unsupportedAllFallback)).toBeNull()
+
+    const wallSamples = [45, ...Array(19).fill(80)]
+    const oneFallbackOfOneEqual = version3Report({
+      samples: { echo: Array(20).fill(45) },
+      wallSamples: { echo: wallSamples },
+      unavailableSamples: { echo: 1 },
+    })
+    expect(validateReport(oneFallbackOfOneEqual)).toEqual(oneFallbackOfOneEqual)
+
+    const tooManyFallbacks = version3Report({
+      samples: { echo: Array(20).fill(45) },
+      wallSamples: { echo: wallSamples },
+      unavailableSamples: { echo: 2 },
+    })
+    expect(validateReport(tooManyFallbacks)).toBeNull()
+  })
+
   test('rejects malformed v3 clocks, counters, and frame timing modes', () => {
     const invalid: SpeedReport[] = []
 
