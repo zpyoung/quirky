@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { act } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import type { CommandHandler, MountFunction, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
+import type { CommandHandler, MountFunction, QuirkyEvent, UiExecuteCommandOptions, UiPluginContext } from '@quirky/protocol'
 import type { DockState, PickerItem, SendResult } from '../src/types'
 
 const COMPOSER_VIEW = 'view:quirky.terminal-dock/composer'
@@ -15,6 +15,9 @@ type PickerKind = 'slash' | 'file'
 type PendingPick = { resolve(value: unknown): void; reject(error: unknown): void }
 
 type FakeOptions = {
+  connId?: number
+  owner?: Fake
+  windows?: Map<number, Fake>
   state?: DockState
   history?: string[]
   pickers?: Partial<Record<PickerKind, PickerItem[]>>
@@ -33,7 +36,7 @@ type FakeOptions = {
 type Fake = {
   context: UiPluginContext
   calls: Call[]
-  executedCommands: { id: string; args?: unknown }[]
+  executedCommands: { id: string; args?: unknown; options?: UiExecuteCommandOptions }[]
   provided: Map<string, unknown>
   opened: { id: string; input?: unknown }[]
   toasts: { title: string; body: string }[]
@@ -98,7 +101,7 @@ function fakeContext(options: FakeOptions = {}): Fake {
   let pickFailureOrdinal = 0
   let failSettingSetsRemaining = options.failSettingSet ?? 0
   const pendingPicks = new Map<PickerKind, PendingPick>()
-  const executedCommands: { id: string; args?: unknown }[] = []
+  const executedCommands: { id: string; args?: unknown; options?: UiExecuteCommandOptions }[] = []
   const sent: { id?: string; text: string; params: Record<string, unknown> }[] = []
   let completeDeferredSend: ((recoveredDraft: string, outcome: SendResult['outcome']) => void) | null = null
   let resolveDeferredSend: ((outcome: SendResult['outcome'], accepted: boolean) => void) | null = null
@@ -120,6 +123,13 @@ function fakeContext(options: FakeOptions = {}): Fake {
     return current
   }
   const handlers: Record<string, Handler> = {
+    'ui.window.self': () => ({ connId: options.connId ?? 1 }),
+    'ui.window.command.run': async (params) => {
+      const window = options.windows?.get(Number(params.connId))
+      const handler = window?.provided.get(String(params.id)) as CommandHandler | undefined
+      if (!handler) throw new Error(`unknown window command: ${params.connId}/${params.id}`)
+      return { result: await handler(params.args) }
+    },
     [`${PLUGIN_METHOD}get`]: () => {
       const ordinal = ++getOrdinal
       if (options.holdFirstGet && ordinal === 1) {
@@ -251,9 +261,9 @@ function fakeContext(options: FakeOptions = {}): Fake {
       if (!(key in settings)) throw new Error(`unknown setting: ${name}`)
       return settings[key]
     },
-    async executeCommand(id: string, args?: unknown) {
-      executedCommands.push({ id, args })
-      const handler = provided.get(id) as CommandHandler | undefined
+    async executeCommand(id: string, args?: unknown, commandOptions?: UiExecuteCommandOptions) {
+      executedCommands.push({ id, args, options: commandOptions })
+      const handler = (options.owner?.provided ?? provided).get(id) as CommandHandler | undefined
       if (handler === undefined) throw new Error(`unknown command: ${id}`)
       return handler(args)
     },
@@ -531,9 +541,79 @@ describe('terminal dock shared states and attachment routing', () => {
 
     expect(fake.executedCommands).toEqual([{
       id: 'command:quirky.terminal-dock/attach',
-      args: { pane: 'pane-a' }
+      args: { pane: 'pane-a', connId: 1 },
+      options: { activateOwner: false }
     }])
     expect(inputClicks).toBe(1)
+  })
+
+  test('opens only the originating composer input after an auxiliary-window command forwards through its owner', async () => {
+    const windows = new Map<number, Fake>()
+    const owner = fakeContext({ connId: 1, windows })
+    const auxiliary = fakeContext({ connId: 2, owner, windows })
+    windows.set(1, owner)
+    windows.set(2, auxiliary)
+    const ownerView = await openComposer(owner)
+    const disposeOwner = mounted
+    mounted = undefined
+    element = null
+    try {
+      const auxiliaryView = await openComposer(auxiliary)
+      let ownerClicks = 0
+      let auxiliaryClicks = 0
+      ownerView.byLabel('Attach files')!.addEventListener('click', () => { ownerClicks += 1 })
+      auxiliaryView.byLabel('Attach files')!.addEventListener('click', () => { auxiliaryClicks += 1 })
+
+      await auxiliaryView.click(auxiliaryView.byLabel('Attach file')!)
+      await settle()
+
+      expect(ownerClicks).toBe(0)
+      expect(auxiliaryClicks).toBe(1)
+      expect(auxiliary.executedCommands).toEqual([{
+        id: 'command:quirky.terminal-dock/attach',
+        args: { pane: 'pane-a', connId: 2 },
+        options: { activateOwner: false }
+      }])
+      expect(owner.callsTo('ui.window.command.run').map((call) => call.params)).toEqual([{
+        connId: 2, id: 'command:quirky.terminal-dock/attach', args: { pane: 'pane-a' }
+      }])
+      expect(auxiliary.callsTo('ui.window.command.run')).toHaveLength(0)
+      expect(owner.callsTo(`${PLUGIN_METHOD}attach`)).toHaveLength(0)
+      expect(auxiliary.callsTo(`${PLUGIN_METHOD}attach`)).toHaveLength(0)
+    } finally {
+      if (disposeOwner) await act(async () => void disposeOwner())
+      ownerView.root.remove()
+    }
+  })
+
+  test('preserves success and unmounted-pane outcomes when forwarding the attachment command', async () => {
+    const windows = new Map<number, Fake>()
+    const owner = fakeContext({ connId: 1, windows })
+    const auxiliary = fakeContext({ connId: 2, owner, windows })
+    windows.set(1, owner)
+    windows.set(2, auxiliary)
+    activate(owner.context)
+    await openComposer(auxiliary)
+    const attach = owner.provided.get('command:quirky.terminal-dock/attach') as CommandHandler
+
+    expect(await attach({ pane: 'pane-a', connId: 2 })).toEqual({ ok: true })
+    expect(await attach({ pane: 'missing', connId: 2 })).toEqual({
+      ok: false, reason: 'The composer is not mounted for pane missing.'
+    })
+  })
+
+  test('refuses invalid attachment window targets before opening a picker or attaching bytes', async () => {
+    const fake = fakeContext()
+    const view = await openComposer(fake)
+    const attach = fake.provided.get('command:quirky.terminal-dock/attach') as CommandHandler
+    let inputClicks = 0
+    view.byLabel('Attach files')!.addEventListener('click', () => { inputClicks += 1 })
+    for (const connId of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '2', null]) {
+      expect(await attach({ pane: 'pane-a', connId })).toEqual({ ok: false, reason: 'connId must be a positive safe integer.' })
+    }
+    expect(inputClicks).toBe(0)
+    expect(fake.callsTo('ui.window.command.run')).toHaveLength(0)
+    expect(fake.callsTo(`${PLUGIN_METHOD}attach`)).toHaveLength(0)
   })
 
   test('forwards headless path and base64 attachments and reports an unmounted interactive pane', async () => {

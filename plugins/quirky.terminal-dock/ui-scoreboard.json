@@ -726,12 +726,12 @@
         "target": "command:quirky.terminal-dock/attach",
         "invoke": {
           "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
-          "quote": "context.executeCommand('command:quirky.terminal-dock/attach', { pane })"
+          "quote": "context.executeCommand('command:quirky.terminal-dock/attach', { pane, connId: identity.connId }, { activateOwner: false })"
         },
         "via": [
           {
             "file": "plugins/quirky.terminal-dock/src/window/Composer.tsx",
-            "quote": "const openAttachmentPicker = () => context.executeCommand('command:quirky.terminal-dock/attach', { pane })"
+            "quote": "const openAttachmentPicker = async () => {\n    setError(null)\n    try {\n      const identity = await context.call('ui.window.self', {})\n      if (!record(identity) || typeof identity.connId !== 'number' || !Number.isSafeInteger(identity.connId) || identity.connId <= 0) {\n        throw new Error('ui.window.self returned an invalid connection identity.')\n      }\n      await context.executeCommand('command:quirky.terminal-dock/attach', { pane, connId: identity.connId }, { activateOwner: false })\n    } catch (reason) {\n      setError(errorMessage(reason))\n    }\n  }"
           }
         ]
       }

@@ -1,6 +1,6 @@
 {
   "id": "quirky.terminal-dock",
-  "apiVersion": "1.12.0",
+  "apiVersion": "1.15.0",
   "name": "Terminal Dock",
   "version": "0.1.0",
   "description": "A pane-scoped composer for recognized terminal agents, with acknowledged serialized sends and durable draft recovery.",
@@ -2004,7 +2004,8 @@
             "path": { "type": "string" },
             "name": { "type": "string" },
             "mime": { "type": "string" },
-            "base64": { "type": "string" }
+            "base64": { "type": "string" },
+            "connId": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
           },
           "additionalProperties": false
         }

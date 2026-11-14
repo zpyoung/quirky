@@ -105,11 +105,41 @@ export function registerDockCommands(context: UiPluginContext, handles: HandleMa
   context.provide(`command:${PLUGIN_METHOD}attach`, async (raw?: unknown) => {
     const target = await resolve(raw)
     if ('ok' in target) return target
+    const connId = target.args.connId
+    if ('connId' in target.args && (typeof connId !== 'number' || !Number.isSafeInteger(connId) || connId <= 0)) {
+      return fail('connId must be a positive safe integer.')
+    }
     if (target.args.path !== undefined || target.args.base64 !== undefined) {
+      const attachArgs: Args = { ...target.args, pane: target.pane }
+      delete attachArgs.connId
       try {
-        return await context.call(`${PLUGIN_METHOD}attach`, { ...target.args, pane: target.pane })
+        return await context.call(`${PLUGIN_METHOD}attach`, attachArgs)
       } catch (error) {
         return fail(errorText(error))
+      }
+    }
+    if (typeof connId === 'number') {
+      let identity: unknown
+      try {
+        identity = await context.call('ui.window.self', {})
+      } catch (error) {
+        return fail(errorText(error))
+      }
+      if (!record(identity) || typeof identity.connId !== 'number' || !Number.isSafeInteger(identity.connId) || identity.connId <= 0) {
+        return fail('ui.window.self returned an invalid connection identity.')
+      }
+      if (identity.connId !== connId) {
+        try {
+          const forwarded = await context.call('ui.window.command.run', {
+            connId,
+            id: `command:${PLUGIN_METHOD}attach`,
+            args: { pane: target.pane }
+          })
+          if (!record(forwarded) || !('result' in forwarded)) return fail('ui.window.command.run returned an invalid command result.')
+          return forwarded.result
+        } catch (error) {
+          return fail(errorText(error))
+        }
       }
     }
     const handle = handles.get(target.pane)

@@ -653,7 +653,18 @@ export function Composer({ context, pane, session, registerActions }: Props) {
     }).catch((reason: unknown) => setError(errorMessage(reason)))
   }
 
-  const openAttachmentPicker = () => context.executeCommand('command:quirky.terminal-dock/attach', { pane })
+  const openAttachmentPicker = async () => {
+    setError(null)
+    try {
+      const identity = await context.call('ui.window.self', {})
+      if (!record(identity) || typeof identity.connId !== 'number' || !Number.isSafeInteger(identity.connId) || identity.connId <= 0) {
+        throw new Error('ui.window.self returned an invalid connection identity.')
+      }
+      await context.executeCommand('command:quirky.terminal-dock/attach', { pane, connId: identity.connId }, { activateOwner: false })
+    } catch (reason) {
+      setError(errorMessage(reason))
+    }
+  }
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.currentTarget.files ?? [])
