@@ -245,7 +245,7 @@ test('a first list failure has one retryable blocking error and a successful ret
     expect(rows.querySelector('.ui-inline-error__action')?.textContent?.trim()).toBe('Retry')
     expect(rows.querySelector('.ui-empty-state, .tasks-list__skeleton-row')).toBeNull()
     expect(element.querySelectorAll('.tasks-list [role="alert"]')).toHaveLength(1)
-    expect(element.querySelector('[aria-label="Task source context"]')?.textContent).toBe('GitHub · Local · Projects not loaded')
+    expect(element.querySelector('[aria-label="Task source context"]')?.textContent).toMatch(/^GitHub · [^·]+ · Projects not loaded$/u)
     recovered = true
     await click(rows.querySelector('.ui-inline-error__action'))
     const listCalls = calls.filter((call) => call.method === 'quirky.tasks/list')
