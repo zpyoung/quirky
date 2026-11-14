@@ -12,12 +12,29 @@ export const UI_CONTROL_ACTIONS = [
   'unlink-reference'
 ] as const
 
-export type UiControlArgs =
+type LegacyUiControlArgs =
   | { action: 'open-workspace-menu' | 'close-workspace-menu'; workspace: string }
   | { action: 'open-vm-menu' | 'close-vm-menu'; vm: string }
   | { action: 'add-reference'; worktree: string; url: string; label: string }
   | { action: 'unlink-reference'; worktree: string; url: string }
 
+
+/** A scope-owned draft operation addressed by its public resource id. */
+export type ScopedUiControlArgs = {
+  action: 'control'
+  scope: string
+  target: string
+  operation: string
+  payload: Record<string, unknown>
+}
+
+/** Requests may omit payload; dispatch normalizes that omission to an empty object. */
+export type ScopedUiControlInput = Omit<ScopedUiControlArgs, 'payload'> & {
+  payload?: Record<string, unknown>
+}
+
+export type UiControlArgs = LegacyUiControlArgs | ScopedUiControlArgs
+export type UiControlInput = LegacyUiControlArgs | ScopedUiControlInput
 export type UiControlResult = UiControlArgs & { delivered: number }
 export type UiControlTarget = 'remote-workspaces' | 'vm-environments' | 'worktree-details'
 
@@ -25,6 +42,8 @@ type UiControlHandler = (args: UiControlArgs) => boolean
 
 type Controllers = Map<UiControlTarget, Set<UiControlHandler>>
 const controllersByContext = new WeakMap<UiPluginContext, Controllers>()
+type ScopedUiControlHandler = (args: ScopedUiControlArgs) => boolean
+const scopesByContext = new WeakMap<UiPluginContext, Map<string, Set<ScopedUiControlHandler>>>()
 const INVALID_ARGS = 'Worktree UI control needs a known action and its target.'
 
 type UiControlPayload = {
@@ -34,6 +53,10 @@ type UiControlPayload = {
   worktree?: unknown
   url?: unknown
   label?: unknown
+  scope?: unknown
+  target?: unknown
+  operation?: unknown
+  payload?: unknown
 }
 
 function isNonBlankString(value: unknown): value is string {
@@ -49,6 +72,16 @@ function normalizeUiControlArgs(raw: unknown): UiControlArgs {
   const value = raw as UiControlPayload
 
   switch (value.action) {
+    case 'control':
+      if (!isNonBlankString(value.scope) || !isNonBlankString(value.target) || !isNonBlankString(value.operation)) return invalidArgs()
+      if (value.payload !== undefined && (typeof value.payload !== 'object' || value.payload === null || Array.isArray(value.payload))) return invalidArgs()
+      return {
+        action: 'control',
+        scope: value.scope,
+        target: value.target,
+        operation: value.operation,
+        payload: value.payload === undefined ? {} : value.payload as Record<string, unknown>
+      }
     case 'open-workspace-menu':
     case 'close-workspace-menu':
       if (!isNonBlankString(value.workspace)) return invalidArgs()
@@ -74,7 +107,7 @@ function normalizeUiControlArgs(raw: unknown): UiControlArgs {
   }
 }
 
-function targetFor(args: UiControlArgs): UiControlTarget {
+function targetFor(args: LegacyUiControlArgs): UiControlTarget {
   switch (args.action) {
     case 'open-workspace-menu':
     case 'close-workspace-menu':
@@ -118,9 +151,46 @@ export function registerUiController(
   }
 }
 
+/** Registers an independent mounted scope; only accepted operations count toward delivery. */
+export function registerUiControlScope(
+  context: UiPluginContext,
+  scope: string,
+  handler: (args: ScopedUiControlArgs) => boolean
+): () => void {
+  if (!isNonBlankString(scope)) return invalidArgs()
+  let scopes = scopesByContext.get(context)
+  if (!scopes) {
+    scopes = new Map()
+    scopesByContext.set(context, scopes)
+  }
+  let handlers = scopes.get(scope)
+  if (!handlers) {
+    handlers = new Set()
+    scopes.set(scope, handlers)
+  }
+  const registration: ScopedUiControlHandler = (args) => handler(args)
+  handlers.add(registration)
+  return () => {
+    if (!handlers.delete(registration)) return
+    if (handlers.size !== 0) return
+    scopes.delete(scope)
+    if (scopes.size === 0) scopesByContext.delete(context)
+  }
+}
+
 /** Validates an action and dispatches it to matching mounted targets. */
 export function dispatchUiControl(context: UiPluginContext, args: unknown): UiControlResult {
   const normalized = normalizeUiControlArgs(args)
+  if (normalized.action === 'control') {
+    const handlers = scopesByContext.get(context)?.get(normalized.scope)
+    let delivered = 0
+    if (handlers) {
+      for (const handler of handlers) {
+        if (handler(normalized)) delivered++
+      }
+    }
+    return { ...normalized, delivered }
+  }
   const handlers = controllersByContext.get(context)?.get(targetFor(normalized))
   let delivered = 0
   if (handlers) {
@@ -131,12 +201,12 @@ export function dispatchUiControl(context: UiPluginContext, args: unknown): UiCo
   return { ...normalized, delivered } as UiControlResult
 }
 
-function uiControlRequest(args: UiControlArgs): { command: typeof UI_CONTROL_COMMAND; args: UiControlArgs } {
+function uiControlRequest(args: UiControlInput): { command: typeof UI_CONTROL_COMMAND; args: UiControlInput } {
   return { command: UI_CONTROL_COMMAND, args }
 }
 
 /** Sends an action to this context's current window and returns its delivery result. */
-export async function requestUiControl(context: UiPluginContext, args: UiControlArgs): Promise<UiControlResult> {
+export async function requestUiControl(context: UiPluginContext, args: UiControlInput): Promise<UiControlResult> {
   const connId = await currentWindowId(context)
   const request = uiControlRequest(args)
   const reply = await context.call('ui.window.command.run', {
