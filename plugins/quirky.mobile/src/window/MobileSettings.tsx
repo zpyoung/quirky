@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Badge, Button, FormRow, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'
+import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { MobilePairingResult, UiPluginContext } from '@quirky/protocol'
 import { createPairing } from './api'
 import { DeviceList } from './DeviceList'
@@ -107,14 +107,16 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
 
 
   if (mobile.loading && mobile.state === null) {
-    return <main className="ui-stack"><p role="status">Loading Mobile settings…</p></main>
+    return <main className="ui-stack"><NoticeLine>Loading Mobile settings…</NoticeLine></main>
   }
   if (mobile.state === null) {
     return (
       <main className="ui-stack">
         <SectionHeader title="Mobile" />
-        <p className="ui-error-text" role="alert">Unable to load Mobile settings: {mobile.error ?? 'The daemon returned no state.'}</p>
-        <div className="ui-cluster"><Button onClick={() => void mobile.refresh()}>Try again</Button></div>
+        <InlineError
+          message={`Unable to load Mobile settings: ${mobile.error ?? 'The daemon returned no state.'}`}
+          action={{ label: 'Try again', onAction: () => void mobile.refresh() }}
+        />
       </main>
     )
   }
@@ -125,8 +127,8 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
         <SectionHeader title="Mobile" actions={<Button onClick={() => context.openView(MOBILE_PAGE_ID)}>Open Mobile page</Button>} />
         <p className="ui-text-muted">Control terminals and agents from your phone.</p>
       </div>
-      {mobile.error && <p className="ui-error-text" role="alert">Could not refresh Mobile state: {mobile.error}</p>}
-      {actionError && <p className="ui-error-text" role="alert">{actionError}</p>}
+      {mobile.error && <InlineError message={`Could not refresh Mobile state: ${mobile.error}`} />}
+      {actionError && <InlineError message={actionError} />}
 
       <ToolPanelFrame title="Desktop identity">
         <div className="ui-stack">

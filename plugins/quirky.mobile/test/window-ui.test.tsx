@@ -106,6 +106,87 @@ function mobileCall(method: string, params: Record<string, unknown>) {
 }
 
 describe('Mobile desktop UI behavior', () => {
+  test('shows shared page loading, load retry and refresh errors', async () => {
+    const { promise, reject: rejectLoad } = Promise.withResolvers<MobileState>()
+    let calls = 0
+    let changed!: Parameters<UiPluginContext['subscribe']>[0]
+    const context = pluginContext((method, params) => {
+      if (method === 'quirky.mobile/state') {
+        calls++
+        if (calls === 1) return promise
+        if (calls === 3) throw new Error('refresh down')
+      }
+      return mobileCall(method, params)
+    })
+    context.subscribe = (listener) => { changed = listener; return () => {} }
+    await render(<MobilePage context={context} input={{ stage: 'intro' }} />)
+    expect(container.querySelector('.ui-notice-line')?.textContent).toBe('Loading Mobile…')
+    expect(container.querySelector('p[role="status"]')).toBeNull()
+    await act(async () => { rejectLoad(new Error('daemon down')) })
+    expect(container.querySelector('.ui-notice-line')).toBeNull()
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Unable to load Mobile settings: daemon down')
+    expect(container.querySelector('.ui-inline-error__action')?.textContent).toBe('Try again')
+    await act(async () => { container.querySelector<HTMLButtonElement>('.ui-inline-error__action')!.click() })
+    expect(calls).toBe(2)
+    expect(container.querySelector('.ui-inline-error')).toBeNull()
+    expect(container.textContent).toContain('Control terminals and agents from your phone.')
+    await act(async () => { await changed({ type: 'quirky.mobile/changed', data: {} }) })
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Could not refresh Mobile state: refresh down')
+    expect(container.querySelector('p.ui-error-text')).toBeNull()
+    await render(<MobilePage key="empty-state-result" context={pluginContext(() => undefined)} />)
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Unable to load Mobile settings: The daemon returned no state.')
+  })
+
+  test('shows shared settings loading, load retry and refresh errors', async () => {
+    const { promise, reject: rejectLoad } = Promise.withResolvers<MobileState>()
+    let calls = 0
+    let changed!: Parameters<UiPluginContext['subscribe']>[0]
+    const context = pluginContext((method, params) => {
+      if (method === 'quirky.mobile/state') {
+        calls++
+        if (calls === 1) return promise
+        if (calls === 3) throw new Error('refresh down')
+      }
+      return mobileCall(method, params)
+    })
+    context.subscribe = (listener) => { changed = listener; return () => {} }
+    await render(<MobileSettings context={context} />)
+    expect(container.querySelector('.ui-notice-line')?.textContent).toBe('Loading Mobile settings…')
+    expect(container.querySelector('p[role="status"]')).toBeNull()
+    await act(async () => { rejectLoad(new Error('daemon down')) })
+    expect(container.querySelector('.ui-notice-line')).toBeNull()
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Unable to load Mobile settings: daemon down')
+    expect(container.querySelector('.ui-inline-error__action')?.textContent).toBe('Try again')
+    await act(async () => { container.querySelector<HTMLButtonElement>('.ui-inline-error__action')!.click() })
+    expect(calls).toBe(2)
+    expect(container.querySelector('.ui-inline-error')).toBeNull()
+    expect(container.textContent).toContain('Control terminals and agents from your phone.')
+    await act(async () => { await changed({ type: 'quirky.mobile/changed', data: {} }) })
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Could not refresh Mobile state: refresh down')
+    expect(container.querySelector('p.ui-error-text')).toBeNull()
+  })
+
+  test('shows pairing action failures through shared errors on both views', async () => {
+    for (const view of ['page', 'settings']) {
+      let pairs = 0
+      const context = pluginContext((method, params) => {
+        if (method === 'quirky.mobile/pair') { pairs++; throw new Error('listener offline') }
+        return mobileCall(method, params)
+      })
+      await render(view === 'page'
+        ? <MobilePage key={view} context={context} input={{ stage: 'pair' }} />
+        : <MobileSettings key={view} context={context} />)
+      if (view === 'settings') await act(async () => {
+        const generate = [...container.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent === 'Generate QR code')
+        generate!.click()
+      })
+      await flushEffects()
+      expect(pairs).toBe(1)
+      expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('listener offline')
+      expect(container.querySelector('p.ui-error-text')).toBeNull()
+    }
+  })
+
   test('copies pairing codes through the registered command without exposing its URL in the result', async () => {
     const copied: string[] = []
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied.push(text) } } })
@@ -227,7 +308,7 @@ describe('Mobile desktop UI behavior', () => {
     await flushEffects()
     await flushEffects()
 
-    expect(calls).toContain('quirky.mobile/pair')
+    expect(calls.filter((method) => method === 'quirky.mobile/pair')).toHaveLength(1)
     expect(reports.some((report) => {
       if (typeof report !== 'object' || report === null || !('pairingAvailable' in report)) return false
       return report.pairingAvailable === true
@@ -281,6 +362,22 @@ describe('Mobile desktop UI behavior', () => {
     })
 
     expect(revoked).toBe(true)
-    expect(container.querySelector('[role="alert"]')).not.toBeNull()
+    expect(container.querySelectorAll('.ui-inline-error').length).toBe(1)
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Device revoked, but the paired-device list could not refresh: daemon unavailable')
+    expect(container.querySelector('[role="status"]')).toBeNull()
+
+    const devices = [{ deviceId: 'phone-1', name: 'Phone', pairedAt: 1, lastSeenAt: 1 }]
+    await render(<DeviceList context={context} devices={devices} onChanged={async () => {}} />)
+    await act(async () => { container.querySelector<HTMLButtonElement>('button[aria-label="Revoke device Phone"]')!.click() })
+    expect(container.querySelector('.ui-inline-error')).toBeNull()
+    expect(container.querySelector('p.ui-text-muted[role="status"]')?.textContent).toBe('Device revoked.')
+
+    const failingContext = pluginContext(() => { throw new Error('revoke unavailable') })
+    await render(<DeviceList context={failingContext} devices={devices} onChanged={async () => {}} />)
+    await act(async () => { container.querySelector<HTMLButtonElement>('button[aria-label="Revoke device Phone"]')!.click() })
+    expect(container.querySelector('.ui-inline-error__message')?.textContent).toBe('Failed to revoke device: revoke unavailable')
+    expect(container.querySelector('[role="status"]')).toBeNull()
+    await render(<DeviceList key="no-devices" context={context} devices={[]} onChanged={async () => {}} />)
+    expect(container.querySelector('.ui-empty-state')?.textContent).toBe('No devices paired yet.')
   })
 })
