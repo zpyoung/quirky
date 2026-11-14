@@ -434,6 +434,43 @@ test('repository labels appear as choices instead of an empty state', async () =
   expect(dialog.querySelector('.ui-empty-state')).toBeNull()
 })
 
+test.each(['resolve', 'reject'] as const)('an older reviewer read that %ss cannot replace newer suggestions', async (outcome) => {
+  const first = hold<unknown>()
+  const second = hold<unknown>()
+  let reviewerReads = 0
+  const { element } = await mountList({
+    state: withNavigation({ detail: detailTarget(274) }),
+    handlers: {
+      'quirky.tasks/mergeMetadata': () => ({ review: { requestedReviewers: ['zach'] }, mergeMetadataKnown: true }),
+      'quirky.tasks/options': (params) => {
+        if (params.kind !== 'reviewers') return params.kind === 'labels' ? { labels: [] } : { assignees: [] }
+        reviewerReads += 1
+        return reviewerReads === 1 ? first.promise : second.promise
+      }
+    }
+  })
+  const reviewerButton = () => element.querySelector('.tasks-pr button[aria-haspopup="dialog"]')
+  await click(reviewerButton())
+  await click(reviewerButton())
+  await click(reviewerButton())
+  expect(reviewerReads).toBe(2)
+  await act(async () => { second.resolve({ recentlyActive: ['alex'], suggestions: ['sam'] }) })
+  const dialog = element.querySelector('[role="dialog"][aria-label="Reviewers for PR #274"]')!
+  expect(dialog.textContent).toContain('alex')
+  expect(dialog.textContent).toContain('sam')
+  await act(async () => {
+    if (outcome === 'reject') first.reject(new Error('Old reviewer read failed.'))
+    else first.resolve({ recentlyActive: ['outdated'], suggestions: [] })
+  })
+  expect(dialog.textContent).toContain('alex')
+  expect(dialog.textContent).toContain('sam')
+  expect(dialog.textContent).not.toContain('outdated')
+  expect(inlineMessages(element.querySelector('.tasks-list')!)).toEqual([])
+  await click(reviewerButton())
+  await click(reviewerButton())
+  expect(reviewerReads).toBe(2)
+})
+
 test('a failed reviewer suggestions read leaves loading and can be retried on the next open', async () => {
   let reviewerReads = 0
   const heldSecondRead = hold<unknown>()

@@ -46,6 +46,8 @@ test('list fragment covers its reachable states and commands without redeclaring
   const filters = coverage.actions.find((entry) => entry.site.quote.includes("requestControl('filters', !filtersOpen)"))
   expect(filters && 'route' in filters && filters.route.target).toBe('command:quirky.tasks/list-control')
   expect(audit.some((entry) => entry.code === 'action-routed' && entry.source?.file === CONTROL && entry.api === 'ui.command.run' && entry.cli === 'quirky ui run command:quirky.tasks/list-control')).toBe(true)
+  const clearFilters = coverage.actions.find((entry) => entry.site.quote.includes("setFilter('all', [])"))
+  expect(clearFilters && 'route' in clearFilters && clearFilters.route.target).toBe('quirky.tasks/navigate')
 })
 
 test('a stale list state witness reports missing evidence in its own fragment', () => {

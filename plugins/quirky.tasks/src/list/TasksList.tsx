@@ -184,6 +184,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   const [reviewerText, setReviewerText] = useState('')
   const [reviewerOptions, setReviewerOptions] = useState<Record<string, ReviewerOptions>>({})
   const failedReviewerOptions = useRef(new Set<string>())
+  const reviewerReadGenerations = useRef(new Map<string, number>())
   const [filterOptions, setFilterOptions] = useState<FilterOptionsStatus>({ status: 'idle' })
   const [mergeFor, setMergeFor] = useState<string | null>(null)
   const [mergeMetadata, setMergeMetadata] = useState<Record<string, MergeMetadata>>({ ...seed?.merge })
@@ -909,9 +910,12 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
     const opening = reviewersFor !== key
     const ownerKey = currentKey
     const ownerGeneration = viewGeneration.current
-    const ownsRead = () => viewGeneration.current === ownerGeneration && latestKey.current === ownerKey
     setReviewersFor(opening ? key : null)
     if (!opening) return
+    const generation = (reviewerReadGenerations.current.get(key) ?? 0) + 1
+    reviewerReadGenerations.current.set(key, generation)
+    const ownsRead = () => reviewerReadGenerations.current.get(key) === generation
+      && viewGeneration.current === ownerGeneration && latestKey.current === ownerKey
     setReviewerText('')
     const retryFailed = failedReviewerOptions.current.delete(key)
     if (reviewerOptions[key] && !retryFailed) return
