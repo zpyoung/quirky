@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import type { QuirkyClient } from '@quirky/protocol'
-import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
+import { RpcErrorCode, type QuirkyClient } from '@quirky/protocol'
+import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, waitForAsync, type Harness } from '../../../packages/daemon/test/helpers'
 
 type Worktree = { id: string; path: string }
 type EditorBuffer = {
@@ -22,6 +23,7 @@ type EditorBuffer = {
   diskContentLength: number | null
   diskContentBytes: number | null
   diskSignature: string | null
+  revision: number
   contentRevision: number
   dirty: boolean
   preview: boolean
@@ -35,6 +37,254 @@ type EditorState = {
 }
 type EditorCloseResult = { closed: true } | { closed: false; needsDecision?: boolean }
 type EditorFixture = { harness: Harness; client: QuirkyClient; worktree: Worktree; root: string }
+type WindowedFixture = {
+  harness: Harness
+  client: QuirkyClient
+  worktreeA: Worktree
+  worktreeB: Worktree
+  rootB: string
+  ui1: QuirkyClient
+  ui2: QuirkyClient
+  c1: number
+  c2: number
+  sentinelTabId: string
+  roots: string[]
+}
+type TerminalGroup = {
+  id?: string
+  activeTab?: string | null
+  tabs?: { id: string }[]
+  first?: TerminalGroup
+  second?: TerminalGroup
+}
+type TerminalWorkspace = { activeGroup: string; root: TerminalGroup }
+type OpenedEditorBuffer = EditorBuffer & { openedTabId: string }
+type WindowHookPlugin = 'quirky.editor' | 'quirky.worktree'
+type WindowCallHook = (method: string, params: Record<string, unknown>) => void | Promise<void>
+type WindowHookGlobals = typeof globalThis & {
+  __g118Hooks?: Partial<Record<WindowHookPlugin, WindowCallHook>>
+}
+
+const windowFixtures = new Set<WindowedFixture>()
+const pluginsRoot = resolve(import.meta.dir, '..', '..')
+
+afterEach(async () => {
+  const pending = [...windowFixtures]
+  windowFixtures.clear()
+  const failures: unknown[] = []
+  delete (globalThis as WindowHookGlobals).__g118Hooks
+  for (const fixture of pending) {
+    try {
+      await fixture.harness.cleanup()
+    } catch (error) {
+      failures.push(error)
+    } finally {
+      for (const root of fixture.roots) rmSync(root, { recursive: true, force: true })
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, 'Editor window fixture cleanup failed')
+})
+
+
+function wrapperMain(pluginId: WindowHookPlugin): string {
+  const actualMain = pathToFileURL(join(pluginsRoot, pluginId, 'main.ts')).href
+  return [
+    `import { activate as activateReal } from ${JSON.stringify(actualMain)}`,
+    `export function activate(context) {`,
+    `  const originalCall = context.call.bind(context)`,
+    `  const wrapped = new Proxy(context, {`,
+    `    get(target, property) {`,
+    `      if (property !== 'call') return Reflect.get(target, property, target)`,
+    `      return async (method, params) => {`,
+    `        await globalThis.__g118Hooks?.[${JSON.stringify(pluginId)}]?.(method, params)`,
+    `        return originalCall(method, params)`,
+    `      }`,
+    `    }`,
+    `  })`,
+    `  return activateReal(wrapped)`,
+    `}`
+  ].join('\n')
+}
+
+function installWindowWrapper(builtinPluginsDir: string, pluginId: WindowHookPlugin): void {
+  const sourceDir = join(pluginsRoot, pluginId)
+  const pluginDir = join(builtinPluginsDir, pluginId)
+  mkdirSync(pluginDir, { recursive: true })
+  for (const name of readdirSync(sourceDir)) {
+    if (name === 'main.ts' || name === 'test') continue
+    symlinkSync(join(sourceDir, name), join(pluginDir, name))
+  }
+  writeFileSync(join(pluginDir, 'main.ts'), wrapperMain(pluginId))
+}
+
+function wrappedBuiltinsDir(home: string): string {
+  const builtinPluginsDir = join(home, 'builtin-plugins')
+  mkdirSync(builtinPluginsDir, { recursive: true })
+  for (const name of readdirSync(builtinsDir())) {
+    if (name === 'quirky.editor' || name === 'quirky.worktree') continue
+    symlinkSync(join(builtinsDir(), name), join(builtinPluginsDir, name))
+  }
+  installWindowWrapper(builtinPluginsDir, 'quirky.editor')
+  installWindowWrapper(builtinPluginsDir, 'quirky.worktree')
+  return builtinPluginsDir
+}
+
+function createWindowRepo(home: string, name: string, files: Record<string, string>, roots: string[]): string {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), `quirky-editor-window-${name}-`)))
+  roots.push(root)
+  for (const [path, text] of Object.entries(files)) {
+    const absolute = join(root, path)
+    mkdirSync(dirname(absolute), { recursive: true })
+    writeFileSync(absolute, text)
+  }
+  const env = {
+    ...process.env,
+    HOME: home,
+    QUIRKY_HOME: home,
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_COUNT: '0',
+    GIT_TERMINAL_PROMPT: '0'
+  }
+  execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: root, env })
+  execFileSync('git', ['add', '.'], { cwd: root, env })
+  execFileSync('git', ['-c', 'user.email=editor@test', '-c', 'user.name=Editor Test', 'commit', '-q', '-m', 'initial'], { cwd: root, env })
+  return root
+}
+
+async function windowFixture(options: { wrapped?: boolean; includeThird?: boolean } = {}): Promise<WindowedFixture> {
+  const home = makeHomeWithoutAutoHooks('q-editor-window-')
+  const roots: string[] = []
+  let harness: Harness | undefined
+  try {
+    harness = await startHarness({
+      home,
+      builtinPluginsDir: options.wrapped ? wrappedBuiltinsDir(home) : builtinsDir()
+    })
+    const rootA = createWindowRepo(home, 'a-', {
+      'src/app.ts': 'first A\nsecond A\n',
+      'docs/sentinel.md': '# A\n'
+    }, roots)
+    const filesB: Record<string, string> = {
+      'src/app.ts': 'first\nsecond λ\n',
+      'docs/sentinel.md': '# B\n',
+      'docs/other.md': '# other\n'
+    }
+    if (options.includeThird) filesB['docs/third.md'] = '# third\n'
+    const rootB = createWindowRepo(home, 'b-', filesB, roots)
+    const client = await harness.connect('cli')
+    await call(client, 'quirky.repo/add', { path: rootA })
+    await call(client, 'quirky.repo/add', { path: rootB })
+    const worktreeA = await call<Worktree>(client, 'quirky.worktree/resolve', { selector: `path:${rootA}` })
+    const worktreeB = await call<Worktree>(client, 'quirky.worktree/resolve', { selector: `path:${rootB}` })
+    const ui1 = await harness.connect('ui')
+    const ui2 = await harness.connect('ui')
+    const { connId: c1 } = await call<{ connId: number }>(ui1, 'ui.window.self')
+    const { connId: c2 } = await call<{ connId: number }>(ui2, 'ui.window.self')
+    await showWindow(ui1, c1, worktreeA.id)
+    await showWindow(ui2, c2, worktreeA.id)
+    const sentinel = await call<OpenedEditorBuffer>(client, 'quirky.editor/open', {
+      worktree: worktreeB.id,
+      path: 'docs/sentinel.md',
+      focus: true
+    })
+    const fixture = {
+      harness,
+      client,
+      worktreeA,
+      worktreeB,
+      rootB,
+      ui1,
+      ui2,
+      c1,
+      c2,
+      sentinelTabId: sentinel.openedTabId,
+      roots
+    }
+    windowFixtures.add(fixture)
+    return fixture
+  } catch (error) {
+    try {
+      await harness?.cleanup()
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+      for (const root of roots) rmSync(root, { recursive: true, force: true })
+    }
+    throw error
+  }
+}
+
+function groupsIn(node: TerminalGroup): TerminalGroup[] {
+  return [
+    ...(node.tabs === undefined ? [] : [node]),
+    ...(node.first === undefined ? [] : groupsIn(node.first)),
+    ...(node.second === undefined ? [] : groupsIn(node.second))
+  ]
+}
+
+async function activeTerminalTab(fixture: WindowedFixture, worktree: string): Promise<string | null> {
+  const { workspace } = await call<{ workspace: TerminalWorkspace }>(fixture.client, 'quirky.terminal/workspace', {
+    workspace: `id:${worktree}`
+  })
+  return groupsIn(workspace.root).find((group) => group.id === workspace.activeGroup)?.activeTab ?? null
+}
+
+async function showWindow(client: QuirkyClient, connId: number, worktree: string): Promise<void> {
+  await call(client, 'ui.window.view.open', {
+    connId,
+    id: 'view:quirky.session/worktree',
+    input: { worktree }
+  })
+}
+
+async function windowLayout(fixture: WindowedFixture, connId: number): Promise<Record<string, unknown>> {
+  const state = await call<{ layout: Record<string, unknown> }>(fixture.client, 'ui.window.state', { connId })
+  return state.layout
+}
+
+async function navigationState(fixture: WindowedFixture, connId: number): Promise<unknown> {
+  return call(fixture.client, 'quirky.worktree/navigationState', { window: connId })
+}
+
+async function waitForWindowGone(fixture: WindowedFixture, connId: number): Promise<void> {
+  await waitForAsync(async () => {
+    const state = await call<{ windows: { connId: number }[] }>(fixture.client, 'ui.state')
+    return !state.windows.some((window) => window.connId === connId)
+  }, 5_000)
+}
+
+async function rejectedCall(client: QuirkyClient, method: string, params: Record<string, unknown> = {}): Promise<{ code: unknown; message: string }> {
+  try {
+    await call(client, method, params)
+  } catch (error) {
+    const rpc = error as { code?: unknown; message?: unknown }
+    return { code: rpc.code, message: String(rpc.message) }
+  }
+  throw new Error(`Expected ${method} to fail`)
+}
+
+async function windowSnapshot(fixture: WindowedFixture, connIds: number[] = [fixture.c1, fixture.c2]): Promise<unknown> {
+  const [stateA, stateB, workspaceA, workspaceB] = await Promise.all([
+    stateOf(fixture.client, fixture.worktreeA.id),
+    stateOf(fixture.client, fixture.worktreeB.id),
+    call<{ workspace: TerminalWorkspace }>(fixture.client, 'quirky.terminal/workspace', { workspace: `id:${fixture.worktreeA.id}` }),
+    call<{ workspace: TerminalWorkspace }>(fixture.client, 'quirky.terminal/workspace', { workspace: `id:${fixture.worktreeB.id}` })
+  ])
+  const editors = (state: EditorState) => ({
+    buffers: state.buffers.map(({ id, revision }) => ({ id, revision })),
+    tabs: state.tabs
+  })
+  const windows = await Promise.all(connIds.map(async (connId) => ({
+    connId,
+    layout: await windowLayout(fixture, connId),
+    history: await navigationState(fixture, connId)
+  })))
+  return {
+    editors: { a: editors(stateA), b: editors(stateB) },
+    workspaces: { a: workspaceA.workspace, b: workspaceB.workspace },
+    windows
+  }
+}
 
 const fixtures = new Set<EditorFixture>()
 afterEach(async () => {
@@ -320,3 +570,311 @@ test('view state selection survives re-fetch and operation history undoes and re
   await call(client, 'quirky.editor/history', { worktree: worktree.id, action: 'redo' })
   expect(readFileSync(join(root, 'created.txt'), 'utf8')).toBe('created\n')
 })
+test('a focused open with a window navigates only that window', async () => {
+  const fixture = await windowFixture()
+  const c2LayoutBefore = await windowLayout(fixture, fixture.c2)
+  expect(c2LayoutBefore).toMatchObject({ worktree: fixture.worktreeA.id })
+  const c2HistoryBefore = await navigationState(fixture, fixture.c2)
+  const opened = await call<OpenedEditorBuffer>(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktreeB.id,
+    path: 'src/app.ts',
+    mode: 'source',
+    line: 2,
+    column: 3,
+    focus: true,
+    window: fixture.c1
+  })
+  expect(opened).toMatchObject({
+    worktreeId: fixture.worktreeB.id,
+    path: join(fixture.rootB, 'src/app.ts'),
+    relativePath: 'src/app.ts'
+  })
+  expect(opened.openedTabId).toEqual(expect.any(String))
+  expect(await activeTerminalTab(fixture, fixture.worktreeB.id)).toBe(opened.openedTabId)
+  expect(await windowLayout(fixture, fixture.c1)).toMatchObject({
+    worktree: fixture.worktreeB.id,
+    view: { id: 'view:quirky.session/worktree', input: { worktree: fixture.worktreeB.id } }
+  })
+  expect(await windowLayout(fixture, fixture.c2)).toEqual(c2LayoutBefore)
+  expect(await navigationState(fixture, fixture.c1)).toEqual({
+    worktrees: [fixture.worktreeA.id, fixture.worktreeB.id],
+    index: 1
+  })
+  expect(c2HistoryBefore).toEqual({ worktrees: [], index: -1 })
+  expect(await navigationState(fixture, fixture.c2)).toEqual(c2HistoryBefore)
+  const buffer = await bufferOf(fixture.client, opened.id)
+  const position = (buffer.view.byTabId as Record<string, Record<string, unknown>>)[opened.openedTabId]
+  expect(position).toMatchObject({ line: 2, column: 3, matchLength: 0, focused: true })
+  expect(position?.navigationId).toEqual(expect.any(String))
+}, 30_000)
+
+test('window implies focus and a repeat reuses the buffer, tab, and draft', async () => {
+  const fixture = await windowFixture()
+  const c2LayoutBefore = await windowLayout(fixture, fixture.c2)
+  expect(c2LayoutBefore).toMatchObject({ worktree: fixture.worktreeA.id })
+  const first = await call<OpenedEditorBuffer>(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktreeB.id,
+    path: 'src/app.ts',
+    mode: 'source',
+    line: 2,
+    column: 3,
+    focus: true,
+    window: fixture.c1
+  })
+  await call(fixture.client, 'quirky.editor/draft', {
+    bufferId: first.id,
+    content: 'first\nsecond λ edited\n',
+    expectedRevision: first.contentRevision
+  })
+  await showWindow(fixture.ui1, fixture.c1, fixture.worktreeA.id)
+  await call(fixture.client, 'quirky.terminal/activateTab', { tab: fixture.sentinelTabId })
+  expect(await activeTerminalTab(fixture, fixture.worktreeB.id)).toBe(fixture.sentinelTabId)
+  const repeated = await call<OpenedEditorBuffer>(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktreeB.id,
+    path: 'src/app.ts',
+    line: 1,
+    column: 1,
+    window: fixture.c1
+  })
+  expect(repeated.id).toBe(first.id)
+  expect(repeated.openedTabId).toBe(first.openedTabId)
+  const state = await stateOf(fixture.client, fixture.worktreeB.id)
+  expect(state.tabs.filter((tab) => tab.bufferId === first.id)).toHaveLength(1)
+  expect(await activeTerminalTab(fixture, fixture.worktreeB.id)).toBe(first.openedTabId)
+  expect(await windowLayout(fixture, fixture.c1)).toMatchObject({ worktree: fixture.worktreeB.id })
+  expect(await windowLayout(fixture, fixture.c2)).toEqual(c2LayoutBefore)
+  const buffer = await bufferOf(fixture.client, first.id)
+  expect(buffer).toMatchObject({ draft: 'first\nsecond λ edited\n', dirty: true })
+  expect(buffer.view).toMatchObject({
+    byTabId: { [first.openedTabId]: { line: 1, column: 1, focused: true } }
+  })
+}, 30_000)
+
+test('opens without a window never move a window', async () => {
+  const fixture = await windowFixture()
+  const first = await call<OpenedEditorBuffer>(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktreeB.id,
+    path: 'src/app.ts',
+    mode: 'source',
+    line: 2,
+    column: 3,
+    focus: true,
+    window: fixture.c1
+  })
+  const layoutsBefore = {
+    c1: await windowLayout(fixture, fixture.c1),
+    c2: await windowLayout(fixture, fixture.c2)
+  }
+  const historiesBefore = {
+    c1: await navigationState(fixture, fixture.c1),
+    c2: await navigationState(fixture, fixture.c2)
+  }
+  const background = await call<OpenedEditorBuffer>(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktreeB.id,
+    path: 'docs/other.md',
+    focus: false
+  })
+  expect(await activeTerminalTab(fixture, fixture.worktreeB.id)).toBe(first.openedTabId)
+  const openedA = await call<OpenedEditorBuffer>(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktreeA.id,
+    path: 'src/app.ts',
+    focus: true
+  })
+  expect(await activeTerminalTab(fixture, fixture.worktreeA.id)).toBe(openedA.openedTabId)
+  expect(background.worktreeId).toBe(fixture.worktreeB.id)
+  expect(await windowLayout(fixture, fixture.c1)).toEqual(layoutsBefore.c1)
+  expect(await windowLayout(fixture, fixture.c2)).toEqual(layoutsBefore.c2)
+  expect(await navigationState(fixture, fixture.c1)).toEqual(historiesBefore.c1)
+  expect(await navigationState(fixture, fixture.c2)).toEqual(historiesBefore.c2)
+}, 30_000)
+
+test('window refusals preserve buffers, tabs, workspaces, layouts, and history', async () => {
+  const fixture = await windowFixture()
+  await call(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktreeB.id,
+    path: 'src/app.ts',
+    mode: 'source',
+    line: 2,
+    column: 3,
+    focus: true,
+    window: fixture.c1
+  })
+  const before = await windowSnapshot(fixture)
+  const rejectWithoutChanges = async (params: Record<string, unknown>) => {
+    const error = await rejectedCall(fixture.client, 'quirky.editor/open', params)
+    expect(await windowSnapshot(fixture)).toEqual(before)
+    return error
+  }
+  expect(await rejectWithoutChanges({
+    worktree: fixture.worktreeB.id,
+    path: 'docs/other.md',
+    window: 999,
+    focus: true
+  })).toMatchObject({
+    code: RpcErrorCode.Conflict,
+    message: 'UI window connection 999 is not open'
+  })
+  expect(await rejectWithoutChanges({
+    worktree: fixture.worktreeB.id,
+    path: 'docs/sentinel.md',
+    window: 999
+  })).toMatchObject({
+    code: RpcErrorCode.Conflict,
+    message: 'UI window connection 999 is not open'
+  })
+  const cliSelf = await rejectedCall(fixture.client, 'ui.window.self')
+  expect(cliSelf.code).toBe(RpcErrorCode.InvalidParams)
+  const cliIdMatch = cliSelf.message.match(/^connection (\d+) is not a UI window$/)
+  if (!cliIdMatch) throw new Error(`Unexpected ui.window.self refusal: ${cliSelf.message}`)
+  const cliConnId = Number(cliIdMatch[1])
+  expect(await rejectWithoutChanges({
+    worktree: fixture.worktreeB.id,
+    path: 'src/app.ts',
+    window: cliConnId
+  })).toEqual({
+    code: RpcErrorCode.InvalidParams,
+    message: `connection ${cliConnId} is not a UI window`
+  })
+  expect(await rejectWithoutChanges({
+    worktree: fixture.worktreeB.id,
+    path: 'src/app.ts',
+    window: fixture.c1,
+    focus: false
+  })).toEqual({
+    code: RpcErrorCode.InvalidParams,
+    message: 'window cannot be combined with focus: false'
+  })
+  for (const window of [0, 1.5, '2']) {
+    expect(await rejectWithoutChanges({
+      worktree: fixture.worktreeB.id,
+      path: 'src/app.ts',
+      window
+    })).toMatchObject({ code: RpcErrorCode.InvalidParams })
+  }
+  const outsideWithWindow = await rejectWithoutChanges({
+    worktree: fixture.worktreeB.id,
+    path: '../outside.txt',
+    window: fixture.c1
+  })
+  const outsideWithoutWindow = await rejectWithoutChanges({
+    worktree: fixture.worktreeB.id,
+    path: '../outside.txt'
+  })
+  expect(outsideWithWindow.code).toBe(outsideWithoutWindow.code)
+  const missingWithWindow = await rejectWithoutChanges({
+    worktree: fixture.worktreeB.id,
+    path: 'missing.ts',
+    window: fixture.c1
+  })
+  const missingWithoutWindow = await rejectWithoutChanges({
+    worktree: fixture.worktreeB.id,
+    path: 'missing.ts'
+  })
+  expect(missingWithWindow.code).toBe(missingWithoutWindow.code)
+  await fixture.ui2.close()
+  await waitForWindowGone(fixture, fixture.c2)
+  const beforeClosedWindowOpen = await windowSnapshot(fixture, [fixture.c1])
+  expect(await rejectedCall(fixture.client, 'quirky.editor/open', {
+    worktree: fixture.worktreeB.id,
+    path: 'src/app.ts',
+    window: fixture.c2
+  })).toEqual({
+    code: RpcErrorCode.Conflict,
+    message: `UI window connection ${fixture.c2} is not open`
+  })
+  expect(await windowSnapshot(fixture, [fixture.c1])).toEqual(beforeClosedWindowOpen)
+}, 30_000)
+
+test('disconnects in flight preserve the opened tab and never navigate another window', async () => {
+  const fixture = await windowFixture({ wrapped: true, includeThird: true })
+  const hookGlobals = globalThis as WindowHookGlobals
+  const cases: {
+    plugin: WindowHookPlugin
+    method: string
+    kind: 'navigate' | 'state' | 'view'
+    path: string
+    code: number
+    message: (connId: number) => string
+  }[] = [
+    {
+      plugin: 'quirky.editor',
+      method: 'quirky.worktree/navigate',
+      kind: 'navigate',
+      path: 'src/app.ts',
+      code: RpcErrorCode.NotFound,
+      message: (connId) => `UI window connection ${connId} is not live.`
+    },
+    {
+      plugin: 'quirky.worktree',
+      method: 'ui.window.state',
+      kind: 'state',
+      path: 'docs/other.md',
+      code: RpcErrorCode.NotFound,
+      message: (connId) => `UI window connection ${connId} is unavailable: UI window connection ${connId} is not open`
+    },
+    {
+      plugin: 'quirky.worktree',
+      method: 'ui.window.view.open',
+      kind: 'view',
+      path: 'docs/third.md',
+      code: RpcErrorCode.Conflict,
+      message: (connId) => `UI window connection ${connId} is not open`
+    }
+  ]
+  try {
+    for (const item of cases) {
+      const ui = await fixture.harness.connect('ui')
+      const { connId } = await call<{ connId: number }>(ui, 'ui.window.self')
+      await showWindow(ui, connId, fixture.worktreeA.id)
+      const c2Before = {
+        layout: await windowLayout(fixture, fixture.c2),
+        history: await navigationState(fixture, fixture.c2)
+      }
+      expect(c2Before.layout).toMatchObject({ worktree: fixture.worktreeA.id })
+      expect(c2Before.history).toEqual({ worktrees: [], index: -1 })
+      let fired = 0
+      const hooks: Partial<Record<WindowHookPlugin, WindowCallHook>> = {}
+      hooks[item.plugin] = async (method, params) => {
+        if (fired > 0 || method !== item.method) return
+        const target = item.kind === 'navigate' ? params.window : params.connId
+        if (target !== connId) return
+        fired += 1
+        await ui.close()
+        await waitForWindowGone(fixture, connId)
+      }
+      hookGlobals.__g118Hooks = hooks
+      const error = await rejectedCall(fixture.client, 'quirky.editor/open', {
+        worktree: fixture.worktreeB.id,
+        path: item.path,
+        mode: 'source',
+        line: 2,
+        column: 3,
+        focus: true,
+        window: connId
+      })
+      delete hookGlobals.__g118Hooks
+      expect(fired).toBe(1)
+      expect(error).toEqual({ code: item.code, message: item.message(connId) })
+      const state = await stateOf(fixture.client, fixture.worktreeB.id)
+      const buffers = state.buffers.filter((buffer) => buffer.relativePath === item.path)
+      expect(buffers).toHaveLength(1)
+      const buffer = buffers[0]!
+      const tabs = state.tabs.filter((tab) => tab.bufferId === buffer.id)
+      expect(tabs).toHaveLength(1)
+      const tab = tabs[0]!
+      expect(await activeTerminalTab(fixture, fixture.worktreeB.id)).toBe(tab.tabId)
+      const opened = await bufferOf(fixture.client, buffer.id)
+      const position = (opened.view.byTabId as Record<string, Record<string, unknown>>)[tab.tabId]
+      expect(position).toMatchObject({ line: 2, column: 3, matchLength: 0, focused: true })
+      expect(position?.navigationId).toEqual(expect.any(String))
+      expect(await windowLayout(fixture, fixture.c2)).toEqual(c2Before.layout)
+      expect(await navigationState(fixture, fixture.c2)).toEqual(c2Before.history)
+      expect(await rejectedCall(fixture.client, 'ui.window.state', { connId })).toEqual({
+        code: RpcErrorCode.Conflict,
+        message: `UI window connection ${connId} is not open`
+      })
+    }
+  } finally {
+    delete hookGlobals.__g118Hooks
+  }
+}, 30_000)
