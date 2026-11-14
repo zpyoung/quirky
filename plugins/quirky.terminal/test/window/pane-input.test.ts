@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act } from 'react'
-import { fakeContext, loadPane, mountPane, paneHandlers, settings, startRecording, stopRecording, unloadPane, type MountedPane } from './pane-support'
-import { PASTE_CHUNK_BYTES, PASTE_DIRECT_BYTES } from '../../src/window/pane/paste'
+import { fakeContext, loadPane, mountPane, paneHandlers, settings, settle, startRecording, stopRecording, unloadPane, type MountedPane } from './pane-support'
+import { BRACKETED_END, BRACKETED_START, PASTE_CHUNK_BYTES, PASTE_DIRECT_BYTES } from '../../src/window/pane/paste'
+import { WORKTREE_PATHS_MIME } from '../../src/window/pane/drop'
+import type { FakeContext } from '../ui-fake'
 
 let mounted: MountedPane | null = null
 let clipboard: { written: string[]; text: string }
@@ -32,7 +34,8 @@ async function mount(over = {}, handlers = paneHandlers(), settingOverrides = {}
   return { fake, pane: mounted }
 }
 
-const written = (fake: ReturnType<typeof fakeContext>) => fake.callsTo('quirky.terminal/write').map((call) => call.params.data as string)
+const written = (fake: FakeContext) => fake.callsTo('quirky.terminal/write').map((call) => call.params.data as string)
+const writtenParams = (fake: FakeContext) => fake.callsTo('quirky.terminal/write').map((call) => call.params)
 
 async function key(pane: MountedPane, init: KeyboardEventInit & { location?: number }) {
   const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })
@@ -54,17 +57,64 @@ describe('SC-62: byte translations', () => {
   ] as const)('%s writes the readline bytes exactly once', async (_name, init, bytes) => {
     const { fake, pane } = await mount()
     const event = await key(pane, init)
-    expect(written(fake)).toEqual([bytes])
+    expect(writtenParams(fake)).toEqual([{ session: 's1', data: bytes, expectedIncarnation: 'fixture-s1' }])
     expect(event.defaultPrevented).toBe(true)
   })
 
   test('keys outside the list reach xterm untouched', async () => {
     const { fake, pane } = await mount()
     const event = await key(pane, { key: 'Enter', keyCode: 13 })
-    expect(written(fake)).toEqual(['\r'])
+    expect(writtenParams(fake)).toEqual([{ session: 's1', data: '\r', expectedIncarnation: 'fixture-s1' }])
     expect(event.defaultPrevented).toBe(true)
     await key(pane, { key: 'a', keyCode: 65, ctrlKey: true })
-    expect(written(fake)).toEqual(['\r', '\x01'])
+    expect(writtenParams(fake)).toEqual([
+      { session: 's1', data: '\r', expectedIncarnation: 'fixture-s1' },
+      { session: 's1', data: '\x01' }
+    ])
+  })
+
+  test('virtual-keyboard insertText input is guarded from the real textarea event', async () => {
+    const { fake, pane } = await mount()
+    const textarea = pane.textarea()
+    textarea.value = 'β'
+    const event = new InputEvent('input', { bubbles: true, cancelable: true, data: 'β', inputType: 'insertText' })
+    await act(async () => void textarea.dispatchEvent(event))
+    await settle()
+    expect(writtenParams(fake)).toEqual([{ session: 's1', data: 'β', expectedIncarnation: 'fixture-s1' }])
+  })
+
+  test('IME composition data stays guarded across xterm’s delayed callback', async () => {
+    const { fake, pane } = await mount()
+    const textarea = pane.textarea()
+    await act(async () => {
+      textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+      textarea.value = `${textarea.value}あ`
+      textarea.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: 'あ' }))
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'あ', inputType: 'insertCompositionText' }))
+    })
+    await settle()
+    await act(async () => void textarea.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '' })))
+    await settle()
+    expect(writtenParams(fake)).toEqual([{ session: 's1', data: 'あ', expectedIncarnation: 'fixture-s1' }])
+  })
+
+  test('a parser query during composition stays generated before the committed IME data', async () => {
+    const { fake, pane } = await mount()
+    const textarea = pane.textarea()
+    await act(async () => {
+      textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+      textarea.value = `${textarea.value}あ`
+      textarea.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: 'あ' }))
+    })
+    await settle()
+    await fake.push(101, '\x1b[6n')
+    await pane.flush()
+    await act(async () => void textarea.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '' })))
+    await settle()
+    expect(writtenParams(fake)).toEqual([
+      { session: 's1', data: '\x1b[1;1R' },
+      { session: 's1', data: 'あ', expectedIncarnation: 'fixture-s1' }
+    ])
   })
 
   test('Shift+Enter sends the kitty sequence after the program pushed kitty flags', async () => {
@@ -79,7 +129,7 @@ describe('SC-62: byte translations', () => {
     expect(written(fake).at(-1)).toBe('\x1b\r')
   })
 
-  test('Cmd+Up and Cmd+Down scroll the scrollback to its top and bottom', async () => {
+  test('Cmd+Up and Cmd+Down scroll without marking a later program reply as human input', async () => {
     const { fake, pane } = await mount()
     await fake.push(101, Array.from({ length: 100 }, (_, index) => `line ${index}`).join('\r\n'))
     await pane.flush()
@@ -90,6 +140,11 @@ describe('SC-62: byte translations', () => {
     await key(pane, { key: 'ArrowDown', keyCode: 40, metaKey: true })
     expect(buffer().viewportY).toBe(buffer().baseY)
     expect(written(fake)).toEqual([])
+    await fake.push(101, '\x1b[6n')
+    await pane.flush()
+    const params = writtenParams(fake)
+    expect(params).toHaveLength(1)
+    expect('expectedIncarnation' in params[0]!).toBe(false)
   })
 
   test('a read-only pane writes nothing for a translated key', async () => {
@@ -120,14 +175,94 @@ describe('SC-37: pasting', () => {
     const event = pasteEvent('hello\nworld')
     await act(async () => void pane.textarea().dispatchEvent(event))
     expect(event.defaultPrevented).toBe(true)
-    expect(written(fake)).toEqual(['hello\rworld'])
+    expect(writtenParams(fake)).toEqual([{ session: 's1', data: 'hello\rworld', expectedIncarnation: 'fixture-s1' }])
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
     expect(pane.textarea().value).toBe('')
   })
 
-  test('10 KiB is one write', async () => {
+  test('an empty bracketed DOM paste is one guarded combined write', async () => {
+    const { fake, pane } = await mount()
+    await act(async () => void pane.term().write('\x1b[?2004h'))
+    await pane.flush()
+    const event = pasteEvent('')
+    await act(async () => void pane.textarea().dispatchEvent(event))
+    await settle()
+    expect(event.defaultPrevented).toBe(true)
+    expect(writtenParams(fake)).toEqual([{
+      session: 's1',
+      data: `${BRACKETED_START}${BRACKETED_END}`,
+      expectedIncarnation: 'fixture-s1'
+    }])
+  })
+
+  test('a 200 KiB bracketed DOM paste guards only the opener and awaits ordered chunks', async () => {
+    let inFlight = 0
+    let overlapped = false
+    const starts = Array.from({ length: 15 }, () => Promise.withResolvers<void>())
+    const writes = Array.from({ length: 15 }, () => Promise.withResolvers<{ ok: true }>())
+    let call = 0
+    const handlers = paneHandlers({}, {
+      'quirky.terminal/write': (params) => {
+        const index = call++
+        inFlight += 1
+        if (inFlight > 1) overlapped = true
+        starts[index]!.resolve()
+        return writes[index]!.promise.then((result) => {
+          inFlight -= 1
+          return result
+        })
+      }
+    })
+    const { fake, pane } = await mount({}, handlers)
+    await act(async () => void pane.term().write('\x1b[?2004h'))
+    await pane.flush()
+    const text = 'x'.repeat(200 * 1024)
+    await act(async () => void pane.textarea().dispatchEvent(pasteEvent(text)))
+    for (let index = 0; index < starts.length; index += 1) {
+      await starts[index]!.promise
+      const params = writtenParams(fake)
+      expect(params).toHaveLength(index + 1)
+      if (index === 0) expect(params[index]).toEqual({ session: 's1', data: BRACKETED_START, expectedIncarnation: 'fixture-s1' })
+      else expect('expectedIncarnation' in params[index]!).toBe(false)
+      writes[index]!.resolve({ ok: true })
+    }
+    await settle()
+    const params = writtenParams(fake)
+    const chunks = written(fake)
+    expect(chunks[0]).toBe(BRACKETED_START)
+    expect(chunks.at(-1)).toBe(BRACKETED_END)
+    expect(chunks.slice(1, -1).every((chunk) => chunk.length <= PASTE_CHUNK_BYTES)).toBe(true)
+    expect(chunks.slice(1, -1).join('')).toBe(text)
+    expect(params.slice(1).every((params) => !('expectedIncarnation' in params))).toBe(true)
+    expect(overlapped).toBe(false)
+  })
+
+  test('a refused guarded opener sends no bracket payload or cleanup closer and only the blocked toast', async () => {
+    const handlers = paneHandlers({}, {
+      'quirky.terminal/write': (params) => {
+        if ('expectedIncarnation' in params) throw new Error('custody refused')
+        return { ok: true }
+      }
+    })
+    const { fake, pane } = await mount({}, handlers)
+    await act(async () => void pane.term().write('\x1b[?2004h'))
+    await pane.flush()
+    const text = 'x'.repeat(200 * 1024)
+    await act(async () => void pane.textarea().dispatchEvent(pasteEvent(text)))
+    await settle()
+    expect(writtenParams(fake)).toEqual([{ session: 's1', data: BRACKETED_START, expectedIncarnation: 'fixture-s1' }])
+    expect(fake.toasts).toEqual([{ title: 'Input blocked', body: 'custody refused' }])
+  })
+
+  test('10 KiB is one guarded DOM paste write', async () => {
     const { fake, pane } = await mount()
     await act(async () => void pane.textarea().dispatchEvent(pasteEvent('x'.repeat(10 * 1024))))
-    expect(written(fake)).toHaveLength(1)
+    await settle()
+    expect(writtenParams(fake)).toEqual([{
+      session: 's1',
+      data: 'x'.repeat(10 * 1024),
+      expectedIncarnation: 'fixture-s1'
+    }])
   })
 
   test('200 KiB arrives complete and in order in 16 KiB writes, each awaited', async () => {
@@ -154,13 +289,16 @@ describe('SC-37: pasting', () => {
     expect(overlapped).toBe(false)
   })
 
-  test('20 MiB is refused with a toast and writes nothing', async () => {
+  test('a 20 MiB DOM paste is refused with one toast and no writes', async () => {
     const { fake, pane } = await mount()
-    await act(async () => {
-      await pane.handle().paste('a'.repeat(20 * 1024 * 1024))
-    })
+    const event = pasteEvent('a'.repeat(20 * 1024 * 1024))
+    await act(async () => void pane.textarea().dispatchEvent(event))
+    await settle()
+    expect(event.defaultPrevented).toBe(true)
     expect(written(fake)).toEqual([])
-    expect(fake.toasts[0]!.title).toBe('Paste is larger than 16 MiB')
+    expect(fake.toasts.map(({ title, body }) => ({ title, body }))).toEqual([
+      { title: 'Paste is larger than 16 MiB', body: 'Nothing was pasted.' }
+    ])
   })
 
   test('bracketed markers wrap the text only when the program turned the mode on', async () => {
@@ -178,7 +316,11 @@ describe('SC-37: pasting', () => {
     await act(async () => {
       await pane.handle().paste('three')
     })
-    expect(written(fake)).toEqual(['one', '\x1b[200~two\x1b[201~', 'three'])
+    expect(writtenParams(fake)).toEqual([
+      { session: 's1', data: 'one', expectedIncarnation: 'fixture-s1' },
+      { session: 's1', data: `${BRACKETED_START}two${BRACKETED_END}` },
+      { session: 's1', data: 'three' }
+    ])
   })
 
   test('a chunked bracketed paste is wrapped once across its chunks', async () => {
@@ -192,6 +334,8 @@ describe('SC-37: pasting', () => {
     expect(writes[0]).toBe('\x1b[200~')
     expect(writes.at(-1)).toBe('\x1b[201~')
     expect(writes.slice(1, -1).join('')).toBe('y'.repeat(PASTE_DIRECT_BYTES + 100))
+    expect(writtenParams(fake)[0]).toEqual({ session: 's1', data: BRACKETED_START, expectedIncarnation: 'fixture-s1' })
+    expect(writtenParams(fake).at(-1)).toEqual({ session: 's1', data: BRACKETED_END })
   })
 
   test('a write that fails ends the paste with a toast and closes the bracket', async () => {
@@ -213,11 +357,12 @@ describe('SC-37: pasting', () => {
     expect(written(fake).at(-1)).toBe('\x1b[201~')
   })
 
-  test('a pane that is not interactive ignores a paste', async () => {
+  test('a non-interactive pane ignores a DOM paste', async () => {
     const { fake, pane } = await mount({ interactive: false })
-    await act(async () => {
-      await pane.handle().paste('nope')
-    })
+    const event = pasteEvent('nope')
+    await act(async () => void pane.textarea().dispatchEvent(event))
+    await settle()
+    expect(event.defaultPrevented).toBe(true)
     expect(written(fake)).toEqual([])
   })
 
@@ -226,32 +371,41 @@ describe('SC-37: pasting', () => {
     await act(async () => {
       await Promise.all([pane.handle().paste('a'), pane.handle().paste('b'), pane.handle().paste('c')])
     })
-    expect(written(fake)).toEqual(['a', 'b', 'c'])
+    expect(writtenParams(fake)).toEqual([
+      { session: 's1', data: 'a', expectedIncarnation: 'fixture-s1' },
+      { session: 's1', data: 'b' },
+      { session: 's1', data: 'c' }
+    ])
   })
 })
 
 describe('SC-38: dropping files', () => {
-  const dropEvent = (data: { files?: { path?: string }[]; text?: Record<string, string> }) => {
+  const dropEvent = (data: { files?: { path?: string }[]; text?: Record<string, string>; types?: string[] }) => {
     const event = new Event('drop', { bubbles: true, cancelable: true })
     Object.defineProperty(event, 'dataTransfer', {
-      value: { files: data.files ?? [], types: ['Files'], getData: (type: string) => data.text?.[type] ?? '' }
+      value: { files: data.files ?? [], types: data.types ?? ['Files'], getData: (type: string) => data.text?.[type] ?? '' }
     })
     return event
   }
   const host = (pane: MountedPane) => pane.element.querySelector('[data-terminal-pane]')!
 
-  test('types the escaped paths at the cursor without Enter', async () => {
+  test('a native file drop types escaped paths with one guarded write', async () => {
     const { fake, pane } = await mount()
     const event = dropEvent({ files: [{ path: '/tmp/w/api/a b.txt' }, { path: '/tmp/w/api/c.txt' }] })
     await act(async () => void host(pane).dispatchEvent(event))
-    expect(written(fake)).toEqual(["'/tmp/w/api/a b.txt' /tmp/w/api/c.txt"])
+    expect(writtenParams(fake)).toEqual([{
+      session: 's1',
+      data: "'/tmp/w/api/a b.txt' /tmp/w/api/c.txt",
+      expectedIncarnation: 'fixture-s1'
+    }])
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
     expect(event.defaultPrevented).toBe(true)
   })
 
-  test('file URLs in the URI list are typed too', async () => {
+  test('file URLs in the URI list are typed through a guarded write', async () => {
     const { fake, pane } = await mount()
     await act(async () => void host(pane).dispatchEvent(dropEvent({ text: { 'text/uri-list': 'file:///tmp/x%20y.txt\r\n' } })))
-    expect(written(fake)).toEqual(["'/tmp/x y.txt'"])
+    expect(writtenParams(fake)).toEqual([{ session: 's1', data: "'/tmp/x y.txt'", expectedIncarnation: 'fixture-s1' }])
   })
 
   test('a drop without file paths is left to its owner', async () => {
@@ -260,6 +414,73 @@ describe('SC-38: dropping files', () => {
     await act(async () => void host(pane).dispatchEvent(event))
     expect(written(fake)).toEqual([])
     expect(event.defaultPrevented).toBe(false)
+  })
+  test('invalid worktree-path drops are refused without resolving or writing', async () => {
+    const { fake, pane } = await mount({ workspaceId: 'id:w' })
+    const event = dropEvent({
+      types: [WORKTREE_PATHS_MIME],
+      text: { [WORKTREE_PATHS_MIME]: '{not json' }
+    })
+    await act(async () => void host(pane).dispatchEvent(event))
+    expect(event.defaultPrevented).toBe(true)
+    expect(fake.callsTo('quirky.worktree/resolve')).toEqual([])
+    expect(written(fake)).toEqual([])
+    expect(fake.toasts.map(({ title, body }) => ({ title, body }))).toEqual([
+      { title: 'Could not use dropped files', body: 'The editor row drag payload is invalid.' }
+    ])
+  })
+
+  test('cross-worktree path drops are refused before resolving or writing', async () => {
+    const { fake, pane } = await mount({ workspaceId: 'id:w' })
+    const event = dropEvent({
+      types: [WORKTREE_PATHS_MIME],
+      text: { [WORKTREE_PATHS_MIME]: JSON.stringify({ worktreeId: 'other', paths: ['src/file.txt'] }) }
+    })
+    await act(async () => void host(pane).dispatchEvent(event))
+    expect(event.defaultPrevented).toBe(true)
+    expect(fake.callsTo('quirky.worktree/resolve')).toEqual([])
+    expect(written(fake)).toEqual([])
+    expect(fake.toasts.map(({ title, body }) => ({ title, body }))).toEqual([
+      { title: 'Could not use dropped files', body: 'The dragged files belong to a different worktree.' }
+    ])
+  })
+
+  test('worktree path resolution retains human classification across its await', async () => {
+    const root = Promise.withResolvers<{ path: string }>()
+    const handlers = paneHandlers({}, { 'quirky.worktree/resolve': () => root.promise })
+    const { fake, pane } = await mount({ workspaceId: 'id:w' }, handlers)
+    const event = dropEvent({
+      types: [WORKTREE_PATHS_MIME],
+      text: { [WORKTREE_PATHS_MIME]: JSON.stringify({ worktreeId: 'w', paths: ['src/a b.txt'] }) }
+    })
+    await act(async () => void host(pane).dispatchEvent(event))
+    expect(event.defaultPrevented).toBe(true)
+    expect(fake.callsTo('quirky.worktree/resolve').map(({ params }) => params)).toEqual([{ selector: 'id:w' }])
+    expect(written(fake)).toEqual([])
+    root.resolve({ path: '/tmp/w/api' })
+    await settle()
+    expect(writtenParams(fake)).toEqual([{
+      session: 's1',
+      data: "'/tmp/w/api/src/a b.txt'",
+      expectedIncarnation: 'fixture-s1'
+    }])
+  })
+
+  test('worktree path traversal outside the resolved root is refused', async () => {
+    const { fake, pane } = await mount({ workspaceId: 'id:w' }, paneHandlers({}, {
+      'quirky.worktree/resolve': () => ({ path: '/tmp/w/api' })
+    }))
+    const event = dropEvent({
+      types: [WORKTREE_PATHS_MIME],
+      text: { [WORKTREE_PATHS_MIME]: JSON.stringify({ worktreeId: 'w', paths: ['../outside'] }) }
+    })
+    await act(async () => void host(pane).dispatchEvent(event))
+    await settle()
+    expect(event.defaultPrevented).toBe(true)
+    expect(written(fake)).toEqual([])
+    expect(fake.toasts.map(({ title, body }) => ({ title, body }))).toEqual([
+      { title: 'Could not use dropped files', body: 'The dragged path escapes its worktree.' }
+    ])
   })
 
   test('a read-only pane types nothing', async () => {
