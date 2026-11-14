@@ -174,6 +174,7 @@ function makeContext(): UiPluginContext {
       if (executeCommandFailure) throw executeCommandFailure
       if (id === 'command:quirky.browser/preferencesControl') dispatchControl(context, args)
     },
+    createCommandDrag: () => 'drag-token',
     consumeCommandDrag: () => null,
     cancelCommandDrag: () => {},
     openView: () => {},
