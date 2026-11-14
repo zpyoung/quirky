@@ -39,9 +39,15 @@ function messageOf(reason: unknown): string {
 export function useQuickOpenRequest(): QuickOpenRequest | null {
   return useSyncExternalStore(subscribe, () => quickOpen, () => null)
 }
+export function isQuickOpenRequestCurrent(id: number): boolean {
+  return quickOpen?.id === id
+}
 
 export function useCloseRequest(): CloseRequest | null {
   return useSyncExternalStore(subscribe, () => closeRequest, () => null)
+}
+export function isCloseRequestCurrent(id: number): boolean {
+  return closeRequest?.id === id
 }
 
 export function showQuickOpen(context: UiPluginContext, worktree?: string, query = '', purpose: QuickOpenPurpose = 'files', group?: string): void {

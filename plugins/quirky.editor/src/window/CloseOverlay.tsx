@@ -4,6 +4,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import { activeDocument } from './activeDocument'
 import {
   finishCloseRequest,
+  isCloseRequestCurrent,
   updateCloseBusy,
   updateCloseError,
   useCloseRequest,
@@ -129,7 +130,8 @@ export function CloseOverlay({
 
   const requestId = request?.id ?? null
   const generation = request ? `${mountGeneration.current}:${request.id}` : null
-  if (busyRef.current.requestId !== requestId) busyRef.current = { requestId, busy: request?.busy ?? false }
+  busyRef.current.requestId = requestId
+  busyRef.current.busy = request?.busy ?? false
   const address = request && generation ? {
     surface,
     target: `close:${request.id}`,
@@ -152,6 +154,7 @@ export function CloseOverlay({
   const currentRequestId = requestId
   const handler = async (control: EditorUiControl) => {
     const isCurrent = () => currentRequestId !== null &&
+      isCloseRequestCurrent(currentRequestId) &&
       controlIdentity.current.requestId === currentRequestId &&
       controlIdentity.current.isCurrent()
     if (!request || !isCurrent() || control.action !== 'choose') return { delivered: false }
@@ -179,6 +182,8 @@ export function CloseOverlay({
     } catch (reason) {
       if (!isCurrent()) return { delivered: false }
       operationError = reason instanceof Error ? reason.message : String(reason)
+    } finally {
+      if (!isCurrent()) updateCloseBusy(request.id, false)
     }
     if (!isCurrent()) return { delivered: false }
     busyRef.current.busy = false
@@ -193,6 +198,7 @@ export function CloseOverlay({
   }
   const onControlError = (reason: Error) => {
     if (!request || currentRequestId === null ||
+      !isCloseRequestCurrent(currentRequestId) ||
       controlIdentity.current.requestId !== currentRequestId ||
       !controlIdentity.current.isCurrent() ||
       (busyRef.current.requestId === currentRequestId && busyRef.current.busy)) return

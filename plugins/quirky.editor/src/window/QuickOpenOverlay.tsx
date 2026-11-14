@@ -2,7 +2,7 @@ import { Button, Dialog, EmptyState, InlineError, NoticeLine, TextField } from '
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { useEditorUiControl, useEditorUiControlReport, useEditorUiControlSurface, type EditorUiControl } from './uiControl'
-import { dismissQuickOpen, useQuickOpenRequest } from './overlayState'
+import { dismissQuickOpen, isQuickOpenRequestCurrent, useQuickOpenRequest } from './overlayState'
 
 type QuickOpenResult = { path: string; name: string; score: number; line?: number; column?: number }
 type QuickOpenResponse = { results: QuickOpenResult[]; truncated: boolean; history: string[] }
@@ -230,7 +230,8 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
   const currentSession = session
   const handler = async (control: EditorUiControl) => {
     const capturedSession = currentSession
-    const isCurrent = () => capturedSession !== null &&
+    const isCurrent = () => capturedSession !== null && request !== null &&
+      isQuickOpenRequestCurrent(request.id) &&
       controlIdentity.current.session === capturedSession &&
       controlIdentity.current.isCurrent()
     if (!request || !capturedSession || !isCurrent()) return { delivered: false }
@@ -342,7 +343,8 @@ export function QuickOpenOverlay({ context, report }: { context: UiPluginContext
     return { delivered: true }
   }
   const onControlError = (reason: Error) => {
-    if (!currentSession || controlIdentity.current.session !== currentSession || !controlIdentity.current.isCurrent()) return
+    if (!currentSession || !request || !isQuickOpenRequestCurrent(request.id) ||
+      controlIdentity.current.session !== currentSession || !controlIdentity.current.isCurrent()) return
     if (busyRef.current.session === currentSession && busyRef.current.busy) return
     setOperation({ session: currentSession, busy: false, error: reason.message })
   }
