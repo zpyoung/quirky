@@ -4188,7 +4188,9 @@
     ],
     "command": [
       {"id": "open-settings", "title": "Open Orchestration settings"},
-      {"id": "dismiss-setup", "title": "Dismiss Orchestration setup"}
+      {"id": "dismiss-setup", "title": "Dismiss Orchestration setup"},
+      {"id": "copy-install-command", "title": "Copy Orchestration skill install command", "description": "Copy the orchestration skill install command to this window's clipboard.", "palette": false},
+      {"id": "copy-prompt", "title": "Copy Orchestration example prompt", "description": "Copy one Orchestration usage example prompt to this window's clipboard.", "palette": false, "args": {"type": "object", "properties": {"example": {"type": "string", "enum": ["hand-off-active-task", "hand-off-to-worktree", "phased-workflow", "parallel-work", "split-large-change"]}}, "required": ["example"], "additionalProperties": false}}
     ]
   }
 }
