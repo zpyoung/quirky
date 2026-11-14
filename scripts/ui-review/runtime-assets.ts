@@ -33,6 +33,7 @@ export type RuntimeAssets = {
 
 export type AssetFingerprint = { path: string; size: number; sha256: string }
 export type AssetSnapshot = ReadonlyMap<string, AssetFingerprint>
+type ServedIndex = AssetFingerprint & { aliases: string[] }
 type FileInfo = Stats
 
 function errorCode(error: unknown): string | null {
@@ -332,9 +333,10 @@ function publicAssetUrl(value: string, pluginId?: string): string {
   return `/${parts.map(encodeURIComponent).join('/')}`
 }
 
-function requireAsset(snapshot: AssetSnapshot, url: string, pluginId?: string): void {
+function requireAsset(snapshot: AssetSnapshot, url: string, pluginId?: string): string {
   const canonical = publicAssetUrl(url, pluginId)
   if (!snapshot.has(canonical)) throw new Error(`runtime assets: missing ${canonical}`)
+  return canonical
 }
 
 function checkSnapshot(assets: RuntimeAssets, expected: AssetSnapshot): void {
@@ -356,28 +358,57 @@ function htmlAttribute(value: string): string {
   return value.replace(/[&"'<>]/g, (character) => escapes[character]!)
 }
 
+function decodeDocumentAttribute(value: string): string {
+  return value.replace(/&(?:#[xX][0-9a-f]+|#\d+|[a-z][a-z0-9]*);?/gi, (entity) => {
+    const named: Record<string, string> = { '&amp;': '&', '&quot;': '"', '&#39;': "'", '&lt;': '<', '&gt;': '>' }
+    if (Object.hasOwn(named, entity)) return named[entity]!
+    const numeric = /^&#(x[0-9a-f]+|\d+);$/i.exec(entity)
+    if (numeric) {
+      const value = numeric[1]!
+      const code = value.toLowerCase().startsWith('x') ? Number.parseInt(value.slice(1), 16) : Number(value)
+      if (code > 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)) return String.fromCodePoint(code)
+    }
+    throw new Error(`runtime assets: invalid URL ${value}`)
+  })
+}
+
 function documentAssetUrl(value: string): string {
-  const decoded = value.replace(/&(?:amp|quot|#39|lt|gt);/g, (entity) => ({
-    '&amp;': '&', '&quot;': '"', '&#39;': "'", '&lt;': '<', '&gt;': '>'
-  })[entity]!)
+  const decoded = decodeDocumentAttribute(value)
   if (/^[a-z][a-z0-9+.-]*:/i.test(decoded)) throw new Error(`runtime assets: invalid URL ${value}`)
   return decoded.startsWith('/') ? decoded : `/${decoded.replace(/^\.\//, '')}`
 }
 
-function checkDocumentAssets(html: string, snapshot: AssetSnapshot): void {
-  for (const match of html.matchAll(/<(script|link)\b([^>]*)>/gi)) {
+function checkDocumentAssets(html: string, snapshot: AssetSnapshot, origin: string): string[] {
+  const aliases: string[] = []
+  const checkReference = (value: string) => {
+    const url = documentAssetUrl(value)
+    const canonical = requireAsset(snapshot, url)
+    if (url !== canonical) aliases.push(url)
+  }
+  for (const match of html.matchAll(/<(script|link|base)\b([^>]*)>/gi)) {
     const attributes: Record<string, string> = {}
     for (const attribute of match[2]!.matchAll(/([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g)) {
-      attributes[attribute[1]!.toLowerCase()] = attribute[2] ?? attribute[3] ?? attribute[4] ?? ''
+      const name = attribute[1]!.toLowerCase()
+      if (Object.hasOwn(attributes, name)) throw new Error(`runtime assets: invalid URL (duplicate HTML attribute ${name})`)
+      attributes[name] = attribute[2] ?? attribute[3] ?? attribute[4] ?? ''
+    }
+    if (match[1]!.toLowerCase() === 'base' && attributes.href !== undefined) {
+      let base: URL
+      try { base = new URL(decodeDocumentAttribute(attributes.href), `${origin}/index.html`) } catch {
+        throw new Error(`runtime assets: invalid URL ${attributes.href}`)
+      }
+      if (base.origin !== origin || new URL('.', base).pathname !== '/' || base.username || base.password || base.search || base.hash) {
+        throw new Error(`runtime assets: invalid URL ${attributes.href}`)
+      }
     }
     if (match[1]!.toLowerCase() === 'script' && attributes.src !== undefined) {
-      requireAsset(snapshot, documentAssetUrl(attributes.src))
+      checkReference(attributes.src)
     }
     const relations = (attributes.rel ?? '').toLowerCase().split(/\s+/)
     if (match[1]!.toLowerCase() === 'link' && attributes.href !== undefined &&
       (relations.includes('stylesheet') || relations.includes('modulepreload') ||
         (relations.includes('preload') && ['script', 'style'].includes(attributes.as ?? '')))) {
-      requireAsset(snapshot, documentAssetUrl(attributes.href))
+      checkReference(attributes.href)
     }
   }
   for (const match of html.matchAll(/<script\b(?=[^>]*\s+type\s*=\s*(["'])importmap\1)[^>]*>([\s\S]*?)<\/script\s*>/gi)) {
@@ -390,13 +421,14 @@ function checkDocumentAssets(html: string, snapshot: AssetSnapshot): void {
       if (!isRecord(mapping)) throw new Error('runtime assets: invalid URL in index import map')
       for (const value of Object.values(mapping)) {
         if (typeof value !== 'string') throw new Error('runtime assets: invalid URL in index import map')
-        requireAsset(snapshot, documentAssetUrl(value))
+        checkReference(value)
       }
     }
   }
+  return aliases
 }
 
-function expectedIndex(snapshot: AssetSnapshot, modules: string[]): AssetFingerprint {
+function expectedIndex(snapshot: AssetSnapshot, modules: string[], origin: string): ServedIndex {
   const recorded = snapshot.get('/index.html')
   if (!recorded) throw new Error('runtime assets: missing /index.html')
   const bytes = readFileSync(recorded.path)
@@ -404,14 +436,14 @@ function expectedIndex(snapshot: AssetSnapshot, modules: string[]): AssetFingerp
     throw new Error('runtime assets: changed /index.html')
   }
   const html = bytes.toString('utf8')
-  checkDocumentAssets(html, snapshot)
+  const aliases = checkDocumentAssets(html, snapshot, origin)
   const importMap = /<script\b(?=[^>]*\s+type\s*=\s*(["'])importmap\1)[^>]*>/i.test(html)
   const bodyEnd = /<\/body\s*>/i.exec(html)
   const links = importMap && bodyEnd !== null && modules.length > 0
     ? modules.map((url) => `<link rel="modulepreload" href="${htmlAttribute(url)}">`).join('\n')
     : ''
   const expected = links && bodyEnd !== null ? `${html.slice(0, bodyEnd.index)}${links}${html.slice(bodyEnd.index)}` : html
-  return { path: recorded.path, size: Buffer.byteLength(expected, 'utf8'), sha256: createHash('sha256').update(expected).digest('hex') }
+  return { path: recorded.path, size: Buffer.byteLength(expected, 'utf8'), sha256: createHash('sha256').update(expected).digest('hex'), aliases }
 }
 
 async function verifyResponse(origin: string, url: string, expected: AssetFingerprint, signal: AbortSignal): Promise<void> {
@@ -464,13 +496,20 @@ export async function verifyRuntimeAssets(
       requireAsset(snapshot, module.url, pluginId)
       return module.url
     })
-    const index = expectedIndex(snapshot, modules)
     const origin = `http://127.0.0.1:${options.port}`
+    const index = expectedIndex(snapshot, modules, origin)
     for (const [url, fingerprint] of snapshot) {
       controller.signal.throwIfAborted()
       const canonical = publicAssetUrl(url)
       if (canonical !== url) throw new Error(`runtime assets: invalid URL ${url}`)
       await verifyResponse(origin, url, url === '/index.html' ? index : fingerprint, controller.signal)
+    }
+    for (const url of modules) {
+      const canonical = publicAssetUrl(url)
+      if (url !== canonical) await verifyResponse(origin, url, snapshot.get(canonical)!, controller.signal)
+    }
+    for (const url of index.aliases) {
+      await verifyResponse(origin, url, snapshot.get(publicAssetUrl(url))!, controller.signal)
     }
     await verifyResponse(origin, '/', index, controller.signal)
     checkSnapshot(assets, snapshot)

@@ -3,8 +3,7 @@ import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import {
   existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync,
-  realpathSync, readlinkSync, rmSync, symlinkSync, watch, writeFileSync,
-  type FSWatcher
+  realpathSync, readlinkSync, rmSync, symlinkSync, writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, sep } from 'node:path'
@@ -59,25 +58,6 @@ function treeState(root: string): string[] {
   }
   visit(root)
   return state
-}
-function waitForPath(path: string, watchers: FSWatcher[]): Promise<void> {
-  if (existsSync(path)) return Promise.resolve()
-  const { promise, resolve, reject } = Promise.withResolvers<void>()
-  const watcher = watch(dirname(path), { persistent: false }, () => {
-    if (!existsSync(path)) return
-    watcher.close()
-    resolve()
-  })
-  watchers.push(watcher)
-  watcher.on('error', (error) => {
-    watcher.close()
-    reject(error)
-  })
-  if (existsSync(path)) {
-    watcher.close()
-    resolve()
-  }
-  return promise
 }
 
 
@@ -228,39 +208,62 @@ describe('runtime asset staging and snapshots', () => {
     expect(existsSync(join(home, 'capture-assets'))).toBe(false)
   })
 
-  test('settles aborted staging without deleting another capture home', async () => {
+  test('settles aborted staging without deleting another capture home', () => {
     const root = freshRoot()
     const fixture = makeRepo(root)
-    for (let index = 0; index < 600; index++) put(join(fixture.pluginRoot, 'src', `entry-${String(index).padStart(4, '0')}.ts`), `export const n = ${index}\n`)
-    const homeA = join(root, 'home-a')
-    const homeB = join(root, 'home-b')
-    mkdirSync(homeA)
-    mkdirSync(homeB)
-    const stageA = join(homeA, 'capture-assets')
-    const controller = new AbortController()
-    const pendingA = prepareRuntimeAssets({ repoRoot: fixture.repoRoot, home: homeA, skipBuild: false, signal: controller.signal })
-    let pendingB: Promise<RuntimeAssets> | undefined
-    const watchers: FSWatcher[] = []
-    try {
-      const stagedPlugin = join(stageA, 'plugins', fixture.pluginId)
-      await waitForPath(stageA, watchers)
-      await waitForPath(join(stageA, 'plugins'), watchers)
-      await waitForPath(stagedPlugin, watchers)
-      await waitForPath(join(stagedPlugin, 'quirky-plugin.json'), watchers)
-      expect(existsSync(join(stagedPlugin, 'src', 'entry-0599.ts'))).toBe(false)
-      pendingB = prepareRuntimeAssets({ repoRoot: fixture.repoRoot, home: homeB, skipBuild: false })
-      controller.abort(new Error('staging cancelled'))
-      await expect(pendingA).rejects.toThrow(/abort|cancel/i)
-      expect(existsSync(stageA)).toBe(false)
-      const b = await pendingB
-      expect(existsSync(join(b.pluginsDir, fixture.pluginId, 'src', 'entry-0599.ts'))).toBe(true)
-      expect(existsSync(stageA)).toBe(false)
-    } finally {
-      controller.abort(new Error('test cleanup'))
-      for (const watcher of watchers) watcher.close()
-      await pendingA.catch(() => undefined)
-      if (pendingB) await pendingB.catch(() => undefined)
-    }
+    const sourceBefore = treeState(fixture.repoRoot)
+    const script = `
+      import { mock } from 'bun:test'
+      import { strict as assert } from 'node:assert'
+      import { existsSync, readFileSync } from 'node:fs'
+      import * as filesystem from 'node:fs/promises'
+      import { join } from 'node:path'
+      const fs = { ...filesystem }
+      let entered, release, gatePath
+      mock.module('node:fs/promises', () => ({
+        ...fs,
+        async copyFile(...args) {
+          await fs.copyFile(...args)
+          if (args[1] === gatePath) {
+            entered.resolve()
+            await release.promise
+          }
+        }
+      }))
+      // the staging module must load after the isolated filesystem barrier is installed
+      const { prepareRuntimeAssets } = await import(${JSON.stringify(join(import.meta.dir, 'runtime-assets.ts'))})
+      for (const order of ['before', 'after']) {
+        const homeA = join(${JSON.stringify(root)}, 'home-a-' + order)
+        const homeB = join(${JSON.stringify(root)}, 'home-b-' + order)
+        await fs.mkdir(homeA)
+        await fs.mkdir(homeB)
+        const stageA = join(homeA, 'capture-assets')
+        gatePath = join(await fs.realpath(homeA), 'capture-assets/plugins/acme.fixture/src/entry.tsx')
+        entered = Promise.withResolvers()
+        release = Promise.withResolvers()
+        const controller = new AbortController()
+        const pendingA = prepareRuntimeAssets({ repoRoot: ${JSON.stringify(fixture.repoRoot)}, home: homeA, skipBuild: false, signal: controller.signal })
+        const rejectedA = assert.rejects(pendingA, /abort|cancel/i)
+        await entered.promise
+        assert.equal(existsSync(gatePath), true)
+        const pendingB = prepareRuntimeAssets({ repoRoot: ${JSON.stringify(fixture.repoRoot)}, home: homeB, skipBuild: false })
+        if (order === 'before') await pendingB
+        controller.abort(new Error('staging cancelled'))
+        release.resolve()
+        await rejectedA
+        const b = await pendingB
+        assert.equal(existsSync(stageA), false)
+        assert.equal(readFileSync(join(b.pluginsDir, 'acme.fixture/src/helper.ts'), 'utf8'), 'export const helper = true\\n')
+      }
+    `
+    const child = Bun.spawnSync([process.execPath, '-e', script], {
+      env: { QUIRKY_HOME: root, HOME: root, PATH: process.env.PATH ?? '/usr/bin:/bin' },
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 20_000
+    })
+    expect(child.exitCode, child.stderr.toString()).toBe(0)
+    expect(treeState(fixture.repoRoot)).toEqual(sourceBefore)
   }, 30_000)
 
   test('rejects source symlinks but excludes a symlinked generated dist before traversal', async () => {
@@ -475,6 +478,66 @@ async function rejectionMessage(operation: Promise<unknown>): Promise<string> {
 }
 
 describe('runtime asset HTTP verification', () => {
+  test('verifies advertised module, script, stylesheet and import-map aliases against their recorded bytes', async () => {
+    const cases = [
+      ['/plugins/acme.fixture/dist/%75i.js', '/plugins/acme.fixture/dist/ui.js', ''],
+      ['/%6dain.js', '/main.js', '<script type="module" src="./%6dain.js"></script>'],
+      ['/%6dain.css', '/main.css', '<link rel="stylesheet" href="./%6dain.css">'],
+      ['/vendor/%72eact.js', '/vendor/react.js', '<script type="importmap">{"imports":{"react":"./vendor/%72eact.js"}}</script>']
+    ] as const
+    for (const [advertised, canonical, declaration] of cases) {
+      const fixture = makeRepo(freshRoot())
+      if (declaration) put(join(fixture.uiDir, 'index.html'), `<html><head><script type="importmap">{}</script>${declaration}</head><body></body></html>`)
+      const { assets, snapshot } = await prebuilt(fixture.repoRoot)
+      const module = declaration ? moduleUrl() : advertised
+      let corruptAlias = true
+      const seen: string[] = []
+      const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+        const path = new URL(request.url).pathname
+        seen.push(path)
+        const key = path === '/' ? '/index.html' : path === advertised ? canonical : path
+        const asset = snapshot.get(key)
+        if (!asset) return new Response('missing', { status: 404 })
+        const bytes = readFileSync(asset.path)
+        if (path === advertised && corruptAlias) bytes[0] = bytes[0]! ^ 1
+        return key === '/index.html'
+          ? new Response(expectedIndex(bytes.toString('utf8'), [module]))
+          : new Response(bytes)
+      } })
+      try {
+        await expect(verifyRuntimeAssets(assets, snapshot, modelWithModules({ 'acme.fixture': module }), verifyOptions(server.port!)))
+          .rejects.toThrow(`runtime assets: served bytes differ ${advertised}`)
+        expect(seen).toContain(advertised)
+        corruptAlias = false
+        await verifyRuntimeAssets(assets, snapshot, modelWithModules({ 'acme.fixture': module }), verifyOptions(server.port!))
+      } finally {
+        await server.stop(true)
+      }
+    }
+  })
+
+  test('rejects document bases that send executable or style references outside verified root output', async () => {
+    const trap = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch() { throw new Error('foreign base was contacted') } })
+    try {
+      for (const base of [`http://127.0.0.1:${trap.port!}/`, `//127.0.0.1:${trap.port!}/`, '/unverified/', '&sol;&sol;foreign.invalid/', '&#x2f;&#x2f;foreign.invalid/', `http://127.0.0.1:${trap.port!}/" href="/`, '/', '&#47;']) {
+        const fixture = makeRepo(freshRoot())
+        put(join(fixture.uiDir, 'index.html'), `<html><head><base href="${base}"><script type="importmap">{}</script><link rel="stylesheet" href="./main.css"></head><body><script type="module" src="./main.js"></script></body></html>`)
+        const { assets, snapshot } = await prebuilt(fixture.repoRoot)
+        const url = moduleUrl()
+        const server = serveSnapshot(snapshot, [url])
+        try {
+          const verifying = verifyRuntimeAssets(assets, snapshot, modelWithModules({ 'acme.fixture': url }), verifyOptions(server.server.port!))
+          if (base === '/' || base === '&#47;') await verifying
+          else await expect(verifying).rejects.toThrow('runtime assets: invalid URL')
+        } finally {
+          await server.server.stop(true)
+        }
+      }
+    } finally {
+      await trap.stop(true)
+    }
+  })
+
   test('rejects hostile module URLs before contacting either loopback server', async () => {
     const root = freshRoot()
     const fixture = makeRepo(root)
