@@ -834,18 +834,55 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     park(current, 'coordinator-seat-lost', detail, version)
   }
 
-  function approvalEscalation(action: KernelAction, detail: string | undefined, version: number): void {
-    const scope = {
+  function approvalScopeForAction(action: KernelAction) {
+    return {
       actionKind: action.kind,
       contentIdentity: action.contentIdentity,
       evidenceKey: action.evidenceKey,
       ...(typeof action.preparedCommitSha === 'string' ? { preparedCommitSha: action.preparedCommitSha } : {})
     }
-    const escalationId = `approval:${hash(JSON.stringify(scope))}`
+  }
+
+  function approvalScopeHash(action: KernelAction): string {
+    return hash(JSON.stringify(approvalScopeForAction(action)))
+  }
+
+  function resolveSupersededApprovalEscalations(activeScopeHash: string | null, version: number): void {
+    const activeEscalationId = activeScopeHash === null ? null : `approval:${activeScopeHash}`
+    const latestById = new Map<string, JournalEntry>()
+    for (const entry of store.journal(watcherId)) {
+      if (entry.kind === 'escalation' && typeof entry.escalationId === 'string') {
+        latestById.set(entry.escalationId, entry)
+      }
+    }
+    for (const entry of latestById.values()) {
+      if (
+        entry.escalationKind !== 'awaiting-approval' ||
+        entry.status !== 'open' ||
+        entry.escalationId === activeEscalationId
+      ) continue
+      const { seq: _seq, eventId: _eventId, watcherId: _watcherId, atMs: _atMs, ...fields } = entry
+      appendEntry({
+        ...fields,
+        kind: 'escalation',
+        class: 'fact',
+        origin: 'owner',
+        resolved: true,
+        eventId: `approval-escalation-superseded:${watcherId}:${hash(entry.escalationId)}:${entry.seq}`,
+        status: 'resolved',
+        reason: 'superseded'
+      }, version, { idempotent: true })
+    }
+  }
+
+  function approvalEscalation(action: KernelAction, detail: string | undefined, version: number): void {
+    const scope = approvalScopeForAction(action)
+    const scopeHash = approvalScopeHash(action)
+    const escalationId = `approval:${scopeHash}`
     const journal = store.journal(watcherId)
     const previous = latestEscalation(journal, escalationId)
     const foldCount = typeof previous?.foldCount === 'number' ? previous.foldCount + 1 : 1
-    const eventId = `approval-escalation:${watcherId}:${hash(JSON.stringify(scope))}:${foldCount}`
+    const eventId = `approval-escalation:${watcherId}:${scopeHash}:${foldCount}`
     if (latestByEventId(journal, eventId)) return
     appendEntry({
       kind: 'escalation',
@@ -959,6 +996,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     const atMs = now()
     const next = { ...latest, enabled: false, terminalAtMs: atMs, haltReason: result.reason }
     store.transaction(() => {
+      resolveSupersededApprovalEscalations(null, version)
       store.save(next)
       appendEntry({
         kind: 'terminal',
@@ -1578,6 +1616,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         const decision: Decision = ownerProposal ? { action: ownerProposal } : await kind.decide(snapshot, journal, current)
         ownerProposal = undefined
         if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
+        if (!ownerAction) {
+          resolveSupersededApprovalEscalations(
+            decision.action ? approvalScopeHash(decision.action) : null,
+            version
+          )
+        }
         trace.decision = decision
         recordConsidered(trace, decision.considered)
         if (!decision.action) {
@@ -1633,6 +1677,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             freshDecision = await kind.decide(freshSnapshot, store.journal(watcherId), store.get(watcherId) ?? gateState.enrollment)
           }
           if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
+          if (!ownerAction) {
+            resolveSupersededApprovalEscalations(
+              freshDecision.action ? approvalScopeHash(freshDecision.action) : null,
+              version
+            )
+          }
           if (!freshDecision.action || actionFingerprint(freshDecision.action) !== fingerprint || freshSnapshot.freshness !== 'live') {
             abandon(selectedAction, 'workspace-moved', 'Cached external decision did not survive a live redecision.', version)
             trace.decision = freshDecision
