@@ -199,7 +199,7 @@ test('valid terminal artifact requests, simulator preview, and plist access are 
     await withLinuxPlatform(async () => {
       recordingWorldOperations = true
       try {
-        const refusal = { kind: 'refused', reason: 'unsupported', guidance: ARTIFACT_GUIDANCE }
+        const refusal = { kind: 'refused', reason: 'unsupported', guidance: ARTIFACT_GUIDANCE } as const
         for (const caller of callers) {
           for (const request of requests) {
             expect(await artifacts.handle({ ...request }, caller)).toEqual(refusal)
@@ -265,7 +265,7 @@ test('valid terminal artifact requests, simulator preview, and plist access are 
         link,
         async openDesktopApp() {
           cliCalls.push('openDesktopApp')
-          return { ok: true }
+          return { ok: true as const }
         }
       }
       expect(await run(runtime)).toBe(1)

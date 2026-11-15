@@ -680,7 +680,7 @@ test.skipIf(process.platform !== 'linux')('refuses VM create and lifecycle while
   const saved = method('vmShow')({ vm: failed.id }) as VmEnvironment
   expect(saved).toEqual(failed)
 
-  const durableRecord = store.get('SELECT * FROM vm_environments WHERE id = ?', failed.id)
+  const durableRecord = store.get<Record<string, unknown>>('SELECT * FROM vm_environments WHERE id = ?', failed.id)
   expect(durableRecord).toBeTruthy()
   const recordBeforeLifecycle = method('vmShow')({ vm: failed.id }) as VmEnvironment
   const ownerCallsBeforeLifecycle = JSON.stringify(calls)
@@ -691,7 +691,7 @@ test.skipIf(process.platform !== 'linux')('refuses VM create and lifecycle while
     await expect(method(operation)({ vm: failed.id, instanceId: failed.instanceId }))
       .rejects.toThrow('Lima VM environments are supported only on macOS (current platform: linux)')
     expect(method('vmShow')({ vm: failed.id })).toEqual(recordBeforeLifecycle)
-    expect(store.get('SELECT * FROM vm_environments WHERE id = ?', failed.id)).toEqual(durableRecord)
+    expect(store.get<Record<string, unknown>>('SELECT * FROM vm_environments WHERE id = ?', failed.id)).toEqual(durableRecord)
     expect(JSON.stringify(calls)).toBe(ownerCallsBeforeLifecycle)
     expect(readFileSync(logPath, 'utf8')).toBe(processLogBeforeLifecycle)
   }

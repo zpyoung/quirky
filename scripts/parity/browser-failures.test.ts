@@ -35,11 +35,13 @@ async function withBrowserChromeProbes<T>(
   const executableSet = new Set(executablePaths)
   const originalStatSync = fs.statSync
   const originalAccessSync = fs.accessSync
-  const statSpy = spyOn(fs, 'statSync').mockImplementation((path) => {
-    const candidate = String(path)
-    if (!virtualPaths.has(candidate)) return originalStatSync(path)
-    return { isFile: () => fileSet.has(candidate) } as fs.Stats
-  })
+  const statSpy = spyOn(fs, 'statSync').mockImplementation(new Proxy(originalStatSync, {
+    apply(target, receiver, args) {
+      const candidate = String(args[0])
+      if (!virtualPaths.has(candidate)) return Reflect.apply(target, receiver, args)
+      return { isFile: () => fileSet.has(candidate) }
+    }
+  }))
   const accessSpy = spyOn(fs, 'accessSync').mockImplementation((path, mode) => {
     const candidate = String(path)
     if (virtualPaths.has(candidate)) {
