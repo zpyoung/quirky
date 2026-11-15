@@ -3449,16 +3449,19 @@
         "id": "projects-control",
         "title": "Projects Control",
         "palette": false,
-        "description": "Open or close the project picker or the column settings, go back from the view chooser to the picker, or show, hide or resize one column, in the Tasks Projects view mounted in the window that runs it. Field ids are the ones quirky tasks project-view lists, plus title and type. Returns how many mounted Projects views applied it.",
+        "description": "Control the Tasks Projects view in the window that runs it: picker and column-panel open or close their panels; back-to-picker returns to the picker; column shows, hides or resizes a field; sort cycles a visible table field; group toggles a raw group key (including __no_value__); zoom selects month, quarter or year; today scrolls the roadmap; edit opens or cancels a visible inline cell addressed by itemId and fieldId. Field ids come from quirky tasks project-view, plus title and type. Returns { delivered }, the number of eligible mounted Projects views that applied the action.",
         "args": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "action": { "type": "string", "enum": ["picker", "column-panel", "back-to-picker", "column"] },
+            "action": { "type": "string", "enum": ["picker", "column-panel", "back-to-picker", "column", "sort", "group", "zoom", "today", "edit"] },
             "open": { "type": "boolean" },
             "fieldId": { "type": "string" },
             "visible": { "type": "boolean" },
-            "width": { "type": "integer", "minimum": 60, "maximum": 800 }
+            "width": { "type": "integer", "minimum": 60, "maximum": 800 },
+            "group": { "type": "string" },
+            "zoom": { "type": "string", "enum": ["month", "quarter", "year"] },
+            "itemId": { "type": "string" }
           },
           "required": ["action"]
         }

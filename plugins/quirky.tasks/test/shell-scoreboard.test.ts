@@ -43,7 +43,7 @@ test('shell coverage includes every owned candidate and leaves only the named fo
   expect(candidates.filter((entry) => OWNED.includes(entry.file) && ['unresolved-assignment', 'unresolved-spread'].includes(entry.kind))).toEqual([])
   const issues = failures()
   expect(issues.filter((entry) => OWNED.includes(entry.source?.file ?? '') || entry.source?.file === `${ROOT}src/list/useCompactList.ts` || entry.coverageFile === FRAGMENT)).toEqual([])
-  expect(issues.length).toBeGreaterThan(0)
+  expect(issues).toEqual([])
   expect(issues.filter((entry) => entry.code !== 'coverage-missing' || !REMAINING.includes(entry.source?.file ?? ''))).toEqual([])
   expect(Object.keys(coverage.surfaces).sort()).toEqual([...plugin.targets].sort())
   for (const [surface, states] of Object.entries(coverage.surfaces)) {
