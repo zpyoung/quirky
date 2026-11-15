@@ -8,7 +8,7 @@ import { parseCliRefusal, type CliReceipt } from './cli-run'
 import { checkIds } from './cli-checks'
 import * as table from './cli-table'
 import { CLI_FILE_OBSERVATION_BINDINGS } from './cli-table'
-import { createCliFilesWorld, type CliFilesWorld } from './cli-world'
+import { createCliFilesWorld, CliFilesStartupError, type CliFilesWorld, type CliFilesStartupDiagnostics } from './cli-world'
 import type { BrowserContext } from 'playwright'
 
 type JsonObject = Record<string, unknown>
@@ -106,6 +106,7 @@ export type CliFilesReport = {
   cleanup: { ok: boolean; error?: string; evidence?: JsonObject }
   elapsedMs: number
   buildElapsedMs: number
+  startup?: CliFilesStartupDiagnostics
   guards?: { denied: string[]; egress: string[]; injected: boolean }
   fixtures?: JsonObject
   error?: { stage: string; kind: string; message: string }
@@ -291,6 +292,12 @@ function tailIsLocalJson(argv: readonly string[]): boolean {
 }
 function sanitizeText(text: string, home: string, tokens: readonly string[]): string {
   let output = text
+  output = output.replace(/https?:\/\/[^\s"'<>]+/gu, (address) => {
+    try {
+      const url = new URL(address)
+      return `${url.protocol}//${url.host}${url.pathname}`
+    } catch { return address.split(/[?#]/, 1)[0]! }
+  })
   if (home) output = output.split(home).join('<cli-home>')
   for (const token of tokens) if (token) output = output.split(token).join('<redacted>')
   output = output.replace(/([?#&](?:hookToken|runtimeToken|token)=)[^&#\s]+/gi, '$1<redacted>')
@@ -306,6 +313,94 @@ function sanitizeValue(value: unknown, home: string, tokens: readonly string[], 
   for (const [childKey, child] of Object.entries(value)) result[childKey] = sanitizeValue(child, home, tokens, childKey)
   return result
 }
+function boundedStartupText(text: string): string {
+  const bytes = Buffer.from(text)
+  let start = Math.max(0, bytes.length - MAX_DIAGNOSTIC_BYTES)
+  while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start++
+  return bytes.subarray(start).toString('utf8')
+}
+
+function startupDiagnostics(value: unknown): CliFilesStartupDiagnostics | undefined {
+  if (!isObject(value) || typeof value.phase !== 'string' || !['environment', 'fixtures', 'build', 'daemon', 'renderer', 'ready'].includes(value.phase)) return
+  const measured = (item: unknown) => typeof item === 'number' && Number.isFinite(item) && item >= 0
+  if (![value.elapsedMs, value.buildElapsedMs, value.rendererElapsedMs].every(measured) ||
+      !Array.isArray(value.renderer) || !isObject(value.logs)) return
+  if (value.assets !== undefined && (!isObject(value.assets) ||
+      typeof value.assets.uiDir !== 'string' || typeof value.assets.pluginsDir !== 'string')) return
+  const stages = ['launch', 'connect', 'context', 'page', 'navigation', 'connection', 'shell', 'worktree', 'layout', 'changes', 'ready', 'failed']
+  for (const entry of value.renderer) {
+    if (!isObject(entry) || typeof entry.stage !== 'string' || !stages.includes(entry.stage) || !measured(entry.elapsedMs)) return
+    for (const key of ['index', 'connId', 'browserPid']) {
+      if (entry[key] !== undefined && (!Number.isSafeInteger(entry[key]) || Number(entry[key]) < (key === 'index' ? 0 : 1))) return
+    }
+    for (const key of ['worktree', 'message']) if (entry[key] !== undefined && typeof entry[key] !== 'string') return
+    if (entry.pageErrors !== undefined && (!Array.isArray(entry.pageErrors) || entry.pageErrors.some(error => typeof error !== 'string'))) return
+    if (entry.failedRequests !== undefined && (!Array.isArray(entry.failedRequests) || entry.failedRequests.some(request =>
+      !isObject(request) || typeof request.path !== 'string' || typeof request.message !== 'string'))) return
+  }
+  for (const key of ['buildTail', 'daemonTail', 'rendererTail']) if (value.logs[key] !== undefined && typeof value.logs[key] !== 'string') return
+  const safe = sanitizeValue(value, '', [])
+  if (!isObject(safe)) return
+  const logs: CliFilesStartupDiagnostics['logs'] = {}
+  for (const key of ['buildTail', 'daemonTail', 'rendererTail'] as const) {
+    const text = record(safe.logs, 'startup logs')[key]
+    if (typeof text === 'string') logs[key] = boundedStartupText(text)
+  }
+  // Every field was checked above; bounding only removes diagnostic examples.
+  const diagnostics = safe as CliFilesStartupDiagnostics
+  return {
+    ...diagnostics,
+    renderer: diagnostics.renderer.slice(-64).map(entry => ({
+      ...entry,
+      ...(entry.message ? { message: boundedStartupText(entry.message) } : {}),
+      ...(entry.pageErrors ? { pageErrors: entry.pageErrors.slice(-5).map(boundedStartupText) } : {}),
+      ...(entry.failedRequests ? { failedRequests: entry.failedRequests.slice(-5).map(request => ({
+        path: boundedStartupText(request.path.split(/[?#]/, 1)[0]!),
+        message: boundedStartupText(request.message)
+      })) } : {})
+    })),
+    logs
+  }
+}
+
+function startupProcessesVerified(value: unknown, diagnostics: CliFilesStartupDiagnostics | undefined): boolean {
+  if (!diagnostics || !isObject(value) || typeof value.ok !== 'boolean' || !isObject(value.evidence)) return false
+  const evidence = value.evidence
+  if (!isObject(evidence.started) || typeof evidence.started.daemon !== 'boolean' || typeof evidence.started.browser !== 'boolean' ||
+      evidence.unresolvedAcquisition !== false || evidence.scopeCleanupComplete !== true || evidence.acquisitionSettled !== true ||
+      evidence.processIdentitiesGone !== true || typeof evidence.homeRemoved !== 'boolean' ||
+      !Array.isArray(evidence.trackedIdentities) || !Array.isArray(evidence.identities)) return false
+  const identities = evidence.trackedIdentities
+  const keys = new Set<string>()
+  for (const identity of identities) {
+    if (!isObject(identity) || identity.gone !== true || typeof identity.kind !== 'string' || !identity.kind ||
+        typeof identity.started !== 'string' || !identity.started || typeof identity.command !== 'string' || !identity.command ||
+        !Number.isSafeInteger(identity.pid) || Number(identity.pid) <= 0 ||
+        !Number.isSafeInteger(identity.ppid) || Number(identity.ppid) < 0 ||
+        !Number.isSafeInteger(identity.pgid) || Number(identity.pgid) <= 0) return false
+    const key = `${identity.pid}\0${identity.started}\0${identity.command}`
+    if (keys.has(key)) return false
+    keys.add(key)
+  }
+  const daemon = identities.filter(identity => isObject(identity) && identity.kind === 'daemon')
+  const browser = identities.filter(identity => isObject(identity) && identity.kind === 'browser')
+  if (daemon.length !== (evidence.started.daemon ? 1 : 0) || browser.length !== (evidence.started.browser ? 1 : 0)) return false
+  if (daemon.some(identity => !isObject(identity) || !String(identity.command).includes('daemon/src/main.ts')) ||
+      browser.some(identity => !isObject(identity) || !/chrome|chromium/i.test(String(identity.command)))) return false
+  if (!evidence.started.daemon && identities.some(identity => isObject(identity) && /^(daemon|pty)/.test(String(identity.kind)))) return false
+  if (!evidence.started.browser && identities.some(identity => isObject(identity) && /^browser/.test(String(identity.kind)))) return false
+  if (evidence.started.browser && !evidence.started.daemon) return false
+  const notifiedBrowserPids = new Set(diagnostics.renderer.flatMap(entry => entry.browserPid === undefined ? [] : [entry.browserPid]))
+  if (notifiedBrowserPids.size > 0 && (!evidence.started.browser || notifiedBrowserPids.size !== 1 ||
+      !browser.some(identity => isObject(identity) && notifiedBrowserPids.has(Number(identity.pid))))) return false
+  const summaries = identities.filter(identity => isObject(identity) && ['daemon', 'browser', 'pty'].includes(String(identity.kind)))
+    .map(identity => {
+      const entry = record(identity, 'startup identity')
+      return { kind: entry.kind, pid: entry.pid, gone: entry.gone }
+    })
+  return isDeepStrictEqual(evidence.identities, summaries)
+}
+
 function safeError(error: unknown): { kind: string; message: string; stderrTail?: string } {
   const value = error && typeof error === 'object' ? error as Record<string, unknown> : {}
   const kind = typeof value.kind === 'string' ? value.kind : typeof value.code === 'string' ? value.code : 'observation-failed'
@@ -2624,6 +2719,8 @@ export class CliFilesRunner {
   currentStage = 'setup'
   activeObservation: ObservationBuilder | undefined
   buildElapsedMs = 0
+  startup: CliFilesStartupDiagnostics | undefined
+  failedStartupCleanup: unknown
   primaryFailure: { stage: string; kind: string; message: string } | undefined
   cleanupFailure: string | undefined
   cleanupEvidence: JsonObject = {}
@@ -4037,6 +4134,7 @@ export class CliFilesRunner {
     this.world = await factory({ signal: this.workController.signal, deadline: this.workDeadline })
     this.home = this.world.home
     this.buildElapsedMs = this.world.buildElapsedMs
+    this.startup = startupDiagnostics(this.world.startupDiagnostics)
     const runtime = readRuntime(this.world.home)
     if (!runtime || runtime.pid !== this.world.daemonPid) throw new CliFilesFailure('runtime-identity', 'new world runtime does not match its daemon PID')
     this.tokenValues.push(runtime.token, runtime.hookToken)
@@ -4303,9 +4401,22 @@ export class CliFilesRunner {
   async cleanupWorld(): Promise<void> {
     if (!this.world) {
       await this.cleanupSentinel()
-      this.cleanupFailure = [this.cleanupFailure, 'owned world cleanup identity could not be verified'].filter(Boolean).join('; ')
+      const transferred = this.failedStartupCleanup
+      const processIdentitiesGone = startupProcessesVerified(transferred, this.startup)
+      const verified = processIdentitiesGone && isObject(transferred) && transferred.ok === true &&
+        transferred.error === undefined && isObject(transferred.evidence) && transferred.evidence.homeRemoved === true
+      const rawEvidence = isObject(transferred) && isObject(transferred.evidence) ? transferred.evidence : {}
+      const trackedIdentities = Array.isArray(rawEvidence.trackedIdentities) ? rawEvidence.trackedIdentities : []
+      if (!verified) this.cleanupFailure = [this.cleanupFailure, 'owned world cleanup identity could not be verified'].filter(Boolean).join('; ')
       if (this.sentinelError) this.cleanupFailure = [this.cleanupFailure, this.sentinelError].filter(Boolean).join('; ')
-      this.cleanupEvidence = { processIdentitiesGone: false, trackedIdentities: [], sentinelAlive: this.sentinelAliveAfterWorld }
+      this.cleanupEvidence = {
+        ...rawEvidence,
+        trackedIdentities,
+        daemonIdentityFound: trackedIdentities.some(identity => isObject(identity) && identity.kind === 'daemon'),
+        browserIdentityFound: trackedIdentities.some(identity => isObject(identity) && identity.kind === 'browser'),
+        processIdentitiesGone,
+        sentinelAlive: this.sentinelAliveAfterWorld
+      }
       clearTimeout(this.cleanupTimer)
       return
     }
@@ -4367,6 +4478,19 @@ export class CliFilesRunner {
       if (!this.primaryFailure) await this.fileWindowScenarios()
       if (!this.primaryFailure) await this.captureGuards()
     } catch (error) {
+      if (error instanceof CliFilesStartupError) {
+        const supplied: unknown = error.startupEvidence
+        if (isObject(supplied)) {
+          this.startup = startupDiagnostics(supplied.diagnostics)
+          if (this.startup) {
+            this.buildElapsedMs = this.startup.buildElapsedMs
+            this.failedStartupCleanup = sanitizeValue(supplied.cleanup, '', [])
+            if (isObject(this.failedStartupCleanup) && typeof this.failedStartupCleanup.error === 'string') {
+              this.cleanupFailure = [this.cleanupFailure, this.failedStartupCleanup.error].filter(Boolean).join('; ')
+            }
+          }
+        }
+      }
       const failure = safeError(error)
       this.primaryFailure ??= {
         stage: this.currentStage,
@@ -4424,6 +4548,7 @@ export class CliFilesRunner {
       },
       elapsedMs: Math.max(1, Date.now() - this.startedAt),
       buildElapsedMs: this.buildElapsedMs,
+      ...(this.startup ? { startup: this.startup } : {}),
       ...(this.guardEvidence ? { guards: this.guardEvidence } : {}),
       ...(Object.keys(this.fixtureEvidence).length ? { fixtures: { ...this.fixtureEvidence, gitCommands: this.gitEvidence } } : {}),
       ...(this.primaryFailure ? { error: this.primaryFailure } : {})

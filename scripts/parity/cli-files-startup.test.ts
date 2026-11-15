@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import * as cliWorldModule from './cli-world'
+import { runCliFilesParity } from './cli-files'
 
 type ProcessIdentity = {
   pid: number
@@ -733,3 +734,131 @@ test('CLI-files ignores poisoned inherited plugin roots and builds only under it
     fixture.dispose()
   }
 })
+test('CLI-files report transfers validated failed-startup evidence without fabricating CLI observations', async () => {
+  const evidence = validStartupEvidence({ daemon: true, browser: false })
+  const failure = typedStartupError(evidence, 'missing-chrome', 'an installed macOS Chrome or Chromium executable was not found')
+  const report = await runCliFilesParity({ createWorld: async () => { throw failure } })
+  const serialized = JSON.stringify(report)
+  expect(report).toMatchObject({
+    ok: false,
+    parityComplete: false,
+    error: { stage: 'setup', kind: 'missing-chrome', message: 'an installed macOS Chrome or Chromium executable was not found' },
+    cleanup: { ok: true }
+  })
+  expect(report.buildElapsedMs).toBe(37)
+  expect((report as unknown as { startup?: StartupDiagnostics }).startup).toEqual(evidence.diagnostics)
+  expect(report.receipts).toEqual([])
+  expect(report.observations).toHaveLength(13)
+  expect(report.observations.every(observation => observation.status === 'not-run' && observation.receiptIds.length === 0)).toBe(true)
+  expect(report.rows).toHaveLength(4)
+  expect(report.rows.every(row => row.status === 'not-run' && row.executed === false)).toBe(true)
+  expect(report.cleanup.evidence).toMatchObject({
+    processIdentitiesGone: true,
+    homeRemoved: true,
+    daemonIdentityFound: true,
+    browserIdentityFound: false,
+    trackedIdentities: [expect.objectContaining({ kind: 'daemon', pid: 701, gone: true })]
+  })
+  expect(serialized).not.toContain('owned world cleanup identity could not be verified')
+})
+
+test('CLI-files report accepts explicit clean pre-daemon accounting without inventing roots', async () => {
+  const evidence = validStartupEvidence({ daemon: false, browser: false })
+  const failure = typedStartupError(evidence, 'egress-guard-inactive', 'recording guard refused startup')
+  const report = await runCliFilesParity({ createWorld: async () => { throw failure } })
+  expect(report.cleanup.ok).toBe(true)
+  expect(report.cleanup.evidence).toMatchObject({
+    processIdentitiesGone: true,
+    homeRemoved: true,
+    daemonIdentityFound: false,
+    browserIdentityFound: false,
+    trackedIdentities: []
+  })
+  expect(report.error).toMatchObject({ kind: 'egress-guard-inactive', message: 'recording guard refused startup' })
+})
+
+test('CLI-files runner rejects ordinary errors, malformed roots, uncertain teardown and incomplete acquisition accounting', async () => {
+  const ordinary = await runCliFilesParity({ createWorld: async () => { throw new Error('ordinary injected startup failed') } })
+  expect(ordinary.cleanup.ok).toBe(false)
+  expect(ordinary.error).toMatchObject({ kind: 'observation-failed', message: 'ordinary injected startup failed' })
+
+  const mutations: Array<[string, (evidence: StartupEvidence) => void]> = [
+    ['missing started daemon root', evidence => {
+      evidence.cleanup.evidence.trackedIdentities = []
+      evidence.cleanup.evidence.identities = []
+    }],
+    ['root present when daemon never started', evidence => {
+      evidence.cleanup.evidence.started = { daemon: false, browser: false }
+      evidence.cleanup.evidence.trackedIdentities = [daemonIdentity()]
+      evidence.cleanup.evidence.identities = [{ kind: 'daemon', pid: 701, gone: true }]
+    }],
+    ['browser PID reported without a started browser root', evidence => {
+      evidence.diagnostics.renderer[0]!.browserPid = 801
+    }],
+    ['malformed phase array', evidence => { Object.assign(evidence.diagnostics, { phase: ['renderer'] }) }],
+    ['malformed renderer stage array', evidence => { Object.assign(evidence.diagnostics.renderer[0]!, { stage: ['failed'] }) }],
+    ['unknown process table', evidence => { evidence.cleanup.evidence.processIdentitiesGone = false }],
+    ['home removal not verified', evidence => { evidence.cleanup.evidence.homeRemoved = false }],
+    ['scope cleanup incomplete', evidence => { evidence.cleanup.evidence.scopeCleanupComplete = false }],
+    ['startup acquisition unresolved', evidence => {
+      evidence.cleanup.evidence.acquisitionSettled = false
+      evidence.cleanup.evidence.unresolvedAcquisition = true
+    }],
+    ['identity survived', evidence => {
+      evidence.cleanup.evidence.trackedIdentities[0]!.gone = false
+      evidence.cleanup.evidence.identities[0]!.gone = false
+    }]
+
+  ]
+  for (const [label, mutate] of mutations) {
+    const evidence = validStartupEvidence({ daemon: true, browser: false })
+    mutate(evidence)
+    const report = await runCliFilesParity({ createWorld: async () => { throw typedStartupError(evidence, 'renderer-disconnected', label) } })
+    expect(report.cleanup.ok, label).toBe(false)
+    expect(report.ok, label).toBe(false)
+    expect(report.parityComplete, label).toBe(false)
+    expect(report.error?.message, label).toBe(label)
+  }
+})
+test('CLI-files runner preserves process proof separately when startup-home removal fails', async () => {
+  const evidence = validStartupEvidence({ daemon: true, browser: false })
+  evidence.cleanup.ok = false
+  evidence.cleanup.error = 'owned home removal could not be verified'
+  evidence.cleanup.evidence.homeRemoved = false
+  const failure = typedStartupError(evidence, 'missing-chrome', 'browser missing')
+  const report = await runCliFilesParity({ createWorld: async () => { throw failure } })
+  expect(report.ok).toBe(false)
+  expect(report.cleanup.ok).toBe(false)
+  expect(report.cleanup.error).toContain('owned home removal could not be verified')
+  expect(report.cleanup.evidence).toMatchObject({ processIdentitiesGone: true, homeRemoved: false })
+  expect(report.error).toMatchObject({ kind: 'missing-chrome', message: 'browser missing' })
+})
+
+test('CLI-files runner retains and re-sanitizes actual factory startup evidence in JSON', async () => {
+  const fixture = makeFactoryFixture({ rendererFailure: true })
+  try {
+    const factoryFailure = await captureFailure(requireFactory()({}, fixture.dependencies))
+    expect(factoryFailure.startupEvidence).toBeDefined()
+    const report = await runCliFilesParity({ createWorld: async () => { throw factoryFailure } })
+    const json = JSON.stringify(report)
+    expect(report.buildElapsedMs).toBe((report as unknown as { startup?: StartupDiagnostics }).startup?.buildElapsedMs)
+    expect((report as unknown as { startup?: StartupDiagnostics }).startup?.phase).toBe('renderer')
+    expect(report.error?.message).toContain('local renderer navigation failed')
+    for (const secret of [fixture.home, 'runtime-token', 'hook-token', 'u:p@127.0.0.1', 'fragment-secret', '?token=', '?extra=', '?arbitrary=', 'extra=value', 'arbitrary=value']) {
+      expect(json).not.toContain(secret)
+    }
+    expect(report.cleanup.evidence).toMatchObject({
+      processIdentitiesGone: true,
+      homeRemoved: true,
+      daemonIdentityFound: true,
+      browserIdentityFound: true,
+      trackedIdentities: [
+        expect.objectContaining({ kind: 'daemon', pid: 701, gone: true }),
+        expect.objectContaining({ kind: 'browser', pid: 801, gone: true })
+      ]
+    })
+  } finally {
+    fixture.dispose()
+  }
+})
+
