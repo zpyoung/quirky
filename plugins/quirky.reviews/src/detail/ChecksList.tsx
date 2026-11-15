@@ -126,6 +126,9 @@ export function ChecksList(props: ChecksListProps) {
   const registration = useRef<ChecksLease | null>(null)
   const [generation, setGeneration] = useState<number>()
   const current = useRef<{
+    ownerKey: string
+    head: string | null
+    rows: CheckRow[] | null
     actions(): Array<{ action: string; enabled: boolean }>
     run(request: ReviewsUiControlRequest, isCurrent: () => boolean): unknown | Promise<unknown>
   } | null>(null)
@@ -136,7 +139,7 @@ export function ChecksList(props: ChecksListProps) {
   const detailRequest = owner === null ? null : viewParams(owner)
   const checkDetails = (id: number) => detailMap(checksValue, id)
   const detailKey = (id: number) => `${ownerKey}:${id}`
-  useLayoutEffect(() => { current.current = { actions, run } })
+  useLayoutEffect(() => { current.current = { ownerKey, head, rows, actions, run } })
 
   useLayoutEffect(() => {
     pendingActionRef.current = null
@@ -278,16 +281,19 @@ export function ChecksList(props: ChecksListProps) {
       pendingExpandIntentRef.current.set(id, next)
       try {
         await props.context.call('quirky.reviews/detailExpandCheck', { ...detailRequest, checkId: id, expanded: next })
-        if (!isCurrent() || pendingExpandIntentRef.current.get(id) !== true || !next || check.checkRunId === null || !headValid) return
-        const key = detailKey(check.checkRunId)
+        const latest = current.current
+        const currentCheck = latest?.rows?.find((item) => checkKey(item) === id)
+        if (!isCurrent() || latest?.ownerKey !== ownerKey || latest.head !== head || !currentCheck
+          || pendingExpandIntentRef.current.get(id) !== true || !next || currentCheck.checkRunId === null || !headValid) return
+        const key = detailKey(currentCheck.checkRunId)
         if (activeLoadsRef.current.has(key)) return
         activeLoadsRef.current.add(key)
         setLoadingCheckRunIds(new Set(activeLoadsRef.current))
         setCheckDetailErrors((previous) => { const errors = new Map(previous); errors.delete(key); return errors })
         try {
           await props.context.call('quirky.reviews/detailLoadCheckDetails', {
-            ...detailRequest, expectedHead: head, checkRunId: check.checkRunId,
-            ...(check.workflowRunId === null ? {} : { workflowRunId: check.workflowRunId }),
+            ...detailRequest, expectedHead: head, checkRunId: currentCheck.checkRunId,
+            ...(currentCheck.workflowRunId === null ? {} : { workflowRunId: currentCheck.workflowRunId }),
           })
         } catch (cause) {
           if (isCurrent()) setCheckDetailErrors((previous) => new Map(previous).set(key, errorText(cause)))

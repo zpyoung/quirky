@@ -1003,3 +1003,19 @@ test('ChecksList surfaces delivered-false diagnostics and fences stale dispatch 
   await settle()
   expect(errorTexts(stale.element).join(' ')).not.toContain('obsolete checks dispatch')
 })
+
+test('ChecksList does not load a check removed while expansion is pending', async () => {
+  const ui = mountChecks(reviewState({ checks: checksEnvelope([check()]) }))
+  const expansion = ui.holdNext('quirky.reviews/detailExpandCheck')
+  let request!: Promise<ReviewsUiControlResult>
+  await act(async () => {
+    request = invokeDetached(ui, control(ui, 'checks-list'), 'check-toggle', { checkId: CHECK_ID, expanded: true })
+    await Promise.resolve()
+  })
+  await settle()
+  ui.render(reviewState({ checks: checksEnvelope([]), expandedChecks: [CHECK_ID] }))
+  await act(async () => { expansion.resolve({}); await expansion.promise })
+  await request
+  await settle()
+  expect(callCount(ui, 'quirky.reviews/detailLoadCheckDetails')).toBe(0)
+})
