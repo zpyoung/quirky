@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import {
   Badge,
+  EmptyState,
   Button,
   ControlIcon,
   Dialog,
@@ -20,6 +21,10 @@ import {
   formatLedgerEntry,
   formatRemainingBudget,
   isDisarmableSitter,
+  isRecord,
+  registerReviewsUiControl,
+  requestReviewsUiControl,
+  sameApprovalScope,
   sitterActionLabel,
   sitterReasonText,
   sitterStatusPresentation,
@@ -35,7 +40,9 @@ import type {
   SitterMergeCheckScope,
   SitterMergeMethod,
   SitterOpenEscalation,
+  ReviewsUiControlRequest,
 } from './data'
+import { parseRepoIdentity, repoFromReviewUrl } from '../detail/data'
 
 const STOPPING_HELP = 'Stopping prevents new actions; an in-flight provider operation may finish.'
 const CAPABILITY_KEYS: readonly SitterCapabilityKey[] = ['updateBranch', 'resolveConflicts', 'fixChecks', 'merge']
@@ -62,6 +69,112 @@ function fieldMergeScope(value: unknown): SitterMergeCheckScope {
 
 function emptyCapabilities(): SitterCapabilities {
   return { updateBranch: 'off', resolveConflicts: 'off', fixChecks: 'off', merge: 'off' }
+}
+type SitterControlAction = { action: string; enabled: boolean }
+type SitterControlLease = { target: string; generation: number; changed(): void; dispose(): void }
+
+function controlDeliveryError(reason: 'target-unavailable' | 'disabled' | 'unknown-action'): string {
+  if (reason === 'disabled') return 'This PR Sitter action is currently unavailable.'
+  if (reason === 'unknown-action') return 'This PR Sitter action is no longer available.'
+  return 'This PR Sitter control is no longer available.'
+}
+
+function controlValue(request: ReviewsUiControlRequest, allowed: readonly string[]): Record<string, unknown> {
+  const value = request.value
+  if (value === undefined) return {}
+  if (!isRecord(value) || Object.keys(value).some((key) => !allowed.includes(key))) {
+    throw new Error('Invalid PR Sitter control arguments.')
+  }
+  return value
+}
+
+function useSitterUiControl(options: {
+  context: UiPluginContext
+  surface: string
+  slot: string
+  target: string
+  active: boolean
+  identity?: string
+  actions(): SitterControlAction[]
+  run(request: ReviewsUiControlRequest, isCurrent: () => boolean): unknown | Promise<unknown>
+  onError(message: string): void
+}) {
+  const actionsRef = useRef(options.actions)
+  const runRef = useRef(options.run)
+  const errorRef = useRef(options.onError)
+  useLayoutEffect(() => {
+    actionsRef.current = options.actions
+    runRef.current = options.run
+    errorRef.current = options.onError
+  })
+  const registrationRef = useRef<SitterControlLease | null>(null)
+  const [reported, setReported] = useState<{ target: string; generation: number } | null>(null)
+  const actionsKey = JSON.stringify(options.actions())
+
+  useLayoutEffect(() => {
+    if (!options.active) {
+      registrationRef.current = null
+      setReported(null)
+      return
+    }
+    const registration = registerReviewsUiControl(options.context, {
+      surface: options.surface,
+      slot: options.slot,
+      target: options.target,
+      actions: () => actionsRef.current(),
+      run: (request, isCurrent) => runRef.current(request, isCurrent),
+    })
+    const lease = {
+      target: options.target,
+      generation: registration.generation,
+      changed: registration.changed,
+      dispose: registration.dispose,
+    }
+    registrationRef.current = lease
+    setReported({ target: lease.target, generation: lease.generation })
+    return () => {
+      registration.dispose()
+      if (registrationRef.current === lease) registrationRef.current = null
+    }
+  }, [options.active, options.context, options.identity, options.slot, options.surface, options.target])
+
+  useEffect(() => {
+    const lease = registrationRef.current
+    if (options.active && lease?.target === options.target) lease.changed()
+  }, [actionsKey, options.active, options.target])
+
+  async function request(
+    action: string,
+    value?: Record<string, unknown>,
+    sessionIsCurrent: () => boolean = () => true,
+  ) {
+    const lease = registrationRef.current
+    if (!options.active || lease === null || lease.target !== options.target) return null
+    const controlRequest: ReviewsUiControlRequest = {
+      target: lease.target,
+      generation: lease.generation,
+      action,
+      ...(value === undefined ? {} : { value }),
+    }
+    try {
+      const result = await requestReviewsUiControl(options.context, controlRequest)
+      if (registrationRef.current === lease && sessionIsCurrent() && !result.delivered) {
+        errorRef.current(controlDeliveryError(result.reason))
+      }
+      return result
+    } catch (failure) {
+      if (registrationRef.current === lease && sessionIsCurrent()) {
+        errorRef.current(messageOf(failure, 'The PR Sitter action could not be delivered.'))
+      }
+      return null
+    }
+  }
+
+  return {
+    target: options.target,
+    generation: options.active && reported?.target === options.target ? reported.generation : undefined,
+    request,
+  }
 }
 
 
@@ -96,34 +209,75 @@ export function SitterSafetyStrip({
   error?: string | null
   onStoppedAll(): void | Promise<void>
 }) {
-  const [requestBusy, setRequestBusy] = useState(false)
+  const [requestBusyToken, setRequestBusyToken] = useState<number | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
-  const stopAll = async () => {
-    setRequestError(null)
-    setRequestBusy(true)
-    let nextError: string | null = null
-    try {
-      await context.executeCommand('command:quirky.reviews/stop-all-sitters', {})
-    } catch (cause) {
-      nextError = messageOf(cause, 'PR Sitters could not be stopped.')
-    }
-    try {
-      await onStoppedAll()
-    } catch (cause) {
-      if (nextError === null) nextError = messageOf(cause, 'PR Sitter status could not be refreshed.')
-    }
-    setRequestError(nextError)
-    setRequestBusy(false)
-  }
+  const requestBusyRef = useRef<{ token: number; isCurrent(): boolean } | null>(null)
+  const requestTokenRef = useRef(0)
+  const target = JSON.stringify(['panel:quirky.reviews/checks', 'sitter-safety-strip', null, null, null, null, null])
+  const requestBusyCurrent = requestBusyToken !== null && requestBusyRef.current?.isCurrent() === true
+  const stopAllEnabled = sitterState.available && sitterState.activeCount > 0 && !busy && !requestBusyCurrent
+  const control = useSitterUiControl({
+    context,
+    surface: 'panel:quirky.reviews/checks',
+    slot: 'sitter-safety-strip',
+    target,
+    active: true,
+    actions: () => [{
+      action: 'stop-all',
+      enabled: sitterState.available && sitterState.activeCount > 0 && !busy &&
+        !(requestBusyToken !== null && requestBusyRef.current?.isCurrent() === true),
+    }],
+    onError: setRequestError,
+    run: (request, isCurrent) => {
+      if (request.action !== 'stop-all') throw new Error('Unknown PR Sitter safety action.')
+      controlValue(request, [])
+      const existingBusy = requestBusyRef.current
+      if (!isCurrent() || !sitterState.available || sitterState.activeCount <= 0 ||
+        busy || (existingBusy !== null && existingBusy.isCurrent())) return
+
+      const token = ++requestTokenRef.current
+      requestBusyRef.current = { token, isCurrent }
+      setRequestError(null)
+      setRequestBusyToken(token)
+      void (async () => {
+        let nextError: string | null = null
+        try {
+          try {
+            await context.executeCommand('command:quirky.reviews/stop-all-sitters', {})
+          } catch (cause) {
+            nextError = messageOf(cause, 'PR Sitters could not be stopped.')
+          }
+          if (isCurrent() && requestBusyRef.current?.token === token) {
+            try {
+              await onStoppedAll()
+            } catch (cause) {
+              if (nextError === null) nextError = messageOf(cause, 'PR Sitter status could not be refreshed.')
+            }
+          }
+          if (isCurrent() && requestBusyRef.current?.token === token) setRequestError(nextError)
+        } finally {
+          if (isCurrent() && requestBusyRef.current?.token === token) {
+            requestBusyRef.current = null
+            setRequestBusyToken(null)
+          }
+        }
+      })()
+    },
+  })
 
   return (
-    <section className="ui-stack" aria-label="PR Sitter safety">
+    <section
+      className="ui-stack"
+      aria-label="PR Sitter safety"
+      data-review-control-target={control.target}
+      data-review-control-generation={control.generation}
+    >
       <SectionHeader title="PR Sitter safety" />
       <div className="ui-cluster">
         <Button
           variant="destructive"
-          disabled={sitterState.activeCount === 0 || busy || requestBusy}
-          onClick={() => { void stopAll() }}
+          disabled={!stopAllEnabled}
+          onClick={() => { void control.request('stop-all') }}
         >
           Stop all PR Sitters
         </Button>
@@ -134,7 +288,8 @@ export function SitterSafetyStrip({
   )
 }
 
-type SitterDialogSession = { generation: number; worktree: string | null }
+type SitterDialogSession = { generation: number; worktree: string | null; identity: string }
+
 
 export function SitterRow({
   context,
@@ -154,6 +309,7 @@ export function SitterRow({
   onRefreshSitter(includeDetail: boolean): Promise<void>
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogSessionGeneration, setDialogSessionGeneration] = useState(0)
   const [capabilities, setCapabilities] = useState<SitterCapabilities>(emptyCapabilities)
   const [branchUpdateMode, setBranchUpdateMode] = useState<SitterBranchUpdateMode>('merge-base-update')
   const [mergeMethod, setMergeMethod] = useState<'' | Exclude<SitterMergeMethod, null>>('')
@@ -162,14 +318,21 @@ export function SitterRow({
   const [actionError, setActionError] = useState<string | null>(null)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [debugCopied, setDebugCopied] = useState(false)
+  const [rowActionToken, setRowActionToken] = useState<number | null>(null)
   const activeWorktreeRef = useRef(activeWorktree)
   activeWorktreeRef.current = activeWorktree
+  const dialogIdentityRef = useRef('')
+  const currentSitterRef = useRef<ChecksSitterState['sitter']>(null)
+  const approvalEscalationsRef = useRef<SitterOpenEscalation[]>([])
   const dialogWorktreeRef = useRef(activeWorktree)
   const dialogOpenRef = useRef(false)
   const dialogGenerationRef = useRef(0)
   const dialogSessionRef = useRef<SitterDialogSession | null>(null)
+  const rowActionGenerationRef = useRef(0)
+  const rowActionLeaseRef = useRef<{ token: number; isCurrent(): boolean } | null>(null)
   const actionGenerationRef = useRef(0)
   const busyActionGenerationRef = useRef<number | null>(null)
+  const busyLeaseRef = useRef<{ session: SitterDialogSession; token: number } | null>(null)
   const debugFeedbackGenerationRef = useRef(0)
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
@@ -179,6 +342,7 @@ export function SitterRow({
     dialogOpenRef.current &&
     dialogSessionRef.current === session &&
     session.generation === dialogGenerationRef.current &&
+    session.identity === dialogIdentityRef.current &&
     session.worktree === dialogWorktreeRef.current &&
     session.worktree === activeWorktreeRef.current
   const clearDebugFeedback = useCallback(() => {
@@ -189,24 +353,30 @@ export function SitterRow({
     }
     setDebugCopied(false)
   }, [])
-  const invalidateDialog = useCallback(() => {
-    dialogGenerationRef.current += 1
+  const invalidateDialog = useCallback((publishGeneration = true) => {
+    const generation = dialogGenerationRef.current + 1
+    dialogGenerationRef.current = generation
     dialogSessionRef.current = null
     dialogOpenRef.current = false
     busyActionGenerationRef.current = null
+    busyLeaseRef.current = null
+    if (publishGeneration) setDialogSessionGeneration(generation)
   }, [])
   const openDialog = useCallback((worktree: string | null) => {
     const currentSession = dialogSessionRef.current
-    if (dialogOpenRef.current && currentSession?.worktree === worktree && worktree === activeWorktreeRef.current) {
+    if (dialogOpenRef.current && currentSession?.worktree === worktree &&
+      currentSession.identity === dialogIdentityRef.current && worktree === activeWorktreeRef.current) {
       void onRefreshSitter(true)
       return
     }
     const generation = dialogGenerationRef.current + 1
     dialogGenerationRef.current = generation
-    dialogSessionRef.current = { generation, worktree }
+    setDialogSessionGeneration(generation)
+    dialogSessionRef.current = { generation, worktree, identity: dialogIdentityRef.current }
     dialogWorktreeRef.current = worktree
     dialogOpenRef.current = true
     busyActionGenerationRef.current = null
+    busyLeaseRef.current = null
     setBusyAction(null)
     clearDebugFeedback()
     setActionError(null)
@@ -290,7 +460,7 @@ export function SitterRow({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      invalidateDialog()
+      invalidateDialog(false)
       debugFeedbackGenerationRef.current += 1
       if (copyTimer.current !== null) {
         clearTimeout(copyTimer.current)
@@ -298,32 +468,6 @@ export function SitterRow({
       }
     }
   }, [invalidateDialog])
-
-  const runAction = async (key: string, command: string, args: JsonRecord, refresh = true) => {
-    const session = dialogSessionRef.current
-    if (!isCurrentDialogSession(session)) return false
-    const actionGeneration = ++actionGenerationRef.current
-    busyActionGenerationRef.current = actionGeneration
-    setActionError(null)
-    setBusyAction(key)
-    try {
-      await context.executeCommand(command, args)
-      if (!isCurrentDialogSession(session)) return false
-      if (refresh) {
-        await onRefreshSitter(true)
-        if (!isCurrentDialogSession(session)) return false
-      }
-      return true
-    } catch (cause) {
-      if (isCurrentDialogSession(session)) setActionError(messageOf(cause, 'The PR Sitter action failed.'))
-      return false
-    } finally {
-      if (isCurrentDialogSession(session) && busyActionGenerationRef.current === actionGeneration) {
-        busyActionGenerationRef.current = null
-        setBusyAction(null)
-      }
-    }
-  }
 
   const setCapability = (key: SitterCapabilityKey, value: SitterCapabilityMode) => {
     setCapabilities((previous) => {
@@ -354,58 +498,6 @@ export function SitterRow({
           ? 'Enter a positive, finite active-time budget.'
           : null
   const canSubmit = submitWarning === null && !unavailableOwner && busyAction === null
-
-  const armSitter = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (!activeWorktree || !review || !canSubmit) return
-    const parsedBudget = Number(budgetHours)
-    if (!Number.isFinite(parsedBudget) || parsedBudget <= 0) return
-    await runAction('arm', 'command:quirky.reviews/arm-sitter', {
-      worktree: activeWorktree,
-      capabilities,
-      branchUpdateMode,
-      mergeMethod: mergeMethod === '' ? null : mergeMethod,
-      mergeCheckScope,
-      budgetHours: parsedBudget,
-    })
-  }
-
-  const approve = async (escalation: SitterOpenEscalation) => {
-    if (!activeWorktree || !currentSitter || !escalation.approvalScope) return
-    await runAction(`approve:${escalation.escalationId}`, 'command:quirky.reviews/approve-sitter', {
-      worktree: activeWorktree,
-      watcherId: currentSitter.target.watcherId,
-      escalationId: escalation.escalationId,
-      expectedScope: escalation.approvalScope,
-    })
-  }
-
-  const stopSitter = async () => {
-    if (!activeWorktree || !currentSitter) return
-    await runAction('stop', 'command:quirky.reviews/stop-sitter', {
-      worktree: activeWorktree,
-      watcherId: currentSitter.target.watcherId,
-    })
-  }
-
-  const copyDebugReport = async () => {
-    const session = dialogSessionRef.current
-    if (!activeWorktree || !currentSitter || !isCurrentDialogSession(session) || session.worktree !== activeWorktree) return
-    clearDebugFeedback()
-    const copied = await runAction('debug', 'command:quirky.reviews/copy-sitter-debug', {
-      worktree: activeWorktree,
-      watcherId: currentSitter.target.watcherId,
-    }, false)
-    if (!copied || !isCurrentDialogSession(session)) return
-    const generation = ++debugFeedbackGenerationRef.current
-    setDebugCopied(true)
-    copyTimer.current = setTimeout(() => {
-      if (debugFeedbackGenerationRef.current !== generation || !isCurrentDialogSession(session)) return
-      copyTimer.current = null
-      setDebugCopied(false)
-    }, 2_000)
-  }
-
   const supportedReview = review !== null && (review.provider === 'github' || review.provider === 'gitlab')
   const row = currentSitter
   const showRearm = row !== null && (effectiveStatus?.state === 'disabled' || effectiveStatus?.state === 'parked')
@@ -418,31 +510,316 @@ export function SitterRow({
   const lastConfirmed = statusPresentation?.label.startsWith('Host unreachable · last confirmed ')
     ? statusPresentation.label.slice('Host unreachable · last confirmed '.length)
     : 'an unknown time ago'
+  const repoIdentity = review === null
+    ? null
+    : parseRepoIdentity(review.prRepo) ?? repoFromReviewUrl(review.url, review.number)
+  const repoOrNull = repoIdentity ? `${repoIdentity.host}/${repoIdentity.owner}/${repoIdentity.repo}` : null
+  const headRefOidOrNull = typeof review?.headRefOid === 'string' && review.headRefOid.length > 0 ? review.headRefOid : null
+  const rowControlTarget = JSON.stringify([
+    'panel:quirky.reviews/checks', 'sitter-row', activeWorktree ?? null, repoOrNull,
+    review?.number ?? null, headRefOidOrNull, null,
+  ])
+  const dialogControlTarget = JSON.stringify([
+    'panel:quirky.reviews/checks', 'sitter-dialog', activeWorktree ?? null, repoOrNull,
+    review?.number ?? null, headRefOidOrNull, 'sitter',
+  ])
+  const dialogIdentity = JSON.stringify([
+    dialogControlTarget,
+    currentSitter?.target.watcherId ?? null,
+    currentSitter?.enrollment.commandRevision ?? null,
+    approvalEscalations.map((escalation) => [
+      escalation.escalationId,
+      escalation.approvalScope?.actionKind ?? null,
+      escalation.approvalScope?.contentIdentity ?? null,
+      escalation.approvalScope?.evidenceKey ?? null,
+      escalation.approvalScope?.preparedCommitSha ?? '',
+    ]),
+  ])
+  dialogIdentityRef.current = dialogIdentity
+  currentSitterRef.current = currentSitter
+  approvalEscalationsRef.current = approvalEscalations
+  const registrationSessionGeneration = dialogOpenRef.current && dialogSessionRef.current !== null &&
+    dialogSessionRef.current.identity !== dialogIdentity
+    ? dialogGenerationRef.current + 1
+    : dialogSessionGeneration
+  const dialogRegistrationIdentity = JSON.stringify([dialogIdentity, registrationSessionGeneration])
+
+  useLayoutEffect(() => {
+    const session = dialogSessionRef.current
+    if (!dialogOpenRef.current || session === null || session.identity === dialogIdentity) return
+    const replacement = {
+      generation: dialogGenerationRef.current + 1,
+      worktree: session.worktree,
+      identity: dialogIdentity,
+    }
+    dialogGenerationRef.current = replacement.generation
+    dialogSessionRef.current = replacement
+    setDialogSessionGeneration(replacement.generation)
+    busyActionGenerationRef.current = null
+    busyLeaseRef.current = null
+    setBusyAction(null)
+    clearDebugFeedback()
+    setActionError(null)
+  }, [clearDebugFeedback, dialogIdentity])
+
+  const isCurrentApproval = (capture: {
+    watcherId: string
+    escalationId: string
+    expectedScope: SitterApprovalScope
+  }) => currentSitterRef.current?.target.watcherId === capture.watcherId &&
+    approvalEscalationsRef.current.some((escalation) =>
+      escalation.escalationId === capture.escalationId &&
+      escalation.approvalScope !== undefined &&
+      sameApprovalScope(escalation.approvalScope, capture.expectedScope))
+
+  const runAction = async (
+    key: string,
+    command: string,
+    args: JsonRecord,
+    session: SitterDialogSession,
+    isCurrent: () => boolean,
+    refresh = true,
+    approval?: { watcherId: string; escalationId: string; expectedScope: SitterApprovalScope },
+  ) => {
+    const current = () => isCurrent() && isCurrentDialogSession(session)
+    if (!current() || busyLeaseRef.current !== null) return false
+    const token = ++actionGenerationRef.current
+    busyActionGenerationRef.current = token
+    busyLeaseRef.current = { session, token }
+    setActionError(null)
+    setBusyAction(key)
+    try {
+      await context.executeCommand(command, args)
+      if (!current() || (approval !== undefined && !isCurrentApproval(approval))) return false
+      if (refresh) {
+        await onRefreshSitter(true)
+        if (!current()) return false
+      }
+      return true
+    } catch (cause) {
+      if (current()) setActionError(messageOf(cause, 'The PR Sitter action failed.'))
+      return false
+    } finally {
+      if (current() && busyLeaseRef.current?.token === token && busyActionGenerationRef.current === token) {
+        busyActionGenerationRef.current = null
+        busyLeaseRef.current = null
+        setBusyAction(null)
+      }
+    }
+  }
+
+  const dialogControl = useSitterUiControl({
+    context,
+    surface: 'panel:quirky.reviews/checks',
+    slot: 'sitter-dialog',
+    target: dialogControlTarget,
+    active: dialogOpen,
+    identity: dialogRegistrationIdentity,
+    actions: () => [
+      { action: 'close-dialog', enabled: true },
+      { action: 'arm', enabled: (!row || showRearm) && canSubmit },
+      { action: 'approve', enabled: !unavailableOwner && busyAction === null && approvalEscalations.length > 0 },
+      { action: 'stop', enabled: showStop && !unavailableOwner && busyAction === null },
+      { action: 'copy-debug', enabled: row !== null && busyAction === null },
+    ],
+    onError: setActionError,
+    run: (request, isCurrent) => {
+      const session = dialogSessionRef.current
+      const current = () => isCurrent() && isCurrentDialogSession(session)
+      if (request.action === 'close-dialog') {
+        controlValue(request, [])
+        if (current()) dismissDialog()
+        return
+      }
+      if (request.action === 'arm') {
+        const value = controlValue(request, ['capabilities', 'branchUpdateMode', 'mergeMethod', 'mergeCheckScope', 'budgetHours'])
+        if (!current() || (row !== null && !showRearm) || !canSubmit || busyLeaseRef.current !== null) return
+        if (!activeWorktree || !review) return
+        let nextCapabilities = capabilities
+        if (Object.hasOwn(value, 'capabilities')) {
+          const candidate = value.capabilities
+          if (!isRecord(candidate) || Object.keys(candidate).length !== CAPABILITY_KEYS.length ||
+            CAPABILITY_KEYS.some((capability) => !Object.hasOwn(candidate, capability) ||
+              (candidate[capability] !== 'off' && candidate[capability] !== 'gated' && candidate[capability] !== 'on'))) {
+            throw new Error('Invalid PR Sitter capabilities.')
+          }
+          nextCapabilities = {
+            updateBranch: candidate.updateBranch as SitterCapabilityMode,
+            resolveConflicts: candidate.resolveConflicts as SitterCapabilityMode,
+            fixChecks: candidate.fixChecks as SitterCapabilityMode,
+            merge: candidate.merge as SitterCapabilityMode,
+          }
+        }
+        const branchValue = Object.hasOwn(value, 'branchUpdateMode') ? value.branchUpdateMode : branchUpdateMode
+        if (branchValue !== 'merge-base-update' && branchValue !== 'rebase') throw new Error('Invalid PR Sitter branch update mode.')
+        const mergeValue = Object.hasOwn(value, 'mergeMethod') ? value.mergeMethod : mergeMethod === '' ? null : mergeMethod
+        if (mergeValue !== null && mergeValue !== 'merge' && mergeValue !== 'squash' && mergeValue !== 'rebase') {
+          throw new Error('Invalid PR Sitter merge method.')
+        }
+        const scopeValue = Object.hasOwn(value, 'mergeCheckScope') ? value.mergeCheckScope : mergeCheckScope
+        if (scopeValue !== 'all' && scopeValue !== 'required') throw new Error('Invalid PR Sitter merge check scope.')
+        const budgetValue = Object.hasOwn(value, 'budgetHours') ? value.budgetHours : Number(budgetHours)
+        if (typeof budgetValue !== 'number' || !Number.isFinite(budgetValue) || budgetValue <= 0) {
+          throw new Error('Enter a positive, finite active-time budget.')
+        }
+        void runAction('arm', 'command:quirky.reviews/arm-sitter', {
+          worktree: activeWorktree,
+          capabilities: nextCapabilities,
+          branchUpdateMode: branchValue,
+          mergeMethod: mergeValue,
+          mergeCheckScope: scopeValue,
+          budgetHours: budgetValue,
+        }, session!, isCurrent)
+        return
+      }
+      if (request.action === 'approve') {
+        const value = controlValue(request, ['escalationId'])
+        if (!current() || unavailableOwner || busyAction !== null ||
+          approvalEscalations.length === 0 || busyLeaseRef.current !== null) return
+        let escalation: SitterOpenEscalation | undefined
+        if (Object.hasOwn(value, 'escalationId')) {
+          if (typeof value.escalationId !== 'string' || value.escalationId.length === 0) {
+            throw new Error('Select a current PR Sitter escalation.')
+          }
+          escalation = approvalEscalations.find((candidate) => candidate.escalationId === value.escalationId)
+        } else if (approvalEscalations.length === 1) {
+          escalation = approvalEscalations[0]
+        } else {
+          throw new Error('Select the escalation to approve.')
+        }
+        if (!activeWorktree || !currentSitter || !escalation?.approvalScope) {
+          throw new Error('The selected PR Sitter escalation is no longer available.')
+        }
+        const expectedScope = { ...escalation.approvalScope }
+        const capture = { watcherId: currentSitter.target.watcherId, escalationId: escalation.escalationId, expectedScope }
+        void runAction(`approve:${escalation.escalationId}`, 'command:quirky.reviews/approve-sitter', {
+          worktree: activeWorktree,
+          watcherId: capture.watcherId,
+          escalationId: capture.escalationId,
+          expectedScope: capture.expectedScope,
+        }, session!, isCurrent, true, capture)
+        return
+      }
+      if (request.action === 'stop') {
+        controlValue(request, [])
+        if (!current() || !showStop || unavailableOwner || busyAction !== null ||
+          busyLeaseRef.current !== null || !activeWorktree || !currentSitter) return
+        void runAction('stop', 'command:quirky.reviews/stop-sitter', {
+          worktree: activeWorktree,
+          watcherId: currentSitter.target.watcherId,
+        }, session!, isCurrent)
+        return
+      }
+      if (request.action === 'copy-debug') {
+        controlValue(request, [])
+        if (!current() || row === null || busyAction !== null || busyLeaseRef.current !== null || !activeWorktree) return
+        clearDebugFeedback()
+        void runAction('debug', 'command:quirky.reviews/copy-sitter-debug', {
+          worktree: activeWorktree,
+          watcherId: row.target.watcherId,
+        }, session!, isCurrent, false).then((copied) => {
+          if (!copied || !current()) return
+          const generation = ++debugFeedbackGenerationRef.current
+          setDebugCopied(true)
+          copyTimer.current = setTimeout(() => {
+            if (debugFeedbackGenerationRef.current !== generation || !isCurrentDialogSession(session)) return
+            copyTimer.current = null
+            setDebugCopied(false)
+          }, 2_000)
+        })
+        return
+      }
+      throw new Error('Unknown PR Sitter dialog action.')
+    },
+  })
+
+  const rowControl = useSitterUiControl({
+    context,
+    surface: 'panel:quirky.reviews/checks',
+    slot: 'sitter-row',
+    target: rowControlTarget,
+    active: supportedReview,
+    actions: () => [{ action: 'open-dialog', enabled: supportedReview }],
+    onError: setActionError,
+    run: (request, isCurrent) => {
+      if (request.action !== 'open-dialog') throw new Error('Unknown PR Sitter row action.')
+      controlValue(request, [])
+      const previous = rowActionLeaseRef.current
+      if (!isCurrent() || !supportedReview || (previous !== null && previous.isCurrent())) return
+      const worktree = activeWorktree
+      const generation = dialogGenerationRef.current
+      const token = ++rowActionGenerationRef.current
+      rowActionLeaseRef.current = { token, isCurrent }
+      setRowActionToken(token)
+      void (async () => {
+        try {
+          await context.executeCommand('command:quirky.reviews/open-sitter', worktree ? { worktree } : {})
+        } catch (cause) {
+          if (!isCurrent() || !mountedRef.current || activeWorktreeRef.current !== worktree ||
+            dialogGenerationRef.current !== generation || rowActionLeaseRef.current?.token !== token) return
+          setActionError(messageOf(cause, 'The PR Sitter dialog could not be opened.'))
+        } finally {
+          if (isCurrent() && rowActionLeaseRef.current?.token === token) {
+            rowActionLeaseRef.current = null
+            setRowActionToken(null)
+          }
+        }
+      })()
+    },
+  })
+
+  const armSitter = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!activeWorktree || !review || !canSubmit || busyLeaseRef.current !== null) return
+    const session = dialogSessionRef.current
+    void dialogControl.request('arm', {
+      capabilities,
+      branchUpdateMode,
+      mergeMethod: mergeMethod === '' ? null : mergeMethod,
+      mergeCheckScope,
+      budgetHours: Number(budgetHours),
+    }, () => isCurrentDialogSession(session))
+  }
+
+  const requestDialogAction = (action: string, value?: Record<string, unknown>) => {
+    const session = dialogSessionRef.current
+    void dialogControl.request(action, value, () => isCurrentDialogSession(session))
+  }
+
+  const requestDialogClose = () => requestDialogAction('close-dialog')
+
+  const requestOpenDialog = () => {
+    const generation = dialogGenerationRef.current
+    void rowControl.request('open-dialog', undefined, () => dialogGenerationRef.current === generation)
+  }
 
   return (
     <>
-      {supportedReview && <ListRow
-        title={<span className="ui-cluster"><ToolIcon name="robot" hue="blue" /> PR Sitter</span>}
-        mainLabel="PR Sitter"
-        status={row && statusPresentation ? statusPresentation.dot : undefined}
-        statusLabel={row && statusPresentation ? statusPresentation.label : undefined}
-        trailing={<span className="ui-cluster">
-          {row && statusPresentation && <Badge tone={statusPresentation.tone}>{statusPresentation.label}</Badge>}
-          <ControlIcon name="caret-right" />
-        </span>}
-        onClick={() => {
-          const worktree = activeWorktree
-          const generation = dialogGenerationRef.current
-          void context.executeCommand('command:quirky.reviews/open-sitter', worktree ? { worktree } : {})
-            .catch((cause: unknown) => {
-              if (!mountedRef.current || activeWorktreeRef.current !== worktree || dialogGenerationRef.current !== generation) return
-              setActionError(messageOf(cause, 'The PR Sitter dialog could not be opened.'))
-            })
-        }}
-      />}
+      {supportedReview && <div
+        data-review-control-target={rowControl.target}
+        aria-busy={rowActionToken !== null && rowActionLeaseRef.current?.isCurrent() === true}
+        data-review-control-generation={rowControl.generation}
+      >
+        <ListRow
+          title={<span className="ui-cluster"><ToolIcon name="robot" hue="blue" /> PR Sitter</span>}
+          mainLabel="PR Sitter"
+          status={row && statusPresentation ? statusPresentation.dot : undefined}
+          statusLabel={row && statusPresentation ? statusPresentation.label : undefined}
+          trailing={<span className="ui-cluster">
+            {row && statusPresentation && <Badge tone={statusPresentation.tone}>{statusPresentation.label}</Badge>}
+            <ControlIcon name="caret-right" />
+          </span>}
+          onClick={requestOpenDialog}
+        />
+      </div>}
+      {!dialogOpen && actionError && <InlineError message={actionError} />}
 
-      <Dialog open={dialogOpen} title="PR Sitter" size="wide" scrollBody onClose={dismissDialog} actions={<Button onClick={dismissDialog}>Close</Button>}>
-        <section className="ui-stack">
+      <Dialog open={dialogOpen} title="PR Sitter" size="wide" scrollBody onClose={requestDialogClose} actions={<Button onClick={requestDialogClose}>Close</Button>}>
+        <section
+          className="ui-stack"
+          data-review-control-target={dialogControl.target}
+          data-review-control-generation={dialogControl.generation}
+        >
           <p>{review?.provider === 'gitlab'
             ? 'Watch this merge request and choose which actions Quirky may take.'
             : 'Watch this pull request and choose which actions Quirky may take.'}</p>
@@ -502,7 +879,7 @@ export function SitterRow({
                 <StatusDot status={statusPresentation.dot} label={statusPresentation.label} />
                 <Badge tone={statusPresentation.tone}>{statusPresentation.label}</Badge>
               </div>}
-              {loadingDetail && !detail && <p role="status" className="ui-text-muted">Loading sitter details…</p>}
+              {loadingDetail && !detail && <div role="status"><NoticeLine>Loading sitter details…</NoticeLine></div>}
               <dl className="ui-stack">
                 <div><dt>Active budget remaining</dt><dd>{formatRemainingBudget(row.budget, row.enrollment.budget)}</dd></div>
                 {row.enrollment.budget.turns !== null && <div><dt>Worker turns</dt><dd>{row.budget.turns} / {row.enrollment.budget.turns}</dd></div>}
@@ -527,7 +904,7 @@ export function SitterRow({
                   <Button
                     variant="primary"
                     disabled={unavailableOwner || busyAction !== null}
-                    onClick={() => { void approve(escalation) }}
+                    onClick={() => requestDialogAction('approve', { escalationId: escalation.escalationId })}
                   >
                     {busyAction === `approve:${escalation.escalationId}` ? 'Approving…' : 'Approve this action'}
                   </Button>
@@ -535,24 +912,34 @@ export function SitterRow({
               })}
               <details className="ui-stack">
                 <summary>Activity ledger</summary>
-                {detail ? activity.length > 0
-                  ? <ol className="ui-stack">{activity.map((entry) => {
-                    const formatted = formatLedgerEntry(entry)
-                    return <li key={entry.eventId}><span>{formatted.title}</span> · <time>{formatted.timestamp}</time></li>
-                  })}</ol>
-                  : <p className="ui-text-muted">No activity has been recorded.</p>
-                  : <p className="ui-text-muted">Open sitter details to load the activity ledger.</p>}
+                {detail !== null
+                  ? activity.length > 0
+                    ? <ol className="ui-stack">{activity.map((entry) => {
+                      const formatted = formatLedgerEntry(entry)
+                      return <li key={entry.eventId}><span>{formatted.title}</span> · <time>{formatted.timestamp}</time></li>
+                    })}</ol>
+                    : <EmptyState message="No activity has been recorded." />
+                  : loadingDetail
+                    ? <div role="status"><NoticeLine>Loading activity ledger…</NoticeLine></div>
+                    : <EmptyState message="Open sitter details to load the activity ledger." />}
               </details>
               {showStop && <div className="ui-stack">
                 <div className="ui-cluster">
-                  <Button variant="destructive" disabled={unavailableOwner || busyAction !== null} onClick={() => { void stopSitter() }}>
+                  <Button
+                    variant="destructive"
+                    disabled={unavailableOwner || busyAction !== null}
+                    onClick={() => requestDialogAction('stop')}
+                  >
                     {busyAction === 'stop' ? 'Stopping…' : 'Stop this sitter'}
                   </Button>
                   <NoticeLine>{STOPPING_HELP}</NoticeLine>
                 </div>
-                {unavailableOwner && <p className="ui-text-muted">Stopping is disabled while the owner cannot be reached.</p>}
+                {unavailableOwner && <NoticeLine>Stopping is disabled while the owner cannot be reached.</NoticeLine>}
               </div>}
-              <Button disabled={busyAction !== null} onClick={() => { void copyDebugReport() }}>
+              <Button
+                disabled={busyAction !== null}
+                onClick={() => requestDialogAction('copy-debug')}
+              >
                 {debugCopied ? 'Debug report copied' : busyAction === 'debug' ? 'Copying debug report…' : 'Copy debug report'}
               </Button>
               {showRearm && <form className="ui-stack" onSubmit={(event) => { void armSitter(event) }}>
