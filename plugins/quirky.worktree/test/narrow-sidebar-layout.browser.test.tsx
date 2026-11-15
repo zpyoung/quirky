@@ -29,6 +29,7 @@ const STYLESHEETS = [
   'packages/ui/src/design-system/tokens.css',
   'packages/ui/src/design-system/components.css',
   'packages/ui/src/design-system/icons/icons.css',
+  'packages/ui/src/design-system/worktree-primitives.css',
   'packages/ui/src/design-system/worktree-tree.css'
 ]
 const HEIGHT = 768
@@ -57,6 +58,8 @@ function browserEntry(): string {
     import { Badge, Button, ExpandingIconButton, IconButton, ListRow, Popover, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
 
     function FilterMenuRegressionFixture() {
+      const emptyTags = document.documentElement.dataset.filterMenuNoTags === 'true'
+      const activityError = document.documentElement.dataset.filterMenuActivityError ?? null
       const [open, setOpen] = useState(false)
       const [filter, setFilter] = useState({
         tagIds: [],
@@ -81,7 +84,8 @@ function browserEntry(): string {
         open ? h(FilterMenu, {
           anchor,
           filter,
-          tags: [{ id: 't1', name: 'urgent', color: null }, { id: 't2', name: 'release-2.4', color: 'blue' }],
+          tags: emptyTags ? [] : [{ id: 't1', name: 'urgent', color: null }, { id: 't2', name: 'release-2.4', color: 'blue' }],
+          activityError,
           sections: [{ id: 'g1', name: 'Release 2.4' }],
           repos: [{ id: 'r1', name: 'harbor-api', displayName: null }],
           statuses: [{ id: 'todo', label: 'Todo' }, { id: 'in-progress', label: 'In progress' }],
@@ -1575,6 +1579,74 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps the Filter menu insid
         await filterButton.click()
       }
     }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('renders shared Filter empty and error states with reachable activity controls', async () => {
+  const context = await browser!.newContext({ viewport: { width: 360, height: 900 } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    await page.evaluate(() => {
+      document.documentElement.dataset.filterMenuRegression = 'true'
+      document.documentElement.dataset.filterMenuNoTags = 'true'
+      document.documentElement.dataset.filterMenuActivityError = 'Projection offline'
+    })
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    await page.getByRole('button', { name: 'Filter', exact: true }).click()
+
+    const popover = page.getByRole('dialog', { name: 'Filter' })
+    await popover.waitFor({ state: 'visible' })
+    const empty = popover.locator('.ui-empty-state')
+    await empty.waitFor({ state: 'visible' })
+    await empty.scrollIntoViewIfNeeded()
+    expect(await empty.getByText('No tags yet.', { exact: true }).isVisible()).toBe(true)
+    const activityError = popover.locator('.ui-inline-error[role="alert"]')
+    await activityError.waitFor({ state: 'visible' })
+    await activityError.scrollIntoViewIfNeeded()
+    expect(await activityError.textContent()).toContain('Workspace activity filters unavailable: Projection offline')
+
+    const activity = popover.getByRole('combobox', { name: 'Activity window' })
+    await activity.scrollIntoViewIfNeeded()
+    expect(await activity.isVisible()).toBe(true)
+    expect(await activity.locator('option').allTextContents()).toEqual([
+      'All',
+      'Live only',
+      'Past 24 hours',
+      'Past 7 days',
+      'Past 30 days',
+      'Custom'
+    ])
+    await activity.selectOption('custom')
+    const customDays = popover.getByRole('textbox', { name: 'Custom days' })
+    await customDays.scrollIntoViewIfNeeded()
+    expect(await customDays.isVisible()).toBe(true)
+    const geometry = await page.evaluate(() => {
+      const element = document.querySelector<HTMLElement>('.ui-popover')!
+      const select = element.querySelector<HTMLSelectElement>('select[aria-label="Activity window"]')!
+      const popup = element.getBoundingClientRect()
+      const control = select.getBoundingClientRect()
+      return {
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        popup: { left: popup.left, top: popup.top, right: popup.right, bottom: popup.bottom },
+        select: { left: control.left, top: control.top, right: control.right, bottom: control.bottom }
+      }
+    })
+    expect(geometry.popup.left).toBeGreaterThanOrEqual(-0.5)
+    expect(geometry.popup.top).toBeGreaterThanOrEqual(-0.5)
+    expect(geometry.popup.right).toBeLessThanOrEqual(geometry.viewport.width + 0.5)
+    expect(geometry.popup.bottom).toBeLessThanOrEqual(geometry.viewport.height + 0.5)
+    expect(geometry.select.left).toBeGreaterThanOrEqual(geometry.popup.left - 0.5)
+    expect(geometry.select.right).toBeLessThanOrEqual(geometry.popup.right + 0.5)
+
+    await popover.evaluate((element) => { (element as HTMLElement).scrollTop = 0 })
+    const screenshotPath = process.env.QUIRKY_UI_SCREENSHOT
+    if (screenshotPath) await page.screenshot({ path: screenshotPath })
   } finally {
     await context.close()
   }
