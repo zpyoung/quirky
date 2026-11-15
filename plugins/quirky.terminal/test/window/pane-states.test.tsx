@@ -422,6 +422,7 @@ async function mountProviderWorkspace(
   const daemon = fakeDaemon(conceptualWorkspace())
   const fake = fakeContext({
     ...daemon.handlers,
+    'ui.contributions': () => ({ menuItems: [], keybindings: [] }),
     'quirky.terminal/quickCommands': () => ({ commands: [] }),
     'quirky.terminal/mobileState': () => ({ terminals: [] }),
     ...extraHandlers

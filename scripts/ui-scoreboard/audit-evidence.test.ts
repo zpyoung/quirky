@@ -122,6 +122,18 @@ describe('source quote resolution', () => {
     }
   })
 
+  test('keeps diagnostic locations fresh when the captured source is edited in place', () => {
+    const captured = source(file, 'if (busy) return <EmptyState />\n')
+    const inventory = plugin([captured])
+    const original = resolveRef(inventory, [file], ref('if (busy)'))
+    if (evidence(original)) throw new Error(original.message)
+    captured.content = '// heading\nif (busy) return <EmptyState />\nif (busy) return null\n'
+    expect(resolveRef(inventory, [file], ref('if (busy)'))).toMatchObject({
+      code: 'evidence-ambiguous',
+      source: { file, line: 2, column: 1 }
+    })
+  })
+
   test('returns evidence-missing for changed and deleted witnesses', () => {
     const content = 'if (busy) return <EmptyState message="Loading entries" />\n'
     const result = resolveRef(plugin([source(file, content)]), [file], ref('<EmptyState message="Loading items" />'))
@@ -247,6 +259,19 @@ describe('one-hop route target resolution', () => {
     const literalContent = "export const SETTINGS = 'view:acme.app/main';\ncontext.openView(SETTINGS)"
     const literal = expression(literalContent, 'SETTINGS', ui)
     expect(resolveTarget(plugin([source(ui, literalContent)]), [ui], literal.source, literal.expression)).toBe('view:acme.app/main')
+  })
+
+  test('rechecks imported route constants after an in-place snapshot edit', () => {
+    const ids = 'plugins/acme.app/src/ids.ts'
+    const content = "import { API } from './ids'; context.call(API)"
+    const imported = source(ids, "export const API = 'acme.app/save'")
+    const inventory = plugin([source(file, content), imported])
+    const parsed = routeArgument(content)
+    expect(resolveTarget(inventory, [file, ids], parsed.source, parsed.expression)).toBe('acme.app/save')
+    imported.content = "export const API = 'acme.app/remove'"
+    expect(resolveTarget(inventory, [file, ids], parsed.source, parsed.expression)).toBe('acme.app/remove')
+    imported.content = 'export const API = chooseRoute()'
+    expect(resolveTarget(inventory, [file, ids], parsed.source, parsed.expression)).toBeUndefined()
   })
 
   test('does not follow a second constant hop or evaluate calls and interpolated const initializers', () => {
