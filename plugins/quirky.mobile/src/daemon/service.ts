@@ -3,6 +3,7 @@ import type { MobileDevice, MobileHostInfo, MobileNetworkInterface, MobilePairin
 import type { OwnerCliPairOffer } from '@quirky/protocol'
 import type { PluginCaller, PluginContext } from '@quirky/protocol'
 import { hostname } from 'node:os'
+import { basename } from 'node:path'
 import { assertMobileCallAllowed } from './authorization'
 import { configureInput, openInput, ownerPairInput, ownerRevokeInput, pairInput, revokeInput, updatePreferencesInput, type MobileConfigureInput, type MobileOpenInput, type MobilePairInput, type OwnerPairInput, type OwnerRevokeInput } from './api'
 import { getMobileBundleChunk, getMobileBundleManifest, getMobileBundleRange, MobileBundleError } from './bundle'
@@ -105,6 +106,10 @@ export class MobileService {
   constructor(private readonly context: PluginContext, options: { portValue?: string; hostValue?: string } = {}) {
     this.store = new MobileStore(context.dataDir)
     this.ownerStore = new OwnerGrantStore(context.dataDir)
+    if (this.ownerStore.recoveredFrom) {
+      context.log(`mobile: set aside unreadable owner-grants.json as ${basename(this.ownerStore.recoveredFrom)}; paired owner CLIs must pair again`)
+    }
+    if (this.ownerStore.recoveryDiagnostic) context.log(`mobile: ${this.ownerStore.recoveryDiagnostic}`)
     const hasPairedHistory = (this.store.registryAvailable && this.store.devices().length > 0) || this.ownerStore.hasGrants
     try {
       this.transport = new MobileTransport({

@@ -22,6 +22,36 @@ logs and cleanup.
 
 Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status` or `quirky help`.
 
+## Browser UI
+
+A plain browser tab uses the UI served by the local daemon. From the repository root, build the
+served UI with the existing `bun run build` instructions, or rebuild only the UI with:
+
+```sh
+bun run --filter './packages/ui' build
+```
+
+The daemon serves `packages/ui/dist` by default. Start it on the machine that will run the browser:
+
+```sh
+bun run daemon
+```
+
+In another terminal, request the authenticated URL with `quirky ui url` (or
+`bun packages/cli/src/main.ts ui url` from this checkout). Add `--open` to ask the daemon host's
+default browser to open it; this confirms only that the OS opener accepted the request, not that a
+page rendered. Use `--json` for the URL object. The address is loopback-only and is intended for a
+browser on the daemon host, not a remote machine.
+
+The URL contains a bearer token in its fragment. Treat the whole URL as a password: do not share
+it, paste it into public logs, or leave it in shell history. JSON output also contains the token.
+
+The browser folder dialog browses directories on the daemon host, not the browser computer, and
+does not upload files. Auxiliary tabs use browser popups; a popup blocker can prevent them from
+opening and may require the dialog's user-click retry. Browser panes must use explicit Chrome
+**Watch** mode; **Native** browser mode is unavailable in a plain tab. Browser tabs do not provide
+native file reveal or operating-system notification permission, click, or dismissal callbacks.
+
 ## Phone companion
 
 `apps/mobile` contains the Expo companion for direct LAN or tailnet connections. It pairs with

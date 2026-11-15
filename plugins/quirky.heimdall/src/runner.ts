@@ -37,6 +37,7 @@ import { isCoordinatorSeatLostError } from './worker-evidence'
 import { createWorkspaceLease, WORKSPACE_LEASE_RENEWAL_MS, WorkspaceLeaseLostError } from './lease'
 import type { WorkspaceKind, WorkspaceLeaseAuthority, WorkspaceLeaseClaim } from './lease'
 import { shadowJudgment } from './judgment'
+import { orchestrationRequestIdForAttemptFingerprint } from './orchestration'
 import { terminalizeRemovedEnrollment, workspaceKindForEnrollment } from './workspace-lifecycle'
 
 const MAX_ACTIONS_PER_TICK = 32
@@ -119,14 +120,6 @@ function latestEscalation(journal: JournalEntry[], escalationId: string): Journa
 
 function budgetWithPolicy(enrollment: Enrollment, journal: JournalEntry[], nowMs: number): BudgetUsage {
   return budgetUsage(journal, nowMs, enrollment.budget)
-}
-
-function workerRequestId(fingerprint: string): string {
-  const digest = createHash('sha256').update(`heimdall-dispatch-v1\0${fingerprint}`).digest()
-  digest[6] = ((digest[6] ?? 0) & 0x0f) | 0x80
-  digest[8] = ((digest[8] ?? 0) & 0x3f) | 0x80
-  const hex = digest.subarray(0, 16).toString('hex')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 export function createRunner(options: RunnerOptions): Runner & { withControl<T>(operation: () => Promise<T>, drain?: boolean): Promise<T> } {
@@ -1854,7 +1847,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           }
           workerRequestValue = request
           workerPromise = (async () => {
-            const requestId = workerRequestId(fingerprint)
+            const requestId = orchestrationRequestIdForAttemptFingerprint(watcherId, fingerprint)
             const commit = commitGate(selectedAction, snapshot as Snapshot, stopPredicateFired, version, attemptId)
             if (!commit || commit.verdict.verdict !== 'allow') {
               const reason = commit?.verdict.verdict === 'allow' ? 'runner-stopped' : commit?.verdict.reason ?? 'runner-stopped'

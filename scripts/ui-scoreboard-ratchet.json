@@ -24,5 +24,6 @@
   "quirky.ledger": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.vault": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.sidebar-extras": ["commands", "compatibility-tokens", "empty", "error", "loading"],
-  "quirky.automations": ["commands", "compatibility-tokens", "empty", "error", "loading"]
+  "quirky.automations": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.worktree": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }

@@ -14,6 +14,8 @@ let unsubscribe: (() => void) | undefined
 const UI_COMMAND_METHODS = [
   'find',
   'replace',
+  'go-to-definition',
+  'find-references',
   'markdown-preview',
   'toggle-word-wrap',
   'copy-context',

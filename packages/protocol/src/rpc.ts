@@ -66,6 +66,28 @@ export type DiagnosticsMemoryReport = {
 
 /** Params a destructive method also accepts: `yes` skips the confirmation, `confirmation` names an answered ask. */
 export type Confirmable = { yes?: boolean; confirmation?: string }
+export type FolderListing = {
+  path: string
+  parent: string | null
+  entries: { name: string; path: string }[]
+  offset: number
+  limit: number
+  hasMore: boolean
+}
+
+export type BrowserHostPrompt = {
+  requestId: string
+  kind: 'folder-picker' | 'window-open'
+  title: string
+  expiresAt: number
+  busy: boolean
+  error: string | null
+  draftPath?: string
+  directory?: FolderListing
+  selectedPaths?: string[]
+  multiple?: boolean
+}
+
 
 /**
  * Every daemon method: params in, result out. The desktop UI, the CLI and mobile all use these;
@@ -170,6 +192,29 @@ export type Methods = {
   'ui.panel.close': { params: Record<string, never>; result: UiLayout }
   'ui.sidebar.set': { params: { visible: boolean }; result: UiLayout }
   'ui.focus': { params: { target: 'sidebar' | 'view' | 'panel' }; result: UiLayout }
+  /** Browser entry-point and controller APIs for an ordinary tab. */
+  /** Returns the built browser UI's authenticated loopback entry URL. */
+  'ui.url': { params: Record<string, never>; result: { url: string } }
+  /** Requests that the daemon host open the authenticated browser UI URL in its default browser. */
+  'ui.open': { params: Record<string, never>; result: { url: string; requested: true } }
+  /** Lists canonical daemon-filesystem directories, including directory symlinks, in a page. */
+  'ui.folder.list': {
+    params: { path?: string; offset?: number; limit?: number }
+    result: FolderListing
+  }
+  /** Controls the browser host in one exact live UI window. */
+  'ui.browserHost.control': {
+    params: {
+      connId: number
+      action: 'state' | 'set-path' | 'navigate' | 'select' | 'confirm' | 'cancel' | 'open-popup'
+      requestId?: string
+      path?: string
+      selected?: boolean
+      offset?: number
+    }
+    result: { active: BrowserHostPrompt | null }
+  }
+
   /** Runs a plugin UI command in one open window and returns its result. */
   'ui.command.run': { params: { id: string; args?: unknown }; result: { result: unknown } }
   /** Dismisses the toast with `key` in the window that shows it and runs its `onDismiss`; NotFound for an unknown key, Conflict when no window is open. */

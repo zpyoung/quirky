@@ -28,9 +28,9 @@ const STYLESHEETS = [
   'packages/ui/src/design-system/compatibility-tokens.css',
   'packages/ui/src/design-system/tokens.css',
   'packages/ui/src/design-system/components.css',
-  'packages/ui/src/design-system/worktree-primitives.css',
   'packages/ui/src/design-system/icons/icons.css',
-  'packages/ui/src/design-system/worktree-tree.css'
+  'packages/ui/src/design-system/worktree-tree.css',
+  'packages/ui/src/design-system/worktree-primitives.css'
 ]
 const HEIGHT = 768
 const GUTTER = 42
@@ -736,6 +736,183 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project head
         expectContained({ left: hovered!.x, top: hovered!.y, right: hovered!.x + hovered!.width, bottom: hovered!.y + hovered!.height }, hoveredLayout.frame)
         expect(overlaps(hoveredLayout.toolTitle, hoveredLayout.toolActions)).toBe(false)
       }
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('shows a visible project name prefix beside the tile, count and actions in a narrow sidebar', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    await page.getByRole('heading', { name: /QuirkyWorktreeProject/ }).waitFor()
+
+    const expectContained = (
+      inner: { left: number; top: number; right: number; bottom: number },
+      outer: { left: number; top: number; right: number; bottom: number }
+    ) => {
+      expect(inner.left).toBeGreaterThanOrEqual(outer.left - 0.5)
+      expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5)
+      expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5)
+      expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5)
+    }
+
+    for (const sidebarWidth of [116, 160]) {
+      const viewportWidth = GUTTER * 2 + CENTER_WIDTH + sidebarWidth * 2
+      await page.setViewportSize({ width: viewportWidth, height: HEIGHT })
+      await page.locator('#layout').evaluate((element, width) => {
+        ;(element as HTMLElement).style.setProperty('--sidebar-width', `${width}px`)
+      }, sidebarWidth)
+
+      const layout = await page.evaluate(() => {
+        const bounds = (element: Element) => {
+          const rect = element.getBoundingClientRect()
+          return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height }
+        }
+        const header = document.querySelector<HTMLElement>('.project-header')!
+        const title = header.querySelector<HTMLElement>('.ui-section-header__title')!
+        const tile = title.querySelector<HTMLElement>('.ui-project-tile')!
+        const projectName = title.querySelector<HTMLElement>('.project-name')!
+        const count = title.querySelector<HTMLElement>('.worktree-attention')!
+        const actions = header.querySelector<HTMLElement>('.ui-section-header__actions')!
+        const firstGlyphRange = document.createRange()
+        firstGlyphRange.setStart(projectName.firstChild!, 0)
+        firstGlyphRange.setEnd(projectName.firstChild!, 1)
+        const firstGlyph = firstGlyphRange.getBoundingClientRect()
+        const ellipsisProbe = document.createElement('span')
+        ellipsisProbe.textContent = '…'
+        ellipsisProbe.style.cssText = `position: absolute; left: -10000px; top: 0; white-space: pre; font: ${getComputedStyle(projectName).font};`
+        document.body.append(ellipsisProbe)
+        const ellipsisWidth = ellipsisProbe.getBoundingClientRect().width
+        ellipsisProbe.remove()
+        return {
+          header: bounds(header),
+          title: bounds(title),
+          tile: bounds(tile),
+          tileDisplay: getComputedStyle(tile).display,
+          tileText: tile.textContent?.trim(),
+          projectName: bounds(projectName),
+          firstGlyph: { left: firstGlyph.left, top: firstGlyph.top, width: firstGlyph.width, height: firstGlyph.height },
+          ellipsisWidth,
+          glyphHitsName: document.elementFromPoint(
+            firstGlyph.left + firstGlyph.width / 2,
+            firstGlyph.top + firstGlyph.height / 2
+          ) === projectName,
+          count: bounds(count),
+          buttons: [...actions.querySelectorAll<HTMLElement>('button')].map(bounds)
+        }
+      })
+
+      expect(layout.tileDisplay).not.toBe('none')
+      expect(layout.tileText).toBe('QU')
+      expect(layout.tile.width).toBeGreaterThanOrEqual(12)
+      expect(layout.tile.height).toBeGreaterThanOrEqual(12)
+      expect(layout.tile.right).toBeLessThan(layout.projectName.left)
+      expect(layout.firstGlyph.width).toBeGreaterThan(0)
+      expect({
+        sidebarWidth,
+        roomForGlyphAndEllipsis: layout.projectName.width >= layout.firstGlyph.width + layout.ellipsisWidth,
+        projectNameWidth: layout.projectName.width,
+        firstGlyphWidth: layout.firstGlyph.width,
+        ellipsisWidth: layout.ellipsisWidth
+      }).toMatchObject({ sidebarWidth, roomForGlyphAndEllipsis: true })
+      expect(layout.glyphHitsName).toBe(true)
+      expect(layout.projectName.right).toBeLessThan(layout.count.left)
+      expectContained(layout.count, layout.title)
+      expect(layout.buttons).toHaveLength(2)
+      for (const button of layout.buttons) {
+        expect(button.left).toBeGreaterThanOrEqual(layout.title.right - 0.5)
+        expectContained(button, layout.header)
+      }
+    }
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('keeps project header focus rings inside the tree scroller in a narrow sidebar', async () => {
+  const context = await browser!.newContext({ viewport: { width: 646, height: HEIGHT } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    const collapseButton = page.getByRole('button', { name: 'Collapse project QuirkyWorktreeProject', exact: true })
+    await collapseButton.waitFor()
+
+    const expectFocusedHeaderButton = async (buttonName: string, sidebarWidth: number) => {
+      const state = await page.getByRole('button', { name: buttonName, exact: true }).evaluate((element) => {
+        const outline = getComputedStyle(element)
+        const outlineWidth = Number.parseFloat(outline.outlineWidth)
+        const outlineExtent = Math.max(0, outlineWidth + Number.parseFloat(outline.outlineOffset))
+        const rect = element.getBoundingClientRect()
+        const ring = {
+          left: rect.left - outlineExtent,
+          top: rect.top - outlineExtent,
+          right: rect.right + outlineExtent,
+          bottom: rect.bottom + outlineExtent
+        }
+        let clipped: string | null = null
+        for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor)
+          const bounds = ancestor.getBoundingClientRect()
+          const clipLeft = bounds.left + ancestor.clientLeft
+          const clipTop = bounds.top + ancestor.clientTop
+          const clipRight = clipLeft + ancestor.clientWidth
+          const clipBottom = clipTop + ancestor.clientHeight
+          if (style.overflowX !== 'visible' && (ring.left < clipLeft - 0.5 || ring.right > clipRight + 0.5)) {
+            clipped = `${ancestor.className}: horizontal clip`
+            break
+          }
+          if (style.overflowY !== 'visible' && (ring.top < clipTop - 0.5 || ring.bottom > clipBottom + 0.5)) {
+            clipped = `${ancestor.className}: vertical clip`
+            break
+          }
+        }
+        return {
+          active: document.activeElement === element,
+          focusVisible: element.matches(':focus-visible'),
+          outlineWidth,
+          outlineStyle: outline.outlineStyle,
+          clipped
+        }
+      })
+      expect({
+        sidebarWidth,
+        buttonName,
+        active: state.active,
+        focusVisible: state.focusVisible,
+        hasOutline: state.outlineStyle !== 'none' && state.outlineWidth > 0,
+        clipped: state.clipped
+      }).toMatchObject({
+        sidebarWidth,
+        buttonName,
+        active: true,
+        focusVisible: true,
+        hasOutline: true,
+        clipped: null
+      })
+    }
+
+    for (const sidebarWidth of [240, 160, 116]) {
+      await page.locator('#layout').evaluate((element, width) => {
+        ;(element as HTMLElement).style.setProperty('--worktree-sidebar-width', `${width}px`)
+      }, sidebarWidth)
+      await page.mouse.move(0, 0)
+      await collapseButton.focus()
+      await expectFocusedHeaderButton('Collapse project QuirkyWorktreeProject', sidebarWidth)
+      await page.keyboard.press('Tab')
+      await expectFocusedHeaderButton('New worktree in QuirkyWorktreeProject', sidebarWidth)
+      await page.keyboard.press('Tab')
+      await expectFocusedHeaderButton('Actions for QuirkyWorktreeProject', sidebarWidth)
     }
   } finally {
     await context.close()
