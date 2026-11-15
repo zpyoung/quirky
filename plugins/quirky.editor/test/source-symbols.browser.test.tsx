@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { CHORD_PLATFORM } from '@quirky/protocol'
 import { chromium, type Browser, type Page } from 'playwright'
+import type { SourceSymbolsReport } from '../src/window/sourceNavigation'
 
 type EditorCall = { method: string; params: Record<string, unknown> }
 type NavigationLocation = {
@@ -20,6 +21,15 @@ type NavigationResponse = {
   language: string
   locations: NavigationLocation[]
   truncated: boolean
+}
+
+// the fixture owns these globals; browser evaluation runs outside its TypeScript module.
+type BrowserRaceState = {
+  __bridgeGate: { method: string; promise: Promise<void> }
+  __releaseBridge(): void
+  __findReferences(): Promise<unknown>
+  __controlResults: unknown[]
+  __controlReport: { sourceSymbols: SourceSymbolsReport }
 }
 
 function expectLookupAtGreet(params: Record<string, unknown>): void {
@@ -71,10 +81,11 @@ function browserEntry(): string {
   const sourceEditor = join(ROOT, 'plugins/quirky.editor/src/window/SourceEditor.tsx')
   const controls = join(ROOT, 'plugins/quirky.editor/src/window/uiControl.tsx')
   return `
-    import { createElement } from 'react'
+    import { createElement, createRef } from 'react'
     import { createRoot } from 'react-dom/client'
     import { EditorView } from '@codemirror/view'
     import { SourceEditor, SourceEditorControlScope } from ${JSON.stringify(sourceEditor)}
+    import type { SourceEditorHandle } from ${JSON.stringify(sourceEditor)}
     import { EditorUiControlProvider, createEditorUiControlReportScope, runEditorUiControl } from ${JSON.stringify(controls)}
     import { activate } from 'editor-activation-fixture'
     import type { UiPluginContext } from '@quirky/protocol'
@@ -93,6 +104,10 @@ function browserEntry(): string {
       __editorCalls: BrowserCall[]
       __initialSelection: { anchor: number; head: number }
       __sourceSelection(): { anchor: number; head: number }
+      __findReferences(): Promise<unknown>
+      __controlResults: unknown[]
+      __bridgeGate?: { method: string; promise: Promise<void> }
+      __releaseBridge?: () => void
       __navigationResponses: Record<'definition' | 'references', {
         worktreeId: string
         language: string
@@ -117,6 +132,7 @@ function browserEntry(): string {
     const settings: Record<string, unknown> = { editorSidebarWidth: 300 }
     browserWindow.__editorCalls = calls
     browserWindow.__initialSelection = initialSelection
+    browserWindow.__controlResults = []
     browserWindow.__sourceSelection = () => {
       const node = document.querySelector('.cm-content')
       const view = node ? EditorView.findFromDOM(node as HTMLElement) : null
@@ -133,6 +149,8 @@ function browserEntry(): string {
       provide(id: string, handler: (...args: unknown[]) => unknown) { provided.set(id, handler) },
       async call(method: string, params: Record<string, unknown> = {}) {
         calls.push({ method, params: structuredClone(params) })
+        const gate = browserWindow.__bridgeGate
+        if (gate?.method === method) await gate.promise
         if (method === 'ui.window.self') return { connId: 22 }
         if (method === 'ui.window.command.run') {
           if (params.connId !== 22) throw new Error('The source-symbol bridge used a different window.')
@@ -141,7 +159,9 @@ function browserEntry(): string {
           if (params.id === 'command:quirky.editor/ui-control' && handler !== runEditorUiControl) {
             throw new Error('The activated UI-control command did not use runEditorUiControl.')
           }
-          return { result: await handler(params.args) }
+          const result = { result: await handler(params.args) }
+          browserWindow.__controlResults.push(result)
+          return result
         }
         if (method === 'quirky.navigation/definition' || method === 'quirky.navigation/references') {
           const kind = method.endsWith('/definition') ? 'definition' : 'references'
@@ -204,7 +224,13 @@ function browserEntry(): string {
       diskContentBytes: null,
       diskSignature: null
     }
+    const editorRef = createRef<SourceEditorHandle>()
+    browserWindow.__findReferences = () => {
+      if (!editorRef.current) throw new Error('The source editor is not mounted.')
+      return editorRef.current.references({ line: 4, column: 27 })
+    }
     const editor = createElement(SourceEditor, {
+      ref: editorRef,
       buffer,
       tabId,
       wrap: false,
@@ -578,6 +604,63 @@ for (const width of [1100, 390]) test.skipIf(!existsSync(executable))(`keeps a 5
     await panel.waitFor({ state: 'detached' })
     const editorHasFocus = await page.locator('.cm-content').evaluate((element) => element === document.activeElement || element.contains(document.activeElement))
     expect(editorHasFocus).toBe(true)
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+for (const stage of ['identity', 'dispatch'] as const) test.skipIf(!existsSync(executable))(`keeps newer reference results after an older modifier-click completes ${stage} transport`, async () => {
+  const context = await browser!.newContext({ viewport: { width: 1100, height: 760 } })
+  const page = await context.newPage()
+  try {
+    await mountEditor(page)
+    await setNavigationResponse(page, 'definition', navigationResult([
+      location('src/greet.ts', 3, 17, 22, 'export function greet(name: Name): string {')
+    ]))
+    await setNavigationResponse(page, 'references', navigationResult([
+      location('src/use.ts', 4, 27, 32, "const label = 'héllo 🙂'; greet(who)")
+    ]))
+    const method = stage === 'identity' ? 'ui.window.self' : 'ui.window.command.run'
+    await page.evaluate((heldMethod) => {
+      const gate = Promise.withResolvers<void>()
+      const state = window as unknown as BrowserRaceState
+      state.__bridgeGate = { method: heldMethod, promise: gate.promise }
+      state.__releaseBridge = gate.resolve
+    }, method)
+    await clickSource(page, { modifiers: [primaryModifier] })
+    await waitForCall(page, method)
+    expect(await callsFor(page, 'quirky.navigation/definition')).toEqual([])
+    await page.evaluate(async () => {
+      const state = window as unknown as BrowserRaceState
+      await state.__findReferences()
+    })
+    await page.getByRole('heading', { name: 'References to greet' }).waitFor()
+    const report = await page.evaluate(() => {
+      const state = window as unknown as BrowserRaceState
+      return state.__controlReport.sourceSymbols
+    })
+    await page.evaluate(() => {
+      const state = window as unknown as BrowserRaceState
+      state.__releaseBridge()
+    })
+    await page.waitForFunction(() => {
+      const state = window as unknown as BrowserRaceState
+      return state.__controlResults.length === 1
+    })
+    expect(await page.evaluate(() => {
+      const state = window as unknown as BrowserRaceState
+      return state.__controlResults
+    }))
+      .toEqual([{ result: { delivered: false } }])
+    expect(await callsFor(page, 'quirky.navigation/definition')).toEqual([])
+    expect(await callsFor(page, 'quirky.editor/open')).toEqual([])
+    const currentReport = await page.evaluate(() => {
+      const state = window as unknown as BrowserRaceState
+      return state.__controlReport.sourceSymbols
+    })
+    expect(currentReport).toEqual(report)
+    expect(await page.locator('.qe-source-locations h2').textContent()).toBe('References to greet')
+    expect(await page.locator('.qe-source-locations .ui-list-row').count()).toBe(1)
   } finally {
     await context.close()
   }

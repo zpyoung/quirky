@@ -110,6 +110,7 @@ type SourceMenu = {
   y: number
   generation: string
   sourceGeneration: string
+  revision: number
   path: string
   relativePath: string
   query?: string
@@ -557,6 +558,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       y,
       generation: rotateMenuGeneration(),
       sourceGeneration: source.generation,
+      revision: textRevision.current,
       path: props.buffer.path,
       relativePath: props.buffer.relativePath,
       line,
@@ -698,19 +700,66 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       return { delivered: closeSourceMenu(menu.generation) }
     }
     if (control.action === 'definition' || control.action === 'references') {
-      if (menu.kind !== 'editor' || menu.line === undefined || menu.column === undefined ||
-          !symbolsEnabled || !onlyKeys(data, [])) return { delivered: false }
+      const hasIntent = Object.hasOwn(data, '_lookupIntent')
+      if (menu.revision !== textRevision.current || menu.kind !== 'editor' ||
+          menu.line === undefined || menu.column === undefined ||
+          !symbolsEnabled || !onlyKeys(data, ['_lookupIntent']) ||
+          hasIntent && (typeof data._lookupIntent !== 'string' || data._lookupIntent.trim() === '')) return { delivered: false }
       const source = sourceSessionRef.current
       if (!source || !isCurrentSourceSession(source)) return { delivered: false }
-      source.view.focus()
       const position = { line: menu.line, column: menu.column }
-      const lookup = control.action === 'definition'
-        ? sourceSymbols.definition(position)
-        : sourceSymbols.references(position)
-      void lookup.catch(() => {})
+      const accepted = sourceSymbols.control(control.action, position, {
+        intent: typeof data._lookupIntent === 'string' ? data._lookupIntent : undefined, focus: true
+      })
+      if (!accepted) return { delivered: false }
       return { delivered: closeSourceMenu(menu.generation) }
     }
     return { delivered: false }
+  }
+
+  async function dispatchMenuControl(action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> {
+    const origin = menuSessionRef.current
+    const address = menuAddressRef.current
+    const source = sourceSessionRef.current
+    const context = bridgeContextRef.current
+    if (!context || !origin || !source || !address || address.generation !== origin.generation ||
+        source.generation !== origin.sourceGeneration || !isCurrentMenuSession(origin)) {
+      if (origin && isCurrentMenuSession(origin)) reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
+      return { delivered: false }
+    }
+    let lookupIntent: string | undefined
+    let controlData = data
+    if (action === 'definition' || action === 'references') {
+      if (origin.revision !== textRevision.current || origin.kind !== 'editor' ||
+          origin.line === undefined || origin.column === undefined ||
+          !symbolsEnabled || data !== undefined && !onlyKeys(data, [])) return { delivered: false }
+      lookupIntent = sourceSymbols.reserveIntent(action, { line: origin.line, column: origin.column }) ?? undefined
+      if (lookupIntent === undefined) return { delivered: false }
+      controlData = { _lookupIntent: lookupIntent }
+    }
+    const control: EditorUiControl = {
+      surface: address.surface,
+      target: address.target,
+      generation: address.generation,
+      action,
+      ...(controlData === undefined ? {} : { data: controlData })
+    }
+    try {
+      const result = await requestEditorUiControl(context, control)
+      const ownsLookup = lookupIntent !== undefined && sourceSymbols.isIntentCurrent(lookupIntent)
+      if (!isCurrentMenuSession(origin) && !(ownsLookup && result.delivered)) return { delivered: false }
+      if (!result.delivered) {
+        if (lookupIntent !== undefined && !ownsLookup) return { delivered: false }
+        reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
+      }
+      return result
+    } catch (reason) {
+      const currentLookup = lookupIntent !== undefined && sourceSymbols.isIntentCurrent(lookupIntent)
+      if (isCurrentMenuSession(origin) && (lookupIntent === undefined || currentLookup)) {
+        reportSourceError(errorMessage(reason))
+      }
+      return { delivered: false }
+    }
   }
 
 
@@ -777,33 +826,6 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     }
   }
 
-  async function dispatchMenuControl(action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> {
-    const origin = menuSessionRef.current
-    const address = menuAddressRef.current
-    const source = sourceSessionRef.current
-    const context = bridgeContextRef.current
-    if (!context || !origin || !source || !address || address.generation !== origin.generation ||
-        source.generation !== origin.sourceGeneration) {
-      if (origin && isCurrentMenuSession(origin)) reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
-      return { delivered: false }
-    }
-    const control: EditorUiControl = {
-      surface: address.surface,
-      target: address.target,
-      generation: address.generation,
-      action,
-      ...(data === undefined ? {} : { data })
-    }
-    try {
-      const result = await requestEditorUiControl(context, control)
-      if (!isCurrentMenuSession(origin)) return { delivered: false }
-      if (!result.delivered) reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
-      return result
-    } catch (reason) {
-      if (isCurrentMenuSession(origin)) reportSourceError(errorMessage(reason))
-      return { delivered: false }
-    }
-  }
   function findNextFromKeyboard(): boolean {
     void dispatchSourceControl('find-next', { query: searchInput.current?.value ?? searchQueryRef.current })
     return true

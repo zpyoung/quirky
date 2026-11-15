@@ -69,6 +69,11 @@ function reportError(kind: SourceSymbolsKind, message: string): string {
 }
 
 let nextLocationsGeneration = 0
+let nextLookupIntent = 0
+
+function newLookupIntent(): string {
+  return `source-lookup-intent-${++nextLookupIntent}`
+}
 
 export function navigationLanguage(path: string): NavigationLanguage | null {
   const lower = path.toLowerCase()
@@ -217,6 +222,21 @@ type LookupSession = {
   reject(reason: Error): void
   settled: boolean
 }
+type LookupIntent = {
+  token: string
+  kind: SourceSymbolsKind
+  position: NavigationPosition
+  bufferId: string
+  tabId: string | null
+  worktreeId: string
+  path: string
+  relativePath: string
+  engineGeneration: string
+  revision: number
+  language: NavigationLanguage
+  context: UiPluginContext
+  consumed: boolean
+}
 export type UseSourceSymbolsOptions = {
   context: UiPluginContext | null
   buffer: BufferIdentity
@@ -236,15 +256,17 @@ export type SourceSymbolsController = {
   panel: SourceLocationsPanel | null
   definition(position?: NavigationPosition, label?: string): Promise<SourceSymbolsResult>
   references(position?: NavigationPosition, label?: string): Promise<SourceSymbolsResult>
-  control(action: SourceSymbolsKind, position?: NavigationPosition, label?: string): boolean
+  reserveIntent(kind: SourceSymbolsKind, position?: NavigationPosition): string | null
+  isIntentCurrent(token: string): boolean
+  control(action: SourceSymbolsKind, position?: NavigationPosition, options?: { intent?: string; focus?: boolean }): boolean
   open(index: number, generation: string): boolean
   close(generation?: string): boolean
   retry(generation: string): boolean
   documentChanged(): void
-  bridgeFailure(): (message: string) => void
+  bridgeFailure(intent?: string): (message: string, dispatchedIntent?: string) => void
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 function positiveInteger(value: unknown): value is number {
@@ -286,6 +308,7 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
   const requestRef = useRef(0)
   const activeRef = useRef<LookupSession | null>(null)
   const retryRef = useRef<LookupSession | null>(null)
+  const intentRef = useRef<LookupIntent | null>(null)
   const mountedRef = useRef(true)
 
   const publishReport = useCallback((next: SourceSymbolsReport) => {
@@ -322,12 +345,62 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
       publishReport(idleReport())
     }
   }, [publishPanel, publishReport, settle])
+  const invalidateIntent = useCallback(() => {
+    intentRef.current = null
+  }, [])
+  const intentIsCurrent = useCallback((intent: LookupIntent): boolean => {
+    const current = optionsRef.current
+    return mountedRef.current && intentRef.current === intent && current.enabled &&
+      current.context === intent.context && current.engineGeneration === intent.engineGeneration &&
+      current.buffer.id === intent.bufferId && current.tabId === intent.tabId &&
+      current.buffer.worktreeId === intent.worktreeId && current.buffer.path === intent.path &&
+      current.buffer.relativePath === intent.relativePath && current.language === intent.language &&
+      current.revision.current === intent.revision
+  }, [])
+  const reserveIntent = useCallback((kind: SourceSymbolsKind, position?: NavigationPosition): string | null => {
+    const current = optionsRef.current
+    const view = current.getView()
+    if (!mountedRef.current || !current.enabled || !current.context || current.engineGeneration === null || !view) return null
+    const offset = position === undefined
+      ? view.state.selection.main.head
+      : validEditorPosition(view.state.doc, position)
+    if (offset === null) return null
+    const line = view.state.doc.lineAt(offset)
+    const capturedPosition = { line: line.number, column: offset - line.from + 1 }
+    invalidateIntent()
+    cancelActive(LOOKUP_REPLACED_MESSAGE, false)
+    requestRef.current++
+    const token = newLookupIntent()
+    intentRef.current = {
+      token,
+      kind,
+      position: capturedPosition,
+      bufferId: current.buffer.id,
+      tabId: current.tabId,
+      worktreeId: current.buffer.worktreeId,
+      path: current.buffer.path,
+      relativePath: current.buffer.relativePath,
+      engineGeneration: current.engineGeneration,
+      revision: current.revision.current,
+      language: current.language,
+      context: current.context,
+      consumed: false
+    }
+    return token
+  }, [cancelActive, invalidateIntent])
+  const isIntentCurrent = useCallback((token: string): boolean => {
+    const intent = intentRef.current
+    return intent !== null && intent.token === token && intentIsCurrent(intent)
+  }, [intentIsCurrent])
+
   useEffect(() => {
     const previous = previousIdentity.current
     if (previous.key === identityKey && previous.context === options.context) return
     previousIdentity.current = { key: identityKey, context: options.context }
+    invalidateIntent()
     cancelActive(null, true)
-  }, [cancelActive, identityKey, options.context])
+  }, [cancelActive, identityKey, invalidateIntent, options.context])
+
 
   const sessionState = useCallback((session: LookupSession): SessionCurrent => {
     if (!mountedRef.current || activeRef.current !== session || requestRef.current !== session.request) return 'replaced'
@@ -358,24 +431,36 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
     })
   }, [publishPanel, publishReport])
 
-  const bridgeFailure = useCallback(() => {
+  const bridgeFailure = useCallback((token?: string) => {
     const origin = optionsRef.current
+    const owner = token === undefined
+      ? intentRef.current
+      : intentRef.current?.token === token ? intentRef.current : null
+    const explicitIntent = token !== undefined
     const revision = origin.revision.current
     const request = requestRef.current
     const generation = panelRef.current?.generation
-    return (message: string) => {
+    return (message: string, dispatchedIntent?: string) => {
       const current = optionsRef.current
-      if (!mountedRef.current || !current.enabled || requestRef.current !== request ||
-          current.revision.current !== revision || panelRef.current?.generation !== generation ||
+      if (!mountedRef.current || !current.enabled ||
           current.context !== origin.context || current.engineGeneration !== origin.engineGeneration ||
           current.buffer.id !== origin.buffer.id || current.tabId !== origin.tabId ||
           current.buffer.worktreeId !== origin.buffer.worktreeId || current.buffer.path !== origin.buffer.path ||
           current.buffer.relativePath !== origin.buffer.relativePath) return
-      const kind = activeRef.current?.kind ?? reportRef.current.kind ?? 'definition'
+      if (dispatchedIntent !== undefined) {
+        if (owner === null || owner.token !== dispatchedIntent || !intentIsCurrent(owner)) return
+      } else if (explicitIntent) {
+        if (owner === null || !intentIsCurrent(owner)) return
+      } else if (owner !== null) {
+        if (!intentIsCurrent(owner)) return
+      } else if (intentRef.current !== null || requestRef.current !== request ||
+          current.revision.current !== revision || panelRef.current?.generation !== generation) return
+      const kind = owner?.kind ?? activeRef.current?.kind ?? reportRef.current.kind ?? 'definition'
+      invalidateIntent()
       cancelActive(message, false)
       showRefusal(kind, message)
     }
-  }, [cancelActive, showRefusal])
+  }, [cancelActive, intentIsCurrent, invalidateIntent, showRefusal])
 
   const completeStale = useCallback((session: LookupSession, state: SessionCurrent) => {
     if (activeRef.current === session) {
@@ -526,7 +611,20 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
       : { kind: session.kind, status: 'list', count: locations.length, truncated: result.truncated })
   }, [completeStale, failSession, openLocation, panelFor, publishPanel, publishReport, sessionState, settle, showRefusal])
 
-  const start = useCallback((kind: SourceSymbolsKind, position?: NavigationPosition, label?: string, fixedParams?: LookupParams): Promise<SourceSymbolsResult> => {
+  const start = useCallback((
+    kind: SourceSymbolsKind,
+    position?: NavigationPosition,
+    label?: string,
+    fixedParams?: LookupParams,
+    intent?: LookupIntent,
+    focusResults = false
+  ): Promise<SourceSymbolsResult> => {
+    if (intent === undefined) {
+      invalidateIntent()
+      cancelActive(LOOKUP_REPLACED_MESSAGE, false)
+    } else if (!intentIsCurrent(intent)) {
+      return Promise.reject(new Error(LOOKUP_REPLACED_MESSAGE))
+    }
     const current = optionsRef.current
     if (!current.enabled) return Promise.reject(new Error(UNSUPPORTED_SOURCE_SYMBOLS_MESSAGE))
     if (!current.context) return Promise.reject(new Error(SOURCE_EDITOR_ONLY_MESSAGE))
@@ -564,7 +662,6 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
       return Promise.reject(reason instanceof Error ? reason : new Error(messageOf(reason)))
     }
 
-    cancelActive(LOOKUP_REPLACED_MESSAGE, false)
     publishPanel(null)
     const request = ++requestRef.current
     const session: LookupSession = {
@@ -580,7 +677,7 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
       kind,
       label: label ?? current.symbolAt(offset),
       params: navParams,
-      focusResults: view.hasFocus,
+      focusResults: focusResults || view.hasFocus,
       timer: undefined,
       resolve: () => {},
       reject: () => {},
@@ -603,27 +700,44 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
     session.reject = deferred.reject
     void runSession(session)
     return deferred.promise
-  }, [cancelActive, panelFor, publishPanel, publishReport, runSession, sessionState, showRefusal])
+  }, [cancelActive, intentIsCurrent, invalidateIntent, panelFor, publishPanel, publishReport, runSession, sessionState, showRefusal])
 
   const definition = useCallback((position?: NavigationPosition, label?: string) => start('definition', position, label), [start])
   const references = useCallback((position?: NavigationPosition, label?: string) => start('references', position, label), [start])
 
-  const control = useCallback((action: SourceSymbolsKind, position?: NavigationPosition, label?: string): boolean => {
+  const control = useCallback((
+    action: SourceSymbolsKind,
+    position?: NavigationPosition,
+    intentOptions?: { intent?: string; focus?: boolean }
+  ): boolean => {
     const current = optionsRef.current
     const view = current.getView()
     if (!current.enabled || !view) return false
+    if (intentOptions?.intent !== undefined) {
+      const intent = intentRef.current
+      if (intent === null || intent.token !== intentOptions.intent || intent.consumed ||
+          intent.kind !== action || !intentIsCurrent(intent) ||
+          position !== undefined && (position.line !== intent.position.line || position.column !== intent.position.column)) return false
+      intent.consumed = true
+      if (intentOptions.focus) view.focus()
+      const promise = start(action, intent.position, undefined, undefined, intent, intentOptions.focus === true)
+      void promise.catch(() => {})
+      return true
+    }
     if (position !== undefined && validEditorPosition(view.state.doc, position) === null) return false
-    const promise = start(action, position, label)
+    if (intentOptions?.focus) view.focus()
+    const promise = start(action, position)
     void promise.catch(() => {})
     return true
-  }, [start])
+  }, [intentIsCurrent, start])
 
   const close = useCallback((generation?: string): boolean => {
     const currentPanel = panelRef.current
     if (!currentPanel || generation !== undefined && currentPanel.generation !== generation) return false
+    invalidateIntent()
     cancelActive(LOOKUP_CLOSED_MESSAGE, true)
     return true
-  }, [cancelActive])
+  }, [cancelActive, invalidateIntent])
 
   const retry = useCallback((generation: string): boolean => {
     const currentPanel = panelRef.current
@@ -647,6 +761,7 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
         currentPanel.status !== 'list' || !session || session.kind !== currentPanel.kind) return false
     const location = currentPanel.locations[index]
     if (!location || location.relativePath === null) return false
+    invalidateIntent()
     void (async () => {
       const state = sessionState(session)
       if (state !== 'current') {
@@ -668,16 +783,18 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
       }
     })()
     return true
-  }, [completeStale, failSession, openLocation, publishPanel, publishReport, sessionState])
+  }, [completeStale, failSession, invalidateIntent, openLocation, publishPanel, publishReport, sessionState])
 
   const documentChanged = useCallback(() => {
+    invalidateIntent()
     cancelActive(DOCUMENT_CHANGED_MESSAGE, true)
-  }, [cancelActive])
+  }, [cancelActive, invalidateIntent])
 
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      invalidateIntent()
       const session = activeRef.current
       if (session) {
         activeRef.current = null
@@ -686,7 +803,9 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
         if (!session.settled) settle(session, { kind: session.kind, status: 'empty' })
       }
     }
-  }, [settle])
+  }, [invalidateIntent, settle])
 
-  return { report, panel, definition, references, control, open, close, retry, documentChanged, bridgeFailure }
+  return {
+    report, panel, definition, references, reserveIntent, isIntentCurrent, control, open, close, retry, documentChanged, bridgeFailure
+  }
 }

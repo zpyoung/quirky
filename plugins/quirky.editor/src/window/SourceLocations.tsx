@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { ControlIcon, EmptyState, IconButton, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { EditorUiControl, EditorUiControlAddress, EditorUiControlResult } from './uiControl'
-import { useEditorUiControl, useEditorUiControlReport } from './uiControl'
+import { EDITOR_UI_CONTROL_COMMAND, useEditorUiControl, useEditorUiControlReport } from './uiControl'
 import type { NavigationPosition, SourceLocationsPanel as PanelState, SourceSymbolsController, SourceSymbolsKind, SourceSymbolsReport } from './sourceNavigation'
-import { SOURCE_WINDOW_UNKNOWN_MESSAGE } from './sourceNavigation'
+import { isRecord, SOURCE_WINDOW_UNKNOWN_MESSAGE } from './sourceNavigation'
 
 const SOURCE_CONTROL_SURFACE = 'view:quirky.editor/document'
 type SourceControlRunner = (action: string, data?: Record<string, unknown>) => Promise<EditorUiControlResult>
@@ -32,6 +32,20 @@ function positionFromData(data: Record<string, unknown>, isValid: (position: Nav
       !Number.isSafeInteger(data.column) || (data.column as number) < 1) return false
   const position = { line: data.line as number, column: data.column as number }
   return isValid(position) ? position : false
+}
+function bridgeIntent(method: string, params: unknown, isValid: (position: NavigationPosition) => boolean): string | undefined {
+  if (method !== 'ui.window.command.run' || !isRecord(params) ||
+      params.id !== EDITOR_UI_CONTROL_COMMAND || !isRecord(params.args)) return undefined
+  const args = params.args
+  const hasData = Object.hasOwn(args, 'data')
+  const data = hasData ? args.data : {}
+  if (args.action !== 'definition' && args.action !== 'references') {
+    return isRecord(data) && Object.hasOwn(data, '_lookupIntent') ? '' : undefined
+  }
+  if (!isRecord(data) || !onlyKeys(data, ['line', 'column', '_lookupIntent']) ||
+      positionFromData(data, isValid) === false) return ''
+  if (!Object.hasOwn(data, '_lookupIntent')) return undefined
+  return typeof data._lookupIntent === 'string' && data._lookupIntent.trim() !== '' ? data._lookupIntent : ''
 }
 function titleOf(panel: PanelState): string {
   const relation = panel.kind === 'definition' ? ' of ' : ' to '
@@ -83,16 +97,20 @@ export function SourceLocations({
         generation: panel.generation,
         actions: locationActions
       }
+  const sourceIntentForBridge = useRef<string | null>(null)
 
   const sourceHandler = async (control: EditorUiControl): Promise<EditorUiControlResult> => {
     if (!enabled || sourceGeneration === null || control.generation !== sourceGeneration) return { delivered: false }
     const data = control.data ?? {}
-    if (!onlyKeys(data, ['line', 'column'])) return { delivered: false }
+    if (!onlyKeys(data, ['line', 'column', '_lookupIntent'])) return { delivered: false }
+    const hasIntent = Object.hasOwn(data, '_lookupIntent')
+    if (hasIntent && (typeof data._lookupIntent !== 'string' || data._lookupIntent.trim() === '')) return { delivered: false }
     const position = positionFromData(data, isValidPosition)
     if (position === false) return { delivered: false }
     const kind = control.action as SourceSymbolsKind
     if (kind !== 'definition' && kind !== 'references') return { delivered: false }
-    return { delivered: controller.control(kind, position ?? undefined) }
+    const options = hasIntent ? { intent: data._lookupIntent as string } : undefined
+    return { delivered: controller.control(kind, position ?? undefined, options) }
   }
   const locationHandler = async (control: EditorUiControl): Promise<EditorUiControlResult> => {
     if (!panel || control.generation !== panel.generation) return { delivered: false }
@@ -116,6 +134,12 @@ export function SourceLocations({
     return {
       ...context,
       async call(method, params = {}) {
+        const intent = bridgeIntent(method, params, isValidPosition)
+        const callFailure = method === 'ui.window.self' && sourceIntentForBridge.current !== null
+          ? controller.bridgeFailure(sourceIntentForBridge.current)
+          : method === 'ui.window.command.run' && intent !== undefined
+            ? controller.bridgeFailure(intent)
+            : fail
         try {
           const result = await context.call(method, params)
           if (method === 'ui.window.self' &&
@@ -127,19 +151,33 @@ export function SourceLocations({
         } catch (reason) {
           const message = method === 'ui.window.self' ? SOURCE_WINDOW_UNKNOWN_MESSAGE
             : reason instanceof Error ? reason.message : String(reason)
-          fail(message)
+          callFailure(message, intent)
           throw new Error(message)
         }
       }
     }
-  }, [context, controller])
+  }, [context, controller, isValidPosition])
   const sourceControls = useEditorUiControl({ context: bridgeContext, address: sourceAddress, handler: sourceHandler })
   const locationControls = useEditorUiControl({ context: bridgeContext, address: locationsAddress, handler: locationHandler })
 
+  const sourceRunner = useCallback((action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> => {
+    if (action !== 'definition' && action !== 'references') return Promise.resolve({ delivered: false })
+    const payload = data ?? {}
+    if (!onlyKeys(payload, ['line', 'column'])) return Promise.resolve({ delivered: false })
+    const position = positionFromData(payload, isValidPosition)
+    if (position === false) return Promise.resolve({ delivered: false })
+    const kind = action as SourceSymbolsKind
+    const intent = controller.reserveIntent(kind, position ?? undefined)
+    if (intent === null) return Promise.resolve({ delivered: false })
+    sourceIntentForBridge.current = intent
+    const pending = sourceControls.run(action, { ...payload, _lookupIntent: intent })
+    sourceIntentForBridge.current = null
+    return pending
+  }, [controller, isValidPosition, sourceControls.run])
   useEffect(() => {
-    onSourceControlRunner(sourceControls.run)
+    onSourceControlRunner(sourceRunner)
     return () => onSourceControlRunner(null)
-  }, [onSourceControlRunner, sourceControls.run])
+  }, [onSourceControlRunner, sourceRunner])
 
   const summary: SourceSymbolsReport = controller.report
   useEffect(() => {

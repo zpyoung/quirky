@@ -1395,7 +1395,7 @@ test('the happy-DOM modifier handler uses the activated UI-control bridge withou
   await tickUi()
   expect(surface.navigationCalls.map(({ params }) => params)).toEqual([{ worktree: `id:${WORKTREE_ID}`, path: 'src/use.ts', line: 4, column: 27 }])
   expect(surface.calls).toContainEqual(expect.objectContaining({ method: 'ui.window.command.run', params: expect.objectContaining({
-    id: 'command:quirky.editor/ui-control', args: expect.objectContaining({ action: 'definition', data: { line: 4, column: 27 } })
+    id: 'command:quirky.editor/ui-control', args: expect.objectContaining({ action: 'definition', data: { line: 4, column: 27, _lookupIntent: expect.any(String) } })
   }) }))
   expect(view.state.selection.toJSON()).toEqual(selection)
 })
@@ -1549,4 +1549,227 @@ test.each(['edit', 'replace'] as const)('a second-stage bridge failure cannot ad
     await act(async () => { newer.resolve(symbolAnswer([])); await newer.promise })
     expect(await outcome).toEqual({ kind: 'references', status: 'empty' })
   }
+})
+
+test.each(['identity', 'dispatch'] as const)('a delayed modifier-click cannot replace a newer lookup after successful %s delivery', async (stage) => {
+  const identity = Promise.withResolvers<unknown>()
+  const dispatch = Promise.withResolvers<void>()
+  const references = symbolAnswer([symbolLocation('src/greet.ts', 11, 30)])
+  const surface = await mountDocument({
+    content: SYMBOL_TEXT,
+    navigation: (method) => method.endsWith('/references') ? references : symbolAnswer(),
+    windowSelf: () => stage === 'identity' ? identity.promise : { connId: 22 }
+  })
+  const address = surface.address('source-symbols:')
+  const call = surface.context.call.bind(surface.context)
+  let delivery: unknown
+  surface.context.call = async (method, params = {}) => {
+    if (stage === 'dispatch' && method === 'ui.window.command.run') await dispatch.promise
+    const result = await call(method, params)
+    if (method === 'ui.window.command.run') delivery = result
+    return result
+  }
+  const view = surface.view()
+  Object.defineProperty(view, 'posAtCoords', { configurable: true, value: () => view.state.doc.line(4).from + 26 })
+  await act(async () => {
+    view.contentDOM.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, button: 0,
+      metaKey: CHORD_PLATFORM === 'darwin', ctrlKey: CHORD_PLATFORM !== 'darwin'
+    }))
+  })
+  expect(surface.navigationCalls).toEqual([])
+  await symbolCommand(surface, 'find-references')
+  const report = structuredClone(surface.report().sourceSymbols)
+  expect(report).toEqual({ status: 'list', kind: 'references', count: 1, truncated: false, error: null })
+  expect(surface.address('source-symbols:').generation).toBe(address.generation)
+  await act(async () => {
+    identity.resolve({ connId: 22 })
+    dispatch.resolve()
+    await identity.promise
+    await dispatch.promise
+  })
+  await tickUi()
+  expect(delivery).toEqual({ result: { delivered: false } })
+  expect(surface.openCalls).toEqual([])
+  expect(surface.navigationCalls.map(({ method }) => method)).toEqual(['quirky.navigation/references'])
+  expect(surface.report().sourceSymbols).toEqual(report)
+  expect(surface.container.querySelector('.qe-source-locations h2')?.textContent).toBe('References to greet')
+  expect(surface.container.querySelectorAll('.ui-list-row')).toHaveLength(1)
+  expect(surface.container.textContent).not.toContain('The editor control is no longer available.')
+
+  expect(await surface.dispatch(address, 'definition', { line: 4, column: 27 })).toEqual({ result: { delivered: true } })
+  await tickUi()
+  expect(surface.navigationCalls.map(({ method }) => method)).toEqual(['quirky.navigation/references', 'quirky.navigation/definition'])
+  expect(surface.openCalls[0]?.params).toEqual({
+    worktree: WORKTREE_ID, path: 'src/greet.ts', mode: 'source', line: 3, column: 17, matchLength: 5, window: 22
+  })
+})
+
+test.each(['identity', 'dispatch'] as const)('a captured menu lookup cannot replace newer references after successful %s delivery', async (stage) => {
+  const identity = Promise.withResolvers<unknown>()
+  const dispatch = Promise.withResolvers<void>()
+  const surface = await mountDocument({
+    content: SYMBOL_TEXT,
+    navigation: (method) => method.endsWith('/references') ? symbolAnswer([symbolLocation()]) : symbolAnswer(),
+    windowSelf: () => stage === 'identity' ? identity.promise : { connId: 22 }
+  })
+  expect(await surface.dispatch(surface.address('source:'), 'menu-open', { kind: 'editor', line: 4, column: 27, x: 10, y: 10 }))
+    .toEqual({ result: { delivered: true } })
+  const call = surface.context.call.bind(surface.context)
+  let delivery: unknown
+  surface.context.call = async (method, params = {}) => {
+    if (stage === 'dispatch' && method === 'ui.window.command.run') await dispatch.promise
+    const result = await call(method, params)
+    if (method === 'ui.window.command.run') delivery = result
+    return result
+  }
+  const button = [...surface.container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    .find((item) => item.textContent === 'Go to Definition')
+  if (!button) throw new Error('The captured editor menu has no Go to Definition action.')
+  await act(async () => button.click())
+  expect(surface.navigationCalls).toEqual([])
+  await symbolCommand(surface, 'find-references')
+  const report = structuredClone(surface.report().sourceSymbols)
+  await act(async () => {
+    identity.resolve({ connId: 22 })
+    dispatch.resolve()
+    await identity.promise
+    await dispatch.promise
+  })
+  await tickUi()
+  expect(delivery).toEqual({ result: { delivered: false } })
+  expect(surface.openCalls).toEqual([])
+  expect(surface.navigationCalls.map(({ method }) => method)).toEqual(['quirky.navigation/references'])
+  expect(surface.report().sourceSymbols).toEqual(report)
+  expect(surface.container.querySelector('.qe-source-locations h2')?.textContent).toBe('References to greet')
+  expect(surface.container.textContent).not.toContain('The editor control is no longer available.')
+})
+
+test('explicit source-symbol controls acknowledge current ownership before the lookup finishes', async () => {
+  const answer = Promise.withResolvers<NavigationResult>()
+  const surface = await mountDocument({ content: SYMBOL_TEXT, navigation: () => answer.promise })
+  expect(await surface.dispatch(surface.address('source-symbols:'), 'references', { line: 4, column: 27 }))
+    .toEqual({ result: { delivered: true } })
+  expect(surface.report().sourceSymbols?.status).toBe('pending')
+  await act(async () => { answer.resolve(symbolAnswer([])); await answer.promise })
+  expect(surface.report().sourceSymbols).toEqual({ status: 'empty', kind: 'references', count: 0, truncated: false, error: null })
+})
+
+test('a current modifier-click still surfaces its window identity failure before navigation', async () => {
+  const surface = await mountDocument({
+    content: SYMBOL_TEXT,
+    windowSelf: () => { throw new Error('identity transport failed') }
+  })
+  const view = surface.view()
+  Object.defineProperty(view, 'posAtCoords', { configurable: true, value: () => view.state.doc.line(4).from + 26 })
+  await act(async () => {
+    view.contentDOM.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, button: 0,
+      metaKey: CHORD_PLATFORM === 'darwin', ctrlKey: CHORD_PLATFORM !== 'darwin'
+    }))
+  })
+  await tickUi()
+  expect(surface.container.textContent).toContain('The daemon did not identify this window.')
+  expect(surface.report().sourceSymbols?.error).toBe('The daemon did not identify this window.')
+  expect(surface.navigationCalls).toEqual([])
+  expect(surface.openCalls).toEqual([])
+})
+
+test('source-symbol delivery rejects unissued lookup ownership without claiming the editor', async () => {
+  const surface = await mountDocument({ content: SYMBOL_TEXT })
+  const address = surface.address('source-symbols:')
+  for (const token of ['not-issued', 1, null]) {
+    expect(await surface.dispatch(address, 'definition', { line: 4, column: 27, _lookupIntent: token }))
+      .toEqual({ result: { delivered: false } })
+  }
+  expect(surface.navigationCalls).toEqual([])
+  expect(surface.report().sourceSymbols?.status).toBe('idle')
+})
+
+test('a UI lookup reservation binds its kind and captured coordinates and cannot be replayed', async () => {
+  const dispatch = Promise.withResolvers<void>()
+  const surface = await mountDocument({ content: SYMBOL_TEXT, navigation: () => symbolAnswer() })
+  const address = surface.address('source-symbols:')
+  const call = surface.context.call.bind(surface.context)
+  let held = false
+  let data: Record<string, unknown> | undefined
+  surface.context.call = async (method, params = {}) => {
+    if (method === 'ui.window.command.run' && !held) {
+      held = true
+      const args = params.args as { data?: Record<string, unknown> }
+      data = args.data
+      await dispatch.promise
+    }
+    return call(method, params)
+  }
+  const view = surface.view()
+  Object.defineProperty(view, 'posAtCoords', { configurable: true, value: () => view.state.doc.line(4).from + 26 })
+  await act(async () => {
+    view.contentDOM.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, button: 0,
+      metaKey: CHORD_PLATFORM === 'darwin', ctrlKey: CHORD_PLATFORM !== 'darwin'
+    }))
+  })
+  expect(typeof data?._lookupIntent).toBe('string')
+  expect(await surface.dispatch(address, 'references', data)).toEqual({ result: { delivered: false } })
+  expect(await surface.dispatch(address, 'definition', { ...data, column: 33 })).toEqual({ result: { delivered: false } })
+  expect(surface.navigationCalls).toEqual([])
+  await act(async () => { dispatch.resolve(); await dispatch.promise })
+  await tickUi()
+  expect(surface.navigationCalls.map(({ method }) => method)).toEqual(['quirky.navigation/definition'])
+  expect(surface.openCalls).toHaveLength(1)
+  expect(await surface.dispatch(address, 'definition', data)).toEqual({ result: { delivered: false } })
+  expect(surface.navigationCalls).toHaveLength(1)
+  expect(surface.openCalls).toHaveLength(1)
+})
+
+test.each([
+  { path: 'src/use.ts', separator: '\u2028', line: 2, column: 7, language: 'typescript' },
+  { path: 'src/use.ts', separator: '\u2029', line: 2, column: 7, language: 'typescript' },
+  { path: 'main.py', separator: '\u2028', line: 1, column: 9, language: 'python' }
+])('reserved modifier-click converts editor coordinates once for $path/$separator', async ({ path, separator, line, column, language }) => {
+  const surface = await mountDocument({
+    relativePath: path, content: `x${separator}const greet = 1\n`,
+    navigation: () => ({ ...symbolAnswer([]), language })
+  })
+  const view = surface.view()
+  Object.defineProperty(view, 'posAtCoords', { configurable: true, value: () => 8 })
+  await act(async () => {
+    view.contentDOM.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, button: 0,
+      metaKey: CHORD_PLATFORM === 'darwin', ctrlKey: CHORD_PLATFORM !== 'darwin'
+    }))
+  })
+  await tickUi()
+  expect(surface.navigationCalls.map(({ params }) => params)).toEqual([{ worktree: `id:${WORKTREE_ID}`, path, line, column }])
+  expect(surface.report().sourceSymbols?.status).toBe('empty')
+})
+
+test('a menu captured before an edit cannot start a lookup at its old position', async () => {
+  const surface = await mountDocument({ content: SYMBOL_TEXT })
+  await surface.dispatch(surface.address('source:'), 'menu-open', { kind: 'editor', line: 4, column: 27, x: 10, y: 10 })
+  const button = [...surface.container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    .find((item) => item.textContent === 'Go to Definition')
+  if (!button) throw new Error('The captured editor menu has no Go to Definition action.')
+  await act(async () => { surface.view().dispatch({ changes: { from: 0, insert: 'x' } }) })
+  await act(async () => button.click())
+  await tickUi()
+  expect(surface.navigationCalls).toEqual([])
+  expect(surface.openCalls).toEqual([])
+  expect(surface.container.querySelector('.qe-source-locations')).toBeNull()
+  expect(surface.container.textContent).not.toContain(SAVED_FIRST)
+})
+
+test.each(['definition', 'references'] as const)('a current public %s menu control retains its no-data contract', async (kind) => {
+  const surface = await mountDocument({ content: SYMBOL_TEXT, navigation: () => symbolAnswer() })
+  await surface.dispatch(surface.address('source:'), 'menu-open', { kind: 'editor', line: 4, column: 27, x: 10, y: 10 })
+  expect(await surface.dispatch(surface.address('source-menu:'), kind)).toEqual({ result: { delivered: true } })
+  await tickUi()
+  expect(surface.navigationCalls).toEqual([{
+    method: `quirky.navigation/${kind}`, params: { worktree: `id:${WORKTREE_ID}`, path: 'src/use.ts', line: 4, column: 27 }
+  }])
+  if (kind === 'definition') expect(surface.openCalls[0]?.params).toEqual({
+    worktree: WORKTREE_ID, path: 'src/greet.ts', mode: 'source', line: 3, column: 17, matchLength: 5, window: 22
+  })
+  else expect(surface.container.querySelector('.qe-source-locations h2')?.textContent).toBe('References to greet')
 })
