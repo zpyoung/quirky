@@ -8,6 +8,7 @@ import type { DropPreviewReport } from '../src/report'
 import type * as React from 'react'
 import type { Root } from 'react-dom/client'
 import type { ToolPanelFrame as ToolPanelFrameComponent } from '@quirky/ui'
+import { UI_CONTROL_COMMAND } from '../src/ui-control'
 import { sectionHeading } from './window/dom'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
@@ -656,6 +657,13 @@ function setup(
         }
         case 'ui.window.self':
           return { connId: 1 }
+        case 'ui.window.command.run': {
+          if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
+          if (params.id !== UI_CONTROL_COMMAND) throw new Error(`unexpected command ${String(params.id)}`)
+          const handler = provided.get(UI_CONTROL_COMMAND) as ((args: unknown) => unknown) | undefined
+          if (!handler) throw new Error(`unexpected command ${UI_CONTROL_COMMAND}`)
+          return { result: await handler(params.args) }
+        }
         case 'quirky.worktree/views':
           return { views: [], needsYouHidden: false, rowFact: 'last-activity' }
         case 'quirky.worktree/activeView':
@@ -674,7 +682,7 @@ function setup(
       return () => void eventListeners.delete(listener)
     },
     getSetting: () => undefined,
-    executeCommand: async () => {},
+    executeCommand: async () => { throw new Error('executeCommand must not be used for UI controls') },
     openView(id: string, input?: unknown) {
       const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
         ? input.worktree
@@ -685,7 +693,6 @@ function setup(
         view: { id, input }
       }
       current = next
-      for (const listener of layoutListeners) listener(next)
     },
     closeView() {},
     togglePanel() {},
