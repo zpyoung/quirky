@@ -1,4 +1,4 @@
-import { Badge, Button, Dialog, EmptyState, ListRow, TextField } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, InlineError, ListRow, NoticeLine, TextField } from '@quirky/ui'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import type { SurfaceProps } from '../types'
 import { parseNotebook, serializeNotebook, sourceLines, type NotebookParse } from './document'
@@ -9,6 +9,7 @@ type KernelState = { status?: string; pid?: number; stderr?: string; error?: str
 type NotebookRuntimeState = { trusted?: boolean; busy?: boolean; executionCount?: number | null; interruptStalled?: boolean; selectedPython?: { path?: string; name?: string; version?: string } | null; kernel?: KernelState }
 type Environment = { path: string; name: string; version?: string; source?: string; hasIpykernel?: boolean; externallyManaged?: boolean }
 type TrustRequest = { index: number | null; all: boolean; mode: 'advance' | 'in-place' }
+type RuntimeReadState = { bufferId: string; runtime: NotebookRuntimeState | null; pending: boolean; error: string | null }
 
 const MAX_CELL_PREVIEW_BYTES = 64 * 1024
 const MAX_CELL_PREVIEW_LINES = 200
@@ -73,7 +74,7 @@ function MimeOutput({ output }: { output: ApiRecord }) {
   }
   if (selected.mime.startsWith('image/')) {
     const src = base64ImageDataUrl(selected.mime, selected.value)
-    if (!src) return <p role="status">Image output is too large or malformed.</p>
+    if (!src) return <InlineError message="Image output is too large or malformed." />
     return <img className="notebook-image-output" src={src} alt="Notebook output" />
   }
   const value = outputText(output)
@@ -90,8 +91,14 @@ export function NotebookSurface(props: SurfaceProps) {
   const content = buffer.draft !== null ? buffer.draft : buffer.content
   const parsed: NotebookParse = useMemo(() => parseNotebook(content), [content])
   const cells = parsed.valid ? parsed.cells : []
-  const [runtime, setRuntime] = useState<NotebookRuntimeState>({ trusted: false, busy: false, kernel: { status: 'stopped' } })
+  const [runtimeRead, setRuntimeRead] = useState<RuntimeReadState>({ bufferId: buffer.id, runtime: null, pending: true, error: null })
+  const runtime = runtimeRead.bufferId === buffer.id ? runtimeRead.runtime : null
+  const runtimePending = runtimeRead.bufferId !== buffer.id || runtimeRead.pending
+  const runtimeReadError = runtimeRead.bufferId === buffer.id ? runtimeRead.error : null
   const [environmentChoices, setEnvironmentChoices] = useState<Environment[]>([])
+  const [environmentOpen, setEnvironmentOpen] = useState(false)
+  const [environmentPending, setEnvironmentPending] = useState(false)
+  const [environmentError, setEnvironmentError] = useState<string | null>(null)
   const [editingCell, setEditingCell] = useState<number | null>(null)
   const [cellDrafts, setCellDrafts] = useState<Record<number, string>>({})
   const [trustRequest, setTrustRequest] = useState<TrustRequest | null>(null)
@@ -99,6 +106,7 @@ export function NotebookSurface(props: SurfaceProps) {
   const [setupError, setSetupError] = useState<string | null>(null)
   const [sourceError, setSourceError] = useState<string | null>(null)
   const [actionBusy, setActionBusy] = useState(false)
+  const [operationNotice, setOperationNotice] = useState<string | null>(null)
   const [kernelError, setKernelError] = useState<string | null>(null)
   const runtimeRefreshSequence = useRef(0)
   const runtimeSurfaceMounted = useRef(false)
@@ -122,12 +130,20 @@ export function NotebookSurface(props: SurfaceProps) {
     runtimeSurfaceMounted.current = true
     const refreshPublishedRuntime = async () => {
       const request = ++runtimeRefreshSequence.current
+      setRuntimeRead({ bufferId, runtime: null, pending: true, error: null })
       try {
         const value = await onAction('quirky.editor/notebook', { bufferId, action: 'state' })
-        if (active && request === runtimeRefreshSequence.current) setRuntime(notebookRuntime(value))
+        if (active && request === runtimeRefreshSequence.current) {
+          setRuntimeRead({ bufferId, runtime: notebookRuntime(value), pending: false, error: null })
+        }
       } catch (error) {
         if (active && request === runtimeRefreshSequence.current) {
-          setKernelError(error instanceof Error ? error.message : String(error))
+          setRuntimeRead({
+            bufferId,
+            runtime: null,
+            pending: false,
+            error: error instanceof Error ? error.message : String(error)
+          })
         }
       }
     }
@@ -173,8 +189,23 @@ export function NotebookSurface(props: SurfaceProps) {
 
   const refreshRuntime = async () => {
     const request = ++runtimeRefreshSequence.current
-    const result = await onAction('quirky.editor/notebook', { bufferId, action: 'state' })
-    if (runtimeSurfaceMounted.current && request === runtimeRefreshSequence.current) setRuntime(notebookRuntime(result))
+    setRuntimeRead({ bufferId, runtime, pending: true, error: null })
+    try {
+      const result = await onAction('quirky.editor/notebook', { bufferId, action: 'state' })
+      if (runtimeSurfaceMounted.current && request === runtimeRefreshSequence.current) {
+        setRuntimeRead({ bufferId, runtime: notebookRuntime(result), pending: false, error: null })
+      }
+    } catch (error) {
+      if (runtimeSurfaceMounted.current && request === runtimeRefreshSequence.current) {
+        setRuntimeRead({
+          bufferId,
+          runtime,
+          pending: false,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+      throw error
+    }
   }
 
   const action = async (name: string, fields: Record<string, unknown> = {}): Promise<unknown> =>
@@ -227,13 +258,16 @@ export function NotebookSurface(props: SurfaceProps) {
   }
 
   const startRun = async (request: TrustRequest) => {
+    if (runtimePending || !runtime) return
     flushCellChanges()
     setActionBusy(true)
+    setOperationNotice('Running notebook…')
     setKernelError(null)
     try {
       if (request.all) {
         const result = asRecord(await action('runAll'))
         if (result.status === 'missing-ipykernel') {
+          setSetupError(null)
           setSetupPrompt(result.externallyManaged === true ? 'venv' : 'install')
         } else if (result.status === 'failed' || result.status === 'dead' || result.status === 'error') {
           setKernelError(typeof result.stderr === 'string' ? result.stderr : 'Notebook execution failed.')
@@ -241,6 +275,7 @@ export function NotebookSurface(props: SurfaceProps) {
       } else if (request.index !== null) {
         const result = asRecord(await action('run', { index: request.index, mode: request.mode }))
         if (result.status === 'missing-ipykernel') {
+          setSetupError(null)
           setSetupPrompt(result.externallyManaged === true ? 'venv' : 'install')
         } else if (result.status === 'failed' || result.status === 'dead' || result.status === 'error') {
           setKernelError(typeof result.stderr === 'string' ? result.stderr : 'Notebook execution failed.')
@@ -252,25 +287,29 @@ export function NotebookSurface(props: SurfaceProps) {
     } catch (error) {
       setKernelError(error instanceof Error ? error.message : String(error))
     } finally {
+      setOperationNotice(null)
       setActionBusy(false)
       setTrustRequest(null)
     }
   }
 
   const requestRun = (request: TrustRequest) => {
+    if (runtimePending || !runtime || buffer.readOnly || !parsed.valid || !parsed.language.startsWith('python')) return
     if (!runtime.trusted) setTrustRequest(request)
     else void startRun(request)
   }
 
   const grantTrustAndRun = async () => {
-    if (!trustRequest) return
+    if (!trustRequest || runtimePending || !runtime) return
     setActionBusy(true)
+    setOperationNotice('Running notebook…')
     try {
       await action('trust')
       await refreshRuntime()
       await startRun(trustRequest)
     } catch (error) {
       setKernelError(error instanceof Error ? error.message : String(error))
+      setOperationNotice(null)
       setActionBusy(false)
       setTrustRequest(null)
     }
@@ -288,26 +327,45 @@ export function NotebookSurface(props: SurfaceProps) {
     }
   }
 
+  const interruptKernel = async () => {
+    setActionBusy(true)
+    setKernelError(null)
+    try {
+      await action('interrupt')
+    } catch (error) {
+      setKernelError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   const loadEnvironments = async () => {
-    setSourceError(null)
+    setEnvironmentOpen(true)
+    setEnvironmentPending(true)
+    setEnvironmentError(null)
+    setEnvironmentChoices([])
     try {
       const result = asRecord(await action('environments'))
       setEnvironmentChoices(Array.isArray(result.environments) ? result.environments.map((entry) => asRecord(entry) as Environment) : [])
     } catch (error) {
-      setSourceError(error instanceof Error ? error.message : String(error))
+      setEnvironmentError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setEnvironmentPending(false)
     }
   }
 
   const selectEnvironment = async (path: string) => {
     setActionBusy(true)
+    setEnvironmentError(null)
     try {
       const selected = asRecord(await action('select', { python: path }))
       if (selected.cancelled === true) return
       await refreshRuntime()
+      setEnvironmentOpen(false)
       setEnvironmentChoices([])
       setKernelError(null)
     } catch (error) {
-      setSourceError(error instanceof Error ? error.message : String(error))
+      setEnvironmentError(error instanceof Error ? error.message : String(error))
     } finally {
       setActionBusy(false)
     }
@@ -315,14 +373,16 @@ export function NotebookSurface(props: SurfaceProps) {
 
   const browseEnvironment = async () => {
     setActionBusy(true)
+    setEnvironmentError(null)
     try {
       const selected = asRecord(await action('select', { browse: true }))
       if (selected.cancelled === true) return
       await refreshRuntime()
       setKernelError(null)
+      setEnvironmentOpen(false)
       setEnvironmentChoices([])
     } catch (error) {
-      setSourceError(error instanceof Error ? error.message : String(error))
+      setEnvironmentError(error instanceof Error ? error.message : String(error))
     } finally {
       setActionBusy(false)
     }
@@ -330,16 +390,23 @@ export function NotebookSurface(props: SurfaceProps) {
 
   const setup = async (kind: 'install' | 'venv') => {
     setActionBusy(true)
+    setOperationNotice('Setting up Python environment…')
     setSetupError(null)
     try {
-      const result = asRecord(await action(kind, runtime.selectedPython?.path ? { python: runtime.selectedPython.path } : {}))
-      if (result.status === 'venv-required') setSetupPrompt('venv')
-      else setSetupPrompt(null)
-      if (result.status === 'failed' || result.status === 'venv-required') setSetupError(typeof result.error === 'string' ? result.error : 'Python environment setup needs attention.')
+      const result = asRecord(await action(kind, runtime?.selectedPython?.path ? { python: runtime.selectedPython.path } : {}))
+      if (result.status === 'venv-required') {
+        setSetupPrompt('venv')
+        setSetupError(typeof result.error === 'string' ? result.error : 'Python environment setup needs attention.')
+      } else if (result.status === 'failed') {
+        setSetupError(typeof result.error === 'string' ? result.error : 'Python environment setup needs attention.')
+      } else {
+        setSetupPrompt(null)
+      }
       await refreshRuntime()
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : String(error))
     } finally {
+      setOperationNotice(null)
       setActionBusy(false)
     }
   }
@@ -442,14 +509,17 @@ export function NotebookSurface(props: SurfaceProps) {
       <Button type="button" onClick={() => { setFindOpen(true); window.requestAnimationFrame(() => document.getElementById(findInputId)?.focus()) }}>Find</Button>
       {!sourceMode && parsed.valid && parsed.language.startsWith('python') && <>
         <Button type="button" onClick={() => void loadEnvironments()} disabled={actionBusy}>
-          {runtime.selectedPython?.name ? `${runtime.selectedPython.name}${runtime.selectedPython.version ? ` (Python ${runtime.selectedPython.version})` : ''}` : 'Select Kernel'}
+          {runtime?.selectedPython?.name ? `${runtime.selectedPython.name}${runtime.selectedPython.version ? ` (Python ${runtime.selectedPython.version})` : ''}` : 'Select Kernel'}
         </Button>
-        <Button type="button" variant="primary" onClick={() => requestRun({ index: null, all: true, mode: 'in-place' })} disabled={actionBusy || buffer.readOnly}>Run all</Button>
+        <Button type="button" variant="primary" onClick={() => requestRun({ index: null, all: true, mode: 'in-place' })} disabled={actionBusy || runtimePending || !runtime || runtime.busy === true || buffer.readOnly}>Run all</Button>
         <Button type="button" variant="destructive" onClick={() => void mutateNotebook('clear', {})} disabled={actionBusy || buffer.readOnly}>Clear all outputs</Button>
-        {runtime.busy && <Button type="button" onClick={() => void action('interrupt')} disabled={actionBusy}>Interrupt</Button>}
-        {(runtime.kernel?.status === 'ready' || runtime.kernel?.status === 'dead') && <Button type="button" onClick={() => void restartKernel()} disabled={actionBusy}>Restart kernel</Button>}
+        {runtime?.busy && <Button type="button" onClick={() => void interruptKernel()} disabled={actionBusy}>Interrupt</Button>}
+        {(runtime?.kernel?.status === 'ready' || runtime?.kernel?.status === 'dead') && <Button type="button" onClick={() => void restartKernel()} disabled={actionBusy}>Restart kernel</Button>}
       </>}
     </header>
+    {runtimePending && <NoticeLine>Loading notebook runtime…</NoticeLine>}
+    {operationNotice && <NoticeLine>{operationNotice}</NoticeLine>}
+    {runtimeReadError && <InlineError message={runtimeReadError} />}
     {findOpen && <div className="notebook-toolbar" role="search" aria-label="Find in notebook">
       <TextField
         id={findInputId}
@@ -500,8 +570,8 @@ export function NotebookSurface(props: SurfaceProps) {
         }}>
           <div className="notebook-cell-toolbar">
             <Badge tone="neutral" label={`Cell type: ${cell.cell_type}`}>{cell.cell_type}</Badge>
-            {cell.cell_type === 'code' && <Badge tone={runtime.busy ? 'working' : 'neutral'} label="Execution count">[{typeof cell.execution_count === 'number' ? cell.execution_count : runtime.busy ? '*' : ' '}]</Badge>}
-            {cell.cell_type === 'code' && <Button type="button" onClick={() => requestRun({ index, all: false, mode: 'in-place' })} disabled={actionBusy || buffer.readOnly}>Run cell</Button>}
+            {cell.cell_type === 'code' && <Badge tone={runtime?.busy ? 'working' : 'neutral'} label="Execution count">[{typeof cell.execution_count === 'number' ? cell.execution_count : runtime?.busy ? '*' : ' '}]</Badge>}
+            {cell.cell_type === 'code' && <Button type="button" onClick={() => requestRun({ index, all: false, mode: 'in-place' })} disabled={actionBusy || runtimePending || !runtime || runtime.busy === true || buffer.readOnly}>Run cell</Button>}
             <Button type="button" onClick={() => setEditingCell(isEditing ? null : index)} disabled={buffer.readOnly}>{isEditing ? 'Done editing' : 'Edit cell'}</Button>
             <details>
               <summary>More cell actions</summary>
@@ -548,26 +618,31 @@ export function NotebookSurface(props: SurfaceProps) {
         <Button type="button" onClick={() => setCellOffset(Math.min(cells.length - 1, cellOffset + CELL_PAGE_SIZE))} disabled={visibleCellEnd >= cells.length}>Next cells</Button>
       </nav>}
       <Button type="button" onClick={() => { setCellOffset(Math.max(0, Math.floor(cells.length / CELL_PAGE_SIZE) * CELL_PAGE_SIZE)); void insertCell(cells.length, 'below', 'code') }} disabled={actionBusy || buffer.readOnly}>Add code cell</Button>
-    </main> : <div role="alert" className="notebook-error">
-      <EmptyState
-        message={parsed.error ?? 'Notebook parse error'}
-        action={{ label: 'Open raw source', onAction: () => onView({ mode: 'source' }) }}
-      />
-    </div>}
+    </main> : <InlineError
+      message={parsed.error ?? 'Notebook parse error'}
+      action={{ label: 'Open raw source', onAction: () => onView({ mode: 'source' }) }}
+    />}
 
-    {environmentChoices.length > 0 && <section className="notebook-kernel-menu" aria-label="Python environments">
+    {environmentOpen && <section className="notebook-kernel-menu" aria-label="Python environments">
       <strong>Recommended and Python on PATH</strong>
-      <ul>{environmentChoices.map((environment) => <li key={environment.path}>
+      {environmentPending && <NoticeLine>Loading Python environments…</NoticeLine>}
+      {!environmentPending && !environmentError && environmentChoices.length === 0 && <EmptyState message="No Python environments found." />}
+      {environmentError && <InlineError
+        message={environmentError}
+        action={{ label: 'Retry', onAction: () => { void loadEnvironments() } }}
+      />}
+      {environmentChoices.length > 0 && <ul>{environmentChoices.map((environment) => <li key={environment.path}>
         <ListRow
           title={`${environment.name}${environment.version ? ` · Python ${environment.version}` : ''}`}
           description={environment.path}
           disabled={actionBusy}
           onClick={() => void selectEnvironment(environment.path)}
         />
-      </li>)}</ul>
+      </li>)}</ul>}
       <Button type="button" onClick={() => void browseEnvironment()} disabled={actionBusy}>Browse for Python…</Button>
-      <Button type="button" onClick={() => setEnvironmentChoices([])}>Cancel</Button>
+      <Button type="button" onClick={() => { setEnvironmentOpen(false); setEnvironmentChoices([]) }}>Cancel</Button>
     </section>}
+
 
     {trustRequest && <Dialog
       open
@@ -594,13 +669,13 @@ export function NotebookSurface(props: SurfaceProps) {
       </>}
     >
       <p>{setupPrompt === 'venv' ? 'A workspace .venv will be created and ipykernel installed there.' : 'This installs or upgrades ipykernel in the selected Python environment.'}</p>
-      {setupError && <p className="ui-error-text" role="alert">{setupError}</p>}
+      {setupError && <InlineError message={setupError} />}
     </Dialog>}
 
-    {runtime.interruptStalled && <p role="status">Not responding. Restart kernel.</p>}
-    {sourceError && <p role="alert">{sourceError}</p>}
-    {kernelError && <p role="alert">{kernelError}</p>}
-    {runtime.kernel?.status === 'dead' && <p role="alert">The kernel died. {runtime.kernel.error || runtime.kernel.stderr || 'The kernel process exited unexpectedly.'}</p>}
-    {runtime.kernel?.error && runtime.kernel.status !== 'dead' && <p role="alert">{runtime.kernel.error}</p>}
+    {runtime?.interruptStalled && <p role="status">Not responding. Restart kernel.</p>}
+    {sourceError && <InlineError message={sourceError} />}
+    {kernelError && <InlineError message={kernelError} />}
+    {runtime?.kernel?.status === 'dead' && <InlineError message={`The kernel died. ${runtime.kernel.error || runtime.kernel.stderr || 'The kernel process exited unexpectedly.'}`} />}
+    {runtime?.kernel?.error && runtime.kernel.status !== 'dead' && <InlineError message={runtime.kernel.error} />}
   </section>
 }
