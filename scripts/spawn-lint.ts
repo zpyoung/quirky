@@ -273,7 +273,7 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
 
   let checker: ts.TypeChecker | undefined
   const resolveIdentifier = (node: ts.Identifier): RootKind | undefined => {
-    if (node.text === 'require') return 'loader'
+    if (node.text === 'require' && !ts.isExportSpecifier(node.parent)) return 'loader'
     if (!candidates.has(node.text)) return undefined
     if (!checker) {
       const host: ts.CompilerHost = {
@@ -295,9 +295,10 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
     for (const declaration of symbol?.declarations ?? []) {
       if (declaration.getSourceFile() !== sourceFile) continue
       const kind = imports.get(declaration)
-      if (kind) return kind
-      if (runtimeDeclaration(declaration)) return undefined
+      if (kind) return node.text === 'require' ? 'loader' : kind
+      if (runtimeDeclaration(declaration)) return node.text === 'require' ? 'loader' : undefined
     }
+    if (ts.isExportSpecifier(node.parent) && symbol && !(symbol.flags & ts.SymbolFlags.Value)) return undefined
     return Object.hasOwn(globalRoots, node.text) ? globalRoots[node.text] : undefined
   }
   const rootCache = new Map<ts.Expression, RootKind | undefined>()

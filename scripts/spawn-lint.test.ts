@@ -132,6 +132,7 @@ const taskOneErrorCases = [
   ['local Bun namespace export', 'import * as B from "bun";\nexport { B }', escapedGlobalDiagnostic(10, 2)],
   ['aliased local loader export', 'import { getBuiltinModule as g } from "node:process";\nexport { g as loader }', dynamicCodeDiagnostic(10, 2)],
   ['nested binding default source', 'const { x: { spawn } =\nBun } = obj', spawnDiagnostic(14)],
+  ['ambient value exported alongside type-only declaration', 'interface Bun {}\ndeclare const Bun: any;\nexport { Bun }', escapedGlobalDiagnostic(10, 3)],
 ] as const
 test.each(taskOneErrorCases)('reports exact task 1 diagnostic and padded column: %s', (_name, source, expected) => {
   expect(scanSourceContent(file, source)).toEqual([expected])
@@ -152,6 +153,10 @@ test.each([
   'import * as B from "bun"; export { type B }',
   'import * as B from "./local"; export { B }',
   'class Bun {}; f(Bun)',
+  'interface Bun {}; export { Bun }',
+  'type Atomics = unknown; export { Atomics }',
+  'import type Bun from "bun"; export { Bun }',
+  'type require = unknown; export { require }',
 ])('preserves local and type-only export controls: %s', source => {
   expect(scanSourceContent(file, source)).toEqual([])
 })
