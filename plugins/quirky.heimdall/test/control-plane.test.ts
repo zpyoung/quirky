@@ -276,6 +276,29 @@ function request(harness: ReturnType<typeof fixture>, command: WatcherCommand, o
   }
 }
 
+function installWorktreeResolver(
+  harness: ReturnType<typeof fixture>,
+  resolve: (method: string, params: Record<string, unknown>) => unknown | Promise<unknown>,
+) {
+  const calls: Array<{ method: string; params: Record<string, unknown>; insideControl: boolean }> = []
+  harness.host.context.call = async (method: string, params: Record<string, unknown> = {}) => {
+    calls.push({ method, params: structuredClone(params), insideControl: !harness.mayStartEffect() })
+    return resolve(method, params)
+  }
+  return calls
+}
+
+function seedControlJournal(harness: ReturnType<typeof fixture>): void {
+  harness.store.append(WATCHER_ID, {
+    kind: 'evidence',
+    class: 'fact',
+    origin: 'owner',
+    resolved: false,
+    evidenceKind: 'control-plane-test-seed',
+    payload: { retained: true },
+  })
+}
+
 describe('Heimdall control plane', () => {
   test('pause fences new effects and drains the current tick before persisting', async () => {
     const h = fixture()
@@ -422,9 +445,12 @@ describe('Heimdall control plane', () => {
     expect(h.store.get(WATCHER_ID)?.commandRevision).toBe(0)
 
 
-    expect(await control.command(request(h, { kind: 'set-concurrency', maxConcurrency: 0 }))).toMatchObject({ kind: 'refused', reason: 'invalid-command' })
-    expect(await control.command(request(h, { kind: 'set-concurrency', maxConcurrency: 1025 }))).toMatchObject({ kind: 'refused', reason: 'invalid-command' })
-    expect(await control.command(request(h, { kind: 'set-concurrency', maxConcurrency: Number.POSITIVE_INFINITY }))).toMatchObject({ kind: 'refused', reason: 'invalid-command' })
+    for (const maxConcurrency of [-1, 0, 1.5, 1025, Number.NaN, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, '2']) {
+      const invalid = { kind: 'set-concurrency', maxConcurrency } as unknown as WatcherCommand
+      expect(await control.command(request(h, invalid))).toMatchObject({ kind: 'refused', reason: 'invalid-command' })
+    }
+    expect(h.store.get(WATCHER_ID)?.commandRevision).toBe(0)
+    expect(h.store.journal(WATCHER_ID)).toEqual([])
     const nonObjective = fixture({ enrollment: { kind: 'hosted-review', kindPayload: {} } })
     expect(await createControlPlane(nonObjective.host).command(request(nonObjective, { kind: 'set-concurrency', maxConcurrency: 2 }))).toMatchObject({ kind: 'refused', reason: 'unsupported-capability' })
     const folder = fixture({ enrollment: { repoId: null, kindPayload: { maxConcurrency: 1 } } })
@@ -432,15 +458,192 @@ describe('Heimdall control plane', () => {
     expect(folder.store.get(WATCHER_ID)?.commandRevision).toBe(0)
   })
 
-  test('folder workspaces with a group identity cannot raise concurrency above one', async () => {
-    const h = fixture({ enrollment: { repoId: 'group:isolated-folders', kindPayload: { workspaceKind: 'folder', maxConcurrency: 1 } } })
-    const result = await createControlPlane(h.host).command(request(h, { kind: 'set-concurrency', maxConcurrency: 2 }))
-    expect(result).toMatchObject({ kind: 'refused', reason: 'unsupported-capability' })
-    expect(h.store.get(WATCHER_ID)).toMatchObject({ commandRevision: 0, kindPayload: { maxConcurrency: 1 } })
+  test('folder projects and group folders cannot raise concurrency above one', async () => {
+    const folderFacts = { id: 'wt-folder-project', repoId: 'repo-folder-project', path: '/workspace', kind: 'folder' }
+    const folder = fixture({
+      enrollment: {
+        repoId: folderFacts.repoId,
+        worktreeId: folderFacts.id,
+        workspacePath: folderFacts.path,
+        kindPayload: { maxConcurrency: 1, retained: 'folder-payload' },
+      },
+    })
+    seedControlJournal(folder)
+    const folderCalls = installWorktreeResolver(folder, (method, params) => {
+      expect(method).toBe('quirky.worktree/resolve')
+      expect(params).toEqual({ selector: `id:${folderFacts.id}` })
+      return folderFacts
+    })
+    const folderControl = createControlPlane(folder.host)
+    const folderBefore = folder.store.get(WATCHER_ID)!
+    const folderJournalBefore = folder.store.journal(WATCHER_ID)
+
+    expect(await folderControl.command(request(folder, { kind: 'set-concurrency', maxConcurrency: 2 }))).toEqual({
+      kind: 'refused',
+      reason: 'unsupported-capability',
+      detail: 'Folder workspaces support a concurrency cap of one.',
+    })
+    expect(folder.store.get(WATCHER_ID)).toEqual(folderBefore)
+    expect(folder.store.journal(WATCHER_ID)).toEqual(folderJournalBefore)
+    expect(folderCalls).toEqual([{
+      method: 'quirky.worktree/resolve',
+      params: { selector: `id:${folderFacts.id}` },
+      insideControl: true,
+    }])
+    expect(folder.calls.changed).toEqual([])
+    expect(folder.calls.reconcile).toEqual([])
+
+    expect(await folderControl.command(request(folder, { kind: 'set-concurrency', maxConcurrency: 1 }))).toMatchObject({ kind: 'applied' })
+    expect(folder.store.get(WATCHER_ID)).toMatchObject({
+      kindPayload: { maxConcurrency: 1, retained: 'folder-payload' },
+      commandRevision: 1,
+    })
+    expect(folder.store.journal(WATCHER_ID)).toContainEqual(expect.objectContaining({
+      evidenceKind: 'objective-concurrency-changed',
+      payload: { maxConcurrency: 1 },
+    }))
+    expect(folderCalls.every(call => call.insideControl)).toBe(true)
+
+    for (const workspace of [
+      { repoId: 'group:group-folder', worktreeId: 'wt-group-folder', workspacePath: '/workspace/group-folder' },
+      { repoId: null, worktreeId: 'wt-legacy-folder', workspacePath: '/workspace/legacy-folder' },
+    ]) {
+      const conservative = fixture({
+        enrollment: {
+          ...workspace,
+          kindPayload: { maxConcurrency: 1, retained: 'conservative-payload' },
+        },
+      })
+      seedControlJournal(conservative)
+      const before = conservative.store.get(WATCHER_ID)!
+      const journalBefore = conservative.store.journal(WATCHER_ID)
+
+      expect(await createControlPlane(conservative.host).command(
+        request(conservative, { kind: 'set-concurrency', maxConcurrency: 2 }),
+      )).toEqual({
+        kind: 'refused',
+        reason: 'unsupported-capability',
+        detail: 'Folder workspaces support a concurrency cap of one.',
+      })
+      expect(conservative.store.get(WATCHER_ID)).toEqual(before)
+      expect(conservative.store.journal(WATCHER_ID)).toEqual(journalBefore)
+      expect(conservative.calls.changed).toEqual([])
+      expect(conservative.calls.reconcile).toEqual([])
+    }
+
+    const git = fixture({
+      enrollment: {
+        repoId: 'repo-git',
+        worktreeId: 'wt-git',
+        workspacePath: '/workspace',
+        kindPayload: { maxConcurrency: 1 },
+      },
+    })
+    const gitFacts = { id: 'wt-git', repoId: 'repo-git', path: '/workspace', kind: 'git' }
+    const gitCalls = installWorktreeResolver(git, (method, params) => {
+      expect(method).toBe('quirky.worktree/resolve')
+      expect(params).toEqual({ selector: 'id:wt-git' })
+      return gitFacts
+    })
+    expect(await createControlPlane(git.host).command(request(git, { kind: 'set-concurrency', maxConcurrency: 2 }))).toMatchObject({ kind: 'applied' })
+    expect(git.store.get(WATCHER_ID)).toMatchObject({ kindPayload: { maxConcurrency: 2 }, commandRevision: 1 })
+    expect(git.store.journal(WATCHER_ID)).toContainEqual(expect.objectContaining({
+      evidenceKind: 'objective-concurrency-changed',
+      payload: { maxConcurrency: 2 },
+    }))
+    expect(gitCalls).toEqual([{
+      method: 'quirky.worktree/resolve',
+      params: { selector: 'id:wt-git' },
+      insideControl: true,
+    }])
+
+    const invalidResolutions: Array<{
+      name: string
+      resolve: (method: string, params: Record<string, unknown>) => unknown | Promise<unknown>
+    }> = [
+      { name: 'lookup failure', resolve: () => { throw new Error('worktree owner unavailable') } },
+      { name: 'malformed result', resolve: () => ({ id: 'wt-project' }) },
+      { name: 'null result', resolve: () => null },
+      { name: 'array result', resolve: () => [] },
+      { name: 'absent kind', resolve: () => ({ id: 'wt-project', repoId: 'repo-project', path: '/workspace' }) },
+      { name: 'unknown kind', resolve: () => ({ id: 'wt-project', repoId: 'repo-project', path: '/workspace', kind: 'other' }) },
+      { name: 'ID mismatch', resolve: () => ({ id: 'wt-replacement', repoId: 'repo-project', path: '/workspace', kind: 'git' }) },
+      { name: 'path mismatch', resolve: () => ({ id: 'wt-project', repoId: 'repo-project', path: '/workspace-moved', kind: 'git' }) },
+      { name: 'repo mismatch', resolve: () => ({ id: 'wt-project', repoId: 'repo-replacement', path: '/workspace', kind: 'git' }) },
+    ]
+    for (const scenario of invalidResolutions) {
+      const unresolved = fixture({
+        enrollment: {
+          repoId: 'repo-project',
+          worktreeId: 'wt-project',
+          workspacePath: '/workspace',
+          kindPayload: { maxConcurrency: 1, retained: scenario.name },
+        },
+      })
+      seedControlJournal(unresolved)
+      const calls = installWorktreeResolver(unresolved, scenario.resolve)
+      const before = unresolved.store.get(WATCHER_ID)!
+      const journalBefore = unresolved.store.journal(WATCHER_ID)
+
+      expect(await createControlPlane(unresolved.host).command(
+        request(unresolved, { kind: 'set-concurrency', maxConcurrency: 2 }),
+      )).toMatchObject({ kind: 'refused', reason: 'owner-unreachable' })
+      expect(unresolved.store.get(WATCHER_ID)).toEqual(before)
+      expect(unresolved.store.journal(WATCHER_ID)).toEqual(journalBefore)
+      expect(calls).toEqual([{
+        method: 'quirky.worktree/resolve',
+        params: { selector: 'id:wt-project' },
+        insideControl: true,
+      }])
+      expect(unresolved.calls.changed).toEqual([])
+      expect(unresolved.calls.reconcile).toEqual([])
+    }
+
+    const racing = fixture({
+      enrollment: {
+        repoId: 'repo-racing',
+        worktreeId: 'wt-racing',
+        workspacePath: '/workspace',
+        kindPayload: { maxConcurrency: 1 },
+      },
+    })
+    seedControlJournal(racing)
+    const lookupStarted = deferred<void>()
+    const finishLookup = deferred<unknown>()
+    const raceCalls = installWorktreeResolver(racing, async () => {
+      lookupStarted.resolve()
+      return finishLookup.promise
+    })
+    const racingControl = createControlPlane(racing.host)
+    const change = racingControl.command(request(racing, { kind: 'set-concurrency', maxConcurrency: 2 }))
+    const lookupTimeout = deferred<boolean>()
+    setImmediate(() => lookupTimeout.resolve(false))
+    const lookupWasStarted = await Promise.race([
+      lookupStarted.promise.then(() => true),
+      lookupTimeout.promise,
+    ])
+    expect(lookupWasStarted).toBe(true)
+    expect(raceCalls).toEqual([{
+      method: 'quirky.worktree/resolve',
+      params: { selector: 'id:wt-racing' },
+      insideControl: true,
+    }])
+    const latest = racing.store.get(WATCHER_ID)!
+    racing.setEnrollment({ ...latest, commandRevision: 1, kindPayload: { maxConcurrency: 7, concurrentChange: true } })
+    const concurrentState = racing.store.get(WATCHER_ID)!
+    const concurrentJournal = racing.store.journal(WATCHER_ID)
+    finishLookup.resolve({ id: 'wt-racing', repoId: 'repo-racing', path: '/workspace', kind: 'git' })
+
+    expect(await change).toMatchObject({ kind: 'indeterminate' })
+    expect(racing.store.get(WATCHER_ID)).toEqual(concurrentState)
+    expect(racing.store.journal(WATCHER_ID)).toEqual(concurrentJournal)
+    expect(racing.calls.changed).toEqual([])
+    expect(racing.calls.reconcile).toEqual([])
   })
 
   test('lowering objective concurrency drains the tick before changing the payload', async () => {
-    const h = fixture()
+    const h = fixture({ enrollment: { worktreeId: 'wt-git' } })
+    installWorktreeResolver(h, () => ({ id: 'wt-git', repoId: 'repo-1', path: '/workspace', kind: 'git' }))
     const control = createControlPlane(h.host)
     const tick = h.holdTick()
     const resultPromise = control.command(request(h, { kind: 'set-concurrency', maxConcurrency: 1 }))
