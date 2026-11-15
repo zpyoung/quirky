@@ -14,9 +14,9 @@ import {
   reviewState, rowKey, rowTarget, strings,
   type CheckResult, type ListData, type ListItem, type ListSource, type MergeMetadata, type Preset
 } from './model'
+import { dispatchListControl, registerListControl, type ListControl } from './list-control'
 import { useReviewNavigation } from './useReviewNavigation'
 import { committed, createSearchLane, expected, observe, sending, settled, typed, type SearchLane } from './search-lane'
-import { dispatchListControl, registerListControl, type ListControl } from './list-control'
 
 export { WorkspaceComposer } from './WorkspaceComposer'
 export { useReviewNavigation } from './useReviewNavigation'
@@ -28,6 +28,7 @@ type OptimisticRow = {
   keepVisible: boolean
   retention?: { viewKey: string; sourceUrl: string }
 }
+
 type FilterOptionsStatus = { status: 'idle' | 'loading' | 'ready' } | { status: 'failed'; message: string }
 type LatestListActions = {
   loadList?: (noCache?: boolean, deliberate?: boolean) => Promise<void>
@@ -340,6 +341,39 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
     listRefreshTokenRef.current = listRefreshToken
     if (listRefreshToken !== undefined) void latest.current.loadList?.(true)
   }, [listRefreshToken])
+
+
+  useEffect(() => {
+    if (!filtersOpen && !repoOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      const active = document.activeElement
+      const focusedPRPopover = document.querySelector('.tasks-pr [role="menu"], .tasks-pr [role="dialog"]')
+      if (focusedPRPopover && active instanceof HTMLElement && active.closest('.tasks-pr__anchor')) return
+      event.preventDefault()
+      event.stopPropagation()
+      if (filtersOpen) setFiltersOpen(false)
+      else if (repoOpen) setRepoOpen(false)
+    }
+    document.addEventListener('keydown', closeOnEscape, true)
+    return () => document.removeEventListener('keydown', closeOnEscape, true)
+  }, [filtersOpen, repoOpen])
+  useEffect(() => {
+    setOptimistic(clearIssueRetentions)
+    checkTriggered.current.clear()
+    setChecksLoading({})
+    setMergeLoading({})
+    if (checksOwner.current === currentKey) return
+    checksOwner.current = currentKey
+    setChecks({})
+  }, [currentKey])
+
+  useEffect(() => {
+    if (!visibleResult) return
+    setOptimistic((previous) => pruneIssueRetentions(previous, currentKey, visibleResult))
+  }, [visibleResult, currentKey])
+
+
   const loadFilterOptions = async (repoId: string) => {
     const generation = ++filterOptionsGeneration.current
     setFilterOptions({ status: 'loading' })
@@ -391,39 +425,6 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
     return reply
   }
   latest.current.sendSearch = sendSearch
-
-
-  useEffect(() => {
-    if (!filtersOpen && !repoOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
-      const active = document.activeElement
-      const focusedPRPopover = document.querySelector('.tasks-pr [role="menu"], .tasks-pr [role="dialog"]')
-      if (focusedPRPopover && active instanceof HTMLElement && active.closest('.tasks-pr__anchor')) return
-      event.preventDefault()
-      event.stopPropagation()
-      if (filtersOpen) setFiltersOpen(false)
-      else if (repoOpen) setRepoOpen(false)
-    }
-    document.addEventListener('keydown', closeOnEscape, true)
-    return () => document.removeEventListener('keydown', closeOnEscape, true)
-  }, [filtersOpen, repoOpen])
-  useEffect(() => {
-    setOptimistic(clearIssueRetentions)
-    checkTriggered.current.clear()
-    setChecksLoading({})
-    setMergeLoading({})
-    if (checksOwner.current === currentKey) return
-    checksOwner.current = currentKey
-    setChecks({})
-  }, [currentKey])
-
-  useEffect(() => {
-    if (!visibleResult) return
-    setOptimistic((previous) => pruneIssueRetentions(previous, currentKey, visibleResult))
-  }, [visibleResult, currentKey])
-
-
   useEffect(() => {
     const action = observe(searchLane, { mode: navigation.mode, query: navigation.query })
     if (action === 'drop') {
