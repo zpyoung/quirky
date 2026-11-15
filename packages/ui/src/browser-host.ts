@@ -57,9 +57,11 @@ type FolderRequest = {
   timer?: unknown
   call: BrowserHostCall
   busy: boolean
+  confirming: boolean
   error: string | null
   draftPath: string
   hasPathDraft: boolean
+  directory?: FolderListing
   selectedPaths: string[]
   multiple: boolean
   readGeneration: number
@@ -175,7 +177,12 @@ export class BrowserHostController {
 
   /** Starts a host request using the daemon's original identity and transport. */
   async handleShellRequest(event: ShellRequestEvent, call: BrowserHostCall): Promise<unknown> {
-    if (this.disposed) throw conflict('browser host is unavailable')
+    if (this.disposed) {
+      if (event.action.kind === 'window-close') {
+        return this.closeAuxiliaryWindow(event.action.request.windowId, event.ownerShell)
+      }
+      throw conflict('browser host is unavailable')
+    }
     this.lastCall = call
     const action = event.action
     switch (action.kind) {
@@ -228,22 +235,26 @@ export class BrowserHostController {
     switch (action) {
       case 'set-path': {
         const path = params.path as string
+        if (folder.confirming) throw conflict('folder confirmation is in progress')
         if (path !== folder.draftPath) {
           if (!folder.multiple) folder.selectedPaths = []
           folder.readGeneration += 1
           folder.busy = false
         }
+        folder.draftPath = path
         folder.hasPathDraft = true
         folder.error = null
         this.publish(folder)
         return { active: this.snapshot }
       }
       case 'navigate': {
+        if (folder.confirming) throw conflict('folder confirmation is in progress')
         const path = params.path as string
         const offset = params.offset ?? 0
         const samePath = path === folder.draftPath && folder.directory?.path === path
         if (!folder.multiple && !samePath) folder.selectedPaths = []
         folder.hasPathDraft = true
+        folder.draftPath = path
         await this.readDirectory(folder, path, offset)
         if (!this.isCurrent(folder)) throw conflict('browser host request is no longer active')
         return { active: this.snapshot }
@@ -252,24 +263,22 @@ export class BrowserHostController {
         const path = params.path as string
         const selected = params.selected as boolean
         if (folder.busy) throw conflict('the folder request is still working')
-        if (!selected && folder.selectedPaths.includes(path)) {
-          folder.selectedPaths = folder.selectedPaths.filter((selectedPath) => selectedPath !== path)
-          if (folder.directory?.path === folder.draftPath) folder.error = null
-          this.publish(folder)
+        if (!selected) {
+          if (folder.selectedPaths.includes(path)) {
+            folder.selectedPaths = folder.selectedPaths.filter((selectedPath) => selectedPath !== path)
+            if (folder.directory?.path === folder.draftPath) folder.error = null
+            this.publish(folder)
+          }
           return { active: this.snapshot }
         }
         if (folder.error || folder.directory?.path !== folder.draftPath) {
           throw conflict('the displayed directory is not ready for selection')
         }
-        if (folder.multiple && selected && folder.selectedPaths.includes(path)) return { active: this.snapshot }
+        if (folder.multiple && folder.selectedPaths.includes(path)) return { active: this.snapshot }
         const isCurrentFolder = path === folder.directory.path
         const isListedFolder = folder.directory.entries.some((entry) => entry.path === path)
         if (!isCurrentFolder && !isListedFolder) throw conflict('the folder is not on the current directory page')
-        if (folder.multiple) {
-          folder.selectedPaths = [...folder.selectedPaths, path]
-        } else {
-          folder.selectedPaths = selected ? [path] : folder.selectedPaths.filter((selectedPath) => selectedPath !== path)
-        }
+        folder.selectedPaths = folder.multiple ? [...folder.selectedPaths, path] : [path]
         folder.error = null
         this.publish(folder)
         return { active: this.snapshot }
@@ -418,6 +427,7 @@ export class BrowserHostController {
       expiresAt: this.now() + BROWSER_HOST_LEASE_MS,
       call,
       busy: true,
+      confirming: false,
       error: null,
       draftPath: request.startingFolder ?? '',
       hasPathDraft: request.startingFolder !== undefined,
@@ -552,6 +562,7 @@ export class BrowserHostController {
     if (active.selectedPaths.length === 0) throw conflict('select a folder before confirming')
     if (!active.multiple && active.selectedPaths.length !== 1) throw conflict('choose exactly one folder')
     active.busy = true
+    active.confirming = true
     active.error = null
     this.publish(active)
     const paths: string[] = []
@@ -572,6 +583,7 @@ export class BrowserHostController {
       } catch (error) {
         if (!this.isCurrent(active)) throw conflict('browser host request is no longer active')
         active.busy = false
+        active.confirming = false
         active.error = errorMessage(error)
         this.publish(active)
         return { active: this.snapshot }
@@ -580,6 +592,7 @@ export class BrowserHostController {
     if (!this.isCurrent(active)) throw conflict('browser host request is no longer active')
     if (paths.length === 0) {
       active.busy = false
+      active.confirming = false
       active.error = 'No selected folder is still available.'
       this.publish(active)
       return { active: this.snapshot }

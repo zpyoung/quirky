@@ -103,7 +103,7 @@ test('browser-host protocol methods expose complete non-connection kernel schema
   }
   expect(KERNEL_METHOD_SCHEMAS['ui.url'].readOnly).toBe(true)
   expect(KERNEL_METHOD_SCHEMAS['ui.folder.list'].readOnly).toBe(true)
-  expect(KERNEL_METHOD_SCHEMAS['ui.open'].readOnly).not.toBe(true)
+  expect(KERNEL_METHOD_SCHEMAS['ui.open']).not.toMatchObject({ readOnly: true })
   expect(KERNEL_METHOD_SCHEMAS[CONTROL_ID].params.properties?.action?.enum).toEqual([
     'state', 'set-path', 'navigate', 'select', 'confirm', 'cancel', 'open-popup'
   ])

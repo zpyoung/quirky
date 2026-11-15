@@ -936,3 +936,118 @@ test('routed control restores its exact target and a stale awaited mutation cann
   await host.controller.controlRouted({ action: 'cancel', requestId: 'routed-second' }, host.rpc)
   await expect(second).resolves.toEqual({ cancelled: true, paths: [] })
 })
+test('typing in the folder path updates the controlled draft instead of reverting', async () => {
+  const host = harness({ list: (params) => listing(String(params.path ?? '/root')) })
+  const result = host.controller.handleShellRequest(folderEvent('typed-path', { startingFolder: '/root' }), host.rpc)
+  await settle()
+  const view = mount(h(FolderDialog, { controller: host.controller }))
+  const input = view.querySelector<HTMLInputElement>('input')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '/root/project')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    await settle()
+  })
+  expect(host.controller.getSnapshot()?.draftPath).toBe('/root/project')
+  expect(input.value).toBe('/root/project')
+  await act(async () => { await control(host, 'cancel', 'typed-path') })
+  await expect(result).resolves.toEqual({ cancelled: true, paths: [] })
+})
+
+test('multi-select false is idempotent and never adds a path that was not selected', async () => {
+  const host = harness({
+    list: () => listing('/root', [
+      { name: 'alpha', path: '/root/alpha' },
+      { name: 'beta', path: '/root/beta' }
+    ])
+  })
+  const result = host.controller.handleShellRequest(folderEvent('explicit-selection', {
+    startingFolder: '/root',
+    multiple: true
+  }), host.rpc)
+  await settle()
+  await control(host, 'select', 'explicit-selection', { path: '/root/alpha', selected: false })
+  expect(host.controller.getSnapshot()?.selectedPaths).toEqual([])
+  await control(host, 'select', 'explicit-selection', { path: '/root/alpha', selected: true })
+  await control(host, 'select', 'explicit-selection', { path: '/root/beta', selected: false })
+  expect(host.controller.getSnapshot()?.selectedPaths).toEqual(['/root/alpha'])
+  await control(host, 'select', 'explicit-selection', { path: '/root/alpha', selected: false })
+  await control(host, 'select', 'explicit-selection', { path: '/root/alpha', selected: false })
+  expect(host.controller.getSnapshot()?.selectedPaths).toEqual([])
+  await control(host, 'cancel', 'explicit-selection')
+  await result
+})
+
+test('navigation cannot replace a folder selection while confirmation is revalidating it', async () => {
+  const confirmationRead = deferred<unknown>()
+  const host = harness({
+    list: (params) => {
+      const path = String(params.path ?? '/root')
+      if (path === '/root') return listing('/root', [
+        { name: 'alpha', path: '/root/alpha' },
+        { name: 'beta', path: '/root/beta' }
+      ])
+      if (path === '/root/alpha') return confirmationRead.promise
+      return listing(path)
+    }
+  })
+  const result = host.controller.handleShellRequest(folderEvent('confirm-navigation', { startingFolder: '/root' }), host.rpc)
+  await settle()
+  await control(host, 'select', 'confirm-navigation', { path: '/root/alpha', selected: true })
+  const confirmation = control(host, 'confirm', 'confirm-navigation')
+  await settle()
+  await expect(control(host, 'navigate', 'confirm-navigation', { path: '/root/beta' })).rejects.toThrow(/working|confirm/i)
+  expect(host.controller.getSnapshot()).toMatchObject({
+    busy: true,
+    draftPath: '/root',
+    selectedPaths: ['/root/alpha']
+  })
+  expect(host.calls.some((call) => call.method === 'ui.folder.list' && call.params.path === '/root/beta')).toBe(false)
+  confirmationRead.resolve(listing('/root/alpha'))
+  await confirmation
+  await expect(result).resolves.toEqual({ cancelled: false, paths: ['/root/alpha'] })
+})
+
+test('dispose permits only the owned window-close round trip needed to remove a registered route', async () => {
+  const child = popup()
+  const host = harness({ openResults: [child] })
+  const closeReply = deferred<{ closed: boolean }>()
+  host.setHook(async (method, params, fallback) => {
+    if (method === 'desktop.shell.reply') {
+      const result = params.result as { windowId: string }
+      host.setRoutes([summary(result.windowId)])
+      return {}
+    }
+    if (method === 'desktop.window.close') {
+      const windowId = String(params.windowId)
+      let result: { closed: boolean }
+      try {
+        result = await host.controller.handleShellRequest({
+          type: 'desktop.shell.request',
+          requestId: 'dispose-close',
+          action: { kind: 'window-close', request: { windowId } },
+          ownerShell: { connId: 17, name: 'quirky-ui' }
+        }, host.rpc) as { closed: boolean }
+      } catch (error) {
+        closeReply.reject(error)
+        throw error
+      }
+      if (result.closed) host.setRoutes(host.routes.filter((route) => route.windowId !== windowId))
+      closeReply.resolve(result)
+      return result
+    }
+    return fallback()
+  })
+  await answerDesktopShellRequest(
+    { callAny: host.rpc } as never,
+    null,
+    windowEvent('dispose-owned-window'),
+    () => {},
+    host.controller
+  )
+  expect(host.routes).toHaveLength(1)
+  host.controller.dispose()
+  await expect(closeReply.promise).resolves.toEqual({ closed: true })
+  expect(child.closed).toBe(true)
+  expect(host.routes).toEqual([])
+  await expect(host.controller.handleShellRequest(folderEvent('after-dispose'), host.rpc)).rejects.toThrow(/unavailable/)
+})
