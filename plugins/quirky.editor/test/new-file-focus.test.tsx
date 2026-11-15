@@ -309,6 +309,20 @@ function makeContext(runtime: Runtime): UiPluginContext {
   return uiContext
 }
 
+function ScopedDocument({ context, input }: { context: UiPluginContext; input: OpenedDocument }) {
+  const [scope] = useState(() => {
+    const documentScope = createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document' })
+    documentScope.report({ mounted: true, bufferId: input.bufferId, tabId: input.tabId, mode: null })
+    return documentScope
+  })
+  useEffect(() => () => scope.dispose(), [scope])
+  return (
+    <EditorUiControlProvider scope={scope}>
+      <DocumentSurface context={context} input={input} />
+    </EditorUiControlProvider>
+  )
+}
+
 function OpenedDocumentHost({ runtime, context, opened }: {
   runtime: Runtime
   context: UiPluginContext
@@ -329,7 +343,7 @@ function OpenedDocumentHost({ runtime, context, opened }: {
   return (
     <div className="qt-group qt-active" data-testid="opened-group">
       <div ref={host} className="qt-hosted-view" data-hosted-view={opened.tabId} data-testid="opened-document">
-        <DocumentSurface context={context} input={{ bufferId: opened.bufferId, tabId: opened.tabId }} />
+        <ScopedDocument key={JSON.stringify([opened.bufferId, opened.tabId])} context={context} input={opened} />
       </div>
     </div>
   )
@@ -348,7 +362,7 @@ function FocusTestApp({ runtime, context }: { runtime: Runtime; context: UiPlugi
       <ExplorerPanel context={context} />
       <div className="qt-group" data-testid="background-group">
         <div className="qt-hosted-view" data-hosted-view={BACKGROUND_TAB_ID} data-testid="background-document">
-          <DocumentSurface context={context} input={{ bufferId: BACKGROUND_BUFFER_ID, tabId: BACKGROUND_TAB_ID }} />
+          <ScopedDocument context={context} input={{ bufferId: BACKGROUND_BUFFER_ID, tabId: BACKGROUND_TAB_ID }} />
         </div>
       </div>
       {opened && <OpenedDocumentHost runtime={runtime} context={context} opened={opened} />}
