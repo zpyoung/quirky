@@ -63,8 +63,15 @@ test('remote bars enroll without weakening local or workspace validation', () =>
     ['existingPlan must be a string', (value) => { value.existingPlan = null }],
     ['tier must be an allowed enum', (value) => { value.tier = 'urgent' }],
     ['landingBar must be an allowed enum', (value) => { value.landingBar = 'remote' }],
+    ['dirty is not a landing bar enum', (value) => { value.landingBar = 'dirty' }],
+    ['committed is not a landing bar enum', (value) => { value.landingBar = 'committed' }],
+    ['merged-into-base is not a landing bar enum', (value) => { value.landingBar = 'merged-into-base' }],
     ['lanesEnabled must be a boolean', (value) => { value.lanesEnabled = 'yes' }],
     ['maxConcurrency must be an integer', (value) => { value.maxConcurrency = 1.5 }],
+    ['maxConcurrency must be numeric', (value) => { value.maxConcurrency = '2' }],
+    ['maxConcurrency must be finite', (value) => { value.maxConcurrency = Number.NaN }],
+    ['maxConcurrency must be finite', (value) => { value.maxConcurrency = Number.POSITIVE_INFINITY }],
+    ['maxConcurrency must be finite', (value) => { value.maxConcurrency = Number.NEGATIVE_INFINITY }],
     ['maxConcurrency has a lower bound', (value) => { value.maxConcurrency = 0 }],
     ['maxConcurrency has an upper bound', (value) => { value.maxConcurrency = 1025 }],
     ['writeTerritory must be an array', (value) => { value.writeTerritory = '**' }],
@@ -166,6 +173,22 @@ test('remote bars enroll without weakening local or workspace validation', () =>
   }
   expect(contractProblems(validPayload(), 'claude').some((problem) => problem.startsWith('owner-unsupported:'))).toBe(true)
 })
+test('folder enrollment accepts files-on-disk and refuses every Git-dependent bar', async () => {
+  const folders = [
+    { id: 'folder-project-wt', repoId: 'folder-project', path: '/registered/folder-project', kind: 'folder' as const, branch: null, headSha: null },
+    { id: 'group-folder-wt', repoId: 'group:team', path: '/registered/group-folder', kind: 'folder' as const, branch: null, headSha: null }
+  ]
+  for (const workspace of folders) {
+    const calls: Array<[string, Record<string, unknown>]> = []
+    const resolved = await resolveWorkspace(async (method, params) => {
+      calls.push([method, params])
+      if (method === 'quirky.worktree/resolve') return workspace
+      throw new Error(`unexpected method ${method}`)
+    }, `id:${workspace.id}`)
+    expect(resolved).toEqual(workspace)
+    expect(calls).toEqual([['quirky.worktree/resolve', { selector: `id:${workspace.id}` }]])
+  }
+})
 
 test('resolves active to the single window\'s selected worktree and refuses otherwise', async () => {
   const resolved = { id: 'wt1', repoId: 'repo1', path: '/repo', kind: 'git' as const, branch: 'main' }
@@ -189,8 +212,8 @@ test('resolves active to the single window\'s selected worktree and refuses othe
     selectorCalls.push([method, params])
     if (method === 'quirky.worktree/resolve') return resolved
     throw new Error(`unexpected method ${method}`)
-  }, 'path:/repo')
-  expect(selectorCalls).toEqual([['quirky.worktree/resolve', { selector: 'path:/repo' }]])
+  }, 'id:wt1')
+  expect(selectorCalls).toEqual([['quirky.worktree/resolve', { selector: 'id:wt1' }]])
 
   const unresolved = [
     { label: 'zero windows', state: { windows: [] } },
@@ -206,8 +229,19 @@ test('resolves active to the single window\'s selected worktree and refuses othe
     await expect(resolveWorkspace(call, 'active')).rejects.toThrow(/worktree-unresolved.*--worktree/)
   }
 
+  for (const malformed of [
+    null,
+    { id: 'replacement', repoId: 'repo1', path: '/repo', kind: 'git' },
+    { id: 'wt1', repoId: 'repo1', path: 'relative/path', kind: 'git' },
+    { id: 'wt1', repoId: 'repo1', path: '/repo/../repo', kind: 'folder' }
+  ]) {
+    await expect(resolveWorkspace(async (method) => {
+      if (method === 'quirky.worktree/resolve') return malformed
+      throw new Error(`unexpected method ${method}`)
+    }, 'id:wt1')).rejects.toThrow(/worktree-unresolved/)
+  }
   await expect(resolveWorkspace(async (method) => {
-    if (method === 'quirky.worktree/resolve') return { id: 'folder1', repoId: 'repo1', path: '/folder', kind: 'folder' }
+    if (method === 'quirky.worktree/resolve') throw new Error('not found')
     throw new Error(`unexpected method ${method}`)
-  }, 'path:/folder')).rejects.toThrow(/workspace-requires-git/)
+  }, 'id:missing')).rejects.toThrow(/worktree-unresolved/)
 })

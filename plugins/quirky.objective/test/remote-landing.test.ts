@@ -1161,7 +1161,7 @@ test('remote bars enroll without weakening local or workspace validation', async
 
   workspaceKind = 'folder'
   await expect(hooks.authorize({ input: { kindPayload: pushedRef } } as never))
-    .rejects.toThrow('workspace-requires-git')
+    .rejects.toThrow('landing-bar-requires-git:')
   workspaceKind = 'git'
 
   const noPushConfig = remoteRig({ landingBar: 'pushed-ref', tier: 'express' })
@@ -1680,6 +1680,18 @@ test('store v3 migration preserves v2 rows and immutable remote landings across 
   const legacyDb = new Database(storeFile)
   try {
     legacyDb.exec(`
+      CREATE TABLE issued (
+        attempt_id TEXT PRIMARY KEY,
+        watcher_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK(role IN ('planner','implementer','reviewer','integrator')),
+        revision INTEGER,
+        task_key TEXT,
+        report_path TEXT NOT NULL,
+        issued_at_ms INTEGER NOT NULL,
+        planner_mode TEXT,
+        baseline_tree TEXT,
+        content_identity TEXT
+      );
       CREATE TABLE landing (
         watcher_id TEXT NOT NULL,
         rung TEXT NOT NULL CHECK (rung IN ('files-on-disk','committed-local-branch')),
@@ -1751,7 +1763,7 @@ test('store v3 migration preserves v2 rows and immutable remote landings across 
   }
   const versionDb = new Database(storeFile)
   try {
-    expect(versionDb.query('PRAGMA user_version').get()).toEqual({ user_version: 3 })
+    expect(versionDb.query('PRAGMA user_version').get()).toEqual({ user_version: 4 })
   } finally {
     versionDb.close()
   }

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { isAbsolute, normalize } from 'node:path'
 import type { Schema } from '@quirky/protocol'
 import type { PlanTask, Assumption, RepairPlannerReport } from './plan'
 import type { CheckRecord, DraftRejection, LandingRecord, OverrunRecord, VerdictRecord } from './store'
@@ -365,10 +366,12 @@ export async function resolveWorkspace(
     throw worktreeUnresolved(`could not resolve '${resolvedSelector}': ${errorText(error)}`)
   }
   const workspace = recordOf(value)
-  if (!workspace || typeof workspace.id !== 'string' || typeof workspace.repoId !== 'string' ||
-    typeof workspace.path !== 'string' || (workspace.kind !== 'git' && workspace.kind !== 'folder')) {
+  if (!workspace || typeof workspace.id !== 'string' || !workspace.id.trim() || workspace.id.includes('\0') ||
+    typeof workspace.repoId !== 'string' || !workspace.repoId.trim() || workspace.repoId.includes('\0') ||
+    typeof workspace.path !== 'string' || workspace.path.includes('\0') || !isAbsolute(workspace.path) ||
+    normalize(workspace.path) !== workspace.path || (workspace.kind !== 'git' && workspace.kind !== 'folder') ||
+    (resolvedSelector.startsWith('id:') && workspace.id !== resolvedSelector.slice(3))) {
     throw worktreeUnresolved(`quirky.worktree/resolve returned an invalid workspace for '${resolvedSelector}'`)
   }
-  if (workspace.kind === 'folder') throw new Error('workspace-requires-git: objective workspaces must be git worktrees')
   return workspace as ResolvedWorkspace
 }

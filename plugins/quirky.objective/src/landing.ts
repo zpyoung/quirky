@@ -402,6 +402,8 @@ export async function commitLocalBranch(
   action: { revision: number; contentIdentity: string; branch: string; headSha: string },
   attemptId: string
 ): Promise<LandingOutcome> {
+  if (runtime.workspaceKind === 'folder') return { effect: 'not-landed', reason: 'landing-bar-requires-git' }
+
   const beforeIdentity = await currentContentIdentity(runtime)
   if (beforeIdentity === null) return { effect: 'not-landed', reason: 'landing-evidence-unavailable' }
   if (beforeIdentity !== action.contentIdentity) return { effect: 'not-landed', reason: 'landing-evidence-stale' }
