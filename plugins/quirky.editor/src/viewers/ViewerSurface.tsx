@@ -1040,16 +1040,18 @@ function PdfViewer({
     }
   }, [generation, isCurrent, props.buffer.id])
 
-  const goToPage = useCallback(async (next: number, fromSearch = false) => {
+  const goToPage = useCallback(async (next: number, searchRequestId?: number) => {
     const capturedPdf = pdfRef.current
     if (!capturedPdf || !safeIndex(next - 1) || next < 1 || next > capturedPdf.numPages) return false
-    if (!fromSearch) searchSequence.current += 1
+    if (searchRequestId === undefined) searchSequence.current += 1
     if (scrollTimer.current !== undefined) window.clearTimeout(scrollTimer.current)
     const requestId = ++pageSequence.current
     const request = pageQueue.current.catch(() => {}).then(async () => {
-      if (!isCurrent() || pdfRef.current !== capturedPdf || pageSequence.current !== requestId) return false
+      if (!isCurrent() || pdfRef.current !== capturedPdf || pageSequence.current !== requestId ||
+        searchRequestId !== undefined && searchSequence.current !== searchRequestId) return false
       await call(propsRef.current, 'page', { page: next })
-      if (!isCurrent() || pdfRef.current !== capturedPdf || pageSequence.current !== requestId) return false
+      if (!isCurrent() || pdfRef.current !== capturedPdf || pageSequence.current !== requestId ||
+        searchRequestId !== undefined && searchSequence.current !== searchRequestId) return false
       pageRef.current = next
       setPage(next)
       return true
@@ -1079,7 +1081,7 @@ function PdfViewer({
         if (!current()) return { found: false, totalPages: capturedPdf.numPages }
         const text = content.items.map((item) => 'str' in item && typeof item.str === 'string' ? item.str : '').join(' ')
         if (text.toLocaleLowerCase().includes(needle)) {
-          const pageChanged = await goToPage(index, true)
+          const pageChanged = await goToPage(index, requestId)
           if (!current() || !pageChanged) return { found: false, totalPages: capturedPdf.numPages }
           setSearchMessage(`Found on page ${index} of ${capturedPdf.numPages}.`)
           return { found: true, page: index, totalPages: capturedPdf.numPages }

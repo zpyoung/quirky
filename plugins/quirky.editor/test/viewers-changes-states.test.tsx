@@ -1154,3 +1154,47 @@ test('CSV can edit a reindexed row to a value applied at its previous coordinate
   expect(surface.element.querySelector<HTMLInputElement>('[aria-label="Row 2, column 2"]')?.value).toBe('2')
   expect(calls.filter(({ action }) => action === 'edit')).toHaveLength(2)
 })
+
+test('a newer PDF search prevents an older search-owned page RPC from changing the canvas or position', async () => {
+  const pageGate = deferred<unknown>()
+  const calls: Record<string, unknown>[] = []
+  let pageRequests = 0
+  const pdf = { numPages: 3, async getPage(index: number) {
+    return { getViewport: ({ scale }: { scale: number }) => ({ width: 600 * scale, height: 800 * scale }),
+      render: () => ({ promise: Promise.resolve(), cancel() {} }),
+      getTextContent: async () => ({ items: [{ str: index === 2 ? 'needle' : 'none' }] }) }
+  } }
+  pdfLoader = () => ({ promise: Promise.resolve(pdf), destroy: async () => {} })
+  const fixture = makeFixture(async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'metadata') return { kind: 'pdf' }
+    if (params.action === 'media') return { url: 'blob:pdf-delayed-page' }
+    if (params.action === 'page' && ++pageRequests === 1) return pageGate.promise
+    return {}
+  })
+  const originalGetContext = HTMLCanvasElement.prototype.getContext
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', { configurable: true, value: () => ({}) })
+  let first: Promise<unknown> | undefined
+  try {
+    const surface = await mountViewer(fixture, makeBuffer('pdf'))
+    await flush()
+    await act(async () => { first = fixture.control('find', { query: 'needle' }, 'pdf:') })
+    await flush()
+    expect(pageRequests).toBe(1)
+    expect(calls.filter(({ action }) => action === 'page')).toEqual([{ bufferId: 'b1', action: 'page', page: 2 }])
+    expect(await routed(fixture, 'find', { query: 'missing' }, 'pdf:')).toEqual({ delivered: true })
+    expect(surface.element.querySelector('.ui-empty-state')?.textContent).toContain('No results')
+    expect(surface.element.querySelector('canvas')?.getAttribute('aria-label')).toBe('PDF page 1')
+    const positions = calls.filter(({ action }) => action === 'position')
+    await act(async () => { pageGate.resolve({}); await first })
+    await flush()
+    expect(surface.element.querySelector('canvas')?.getAttribute('aria-label')).toBe('PDF page 1')
+    expect(calls.filter(({ action }) => action === 'position')).toEqual(positions)
+    expect(surface.element.textContent).not.toContain('Found on page 2')
+    expect(await routed(fixture, 'next-page', undefined, 'pdf:')).toEqual({ delivered: true })
+    expect(surface.element.querySelector('canvas')?.getAttribute('aria-label')).toBe('PDF page 2')
+  } finally {
+    await act(async () => { pageGate.resolve({}); await Promise.allSettled([first]) })
+    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', { configurable: true, value: originalGetContext })
+  }
+})
