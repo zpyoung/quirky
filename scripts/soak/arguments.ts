@@ -25,7 +25,7 @@ export const USAGE = `Usage: bun scripts/soak.ts [--minutes <n>] [--out <dir>] [
                     [--max-children <n>] [--max-growth <n>] [--max-zombies <n>]
                     [--max-events-per-5s <n>] [--max-stall-ms <n>]
                     [--max-unanswered <n>] [--slow-git <ms>]
-                    [--fault leak|zombies|storm|block|slow-git] [--help]`
+                    [--fault leak|zombies|storm|block|slow-git|feedback] [--help]`
 
 function parseNumber(value: string | undefined, flag: string, fallback: number, allowZero: boolean): number {
   if (value === undefined) return fallback
@@ -138,6 +138,9 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
     ? undefined
     : FAULT_KINDS.find((kind) => kind === values.fault)
   if (values.fault !== undefined && fault === undefined) throw new UsageError(faultError)
+  if (fault === 'feedback' && windows < 2) {
+    throw new UsageError('--fault feedback needs --windows 2 or more')
+  }
 
 
   const minutes = parseNumber(values.minutes, '--minutes', QUALIFYING_MINUTES, false)

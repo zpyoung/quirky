@@ -1,10 +1,10 @@
-import { accessSync, chmodSync, constants, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { accessSync, chmodSync, constants, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { checkSchemaDeclaration, validateValue, type Schema } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { resolveHelperBinary } from '../../plugins/quirky.browser/src/runtime/native'
 import { createProcessScope, type ProcessScope } from '../test-support/process-scope'
-import { startWorld, type SoakWorld } from '../soak/world'
+import { stageBuiltinPlugins, startWorld, type SoakWorld } from '../soak/world'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { startBrowserFixture, type BrowserFixture } from './browser-fixture'
 
@@ -173,20 +173,23 @@ export function createBrowserEnvironment(home: string, repoRoot: string): Record
   }
 }
 
-export function createBuiltinPluginsDirectory(home: string, repoRoot: string): {
+/** Selects Browser's isolated built-ins and shares their root with the builder and daemon. */
+export function createBuiltinPluginsDirectory(home: string, repoRoot: string, env: Record<string, string>): {
   directory: string
   includedPlugins: string[]
   excludedPlugins: string[]
 } {
-  const checkout = realpathSync(repoRoot)
-  const pluginsRoot = join(checkout, 'plugins')
   const directory = join(resolve(home), 'builtin-plugins')
-  mkdirSync(directory, { recursive: true, mode: 0o700 })
+  if (!existsSync(directory)) stageBuiltinPlugins(repoRoot, home)
+  if (lstatSync(directory).isSymbolicLink() || realpathSync(directory) !== join(realpathSync(home), 'builtin-plugins')) {
+    throw new BrowserFailure('invalid-cli-contract', 'built-in plugins must be staged inside the fixture home')
+  }
   const includedPlugins: string[] = []
   const excludedPlugins: string[] = []
-  for (const entry of readdirSync(pluginsRoot, { withFileTypes: true })) {
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) throw new BrowserFailure('invalid-cli-contract', `built-in plugin must not link to checkout output: ${entry.name}`)
     if (!entry.isDirectory()) continue
-    const pluginPath = join(pluginsRoot, entry.name)
+    const pluginPath = join(directory, entry.name)
     const manifestPath = join(pluginPath, 'quirky-plugin.json')
     if (!existsSync(manifestPath)) continue
     let manifest: unknown
@@ -201,11 +204,13 @@ export function createBuiltinPluginsDirectory(home: string, repoRoot: string): {
     }
     if (manifest.id === 'quirky.accounts') {
       excludedPlugins.push(manifest.id)
+      rmSync(pluginPath, { recursive: true, force: true })
       continue
     }
-    symlinkSync(realpathSync(pluginPath), join(directory, entry.name), 'dir')
     includedPlugins.push(manifest.id)
   }
+  env.QUIRKY_PLUGINS_DIR = directory
+  env.QUIRKY_BUILTIN_PLUGINS_DIR = directory
   return {
     directory,
     includedPlugins: includedPlugins.sort(),
@@ -928,8 +933,7 @@ export async function startBrowserWorld(options: {
           browserEnv.QUIRKY_BROWSER_CHROME = browserChrome
           delete browserEnv.QUIRKY_UI_DIR
           if (bootsUi) {
-            const pluginFixture = createBuiltinPluginsDirectory(home, repoRoot)
-            browserEnv.QUIRKY_BUILTIN_PLUGINS_DIR = pluginFixture.directory
+            const pluginFixture = createBuiltinPluginsDirectory(home, repoRoot, browserEnv)
             excludedPlugins = pluginFixture.excludedPlugins
           }
           const preparationEnv = preparation.env
