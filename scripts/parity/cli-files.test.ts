@@ -5,7 +5,6 @@ import { createProcessScope } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 
 const root = resolve(import.meta.dir, '../..')
-
 test('the real two-window CLI rehearsal observes file placement and cleans its owned processes', async () => {
   const scope = createProcessScope()
   const env = createIsolatedRuntimeEnvironment(scope.home, { repoRoot: root })
@@ -23,41 +22,57 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
       buildElapsedMs: report.buildElapsedMs,
       observationElapsedMs: Object.fromEntries(report.observations.map((entry: { id: string; evidence: { elapsedMs: number } }) => [entry.id, entry.evidence.elapsedMs]))
     }))
-    expect(report).toMatchObject({ schemaVersion: 1, scope: 'goal-11-cli-files', ok: true, parityComplete: false, cleanup: { ok: true } })
+    expect(report.parityComplete).toBe(true)
+    expect(report).toMatchObject({ schemaVersion: 1, scope: 'goal-11-cli-files', ok: true, cleanup: { ok: true } })
     expect(report.error).toBeUndefined()
     expect(report.rows.map((row: { id: string }) => row.id)).toEqual(['file-diff', 'file-open', 'file-open-changed', 'file-open-render'])
-    expect(report.rows.map((row: { disposition: string }) => row.disposition)).toEqual(['gap', 'covered', 'gap', 'gap'])
-    const expectedDifferences: Record<string, string[]> = {
+    const expectedObservations: Record<string, string[]> = {
       'file-diff': [
-        'Review is one combined tab per worktree, not one diff tab per file.',
-        'open-diff automatically activates Review; it has no explicit background presentation option.',
-        'Review does not provide Orca edit/diff/both or staged/unstaged selection modes.'
+        'files-review-diff', 'files-review-reuse', 'files-window-routing', 'files-window-refusals',
+        'files-review-focus-window', 'files-review-background', 'files-review-source'
       ],
-      'file-open': [],
+      'file-open': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path', 'files-editor-window-focus'],
       'file-open-changed': [
-        'open-changed uses one combined Review tab rather than per-file tabs.',
-        'Review is automatically activated rather than optionally presented in the background.',
-        'open-changed does not provide Orca edit/diff/both modes or staged/unstaged selection.'
+        'files-review-changed', 'files-window-routing', 'files-window-refusals', 'files-review-focus-window', 'files-changed-modes'
       ],
       'file-open-render': [
-        'Focused editor open activates the destination worktree tab but does not navigate the current window to that worktree.',
-        'Headless DOM focus is not a native desktop foreground-window guarantee.'
+        'files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path', 'files-editor-window-focus', 'files-window-refusals'
+      ]
+    }
+    const expectedDifferences: Record<string, string[]> = {
+      'file-diff': [
+        'Quirky Review is one combined tab per worktree, not one diff tab per file.',
+        'Review focuses by default; Orca opens the diff in the background.',
+        'Exact window routing uses ui.window.command.run --conn-id rather than a command flag.',
+        'Background reveal or scope applies in the target renderer when Review is next shown.',
+        'Review source selects staged or unstaged; omission shows the whole review, not Orca’s unstaged default.'
+      ],
+      'file-open': ['Without --window, --focus selects the tab in its worktree workspace and moves no window.'],
+      'file-open-changed': [
+        'Quirky Review is one combined tab per worktree rather than one tab per changed file.',
+        'Review focuses by default; Orca opens in the background.',
+        'Edit and both open at most 50 files and refuse capped status; deleted files are skipped.'
+      ],
+      'file-open-render': [
+        '--window routes focused editor open to the chosen Quirky renderer; without it, focus selects only the workspace tab.',
+        'Headless document focus is not native macOS window raising.'
       ]
     }
     for (const row of report.rows) {
-      expect(row).toMatchObject({ status: 'observed', executed: true })
-      expect(row.observations.length).toBeGreaterThan(0)
+      expect(row).toMatchObject({ disposition: 'covered', status: 'observed', executed: true })
+      expect(row.observations).toEqual(expectedObservations[row.id])
       expect(row.differences).toEqual(expectedDifferences[row.id])
     }
     expect(report.observations.map((entry: { id: string }) => entry.id).sort()).toEqual([
-      'files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path',
-      'files-review-diff', 'files-review-reuse', 'files-review-changed', 'files-window-routing'
+      'files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path', 'files-editor-window-focus',
+      'files-window-refusals', 'files-review-diff', 'files-review-reuse', 'files-window-routing',
+      'files-review-focus-window', 'files-review-background', 'files-review-source', 'files-review-changed', 'files-changed-modes'
     ].sort())
+    const receiptById = new Map(report.receipts.map((receipt: { id: string }) => [receipt.id, receipt]))
     for (const observation of report.observations) {
       expect(observation.status, JSON.stringify(observation.error)).toBe('observed')
-      expect(Number.isFinite(observation.evidence.elapsedMs)).toBe(true)
-      expect(observation.evidence.elapsedMs).toBeGreaterThanOrEqual(0)
       expect(observation.receiptIds.length).toBeGreaterThan(0)
+      for (const receiptId of observation.receiptIds) expect(receiptById.has(receiptId)).toBe(true)
       expect(observation.before).toHaveLength(2)
       expect(observation.after).toHaveLength(2)
       for (const sample of [...observation.before, ...observation.after]) {
@@ -66,6 +81,164 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
         expect(sample.windowViewId).toBe('view:quirky.session/worktree')
       }
     }
+    const observationFor = (id: string) => report.observations.find((entry: { id: string }) => entry.id === id)
+    const receiptFor = (id: string) => report.receipts.find((entry: { id: string }) => entry.id === id)
+    const replyFor = (id: string) => receiptFor(id)?.evidence?.result?.result
+
+    const windowFocusObservation = observationFor('files-editor-window-focus')
+    const windowFocus = windowFocusObservation.evidence.windowFocus
+    const focusOpen = receiptFor(windowFocus.focus.receiptId).evidence.result
+    const reusedOpen = receiptFor(windowFocus.reuse.receiptId).evidence.result
+    const backgroundOpen = receiptFor(windowFocus.background.receiptId).evidence.result
+    expect(typeof focusOpen.id).toBe('string')
+    expect(focusOpen).toMatchObject({
+      worktreeId: windowFocusObservation.evidence.request.worktreeId,
+      path: windowFocusObservation.evidence.request.absolutePath,
+      openedTabId: windowFocus.tabId
+    })
+    expect(windowFocus.focus.before.public[0].windowState.layout.worktree)
+      .not.toBe(windowFocusObservation.evidence.request.worktreeId)
+    expect(windowFocus.focus.after.public[0].windowState.layout.worktree).toBe(windowFocusObservation.evidence.request.worktreeId)
+    expect(windowFocus.focus.after.public[1].windowState.layout.worktree).toBe(windowFocus.focus.before.public[1].windowState.layout.worktree)
+    expect(windowFocus.focus.after.dom[0]).toMatchObject({
+      renderedTabId: windowFocus.tabId,
+      path: windowFocusObservation.evidence.request.absolutePath,
+      lines: ['first', 'second λ', ''],
+      caret: { line: 2, column: 3 },
+      activeElementHostedTabId: windowFocus.tabId,
+      activeElementIsSource: true
+    })
+    expect(windowFocus.focus.after.dom[1]).toEqual(windowFocus.focus.before.dom[1])
+    expect(reusedOpen.id).toBe(focusOpen.id)
+    expect(reusedOpen.openedTabId).toBe(windowFocus.tabId)
+    expect(windowFocus.reuse.after.public[0].editor.tabs.filter((tab: { bufferId: string }) => tab.bufferId === focusOpen.id))
+      .toHaveLength(1)
+    expect(windowFocus.reuse.after.dom[0].caret).toEqual({ line: 1, column: 1 })
+    expect(backgroundOpen.openedTabId).not.toBe(windowFocus.tabId)
+    expect(windowFocus.background.after.public.map((window: { windowState: { layout: unknown } }) => window.windowState.layout))
+      .toEqual(windowFocus.background.before.public.map((window: { windowState: { layout: unknown } }) => window.windowState.layout))
+    expect(windowFocus.background.after.dom[0]).toEqual(windowFocus.background.before.dom[0])
+
+    const refusalObservation = observationFor('files-window-refusals')
+    const refusals = refusalObservation.evidence.refusals
+    expect(refusals.cases.map((entry: { receiptId: string }) => {
+      const receipt = receiptFor(entry.receiptId)
+      return [receipt.exitCode, receipt.evidence.result.error.code, receipt.evidence.result.error.message]
+    })).toEqual([
+      [1, 'conflict', 'UI window connection 999 is not open'],
+      [2, 'usage', expect.any(String)],
+      [1, 'invalid-params', 'window cannot be combined with focus: false'],
+      [1, 'conflict', 'UI window connection 999 is not open'],
+      [1, 'conflict', `UI window connection ${refusals.disconnected.connId} is not open`],
+      [1, 'conflict', `UI window connection ${refusals.disconnected.connId} is not open`]
+    ])
+    expect(refusals.disconnected.connId).not.toBe(refusalObservation.before[0].connId)
+    expect(refusals.disconnected.connId).not.toBe(refusalObservation.before[1].connId)
+    expect(refusals.disconnected.listedWhenCommandsRan).toBe(false)
+
+    const focusReviewObservation = observationFor('files-review-focus-window')
+    const focusReview = focusReviewObservation.evidence.focusWindow
+    const openedReview = replyFor(focusReview.openDiffReceiptId)
+    expect(openedReview).toMatchObject({
+      worktree: focusReview.worktreeId,
+      tabId: focusReview.tabId,
+      created: false,
+      focused: true,
+      source: null,
+      reveal: 'src/app.ts',
+      statusComplete: null
+    })
+    expect(focusReview.diff.after.public[0].windowState.layout.worktree).toBe(focusReview.worktreeId)
+    expect(focusReview.diff.after.public[1].windowState.layout.worktree)
+      .toBe(focusReview.diff.before.public[1].windowState.layout.worktree)
+    expect(focusReview.diff.after.dom[0].reviewCards.find((card: { path: string }) => card.path === 'src/app.ts'))
+      .toMatchObject({ active: true, expanded: true, loaded: true })
+    expect(replyFor(focusReview.openChangesReceiptId)).toMatchObject({
+      worktree: focusReview.worktreeId,
+      mode: 'diff',
+      source: null,
+      focused: true,
+      review: { tabId: focusReview.tabId, created: false, focused: true, source: null, reveal: null, statusComplete: null },
+      opened: [],
+      skipped: []
+    })
+
+    const backgroundReviewObservation = observationFor('files-review-background')
+    const backgroundReview = backgroundReviewObservation.evidence.backgroundReview
+    expect(replyFor(backgroundReview.coldReceiptId)).toMatchObject({
+      worktree: backgroundReview.worktreeId,
+      tabId: backgroundReview.tabId,
+      created: true,
+      focused: false,
+      source: null,
+      reveal: 'src/app.ts'
+    })
+    expect(replyFor(backgroundReview.mountedReceiptId)).toMatchObject({
+      tabId: backgroundReview.tabId,
+      created: false,
+      focused: false,
+      reveal: 'docs/review-notes.md'
+    })
+    expect(backgroundReview.cold.after.activeTab).toBe(backgroundReview.sentinelTabId)
+    expect(backgroundReview.cold.after.dom.every((dom: { reviewTabMounted: boolean }) => !dom.reviewTabMounted)).toBe(true)
+    expect(backgroundReview.mounted.after.dom[1].reviewCards.find((card: { path: string }) => card.path === 'src/app.ts'))
+      .toMatchObject({ active: true })
+    expect(backgroundReview.mounted.scrollTopAfter).toBe(backgroundReview.mounted.scrollTopBefore)
+    expect(backgroundReview.mounted.inputAfter).toEqual(backgroundReview.mounted.inputBefore)
+    expect(backgroundReview.mounted.afterShow.dom[1].reviewCards.find((card: { path: string }) => card.path === 'docs/review-notes.md'))
+      .toMatchObject({ active: true, expanded: true, loaded: true })
+    expect(backgroundReview.mounted.afterShow.dom[1].reviewCards
+      .filter((card: { active: boolean }) => card.active).map((card: { path: string }) => card.path))
+      .toEqual(['docs/review-notes.md'])
+
+    const sourceObservation = observationFor('files-review-source')
+    const source = sourceObservation.evidence.sourceReview
+    expect(source.scopes.staged.cardPaths).toEqual(source.status.stagedPaths)
+    expect(source.scopes.unstaged.cardPaths).toEqual(source.status.unstagedPaths)
+    const stagedReadme = source.scopes.staged.dom[0].reviewCards.find((card: { path: string }) => card.path === 'README.md')
+    const unstagedReadme = source.scopes.unstaged.dom[0].reviewCards.find((card: { path: string }) => card.path === 'README.md')
+    const wholeReadme = source.scopes.whole.dom[0].reviewCards.find((card: { path: string }) => card.path === 'README.md')
+    expect(stagedReadme.originalLines).toEqual(source.readme.base.split('\n'))
+    expect(stagedReadme.modifiedLines).toEqual(source.readme.index.split('\n'))
+    expect(unstagedReadme.originalLines).toEqual(source.readme.index.split('\n'))
+    expect(unstagedReadme.modifiedLines).toEqual(source.readme.working.split('\n'))
+    expect(wholeReadme.modifiedLines).toEqual(source.readme.working.split('\n'))
+    expect(wholeReadme.originalLines.join('\n')).not.toContain('scope index λ')
+    expect(wholeReadme.originalLines.join('\n')).not.toContain('scope working λ')
+    expect(new Set([source.readme.base, source.readme.index, source.readme.working]).size).toBe(3)
+    expect(source.scopes.staged.chip).toBe('Staged changes')
+    expect(source.scopes.unstaged.chip).toBe('Unstaged changes')
+    expect(source.scopes.whole.chip).toBeNull()
+    expect(source.refusal.code).toBe('conflict')
+
+    const modesObservation = observationFor('files-changed-modes')
+    const modes = modesObservation.evidence.changedModes
+    const editResult = replyFor(modes.edit.receiptId)
+    const bothResult = replyFor(modes.both.receiptId)
+    const unstagedResult = replyFor(modes.unstagedEdit.receiptId)
+    expect(editResult).toMatchObject({
+      worktree: modes.worktreeId,
+      mode: 'edit',
+      focused: false,
+      review: null,
+      skipped: [{ path: 'README.md', reason: 'deleted' }]
+    })
+    expect(editResult.opened.map((entry: { path: string }) => entry.path)).toEqual(modes.expectedEditPaths)
+    expect(editResult.opened.find((entry: { path: string; tabId: string }) => entry.path === 'src/app.ts').tabId).toBe(focusOpen.openedTabId)
+    expect(modes.edit.after.public[1].workspace.workspace.root.activeTab).toBe(modes.sentinelTabId)
+    expect(modes.edit.after.dom[1]).toEqual(modes.edit.before.dom[1])
+    expect(bothResult.opened).toEqual(editResult.opened)
+    expect(bothResult.skipped).toEqual(editResult.skipped)
+    expect(bothResult).toMatchObject({
+      mode: 'both',
+      focused: true,
+      review: { tabId: source.tabId, created: false, focused: true }
+    })
+    expect(unstagedResult.opened.map((entry: { path: string }) => entry.path)).toEqual(modes.expectedUnstagedPaths)
+    expect(unstagedResult.skipped).toContainEqual({ path: 'README.md', reason: 'deleted' })
+    expect(unstagedResult.opened.find((entry: { path: string; tabId: string }) => entry.path === 'src/app.ts').tabId).toBe(focusOpen.openedTabId)
+    expect(modes.unstagedEdit.after.dom[0].path).toBe(modes.unstagedEdit.firstOpenedAbsolutePath)
+
     for (const [id, lines] of [
       ['files-editor-local', ['first A', 'second A', '']],
       ['files-editor-other-worktree', ['first', 'second λ', '']],
@@ -121,6 +294,16 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
     expect(report.cleanup.evidence.sentinelAlive).toBe(true)
     expect(report.cleanup.evidence.trackedIdentities.some((identity: { command: string }) => identity.command.includes('daemon/src/main.ts'))).toBe(true)
     expect(report.cleanup.evidence.trackedIdentities.some((identity: { command: string }) => /chrome|chromium/i.test(identity.command))).toBe(true)
+    for (const identity of report.cleanup.evidence.trackedIdentities) {
+      expect(identity, identity.command).toHaveProperty('gone', true)
+    }
+    expect(report.cleanup.evidence.temporaryPageIdentities).toHaveLength(1)
+    expect(report.cleanup.evidence.temporaryPageIdentities[0]).toMatchObject({
+      connId: refusals.disconnected.connId,
+      contextClosed: true,
+      pageClosed: true,
+      connectionGone: true
+    })
     expect(report.guards).toMatchObject({ denied: [], egress: ['https://cli-parity-guard.invalid/self-test'], injected: false })
     expect(stdout).not.toMatch(/#token=|hookToken|runtimeToken/)
     expect(existsSync(resolve(root, 'cli-injected'))).toBe(false)

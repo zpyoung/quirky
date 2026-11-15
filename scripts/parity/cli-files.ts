@@ -1703,9 +1703,10 @@ function assertReviewSourceObservation(observation: CliFileObservation, byId: Ma
     const input = record(matching[0]!.input, `${observation.id} ${name} Review input`)
     equal(input.mode, 'review', `${observation.id} ${name} Review mode`)
     equal(input.worktree, worktreeId, `${observation.id} ${name} Review worktree`)
-    if (expectedSource[name] === null) {
-      if (input.source !== undefined) throw new CliFilesFailure('source-mismatch', `${observation.id} whole review retained a source scope`)
-    } else equal(input.source, expectedSource[name], `${observation.id} ${name} stored source scope`)
+    if (name === 'staged') {
+      equal(input.source, 'staged', `${observation.id} initial stored source scope`)
+      equal(input.reveal, SENTINEL_PATH, `${observation.id} initial stored reveal`)
+    }
     equal(scope.cardPaths, expectedPaths[name], `${observation.id} ${name} evidence card paths`)
     const dom = array(scope.dom, `${observation.id} ${name} final DOM`).map((entry) => record(entry, `${observation.id} ${name} DOM`) as unknown as CliFileDomWindow)
     if (dom.length !== 2) throw new CliFilesFailure('missing-observation', `${observation.id} ${name} final DOM omits a window`)

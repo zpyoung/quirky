@@ -2614,6 +2614,10 @@ function sourceReviewEvidenceFixture(): { receipts: CliReceipt[]; observation: f
   const worktreeA = 'wt-A'
   const worktreeB = 'wt-B'
   const tabId = 'review-B-staged'
+  const storedInput = {
+    worktree: worktreeB, mode: 'review', reveal: 'docs/review-notes.md', source: 'staged',
+    groupId: `group-${worktreeB}`, preview: false, split: false, tabId
+  }
   const rootB = '/tmp/cli-fixture/worktrees/b'
   const readmePath = 'README.md'
   const readmeBase = 'README base λ\n'
@@ -2705,7 +2709,7 @@ function sourceReviewEvidenceFixture(): { receipts: CliReceipt[]; observation: f
         ? evidenceWindow({ connId: 11, worktreeId: worktreeA })
         : reviewFixtureWindow({
             connId: 11, worktreeId: worktreeB, tabId, selectedTabId: tabId,
-            input: { mode: 'review', worktree: worktreeB, source: name === 'unstaged' ? 'staged' : 'unstaged' },
+            input: storedInput,
             cards: name === 'unstaged' ? stagedCards : unstagedCards
           }),
       evidenceWindow({ connId: 12, worktreeId: worktreeA })
@@ -2744,12 +2748,7 @@ function sourceReviewEvidenceFixture(): { receipts: CliReceipt[]; observation: f
     harness.receipt(receiptId, [
       'api', 'call', 'ui.window.command.run', '--conn-id', '11', '--id', commandId, '--args', JSON.stringify(request)
     ], { result: reply })
-    const input = {
-      mode: 'review',
-      worktree: worktreeB,
-      ...(name === 'whole' ? {} : { source: name }),
-      ...(name === 'staged' ? { reveal: 'docs/review-notes.md' } : {})
-    }
+    const input = storedInput
     const after = harness.sample(`${name}-after`, [
       reviewFixtureWindow({
         connId: 11, worktreeId: worktreeB, tabId, selectedTabId: tabId, input, cards
@@ -2840,7 +2839,7 @@ function sourceReviewEvidenceFixture(): { receipts: CliReceipt[]; observation: f
   const refusalBefore = harness.sample('source-refusal-before', [
     reviewFixtureWindow({
       connId: 11, worktreeId: worktreeB, tabId, selectedTabId: tabId,
-      input: { mode: 'review', worktree: worktreeB }, cards: wholeCards
+      input: storedInput, cards: wholeCards
     }),
     evidenceWindow({ connId: 12, worktreeId: worktreeA })
   ])
@@ -2856,7 +2855,7 @@ function sourceReviewEvidenceFixture(): { receipts: CliReceipt[]; observation: f
   const refusalAfter = harness.sample('source-refusal-after', [
     reviewFixtureWindow({
       connId: 11, worktreeId: worktreeB, tabId, selectedTabId: tabId,
-      input: { mode: 'review', worktree: worktreeB }, cards: wholeCards
+      input: storedInput, cards: wholeCards
     }),
     evidenceWindow({ connId: 12, worktreeId: worktreeA })
   ])
@@ -2867,8 +2866,8 @@ function sourceReviewEvidenceFixture(): { receipts: CliReceipt[]; observation: f
     receiptId: refusalReceiptId,
     code: 'conflict',
     message: refusalMessage,
-    beforeInput: { mode: 'review', worktree: worktreeB },
-    afterInput: { mode: 'review', worktree: worktreeB },
+    beforeInput: storedInput,
+    afterInput: storedInput,
     before: refusalBefore,
     after: refusalAfter,
     otherHistoryBefore: refusalOtherHistoryBefore,

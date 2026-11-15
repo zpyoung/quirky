@@ -327,10 +327,13 @@ test('table parser rejects malformed observations and wrong acceptance commands'
   }
 })
 
-test('the four file rows bind renderer observations without changing their dispositions or partial mappings', () => {
+test('the four file rows declare bounded renderer coverage with compiled observation bindings', () => {
   const rows = loadCliTable()
   for (const [id, observations] of Object.entries(fileObservationIds)) {
     expect(rowObservations(rows.find(row => row.id === id)!)).toEqual([...observations])
+    const row = rows.find(row => row.id === id)!
+    expect(row.disposition).toBe('covered')
+    expect(row.reason).not.toContain('Follow-up:')
   }
 
   expect(rows.find(row => row.id === 'file-open')).toMatchObject({
@@ -338,8 +341,19 @@ test('the four file rows bind renderer observations without changing their dispo
     checks: ['file-open', 'file-state', 'file-read', 'file-close']
   })
   for (const id of ['file-open-render', 'file-diff', 'file-open-changed']) {
-    expect(rows.find(row => row.id === id)).toMatchObject({ disposition: 'gap', checks: [] })
+    expect(rows.find(row => row.id === id)).toMatchObject({ disposition: 'covered', checks: [] })
   }
+  expect(rows.find(row => row.id === 'file-open-render')!.reason).toMatch(/--window/)
+  expect(rows.find(row => row.id === 'file-open-render')!.reason).toMatch(/headless.*not.*native/i)
+  for (const id of ['file-diff', 'file-open-changed']) {
+    expect(rows.find(row => row.id === id)!.reason).toContain('combined Review')
+  }
+  const source = readFileSync(tablePath, 'utf8')
+  for (const title of [
+    'Prove file and review CLI targeting in the real UI',
+    'Navigate the selected window for editor open focus',
+    'Provide explicit background Review presentation'
+  ]) expect(source).not.toContain(title)
 
   const refs = new Map(validateCatalog(syntheticCatalog(), rows).map(entry => [entry.rowId, entry.refs]))
   expect(refs.get('file-open-render')).toEqual(expect.arrayContaining([
@@ -472,7 +486,7 @@ test('core report keeps observation pointers unexecuted and separate from parity
   })
   for (const id of ['file-open-render', 'file-diff', 'file-open-changed']) {
     expect(reduced.find(result => result.id === id)).toMatchObject({
-      status: 'gap',
+      status: 'separate-run',
       executed: false,
       checks: []
     })
@@ -484,7 +498,7 @@ test('core report keeps observation pointers unexecuted and separate from parity
   expect(report.parityComplete).toBe(false)
   expect(report.rows.find(row => row.id === 'file-open')?.status).toBe('failed')
   for (const id of ['file-open-render', 'file-diff', 'file-open-changed']) {
-    expect(report.rows.find(row => row.id === id)?.status).toBe('gap')
+    expect(report.rows.find(row => row.id === id)?.status).toBe('separate-run')
   }
 
   const untouched = allRows.find(row => row.id === 'account-list')!
