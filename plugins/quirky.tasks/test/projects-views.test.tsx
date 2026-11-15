@@ -235,6 +235,16 @@ function harness(): Harness {
   return h
 }
 
+function holdNextControl(h: Harness): (error: Error) => void {
+  const { promise, reject } = Promise.withResolvers<never>()
+  const original = h.handlers.get('ui.window.command.run')!
+  h.handlers.set('ui.window.command.run', (params) => {
+    h.handlers.set('ui.window.command.run', original)
+    return promise
+  })
+  return reject
+}
+
 function tasksState(project: ProjectTarget | null = PROJECT, savedView: string | null = 'V1'): TasksState {
   return {
     revision: 1,
@@ -993,6 +1003,77 @@ test('10c. A failed window identity lookup is retried on the next control reques
   expect(calls(h, 'ui.window.command.run').map((call) => call.params.connId)).toEqual([7])
   expect(h.logs).toEqual(['tasks: projects control failed: No window'])
 })
+test('10d. Delayed control rejection cannot change a replacement context', async () => {
+  const first = harness()
+  const next = harness()
+  for (const h of [first, next]) {
+    h.fixtures.get(projectViewIdentity(PROJECT, 'V1'))!.items = [item('I1', 'Zulu'), item('I2', 'Alpha')]
+  }
+  const reject = holdNextControl(first)
+  const container = await mount(first)
+  await click(headerButton(container, 'Title'))
+  expect(rowTitles(container)).toEqual(['Zulu', 'Alpha'])
+  await rerender(container, next, tasksState())
+  await act(async () => reject(new Error('No window')))
+  await settle()
+  expect(rowTitles(container)).toEqual(['Zulu', 'Alpha'])
+  expect(headerButton(container, 'Title').textContent?.trim()).toBe('Title')
+  expect(controlArgs(next)).toEqual([])
+})
+
+test('10e. Returning to the same context does not revive an expired request', async () => {
+  const first = harness()
+  const next = harness()
+  for (const h of [first, next]) {
+    h.fixtures.get(projectViewIdentity(PROJECT, 'V1'))!.items = [item('I1', 'Zulu'), item('I2', 'Alpha')]
+  }
+  const reject = holdNextControl(first)
+  const container = await mount(first)
+  await click(headerButton(container, 'Title'))
+  await rerender(container, next, tasksState())
+  await rerender(container, first, tasksState())
+  await act(async () => reject(new Error('No window')))
+  await settle()
+  expect(rowTitles(container)).toEqual(['Zulu', 'Alpha'])
+  expect(headerButton(container, 'Title').textContent?.trim()).toBe('Title')
+  expect(controlArgs(first)).toEqual([{ action: 'sort', fieldId: 'title' }])
+  expect(controlArgs(next)).toEqual([])
+})
+
+test('10f. Disposed roadmap requests cannot overwrite a replacement mount zoom', async () => {
+  const h = harness()
+  addFixture(h, PROJECT, roadmapFixture())
+  localStorage.setItem('quirky.tasks.projects.roadmapZoom', 'month')
+  const reject = holdNextControl(h)
+  const original = await mount(h)
+  await click(button(original, 'Year'))
+  expect(localStorage.getItem('quirky.tasks.projects.roadmapZoom')).toBe('month')
+  await unmount(original)
+  const replacement = await mount(h)
+  await click(button(replacement, 'Quarter'))
+  expect(localStorage.getItem('quirky.tasks.projects.roadmapZoom')).toBe('quarter')
+  await act(async () => reject(new Error('No window')))
+  await settle()
+  expect(localStorage.getItem('quirky.tasks.projects.roadmapZoom')).toBe('quarter')
+  expect(button(replacement, 'Quarter').getAttribute('aria-pressed')).toBe('true')
+  expect(controlArgs(h)).toEqual([{ action: 'zoom', zoom: 'year' }, { action: 'zoom', zoom: 'quarter' }])
+})
+
+test('10g. Delayed rejection still falls back after rerendering the same live context', async () => {
+  const h = harness()
+  h.fixtures.get(projectViewIdentity(PROJECT, 'V1'))!.items = [item('I1', 'Zulu'), item('I2', 'Alpha')]
+  const reject = holdNextControl(h)
+  const container = await mount(h)
+  await click(headerButton(container, 'Title'))
+  await rerender(container, h, tasksState())
+  await act(async () => reject(new Error('No window')))
+  await settle()
+  expect(rowTitles(container)).toEqual(['Alpha', 'Zulu'])
+  expect(headerButton(container, 'Title').textContent?.trim()).toBe('Title ↑')
+  expect(h.logs).toEqual(['tasks: projects control failed: No window'])
+  expectBridgeRequests(h, [{ action: 'sort', fieldId: 'title' }])
+})
+
 test('11. Control delivery is scoped to eligible mounted surfaces, contexts, and lifetimes', async () => {
   const firstHarness = harness()
   const firstFixture = firstHarness.fixtures.get(projectViewIdentity(PROJECT, 'V1'))!

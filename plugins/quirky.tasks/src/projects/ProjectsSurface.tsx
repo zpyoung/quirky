@@ -1,5 +1,5 @@
 import { Badge, Button, Dialog, EmptyState, IconButton, InlineError, NoticeLine, Tabs, TextField } from '@quirky/ui'
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import type { ItemTarget, ProjectTarget, TasksSurfaceProps } from '../contracts'
 import { Markdown } from '../issue/Markdown'
 import { openReview } from '../review-navigation'
@@ -475,6 +475,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const warnedSubIssues = useRef(false)
   const roadmapScroller = useRef<HTMLDivElement>(null)
   const controlHandler = useRef<ProjectsControlHandler>(() => false)
+  const controlLifetime = useRef(0)
   const busyItemRef = useRef(new Set<string>())
   const previewGeneration = useRef(0)
   const openingGeneration = useRef(0)
@@ -496,7 +497,14 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const activeQuery = appliedQuery
   const isQueryDirty = queryDraft !== activeQuery
 
-  useEffect(() => registerProjectsControl(context, (request) => controlHandler.current(request)), [context])
+  useLayoutEffect(() => {
+    controlLifetime.current += 1
+    const unregister = registerProjectsControl(context, (request) => controlHandler.current(request))
+    return () => {
+      controlLifetime.current += 1
+      unregister()
+    }
+  }, [context])
 
   useEffect(() => {
     clearInlineEditors()
@@ -893,9 +901,11 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   }
 
   async function controlProjects(request: ProjectsControlRequest): Promise<void> {
+    const lifetime = controlLifetime.current
     try {
       await requestProjectsControl(context, request)
     } catch (error) {
+      if (lifetime !== controlLifetime.current) return
       context.log(`tasks: projects control failed: ${errorMessage(error)}`)
       applyControl(request)
     }
@@ -1782,7 +1792,7 @@ function ProjectTable(props: {
               ? <Button type="button" className="quirky-tasks-project-table__title" onClick={() => props.onOpen(item)} title={String(item.content?.title ?? '')}>{String(item.content?.title ?? (isRestricted(item) ? 'Restricted item' : 'Untitled'))}</Button>
               : column.kind === 'type'
                 ? item.content?.kind === 'issue'
-                  ? <div className="quirky-tasks-projects__type-cell"><span>Issue</span>{!hasIssueTypeField && <ProjectFieldCell item={item} field={ISSUE_TYPE_FIELD} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onSelectChange={props.onSelectChange} onMultiSelectChange={props.onMultiSelectChange} onIssueTypeChange={props.onIssueTypeChange} inlineCell={props.inlineCell} />}</div>
+                  ? <div className="quirky-tasks-project-table__type-cell"><span>Issue</span>{!hasIssueTypeField && <ProjectFieldCell item={item} field={ISSUE_TYPE_FIELD} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onSelectChange={props.onSelectChange} onMultiSelectChange={props.onMultiSelectChange} onIssueTypeChange={props.onIssueTypeChange} inlineCell={props.inlineCell} />}</div>
                   : <span>{String(item.content?.kind === 'pullRequest' ? 'Pull request' : item.content?.kind === 'draft' ? 'Draft' : 'Restricted')}</span>
                 : <ProjectFieldCell item={item} field={column.field!} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onSelectChange={props.onSelectChange} onMultiSelectChange={props.onMultiSelectChange} onIssueTypeChange={props.onIssueTypeChange} inlineCell={props.inlineCell} />}
           </td>)}
