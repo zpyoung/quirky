@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { PluginContext, ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
 import type { HostingEnv } from '../../src/env'
 import { isRecord } from '../../src/data'
-import { createGitLabClient } from '../../src/gitlab/api'
+import { createGitLabClient, type GitLabFetch } from '../../src/gitlab/api'
 import type { GitLabScope } from '../../src/gitlab/types'
 import { gitlabApiBase, parseGitLabHosts, parseGitLabRemote } from '../../src/gitlab/identity'
 import { invalidateGitLabToken, readGitLabToken } from '../../src/gitlab/token'
@@ -193,7 +193,7 @@ describe('GitLab token lookup', () => {
 })
 
 describe('GitLab API transport', () => {
-  function apiClient(fetcher: typeof fetch, runner: ProcessRunner = recordingRunner(() => runResult()).runner, readToken?: typeof readGitLabToken) {
+  function apiClient(fetcher: GitLabFetch, runner: ProcessRunner = recordingRunner(() => runResult()).runner, readToken?: typeof readGitLabToken) {
     return createGitLabClient(hostingEnv(runner), {
       fetch: fetcher,
       ...(readToken === undefined ? {} : { readToken })

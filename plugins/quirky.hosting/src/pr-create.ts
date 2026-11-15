@@ -70,7 +70,8 @@ function defaultBranchFrom(value: unknown): string | undefined {
   return nonEmptyString(value.defaultBranchRef.name)
 }
 
-async function projectDefaultBase(env: HostingEnv, scope: Scope): Promise<string | undefined> {
+/** Read the repository's configured creation base without requiring provider access. */
+export async function projectDefaultBase(env: HostingEnv, scope: Scope): Promise<string | undefined> {
   try {
     const details = await env.context.call('quirky.repo/show', { repo: scope.worktree.repoId })
     if (!isRecord(details) || !isRecord(details.settings)) return undefined
@@ -92,7 +93,8 @@ async function detectedDefaultBase(env: HostingEnv, scope: Scope): Promise<strin
   }
 }
 
-function normalizeBase(value: string): string {
+/** Convert a local or remote-qualified base into a branch name for review creation. */
+export function normalizeBase(value: string): string {
   const trimmed = value.trim().replace(/^refs\/heads\//u, '').replace(/^refs\/remotes\//u, '')
   const slash = trimmed.indexOf('/')
   if (slash > 0 && (trimmed.slice(0, slash) === 'origin' || trimmed.slice(0, slash) === 'upstream')) return trimmed.slice(slash + 1)
@@ -117,7 +119,8 @@ async function selectedBase(
   }
 }
 
-async function upstreamRef(env: HostingEnv, scope: Scope, branch: string): Promise<string | undefined> {
+/** Find the published tracking ref used to gate review creation. */
+export async function upstreamRef(env: HostingEnv, scope: Scope, branch: string): Promise<string | undefined> {
   try {
     const output = await env.git(scope, ['rev-parse', '--abbrev-ref', `${branch}@{upstream}`])
     const ref = nonEmptyString(output)
@@ -127,7 +130,8 @@ async function upstreamRef(env: HostingEnv, scope: Scope, branch: string): Promi
   }
 }
 
-async function aheadBehind(env: HostingEnv, scope: Scope, upstream: string): Promise<{ behind: number; ahead: number } | undefined> {
+/** Compare the current worktree with its upstream before a review is created. */
+export async function aheadBehind(env: HostingEnv, scope: Scope, upstream: string): Promise<{ behind: number; ahead: number } | undefined> {
   try {
     const output = await env.git(scope, ['rev-list', '--left-right', '--count', `${upstream}...HEAD`])
     const parts = output.trim().split(/\s+/u)
@@ -140,7 +144,8 @@ async function aheadBehind(env: HostingEnv, scope: Scope, upstream: string): Pro
   }
 }
 
-async function remoteBaseExists(env: HostingEnv, scope: Scope, base: string): Promise<boolean> {
+/** Require a locally known remote base before creating a review against it. */
+export async function remoteBaseExists(env: HostingEnv, scope: Scope, base: string): Promise<boolean> {
   try {
     const output = await env.git(scope, ['for-each-ref', '--format=%(refname:short)', 'refs/remotes'])
     return output.split(/\r?\n/u).some((ref) => {

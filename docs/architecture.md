@@ -125,6 +125,11 @@ The API mirrors the kept features. Names are indicative; the prototype fixes the
   and `git.*`.
 - **Hosting:** `hosting.*` covers PRs, issues, checks, reviews and merges across GitHub, GitLab,
   Bitbucket, Gitea and Azure DevOps.
+  `quirky.hosting` uses `gh` for GitHub. GitLab hosts are selected through `gitlabHosts`
+  (default `gitlab.com`), with `GITLAB_TOKEN` or the host's `glab` token used for REST v4.
+  GitLab supports repository identity, auth diagnosis, merge-request reads, creation and state
+  changes, comments and discussions. GitLab merging, checks, file APIs and Reviews UI support
+  are not implemented.
 - **Browser:** `browser.*` keeps the command set agents already use (snapshot, click, fill,
   screenshot, tabs and the rest; `src/cli/browser-handler-groups.ts`).
 - **Background work:** `automation.*`, `orchestration.*`, `heimdall.*`, `sitter.*`, `objective.*`,

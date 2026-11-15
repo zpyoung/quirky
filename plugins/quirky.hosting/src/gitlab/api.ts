@@ -17,6 +17,8 @@ export type GitLabResponse = {
   retryAfterMs: number | null
 }
 
+export type GitLabFetch = (...args: Parameters<typeof fetch>) => Promise<Response>
+
 const BODY_LIMIT_BYTES = 4 * 1024 * 1024
 const READ_DEADLINE_MS = 30_000
 const WRITE_DEADLINE_MS = 60_000
@@ -34,7 +36,7 @@ export function gitlabError(
 
 export function createGitLabClient(
   env: HostingEnv,
-  options: { fetch?: typeof fetch; readToken?: typeof readGitLabToken } = {}
+  options: { fetch?: GitLabFetch; readToken?: typeof readGitLabToken } = {}
 ) {
   const fetcher = options.fetch ?? fetch
   const readToken = options.readToken ?? readGitLabToken
