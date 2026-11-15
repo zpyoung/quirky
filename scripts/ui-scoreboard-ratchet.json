@@ -4,6 +4,7 @@
   "quirky.browser": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.feedback": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.handoff": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.heimdall": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.loops": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.ask": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.notifications": ["commands", "compatibility-tokens", "empty", "error", "loading"],
