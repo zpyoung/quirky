@@ -19,7 +19,10 @@ import {
   type DesktopWindowResult,
   type FolderPickerRequest,
   type FolderPickerResult,
+  type BrowserHostPrompt,
   type NativeDesktopCapabilities,
+  type FolderListing,
+  type Methods,
   type QuirkyEvent,
   type Schema,
   type UiLayout,
@@ -47,6 +50,7 @@ const PALETTE_RECENT_ID_LIMIT = 2048
 const MAX_JSON_LENGTH = 64 * 1024
 const COMMAND_TIMEOUT_MS = 30_000
 const TOAST_DISMISS = 'ui.toast.dismiss'
+const BROWSER_HOST_CONTROL = 'ui.browserHost.control'
 const FOCUS_TARGETS = ['sidebar', 'view', 'panel'] as const
 const PANEL_WIDTH_MIN = 220
 const PANEL_WIDTH_MAX = 4096
@@ -134,6 +138,90 @@ function nativeResultMatches(action: DesktopShellAction, value: unknown): value 
       return value.requested === true
   }
 }
+/** Identifies the browser controller's deliberate shell-only capability subset. */
+function hasBrowserHostCapabilities(capabilities: NativeDesktopCapabilities | undefined): boolean {
+  return capabilities !== undefined &&
+    capabilities.directoryPicker &&
+    capabilities.auxiliaryWindows &&
+    !capabilities.revealItem &&
+    !capabilities.notifications.permission &&
+    !capabilities.notifications.click &&
+    !capabilities.notifications.dismiss
+}
+
+function folderListingFromReply(value: unknown): FolderListing {
+  if (!isRecord(value) ||
+    typeof value.path !== 'string' ||
+    !(value.parent === null || typeof value.parent === 'string') ||
+    !Array.isArray(value.entries) ||
+    typeof value.offset !== 'number' ||
+    !Number.isInteger(value.offset) ||
+    typeof value.limit !== 'number' ||
+    !Number.isInteger(value.limit) ||
+    typeof value.hasMore !== 'boolean') {
+    throw conflict('browser host returned an invalid folder listing')
+  }
+  const entries: FolderListing['entries'] = []
+  for (const entry of value.entries) {
+    if (!isRecord(entry) || typeof entry.name !== 'string' || typeof entry.path !== 'string') {
+      throw conflict('browser host returned an invalid folder listing')
+    }
+    entries.push({ name: entry.name, path: entry.path })
+  }
+  return {
+    path: value.path,
+    parent: value.parent,
+    entries,
+    offset: value.offset,
+    limit: value.limit,
+    hasMore: value.hasMore
+  }
+}
+
+function browserHostPromptFromReply(value: unknown): BrowserHostPrompt | null {
+  if (value === null) return null
+  if (!isRecord(value) ||
+    typeof value.requestId !== 'string' ||
+    (value.kind !== 'folder-picker' && value.kind !== 'window-open') ||
+    typeof value.title !== 'string' ||
+    typeof value.expiresAt !== 'number' ||
+    typeof value.busy !== 'boolean' ||
+    !(value.error === null || typeof value.error === 'string')) {
+    throw conflict('browser host returned an invalid prompt')
+  }
+  const prompt: BrowserHostPrompt = {
+    requestId: value.requestId,
+    kind: value.kind,
+    title: value.title,
+    expiresAt: value.expiresAt,
+    busy: value.busy,
+    error: value.error
+  }
+  if (value.draftPath !== undefined) {
+    if (typeof value.draftPath !== 'string') throw conflict('browser host returned an invalid prompt')
+    prompt.draftPath = value.draftPath
+  }
+  if (value.directory !== undefined) prompt.directory = folderListingFromReply(value.directory)
+  if (value.selectedPaths !== undefined) {
+    if (!Array.isArray(value.selectedPaths) || !value.selectedPaths.every((path) => typeof path === 'string')) {
+      throw conflict('browser host returned an invalid prompt')
+    }
+    prompt.selectedPaths = value.selectedPaths
+  }
+  if (value.multiple !== undefined) {
+    if (typeof value.multiple !== 'boolean') throw conflict('browser host returned an invalid prompt')
+    prompt.multiple = value.multiple
+  }
+  return prompt
+}
+
+function browserHostControlResult(value: unknown): Methods['ui.browserHost.control']['result'] {
+  if (!isRecord(value) || !Object.hasOwn(value, 'active')) {
+    throw conflict('browser host returned an invalid control state')
+  }
+  return { active: browserHostPromptFromReply(value.active) }
+}
+
 
 function overlayShown(report: Report | undefined): boolean {
   if (!report) return false
@@ -921,8 +1009,20 @@ export class LayoutService {
     this.validateCommand(id, args)
     return this.route(target, id, args)
   }
+  /** Routes the reserved browser-host control only to its exact live browser window. */
+  browserHostControl(
+    connId: number,
+    control: Omit<Methods['ui.browserHost.control']['params'], 'connId'>
+  ): Promise<Methods['ui.browserHost.control']['result']> {
+    const target = this.requireWindowById(connId)
+    if (!hasBrowserHostCapabilities(this.desktopCapabilitiesByWindow.get(connId))) {
+      throw conflict('browser-host control is unavailable for this UI window')
+    }
+    return this.route(target, BROWSER_HOST_CONTROL, control).then(({ result }) => browserHostControlResult(result))
+  }
 
-  /** Records capabilities reported by this exact UI window's trusted native preload. */
+
+  /** Records the shell capabilities reported for this exact UI connection. */
   setDesktopCapabilities(conn: ClientConn, capabilities: NativeDesktopCapabilities): void {
     this.requireWindow(conn)
     this.desktopCapabilitiesByWindow.set(conn.id, {
