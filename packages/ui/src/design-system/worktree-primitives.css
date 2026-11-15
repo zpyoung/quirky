@@ -279,3 +279,19 @@
     animation: none;
   }
 }
+
+.worktree-create-error {
+  box-sizing: border-box;
+  max-height: 6rem;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  width: 100%;
+}
+
+.worktree-create-error .ui-inline-error__message {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}

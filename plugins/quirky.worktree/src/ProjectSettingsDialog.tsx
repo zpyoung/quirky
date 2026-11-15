@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { HookScript, ProjectSettings, Repo, RepoDetails, UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, Dialog, FormRow, SectionHeader, TextField } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import { FolderPickerUnavailableError, messageOf, pickNativeFolder } from './actions'
 import { repoLabel } from './report'
 import type { ExternalVisibility, WorktreeProjectIdentity } from './parity-types'
@@ -95,13 +95,15 @@ const SCRIPT_FIELDS: Partial<Record<keyof Form, true>> = { setupScript: true, ar
 
 /** The `quirky.repo/set` params for what differs from `before`; an emptied field is sent as '' to clear it. */
 function changes(before: Form, after: Form): Record<string, string> {
-  const out: Record<string, string> = {}
+  const entries: [string, string][] = []
   for (const key of TEXT_FIELDS) {
     const next = SCRIPT_FIELDS[key] === true ? after[key] : after[key].trim()
-    if (next !== before[key]) out[key] = next
+    if (next !== before[key]) entries.push([key, next])
   }
-  if (after.waitForSetup !== before.waitForSetup) out.agentStartup = after.waitForSetup ? 'wait-for-setup' : 'start-immediately'
-  return out
+  const textChanges = Object.fromEntries(entries)
+  return after.waitForSetup !== before.waitForSetup
+    ? { ...textChanges, agentStartup: after.waitForSetup ? 'wait-for-setup' : 'start-immediately' }
+    : textChanges
 }
 
 function SharedScript({ label, script }: { label: string; script: HookScript | null }) {
@@ -241,7 +243,7 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
   return (
     <Dialog open title={title} onClose={onClose} size="wide">
       {!form || !details ? (
-        <p className="ui-text-muted" role="status">Loading…</p>
+        <div role="status"><NoticeLine>Loading…</NoticeLine></div>
       ) : (
         <form className="ui-stack" onSubmit={save}>
           <TextField
@@ -369,12 +371,13 @@ export function ProjectSettingsDialog({ context, repo, onClose }: Props) {
           {repo.kind === 'git' && (
             <section className="ui-stack" aria-label="Ledger Staleness">
               <div ref={ledgerSettingsMount} />
-              {ledgerMountError && <p className="ui-error-text" role="alert">{ledgerMountError}</p>}
+              {ledgerMountError && <InlineError message={ledgerMountError} />}
             </section>
           )}
           <section className="ui-stack" aria-label="Shared hooks">
             <SectionHeader title={details.hooks.file ? `Shared hooks (${details.hooks.file})` : 'Shared hooks'} />
-            {!details.hooks.setup?.shared && !details.hooks.archive?.shared && !details.hooks.issueCommand?.shared && <p className="ui-text-muted">No shared scripts.</p>}
+            {!details.hooks.setup?.shared && !details.hooks.archive?.shared && !details.hooks.issueCommand?.shared &&
+              <EmptyState message="No shared scripts." />}
             <SharedScript label="Setup" script={details.hooks.setup} />
             <SharedScript label="Archive" script={details.hooks.archive} />
             <SharedScript label="GitHub issue command" script={details.hooks.issueCommand ?? null} />
