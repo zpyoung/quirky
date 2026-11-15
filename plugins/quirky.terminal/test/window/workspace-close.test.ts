@@ -413,3 +413,24 @@ describe('SC-72: reopen with nothing to reopen', () => {
     expect(view.last().layout.revision).toBe(9)
   })
 })
+
+test.each([false, true])('running confirmation dispatches its rendered generation and checkbox draft (%s)', async (dontAskAgain) => {
+  const view = await mount(simpleWorkspace(), { describe: 'Stop sleep in Terminal 1?' }, { provider: true })
+  const ownerCalls: unknown[] = []
+  view.fake.context.executeCommand = async (...args) => { ownerCalls.push(args) }
+  await closeFocused(view)
+  const generation = view.last().dialog.generation
+  if (dontAskAgain) await click(view.q('[role="dialog"] input[type="checkbox"]'))
+  expect(view.fake.callsTo('setting.set')).toEqual([])
+  expect(callsTo(view.fake, 'closeTab')).toEqual([])
+  expect(document.activeElement).not.toBe(button(view, 'Stop and Close'))
+  await click(button(view, 'Stop and Close'))
+  expect(view.fake.callsTo('ui.window.command.run').map((call) => call.params)).toEqual([{
+    connId: 41,
+    id: 'command:quirky.terminal/workspace-view-action',
+    args: { workspace: 'wt-main', action: 'confirm-close', kind: 'close-running', generation, dontAskAgain }
+  }])
+  expect(callsTo(view.fake, 'closeTab')).toEqual([{ tab: 'tab-1', yes: true }])
+  expect(view.fake.callsTo('setting.set').map((call) => call.params)).toEqual(dontAskAgain ? [{ id: 'setting:quirky.terminal/confirm-close-running', value: false }] : [])
+  expect(ownerCalls).toEqual([])
+})

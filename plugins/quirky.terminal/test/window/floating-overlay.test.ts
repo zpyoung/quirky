@@ -14,6 +14,8 @@ import {
   loadWorkspace,
   makeWorkspace,
   mouse,
+  pane,
+  tab,
   settle,
   startRecording,
   stopRecording,
@@ -520,6 +522,25 @@ describe('SC-67: the overlay report and its events', () => {
     expect(report.layout).toMatchObject({ id: 'floating', activeGroup: 'grp-1' })
     expect(report.focusedPane).toBe('pane-3')
     expect(report.panes.map((entry: any) => entry.pane).sort()).toEqual(['pane-2', 'pane-3', 'pane-4', 'pane-5'])
+  })
+
+  test('publishes the floating switcher generation while shown and nulls it when hidden', async () => {
+    const switcherWorkspace = makeWorkspace(group('grp-1', [
+      tab('tab-1', pane('pane-1', 's-1')),
+      tab('tab-2', pane('pane-2', 's-2'))
+    ]), { id: 'floating' })
+    const view = await mountOverlay({ state: { open: true }, floatingWorkspace: switcherWorkspace })
+    const controller = registry.controllerFor('floating')!
+
+    await act(async () => { controller.recentTab() })
+    expect(view.last().dialog).toEqual({
+      kind: 'switch-tabs',
+      title: 'Switch tabs',
+      generation: expect.any(String)
+    })
+
+    await view.fake.emit({ type: 'quirky.terminal/floating', data: { state: { ...view.state(), open: false } } } as never)
+    expect(view.last()).toMatchObject({ shown: false, dialog: null })
   })
 
   test('visibleSessions lists the panes the open panel shows and none while minimized', async () => {
