@@ -50,6 +50,8 @@ export type PaneProps = {
   onSaved(content: string, hash: string): void
   /** Refetch the diff and replace this pane with it, dropping the draft. */
   onReload(): Promise<void>
+  /** A mounted view control asks the owner to reload this stale card. */
+  onStaleReload(): void
   onFocus?(): void
   /** Draws and takes notes on the modified side of a text diff; image, binary and too-large diffs never use it. */
   notes?: NotesBinding
@@ -108,7 +110,7 @@ export function DiffPane(props: PaneProps) {
 
 const NO_NOTES: readonly Note[] = []
 
-function TextPane({ context, worktree, path, diff, editable, settings, variant, onState, bind, onSaved, onReload, onFocus, notes, revertOnDisk }: PaneProps) {
+function TextPane({ context, worktree, path, diff, editable, settings, variant, onState, bind, onSaved, onReload, onStaleReload, onFocus, notes, revertOnDisk }: PaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const mergeRef = useRef<MergeHandle | null>(null)
   const base = useRef<{ text: string; hash: string | null | undefined }>({ text: diff.modified, hash: diff.modifiedHash })
@@ -172,7 +174,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
       await write(content, force)
     } catch (error) {
       if (reasonOf(error) === 'changed-on-disk') setStale(true)
-      else context.toast('Save failed', messageOf(error))
+      else context.toast('Save failed', messageOf(error), { kind: 'error' })
     }
   }
 
@@ -223,7 +225,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
           dirtyRef.current = merge.getModified() !== base.current.text
           setDirty(dirtyRef.current)
         }
-        context.toast('Revert failed', messageOf(error))
+        context.toast('Revert failed', messageOf(error), { kind: 'error' })
       }
     } finally {
       reverting.current = false
@@ -231,8 +233,9 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
   }
 
   const ifDirty = (force: boolean) => () => (dirtyRef.current ? save(force) : Promise.resolve())
-  const actions = useRef({ save: ifDirty(false), overwrite: ifDirty(true), reload: onReload, revert })
-  actions.current = { save: ifDirty(false), overwrite: ifDirty(true), reload: onReload, revert }
+  const overwrite = ifDirty(true)
+  const actions = useRef({ save: ifDirty(false), overwrite, reload: onReload, revert })
+  actions.current = { save: ifDirty(false), overwrite, reload: onReload, revert }
   const canRevert = revertOnDisk === true && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
 
   const showEditor = overflow === null
@@ -336,7 +339,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
     try {
       await actions.current.reload()
     } catch (error) {
-      context.toast('Reload failed', messageOf(error))
+      context.toast('Reload failed', messageOf(error), { kind: 'error' })
     }
   }
   useEffect(() => {
@@ -353,7 +356,7 @@ function TextPane({ context, worktree, path, diff, editable, settings, variant, 
   return (
     <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
       {stale && (
-        <StaleBar variant={variant} onReload={() => void reload()} onOverwrite={() => void actions.current.overwrite()} />
+        <StaleBar variant={variant} onReload={onStaleReload} onOverwrite={() => void actions.current.overwrite()} />
       )}
       {overflow ? (
         <div className="ui-stack" role="region" aria-label="This diff is too large to display safely." style={{ padding: 'var(--ui-space-12)' }}>

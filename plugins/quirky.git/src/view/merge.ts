@@ -167,7 +167,8 @@ function revertOnlyControls(type: 'reject' | 'accept', action: (event: MouseEven
   button.name = 'reject'
   button.textContent = 'Revert Block'
   button.setAttribute('aria-label', 'Revert Block')
-  button.addEventListener('mousedown', action)
+  const revertDraft = (event: MouseEvent) => action(event)
+  button.addEventListener('mousedown', revertDraft)
   return button
 }
 
@@ -177,8 +178,9 @@ function ownedRevertControls(onRevert: (apply: () => boolean) => void) {
     if (type === 'accept') return revertOnlyControls(type, action)
     const button = ownedRevertButton('inline')
     button.name = 'reject'
-    const press = (event: MouseEvent) => {
+    const onRevertPress = (event: MouseEvent) => {
       event.preventDefault()
+      event.stopPropagation()
       onRevert(() => {
         try {
           action(event)
@@ -189,11 +191,12 @@ function ownedRevertControls(onRevert: (apply: () => boolean) => void) {
         }
       })
     }
-    button.addEventListener('mousedown', press)
     // enter and space click with detail 0; a mouse click already ran on mousedown
-    button.addEventListener('click', (event) => {
-      if (event.detail === 0) press(event)
-    })
+    const onRevertKeyboardClick = (event: MouseEvent) => {
+      if (event.detail === 0) onRevertPress(event)
+    }
+    button.addEventListener('mousedown', onRevertPress)
+    button.addEventListener('click', onRevertKeyboardClick)
     return button
   }
 }
@@ -241,7 +244,7 @@ export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHa
     const { onRevert } = options
     if (onRevert) {
       // the library reverts on mousedown itself; capturing first lets the owner veto the press
-      const intercept = (event: MouseEvent) => {
+      const onRevertPress = (event: MouseEvent) => {
         const control = event.target instanceof Element ? event.target.closest<HTMLElement>('.cm-merge-revert > *') : null
         const chunk = control ? chunks()[Number(control.dataset.chunk)] : undefined
         if (!chunk) return
@@ -254,14 +257,14 @@ export function createMerge(parent: HTMLElement, options: MergeOptions): MergeHa
         })
       }
       // enter and space click with detail 0, which the library ignores; a mouse click already ran on mousedown
-      const interceptKeyboard = (event: MouseEvent) => {
-        if (event.detail === 0) intercept(event)
+      const onRevertKeyboardClick = (event: MouseEvent) => {
+        if (event.detail === 0) onRevertPress(event)
       }
-      view.dom.addEventListener('mousedown', intercept, true)
-      view.dom.addEventListener('click', interceptKeyboard, true)
+      view.dom.addEventListener('mousedown', onRevertPress, true)
+      view.dom.addEventListener('click', onRevertKeyboardClick, true)
       destroy = () => {
-        view.dom.removeEventListener('mousedown', intercept, true)
-        view.dom.removeEventListener('click', interceptKeyboard, true)
+        view.dom.removeEventListener('mousedown', onRevertPress, true)
+        view.dom.removeEventListener('click', onRevertKeyboardClick, true)
         view.destroy()
       }
     }
