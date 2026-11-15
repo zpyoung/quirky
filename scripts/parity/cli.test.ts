@@ -118,9 +118,21 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     expect(receipt('local-account-login-codex')).toMatchObject({ status: 'complete', label: 'CLI parity Codex', email: 'codex-parity@example.invalid', needsSignIn: false })
     expect(receipt('local-worktree-current')).toMatchObject({ nestedId: expect.any(String), mainIsMain: true, outside: 'not-found' })
     const takeover = receipt('workers-run-use')
+    const coordinatorSessionId = takeover!.coordinator
     expect(takeover).toMatchObject({ runId: expect.any(String), coordinator: expect.any(String), controllerRefusal: 'consumer_fenced' })
     const generation = takeover!.generation as { before: number; after: number }
     expect(generation.after).toBe(generation.before + 1)
+    const coordinatorLayout = receipt('workers-coordinator-tab-layout')
+    expect({ ...coordinatorLayout }).toMatchObject({
+      worktreeId: expect.any(String), tabId: expect.any(String), paneId: expect.any(String), sessionId: expect.any(String),
+      creationMatched: true
+    })
+    for (const key of ['worktreeId', 'tabId', 'paneId', 'sessionId'] as const) {
+      expect(coordinatorLayout[key]).toMatch(/./s)
+    }
+    const createdWorktree = receipt('worktree-create')
+    expect(coordinatorLayout.worktreeId).toBe(createdWorktree.id)
+    expect(coordinatorLayout.sessionId).toBe(coordinatorSessionId)
     expect(receipt('workers-reply-replay')).toMatchObject({ replayed: true, sameAnswer: true, mismatch: 'request_mismatch' })
     expect(receipt('workers-stop')).toMatchObject({ state: 'stopped', processAction: 'closed_agent_terminal', ptyAlive: false, unauthorized: 'consumer_fenced' })
     expect(receipt('workers-abandon')).toMatchObject({ state: 'abandoned', processAction: 'none', ptyAlive: true, pidAlive: true })

@@ -15,7 +15,6 @@ const COMMAND = 'command:quirky.worktree/new-worktree'
 const ADD_PROJECT_COMMAND = 'command:quirky.worktree/add-project'
 const SESSION_VIEW = 'view:quirky.session/worktree'
 const UI_CONTROL = UI_CONTROL_COMMAND
-
 const WORKTREE_DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'name' | 'instanceId'> = {
   kind: 'git',
   displayName: null,
@@ -219,15 +218,19 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
         case 'ui.window.command.run': {
           if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
           const args = params.args
-          const scoped = params.id === UI_CONTROL_COMMAND && typeof args === 'object' && args !== null && 'scope' in args
           const handler = provided.get(String(params.id))
-          if (!scoped && typeof handler !== 'function') throw new Error(`unexpected command ${String(params.id)}`)
-          if (!scoped) {
+          let result: unknown
+          if (typeof handler === 'function') {
             world.windowCommandStarted?.()
             if (world.windowCommandGate) await world.windowCommandGate
+            result = await (handler as (args: unknown) => unknown)(args)
+            world.windowCommandDispatched?.()
+          } else {
+            const scoped = params.id === UI_CONTROL_COMMAND &&
+              typeof args === 'object' && args !== null && !Array.isArray(args) && 'scope' in args
+            if (!scoped) throw new Error(`unexpected command ${String(params.id)}`)
+            result = dispatchUiControl(context, args)
           }
-          const result = scoped ? dispatchUiControl(context, args) : await (handler as (args: unknown) => unknown)(args)
-          if (!scoped) world.windowCommandDispatched?.()
           return { result }
         }
         case 'quirky.worktree/origins':
@@ -411,7 +414,7 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
       return () => void eventListeners.delete(listener)
     },
     getSetting: (name: string) => (name === 'setting:quirky.worktree/confirmDelete' ? world.confirmDelete : undefined),
-    executeCommand: async () => {},
+    executeCommand: async () => { throw new Error('executeCommand must not be used for UI controls') },
     openView(id: string, input?: unknown) {
       opened.push({ id, input })
       const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
@@ -1693,37 +1696,62 @@ test('the UI control command is provided and returns zero when no worktree dialo
 test.each(['Cancel', 'Escape'])('Worktree details discards reference edits on %s', async (dismissal) => {
   const h = setup()
   h.world.worktrees[1]!.references = [{ id: 'ref_saved', url: 'https://example.com/saved', label: 'Saved task', createdAt: 1 }]
+  const openDetailsRequest = {
+    connId: 1,
+    id: UI_CONTROL,
+    args: {
+      action: 'control',
+      scope: 'worktrees-section',
+      target: 'worktrees',
+      operation: 'open-dialog',
+      payload: { owner: expect.any(String), dialog: { kind: 'update', worktreeId: 'w2' } }
+    }
+  }
   await h.mountInto(host)
   await click(actionButton(rowOf('fix-login', 'api'))!)
   await chooseMore('Details…')
   await click(dialogButton('Unlink'))
   expect(h.callsTo('quirky.worktree/unlinkReference')).toEqual([])
-  expect(h.callsTo('ui.window.command.run').filter(({ args }) =>
-    typeof args !== 'object' || args === null || !('scope' in args)
-  )).toEqual([{
+  const treeOpenRequest = {
     connId: 1,
     id: UI_CONTROL,
-    args: { action: 'unlink-reference', worktree: 'w2', url: 'https://example.com/saved' }
-  }])
+    args: {
+      action: 'control',
+      scope: 'tree',
+      target: 'w2',
+      operation: 'open-workspace-menu',
+      payload: { x: expect.any(Number), y: expect.any(Number), focus: true }
+    }
+  }
+  const treeCloseRequest = {
+    connId: 1,
+    id: UI_CONTROL,
+    args: {
+      action: 'control',
+      scope: 'tree',
+      target: 'w2',
+      operation: 'close-menu',
+      payload: { seq: expect.any(Number) }
+    }
+  }
+  expect(h.callsTo('ui.window.command.run')).toEqual([
+    treeOpenRequest,
+    treeCloseRequest,
+    openDetailsRequest,
+    { connId: 1, id: UI_CONTROL, args: { action: 'unlink-reference', worktree: 'w2', url: 'https://example.com/saved' } }
+  ])
   expect(document.querySelector('[aria-label="Linked references"]')!.textContent).not.toContain('Saved task')
 
   await typeInto(dialogField('Reference URL')!, 'https://example.com/draft')
   await typeInto(dialogField('Reference label')!, 'Draft task')
   await click(dialogButton('Add reference'))
   expect(h.callsTo('quirky.worktree/linkReference')).toEqual([])
-  expect(h.callsTo('ui.window.command.run').filter(({ args }) =>
-    typeof args !== 'object' || args === null || !('scope' in args)
-  )).toEqual([
-    {
-      connId: 1,
-      id: UI_CONTROL,
-      args: { action: 'unlink-reference', worktree: 'w2', url: 'https://example.com/saved' }
-    },
-    {
-      connId: 1,
-      id: UI_CONTROL,
-      args: { action: 'add-reference', worktree: 'w2', url: 'https://example.com/draft', label: 'Draft task' }
-    }
+  expect(h.callsTo('ui.window.command.run')).toEqual([
+    treeOpenRequest,
+    treeCloseRequest,
+    openDetailsRequest,
+    { connId: 1, id: UI_CONTROL, args: { action: 'unlink-reference', worktree: 'w2', url: 'https://example.com/saved' } },
+    { connId: 1, id: UI_CONTROL, args: { action: 'add-reference', worktree: 'w2', url: 'https://example.com/draft', label: 'Draft task' } }
   ])
   expect(document.querySelector('[aria-label="Linked references"]')!.textContent).toContain('Draft task')
 
@@ -1809,12 +1837,16 @@ test('preserves newer reference inputs while an earlier add request is pending',
   const gate = Promise.withResolvers<void>()
   const started = Promise.withResolvers<void>()
   const dispatched = Promise.withResolvers<void>()
+  const detailsDispatched = Promise.withResolvers<void>()
+  await h.mountInto(host)
+  await click(actionButton(rowOf('fix-login', 'api'))!)
+  h.world.windowCommandDispatched = () => detailsDispatched.resolve()
+  await chooseMore('Details…')
+  await act(async () => { await detailsDispatched.promise })
+  expect(dialogField('Reference URL')).toBeDefined()
   h.world.windowCommandGate = gate.promise
   h.world.windowCommandStarted = () => started.resolve()
   h.world.windowCommandDispatched = () => dispatched.resolve()
-  await h.mountInto(host)
-  await click(actionButton(rowOf('fix-login', 'api'))!)
-  await chooseMore('Details…')
 
   await typeInto(dialogField('Reference URL')!, 'https://example.com/earlier')
   await typeInto(dialogField('Reference label')!, 'Earlier task')

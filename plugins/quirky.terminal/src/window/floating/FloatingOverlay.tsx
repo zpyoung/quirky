@@ -142,7 +142,7 @@ function PanelBody({ context, options, report }: { context: UiPluginContext; opt
  * maximize, minimize) over the window. Geometry changes are local while the mouse is down and sent
  * once through `setFloating` on release. It tells the window when focus is inside the panel
  * (`floatingFocus`), so the app keys act on its workspace, and reports `{shown, state, focused, focusSequence,
- * layout, focusedPane, panes, visibleSessions}`. Draws nothing while the Enable Floating Workspace setting is off.
+ * layout, focusedPane, panes, visibleSessions, dialog}`. Draws nothing while the Enable Floating Workspace setting is off.
  */
 export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
   const [state, setState] = useState<FloatingState | null>(null)
@@ -206,7 +206,8 @@ export function FloatingOverlay({ context, report, workspaceOptions }: Props) {
       focused: showPanel && Boolean(body?.focused),
       focusSequence: lastFocusSequence.current,
       panes: showPanel ? (body?.panes ?? []) : [],
-      visibleSessions: showPanel ? (body?.visibleSessions ?? []) : []
+      visibleSessions: showPanel ? (body?.visibleSessions ?? []) : [],
+      dialog: showPanel ? (body?.dialog ?? null) : null
     })
   }, [report, state, showPanel, body])
 

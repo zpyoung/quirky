@@ -307,10 +307,30 @@ function adjustBudget(host: KernelControlHost, enrollment: Enrollment, budget: B
   return applied(now(host), true, true)
 }
 
-function setConcurrency(host: KernelControlHost, enrollment: Enrollment, maxConcurrency: number): Completion {
+async function setConcurrency(host: KernelControlHost, enrollment: Enrollment, maxConcurrency: number): Promise<Completion> {
   if (enrollment.kind !== 'objective') return complete(refused('unsupported-capability', 'Concurrency can only be changed for objective watchers.'))
   if (enrollment.repoId === null || enrollment.repoId === undefined || enrollment.repoId.startsWith('group:')) {
     if (maxConcurrency !== 1) return complete(refused('unsupported-capability', 'Folder workspaces support a concurrency cap of one.'))
+  }
+  let resolved: unknown
+  try {
+    if (!enrollment.worktreeId) throw new Error('The objective workspace identity is unavailable.')
+    resolved = await host.context.call('quirky.worktree/resolve', { selector: `id:${enrollment.worktreeId}` })
+  } catch (error) {
+    return complete(refused('owner-unreachable', errorDetail(error)))
+  }
+  if (typeof resolved !== 'object' || resolved === null || Array.isArray(resolved)) {
+    return complete(refused('owner-unreachable', 'The objective workspace could not be resolved.'))
+  }
+  const workspace = resolved as Record<string, unknown>
+  if (workspace.id !== enrollment.worktreeId || workspace.path !== enrollment.workspacePath ||
+    typeof workspace.repoId !== 'string' || !workspace.repoId ||
+    (enrollment.repoId != null && workspace.repoId !== enrollment.repoId) ||
+    (workspace.kind !== 'git' && workspace.kind !== 'folder')) {
+    return complete(refused('owner-unreachable', 'The resolved objective workspace identity does not match its enrollment.'))
+  }
+  if (workspace.kind === 'folder' && maxConcurrency !== 1) {
+    return complete(refused('unsupported-capability', 'Folder workspaces support a concurrency cap of one.'))
   }
   const payload = enrollment.kindPayload
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {

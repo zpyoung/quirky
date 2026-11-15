@@ -624,6 +624,26 @@ describe('objective decisions', () => {
     expect(nextStep(approvedPlanWithOffCapability, [])).toEqual({ action: firstAction })
   })
 
+  test('folder projects and group folders cannot raise concurrency above one', () => {
+    const folderWithForgedCap = world({
+      workspaceKind: 'folder',
+      contract: { ...contract, maxConcurrency: 1024 },
+      revision: revision([
+        { taskKey: 'first', deps: [] },
+        { taskKey: 'second', deps: [] }
+      ])
+    })
+    const firstStillRunning = [nodeAttempt('folder-first', 1, 'first', 1, {
+      state: 'running', dispatchId: 'folder-first-dispatch'
+    })]
+
+    expect(nextStep(folderWithForgedCap, firstStillRunning)).toEqual({
+      action: null, reason: 'node-in-flight'
+    })
+    expect(deriveProgress(folderWithForgedCap, firstStillRunning).tasks.map(task => task.state))
+      .toEqual(['in-flight', 'pending'])
+  })
+
   test('advances succeeded tasks through shell checks, gates, express landing, and terminal stop', () => {
     const criteria = [{ body: 'tests pass', shellCheckable: true, checkCommand: 'pnpm test' }]
     const completeWorld = completedWorld('express', {
@@ -1205,6 +1225,36 @@ describe('objective decisions', () => {
     expect(stopObjective(snapshot(landOff), completedJournal())).toMatchObject({
       kind: 'park', deviation: { kind: 'gate-held', naturalKey: 'land-capability-off' }
     })
+  })
+
+  test('folder files-on-disk landing is verified and cannot execute Git actions', () => {
+    const forgedLandings = [
+      landingRow('files-on-disk'),
+      landingRow('committed-local-branch'),
+      { watcherId: 'watcher', rung: 'pushed-ref', contentIdentity: identity, attemptId: 'forged-push', payload: { revision: 1 }, recordedAtMs: 1 },
+      { watcherId: 'watcher', rung: 'hosted-review', contentIdentity: identity, attemptId: 'forged-review', payload: { revision: 1 }, recordedAtMs: 1 },
+      { watcherId: 'watcher', rung: 'merged', contentIdentity: identity, attemptId: 'forged-merge', payload: { revision: 1 }, recordedAtMs: 1 }
+    ] as never
+    for (const landingBar of ['committed-local-branch', 'pushed-ref', 'hosted-review', 'merged'] as const) {
+      const forgedFolder = completedWorld('express', {
+        workspaceKind: 'folder',
+        contract: { ...contract, landingBar },
+        landings: forgedLandings
+      })
+      const journal = completedJournal()
+
+      expect(nextStep(forgedFolder, journal)).toEqual({
+        action: null, reason: 'landing-bar-requires-git'
+      })
+      expect(decideObjective(snapshot(forgedFolder), journal)).toMatchObject({
+        action: null, reason: 'landing-bar-requires-git'
+      })
+      expect(paceObjective(snapshot(forgedFolder), journal)).toBe('idle')
+      expect(stopObjective(snapshot(forgedFolder), journal)).toMatchObject({
+        kind: 'park',
+        detail: 'Folder workspaces support only files-on-disk landing.'
+      })
+    }
   })
 
   test('replays unresolved commit evidence across unchanged and advanced HEADs', () => {

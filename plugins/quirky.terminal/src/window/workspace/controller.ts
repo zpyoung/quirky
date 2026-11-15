@@ -48,10 +48,10 @@ export type CloseTarget =
 export type MenuState = { kind: string; target: string | null; x: number; y: number; query: string }
 
 export type DialogState =
-  | { kind: 'close-running'; title: string; target: CloseTarget; tabLabel: string; agent: boolean; notBefore: number }
-  | { kind: 'close-pinned'; title: string; target: CloseTarget; tabLabel: string; notBefore: number }
-  | { kind: 'switch-tabs'; title: string; group: string; order: string[]; index: number }
-  | { kind: 'new-session'; title: string; request: NewSessionRequest; group: string | null; pending?: boolean; error?: string | null; startedSession?: Session }
+  | { kind: 'close-running'; generation: string; title: string; target: CloseTarget; tabLabel: string; agent: boolean; notBefore: number }
+  | { kind: 'close-pinned'; generation: string; title: string; target: CloseTarget; tabLabel: string; notBefore: number }
+  | { kind: 'switch-tabs'; generation: string; title: string; group: string; order: string[]; index: number }
+  | { kind: 'new-session'; generation: string; title: string; request: NewSessionRequest; group: string | null; pending?: boolean; error?: string | null; startedSession?: Session }
 
 export type PaneDropTarget = { kind: 'edge'; pane: string; edge: Edge } | { kind: 'tab'; tab: string }
 
@@ -124,7 +124,7 @@ export type ViewReport = {
   /** Mounted terminal accessory contribution IDs by pane ID. */
   mountedAccessories: Record<string, string[]>
   menu: { kind: string; target: string | null; items: { label: string; key: string | null; enabled: boolean; separator: boolean }[] } | null
-  dialog: { kind: string; title: string } | null
+  dialog: { kind: string; title: string; generation: string } | null
 }
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -1019,7 +1019,7 @@ export class WorkspaceController {
       const loc = locateTab(ws, target.tab)
       if (!loc) return
       if (loc.tab.pinned && this.state.settings['confirm-close-pinned']) {
-        this.set({ dialog: { kind: 'close-pinned', title: 'Close pinned tab?', target, tabLabel: displayTitle(loc.tab), notBefore: 0 }, menu: null })
+        this.set({ dialog: { kind: 'close-pinned', generation: crypto.randomUUID(), title: 'Close pinned tab?', target, tabLabel: displayTitle(loc.tab), notBefore: 0 }, menu: null })
         return
       }
     }
@@ -1052,7 +1052,7 @@ export class WorkspaceController {
       const agent = isAgentQuestion(question)
       this.set({
         menu: null,
-        dialog: { kind: 'close-running', title: agent ? 'Stop this agent?' : 'Stop running command?', target, tabLabel: this.tabLabelOf(target), agent, notBefore }
+        dialog: { kind: 'close-running', generation: crypto.randomUUID(), title: agent ? 'Stop this agent?' : 'Stop running command?', target, tabLabel: this.tabLabelOf(target), agent, notBefore }
       })
       return
     }
@@ -1153,7 +1153,7 @@ export class WorkspaceController {
     const order = switcherOrder(at.group, this.state.settings['ctrl-tab-order'])
     if (order.length < 2) return
     const index = (Math.max(order.indexOf(at.tab.id), 0) + 1) % order.length
-    this.set({ dialog: { kind: 'switch-tabs', title: 'Switch tabs', group: at.group.id, order, index }, menu: null })
+    this.set({ dialog: { kind: 'switch-tabs', generation: crypto.randomUUID(), title: 'Switch tabs', group: at.group.id, order, index }, menu: null })
   }
 
   stepSwitcher(direction: 1 | -1): void {
@@ -1438,7 +1438,7 @@ export class WorkspaceController {
   private chooseEntry(entry: MenuEntry, group: string | undefined): void {
     if (entry.kind === 'terminal') void this.newTab(group === undefined ? {} : { group })
     else if (entry.kind === 'manage') this.context.openView(AGENTS_VIEW_ID)
-    else this.set({ dialog: { kind: 'new-session', title: `New ${entry.request.label} session`, request: entry.request, group: group ?? null } })
+    else this.set({ dialog: { kind: 'new-session', generation: crypto.randomUUID(), title: `New ${entry.request.label} session`, request: entry.request, group: group ?? null } })
   }
 
   /**
@@ -1704,7 +1704,7 @@ export class WorkspaceController {
             items: this.menuItems().map((item) => ({ label: item.label, key: item.key ?? null, enabled: item.enabled !== false && !item.separator, separator: item.separator === true }))
           }
         : null,
-      dialog: dialog ? { kind: dialog.kind, title: dialog.title } : null
+      dialog: dialog ? { kind: dialog.kind, title: dialog.title, generation: dialog.generation } : null
     }
   }
 

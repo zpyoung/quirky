@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { isRecord } from '../src/pr-data'
 import { bootHosting, type HostingTest } from './helpers'
 
+const unsupportedProviderRemote = 'https://bitbucket.org/test-owner/test-repo.git'
+
 const hosts: HostingTest[] = []
 afterEach(async () => {
   for (const host of hosts.splice(0).reverse()) await host.cleanup()
@@ -1233,11 +1235,56 @@ describe('quirky.hosting PR creation', () => {
       eligible: false, reason: 'default_branch', nextAction: 'create_new_branch'
     })
   
-    const unsupportedHost = await host(fixtureState(), { remote: 'https://gitlab.com/test-owner/test-repo.git' })
+    const unsupportedHost = await host(fixtureState(), { remote: unsupportedProviderRemote })
     expect(await unsupportedHost.call('creationEligibility', { worktree: unsupportedHost.worktree, title: 'Unsupported' })).toMatchObject({
       eligible: false, reason: 'unsupported_provider', nextAction: 'select_github_repo'
     })
     expect(invocationsFor(unsupportedHost, (args) => args[0] === 'pr')).toHaveLength(0)
+  }, 20_000)
+
+  test('GH13 unsupported-provider fixtures do not consult GitLab credentials or external HTTP', async () => {
+    const previousToken = process.env.GITLAB_TOKEN
+    const previousFetch = globalThis.fetch
+    const externalAttempts: string[] = []
+    const guardedFetch: typeof fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
+        externalAttempts.push(url.host)
+        throw new Error('the hosting fixture refuses external HTTP before transport')
+      }
+      return previousFetch(input, init)
+    }, {
+      preconnect() {
+        externalAttempts.push('preconnect')
+        throw new Error('the hosting fixture refuses preconnect')
+      }
+    })
+    let testHost: HostingTest | undefined
+    process.env.GITLAB_TOKEN = 'fixture-only-dummy-gitlab-token'
+    globalThis.fetch = guardedFetch
+    try {
+      testHost = await host(fixtureState(), { remote: unsupportedProviderRemote })
+      const glabLog = join(testHost.root, 'glab-isolation.jsonl')
+      writeFileSync(glabLog, '')
+      writeFileSync(join(testHost.root, 'fakebin', 'glab'), `#!/usr/bin/env bun\nimport { appendFileSync } from 'node:fs'\nappendFileSync(${JSON.stringify(glabLog)}, JSON.stringify(process.argv.slice(2)) + '\\n')\nprocess.exitCode = 1\n`, { mode: 0o755 })
+      expect(await testHost.call('creationEligibility', { title: 'Unsupported' })).toMatchObject({
+        eligible: false, reason: 'unsupported_provider', nextAction: 'select_github_repo'
+      })
+      await expect(testHost.call('create', { title: 'Must stay blocked' })).rejects.toMatchObject({
+        data: { reason: 'unsupported_provider' }
+      })
+      expect(externalAttempts).toEqual([])
+      expect(readFileSync(glabLog, 'utf8')).toBe('')
+      expect(invocationsFor(testHost, (args) => args[0] === 'pr')).toHaveLength(0)
+    } finally {
+      try {
+        await testHost?.cleanup()
+      } finally {
+        globalThis.fetch = previousFetch
+        if (previousToken === undefined) delete process.env.GITLAB_TOKEN
+        else process.env.GITLAB_TOKEN = previousToken
+      }
+    }
   }, 20_000)
 
   test('GH14 creates once with the detected D20 base, committed template body, draft flag, and temp-file cleanup', async () => {

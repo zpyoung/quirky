@@ -1,5 +1,5 @@
-import type { DragEvent, ReactNode } from 'react'
-import { Badge, FileIcon, IconButton, ListRow, ReviewMark } from '@quirky/ui'
+import type { DragEvent, MouseEvent, ReactNode } from 'react'
+import { Badge, EmptyState, FileIcon, IconButton, InlineError, ListRow, NoticeLine, ReviewMark } from '@quirky/ui'
 import type { UiTone } from '@quirky/ui'
 import type { GitChangeStatus, GitStatusEntry, ReviewMarkState } from '@quirky/protocol'
 import { conflictLabel, splitPath, statusLetter } from './format'
@@ -133,18 +133,31 @@ const ROW_STYLE = { gap: 'var(--ui-space-2)', listStyle: 'none', margin: 0, padd
 
 function SubmoduleEntries({ expansion, indent }: { expansion: Expansion; indent: string | undefined }) {
   const style = indent === undefined ? undefined : { paddingInlineStart: indent }
-  if (expansion.entries === null || expansion.entries.length === 0) {
-    const text = expansion.failed ? 'Could not load the submodule changes' : expansion.entries === null ? 'Loading…' : 'No changes inside'
+  if (expansion.entries === null && !expansion.failed) {
     return (
       <li role="presentation" style={style}>
-        <p className="ui-text-muted" data-submodule-message>{text}</p>
+        <div data-submodule-message><NoticeLine>Loading…</NoticeLine></div>
+      </li>
+    )
+  }
+  if (expansion.failed) {
+    return (
+      <li role="presentation" style={style}>
+        <div data-submodule-message><InlineError message="Could not load the submodule changes" /></div>
+      </li>
+    )
+  }
+  if (expansion.entries!.length === 0) {
+    return (
+      <li role="presentation" style={style}>
+        <div data-submodule-message><EmptyState message="No changes inside" /></div>
       </li>
     )
   }
   return (
     <li role="presentation" style={style}>
       <ul className="ui-stack" role="group" aria-label="Changes inside the submodule" style={ROW_STYLE}>
-        {expansion.entries.map((inside) => {
+        {expansion.entries!.map((inside) => {
           const { name, dir } = splitPath(inside.path)
           return (
             <li key={`${inside.area}:${inside.path}`} className="git-row" data-submodule-entry data-row-path={inside.path}>
@@ -195,8 +208,24 @@ export function FileRow({ item, depth, tree, selected, option, id, handlers }: F
   const buttons = selected ? handlers.buttons(item) : []
   const checked = handlers.check?.(item) ?? null
   const indent = tree ? `calc(${depth} * var(--ui-space-12))` : undefined
+  const onClick = (event: MouseEvent<HTMLLIElement>) => {
+    if (event.target instanceof HTMLInputElement && event.target.type === 'checkbox') {
+      event.stopPropagation()
+      return
+    }
+    handlers.click(item)
+  }
   const onDragStart = (event: DragEvent<HTMLLIElement>) => {
     event.dataTransfer?.setData('text/plain', handlers.dragText(item))
+  }
+  const onContextMenu = (event: MouseEvent<HTMLLIElement>) => {
+    event.preventDefault()
+    handlers.contextMenu(item, event.clientX, event.clientY)
+  }
+  const onToggleCheck = () => handlers.toggleCheck?.(item)
+  const onToggleExpansion = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    handlers.toggleExpansion?.(item)
   }
   return (
     <>
@@ -209,12 +238,9 @@ export function FileRow({ item, depth, tree, selected, option, id, handlers }: F
         title={hint === null ? item.path : `${item.path}\n${hint}`}
         style={indent === undefined ? undefined : { paddingInlineStart: indent }}
         draggable
-        onClick={() => handlers.click(item)}
+        onClick={onClick}
         onDragStart={onDragStart}
-        onContextMenu={(event) => {
-          event.preventDefault()
-          handlers.contextMenu(item, event.clientX, event.clientY)
-        }}
+        onContextMenu={onContextMenu}
       >
         <div className={`ui-list-row ui-list-row--interactive${selected ? ' ui-list-row--selected' : ''}`}>
           <span className="ui-list-row__main">
@@ -229,8 +255,7 @@ export function FileRow({ item, depth, tree, selected, option, id, handlers }: F
                     aria-label={`Include ${item.path} in the commit`}
                     checked={checked}
                     tabIndex={-1}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={() => handlers.toggleCheck?.(item)}
+                    onChange={onToggleCheck}
                   />
                 )
               }
@@ -243,10 +268,7 @@ export function FileRow({ item, depth, tree, selected, option, id, handlers }: F
                   label={`${expansion.open ? 'Collapse' : 'Expand'} ${item.path}`}
                   aria-expanded={expansion.open}
                   tabIndex={-1}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    handlers.toggleExpansion?.(item)
-                  }}
+                  onClick={onToggleExpansion}
                 >
                   {expansion.open ? '▾' : '▸'}
                 </IconButton>
@@ -257,21 +279,24 @@ export function FileRow({ item, depth, tree, selected, option, id, handlers }: F
               <Status item={item} />
               {buttons.length > 0 && (
                 <span className="git-row__actions">
-                  {buttons.map((button) => (
-                    <IconButton
-                      key={button.label}
-                      label={`${button.label} ${item.path}`}
-                      title={button.label}
-                      tabIndex={-1}
-                      variant={button.destructive ? 'destructive' : 'secondary'}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        button.run()
-                      }}
-                    >
-                      {button.glyph}
-                    </IconButton>
-                  ))}
+                  {buttons.map((button) => {
+                    const onButtonClick = (event: MouseEvent<HTMLButtonElement>) => {
+                      event.stopPropagation()
+                      button.run()
+                    }
+                    return (
+                      <IconButton
+                        key={button.label}
+                        label={`${button.label} ${item.path}`}
+                        title={button.label}
+                        tabIndex={-1}
+                        variant={button.destructive ? 'destructive' : 'secondary'}
+                        onClick={onButtonClick}
+                      >
+                        {button.glyph}
+                      </IconButton>
+                    )
+                  })}
                 </span>
               )}
             </span>
