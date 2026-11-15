@@ -9,6 +9,7 @@ import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
 import { createEditorUiControlReportScope, EditorUiControlProvider } from '../src/window/uiControl'
 import type { EditorUiControlAddress } from '../src/window/uiControl'
 import type { activate as Activate, deactivate as Deactivate } from '../src/ui'
+import { searchMarkdown } from '../src/markdown/source'
 
 type Call = (method: string, params: Record<string, unknown>) => unknown | Promise<unknown>
 type ControlReport = { uiControls?: EditorUiControlAddress[]; [key: string]: unknown }
@@ -128,14 +129,17 @@ async function renderSurface(
     async control(kind, action, data) {
       const address = surface.address(kind)
       if (!address) throw new Error(`No current Markdown ${kind} registration.`)
-      let result: unknown
-      await act(async () => {
-        result = await provided.get('command:quirky.editor/ui-control')!({
+      let completion: Promise<{ ok: boolean; value?: unknown; error?: unknown }> | undefined
+      await act(() => {
+        completion = Promise.resolve(provided.get('command:quirky.editor/ui-control')!({
           surface: address.surface, target: address.target, generation: address.generation, action,
           ...(data === undefined ? {} : { data })
-        })
+        })).then(value => ({ ok: true, value }), error => ({ ok: false, error }))
       })
-      return result
+      const outcome = await completion!
+      await act(async () => {})
+      if (!outcome.ok) throw outcome.error
+      return outcome.value
     },
     async update(patch) {
       buffer = { ...buffer, ...patch }
@@ -1411,6 +1415,8 @@ try {
   readOnly = makeSurface('emoji-readonly', true)
   await act(async () => readOnly.root.render(readOnly.render()))
   const readonlyEditor = await wait(() => readOnly.host.querySelector('.ProseMirror'))
+  await act(async () => { readonlyEditor.focus(); const range = document.createRange(); range.selectNodeContents(readonlyEditor.querySelector('p')); window.getSelection().removeAllRanges(); window.getSelection().addRange(range); document.dispatchEvent(new Event('selectionchange')); readonlyEditor.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })) })
+  await wait(() => address(readOnly, 'selection'))
   const before = readonlyEditor.innerHTML
   const readonlyResult = await send(readOnly, 'selection', 'format', { value: 'bold' })
   assert.deepEqual(readonlyResult, { result: { delivered: false } })
@@ -1434,3 +1440,575 @@ try {
     if (child.exitCode === null) { child.kill(); await child.exited }
   }
 }, 30_000)
+const notesBufferA = {
+  id: 'b1', tabId: 't1', worktreeId: 'w1', root: '/fixture', path: '/fixture/a.md',
+  relativePath: 'a.md', name: 'a.md', revision: 7, contentRevision: 7
+}
+const notesBufferB = {
+  id: 'b2', tabId: 't2', worktreeId: 'w2', root: '/fixture', path: '/fixture/b.md',
+  relativePath: 'b.md', name: 'b.md', revision: 3, contentRevision: 3
+}
+const notesSessionInventory = [{ id: 's1', agent: 'agent1', title: 'Fixture terminal', kind: 'terminal', status: 'running' }]
+const notesAgentInventory = [{ id: 'agent1', label: 'Agent One' }, { id: 'agent2', label: 'Agent Two' }]
+
+
+function notesNote(body = 'existing note', id = 'n1') {
+  return {
+    id, bufferId: 'b1', worktreeId: 'w1', filePath: 'a.md', source: 'markdown' as const,
+    selectedText: 'alpha', startLine: 1, endLine: 1, lineNumber: 1, body, createdAt: 1, side: 'modified' as const
+  }
+}
+function notesCalls(surface: MountedSurface, method: string, action: string) {
+  return surface.calls.filter((call) => call.method === method && call.params.action === action)
+}
+async function notesOpenNotes(surface: MountedSurface): Promise<HTMLElement> {
+  expect(surface.address('rich')).toBeDefined()
+  await surface.control('rich', 'notes', { open: true })
+  return waitFor(() => surface.element.querySelector<HTMLElement>('.markdown-review-notes'), 'addressed Review notes panel')
+}
+async function notesOpenAdd(surface: MountedSurface, text = 'alpha'): Promise<HTMLElement> {
+  await waitFor(() => surface.element.querySelector<HTMLElement>('.ProseMirror'), 'real TipTap editor')
+  await waitFor(() => surface.address('selection'), 'selection control address')
+  await selectRichText(surface, text)
+  await surface.control('selection', 'add-review-note')
+  const dialog = await waitFor(() => surface.element.querySelector<HTMLElement>('[role="dialog"][aria-label="Add note for the AI"]'), 'addressed Add note composer')
+  expect(surface.address('note')).toBeDefined()
+  return dialog
+}
+async function notesOpenSend(surface: MountedSurface): Promise<HTMLElement> {
+  await notesOpenNotes(surface)
+  await surface.control('rich', 'send-menu')
+  const dialog = await waitFor(() => surface.element.querySelector<HTMLElement>('[role="dialog"][aria-label="Send notes to"]'), 'addressed Send notes dialog')
+  expect(surface.address('send')).toBeDefined()
+  return dialog
+}
+async function notesOpenTemplates(surface: MountedSurface): Promise<HTMLElement> {
+  expect(surface.address('rich')).toBeDefined()
+  await surface.control('rich', 'templates')
+  const dialog = await waitFor(() => [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find(element => element.textContent?.includes('New Markdown')), 'addressed New Markdown dialog')
+  expect(surface.address('templates')).toBeDefined()
+  return dialog
+}
+async function notesExpectRejected(surface: MountedSurface, operation: Promise<unknown>, message: string): Promise<void> {
+  let cause: unknown
+  try { await operation } catch (error) { cause = error }
+  expect(cause).toBeInstanceOf(Error)
+  expect((cause as Error).message).toBe(message)
+  await waitFor(() => errorMessage(surface.element, message) ?? [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].map(element => errorMessage(element, message)).find(Boolean), `InlineError ${message}`)
+}
+
+test('addressed Edit saves the existing note body without any editor selection', async () => {
+  const surface = await renderSurface('rich', {
+    content: 'alpha', buffer: notesBufferA,
+    call: async (method, params) => method === 'quirky.editor/notes' && params.action === 'list'
+      ? { notes: [notesNote()] }
+      : {}
+  })
+  await notesOpenNotes(surface)
+  await waitFor(() => button(surface.element, 'Edit'), 'existing review note')
+  window.getSelection()?.removeAllRanges()
+  expect(window.getSelection()?.toString()).toBe('')
+  await surface.control('rich', 'edit-note', { noteId: 'n1' })
+  const composer = await waitFor(() => surface.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]'), 'Edit note composer')
+  expect(surface.address('note')).toBeDefined()
+  expect(composer.value).toBe('existing note')
+  await surface.control('note', 'submit')
+  expect(notesCalls(surface, 'quirky.editor/notes', 'edit')).toEqual([{
+    method: 'quirky.editor/notes', params: { bufferId: 'b1', action: 'edit', noteId: 'n1', text: 'existing note' }
+  }])
+})
+
+test('addressed Add submits the captured rich selection and exact line range', async () => {
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA })
+  const dialog = await notesOpenAdd(surface)
+  await setValue(dialog.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]')!, 'review this')
+  await surface.control('note', 'submit')
+  expect(notesCalls(surface, 'quirky.editor/notes', 'add')).toEqual([{
+    method: 'quirky.editor/notes', params: {
+      bufferId: 'b1', action: 'add',
+      selection: { text: 'alpha', startLine: 1, endLine: 1, mode: 'rich' }, text: 'review this'
+    }
+  }])
+})
+
+for (const { label, body, accepted } of [
+  { label: '16,384 ASCII bytes', body: 'a'.repeat(16_384), accepted: true },
+  { label: '16,385 ASCII bytes', body: 'a'.repeat(16_385), accepted: false },
+  { label: '16,384 multibyte bytes', body: 'é'.repeat(8_192), accepted: true },
+  { label: '16,385 multibyte bytes', body: 'é'.repeat(8_192) + 'x', accepted: false }
+]) {
+  test(`note submit ${accepted ? 'accepts' : 'refuses'} ${label}`, async () => {
+    const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA })
+    const dialog = await notesOpenAdd(surface)
+    const draft = dialog.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]')!
+    await setValue(draft, body)
+    await surface.control('note', 'submit')
+    const writes = notesCalls(surface, 'quirky.editor/notes', 'add')
+    if (accepted) {
+      expect(writes).toHaveLength(1)
+      expect(writes[0]?.params).toEqual({
+        bufferId: 'b1', action: 'add',
+        selection: { text: 'alpha', startLine: 1, endLine: 1, mode: 'rich' }, text: body
+      })
+    } else {
+      expect(errorMessage(surface.element, 'Comment is too large to submit safely.')).not.toBeNull()
+      expect(draft.value).toBe(body)
+      expect(writes).toHaveLength(0)
+    }
+  })
+}
+
+test('selection above 32,768 bytes cannot open an Add note composer', async () => {
+  const text = 'x'.repeat(32_769)
+  const surface = await renderSurface('rich', { content: text, buffer: notesBufferA })
+  await waitFor(() => surface.address('rich'), 'rich control address')
+  await waitFor(() => surface.element.querySelector('.ProseMirror'), 'real TipTap editor')
+  await selectRichText(surface, text)
+  expect(await surface.control('selection', 'add-review-note')).toEqual({ delivered: false })
+  expect(surface.address('note')).toBeUndefined()
+  expect(surface.element.querySelector('[role="dialog"][aria-label="Add note for the AI"]')).toBeNull()
+  expect(notesCalls(surface, 'quirky.editor/notes', 'add')).toHaveLength(0)
+})
+
+test('copy context preserves its active-command result and writes exact Markdown context', async () => {
+  const previous = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const writes: string[] = []
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { writes.push(text) } } })
+  try {
+    const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA })
+    await waitFor(() => surface.address('selection'), 'selection control address')
+    await selectRichText(surface, 'alpha')
+    const command = await waitFor(() => surface.commands()?.['copy-context'], 'active copy-context command')
+    expect(await command()).toEqual({ copied: true, path: 'a.md', lines: '1' })
+    expect(writes).toEqual(['a.md:1\nalpha'])
+    expect(await surface.control('selection', 'copy-context')).toEqual({ delivered: true })
+    expect(writes).toEqual(['a.md:1\nalpha', 'a.md:1\nalpha'])
+  } finally {
+    if (previous) Object.defineProperty(navigator, 'clipboard', previous)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+test('hiding and reopening Review notes preserves the unsent addressed composer draft', async () => {
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA })
+  await notesOpenNotes(surface)
+  const dialog = await notesOpenAdd(surface)
+  await setValue(dialog.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]')!, 'unsent draft')
+  await surface.control('rich', 'notes', { open: false })
+  expect(surface.element.querySelector('.markdown-review-notes')).toBeNull()
+  expect(surface.address('note')).toBeUndefined()
+  await surface.control('rich', 'notes', { open: true })
+  const reopened = await waitFor(() => surface.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]'), 'reopened note composer')
+  expect(reopened.value).toBe('unsent draft')
+  expect(surface.address('note')).toBeDefined()
+})
+
+test('note submit acquires busy state synchronously and refuses a same-tick duplicate', async () => {
+  const write = deferred<unknown>()
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'add') return write.promise
+    return {}
+  } })
+  const dialog = await notesOpenAdd(surface)
+  await setValue(dialog.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]')!, 'one note')
+  const first = surface.control('note', 'submit')
+  const duplicate = surface.control('note', 'submit')
+  await waitFor(() => notesCalls(surface, 'quirky.editor/notes', 'add').length === 1, 'first note write')
+  expect(await duplicate).toEqual({ delivered: false })
+  expect(notesCalls(surface, 'quirky.editor/notes', 'add')).toHaveLength(1)
+  write.resolve({})
+  await first
+  expect(notesCalls(surface, 'quirky.editor/notes', 'add')).toHaveLength(1)
+})
+
+test('stale note completion cannot clear a reopened composer after A-B-A buffer replacement', async () => {
+  const oldWrite = deferred<unknown>()
+  let addCount = 0
+  let listCount = 0
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') { listCount += 1; return { notes: [] } }
+    if (method === 'quirky.editor/notes' && params.action === 'add') return ++addCount === 1 ? oldWrite.promise : {}
+    return {}
+  } })
+  const oldDialog = await notesOpenAdd(surface)
+  await setValue(oldDialog.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]')!, 'old draft')
+  const oldCompletion = surface.control('note', 'submit')
+  await waitFor(() => addCount === 1, 'delayed old note write')
+  await surface.control('note', 'cancel')
+  await surface.update(notesBufferB)
+  await surface.update(notesBufferA)
+  await waitFor(() => surface.element.querySelector('.ProseMirror'), 'replacement TipTap editor')
+  const currentDialog = await notesOpenAdd(surface)
+  await setValue(currentDialog.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]')!, 'new composer draft')
+  const readsBeforeOldCompletion = listCount
+  oldWrite.resolve({})
+  await oldCompletion
+  const stillCurrent = surface.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]')
+  expect(stillCurrent?.value).toBe('new composer draft')
+  expect(surface.address('note')).toBeDefined()
+  expect(listCount).toBe(readsBeforeOldCompletion)
+})
+
+test('send validates completed session and agent inventories before any note-write effect', async () => {
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [notesNote()] }
+    if (method === 'quirky.session/list') return notesSessionInventory
+    if (method === 'quirky.agents/list') return notesAgentInventory
+    return {}
+  } })
+  await notesOpenSend(surface)
+  await waitFor(() => button(surface.element, 'Send'), 'loaded existing-session Send action')
+  expect(await surface.control('send', 'send', { target: 'existing', sessionId: 'forged-session' })).toEqual({ delivered: false })
+  expect(await surface.control('send', 'send', { target: 'new', agent: 'forged-agent' })).toEqual({ delivered: false })
+  expect(notesCalls(surface, 'quirky.editor/notes', 'send')).toHaveLength(0)
+  expect(surface.address('send')).toBeDefined()
+})
+
+test('send pending read can fail, retry to an empty inventory, and remain cancellable', async () => {
+  const firstSessions = deferred<unknown>()
+  let sessionReads = 0
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [] }
+    if (method === 'quirky.session/list') return ++sessionReads === 1 ? firstSessions.promise : []
+    if (method === 'quirky.agents/list') return []
+    return {}
+  } })
+  const dialog = await notesOpenSend(surface)
+  expect(notice(dialog, 'Loading note destinations…')).not.toBeNull()
+  firstSessions.reject(new Error('fixture destinations failed'))
+  await waitFor(() => errorMessage(dialog, 'fixture destinations failed'), 'send inventory failure')
+  expect(button(dialog, 'Cancel')).toBeDefined()
+  await surface.control('send', 'retry')
+  await waitFor(() => emptyState(dialog, 'No note destinations available.'), 'settled empty destination inventory')
+  expect(button(dialog, 'Cancel')).toBeDefined()
+  expect(surface.address('send')).toBeDefined()
+  await surface.control('send', 'cancel')
+  expect(surface.address('send')).toBeUndefined()
+  expect(surface.element.querySelector('[role="dialog"][aria-label="Send notes to"]')).toBeNull()
+})
+
+test('send uses loaded session ownership, reports returned delivery failure, and closes only its origin on success', async () => {
+  const delayedSend = deferred<unknown>()
+  let currentNotes = [notesNote()]
+  let sendCount = 0
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: currentNotes }
+    if (method === 'quirky.session/list') return notesSessionInventory
+    if (method === 'quirky.agents/list') return notesAgentInventory
+    if (method === 'quirky.editor/notes' && params.action === 'send') {
+      if (++sendCount === 1) return delayedSend.promise
+      currentNotes = []
+      return { delivery: 'delivered', deletedNoteIds: ['n1'], retainedNoteIds: [] }
+    }
+    return {}
+  } })
+  const notesPanel = await notesOpenNotes(surface)
+  await waitFor(() => notesPanel.querySelector('.markdown-note'), 'existing note to send')
+  const sendDialog = await notesOpenSend(surface)
+  const existing = surface.control('send', 'send', { target: 'existing', sessionId: 's1' })
+  const duplicate = surface.control('send', 'send', { target: 'existing', sessionId: 's1' })
+  await waitFor(() => sendCount === 1, 'single existing-session send')
+  expect(await duplicate).toEqual({ delivered: false })
+  delayedSend.resolve({ delivery: 'not-delivered', deletedNoteIds: [], retainedNoteIds: ['n1'], error: 'fixture send failed' })
+  await notesExpectRejected(surface, existing, 'fixture send failed')
+  await waitFor(() => errorMessage(sendDialog, 'fixture send failed'), 'returned send failure')
+  expect(sendDialog.textContent).toContain('Cancel')
+  expect(surface.address('send')).toBeDefined()
+  expect(notesPanel.textContent).toContain('existing note')
+  expect(notesCalls(surface, 'quirky.editor/notes', 'send').map((call) => call.params)).toEqual([{
+    bufferId: 'b1', action: 'send', target: 'existing', sessionId: 's1', agent: 'agent1'
+  }])
+
+  const other = await renderSurface('rich', { buffer: notesBufferB, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [notesNote('other note', 'n2')] }
+    if (method === 'quirky.session/list') return notesSessionInventory
+    if (method === 'quirky.agents/list') return notesAgentInventory
+    return {}
+  } })
+  await notesOpenSend(other)
+  const readsBeforeSuccess = notesCalls(surface, 'quirky.editor/notes', 'list').length
+  await surface.control('send', 'send', { target: 'new', agent: 'agent2' })
+  expect(notesCalls(surface, 'quirky.editor/notes', 'send').map((call) => call.params)).toEqual([
+    { bufferId: 'b1', action: 'send', target: 'existing', sessionId: 's1', agent: 'agent1' },
+    { bufferId: 'b1', action: 'send', target: 'new', agent: 'agent2' }
+  ])
+  expect(notesCalls(surface, 'quirky.editor/notes', 'list').length).toBeGreaterThan(readsBeforeSuccess)
+  await waitFor(() => emptyState(notesPanel, 'No review notes.'), 'notes reload after successful delivery')
+  expect(surface.address('send')).toBeUndefined()
+  expect(surface.element.querySelector('[role="dialog"][aria-label="Send notes to"]')).toBeNull()
+  expect(other.address('send')).toBeDefined()
+  expect(other.element.querySelector('[role="dialog"][aria-label="Send notes to"]')).not.toBeNull()
+})
+
+test('note delete, PDF export and clipboard control failures retain their actual InlineError message', async () => {
+  const previous = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('fixture clipboard failed') } } })
+  try {
+    const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+      if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [notesNote()] }
+      if (method === 'quirky.editor/notes' && params.action === 'delete') throw new Error('fixture delete failed')
+      if (method === 'quirky.editor/notes' && params.action === 'copy') return { text: 'review notes', count: 1 }
+      if (method === 'quirky.editor/markdown' && params.action === 'exportPdf') throw new Error('fixture export failed')
+      return {}
+    } })
+    const panel = await notesOpenNotes(surface)
+    await notesExpectRejected(surface, surface.control('rich', 'delete-note', { noteId: 'n1' }), 'fixture delete failed')
+    expect(panel.textContent).toContain('existing note')
+    await surface.control('rich', 'dismiss-error')
+    await notesExpectRejected(surface, surface.control('rich', 'export-pdf'), 'fixture export failed')
+    await surface.control('rich', 'dismiss-error')
+    await notesExpectRejected(surface, surface.control('rich', 'copy-notes'), 'fixture clipboard failed')
+  } finally {
+    if (previous) Object.defineProperty(navigator, 'clipboard', previous)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+test('template inventory pending, failure, Retry and empty-state recovery leave Cancel usable', async () => {
+  const firstRead = deferred<unknown>()
+  let reads = 0
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'templates') return ++reads === 1 ? firstRead.promise : { templates: [] }
+    return {}
+  } })
+  const dialog = await notesOpenTemplates(surface)
+  expect(notice(dialog, 'Loading Markdown templates…')).not.toBeNull()
+  expect(button(dialog, 'Cancel')).toBeDefined()
+  firstRead.reject(new Error('fixture templates failed'))
+  await waitFor(() => errorMessage(dialog, 'fixture templates failed'), 'template inventory failure')
+  await surface.control('templates', 'retry')
+  await waitFor(() => emptyState(dialog, 'No Markdown templates.'), 'empty template inventory')
+  expect(button(dialog, 'Blank Markdown (untitled.md)')).toBeDefined()
+  expect(button(dialog, 'Cancel')).toBeDefined()
+  await surface.control('templates', 'cancel')
+  expect(surface.address('templates')).toBeUndefined()
+})
+
+test('template create accepts only a loaded template or explicit blank and captures worktree and title', async () => {
+  const creates: Record<string, unknown>[] = []
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'templates') return { templates: [{ relativePath: 'templates/base.md', title: 'Starter' }] }
+    if (method === 'quirky.editor/markdown' && params.action === 'new') { creates.push(params); return {} }
+    return {}
+  } })
+  let dialog = await notesOpenTemplates(surface)
+  await waitFor(() => button(dialog, 'Starter — templates/base.md'), 'loaded Markdown template')
+  expect(await surface.control('templates', 'create', { title: 'Untrusted', template: 'templates/forged.md' })).toEqual({ delivered: false })
+  expect(creates).toHaveLength(0)
+  await surface.control('templates', 'create', { title: 'Captured title', template: 'templates/base.md' })
+  expect(creates[0]).toEqual({
+    bufferId: 'b1', action: 'new', worktree: 'id:w1', title: 'Captured title', template: 'templates/base.md'
+  })
+  await waitFor(() => surface.address('templates') === undefined, 'successful template dialog close')
+
+  dialog = await notesOpenTemplates(surface)
+  await waitFor(() => button(dialog, 'Starter — templates/base.md'), 'template inventory for blank create')
+  await surface.control('templates', 'create', { title: 'Blank title' })
+  expect(creates[1]).toEqual({ bufferId: 'b1', action: 'new', worktree: 'id:w1', title: 'Blank title' })
+})
+
+test('failed template creation retains title and filter drafts with the actual InlineError', async () => {
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'templates') return { templates: [{ relativePath: 'templates/starter.md', title: 'Starter' }] }
+    if (method === 'quirky.editor/markdown' && params.action === 'new') throw new Error('fixture create failed')
+    return {}
+  } })
+  const dialog = await notesOpenTemplates(surface)
+  await waitFor(() => button(dialog, 'Starter — templates/starter.md'), 'loaded template before failed create')
+  const title = dialog.querySelector<HTMLInputElement>('input[placeholder="Title"]')!
+  const filter = dialog.querySelector<HTMLInputElement>('input[placeholder="Search templates…"]')!
+  await setValue(title, 'Retained title')
+  await setValue(filter, 'starter')
+  await notesExpectRejected(surface, surface.control('templates', 'create'), 'fixture create failed')
+  expect(title.value).toBe('Retained title')
+  expect(filter.value).toBe('starter')
+  expect(surface.address('templates')).toBeDefined()
+})
+
+test('template create prevents same-tick duplicates and stale A-B-A completions cannot close or clear a reopened dialog', async () => {
+  const oldCreate = deferred<unknown>()
+  let creates = 0
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'templates') return { templates: [{ relativePath: 'templates/base.md', title: 'Starter' }] }
+    if (method === 'quirky.editor/markdown' && params.action === 'new') { creates += 1; return oldCreate.promise }
+    return {}
+  } })
+  const firstDialog = await notesOpenTemplates(surface)
+  await waitFor(() => button(firstDialog, 'Starter — templates/base.md'), 'loaded template for delayed create')
+  const oldCompletion = surface.control('templates', 'create', { title: 'Old title', template: 'templates/base.md' })
+  const duplicate = surface.control('templates', 'create', { title: 'Old title', template: 'templates/base.md' })
+  await waitFor(() => creates === 1, 'single delayed create')
+  expect(await duplicate).toEqual({ delivered: false })
+  await surface.control('templates', 'cancel')
+  const currentDialog = await notesOpenTemplates(surface)
+  await waitFor(() => button(currentDialog, 'Starter — templates/base.md'), 'reopened template dialog')
+  await setValue(currentDialog.querySelector<HTMLInputElement>('input[placeholder="Title"]')!, 'New title')
+  await setValue(currentDialog.querySelector<HTMLInputElement>('input[placeholder="Search templates…"]')!, 'new filter')
+  await surface.update(notesBufferB)
+  await surface.update(notesBufferA)
+  const replacementDialog = await notesOpenTemplates(surface)
+  await setValue(replacementDialog.querySelector<HTMLInputElement>('input[placeholder="Title"]')!, 'New title')
+  await setValue(replacementDialog.querySelector<HTMLInputElement>('input[placeholder="Search templates…"]')!, 'new filter')
+  const newTitle = replacementDialog.querySelector<HTMLInputElement>('input[placeholder="Title"]')!
+  const newFilter = replacementDialog.querySelector<HTMLInputElement>('input[placeholder="Search templates…"]')!
+  oldCreate.resolve({})
+  await oldCompletion
+  expect(surface.address('templates')).toBeDefined()
+  expect(document.body.contains(replacementDialog)).toBe(true)
+  expect(newTitle.value).toBe('New title')
+  expect(newFilter.value).toBe('new filter')
+  expect(creates).toBe(1)
+})
+
+test('old template completion after unmount performs no replacement UI or delegated effect', async () => {
+  const create = deferred<unknown>()
+  const creates: Record<string, unknown>[] = []
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'templates') return { templates: [] }
+    if (method === 'quirky.editor/markdown' && params.action === 'new') { creates.push(params); return create.promise }
+    return {}
+  } })
+  await notesOpenTemplates(surface)
+  await waitFor(() => emptyState(surface.element, 'No Markdown templates.'), 'empty template list before blank create')
+  const completion = surface.control('templates', 'create', { title: 'Unmounted' })
+  await waitFor(() => creates.length === 1, 'pending template creation')
+  await surface.unmount()
+  create.resolve({})
+  await completion
+  expect(creates).toHaveLength(1)
+  expect(surface.element.textContent).toBe('')
+})
+
+test('real TipTap flush applies at its expected revision before export and preserves source bytes', async () => {
+  const order: string[] = []
+  const applyResponses: unknown[] = []
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') {
+      order.push('apply')
+      const response = { changed: true, sourcePreserved: true, buffer: { contentRevision: 8 } }
+      applyResponses.push(response)
+      return response
+    }
+    if (method === 'quirky.editor/markdown' && params.action === 'exportPdf') {
+      order.push('export')
+      return { path: '/fixture/out.pdf' }
+    }
+    return {}
+  } })
+  await waitFor(() => surface.element.querySelector('.ProseMirror'), 'real TipTap editor before apply')
+  await selectRichText(surface, 'alpha')
+  expect(surface.address('selection')).toBeDefined()
+  await surface.control('selection', 'format', { value: 'bold' })
+  await surface.control('rich', 'export-pdf')
+  expect(notesCalls(surface, 'quirky.editor/markdown', 'apply')[0]?.params).toMatchObject({
+    bufferId: 'b1', action: 'apply', expectedRevision: 7
+  })
+  expect(notesCalls(surface, 'quirky.editor/markdown', 'apply')[0]?.params.text).not.toBe('alpha')
+  expect(applyResponses).toEqual([{ changed: true, sourcePreserved: true, buffer: { contentRevision: 8 } }])
+  expect(order).toEqual(['apply', 'export'])
+  expect(errorMessage(surface.element, 'Rich Markdown update did not preserve its source bytes.')).toBeNull()
+})
+
+test('a real rich edit remains visible when an in-flight apply conflicts with an external revision', async () => {
+  const apply = deferred<unknown>()
+  const conflict = 'The Markdown draft changed elsewhere. Your local rich edit is retained; switch to source or compare before retrying.'
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') return apply.promise
+    return {}
+  } })
+  await waitFor(() => surface.element.querySelector('.ProseMirror'), 'real TipTap editor before external conflict')
+  await selectRichText(surface, 'alpha')
+  const formatting = surface.control('selection', 'format', { value: 'bold' })
+  await waitFor(() => notesCalls(surface, 'quirky.editor/markdown', 'apply').length === 1, 'pending rich apply')
+  await surface.update({ content: 'external replacement', revision: 8, contentRevision: 8 })
+  await waitFor(() => errorMessage(surface.element, conflict), 'external revision conflict')
+  expect(surface.element.querySelector('.ProseMirror')?.textContent).toContain('alpha')
+  expect(surface.element.querySelector('.ProseMirror')?.textContent).not.toContain('external replacement')
+  expect(notesCalls(surface, 'quirky.editor/markdown', 'apply')[0]?.params.expectedRevision).toBe(7)
+  apply.resolve({ changed: true, sourcePreserved: true, buffer: { contentRevision: 8 } })
+  await formatting.catch(() => {})
+  expect(surface.element.querySelector('.ProseMirror')?.textContent).toContain('alpha')
+  expect(errorMessage(surface.element, conflict)).not.toBeNull()
+  expect(surface.element.querySelector('.ProseMirror')?.textContent).not.toContain('external replacement')
+})
+
+test('a pasted image transfer is cancelled when its captured selection changes before begin completes', async () => {
+  const begin = deferred<unknown>()
+  const bytes = Uint8Array.of(137, 80, 78, 71)
+  const surface = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/transfer') {
+      if (params.action === 'begin') return begin.promise
+      if (params.action === 'chunk') return { offset: bytes.length }
+      if (params.action === 'commit') return { path: 'images/old.png' }
+    }
+    return {}
+  } })
+  const editor = await waitFor(() => surface.element.querySelector<HTMLElement>('.ProseMirror'), 'image paste editor')
+  const file = { name: 'fixture.png', type: 'image/png', size: bytes.length, slice: (start: number, end: number) => ({ arrayBuffer: async () => bytes.slice(start, end).buffer }) }
+  const paste = new Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(paste, 'clipboardData', { value: { items: [], files: [file] } })
+  await act(async () => { editor.dispatchEvent(paste) })
+  await waitFor(() => surface.calls.some(call => call.method === 'quirky.editor/transfer' && call.params.action === 'begin'), 'bounded image begin')
+  await selectRichText(surface, 'alpha')
+  await act(async () => { begin.resolve({ transferId: 'old-image', maxChunkBytes: 65_536 }) })
+  await waitFor(() => surface.calls.some(call => call.method === 'quirky.editor/transfer' && call.params.action === 'cancel'), 'cancelled old image transfer')
+  expect(surface.calls.filter(call => call.method === 'quirky.editor/transfer' && call.params.action === 'cancel').map(call => call.params)).toEqual([{ action: 'cancel', transferId: 'old-image' }])
+  expect(surface.calls.some(call => call.method === 'quirky.editor/transfer' && ['chunk', 'commit'].includes(String(call.params.action)))).toBe(false)
+  expect(surface.calls.some(call => call.method === 'quirky.editor/markdown' && call.params.action === 'importImage')).toBe(false)
+  expect(editor.textContent).toBe('alpha')
+})
+
+for (const mode of ['preview', 'rich'] as const) {
+  for (const unit of ['a', 'é']) {
+    test(`${mode} public Find and Replace preserve the UTF-8 query boundary for ${unit}`, async () => {
+      const query = unit.repeat(unit === 'a' ? 2048 : 1024)
+      const source = query + 'x'
+      const surface = await renderSurface(mode, { content: source, call: async (method, params) => {
+        if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return { richEligible: true, previewAvailable: true, imageUrls: {} }
+        if (method === 'quirky.editor/markdown' && params.action === 'search') return searchMarkdown(source, String(params.query), {})
+        if (method === 'quirky.editor/markdown' && params.action === 'replace') return { replacements: 1 }
+        return {}
+      } })
+      await surface.control(mode, 'find', { query })
+      const search = await waitFor(() => surface.element.querySelector<HTMLElement>('.markdown-toolbar--search'), 'bounded query search')
+      expect(search.textContent).toContain('1 of 1')
+      await surface.control('search', 'replace-all', { query, text: 'replacement' })
+      const replacements = surface.calls.filter(call => call.method === 'quirky.editor/markdown' && call.params.action === 'replace')
+      expect(replacements).toHaveLength(1)
+      const oversized = query + 'x'
+      await surface.control('search', 'find', { query: oversized })
+      await waitFor(() => emptyState(search, 'No results'), 'oversized Find result')
+      await expect(surface.control('search', 'replace-all', { query: oversized, text: 'replacement' })).rejects.toThrow('Markdown find queries are limited to 2 KiB.')
+      expect(surface.calls.filter(call => call.method === 'quirky.editor/markdown' && call.params.action === 'replace')).toHaveLength(1)
+    })
+  }
+}
+
+test('a delayed link check cannot navigate or clear a same-kind reopened link form', async () => {
+  const checked = deferred<unknown>()
+  const surface = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'links') return checked.promise
+    return {}
+  } })
+  await selectRichText(surface, 'alpha')
+  await surface.control('selection', 'format', { value: 'link' })
+  const oldAddress = surface.address('link')!
+  const pending = surface.control('link', 'open', { target: 'https://old.test' })
+  try {
+    await waitFor(() => surface.calls.some(call => call.method === 'quirky.editor/markdown' && call.params.action === 'links'), 'pending old link check')
+    await surface.control('link', 'close')
+    await surface.control('selection', 'format', { value: 'link' })
+    const current = await waitFor(() => surface.address('link'), 'reopened link control')
+    expect(current.generation).not.toBe(oldAddress.generation)
+    const field = surface.element.querySelector<HTMLInputElement>('input[aria-label="Paste or type a link"]')!
+    await setValue(field, 'https://new.test')
+    checked.resolve({ safe: true, kind: 'external' })
+    await pending
+    expect(field.value).toBe('https://new.test')
+    expect(surface.address('link')?.generation).toBe(current.generation)
+    expect(surface.calls.some(call => ['quirky.browser/openLink', 'quirky.terminal/openExternal', 'quirky.editor/open'].includes(call.method))).toBe(false)
+  } finally {
+    checked.resolve({ safe: true, kind: 'external' })
+    await pending
+  }
+})

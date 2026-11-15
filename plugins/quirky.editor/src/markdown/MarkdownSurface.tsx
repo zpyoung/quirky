@@ -88,6 +88,7 @@ function useMarkdownControl(
   const registration = useEditorUiControl({
     context: props.context, address,
     async handler(control) {
+      if (!mounted.current || origin.current?.generation !== control.generation || origin.current?.target !== control.target || !origin.current?.actions.includes(control.action)) return { delivered: false }
       try { return { delivered: await handler(control) !== false } }
       catch (cause) { onError(cause instanceof Error ? cause : new Error(errorText(cause))); throw cause }
     },
@@ -142,8 +143,10 @@ async function openExternalTarget(
   context: SurfaceProps['context'],
   target: string,
   worktreeId: string,
-  event?: LinkModifiers
+  event?: LinkModifiers,
+  live?: () => boolean
 ): Promise<void> {
+  if (live && !live()) return
   if (!/^https?:/i.test(target)) {
     await context.call('quirky.terminal/openExternal', { target })
     return
@@ -157,6 +160,7 @@ async function openExternalTarget(
     })
   } catch (error) {
     if (!isBrowserMethodUnavailable(error)) throw error
+    if (live && !live()) return
     await context.call('quirky.terminal/openExternal', { target })
   }
 }
@@ -775,7 +779,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         await props.context.call('quirky.editor/open', { worktree: `id:${props.buffer.worktreeId}`, path: result.resolved, focus: true })
         return
       }
-      if (result.kind === 'external') await openExternalTarget(props.context, href, props.buffer.worktreeId, event)
+      if (result.kind === 'external') await openExternalTarget(props.context, href, props.buffer.worktreeId, event, () => isCurrent(requestScope))
     } catch (cause) {
       if (isCurrent(requestScope)) setActionError(errorText(cause))
       throw cause
@@ -899,7 +903,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       throw cause
     }
   }, [isCurrent, props.buffer.id, props.context, scope])
-  const reportMissingAnchor = useCallback((anchor: string) => {
+  const onMissingAnchor = useCallback((anchor: string) => {
     if (isCurrent(scope)) setActionError(`No Markdown preview heading or HTML anchor matches “${anchor}”.`)
   }, [isCurrent, scope])
 
@@ -999,17 +1003,17 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           setSearchResult(null)
           setSearchStatus('idle')
         }} onKeyDown={(event) => { if (event.key === 'Enter') void searchControls.run('find', { query }) }} />
-        <label className="markdown-check"><input type="checkbox" aria-label="Match case" checked={matchCase} onChange={(event) => { void searchControls.run('options', { matchCase: event.currentTarget.checked }) }} /> Match case</label>
-        <label className="markdown-check"><input type="checkbox" aria-label="Match whole word" checked={wholeWord} onChange={(event) => { void searchControls.run('options', { wholeWord: event.currentTarget.checked }) }} /> Match whole word</label>
+        <label className="markdown-check"><input type="checkbox" aria-label="Match case" title="Match case in preview" checked={matchCase} onChange={(event) => { void searchControls.run('options', { matchCase: event.currentTarget.checked }) }} /> Match case</label>
+        <label className="markdown-check"><input type="checkbox" aria-label="Match whole word" title="Match whole word in preview" checked={wholeWord} onChange={(event) => { void searchControls.run('options', { wholeWord: event.currentTarget.checked }) }} /> Match whole word</label>
         <Button type="button" onClick={() => { void searchControls.run('find', { query }) }}>Find</Button>
-        <Button type="button" onClick={() => { void searchControls.run('previous') }}>Previous</Button>
-        <Button type="button" onClick={() => { void searchControls.run('next') }}>Next</Button>
+        <Button type="button" title="Previous preview match" onClick={() => { void searchControls.run('previous') }}>Previous</Button>
+        <Button type="button" title="Next preview match" onClick={() => { void searchControls.run('next') }}>Next</Button>
         <Button type="button" onClick={() => { void searchControls.run('replace-toggle', { open: !replaceOpen }) }}>Replace</Button>
         {replaceOpen && <><input className="markdown-input" aria-label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} /><Button type="button" disabled={props.buffer.readOnly} onClick={() => { void searchControls.run('replace-one', { query, text: replaceText }) }}>Replace</Button><Button type="button" disabled={props.buffer.readOnly} onClick={() => { void searchControls.run('replace-all', { query, text: replaceText }) }}>Replace all</Button></>}
         {searchStatus === 'loading' && searchScope === scope && <div role="status"><NoticeLine>Searching preview…</NoticeLine></div>}
         {searchStatus === 'ready' && searchScope === scope && searchResult?.total === 0 && <EmptyState message="No results" />}
         {searchStatus === 'ready' && searchScope === scope && searchResult && searchResult.total > 0 && <span>{searchIndex + 1} of {searchResult.total}</span>}
-        <Button type="button" onClick={() => { void searchControls.run('close') }}>Close</Button>
+        <Button type="button" title="Close preview search" onClick={() => { void searchControls.run('close') }}>Close</Button>
       </div>}
       {feedback && <div role="status" className="markdown-status">{feedback}<Button type="button" onClick={() => { void controls.run('dismiss-feedback') }}>Dismiss</Button></div>}
       {currentPreviewRead.status === 'loading' && <div role="status" className="markdown-status"><NoticeLine>Preparing preview…</NoticeLine></div>}
@@ -1029,7 +1033,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         onOpenLink={(href, event) => { event.preventDefault(); void controls.run('open-link', { target: href, modifier: CHORD_PLATFORM === 'darwin' ? event.metaKey : event.ctrlKey, shift: event.shiftKey }) }}
         markdownAnchor={typeof props.buffer.view.markdownAnchor === 'string' ? props.buffer.view.markdownAnchor : null}
         onView={props.onView}
-        onMissingAnchor={reportMissingAnchor}
+        onMissingAnchor={onMissingAnchor}
         articleRef={previewArticle}
       />}
     </div>
@@ -1072,6 +1076,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [emojiPickerModule, setEmojiPickerModule] = useState<EmojiPickerModule | null>(null)
   const [emojiPickerRead, setEmojiPickerRead] = useState<{ scope: string; status: 'idle' | 'loading' | 'ready' | 'error'; error: string | null }>({ scope, status: 'idle', error: null })
   const [moreOpen, setMoreOpen] = useState(false)
+  const moreIntent = useRef(0)
   const [searchOpen, setSearchOpen] = useState(false)
   const searchInput = useRef<HTMLInputElement>(null)
   const searchOpener = useRef<HTMLElement | null>(null)
@@ -1091,6 +1096,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const [notesRead, setNotesRead] = useState<{ scope: string; status: 'loading' | 'ready' | 'error'; error: string | null }>({ scope, status: 'loading', error: null })
   const [notesOpen, setNotesOpen] = useState(false)
   const [noteComposer, setNoteComposer] = useState(false)
+  const noteSelection = useRef<{ doc: Editor['state']['doc']; version: number; text: string; startLine: number; endLine: number } | null>(null)
   const noteInput = useRef<HTMLTextAreaElement>(null)
   const [noteBody, setNoteBody] = useState('')
   const [noteEdit, setNoteEdit] = useState<string | null>(null)
@@ -1132,6 +1138,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const currentTocRead = tocRead.scope === scope ? tocRead : { scope, status: 'loading' as const, error: null }
   const currentTemplateRead = templateRead.scope === scope ? templateRead : { scope, status: 'idle' as const, error: null }
   const emojiSessionRef = useRef(0)
+  const emojiEpoch = useRef(0)
   const emojiRequestRef = useRef(0)
   const emojiOpenRef = useRef(false)
   const eligibilityRequestRef = useRef(0)
@@ -1159,6 +1166,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const openEmoji = useCallback(() => {
     if (readOnly) return
     const session = ++emojiSessionRef.current
+    emojiEpoch.current = selectionEpoch.current
     emojiOpenRef.current = true
     setEmojiOpen(true)
     setEmojiPickerRead({ scope, status: emojiPickerModule ? 'ready' : 'idle', error: null })
@@ -1190,6 +1198,8 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const slashRef = useRef<typeof slash>(slash)
   const docMenuRef = useRef<typeof docMenu>(docMenu)
   const [, renderEngine] = useState(0)
+  const selectionEpoch = useRef(0)
+  const documentEpoch = useRef(0)
   const selectionRun = useRef<EditorUiControlActions | null>(null)
   const linkContext = useRef<{ doc: Editor['state']['doc']; from: number; to: number } | null>(null)
 
@@ -1279,8 +1289,10 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         }
       }
     },
-    onCreate: ({ editor: current }) => { renderEngine((value) => value + 1); updateCompletionsRef.current(current) },
+    onCreate: ({ editor: current }) => { selectionEpoch.current += 1; renderEngine((value) => value + 1); updateCompletionsRef.current(current) },
     onUpdate: ({ editor: current }) => {
+      selectionEpoch.current += 1
+      documentEpoch.current += 1
       renderEngine((value) => value + 1)
       const markdown = current.getMarkdown()
       pendingText.current = markdown
@@ -1289,6 +1301,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       updateCompletionsRef.current(current)
     },
     onSelectionUpdate: ({ editor: current }) => {
+      selectionEpoch.current += 1
       renderEngine((value) => value + 1)
       const review = selectionForReview(current)
       if (review) setSelection({ from: current.state.selection.from, to: current.state.selection.to, ...review })
@@ -1593,7 +1606,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     return () => { tocRequestRef.current += 1 }
   }, [loadToc, tocOpen])
 
-  const loadTemplates = useCallback(async (session: number) => {
+  const loadTemplates = useCallback(async (session: number, raise = false) => {
     if (!templateOpenRef.current || session !== templateSessionRef.current) return
     const request = ++templateRequestRef.current
     const requestScope = scope
@@ -1606,6 +1619,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== templateRequestRef.current || session !== templateSessionRef.current || !templateOpenRef.current) return
       setTemplateRead({ scope: requestScope, status: 'error', error: errorText(cause) })
+      if (raise) throw cause
     }
   }, [buffer.worktreeId, call, isCurrent, scope])
   const closeTemplates = useCallback(() => {
@@ -1621,12 +1635,15 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     return result
   }, [call])
 
-  const importImage = useCallback(async () => {
+  const importImage = useCallback(async (originLive: () => boolean = () => true) => {
     if (!editor || readOnly) return
     const requestScope = scope
+    const originDoc = editor.state.doc
+    const epoch = selectionEpoch.current
+    const live = () => isCurrent(requestScope) && originLive() && !currentBuffer.current.readOnly && editorRef.current === editor && editor.state.doc === originDoc && selectionEpoch.current === epoch
     try {
       await flush()
-      if (!isCurrent(requestScope)) return
+      if (!live()) return
       const position = markdownOffsetAt(editor, editor.state.selection.from)
       const end = markdownOffsetAt(editor, editor.state.selection.to)
       const result = await call(MARKDOWN_METHOD, {
@@ -1634,17 +1651,21 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         expectedRevision: revision.current,
         selection: { from: position, to: end }
       }) as { buffer?: SurfaceProps['buffer']; cancelled?: boolean }
-      if (!isCurrent(requestScope) || result.cancelled) return
+      if (!live() || result.cancelled) return
       updateBufferFromApi(result.buffer)
       await loadNotes()
     } catch (cause) {
-      if (isCurrent(requestScope)) reportFlushError(errorText(cause))
+      if (live()) reportFlushError(errorText(cause))
+      throw cause
     }
   }, [call, editor, flush, isCurrent, loadNotes, readOnly, reportFlushError, scope, updateBufferFromApi])
 
-  const importPastedImage = useCallback(async (file: File) => {
+  async function importPastedImage(file: File) {
     if (!editor || readOnly || buffer.mode === 'preview') return
     const requestScope = scope
+    const originDoc = editor.state.doc
+    const epoch = selectionEpoch.current
+    const live = () => isCurrent(requestScope) && !currentBuffer.current.readOnly && editorRef.current === editor && editor.state.doc === originDoc && selectionEpoch.current === epoch
     if (file.size <= 0 || file.size > 18 * 1024 * 1024) {
       reportFlushError('Pasted images must be non-empty and fit the 24 MiB encoded-image limit.')
       return
@@ -1658,6 +1679,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     let importedPath: string | null = null
     try {
       await flush()
+      if (!live()) return
       const begun = await context.call('quirky.editor/transfer', {
         action: 'begin',
         kind: 'import',
@@ -1670,9 +1692,12 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         throw new Error('The editor could not begin the bounded image import.')
       }
       transferId = begun.transferId
+      if (!live()) throw new Error('The image insertion context changed.')
       const chunkBytes = Math.min(65_536, begun.maxChunkBytes)
       for (let offset = 0; offset < file.size; offset += chunkBytes) {
+        if (!live()) throw new Error('The image insertion context changed.')
         const chunk = new Uint8Array(await file.slice(offset, Math.min(file.size, offset + chunkBytes)).arrayBuffer())
+        if (!live()) throw new Error('The image insertion context changed.')
         const result = await context.call('quirky.editor/transfer', {
           action: 'chunk',
           transferId,
@@ -1681,11 +1706,13 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         }) as { offset?: unknown }
         if (result.offset !== offset + chunk.byteLength) throw new Error('The bounded image transfer did not acknowledge the complete chunk.')
       }
+      if (!live()) throw new Error('The image insertion context changed.')
       const committed = await context.call('quirky.editor/transfer', { action: 'commit', transferId }) as { path?: unknown; paths?: unknown }
       transferId = null
       const path = Array.isArray(committed.paths) ? committed.paths[0] : committed.path
       if (typeof path !== 'string') throw new Error('The editor did not return the imported image path.')
       importedPath = path
+      if (!live()) throw new Error('The image insertion context changed.')
       const result = await call(MARKDOWN_METHOD, {
         action: 'importImage',
         expectedRevision: revision.current,
@@ -1693,6 +1720,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         selection: { from, to }
       }) as { buffer?: SurfaceProps['buffer'] }
       importedPath = null
+      if (!live()) return
       updateBufferFromApi(result.buffer)
       await loadNotes()
     } catch (cause) {
@@ -1705,11 +1733,11 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           yes: true
         }).catch(() => {})
       }
-      if (isCurrent(requestScope)) reportFlushError(errorText(cause))
+      if (live()) reportFlushError(errorText(cause))
     }
-  }, [buffer, call, context, editor, flush, isCurrent, loadNotes, readOnly, reportFlushError, scope, updateBufferFromApi])
+  }
 
-  const applyFormat = useCallback(async (item: Pick<SlashItem, 'format' | 'id'>, removeTrigger = false) => {
+  const applyFormat = useCallback(async (item: Pick<SlashItem, 'format' | 'id'>, removeTrigger = false, originLive: () => boolean = () => true) => {
     if (!editor || readOnly) return
     if (removeTrigger) {
       const current = editor.state.selection.from
@@ -1748,7 +1776,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     else if (item.format === 'mermaid') editor.chain().focus().setCodeBlock({ language: 'mermaid' }).insertContent('graph TD\n  A[Start] --> B[End]').run()
     else if (item.format === 'inlineMath') editor.commands.insertInlineMath({ latex: 'x^2' })
     else if (item.format === 'blockMath') editor.commands.insertBlockMath({ latex: 'x^2' })
-    else if (item.format === 'image') await importImage()
+    else if (item.format === 'image') await importImage(originLive)
     else if (item.format === 'emoji') openEmoji()
     else if (item.format === 'link') {
       linkContext.current = { doc: editor.state.doc, from: editor.state.selection.from, to: editor.state.selection.to }
@@ -1861,11 +1889,12 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     onView({ markdownAnchor: null })
   }, [buffer.view.markdownAnchor, editor, isCurrent, jumpToHeading, onView, reportError, scope, source])
 
-  const openExternal = useCallback(async (target: string, event?: LinkModifiers) => {
+  const openExternal = useCallback(async (target: string, event?: LinkModifiers, live: () => boolean = () => isCurrent(scope)) => {
     const requestScope = scope
     try {
+      if (!live()) return
       const result = await checkLink(target)
-      if (!isCurrent(requestScope)) return
+      if (!live()) return
       if (result.kind === 'document' && result.resolved) {
         const opened = await context.call('quirky.editor/open', {
           worktree: `id:${buffer.worktreeId}`,
@@ -1873,7 +1902,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           mode: 'preview',
           focus: true
         }) as { id?: string; openedTabId?: string }
-        if (!isCurrent(requestScope)) return
+        if (!live()) return
         if (result.anchor) {
           if (!opened.id || !opened.openedTabId) throw new Error('The editor did not return the preview tab identity needed to reveal this heading.')
           await context.call('quirky.editor/view', {
@@ -1888,18 +1917,18 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       } else if (result.kind === 'anchor') {
         onView({ markdownAnchor: result.anchor ?? null })
       } else if (result.kind === 'external') {
-        await openExternalTarget(context, target, buffer.worktreeId, event)
+        await openExternalTarget(context, target, buffer.worktreeId, event, live)
       }
-      if (isCurrent(requestScope)) clearError('open-link')
+      if (live()) clearError('open-link')
     } catch (cause) {
-      if (isCurrent(requestScope)) reportError('open-link', cause)
+      if (live()) reportError('open-link', cause)
       throw cause
     }
   }, [buffer.worktreeId, checkLink, clearError, context, isCurrent, onView, reportError, scope])
 
   
 
-  const loadSendTargets = useCallback(async (session: number) => {
+  const loadSendTargets = useCallback(async (session: number, raise = false) => {
     const request = ++sendRequestRef.current
     const requestScope = scope
     setSendRead({ scope: requestScope, status: 'loading', error: null })
@@ -1917,6 +1946,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== sendRequestRef.current || session !== sendSessionRef.current) return
       setSendRead({ scope: requestScope, status: 'error', error: errorText(cause) })
+      if (raise) throw cause
     }
   }, [buffer.worktreeId, context, isCurrent, scope])
   const closeSendMenu = useCallback(() => {
@@ -1931,63 +1961,20 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       return
     }
     const session = ++sendSessionRef.current
+    clearError('send')
     setSendMenu(true)
     setAgentTargets({ sessions: [], agents: [] })
     void loadSendTargets(session)
-  }, [closeSendMenu, loadSendTargets, sendMenu])
+  }, [clearError, closeSendMenu, loadSendTargets, sendMenu])
 
-  const sendNotes = useCallback(async (target: 'existing' | 'new') => {
-    const requestScope = scope
-    const session = sendSessionRef.current
-    try {
-      const params = target === 'existing'
-        ? { action: 'send', target, sessionId: sendTarget, agent: agentTargets.sessions.find((item) => item.id === sendTarget)?.agent }
-        : { action: 'send', target, agent: sendAgent }
-      const result = await call(NOTES_METHOD, params) as { delivery: string; deletedNoteIds: string[]; retainedNoteIds: string[]; error?: string }
-      if (!isCurrent(requestScope) || session !== sendSessionRef.current) return
-      if (result.error) {
-        reportError('send-notes', new Error(result.error))
-        return
-      }
-      clearError('send-notes')
-      setFeedback(`${result.deletedNoteIds.length} note(s) delivered.`)
-      closeSendMenu()
-      await loadNotes()
-    } catch (cause) {
-      if (isCurrent(requestScope) && session === sendSessionRef.current) reportError('send-notes', cause)
-    }
-  }, [agentTargets.sessions, call, clearError, closeSendMenu, isCurrent, loadNotes, reportError, scope, sendAgent, sendTarget])
+  
 
-  const addNote = useCallback(async () => {
-    if (!selection) return
-    if (utf8Bytes(noteBody) > MAX_NOTE_BODY_BYTES) {
-      reportError('note-submit', new Error('Comment is too large to submit safely.'))
-      return
-    }
-    const requestScope = scope
-    try {
-      if (noteEdit) {
-        await call(NOTES_METHOD, { action: 'edit', noteId: noteEdit, text: noteBody })
-      } else {
-        await call(NOTES_METHOD, {
-          action: 'add',
-          selection: { text: selection.text, startLine: selection.startLine, endLine: selection.endLine, mode: 'rich' },
-          text: noteBody
-        })
-      }
-      if (!isCurrent(requestScope)) return
-      clearError('note-submit')
-      setNoteComposer(false)
-      setNoteBody('')
-      setNoteEdit(null)
-      await loadNotes()
-    } catch (cause) {
-      if (isCurrent(requestScope)) reportError('note-submit', cause)
-    }
-  }, [call, clearError, isCurrent, loadNotes, noteBody, noteEdit, reportError, scope, selection])
+  
   const startReviewNote = useCallback(() => {
     const selected = editor ? selectionForReview(editor) : null
     if (!selected || readOnly || !isCurrent(scope)) throw new Error('Select Markdown text before adding a review note.')
+    notePopup.invalidate()
+    noteSelection.current = { doc: editor!.state.doc, version: documentEpoch.current, ...selected }
     setSelection({ from: editor!.state.selection.from, to: editor!.state.selection.to, ...selected })
     setNoteEdit(null)
     setNoteBody('')
@@ -2016,6 +2003,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     const requestScope = scope
     try {
       const result = await call(NOTES_METHOD, { action: 'copy' }) as { text: string; count: number }
+      if (!isCurrent(requestScope)) return
       await navigator.clipboard.writeText(result.text)
       if (!isCurrent(requestScope)) return
       clearError('copy-notes')
@@ -2028,11 +2016,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 
   const exportPdf = useCallback(async () => {
     const requestScope = scope
-    try {
-      await flush()
-    } catch {
-      return
-    }
+    await flush()
     if (!isCurrent(requestScope)) return
     try {
       const result = await call(MARKDOWN_METHOD, { action: 'exportPdf' }) as { path?: string; cancelled?: boolean }
@@ -2049,11 +2033,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 
   const openPreview = useCallback(async () => {
     const requestScope = scope
-    try {
-      await flush()
-    } catch {
-      return
-    }
+    await flush()
     if (!isCurrent(requestScope)) return
     try {
       await context.call('quirky.editor/open', { worktree: `id:${buffer.worktreeId}`, path: buffer.relativePath, mode: 'preview', focus: false })
@@ -2089,45 +2069,36 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     void loadTemplates(session)
   }, [loadTemplates, scope])
 
-  const createNewDocument = useCallback(async (template?: string) => {
-    const requestScope = scope
-    const session = templateSessionRef.current
-    setTemplateCreateError(null)
-    try {
-      await call(MARKDOWN_METHOD, {
-        action: 'new',
-        worktree: `id:${buffer.worktreeId}`,
-        title: templateTitle,
-        ...(template ? { template } : {})
-      })
-      if (!isCurrent(requestScope) || session !== templateSessionRef.current || !templateOpenRef.current) return
-      closeTemplates()
-    } catch (cause) {
-      if (isCurrent(requestScope) && session === templateSessionRef.current && templateOpenRef.current) setTemplateCreateError(errorText(cause))
-    }
-  }, [buffer.worktreeId, call, closeTemplates, isCurrent, scope, templateTitle])
+  
 
   const selectionDoc = editor?.state.doc
   const selectionFrom = editor?.state.selection.from
   const selectionTo = editor?.state.selection.to
-  const selectionGeneration = useMemo(() => crypto.randomUUID(), [scope, editor, selectionDoc, selectionFrom, selectionTo])
+  const selectionVersion = selectionEpoch.current
+  const selectionGeneration = useMemo(() => crypto.randomUUID(), [scope, editor, selectionDoc, selectionFrom, selectionTo, selectionVersion])
   const searchPopup = useMarkdownPopup(scope, searchOpen)
   const morePopup = useMarkdownPopup(scope, moreOpen, selectionGeneration)
   const slashPopup = useMarkdownPopup(scope, slash !== null, `${slash?.query}:${selectionFrom}:${selectionTo}`)
   const documentsPopup = useMarkdownPopup(scope, docMenu?.scope === scope, `${docMenu?.query}:${docMenu?.from}:${docMenu?.to}`)
   const linkPopup = useMarkdownPopup(scope, linkBubble, selectionGeneration)
   const emojiPopup = useMarkdownPopup(scope, emojiOpen, selectionGeneration)
+  useEffect(() => { if (emojiOpen && emojiEpoch.current !== selectionVersion) closeEmoji() }, [emojiOpen, selectionVersion, closeEmoji])
+  const notePopup = useMarkdownPopup(scope, notesOpen && noteComposer, noteEdit ?? 'add')
+  const sendPopup = useMarkdownPopup(scope, notesOpen && sendMenu, sendSessionRef.current)
+  const templatesPopup = useMarkdownPopup(scope, templatesOpen, templateSessionRef.current)
+  const [pendingControl, setPendingControl] = useState<{ kind: string; generation: string } | null>(null)
   const controlBusy = useRef<{ scope: string; token: symbol } | null>(null)
   const currentBuffer = useRef(buffer)
   currentBuffer.current = buffer
   function selectionIsCurrent() {
-    return isCurrent(scope) && editorRef.current === editor && !editor?.isDestroyed &&
+    return !!editor && isCurrent(scope) && selectionEpoch.current === selectionVersion && editorRef.current === editor && !editor.isDestroyed &&
       editor?.state.doc === selectionDoc && editor?.state.selection.from === selectionFrom && editor?.state.selection.to === selectionTo
   }
   useEffect(() => {
     setSearchOpen(false); setMoreOpen(false); setSlash(null); setDocMenu(null); setLinkBubble(false)
     closeEmoji(); closeTemplates(); closeSendMenu()
     setNoteComposer(false); setNoteEdit(null); setNoteBody(''); setFeedback(null)
+    noteSelection.current = null
   }, [scope])
   function popupFor(kind: string) {
     if (kind === 'search') return searchPopup
@@ -2136,11 +2107,14 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     if (kind === 'documents') return documentsPopup
     if (kind === 'link') return linkPopup
     if (kind === 'emoji') return emojiPopup
+    if (kind === 'note') return notePopup
+    if (kind === 'send') return sendPopup
+    if (kind === 'templates') return templatesPopup
     return null
   }
   async function handleMarkdownControl(kind: string, { action, data = {} }: EditorUiControl) {
     const popup = popupFor(kind)
-    const live = () => isCurrent(scope) && (!popup || popup.isCurrent())
+    const live = () => isCurrent(scope) && (!popup || popup.isCurrent()) && (kind !== 'link' || selectionIsCurrent())
     if (!live()) return false
     if (kind === 'search') {
       if (action === 'find') {
@@ -2166,8 +2140,14 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       if (!['replace-one', 'replace-all'].includes(action) || readOnly || !controlData(data, ['query', 'text']) || Object.values(data).some(value => typeof value !== 'string')) return false
     } else if (kind === 'selection') {
       if (!editor || !selectionIsCurrent()) return false
+      if (composition.current && !['copy-code', 'copy-context'].includes(action)) return false
       if (action === 'format') {
         if (readOnly || !controlData(data, ['value'], ['value']) || typeof data.value !== 'string' || !FORMAT_VALUES.includes(data.value as MarkdownFormat)) return false
+        if (data.value === 'link' || data.value === 'emoji') {
+          if (data.value === 'link') linkPopup.invalidate()
+          else emojiPopup.invalidate()
+          await applyFormat({ id: data.value, format: data.value }); return
+        }
       } else if (action === 'table') {
         if (readOnly || !controlData(data, ['operation'], ['operation']) || typeof data.operation !== 'string' || !editor.isActive('table') ||
           !['row-above','row-below','row-delete','column-left','column-right','column-delete','delete'].includes(data.operation) ||
@@ -2179,9 +2159,11 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         if (readOnly || !editor.isActive('codeBlock') || !controlData(data, ['outdent'], ['outdent']) || typeof data.outdent !== 'boolean') return false
       } else if (!['copy-code','copy-context','add-review-note'].includes(action) || !controlData(data, []) ||
         (action === 'copy-code' && !editor.isActive('codeBlock')) || (action === 'add-review-note' && readOnly)) return false
+      if ((action === 'copy-context' || action === 'add-review-note') && !selectionForReview(editor)) return false
+      if (action === 'add-review-note') { startReviewNote(); return }
     } else if (kind === 'more') {
-      if (action === 'close') { if (!controlData(data, [])) return false; morePopup.invalidate(); setMoreOpen(false); return }
-      if (action !== 'choose' || readOnly || !selectionIsCurrent() || !controlData(data, ['value'], ['value']) || typeof data.value !== 'string' || !MORE_FORMATS.includes(data.value)) return false
+      if (action === 'close') { if (!controlData(data, [])) return false; moreIntent.current += 1; morePopup.invalidate(); setMoreOpen(false); return }
+      if (action !== 'choose' || readOnly || composition.current || !selectionIsCurrent() || !controlData(data, ['value'], ['value']) || typeof data.value !== 'string' || !MORE_FORMATS.includes(data.value)) return false
     } else if (kind === 'slash') {
       if (action === 'close') { if (!controlData(data, [])) return false; slashPopup.invalidate(); setSlash(null); return }
       if (action !== 'choose' || readOnly || composition.current || !selectionIsCurrent() || !controlData(data, ['id'], ['id']) || typeof data.id !== 'string' || !slash || !filterSlashCatalog(slash.query).some(item => item.id === data.id)) return false
@@ -2197,6 +2179,35 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       if (action === 'close') { if (!controlData(data, [])) return false; emojiPopup.invalidate(); closeEmoji(); return }
       if (action === 'retry') { if (!controlData(data, []) || currentEmojiRead.status !== 'error') return false; await loadEmojiPicker(); return }
       if (action !== 'insert' || readOnly || !editor || !selectionIsCurrent() || !emojiPickerModule || currentEmojiRead.status !== 'ready' || !controlData(data, ['value'], ['value']) || typeof data.value !== 'string' || data.value.length === 0) return false
+    } else if (kind === 'note') {
+      if (action === 'cancel') {
+        if (!controlData(data, [])) return false
+        notePopup.invalidate(); setNoteComposer(false); setNoteEdit(null); setNoteBody(''); noteSelection.current = null; return
+      }
+      if (action !== 'submit' || readOnly || !controlData(data, ['text']) || (Object.hasOwn(data, 'text') && typeof data.text !== 'string')) return false
+      if (noteEdit ? !notes.some(note => note.id === noteEdit) : !noteSelection.current || noteSelection.current.doc !== editor?.state.doc || noteSelection.current.version !== documentEpoch.current) return false
+      if (controlBusy.current?.scope === scope) return false
+      const text = typeof data.text === 'string' ? data.text : noteBody
+      setNoteBody(text)
+      if (text.trim() === '' || utf8Bytes(text) > MAX_NOTE_BODY_BYTES) {
+        reportError('note', new Error(text.trim() === '' ? 'Write a comment before submitting.' : 'Comment is too large to submit safely.'))
+        return
+      }
+    } else if (kind === 'send') {
+      if (action === 'cancel') { if (!controlData(data, [])) return false; sendPopup.invalidate(); closeSendMenu(); return }
+      if (action === 'dismiss-error') { if (!controlData(data, []) || operationError?.key !== 'send') return false; dismissError(operationError.id); return }
+      if (action === 'retry') { if (!controlData(data, []) || sendRead.status !== 'error') return false; await loadSendTargets(sendSessionRef.current, true); return }
+      if (action !== 'send' || readOnly || sendRead.scope !== scope || sendRead.status !== 'ready' ||
+        !controlData(data, data.target === 'existing' ? ['target','sessionId'] : ['target','agent'], ['target']) ||
+        (data.target !== 'existing' && data.target !== 'new') ||
+        (Object.hasOwn(data, 'sessionId') && typeof data.sessionId !== 'string') ||
+        (Object.hasOwn(data, 'agent') && typeof data.agent !== 'string')) return false
+      if (data.target === 'existing' ? !agentTargets.sessions.some(value => value.id === (data.sessionId ?? sendTarget)) : !agentTargets.agents.some(value => value.id === (data.agent ?? sendAgent))) return false
+    } else if (kind === 'templates') {
+      if (action === 'cancel') { if (!controlData(data, [])) return false; templatesPopup.invalidate(); closeTemplates(); return }
+      if (action === 'retry') { if (!controlData(data, []) || currentTemplateRead.status !== 'error') return false; await loadTemplates(templateSessionRef.current, true); return }
+      if (action !== 'create' || !controlData(data, ['title','template']) || Object.values(data).some(value => typeof value !== 'string')) return false
+      if (Object.hasOwn(data, 'template') && (currentTemplateRead.status !== 'ready' || !templateOptions.some(value => value.relativePath === data.template))) return false
     } else if (kind === 'rich') {
       if (action === 'find' || action === 'replace') {
         if (!controlData(data, ['query']) || (Object.hasOwn(data, 'query') && typeof data.query !== 'string')) return false
@@ -2204,7 +2215,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       }
       if (['more','toc','frontmatter','notes'].includes(action)) {
         if (!controlData(data, ['open'], ['open']) || typeof data.open !== 'boolean' || (action === 'frontmatter' && split.prefix === '')) return false
-        if (action === 'more') { if (!data.open) morePopup.invalidate(); setMoreOpen(data.open) }
+        if (action === 'more') { moreIntent.current += 1; if (!data.open) morePopup.invalidate(); setMoreOpen(data.open) }
         if (action === 'notes') setNotesOpen(data.open)
         if (action === 'toc') { setTocOpen(data.open); await call(MARKDOWN_METHOD, { action: 'toc', visible: data.open }) }
         if (action === 'frontmatter') { setFrontMatterVisible(data.open); await call(MARKDOWN_METHOD, { action: 'frontmatter', visible: data.open }) }
@@ -2227,7 +2238,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         if (!controlData(data, ['target','modifier','shift'], ['target']) || typeof data.target !== 'string' || (Object.hasOwn(data,'modifier') && typeof data.modifier !== 'boolean') || (Object.hasOwn(data,'shift') && typeof data.shift !== 'boolean')) return false
       } else if (action === 'edit-note' || action === 'delete-note') {
         if (readOnly || !controlData(data, ['noteId'], ['noteId']) || typeof data.noteId !== 'string' || !notes.some(note => note.id === data.noteId)) return false
-        if (action === 'edit-note') { const note = notes.find(note => note.id === data.noteId)!; setNoteEdit(note.id); setNoteBody(note.body); setNoteComposer(true); setNotesOpen(true); return }
+        if (action === 'edit-note') { const note = notes.find(note => note.id === data.noteId)!; notePopup.invalidate(); noteSelection.current = null; setNoteEdit(note.id); setNoteBody(note.body); setNoteComposer(true); setNotesOpen(true); return }
       } else {
         if (!controlData(data, [])) return false
         if (action === 'dismiss-error') { if (operationError) dismissError(operationError.id); else setFlushError(null); return }
@@ -2240,13 +2251,15 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           setOpenAnyway(true); return
         }
         if (action === 'templates') { openNewDocument(); return }
-        if (action === 'send-menu') { await openSendMenu(); return }
+        if (action === 'send-menu') { setNotesOpen(true); await openSendMenu(); return }
         if (!['source','preview','retry-flush','export-pdf','refresh-notes','copy-notes','refresh-headings','retry-capabilities'].includes(action)) return false
       }
     } else return false
     if (controlBusy.current?.scope === scope) return false
     const token = Symbol()
     controlBusy.current = { scope, token }
+    const pendingGeneration = popup?.generation
+    if (pendingGeneration && ['note','send','templates'].includes(kind)) setPendingControl({ kind, generation: pendingGeneration })
     try {
       if (kind === 'selection') {
         if (action === 'format') await applyFormat({ id: String(data.value), format: data.value as MarkdownFormat })
@@ -2274,7 +2287,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           }
           await flush()
         }
-      } else if (kind === 'more') { morePopup.invalidate(); setMoreOpen(false); await applyFormat({ id: String(data.value), format: data.value as MarkdownFormat }) }
+      } else if (kind === 'more') { const intent = moreIntent.current; morePopup.invalidate(); setMoreOpen(false); await applyFormat({ id: String(data.value), format: data.value as MarkdownFormat }, false, () => moreIntent.current === intent) }
       else if (kind === 'slash') { const item = filterSlashCatalog(slash!.query).find(item => item.id === data.id)!; await applyFormat(item, true) }
       else if (kind === 'documents') await chooseDocument(String(data.path))
       else if (kind === 'emoji') {
@@ -2283,7 +2296,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       } else if (kind === 'link') {
         const target = typeof data.target === 'string' ? data.target : linkValue
         if (action === 'copy') { await navigator.clipboard.writeText(target); if (live()) setFeedback('Copied link') }
-        else if (action === 'open') await openExternal(target)
+        else if (action === 'open') await openExternal(target, undefined, live)
         else {
           if (action === 'save' && target.trim() !== '') { await checkLink(target.trim()); if (!live() || !selectionIsCurrent() || currentBuffer.current.readOnly) return }
           if (action === 'remove' || target.trim() === '') editor!.chain().focus().extendMarkRange('link').unsetLink().run()
@@ -2298,6 +2311,39 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         const result = await call(MARKDOWN_METHOD, { action: 'replace', expectedRevision: revision.current, query, text, matchCase, wholeWord, all: action === 'replace-all' }) as { buffer?: SurfaceProps['buffer']; replacements?: number }
         if (!live()) return
         updateBufferFromApi(result.buffer); setSearchResult(null); setFeedback(`${result.replacements ?? 0} replacement(s)`)
+      } else if (kind === 'note') {
+        const captured = noteSelection.current
+        const editing = noteEdit
+        const text = typeof data.text === 'string' ? data.text : noteBody
+        if (!editing) {
+          await flush()
+          if (!live() || currentBuffer.current.readOnly || captured?.doc !== editor?.state.doc || captured?.version !== documentEpoch.current) return
+        }
+        await call(NOTES_METHOD, editing ? { action: 'edit', noteId: editing, text } : {
+          action: 'add', selection: { text: captured!.text, startLine: captured!.startLine, endLine: captured!.endLine, mode: 'rich' }, text
+        })
+        if (!live()) return
+        await loadNotes(true)
+        if (!live()) return
+        notePopup.invalidate(); setNoteComposer(false); setNoteBody(''); setNoteEdit(null); noteSelection.current = null
+      } else if (kind === 'send') {
+        const selected = data.target === 'existing' ? agentTargets.sessions.find(value => value.id === (data.sessionId ?? sendTarget)) : null
+        if (selected) setSendTarget(selected.id)
+        else setSendAgent(String(data.agent ?? sendAgent))
+        const result = await call(NOTES_METHOD, data.target === 'existing'
+          ? { action: 'send', target: 'existing', sessionId: selected!.id, agent: selected!.agent }
+          : { action: 'send', target: 'new', agent: data.agent ?? sendAgent }) as { deletedNoteIds: string[]; error?: string }
+        if (!live()) return
+        if (result.error) throw new Error(result.error)
+        await loadNotes(true)
+        if (!live()) return
+        setFeedback(`${result.deletedNoteIds.length} note(s) delivered.`); sendPopup.invalidate(); closeSendMenu()
+      } else if (kind === 'templates') {
+        const title = typeof data.title === 'string' ? data.title : templateTitle
+        setTemplateTitle(title); setTemplateCreateError(null)
+        await call(MARKDOWN_METHOD, { action: 'new', worktree: `id:${buffer.worktreeId}`, title, ...(typeof data.template === 'string' ? { template: data.template } : {}) })
+        if (!live()) return
+        templatesPopup.invalidate(); closeTemplates()
       } else if (kind === 'rich') {
         if (action === 'source') await openSource()
         else if (action === 'preview') await openPreview()
@@ -2310,14 +2356,34 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         else if (action === 'delete-note') { await call(NOTES_METHOD, { action: 'delete', noteId: data.noteId }); if (live()) await loadNotes() }
         else if (action === 'open-link') await openExternal(String(data.target), { metaKey: CHORD_PLATFORM === 'darwin' && data.modifier === true, ctrlKey: CHORD_PLATFORM !== 'darwin' && data.modifier === true, shiftKey: data.shift === true })
       }
-    } catch (cause) { if (live() && errorText(cause) !== flushFailure.current) reportError(kind, cause); throw cause }
-    finally { if (controlBusy.current?.token === token) controlBusy.current = null }
+    } catch (cause) {
+      if (live() && errorText(cause) !== flushFailure.current) {
+        if (kind === 'templates') setTemplateCreateError(errorText(cause))
+        else reportError(kind, cause)
+      }
+      throw cause
+    } finally {
+      if (controlBusy.current?.token === token) controlBusy.current = null
+      if (isCurrent(scope) && pendingGeneration) setPendingControl(value => value?.generation === pendingGeneration ? null : value)
+    }
   }
   const richControls = useMarkdownControl(props, 'rich', scope, true,
-    ['source','preview','retry-flush','open-anyway','find','replace','more','toc','frontmatter','notes','toc-level','toc-collapse','toc-expand','heading','export-pdf','templates','refresh-notes','copy-notes','send-menu','edit-note','delete-note','open-link','dismiss-error','dismiss-feedback','dismiss-flush-error','dismiss-capabilities','refresh-headings','retry-capabilities'],
+    ['source','preview','retry-flush','open-anyway','find','replace','more','toc','frontmatter','notes','toc-level','toc-collapse','toc-expand','heading','export-pdf','templates','refresh-notes','copy-notes','send-menu','edit-note','delete-note','open-link','dismiss-error','dismiss-feedback','dismiss-flush-error','dismiss-capabilities','refresh-headings','retry-capabilities'].filter(action => {
+      if (action === 'frontmatter') return split.prefix !== ''
+      if (action === 'open-anyway') return !!eligibility?.reason?.includes('600') && utf8Bytes(source) <= 1024 * 1024
+      if (action === 'heading') return currentTocRead.status === 'ready' && toc.length > 0
+      if (action === 'edit-note' || action === 'delete-note') return !readOnly && currentNotesRead.status === 'ready' && notes.length > 0
+      if (action === 'retry-capabilities' || action === 'dismiss-capabilities') return eligibilityRead.scope === scope && eligibilityRead.status === 'error'
+      if (action === 'refresh-headings') return currentTocRead.status === 'error'
+      if (action === 'dismiss-flush-error') return !!flushError && flushErrorScope === scope
+      if (action === 'dismiss-error') return operationError?.scope === scope && !(notesOpen && sendMenu && operationError.key === 'send')
+      if (action === 'dismiss-feedback') return !!feedback
+      return true
+    }),
     control => handleMarkdownControl('rich', control), cause => { if (isCurrent(scope) && cause.message !== flushFailure.current) reportError('bridge', cause) })
+  const currentSelection = editor ? selectionForReview(editor) : null
   const selectionControls = useMarkdownControl(props, 'selection', selectionGeneration, !!editor,
-    [...(!readOnly ? ['format','table','code-language','code-indent','add-review-note'] : []), 'copy-code','copy-context'],
+    [...(!readOnly ? ['format', ...(editor?.isActive('table') ? ['table'] : []), ...(editor?.isActive('codeBlock') ? ['code-language','code-indent'] : []), ...(currentSelection ? ['add-review-note'] : [])] : []), ...(editor?.isActive('codeBlock') ? ['copy-code'] : []), ...(currentSelection ? ['copy-context'] : [])],
     control => handleMarkdownControl('selection', control), cause => { if (selectionIsCurrent()) reportError('selection', cause) })
   const searchControls = useMarkdownControl(props, 'search', searchPopup.generation, searchOpen,
     ['find','previous','next','close','replace-toggle','options', ...(!readOnly ? ['replace-one','replace-all'] : [])],
@@ -2327,6 +2393,15 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const documentsControls = useMarkdownControl(props, 'documents', documentsPopup.generation, docMenu?.scope === scope, ['choose','close', ...(docMenu?.status === 'error' ? ['retry'] : [])], control => handleMarkdownControl('documents', control), cause => { if (documentsPopup.isCurrent()) reportError('documents', cause) })
   const linkControls = useMarkdownControl(props, 'link', linkPopup.generation, linkBubble, ['open','copy','close', ...(!readOnly ? ['save','remove'] : [])], control => handleMarkdownControl('link', control), cause => { if (linkPopup.isCurrent()) reportError('link', cause) })
   const emojiControls = useMarkdownControl(props, 'emoji', emojiPopup.generation, emojiOpen, ['close', ...(currentEmojiRead.status === 'error' ? ['retry'] : []), ...(!readOnly && currentEmojiRead.status === 'ready' ? ['insert'] : [])], control => handleMarkdownControl('emoji', control), cause => { if (emojiPopup.isCurrent()) reportError('emoji', cause) })
+  const noteControls = useMarkdownControl(props, 'note', notePopup.generation, notesOpen && noteComposer,
+    ['cancel', ...(!readOnly && pendingControl?.generation !== notePopup.generation ? ['submit'] : [])],
+    control => handleMarkdownControl('note', control), cause => { if (isCurrent(scope) && notePopup.isCurrent()) reportError('note', cause) })
+  const sendControls = useMarkdownControl(props, 'send', sendPopup.generation, notesOpen && sendMenu,
+    ['cancel', ...(operationError?.scope === scope && operationError.key === 'send' ? ['dismiss-error'] : []), ...(sendRead.status === 'error' ? ['retry'] : []), ...(!readOnly && sendRead.status === 'ready' && pendingControl?.generation !== sendPopup.generation ? ['send'] : [])],
+    control => handleMarkdownControl('send', control), cause => { if (isCurrent(scope) && sendPopup.isCurrent()) reportError('send', cause) })
+  const templatesControls = useMarkdownControl(props, 'templates', templatesPopup.generation, templatesOpen,
+    ['cancel', ...(currentTemplateRead.status === 'error' ? ['retry'] : []), ...(pendingControl?.generation !== templatesPopup.generation ? ['create'] : [])],
+    control => handleMarkdownControl('templates', control), cause => { if (isCurrent(scope) && templatesPopup.isCurrent()) setTemplateCreateError(cause.message) })
   selectionRun.current = selectionControls
   runSlashRef.current = slashControls
   chooseDocumentRef.current = documentsControls
@@ -2336,7 +2411,6 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const codeLanguage = editor?.isActive('codeBlock') ? String(editor.getAttributes('codeBlock').language ?? '') : ''
   const emojiPickerModuleLoaded = emojiPickerModule
   const EmojiPicker = emojiPickerModuleLoaded?.default
-  const currentSelection = editor ? selectionForReview(editor) : null
   const visibleNotes = currentNotesRead.status === 'ready' ? notes : []
   const currentSendRead = sendRead.scope === scope ? sendRead : { scope, status: 'idle' as const, error: null }
   const visibleToc = toc.filter((heading) => tocLevels.has(heading.level))
@@ -2381,23 +2455,22 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       {templatesOpen && <Dialog
         open={templatesOpen}
         title="New Markdown"
-        onClose={closeTemplates}
-        actions={<Button onClick={closeTemplates}>Cancel</Button>}
+        onClose={() => { void templatesControls.run('cancel') }}
+        actions={<Button onClick={() => { void templatesControls.run('cancel') }}>Cancel</Button>}
       >
         <div className="markdown-template-dialog">
-          <TextField label="Document title" className="markdown-input" placeholder="Title" value={templateTitle} onChange={(event) => setTemplateTitle(event.currentTarget.value)} />
-          <TextField label="Search templates" className="markdown-input" placeholder="Search templates…" value={templateQuery} onChange={(event) => setTemplateQuery(event.currentTarget.value)} />
-          <Button type="button" onClick={() => void createNewDocument()}>Blank Markdown (untitled.md)</Button>
+          <TextField label="Document title" className="markdown-input" placeholder="Title" value={templateTitle} disabled={pendingControl?.generation === templatesPopup.generation} onChange={(event) => setTemplateTitle(event.currentTarget.value)} />
+          <TextField label="Search templates" className="markdown-input" placeholder="Search templates…" value={templateQuery} disabled={pendingControl?.generation === templatesPopup.generation} onChange={(event) => setTemplateQuery(event.currentTarget.value)} />
+          <Button type="button" disabled={pendingControl?.generation === templatesPopup.generation} onClick={() => { void templatesControls.run('create', { title: templateTitle }) }}>Blank Markdown (untitled.md)</Button>
           {currentTemplateRead.status === 'loading' && <div role="status"><NoticeLine>Loading Markdown templates…</NoticeLine></div>}
           {currentTemplateRead.status === 'error' && currentTemplateRead.error && <InlineError
             message={currentTemplateRead.error}
-            action={{ label: 'Retry', onAction: () => { void loadTemplates(templateSessionRef.current) } }}
-            onDismiss={() => setTemplateRead((previous) => previous.scope === scope ? { ...previous, error: null, status: 'idle' } : previous)}
+            action={{ label: 'Retry', onAction: () => { void templatesControls.run('retry') } }}
           />}
-          {templateCreateError && <InlineError message={templateCreateError} onDismiss={() => setTemplateCreateError(null)} />}
+          {templateCreateError && <InlineError message={templateCreateError} />}
           {currentTemplateRead.status === 'ready' && templateOptions.length === 0 && <EmptyState message="No Markdown templates." />}
           {currentTemplateRead.status === 'ready' && templateOptions.length > 0 && visibleTemplates.length === 0 && <EmptyState message="No matching templates." />}
-          {currentTemplateRead.status === 'ready' && visibleTemplates.map((template) => <Button key={template.relativePath} type="button" onClick={() => void createNewDocument(template.relativePath)}>{template.title} — {template.relativePath}</Button>)}
+          {currentTemplateRead.status === 'ready' && visibleTemplates.map((template) => <Button key={template.relativePath} type="button" disabled={pendingControl?.generation === templatesPopup.generation} onClick={() => { void templatesControls.run('create', { title: templateTitle, template: template.relativePath }) }}>{template.title} — {template.relativePath}</Button>)}
         </div>
       </Dialog>}
 
@@ -2499,7 +2572,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       </aside>}
 
       {feedback && <div role="status" className="markdown-status">{feedback}<Button type="button" onClick={() => { void richControls.run('dismiss-feedback') }}>Dismiss</Button></div>}
-      {operationError?.scope === scope && <InlineError message={operationError.message} onDismiss={() => { void richControls.run('dismiss-error') }} />}
+      {operationError?.scope === scope && !(notesOpen && sendMenu && operationError.key === 'send') && <InlineError message={operationError.message} onDismiss={() => { void richControls.run('dismiss-error') }} />}
       {flushError && flushErrorScope === scope && <div className="markdown-flush-failure">
         <InlineError
           message={flushError}
@@ -2565,24 +2638,25 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           {currentNotesRead.status === 'ready' && visibleNotes.length === 0 && <EmptyState message="No review notes." />}
           {sendMenu && <div role="dialog" aria-label="Send notes to" className="markdown-popover markdown-popover--form">
             {currentSendRead.status === 'loading' && <div role="status"><NoticeLine>Loading note destinations…</NoticeLine></div>}
+            {operationError?.scope === scope && operationError.key === 'send' && <InlineError message={operationError.message} onDismiss={() => { void sendControls.run('dismiss-error') }} />}
             {currentSendRead.status === 'error' && currentSendRead.error && <InlineError
               message={currentSendRead.error}
-              action={{ label: 'Retry', onAction: () => { void loadSendTargets(sendSessionRef.current) } }}
+              action={{ label: 'Retry', onAction: () => { void sendControls.run('retry') } }}
             />}
             {currentSendRead.status === 'ready' && agentTargets.sessions.length === 0 && agentTargets.agents.length === 0 && <EmptyState message="No note destinations available." />}
             {currentSendRead.status === 'ready' && <>
-              <label className="markdown-field">Running agent<select className="markdown-select" value={sendTarget} onChange={(event) => setSendTarget(event.currentTarget.value)}><option value="">Choose a running agent</option>{agentTargets.sessions.map((session) => <option key={session.id} value={session.id}>{session.agent} · {session.title}</option>)}</select></label>
-              <Button type="button" disabled={!sendTarget} onClick={() => void sendNotes('existing')}>Send</Button>
-              <label className="markdown-field">New agent<select className="markdown-select" value={sendAgent} onChange={(event) => setSendAgent(event.currentTarget.value)}><option value="">Choose an agent</option>{agentTargets.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}</select></label>
-              <Button type="button" disabled={!sendAgent} onClick={() => void sendNotes('new')}>New agent</Button>
+              <label className="markdown-field">Running agent<select className="markdown-select" value={sendTarget} disabled={pendingControl?.generation === sendPopup.generation} onChange={(event) => setSendTarget(event.currentTarget.value)}><option value="">Choose a running agent</option>{agentTargets.sessions.map((session) => <option key={session.id} value={session.id}>{session.agent} · {session.title}</option>)}</select></label>
+              <Button type="button" disabled={!sendTarget || readOnly || pendingControl?.generation === sendPopup.generation} onClick={() => { void sendControls.run('send', { target: 'existing', sessionId: sendTarget }) }}>Send</Button>
+              <label className="markdown-field">New agent<select className="markdown-select" value={sendAgent} disabled={pendingControl?.generation === sendPopup.generation} onChange={(event) => setSendAgent(event.currentTarget.value)}><option value="">Choose an agent</option>{agentTargets.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.label}</option>)}</select></label>
+              <Button type="button" disabled={!sendAgent || readOnly || pendingControl?.generation === sendPopup.generation} onClick={() => { void sendControls.run('send', { target: 'new', agent: sendAgent }) }}>New agent</Button>
             </>}
-            <Button type="button" onClick={closeSendMenu}>Cancel</Button>
+            <Button type="button" onClick={() => { void sendControls.run('cancel') }}>Cancel</Button>
           </div>}
           {noteComposer && <div role="dialog" aria-label="Add note for the AI" className="markdown-popover markdown-popover--form">
             <p>{selection?.text ? `Selected text: ${selection.text}` : 'Add note for the AI'}</p>
-            <textarea ref={noteInput} className="markdown-textarea" aria-label="Add note for the AI" rows={3} maxLength={MAX_NOTE_BODY_BYTES} value={noteBody} onChange={(event) => setNoteBody(event.currentTarget.value)} />
-            <Button type="button" onClick={() => void addNote()}>{noteEdit ? 'Save note' : 'Add note'}</Button>
-            <Button type="button" onClick={() => { setNoteComposer(false); setNoteEdit(null); setNoteBody('') }}>Cancel</Button>
+            <textarea ref={noteInput} className="markdown-textarea" aria-label="Add note for the AI" rows={3} maxLength={MAX_NOTE_BODY_BYTES} value={noteBody} disabled={readOnly || pendingControl?.generation === notePopup.generation} onChange={(event) => setNoteBody(event.currentTarget.value)} />
+            <Button type="button" disabled={readOnly || pendingControl?.generation === notePopup.generation} onClick={() => { void noteControls.run('submit', { text: noteBody }) }}>{noteEdit ? 'Save note' : 'Add note'}</Button>
+            <Button type="button" onClick={() => { void noteControls.run('cancel') }}>Cancel</Button>
           </div>}
           {currentNotesRead.status === 'ready' && visibleNotes.map((note) => <article key={note.id} className="markdown-note">
             <small>{note.startLine === note.endLine ? `Line ${note.lineNumber}` : `Lines ${note.startLine}-${note.endLine}`}</small>
