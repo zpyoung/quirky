@@ -478,7 +478,7 @@ test.each([
   { pending: true, started: false, error: 'stale error', notice: 'Starting session…' },
   { pending: true, started: true, error: 'stale error', notice: 'Opening session…' },
   { pending: false, started: false, error: 'start refused', notice: null }
-])('prompt progress and failure share components exclusively: %j', async (state) => {
+] as const)('prompt progress and failure share components exclusively: %j', async (state) => {
   // React's DOM feature detection needs the installed test window.
   const { createRoot } = await import('react-dom/client')
   const { PromptDialog } = await import('../../src/window/workspace/PromptDialog')

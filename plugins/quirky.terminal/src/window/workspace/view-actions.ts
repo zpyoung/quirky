@@ -20,7 +20,7 @@ function messageOf(error: unknown): string {
 export async function runWorkspaceViewAction(context: UiPluginContext, args: WorkspaceViewActionArgs): Promise<void> {
   let result: unknown
   try {
-    result = await requestWindowCommand(context, { command: WORKSPACE_VIEW_ACTION_COMMAND, args })
+    result = await requestWindowCommand(context, { command: 'command:quirky.terminal/workspace-view-action', args })
   } catch (error) {
     context.toast('Could not run workspace action', messageOf(error))
     return

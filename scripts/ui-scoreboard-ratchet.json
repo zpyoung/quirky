@@ -12,6 +12,7 @@
   "quirky.agent-status": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.cli": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.mobile": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.terminal": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.terminal-dock": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.agents": ["commands", "empty", "error", "loading"],
   "quirky.session-info": ["commands", "compatibility-tokens", "empty", "error", "loading"],

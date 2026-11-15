@@ -109,21 +109,21 @@ export function DialogLayer({ controller, state }: { controller: WorkspaceContro
   if (!dialog) return null
   const { generation, kind } = dialog
   const workspace = controller.workspaceId
-  const onCancel = () => void runWorkspaceViewAction(controller.context, { workspace, action: 'cancel-dialog', kind, generation })
-  const onConfirm = (dontAskAgain: boolean) => {
+  const cancelDialog = () => void runWorkspaceViewAction(controller.context, { workspace, action: 'cancel-dialog', kind, generation })
+  const confirmClose = (dontAskAgain: boolean) => {
     if (kind !== 'close-running' && kind !== 'close-pinned') return
     void runWorkspaceViewAction(controller.context, { workspace, action: 'confirm-close', kind, generation, dontAskAgain })
   }
   const onSubmit = (prompt: string) => void runWorkspaceViewAction(controller.context, { workspace, action: 'submit-session', kind: 'new-session', generation, prompt })
   switch (dialog.kind) {
     case 'close-running':
-      return <CloseRunningDialog key={generation} agent={dialog.agent} tabLabel={dialog.tabLabel} onCancel={onCancel} onConfirm={onConfirm} />
+      return <CloseRunningDialog key={generation} agent={dialog.agent} tabLabel={dialog.tabLabel} onCancel={cancelDialog} onConfirm={confirmClose} />
     case 'close-pinned':
-      return <ClosePinnedDialog key={generation} tabLabel={dialog.tabLabel} onCancel={onCancel} onConfirm={onConfirm} />
+      return <ClosePinnedDialog key={generation} tabLabel={dialog.tabLabel} onCancel={cancelDialog} onConfirm={confirmClose} />
     case 'switch-tabs':
       return <Switcher key={generation} controller={controller} dialog={dialog} />
     case 'new-session':
-      return <PromptDialog key={generation} request={dialog.request} pending={dialog.pending === true} started={dialog.startedSession !== undefined} error={dialog.error ?? null} onClose={onCancel} onSubmit={onSubmit} />
+      return <PromptDialog key={generation} request={dialog.request} pending={dialog.pending === true} started={dialog.startedSession !== undefined} error={dialog.error ?? null} onClose={cancelDialog} onSubmit={onSubmit} />
   }
 }
 
