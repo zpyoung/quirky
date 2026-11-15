@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { Buffer } from 'node:buffer'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync, renameSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync, renameSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
@@ -217,6 +217,87 @@ function landingFor(r: LandingRig, rung: LandingRow['rung'], contentIdentity: st
     watcherId: r.enrollment.watcherId, rung, contentIdentity, attemptId: `landing-${rung}`,
     payload: { revision: 1 }, recordedAtMs: 10
   })
+}
+
+type FolderLandingFixture = {
+  context: PluginContext
+  root: string
+  dataDir: string
+  enrollment: { watcherId: string }
+  runtime: ObjectiveRuntime
+}
+
+function folderRuntime(r: FolderLandingFixture): ObjectiveRuntime {
+  return {
+    ...r.runtime,
+    workspaceKind: 'folder',
+    captureContentIdentity: () => captureContentIdentity(
+      r.context, r.root, r.dataDir, r.enrollment.watcherId, 'folder'
+    )
+  }
+}
+
+function addStandardChecks(r: LandingFolderView, contentIdentity: string): void {
+  const criterionCommand = r.task.criteria[0]!.checkCommand!
+  const gateCommand = r.payload.gates[0]!.command
+  const criterionAttemptId = 'folder-criterion-pass'
+  const gateAttemptId = 'folder-gate-pass'
+  r.checkRows.push(
+    {
+      attemptId: criterionAttemptId, watcherId: r.enrollment.watcherId, revision: 1, kind: 'criterion',
+      targetKey: 'implement:0', contentIdentity, command: criterionCommand, status: 'passed',
+      exitCode: 0, timedOut: false, stdoutTail: '', stderrTail: '', checkedAtMs: 2
+    },
+    {
+      attemptId: gateAttemptId, watcherId: r.enrollment.watcherId, revision: 1, kind: 'gate',
+      targetKey: 'ready', contentIdentity, command: gateCommand, status: 'passed',
+      exitCode: 0, timedOut: false, stdoutTail: '', stderrTail: '', checkedAtMs: 2
+    }
+  )
+  r.appendAttempt(criterionAttemptId, {
+    kind: 'run-check', revision: 1, taskKey: 'implement', criterionIndex: 0, command: criterionCommand,
+    contentIdentity, evidenceKey: `check:1:implement:0:${contentIdentity}`
+  }, `${criterionAttemptId}-dispatch`)
+  r.appendAttempt(gateAttemptId, {
+    kind: 'run-gate', revision: 1, gateName: 'ready', command: gateCommand, contentIdentity,
+    evidenceKey: `gate:1:ready:${contentIdentity}`
+  }, `${gateAttemptId}-dispatch`)
+}
+
+function addStandardReviewer(r: LandingFolderView, contentIdentity: string): void {
+  const attemptId = 'folder-reviewer-approval'
+  const dispatchId = `${attemptId}-dispatch`
+  r.issuedRows.push({
+    attemptId, watcherId: r.enrollment.watcherId, role: 'reviewer', revision: 1, contentIdentity
+  })
+  r.verdictRows.push({
+    attemptId, watcherId: r.enrollment.watcherId, dispatchId, revision: 1, role: 'reviewer',
+    contentIdentity, verdict: 'approve',
+    criteriaResults: [{ taskKey: 'implement', criterionIndex: 0, result: 'pass', note: 'Verified.' }],
+    checksRun: [], summary: 'Approved.', digest: 'folder-reviewer-digest', acceptedAtMs: 3
+  })
+  r.appendAttempt(attemptId, {
+    kind: 'dispatch-reviewer', revision: 1, contentIdentity,
+    evidenceKey: `review:1:reviewer:${contentIdentity}:1`
+  }, dispatchId)
+}
+
+type LandingFolderView = {
+  root: string
+  payload: ObjectivePayload
+  enrollment: { watcherId: string }
+  task: { criteria: Array<{ checkCommand?: string }> }
+  checkRows: CheckRow[]
+  verdictRows: VerdictRow[]
+  issuedRows: Array<{
+    attemptId: string; watcherId: string; role: 'reviewer' | 'integrator'; revision: number; contentIdentity: string | null
+  }>
+  appendAttempt(
+    attemptId: string,
+    action: NonNullable<ObjectiveJournalEntry['action']>,
+    dispatchId: string,
+    state?: 'running' | 'settled'
+  ): void
 }
 
 test('records files-on-disk landing only when content identity matches and required checks and verdicts pass', async () => {
@@ -497,4 +578,51 @@ test('refuses detached HEAD with branch-not-attached and distinguishes commit-ho
     revision: 1, contentIdentity: indeterminateIdentity, branch: indeterminateHead.branch!, headSha: indeterminateHead.headSha!
   }, 'indeterminate-attempt')).toEqual({ effect: 'indeterminate', reason: 'commit-state-indeterminate' })
   expect(indeterminate.landingRows.some(row => row.rung === 'committed-local-branch')).toBe(false)
+}, 30_000)
+test('folder checks and tiered review retain content-bound evidence without Git', async () => {
+  const r = rig()
+  r.payload.tier = 'standard'
+  r.payload.landingBar = 'files-on-disk'
+  mkdirSync(join(r.root, 'src'), { recursive: true })
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'export const value = 1\n')
+  const runtime = folderRuntime(r)
+  const contentIdentity = await runtime.captureContentIdentity()
+  const action = actionFor(contentIdentity)
+
+  expect(await recordFilesOnDisk(runtime, action, 'missing-folder-evidence', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-incomplete'
+  })
+  addStandardChecks(r, contentIdentity)
+  expect(await recordFilesOnDisk(runtime, action, 'missing-folder-review', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-incomplete'
+  })
+  addStandardReviewer(r, contentIdentity)
+
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'changed after checks and review\n')
+  expect(await recordFilesOnDisk(runtime, action, 'stale-folder-evidence', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-stale'
+  })
+  expect(r.landingRows).toHaveLength(0)
+
+  const unavailableRuntime: ObjectiveRuntime = {
+    ...runtime,
+    captureContentIdentity: async () => { throw new Error('folder observation unavailable') }
+  }
+  expect(await recordFilesOnDisk(unavailableRuntime, action, 'unavailable-folder-evidence', r.journal)).toEqual({
+    effect: 'not-landed', reason: 'landing-evidence-unavailable'
+  })
+  expect(r.landingRows).toHaveLength(0)
+
+  writeFileSync(join(r.root, 'src', 'main.ts'), 'export const value = 1\n')
+  expect(await recordFilesOnDisk(runtime, action, 'folder-landing', r.journal)).toEqual({ effect: 'landed' })
+  expect(r.landingRows).toHaveLength(1)
+  expect(r.landingRows[0]).toMatchObject({
+    rung: 'files-on-disk', contentIdentity, attemptId: 'folder-landing',
+    payload: { revision: 1, checkAttempts: ['folder-criterion-pass', 'folder-gate-pass'], verdictAttempts: ['folder-reviewer-approval'] }
+  })
+  expect(await recordFilesOnDisk(runtime, action, 'folder-landing-recovery', r.journal)).toEqual({ effect: 'landed' })
+  expect(r.landingRows).toHaveLength(1)
+  expect(r.landingRows[0]?.attemptId).toBe('folder-landing')
+  expect(r.calls.some(call => call.argv[0] === 'git')).toBe(false)
+  expect(existsSync(join(r.root, '.git'))).toBe(false)
 }, 30_000)

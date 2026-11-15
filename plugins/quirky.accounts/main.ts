@@ -1,9 +1,20 @@
+import { basename } from 'node:path'
 import type { PluginActivationDisposer, PluginContext } from '@quirky/protocol'
 import { AccountService } from './src/service'
 import { migrations } from './src/store'
 import { UsageService } from './src/usage/index'
+import { recoverCredentialStore } from './src/usage/credentials'
 
 export function activate(context: PluginContext): PluginActivationDisposer {
+  const recovery = recoverCredentialStore(context.dataDir)
+  if (recovery) {
+    if ('quarantinedPath' in recovery) {
+      context.log(`accounts: set aside unreadable usage-credentials.json as ${basename(recovery.quarantinedPath)}; saved provider credentials must be entered again`)
+    } else {
+      context.log(`accounts: ${recovery.diagnostic}`)
+    }
+  }
+
   const store = context.openStore(migrations)
   const accounts = new AccountService(context, store)
   const usage = new UsageService(context, () => accounts.usageTargets())

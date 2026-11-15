@@ -115,15 +115,16 @@ function setup() {
         case 'ui.window.self':
           return { connId: 1 }
         case 'ui.window.command.run': {
+          if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
           const args = params.args
-          const scoped = params.id === UI_CONTROL_COMMAND && typeof args === 'object' && args !== null && 'scope' in args
-          if (scoped) {
-            if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
-            return { result: dispatchUiControl(context, args) }
-          }
           const handler = provided.get(String(params.id))
-          if (typeof handler !== 'function') throw new Error(`unexpected command ${String(params.id)}`)
-          return { result: await (handler as (args: unknown) => unknown)(args) }
+          if (typeof handler === 'function') {
+            return { result: await (handler as (args: unknown) => unknown)(args) }
+          }
+          const scoped = params.id === UI_CONTROL_COMMAND &&
+            typeof args === 'object' && args !== null && !Array.isArray(args) && 'scope' in args
+          if (scoped) return { result: dispatchUiControl(context, args) }
+          throw new Error(`unexpected command ${String(params.id)}`)
         }
         case 'quirky.repo/list':
           return [...REPOS]
@@ -213,7 +214,7 @@ function setup() {
       return () => void listeners.delete(listener)
     },
     getSetting: () => undefined,
-    executeCommand: async () => {},
+    executeCommand: async () => { throw new Error('executeCommand must not be used for UI controls') },
     openView() {},
     closeView() {},
     togglePanel() {},
@@ -618,7 +619,40 @@ test('Needs you with nothing waiting offers Show all worktrees', async () => {
 test('Display › Right side shows is panel-wide and saved with the views', async () => {
   const h = setup()
   await h.mountInto(host)
+  const start = h.calls.length
   await chooseDisplay('Right side shows', 'Branch')
+  const routed = h.calls.slice(start).filter((call) => call.method === 'ui.window.command.run')
+  const factRoutes = routed.filter((call) => {
+    const args = call.params.args
+    return typeof args === 'object' && args !== null && 'operation' in args && args.operation === 'set-row-fact'
+  })
+  expect(factRoutes).toHaveLength(1)
+  for (const call of routed) expect(call.params).toMatchObject({ connId: 1, id: UI_CONTROL_COMMAND })
+  expect(routed.map((call) => call.params)).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      connId: 1,
+      id: UI_CONTROL_COMMAND,
+      args: expect.objectContaining({
+        action: 'control',
+        scope: 'worktrees-section',
+        target: 'worktrees',
+        operation: 'set-menu',
+        payload: expect.objectContaining({ menu: 'display' })
+      })
+    }),
+    expect.objectContaining({
+      connId: 1,
+      id: UI_CONTROL_COMMAND,
+      args: expect.objectContaining({
+        action: 'control',
+        scope: 'worktrees-section',
+        target: 'worktrees',
+        operation: 'set-row-fact',
+        payload: expect.objectContaining({ fact: 'branch' })
+      })
+    })
+  ]))
+  expect(h.calls.slice(start).filter((call) => call.method === 'ui.window.self').length).toBeGreaterThanOrEqual(routed.length)
   expect(h.world.views.rowFact).toBe('branch')
   expect(hasDot('all')).toBe(false)
   expect(host.querySelector('.worktree-fact')?.textContent).toBeTruthy()

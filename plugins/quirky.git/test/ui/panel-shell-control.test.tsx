@@ -592,7 +592,20 @@ describe('parent callbacks that carry operation completion', () => {
         expect(panel.fake.called('quirky.git/aiFix').map((call) => call.params)).toEqual([{
           worktree: 'feat', action: 'fixCommitFailure', agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}\nKeep the change small.', launchOptions: null, save: 'repo'
         }])
-        expect(panel.fake.called('ui.window.command.run')).toHaveLength(bridges)
+        expect(panel.fake.called('ui.window.command.run')).toHaveLength(bridges + 1)
+        expect(panel.fake.called('ui.window.command.run')[bridges]).toEqual({
+          method: 'ui.window.command.run',
+          params: {
+            connId: 22,
+            id: 'command:quirky.git/ui-control',
+            args: {
+              surface: 'panel:quirky.git/source-control',
+              target: 'ai-launch:feat:fixCommitFailure',
+              generation: expect.stringMatching(/^ai-\d+$/),
+              action: 'start'
+            }
+          }
+        })
         expect(dialog()).toBe(launch)
         expect(start.textContent).toBe('Save & start agent')
         expect(start.disabled).toBe(true)

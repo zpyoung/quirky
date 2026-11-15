@@ -1,5 +1,5 @@
-import { useId, useState, type FormEvent } from 'react'
-import { Button, FormRow } from '@quirky/ui'
+import { useId, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { Button, FormRow, InlineError, NoticeLine } from '@quirky/ui'
 import { Dialog } from './Dialog'
 
 /** How an agent handles tool approvals, as Agent settings configures it. */
@@ -34,6 +34,11 @@ export function PromptDialog({ request, pending, started, error, onSubmit, onClo
     event.preventDefault()
     if (canSubmit) onSubmit(prompt)
   }
+  const onPromptKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || (!event.metaKey && !event.ctrlKey)) return
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
+    submit(event)
+  }
 
   return (
     <Dialog title={`New ${request.label} session`} onClose={onClose}>
@@ -50,9 +55,7 @@ export function PromptDialog({ request, pending, started, error, onSubmit, onClo
             rows={5}
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && canSubmit) onSubmit(prompt)
-            }}
+            onKeyDown={onPromptKeyDown}
           />
         </FormRow>
         {request.background
@@ -61,7 +64,7 @@ export function PromptDialog({ request, pending, started, error, onSubmit, onClo
             ? <p className="ui-help-text">{PERMISSION_TEXT[request.permissions]} Change it in Agent settings.</p>
             : null}
         {started ? <p className="ui-help-text">This session has already started. Opening it will not start another agent.</p> : null}
-        {error !== null ? <div className="ui-error-text" role="alert">{error}</div> : null}
+        {pending ? <div role="status"><NoticeLine>{started ? 'Opening session…' : 'Starting session…'}</NoticeLine></div> : error !== null ? <InlineError message={error} /> : null}
         <div className="ui-dialog__actions qt-dialog-actions">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel

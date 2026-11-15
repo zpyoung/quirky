@@ -1,11 +1,13 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, Dialog, FormRow, TextField } from '@quirky/ui'
+import { Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine, TextField } from '@quirky/ui'
 import { messageOf } from '../panel/format'
-import { initialAgent, isUsable, useAgents } from './agents'
+import { initialAgent, isUsable, useAgents, type Agents } from './agents'
 import { DEFAULT_TEMPLATE, type FixAction, type LaunchParams, type Recipe } from './types'
 import type { RecipeLaunchOptions } from '../daemon/recipe-options'
 import { LaunchOptionsEditor } from './LaunchOptionsEditor'
+import type { GitUiControl } from '../ui-control'
+import { aiControlGeneration, requestAiControl, useAiControl } from './ai-control'
 
 const TITLES: Readonly<Record<FixAction, string>> = {
   fixCommitFailure: 'Fix Commit Failure With AI',
@@ -18,6 +20,28 @@ const TITLES: Readonly<Record<FixAction, string>> = {
 }
 
 type Preview = { prompt: string; recipe: Recipe }
+type PreviewState = { preview: Preview | null; loading: boolean; error: string | null }
+
+async function readPreview(
+  context: UiPluginContext,
+  worktree: string,
+  action: FixAction,
+  latest: MutableRefObject<number>,
+  alive: MutableRefObject<boolean>,
+  setState: Dispatch<SetStateAction<PreviewState>>
+): Promise<void> {
+  const request = ++latest.current
+  setState((previous) => ({ ...previous, loading: true, error: null }))
+  try {
+    const preview = (await context.call('quirky.git/aiFixPreview', { worktree, action })) as Preview
+    if (alive.current && request === latest.current) setState({ preview, loading: false, error: null })
+  } catch (error) {
+    if (alive.current && request === latest.current) {
+      setState((previous) => ({ ...previous, loading: false, error: messageOf(error) }))
+    }
+  }
+}
+
 
 type Props = {
   context: UiPluginContext
@@ -51,9 +75,9 @@ function hasLaunchChoices(value: RecipeLaunchOptions | null): boolean {
   return value !== null && value !== undefined && (value.model !== undefined || Object.keys(value.optionValues ?? {}).length > 0)
 }
 
-type FormProps = Props & { preview: Preview; agents: ReturnType<typeof useAgents> }
+type FormProps = Props & { preview: Preview; agents: Agents }
 
-function LaunchForm({ context, action, preview, agents, onClose, start }: FormProps) {
+function LaunchForm({ context, worktree, action, preview, agents, onClose, start }: FormProps) {
   const { recipe } = preview
   const usable = agents.list === null ? [] : agents.list.agents.filter(isUsable)
   const fallback = agents.list === null ? '' : initialAgent(agents.list, usable)
@@ -65,11 +89,19 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
   )
   const launchOptions = launchChoices.has(agent) ? launchChoices.get(agent)! : agent === initial ? recipe.launchOptions ?? {} : null
   const [text, setText] = useState(preview.prompt)
+  const textRef = useRef(text)
+  textRef.current = text
   const [args, setArgs] = useState(recipe.args)
   const [saveRecipe, setSaveRecipe] = useState(true)
   const [scope, setScope] = useState<'repo' | 'global'>('repo')
   const [starting, setStarting] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const startReserved = useRef(false)
+  const active = useRef(true)
+  const pendingControls = useRef(new Set<string>())
+  const sessionGeneration = useRef<string | null>(null)
+  if (sessionGeneration.current === null) sessionGeneration.current = aiControlGeneration()
+  const target = `ai-launch:${worktree}:${action}`
   const agentId = useId()
   const templateId = useId()
   const saveRecipeId = useId()
@@ -86,26 +118,98 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
   const saving = changed && saveRecipe
   const known = usable.some((entry) => entry.id === agent)
 
-  const go = async () => {
+  useEffect(() => {
+    active.current = true
+    startReserved.current = false
+    return () => {
+      active.current = false
+      startReserved.current = true
+      pendingControls.current.clear()
+    }
+  }, [])
+
+  function hasNoData(data: Record<string, unknown> | undefined): boolean {
+    return data === undefined || Object.keys(data).length === 0
+  }
+
+  function sendAiControl(control: { target: string; generation: string; action: string }): void {
+    const key = JSON.stringify([control.target, control.generation, control.action])
+    if (pendingControls.current.has(key)) return
+    pendingControls.current.add(key)
+    void requestAiControl(context, control).finally(() => pendingControls.current.delete(key))
+  }
+
+  function requestLaunchAction(controlAction: string): void {
+    const generation = sessionGeneration.current
+    if (!active.current || generation === null) return
+    sendAiControl({ target, generation, action: controlAction })
+  }
+
+  async function go(): Promise<void> {
     setStarting(true)
     setFailure(null)
-    const includeChoices = saving || optionsChanged || agent !== initial
+    const launchTemplate = templateOf(textRef.current, preview.prompt, recipe.template)
+    const saveLaunch = saveRecipe && (agent !== initial || args !== recipe.args || launchTemplate !== recipe.template || optionsChanged)
+    const includeChoices = saveLaunch || optionsChanged || agent !== initial
     const refusal = await start({
       agent,
       args,
-      template,
+      template: launchTemplate,
       ...(includeChoices ? { launchOptions } : {}),
-      ...(saving ? { save: scope } : {})
+      ...(saveLaunch ? { save: scope } : {})
     })
     setStarting(false)
     if (refusal === null) onClose()
-    else setFailure(refusal)
+    else {
+      startReserved.current = false
+      setFailure(refusal)
+    }
+  }
+
+  function handleLaunchControl(control: GitUiControl): boolean {
+    const generation = sessionGeneration.current
+    if (!active.current || generation === null || control.target !== target || control.generation !== generation ||
+        !hasNoData(control.data)) return false
+    if (control.action === 'start') {
+      if (agent === '' || usable.length === 0 || starting || startReserved.current) return false
+      startReserved.current = true
+      void go()
+      return true
+    }
+    if (control.action === 'reset-template') {
+      if (textRef.current === DEFAULT_TEMPLATE) return false
+      textRef.current = DEFAULT_TEMPLATE
+      setText(DEFAULT_TEMPLATE)
+      return true
+    }
+    return false
+  }
+
+  const actions = [
+    ...(agent !== '' && usable.length > 0 && !starting && !startReserved.current ? ['start'] : []),
+    ...(textRef.current !== DEFAULT_TEMPLATE ? ['reset-template'] : [])
+  ]
+  const controlAddress = actions.length === 0
+    ? null
+    : { target, generation: sessionGeneration.current!, actions }
+  useAiControl(context, controlAddress, handleLaunchControl)
+
+  function requestStart(): void {
+    requestLaunchAction('start')
+  }
+
+  function requestReset(): void {
+    requestLaunchAction('reset-template')
   }
 
   return (
     <>
       <div className="ui-stack">
-        {agents.list !== null && usable.length > 0 ? (
+        {agents.error !== null && (
+          <InlineError message={`Could not read the agents: ${agents.error}`} action={{ label: 'Retry', onAction: agents.retry }} />
+        )}
+        {!agents.settled && <div role="status"><NoticeLine>Detecting agents...</NoticeLine></div>}
+        {agents.list !== null && usable.length > 0 && (
           <FormRow label="Agent" htmlFor={agentId}>
             <select id={agentId} className="ui-text-field__input" aria-label="Agent" value={agent} onChange={(event) => setPicked(event.target.value)}>
               {!known && agent !== '' && <option value={agent}>{agent}</option>}
@@ -116,12 +220,8 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
               ))}
             </select>
           </FormRow>
-        ) : (
-          <div className="ui-stack">
-            <span className="ui-text-field__label">Agent</span>
-            <span className="ui-text-muted">{agents.settled ? 'No enabled agents' : 'Detecting agents...'}</span>
-          </div>
         )}
+        {agents.settled && agents.error === null && usable.length === 0 && <EmptyState message="No enabled agents" />}
         <div className="ui-stack">
           <FormRow label="Prompt template" htmlFor={templateId}>
             <textarea
@@ -135,7 +235,7 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
             />
           </FormRow>
           <div className="ui-cluster">
-            <Button type="button" disabled={text === DEFAULT_TEMPLATE} onClick={() => setText(DEFAULT_TEMPLATE)}>
+            <Button type="button" disabled={text === DEFAULT_TEMPLATE} onClick={requestReset}>
               Reset
             </Button>
           </div>
@@ -173,14 +273,10 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
           )}
         </div>
       </div>
-      {failure !== null && (
-        <p className="ui-error-text" role="alert">
-          {failure}
-        </p>
-      )}
+      {failure !== null && <InlineError message={failure} />}
       <div className="ui-cluster">
         <Button type="button" onClick={onClose}>Cancel</Button>
-        <Button type="button" variant="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={() => void go()}>
+        <Button type="button" variant="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={requestStart}>
           {saving ? 'Save & start agent' : 'Start agent'}
         </Button>
       </div>
@@ -195,37 +291,32 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
 export function LaunchDialog(props: Props) {
   const { context, worktree, action, onClose } = props
   const agents = useAgents(context, true)
-  const [preview, setPreview] = useState<Preview | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [state, setState] = useState<PreviewState>({ preview: null, loading: true, error: null })
+  const latest = useRef(0)
+  const alive = useRef(false)
+
+  function retryPreview(): void {
+    void readPreview(context, worktree, action, latest, alive, setState)
+  }
 
   useEffect(() => {
-    let alive = true
-    context
-      .call('quirky.git/aiFixPreview', { worktree, action })
-      .then((result) => {
-        if (alive) setPreview(result as Preview)
-      })
-      .catch((e: unknown) => {
-        if (alive) setError(messageOf(e))
-      })
+    alive.current = true
+    void readPreview(context, worktree, action, latest, alive, setState)
     return () => {
-      alive = false
+      alive.current = false
+      latest.current += 1
     }
-  }, [context, worktree, action])
+  }, [context, worktree, action, latest, alive, setState])
 
   return (
     <Dialog open title={TITLES[action]} onClose={onClose}>
       <p className="ui-text-muted">Review and edit the full command input before starting an agent.</p>
-      {preview !== null && <LaunchForm {...props} preview={preview} agents={agents} />}
-      {preview === null && error === null && <p className="ui-text-muted">Loading…</p>}
-      {error !== null && (
+      {state.preview !== null && <LaunchForm {...props} preview={state.preview} agents={agents} />}
+      {state.preview === null && state.loading && <div role="status"><NoticeLine>Loading…</NoticeLine></div>}
+      {state.error !== null && (
         <>
-          <p className="ui-error-text" role="alert">
-            {error}
-          </p>
-          <div className="ui-cluster">
-            <Button type="button" onClick={onClose}>Cancel</Button>
-          </div>
+          <InlineError message={state.error} action={{ label: 'Retry', onAction: retryPreview }} />
+          {state.preview === null && <div className="ui-cluster"><Button type="button" onClick={onClose}>Cancel</Button></div>}
         </>
       )}
     </Dialog>
