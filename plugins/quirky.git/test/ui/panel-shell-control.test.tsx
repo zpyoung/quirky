@@ -1,12 +1,13 @@
-import { afterAll, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
-import type { GitUiControl } from '../../src/ui-control'
+import type { GitUiControl, GitUiControlAddress as ControlAddress, GitUiControlResult } from '../../src/ui-control'
+import type { Fake } from './panel-support'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 // React-bound modules are imported after the DOM is installed so their initialization sees it.
-const { act, fakeContext, layoutFor } = await import('./panel-support')
+const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, press, q, settle, statusOf, type } = await import('./panel-support')
 const { createElement } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { activate } = await import('../../src/ui')
@@ -21,6 +22,18 @@ const {
 } = await import('../../src/ui-control')
 
 afterAll(() => GlobalRegistrator.unregister())
+const mountedPanels = new Set<() => void>()
+beforeEach(() => { document.body.innerHTML = '' })
+afterEach(() => { for (const unmount of mountedPanels) unmount() })
+
+const primary = (element: HTMLElement) => q(element, '.ui-split-button__primary') as HTMLButtonElement
+const errorLine = (element: HTMLElement) => q(element, '.ui-inline-error')
+const message = (element: HTMLElement) => byLabel(element, 'Commit message') as HTMLTextAreaElement
+const dialog = () => q(document.body, '[role="dialog"]')
+const upstream = (ahead: number, behind: number, behindPatchEquivalent: boolean | null = null) => ({
+  hasUpstream: true, name: 'origin/zoe/feat', sha: 'b'.repeat(40), ahead, behind, behindPatchEquivalent
+})
+const SOMETHING_TO_SHIP = compareOf({ entries: [{ path: 'util.ts', status: 'modified', added: 1, removed: 0, binary: false }], added: 1, ahead: 1 })
 
 type Control = GitUiControl
 type Address = Parameters<typeof registerGitUiControl>[1]
@@ -253,4 +266,593 @@ test('new Git UI generations are distinct opaque session identifiers', () => {
   expect(first.trim()).not.toBe('')
   expect(second.trim()).not.toBe('')
   expect(second).not.toBe(first)
+})
+
+test('mount scopes retain the initiating context clipboard reader without touching a system clipboard', async () => {
+  const fake = fakeContext(layoutFor(null))
+  let reads = 0
+  fake.context.readClipboardText = function () {
+    expect(this).toBe(fake.context)
+    reads++
+    return Promise.resolve('fixture clipboard text')
+  }
+  let read!: () => Promise<string>
+  const mount = mountGitUiControls(fake.context, 'extension:clipboard', (scoped) => {
+    read = () => scoped.readClipboardText()
+    return () => () => {}
+  })
+  const cleanup = mount(document.createElement('div'), {})
+  try {
+    expect(await read()).toBe('fixture clipboard text')
+    expect(reads).toBe(1)
+  } finally { cleanup?.() }
+})
+
+type ControlHandler = (args: unknown) => GitUiControlResult
+
+async function controlled(configure: (fake: Fake) => void = () => {}) {
+  const fake = fakeContext(layoutFor('feat'), 22)
+  fake.status = statusOf([entry('a.ts', 'staged'), entry('dir/b.ts')])
+  configure(fake)
+  let handler: ControlHandler | undefined
+  const provide = fake.context.provide
+  fake.context.provide = (id, value) => {
+    provide(id, value)
+    if (id === 'command:quirky.git/ui-control') handler = value as ControlHandler
+  }
+  const mounted = mountPanel(fake)
+  const unmount = () => {
+    if (!mountedPanels.delete(unmount)) return
+    mounted.unmount()
+  }
+  mountedPanels.add(unmount)
+  await settle()
+  const controls = (): ControlAddress[] => fake.reports.at(-1)?.uiControls ?? []
+  const address = (action: string) => {
+    const found = controls().find((control) => control.actions.includes(action))
+    expect(found).toBeDefined()
+    return found!
+  }
+  const send = async (control: ControlAddress, action: string, data?: Record<string, unknown>) => {
+    let result: { delivered: boolean } | undefined
+    await act(async () => { result = handler!({ surface: control.surface, target: control.target, generation: control.generation, action, ...(data === undefined ? {} : { data }) }) })
+    await settle()
+    return result!
+  }
+  return { fake, ...mounted, unmount, controls, address, send, dispatch: handler! }
+}
+
+describe('exact-window parent controllers', () => {
+  test('reported controls fit the host limit with 1,000 rows without publishing row addresses', async () => {
+    const panel = await controlled((fake) => { fake.status = statusOf(Array.from({ length: 1000 }, (_, i) => entry(`row-${i}.ts`)), { capped: true }) })
+    try {
+      expect(panel.controls().length).toBeGreaterThan(0)
+      expect(panel.controls().length).toBeLessThan(20)
+      expect(new TextEncoder().encode(JSON.stringify(panel.fake.reports.at(-1))).byteLength).toBeLessThanOrEqual(65_536)
+      expect(panel.fake.reports.at(-1)).toMatchObject({ worktree: 'feat', branch: 'zoe/feat', capped: true, sections: [{ id: 'unstaged', count: 1000 }] })
+    } finally { panel.unmount() }
+  })
+
+  test('pointer filter opening uses the captured report address through self and the exact-window bridge', async () => {
+    const panel = await controlled()
+    try {
+      panel.fake.on('ui.window.self', () => ({ connId: 22 }))
+      const address = panel.address('filter-open')
+      await click(byLabel(panel.element, 'Filter files by name'))
+      expect(byLabel(panel.element, 'Filter files…')).not.toBeNull()
+      expect(panel.fake.called('ui.window.command.run').at(-1)?.params).toMatchObject({
+        connId: 22, id: 'command:quirky.git/ui-control',
+        args: { surface: address.surface, target: address.target, generation: address.generation, action: 'filter-open' }
+      })
+      await type(byLabel(panel.element, 'Filter files…') as HTMLInputElement, 'a')
+      expect(panel.address('filter-close').generation).toBe(address.generation)
+      await press(byLabel(panel.element, 'Filter files…')!, 'Escape')
+      expect(byLabel(panel.element, 'Filter files…')).toBeNull()
+      expect(panel.fake.reports.at(-1).filter).toBe('')
+    } finally { panel.unmount() }
+  })
+
+  test('malformed, stale and unknown controls refuse without changes or delegated effects', async () => {
+    const panel = await controlled()
+    try {
+      const main = panel.address('row-open')
+      const before = panel.fake.calls.length
+      const report = structuredClone(panel.fake.reports.at(-1))
+      expect(await panel.send(main, 'unknown')).toEqual({ delivered: false })
+      expect(await panel.send({ ...main, generation: 'stale' }, 'row-open', { path: 'a.ts' })).toEqual({ delivered: false })
+      expect(await panel.send(main, 'row-open', { path: 17 })).toEqual({ delivered: false })
+      expect(await panel.send(main, 'row-open', { path: 'not-a-current-file' })).toEqual({ delivered: false })
+      expect(await panel.send(main, 'view-mode', { mode: 'grid' })).toEqual({ delivered: false })
+      expect(panel.fake.calls).toHaveLength(before)
+      expect(panel.fake.views).toEqual([])
+      expect(panel.fake.toasts).toEqual([])
+      expect(panel.fake.reports.at(-1)).toEqual(report)
+      expect(errorLine(panel.element)).toBeNull()
+      expect(byLabel(panel.element, 'Filter files…')).toBeNull()
+      expect(dialog()).toBeNull()
+    } finally { panel.unmount() }
+  })
+
+  test('A to B to A and remount do not resurrect an old controller generation', async () => {
+    const panel = await controlled()
+    const old = panel.address('filter-open')
+    await act(async () => panel.fake.setLayout(layoutFor('other')))
+    await settle()
+    await act(async () => panel.fake.setLayout(layoutFor('feat')))
+    await settle()
+    expect(panel.address('filter-open').generation).not.toBe(old.generation)
+    expect(await panel.send(old, 'filter-open')).toEqual({ delivered: false })
+    panel.unmount()
+    expect(await panel.send(old, 'filter-open')).toEqual({ delivered: false })
+    const remount = mountPanel(panel.fake)
+    try {
+      await settle()
+      expect(await panel.send(old, 'filter-open')).toEqual({ delivered: false })
+      expect(byLabel(remount.element, 'Filter files…')).toBeNull()
+    } finally { remount.unmount() }
+  })
+
+  test('a replaced row menu cannot stage a changed row or close its successor', async () => {
+    const panel = await controlled()
+    try {
+      const main = panel.address('row-menu-open')
+      await panel.send(main, 'row-menu-open', { path: 'dir/b.ts' })
+      const first = panel.address('stage')
+      await panel.send(first, 'close')
+      await panel.send(main, 'row-menu-open', { path: 'dir/b.ts' })
+      const second = panel.address('stage')
+      expect(second.generation).not.toBe(first.generation)
+      expect(await panel.send(first, 'close')).toEqual({ delivered: false })
+      expect(q(document.body, '[role="menu"]')).not.toBeNull()
+      panel.fake.status = statusOf([entry('a.ts', 'staged')])
+      await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      expect(await panel.send(second, 'stage')).toEqual({ delivered: false })
+      expect(panel.fake.called('quirky.git/stage')).toEqual([])
+    } finally { panel.unmount() }
+  })
+
+  test('same-kind replacement confirmations cannot be confirmed or closed by the old session', async () => {
+    const panel = await controlled()
+    try {
+      const main = panel.address('row-revert')
+      await panel.send(main, 'row-revert', { path: 'a.ts' })
+      const first = panel.address('confirm')
+      await panel.send(first, 'cancel')
+      await panel.send(main, 'row-revert', { path: 'a.ts' })
+      const second = panel.address('confirm')
+      expect(second.generation).not.toBe(first.generation)
+      expect(await panel.send(first, 'confirm')).toEqual({ delivered: false })
+      expect(await panel.send(first, 'cancel')).toEqual({ delivered: false })
+      expect(dialog()).not.toBeNull()
+      expect(panel.fake.called('quirky.git/discard')).toEqual([])
+      panel.fake.status = statusOf([entry('dir/b.ts')])
+      await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      expect(await panel.send(second, 'confirm')).toEqual({ delivered: false })
+      expect(panel.fake.called('quirky.git/unstage')).toEqual([])
+    } finally { panel.unmount() }
+  })
+
+  for (const failureMode of ['self', 'rejected', 'refused', 'malformed']) {
+    test(`failed ${failureMode} delivery retains the draft and reports an initiating-window error without fallback`, async () => {
+      const panel = await controlled()
+      try {
+        await type(message(panel.element), 'keep this draft')
+        if (failureMode === 'self') panel.fake.on('ui.window.self', () => ({ connId: 0 }))
+        else panel.fake.on('ui.window.command.run', () => {
+          if (failureMode === 'rejected') throw new Error('fixture bridge refused')
+          return failureMode === 'refused' ? { result: { delivered: false } } : { result: { delivered: 'yes' } }
+        })
+        await click(primary(panel.element))
+        expect(message(panel.element).value).toBe('keep this draft')
+        expect(panel.fake.called('quirky.git/commit')).toEqual([])
+        expect(panel.fake.toastOptions.at(-1)).toMatchObject({ kind: 'error' })
+        expect(panel.fake.toasts.at(-1)?.[1]).toBe(failureMode === 'rejected' ? 'fixture bridge refused' : 'The source control action is no longer available.')
+      } finally { panel.unmount() }
+    })
+  }
+
+  test('same-turn ship requests reserve one commit and late success retains an edited draft', async () => {
+    const pending = Promise.withResolvers<unknown>()
+    const panel = await controlled((fake) => fake.on('quirky.git/commit', () => pending.promise))
+    try {
+      await type(message(panel.element), 'first draft')
+      const address = panel.address('ship-step')
+      let first: { delivered: boolean } | undefined
+      let second: { delivered: boolean } | undefined
+      await act(async () => {
+        const handler = panel.fake.context
+        const args = { surface: address.surface, target: address.target, generation: address.generation, action: 'ship-step', data: { kind: 'commit-staged' } }
+        const results = await Promise.all([
+          handler.call('ui.window.command.run', { connId: 22, id: 'command:quirky.git/ui-control', args }),
+          handler.call('ui.window.command.run', { connId: 22, id: 'command:quirky.git/ui-control', args })
+        ])
+        const firstReply = results[0] as { result: { delivered: boolean } }
+        const secondReply = results[1] as { result: { delivered: boolean } }
+        first = firstReply.result
+        second = secondReply.result
+      })
+      await settle()
+      expect(first).toEqual({ delivered: true })
+      expect(second).toEqual({ delivered: false })
+      expect(panel.fake.called('quirky.git/commit')).toHaveLength(1)
+      await act(async () => panel.fake.setLayout(layoutFor('other')))
+      await settle()
+      await act(async () => panel.fake.setLayout(layoutFor('feat')))
+      await settle()
+      await type(message(panel.element), 'newer draft')
+      await act(async () => pending.resolve({ sha: 'd'.repeat(40) }))
+      await settle()
+      expect(message(panel.element).value).toBe('newer draft')
+    } finally { panel.unmount() }
+  })
+
+  test('owner and auxiliary input deliver through their actual activated handlers to only the initiating window', async () => {
+    const owner = await controlled()
+    const auxiliary = await controlled()
+    try {
+      owner.fake.on('ui.window.self', () => ({ connId: 11 }))
+      auxiliary.fake.on('ui.window.self', () => ({ connId: 22 }))
+      const destinations: Record<number, ControlHandler> = { 11: owner.dispatch, 22: auxiliary.dispatch }
+      for (const panel of [owner, auxiliary]) panel.fake.on('ui.window.command.run', (params) => {
+        if (typeof params.connId !== 'number') throw new Error('Missing connection')
+        return { result: destinations[params.connId]!(params.args) }
+      })
+      await click(byLabel(auxiliary.element, 'Filter files by name'))
+      expect(byLabel(auxiliary.element, 'Filter files…')).not.toBeNull()
+      expect(byLabel(owner.element, 'Filter files…')).toBeNull()
+      expect(auxiliary.fake.called('ui.window.command.run').at(-1)?.params.connId).toBe(22)
+      expect(owner.fake.called('ui.window.command.run')).toEqual([])
+    } finally { auxiliary.unmount(); owner.unmount() }
+  })
+
+  test('delivery acknowledges one unresolved remote operation before 30,001 ms of virtual time', async () => {
+    const pending = Promise.withResolvers<unknown>()
+    const panel = await controlled((fake) => {
+      fake.status = statusOf([], { upstreamStatus: upstream(1, 0) })
+      fake.compare = SOMETHING_TO_SHIP
+      fake.on('quirky.git/push', () => pending.promise)
+    })
+    const now = Date.now
+    try {
+      const address = panel.address('ship-step')
+      let reply: unknown
+      let request!: Promise<void>
+      await act(async () => {
+        request = panel.fake.context.call('ui.window.command.run', {
+          connId: 22, id: 'command:quirky.git/ui-control',
+          args: { surface: address.surface, target: address.target, generation: address.generation, action: 'ship-step', data: { kind: 'push' } }
+        }).then((value) => { reply = value })
+      })
+      await settle()
+      expect(reply).toEqual({ result: { delivered: true } })
+      expect(panel.fake.called('quirky.git/push')).toHaveLength(1)
+      const began = now()
+      Date.now = () => began + 30_001
+      await settle()
+      expect(reply).toEqual({ result: { delivered: true } })
+      expect(await panel.send(address, 'ship-step', { kind: 'push' })).toEqual({ delivered: false })
+      expect(panel.fake.called('quirky.git/push')).toHaveLength(1)
+      await request
+      await act(async () => pending.reject(new Error('fixture push failed')))
+      await settle()
+      expect(errorLine(panel.element)?.textContent).toContain('fixture push failed')
+    } finally { Date.now = now; panel.unmount() }
+  })
+
+  test('a delivery error that returns after a worktree switch cannot write into the replacement', async () => {
+    const delivery = Promise.withResolvers<unknown>()
+    const panel = await controlled((fake) => fake.on('ui.window.command.run', () => delivery.promise))
+    try {
+      await click(byLabel(panel.element, 'Filter files by name'))
+      await act(async () => panel.fake.setLayout(layoutFor('other')))
+      await settle()
+      await act(async () => delivery.reject(new Error('old delivery refused')))
+      await settle()
+      expect(panel.fake.toasts).toEqual([])
+      expect(byLabel(panel.element, 'Filter files…')).toBeNull()
+    } finally { panel.unmount() }
+  })
+})
+
+describe('parent callbacks that carry operation completion', () => {
+  for (const refused of [false, true]) {
+    test(`customized launch retains its edited payload and pending dialog until ${refused ? 'refusal' : 'success'}`, async () => {
+      const pending = Promise.withResolvers<unknown>()
+      const panel = await controlled((fake) => {
+        fake.settings['ai-enabled'] = true
+        fake.on('quirky.agents/list', () => ({ defaultAgent: 'claude', agents: ['claude', 'codex'].map((id) => ({ id, label: id, installed: true, enabled: true, canGenerate: true, isDefault: id === 'claude' })) }))
+        fake.on('quirky.session/list', () => [])
+        fake.on('quirky.agents/options', (params) => ({
+          agent: params.agent, label: params.agent, supported: false, models: [], unlisted: 'accept', unlistedOptions: [], structured: false,
+          extraArgs: { supported: true, allowed: '--model', placeholder: '--model', message: null }
+        }))
+        fake.on('quirky.git/aiFixPreview', () => ({
+          prompt: 'Fix prompt',
+          recipe: { action: 'fixCommitFailure', agent: null, args: '', template: '{basePrompt}', launchOptions: {}, sources: { agent: 'default', args: 'default', template: 'default', launchOptions: 'default' } }
+        }))
+        fake.on('quirky.git/commit', () => { throw failure('Commit fixture failed.', { reason: 'hook', summary: 'Commit fixture failed.', output: 'fixture output' }) })
+        fake.on('quirky.git/aiFix', () => pending.promise)
+      })
+      try {
+        await type(message(panel.element), 'commit before customizing')
+        await click(primary(panel.element))
+        expect(await panel.send(panel.address('ai-customize'), 'ai-customize', { action: 'fixCommitFailure' })).toEqual({ delivered: true })
+        const launch = dialog()!
+        expect(launch).not.toBeNull()
+        const agent = byLabel(launch, 'Agent') as HTMLSelectElement
+        await act(async () => { agent.value = 'codex'; agent.dispatchEvent(new Event('change', { bubbles: true })) })
+        await settle()
+        await type(byLabel(launch, 'CLI arguments') as HTMLInputElement, '--model gpt-5.4')
+        await type(byLabel(launch, 'Prompt template') as HTMLTextAreaElement, 'Fix prompt\nKeep the change small.')
+        const start = buttonText(launch, 'Save & start agent') as HTMLButtonElement
+        const bridges = panel.fake.called('ui.window.command.run').length
+        await click(start)
+        expect(panel.fake.called('quirky.git/aiFix').map((call) => call.params)).toEqual([{
+          worktree: 'feat', action: 'fixCommitFailure', agent: 'codex', args: '--model gpt-5.4', template: '{basePrompt}\nKeep the change small.', launchOptions: null, save: 'repo'
+        }])
+        expect(panel.fake.called('ui.window.command.run')).toHaveLength(bridges)
+        expect(dialog()).toBe(launch)
+        expect(start.textContent).toBe('Save & start agent')
+        expect(start.disabled).toBe(true)
+        if (refused) await act(async () => pending.reject(new Error('fixture launch refused')))
+        else await act(async () => pending.resolve({ session: 'fixture', agent: 'codex' }))
+        await settle()
+        if (refused) {
+          expect(dialog()).toBe(launch)
+          expect(launch.textContent).toContain('fixture launch refused')
+          expect(start.disabled).toBe(false)
+          expect((byLabel(launch, 'Prompt template') as HTMLTextAreaElement).value).toBe('Fix prompt\nKeep the change small.')
+        } else expect(dialog()).toBeNull()
+      } finally { panel.unmount() }
+    })
+  }
+
+  for (const failed of [false, true]) {
+    test(`capped status Retry awaits its single read through pending and slow states on ${failed ? 'failure' : 'success'}`, async () => {
+      const panel = await controlled((fake) => { fake.status = statusOf([entry('a.ts')], { capped: true }) })
+      const pending = Promise.withResolvers<unknown>()
+      const originalTimeout = globalThis.setTimeout
+      let showSlow: (() => void) | undefined
+      try {
+        const retry = buttonText(panel.element, 'Retry') as HTMLButtonElement
+        const before = panel.fake.called('quirky.git/status').length
+        const bridges = panel.fake.called('ui.window.command.run').length
+        panel.fake.on('quirky.git/status', () => pending.promise)
+        globalThis.setTimeout = ((handler: (...args: unknown[]) => void, delay?: number, ...args: unknown[]) => {
+          if (delay === 1000) showSlow = () => handler(...args)
+          return originalTimeout(handler, delay, ...args)
+        }) as typeof setTimeout
+        await click(retry)
+        expect(retry.disabled).toBe(true)
+        expect(panel.fake.called('quirky.git/status')).toHaveLength(before + 1)
+        await click(retry)
+        expect(panel.fake.called('quirky.git/status')).toHaveLength(before + 1)
+        expect(panel.fake.called('ui.window.command.run')).toHaveLength(bridges)
+        expect(showSlow).toBeDefined()
+        await act(async () => showSlow!())
+        expect(byLabel(panel.element, 'Refreshing')).not.toBeNull()
+        expect(retry.disabled).toBe(true)
+        if (failed) await act(async () => pending.reject(new Error('fixture status refused')))
+        else await act(async () => pending.resolve(panel.fake.status))
+        await settle()
+        expect(byLabel(panel.element, 'Refreshing')).toBeNull()
+        expect(retry.disabled).toBe(false)
+        if (failed) {
+          expect(panel.fake.toasts.at(-1)).toEqual(['Could not refresh Source Control', 'Try again.'])
+          expect(panel.fake.toastOptions.at(-1)).toMatchObject({ kind: 'error' })
+        }
+      } finally { globalThis.setTimeout = originalTimeout; panel.unmount() }
+    })
+  }
+})
+
+describe('notice command leases', () => {
+  async function failedStageNotice() {
+    const panel = await controlled((fake) => fake.on('quirky.git/stage', () => { throw failure('fixture stage failed') }))
+    await panel.send(panel.address('row-menu-open'), 'row-menu-open', { path: 'dir/b.ts' })
+    await panel.send(panel.address('stage'), 'stage')
+    expect(noticeOf(panel.element)?.getAttribute('role')).toBe('alert')
+    expect(noticeOf(panel.element)?.classList.contains('ui-toast--failing')).toBe(true)
+    return panel
+  }
+
+  test('refused Retry delivery retains the notice and posts no automatic second dismissal', async () => {
+    const panel = await failedStageNotice()
+    try {
+      const bridges = panel.fake.called('ui.window.command.run').length
+      const stageCalls = panel.fake.called('quirky.git/stage').length
+      const toasts = panel.fake.toasts.length
+      panel.fake.on('ui.window.command.run', () => ({ result: { delivered: false } }))
+      await click(buttonText(noticeOf(panel.element)!, 'Retry'))
+      expect(panel.fake.called('ui.window.command.run')).toHaveLength(bridges + 1)
+      expect(panel.fake.called('quirky.git/stage')).toHaveLength(stageCalls)
+      expect(noticeOf(panel.element)).not.toBeNull()
+      expect(panel.fake.toasts).toHaveLength(toasts + 1)
+      expect(panel.fake.toastOptions.at(-1)).toMatchObject({ kind: 'error' })
+    } finally { panel.unmount() }
+  })
+
+  test('replaced notices refuse an old Retry and expiry is checked before timer rendering', async () => {
+    const panel = await failedStageNotice()
+    const now = Date.now
+    try {
+      const old = panel.address('run')
+      expect(await panel.send(old, 'run', { label: 'Retry' })).toEqual({ delivered: true })
+      const current = panel.address('run')
+      expect(current.generation).not.toBe(old.generation)
+      const before = panel.fake.called('quirky.git/stage').length
+      expect(await panel.send(old, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+      const began = now()
+      Date.now = () => began + 10_001
+      expect(await panel.send(current, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+      expect(panel.fake.called('quirky.git/stage')).toHaveLength(before)
+    } finally { Date.now = now; panel.unmount() }
+  })
+
+  test('away and disposed panel notices cannot delegate a saved Retry even after returning', async () => {
+    const panel = await failedStageNotice()
+    try {
+      const old = panel.address('run')
+      const before = panel.fake.called('quirky.git/stage').length
+      await act(async () => panel.fake.setLayout(layoutFor('other')))
+      await settle()
+      expect(await panel.send(old, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+      await act(async () => panel.fake.setLayout(layoutFor('feat')))
+      await settle()
+      expect(await panel.send(old, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+      expect(panel.fake.called('quirky.git/stage')).toHaveLength(before)
+    } finally { panel.unmount() }
+  })
+
+  test('bulk revert failure is a failing shared notice even without a Failed title prefix', async () => {
+    const panel = await controlled((fake) => fake.on('quirky.git/discard', () => { throw failure('fixture revert failed') }))
+    try {
+      await panel.send(panel.address('revert-all'), 'revert-all')
+      await panel.send(panel.address('confirm'), 'confirm')
+      expect(noticeOf(panel.element)?.textContent).toContain('Revert all stopped')
+      expect(noticeOf(panel.element)?.getAttribute('role')).toBe('alert')
+      expect(noticeOf(panel.element)?.classList.contains('ui-toast--failing')).toBe(true)
+      const retry = panel.address('run')
+      panel.fake.status = statusOf([entry('new.ts')])
+      await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      const before = panel.fake.called('quirky.git/discard').length
+      expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+      expect(panel.fake.called('quirky.git/discard')).toHaveLength(before)
+    } finally { panel.unmount() }
+  })
+})
+
+test('base changes await the real status/compare refresh before review refresh and close', async () => {
+  const panel = await controlled()
+  const pending = Promise.withResolvers<unknown>()
+  try {
+    await panel.send(panel.address('change-base'), 'change-base')
+    const base = dialog()!
+    const usePrimary = buttonText(base, 'Use Primary') as HTMLButtonElement
+    const reviewReads = panel.fake.called('quirky.git/review').length
+    const bridges = panel.fake.called('ui.window.command.run').length
+    panel.fake.on('quirky.git/status', () => pending.promise)
+    await click(usePrimary)
+    expect(panel.fake.called('quirky.git/setBase').at(-1)?.params).toEqual({ worktree: 'feat', clear: true })
+    expect(dialog()).toBe(base)
+    expect(usePrimary.disabled).toBe(true)
+    expect(panel.fake.called('quirky.git/review')).toHaveLength(reviewReads)
+    expect(panel.fake.called('ui.window.command.run')).toHaveLength(bridges)
+    await act(async () => pending.resolve(panel.fake.status))
+    await settle()
+    expect(panel.fake.called('quirky.git/review')).toHaveLength(reviewReads + 1)
+    expect(dialog()).toBeNull()
+  } finally { panel.unmount() }
+})
+
+test('a review hash read cannot mark a replacement worktree session after A to B to A', async () => {
+  const hash = Promise.withResolvers<unknown>()
+  const panel = await controlled((fake) => fake.on('quirky.git/diff', () => hash.promise))
+  try {
+    expect(await panel.send(panel.address('row-toggle-mark'), 'row-toggle-mark', { path: 'a.ts' })).toEqual({ delivered: true })
+    expect(panel.fake.called('quirky.git/diff')).toHaveLength(1)
+    await act(async () => panel.fake.setLayout(layoutFor('other')))
+    await settle()
+    await act(async () => panel.fake.setLayout(layoutFor('feat')))
+    await settle()
+    await act(async () => hash.resolve({ modifiedHash: 'fixture-hash' }))
+    await settle()
+    expect(panel.fake.called('quirky.git/setReviewMark')).toEqual([])
+    expect(panel.fake.toasts).toEqual([])
+  } finally { panel.unmount() }
+})
+
+test('ship-step validates its captured kind and busy state rather than substituting the new step', async () => {
+  const panel = await controlled()
+  try {
+    const address = panel.address('ship-step')
+    panel.fake.status = statusOf([], { upstreamStatus: upstream(1, 0) })
+    panel.fake.compare = SOMETHING_TO_SHIP
+    await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+    await settle()
+    expect(await panel.send(address, 'ship-step', { kind: 'commit-staged', message: 'stale commit' })).toEqual({ delivered: false })
+    expect(panel.fake.called('quirky.git/commit')).toEqual([])
+    expect(panel.fake.called('quirky.git/push')).toEqual([])
+    panel.fake.status = { ...panel.fake.status, busy: 'fetch' }
+    await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+    await settle()
+    expect(await panel.send(address, 'ship-step', { kind: 'push' })).toEqual({ delivered: false })
+    expect(panel.fake.called('quirky.git/push')).toEqual([])
+  } finally { panel.unmount() }
+})
+
+test('a force-push confirmation never substitutes a changed pull-request lease', async () => {
+  let target = {
+    ready: true, remote: 'fork', branch: 'zoe/feat', localBranch: 'zoe/feat', localHead: 'a'.repeat(40),
+    headOid: 'c'.repeat(40), number: 7, fork: true, repository: { host: 'github.com', owner: 'zoe', repo: 'project' }
+  }
+  const panel = await controlled((fake) => {
+    fake.status = statusOf([], { upstreamStatus: upstream(2, 2, true) })
+    fake.compare = SOMETHING_TO_SHIP
+    fake.on('quirky.hosting/forBranch', () => ({ kind: 'found', review: { number: 7, url: 'https://github.com/zoe/project/pull/7', state: 'open' } }))
+    fake.on('quirky.git/pushTarget', () => target)
+  })
+  try {
+    await panel.send(panel.address('ship-step'), 'ship-step', { kind: 'push' })
+    const confirm = panel.address('confirm')
+    expect(dialog()?.textContent).toContain('c'.repeat(40))
+    target = { ...target, headOid: 'd'.repeat(40) }
+    await panel.send(confirm, 'confirm')
+    expect(panel.fake.called('quirky.git/forcePush')).toEqual([])
+    expect(panel.fake.called('quirky.git/pushTarget').length).toBeGreaterThanOrEqual(3)
+    expect(dialog() !== null || errorLine(panel.element) !== null).toBe(true)
+  } finally { panel.unmount() }
+})
+
+test('branch A to B to A replaces ownership without resurrecting the original address', async () => {
+  const panel = await controlled()
+  try {
+    const first = panel.address('filter-open')
+    for (const branch of ['zoe/other', 'zoe/feat']) {
+      panel.fake.status = { ...panel.fake.status, branch }
+      await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      expect(panel.address('filter-open').generation).not.toBe(first.generation)
+    }
+    expect(await panel.send(first, 'filter-open')).toEqual({ delivered: false })
+    expect(byLabel(panel.element, 'Filter files…')).toBeNull()
+  } finally { panel.unmount() }
+})
+
+test('commanded ship messages are trimmed, validated and never coerced', async () => {
+  const panel = await controlled()
+  try {
+    const address = panel.address('ship-step')
+    expect(await panel.send(address, 'ship-step', { kind: 'commit-staged', message: 17 })).toEqual({ delivered: false })
+    expect(panel.fake.called('quirky.git/commit')).toEqual([])
+    expect(await panel.send(address, 'ship-step', { kind: 'commit-staged', message: '  Commanded commit  ' })).toEqual({ delivered: true })
+    expect(panel.fake.called('quirky.git/commit').map((call) => call.params)).toEqual([{ worktree: 'feat', message: 'Commanded commit' }])
+    await panel.send(address, 'ship-step', { kind: 'commit-staged', message: '   ' })
+    expect(panel.fake.called('quirky.git/commit')).toHaveLength(1)
+    expect(errorLine(panel.element)?.textContent).toContain('Write a commit message, or click ✦')
+    expect(document.activeElement).toBe(message(panel.element))
+  } finally { panel.unmount() }
+})
+
+test('same-turn default AI requests reserve one launch without customized launch parameters', async () => {
+  const pending = Promise.withResolvers<unknown>()
+  const panel = await controlled((fake) => {
+    fake.settings['ai-enabled'] = true
+    fake.status = statusOf([entry('conflict.ts', 'conflicts', 'modified', { conflict: { kind: 'both_modified', state: 'unresolved' } })], { operation: 'merge' })
+    fake.on('quirky.git/aiFix', () => pending.promise)
+  })
+  try {
+    const address = panel.address('ai-fix')
+    const args = { surface: address.surface, target: address.target, generation: address.generation, action: 'ai-fix', data: { action: 'resolveConflicts' } }
+    let results: GitUiControlResult[] = []
+    await act(async () => { results = [panel.dispatch(args), panel.dispatch(args)] })
+    await settle()
+    expect(results).toEqual([{ delivered: true }, { delivered: false }])
+    expect(panel.fake.called('quirky.git/aiFix').map((call) => call.params)).toEqual([{ worktree: 'feat', action: 'resolveConflicts' }])
+    await act(async () => pending.resolve({ session: 'fixture', agent: 'codex' }))
+    await settle()
+  } finally { panel.unmount() }
 })

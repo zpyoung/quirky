@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GitCompare, GitStatus, UiPluginContext, Worktree } from '@quirky/protocol'
 import { conflictBlocks } from '../view/conflict-markers'
 import { dataOf, messageOf } from './format'
@@ -46,8 +46,9 @@ const VIEW_MODE_ID = 'setting:quirky.git/viewMode'
  * The panel's settings, re-read on `setting.changed`. `setViewMode` shows the new mode at once
  * and writes it through `setting.set`; a refused write puts the stored mode back.
  */
-export function useSettings(context: UiPluginContext): [PanelSettings, (mode: ViewMode) => void] {
+export function useSettings(context: UiPluginContext): [PanelSettings, (mode: ViewMode, current?: () => boolean) => void] {
   const [settings, setSettings] = useState(() => readSettings(context))
+  const writeVersion = useRef(0)
   useEffect(() => {
     setSettings(readSettings(context))
     return context.subscribe((event) => {
@@ -60,9 +61,11 @@ export function useSettings(context: UiPluginContext): [PanelSettings, (mode: Vi
     })
   }, [context])
   const setViewMode = useCallback(
-    (mode: ViewMode) => {
+    (mode: ViewMode, current?: () => boolean) => {
+      const version = ++writeVersion.current
       setSettings((prev) => ({ ...prev, viewMode: mode }))
       context.call('setting.set', { id: VIEW_MODE_ID, value: mode }).catch((error: unknown) => {
+        if (version !== writeVersion.current || (current !== undefined && !current())) return
         context.toast('Could not change the view', messageOf(error), { kind: 'error' })
         setSettings(readSettings(context))
       })
@@ -127,24 +130,27 @@ export function useStatus(context: UiPluginContext, worktree: string): StatusDat
   const newest = useRef(0)
   const alive = useRef(true)
 
-  const refresh = useCallback(async function refresh(): Promise<GitStatus | null> {
-    const ticket = ++newest.current
-    try {
-      const next = (await context.call('quirky.git/status', { worktree })) as GitStatus
-      const readiness = await findConflictReadiness(context, worktree, next)
-      if (!alive.current || ticket !== newest.current) return next
-      setStatus((prev) => (same(prev, next) ? prev : next))
-      setMarkersGone((prev) => (same([...prev].sort(), [...readiness.markersGone].sort()) ? prev : readiness.markersGone))
-      setUnreadableConflicts((prev) => (same([...prev].sort(), [...readiness.unreadableConflicts].sort()) ? prev : readiness.unreadableConflicts))
-      setError(null)
-      setUnavailable(null)
-      return next
-    } catch (e) {
-      if (!alive.current || ticket !== newest.current) return null
-      if (dataOf(e).reason === 'folder-workspace') setUnavailable(messageOf(e))
-      else setError(messageOf(e))
-      return null
+  const refresh = useMemo(() => {
+    async function refresh(): Promise<GitStatus | null> {
+      const ticket = ++newest.current
+      try {
+        const next = (await context.call('quirky.git/status', { worktree })) as GitStatus
+        const readiness = await findConflictReadiness(context, worktree, next)
+        if (!alive.current || ticket !== newest.current) return next
+        setStatus((prev) => (same(prev, next) ? prev : next))
+        setMarkersGone((prev) => (same([...prev].sort(), [...readiness.markersGone].sort()) ? prev : readiness.markersGone))
+        setUnreadableConflicts((prev) => (same([...prev].sort(), [...readiness.unreadableConflicts].sort()) ? prev : readiness.unreadableConflicts))
+        setError(null)
+        setUnavailable(null)
+        return next
+      } catch (e) {
+        if (!alive.current || ticket !== newest.current) return null
+        if (dataOf(e).reason === 'folder-workspace') setUnavailable(messageOf(e))
+        else setError(messageOf(e))
+        return null
+      }
     }
+    return refresh
   }, [context, worktree])
 
   useEffect(() => {

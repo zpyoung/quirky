@@ -1,59 +1,73 @@
-import { useState } from 'react'
+import { useRef } from 'react'
 import { Button, ContextMenu, ControlIcon, IconButton, TextField, ToolPanelActions } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { ReviewModel } from '@quirky/protocol'
+import type { FixAction } from '../ai/types'
 import type { ViewMode } from './data'
 
 const FILTER_LABEL = 'Filter files…'
 
+type HeaderAction = 'view-mode' | 'change-base' | 'refresh' | 'ai-customize' | 'ai-settings' | 'revert-all'
 type HeaderProps = {
   filter: string
   filterOpen: boolean
-  onFilterOpen(open: boolean): void
+  onFilterControl(action: 'filter-open' | 'filter-close'): void
   onFilter(query: string): void
   viewMode: ViewMode
-  onViewMode(mode: ViewMode): void
-  onChangeBase(): void
-  onRefresh(): void
-  /** Offered while Source Control AI actions are on. */
-  onSummarize?(): void
-  /** The pull-request AI actions, listed after Summarize while a pull request is open for the branch. */
-  prActions?: ReadonlyArray<{ label: string; onSelect(): void }>
-  /** Opens the Source Control AI settings view. */
-  onAiSettings?(): void
-  /** How many files "Revert all…" would revert; 0 leaves it disabled. */
+  menuGeneration: string | null
+  menuPosition: { x: number; y: number } | null
+  onMenuOpen(position: { x: number; y: number }): void
+  onMenuClose(): void
+  onMenuAction(action: HeaderAction, data?: Record<string, unknown>): void
+  summarize: boolean
+  prActions?: ReadonlyArray<{ label: string; action: FixAction }>
+  aiSettings: boolean
   revertable: number
-  onRevertAll(): void
 }
 
 /** The panel's filter toggle and ⋯ menu (frame header), with the filter box in the body. */
-export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, onViewMode, onChangeBase, onRefresh, onSummarize, prActions = [], onAiSettings, revertable, onRevertAll }: HeaderProps) {
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number; trigger: HTMLButtonElement } | null>(null)
-  const select = (action?: () => void) => () => {
-    menuAt?.trigger.focus()
-    action?.()
+export function Header({
+  filter,
+  filterOpen,
+  onFilterControl,
+  onFilter,
+  viewMode,
+  menuGeneration,
+  menuPosition,
+  onMenuOpen,
+  onMenuClose,
+  onMenuAction,
+  summarize,
+  prActions = [],
+  aiSettings,
+  revertable
+}: HeaderProps) {
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
+  const select = (action: HeaderAction, data?: Record<string, unknown>) => () => {
+    menuTriggerRef.current?.focus()
+    onMenuAction(action, data)
   }
   const entries: ContextMenuItem[] = [
-    { label: 'List', checked: viewMode === 'list', onSelect: select(() => onViewMode('list')) },
-    { label: 'Tree', checked: viewMode === 'tree', onSelect: select(() => onViewMode('tree')) },
-    { label: 'Change base…', separatorBefore: true, onSelect: select(onChangeBase) },
-    { label: 'Refresh', onSelect: select(onRefresh) },
-    ...(onSummarize ? [{ label: 'Summarize branch with AI', onSelect: select(onSummarize) }] : []),
-    ...prActions.map((item) => ({ label: item.label, onSelect: select(item.onSelect) })),
-    ...(onAiSettings ? [{ label: 'AI settings…', separatorBefore: true, onSelect: select(onAiSettings) }] : []),
+    { label: 'List', checked: viewMode === 'list', onSelect: select('view-mode', { mode: 'list' }) },
+    { label: 'Tree', checked: viewMode === 'tree', onSelect: select('view-mode', { mode: 'tree' }) },
+    { label: 'Change base…', separatorBefore: true, onSelect: select('change-base') },
+    { label: 'Refresh', onSelect: select('refresh') },
+    ...(summarize ? [{ label: 'Summarize branch with AI', onSelect: select('ai-customize', { action: 'branchSummary' }) }] : []),
+    ...prActions.map((item) => ({
+      label: item.label,
+      onSelect: select('ai-customize', { action: item.action })
+    })),
+    ...(aiSettings ? [{ label: 'AI settings…', separatorBefore: true, onSelect: select('ai-settings') }] : []),
     {
       label: 'Revert all…',
       separatorBefore: true,
       danger: true,
       enabled: revertable > 0,
       title: revertable > 0 ? undefined : 'No files to revert',
-      onSelect: select(onRevertAll)
+      onSelect: select('revert-all')
     }
   ]
-  const close = () => {
-    onFilter('')
-    onFilterOpen(false)
-  }
+  const closeFilter = () => onFilterControl('filter-close')
   return (
     <>
       <ToolPanelActions>
@@ -62,7 +76,7 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
           variant={filter.trim() !== '' ? 'primary' : 'secondary'}
           aria-pressed={filterOpen}
           title={filter.trim() !== '' ? `Filter: ${filter.trim()}` : 'Filter files by name'}
-          onClick={() => (filterOpen ? close() : onFilterOpen(true))}
+          onClick={() => onFilterControl(filterOpen ? 'filter-close' : 'filter-open')}
         >
           <ControlIcon name="magnifying-glass" />
         </IconButton>
@@ -70,9 +84,10 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
           label="More source control actions"
           aria-haspopup="menu"
           title="More source control actions"
+          ref={menuTriggerRef}
           onClick={(event) => {
             const box = event.currentTarget.getBoundingClientRect()
-            setMenuAt({ x: box.right, y: box.bottom, trigger: event.currentTarget })
+            onMenuOpen({ x: box.right, y: box.bottom })
           }}
         >
           <ControlIcon name="dots-three" />
@@ -90,17 +105,29 @@ export function Header({ filter, filterOpen, onFilterOpen, onFilter, viewMode, o
             onChange={(event) => onFilter(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
+                event.preventDefault()
                 event.stopPropagation()
-                close()
+                closeFilter()
               }
             }}
           />
-          <IconButton label="Clear and close filter" title="Clear and close filter" onClick={close}>
+          <IconButton label="Clear and close filter" title="Clear and close filter" onClick={closeFilter}>
             {'×'}
           </IconButton>
         </div>
       )}
-      {menuAt && <ContextMenu x={menuAt.x} y={menuAt.y} align="end" label="Source control actions" items={entries} returnFocusTo={menuAt.trigger} onClose={() => setMenuAt(null)} />}
+      {menuGeneration !== null && menuPosition !== null && (
+        <ContextMenu
+          key={menuGeneration}
+          x={menuPosition.x}
+          y={menuPosition.y}
+          align="end"
+          label="Source control actions"
+          items={entries}
+          returnFocusTo={menuTriggerRef.current ?? undefined}
+          onClose={onMenuClose}
+        />
+      )}
     </>
   )
 }

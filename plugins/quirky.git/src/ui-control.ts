@@ -302,6 +302,7 @@ function delegatedContext(context: UiPluginContext): UiPluginContext {
     get nativeBrowser() { return context.nativeBrowser },
     get pluginId() { return context.pluginId },
     log(message) { context.log(message) },
+    readClipboardText() { return context.readClipboardText() },
     nativeDropPaths(files) { return context.nativeDropPaths(files) },
     provide(contributionId, implementation) { context.provide(contributionId, implementation) },
     call(method, params) { return context.call(method, params) },

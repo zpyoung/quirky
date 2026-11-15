@@ -141,7 +141,13 @@ describe('quirky.git source-control panel', () => {
     await settle()
     const before = fake.calls.length
     await fromMenu(element, 'edited.ts', 'Stage')
-    expect(fake.calls.slice(before)).toEqual([
+    const calls = fake.calls.slice(before)
+    expect(calls.filter(({ method }) => method === 'ui.window.self')).toHaveLength(2)
+    expect(calls.filter(({ method }) => method === 'ui.window.command.run').map(({ params }) => params)).toMatchObject([
+      { connId: expect.any(Number), id: 'command:quirky.git/ui-control', args: { surface: PANEL, target: 'worktree:w1', generation: expect.any(String), action: 'row-menu-open', data: { path: 'edited.ts', x: 5, y: 5 } } },
+      { connId: expect.any(Number), id: 'command:quirky.git/ui-control', args: { surface: PANEL, target: 'row-menu:w1:edited.ts', generation: expect.any(String), action: 'stage' } }
+    ])
+    expect(calls.filter(({ method }) => method !== 'ui.window.self' && method !== 'ui.window.command.run')).toEqual([
       { method: 'quirky.git/stage', params: { worktree: 'w1', paths: ['edited.ts'] } },
       { method: 'quirky.git/status', params: { worktree: 'w1' } },
       { method: 'quirky.git/compare', params: { worktree: 'w1' } },
