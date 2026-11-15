@@ -261,6 +261,58 @@ function dataTypeIsReadOnly(field: ProjectField): boolean {
   const name = field.name?.trim().toLowerCase() ?? ''
   return type === 'REPOSITORY' || type === 'PARENT_ISSUE' || name === 'repository' || name === 'parent' || name === 'parent issue' || name === 'title'
 }
+type InlineEditSession = { projectKey: string; viewId: string; revision: number; draft: string; saving: boolean; error: string }
+type InlineEditorState = {
+  editing: boolean
+  draft: string
+  saving: boolean
+  error: string
+  onBegin(): void
+  onDraft(value: string): void
+  onSave(): void
+  onCancel(): void
+  onKeyDown(event: KeyboardEvent<HTMLInputElement>): void
+}
+type InlineFieldShape = { clear: boolean; value?: unknown; error?: string }
+
+function inlineEditorKey(itemId: string, fieldId: string): string {
+  return JSON.stringify([itemId, fieldId])
+}
+
+function inlineCollectionProperty(field: ProjectField): 'labels' | 'assignees' | null {
+  const type = fieldDataType(field)
+  const name = field.name ?? ''
+  if (type === 'USERS' || /assignee/i.test(name)) return 'assignees'
+  if (type === 'LABELS' || /label/i.test(name)) return 'labels'
+  return null
+}
+
+function inlineInitialValue(item: ProjectItem, field: ProjectField): string {
+  const collection = isIssue(item) ? inlineCollectionProperty(field) : null
+  if (collection !== null) {
+    const values = item.content?.[collection]
+    return Array.isArray(values)
+      ? values.map((entry) => typeof entry === 'string' ? entry : String(record(entry)?.login ?? record(entry)?.name ?? '')).filter(Boolean).join(', ')
+      : ''
+  }
+  const raw = fieldValue(item, field.id)
+  if (typeof raw === 'string' || typeof raw === 'number') return String(raw)
+  const key = fieldDataType(field).toLowerCase()
+  return String(record(raw)?.[key] ?? '')
+}
+
+function shapeInlineField(field: ProjectField, draft: string): InlineFieldShape {
+  if (draft === '') return { clear: true }
+  const type = fieldDataType(field)
+  if (type === 'NUMBER') {
+    const number = Number(draft)
+    return Number.isFinite(number) ? { clear: false, value: { number } } : { clear: false, error: 'Enter a finite number.' }
+  }
+  if (type === 'DATE') return { clear: false, value: { date: draft } }
+  if (type === 'TEXT') return { clear: false, value: { text: draft } }
+  return { clear: false, error: 'This field cannot be edited inline.' }
+}
+
 type ProjectFieldOverride = { projectKey: string; itemId: string; fieldId: string; clear: boolean; pending: boolean; value?: unknown }
 
 function projectFieldMutationKey(projectKey: string, itemId: string, fieldId: string): string {
@@ -363,6 +415,9 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const [issueTypesByItem, setIssueTypesByItem] = useState<Record<string, Array<{ id: string; name: string }>>>({})
   const [deviceColumns, setDeviceColumns] = useState<{ hidden: string[]; widths: Record<string, number> }>({ hidden: [], widths: {} })
   const [zoom, setZoom] = useState<RoadmapZoom>(() => readZoom())
+  const [inlineEditors, setInlineEditors] = useState<Map<string, InlineEditSession>>(() => new Map())
+  const inlineEditorsRef = useRef(inlineEditors)
+  const inlineRevision = useRef(0)
   const projectGeneration = useRef(0)
   const viewGeneration = useRef(0)
   const tableGeneration = useRef(0)
@@ -396,6 +451,10 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   const isQueryDirty = queryDraft !== activeQuery
 
   useEffect(() => registerProjectsControl(context, (request) => controlHandler.current(request)), [context])
+
+  useEffect(() => {
+    clearInlineEditors()
+  }, [projectKey, activeViewId])
 
   useEffect(() => {
     projectGeneration.current += 1
@@ -679,6 +738,36 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
     setDeviceColumns(next)
     writeDeviceColumns(key, next)
   }
+  function canUseTableSurface(): boolean {
+    if (!project || table === null || tableItems.length === 0 || chooseView) return false
+    if (layout === 'TABLE') return true
+    if (layout === 'BOARD') return currentView === null || boardGroupField(currentView, tableFields) === null
+    if (layout === 'ROADMAP') return !roadmapModel.placementFieldName
+    return false
+  }
+
+  function canUseRoadmapSurface(): boolean {
+    return project !== null && table !== null && tableItems.length > 0 && !chooseView && layout === 'ROADMAP' && roadmapModel.placementFieldName !== null
+  }
+
+  function editableInlineCell(itemId: string, fieldId: string): { item: ProjectItem; field: ProjectField } | null {
+    if (!canUseTableSurface() || activeViewId === '') return null
+    const item = tableItems.find((candidate) => candidate.id === itemId)
+    const field = tableFields.find((candidate) => candidate.id === fieldId)
+    if (!item || !field || isRestricted(item) || isDraft(item) || dataTypeIsReadOnly(field)) return null
+    const collection = isIssue(item) ? inlineCollectionProperty(field) : null
+    if (collection === null && !['TEXT', 'NUMBER', 'DATE'].includes(fieldDataType(field))) return null
+    if (!columns.some((column) => column.id === field.id && column.field?.id === field.id)) return null
+    const groupPrefix = currentView?.id ?? 'view'
+    const visible = tableGroups.some((group) => group.items.some((candidate) => candidate.id === item.id) && !collapsedGroups.has(`${groupPrefix}|${group.key}`))
+    return visible ? { item, field } : null
+  }
+
+  function isCurrentInlineSession(session: InlineEditSession): boolean {
+    return project !== null && session.projectKey === projectKey && session.projectKey === currentProjectKey.current &&
+      session.viewId === activeViewId && session.viewId === currentViewId.current
+  }
+
   function applyControl(request: ProjectsControlRequest): boolean {
     if (request.action === 'picker') {
       const open = request.open ?? !pickerOpen
@@ -700,6 +789,49 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       setPickerOpen(true)
       setBrowseError(null)
       setBrowseErrorHost(null)
+      return true
+    }
+    if (request.action === 'sort') {
+      if (!canUseTableSurface() || !columns.some((column) => column.id === request.fieldId)) return false
+      toggleSort(request.fieldId)
+      return true
+    }
+    if (request.action === 'group') {
+      if (!canUseTableSurface() || !currentView?.groupByFields?.[0] || !tableGroups.some((group) => group.key === request.group)) return false
+      setCollapsedGroups((previous) => toggleSet(previous, `${currentView?.id ?? 'view'}|${request.group}`))
+      return true
+    }
+    if (request.action === 'zoom') {
+      if (!canUseRoadmapSurface()) return false
+      setZoom(request.zoom)
+      saveZoom(request.zoom)
+      return true
+    }
+    if (request.action === 'today') {
+      if (!canUseRoadmapSurface() || roadmapScroller.current === null || roadmapModel.todayIndex === null) return false
+      scrollToToday(roadmapScroller.current, roadmapModel.todayIndex, roadmapModel.tickWidth)
+      return true
+    }
+    if (request.action === 'edit') {
+      const key = inlineEditorKey(request.itemId, request.fieldId)
+      if (request.open) {
+        const target = editableInlineCell(request.itemId, request.fieldId)
+        if (!target) return false
+        const existing = inlineEditorsRef.current.get(key)
+        if (existing && isCurrentInlineSession(existing)) return true
+        writeInlineSession(key, {
+          projectKey,
+          viewId: activeViewId,
+          revision: ++inlineRevision.current,
+          draft: inlineInitialValue(target.item, target.field),
+          saving: false,
+          error: ''
+        })
+        return true
+      }
+      const existing = inlineEditorsRef.current.get(key)
+      if (!existing || !isCurrentInlineSession(existing)) return false
+      removeInlineSession(key)
       return true
     }
     if (!project || !currentView || !tableFields.some((field) => field.id === request.fieldId) && !['title', 'type'].includes(request.fieldId)) return false
@@ -724,6 +856,104 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
   }
 
   controlHandler.current = applyControl
+
+  function writeInlineSession(key: string, session: InlineEditSession): void {
+    const next = new Map(inlineEditorsRef.current)
+    next.set(key, session)
+    inlineEditorsRef.current = next
+    setInlineEditors(next)
+  }
+
+  function removeInlineSession(key: string): boolean {
+    if (!inlineEditorsRef.current.has(key)) return false
+    const next = new Map(inlineEditorsRef.current)
+    next.delete(key)
+    inlineEditorsRef.current = next
+    setInlineEditors(next)
+    return true
+  }
+
+  function clearInlineEditors(): void {
+    if (inlineEditorsRef.current.size === 0) return
+    const next = new Map<string, InlineEditSession>()
+    inlineEditorsRef.current = next
+    setInlineEditors(next)
+  }
+
+  function requestSort(fieldId: string): void {
+    void controlProjects({ action: 'sort', fieldId })
+  }
+
+  function requestGroupToggle(group: string): void {
+    void controlProjects({ action: 'group', group })
+  }
+
+  function requestRoadmapZoom(zoom: RoadmapZoom): void {
+    void controlProjects({ action: 'zoom', zoom })
+  }
+
+  function requestToday(): void {
+    void controlProjects({ action: 'today' })
+  }
+
+  function requestInlineEdit(item: ProjectItem, field: ProjectField, open: boolean): void {
+    void controlProjects({ action: 'edit', itemId: item.id, fieldId: field.id, open })
+  }
+
+  function updateInlineDraft(item: ProjectItem, field: ProjectField, draft: string): void {
+    const key = inlineEditorKey(item.id, field.id)
+    const session = inlineEditorsRef.current.get(key)
+    if (!session || !isCurrentInlineSession(session)) return
+    writeInlineSession(key, { ...session, draft, error: '' })
+  }
+
+  async function saveInlineEdit(item: ProjectItem, field: ProjectField): Promise<void> {
+    const key = inlineEditorKey(item.id, field.id)
+    const session = inlineEditorsRef.current.get(key)
+    const target = editableInlineCell(item.id, field.id)
+    if (!session || !isCurrentInlineSession(session) || session.saving || !target) return
+    if (session.draft === inlineInitialValue(target.item, target.field)) {
+      requestInlineEdit(target.item, target.field, false)
+      return
+    }
+    const collection = isIssue(target.item) ? inlineCollectionProperty(target.field) : null
+    const shaped = collection === null ? shapeInlineField(target.field, session.draft) : null
+    if (shaped?.error) {
+      writeInlineSession(key, { ...session, error: shaped.error })
+      return
+    }
+    writeInlineSession(key, { ...session, saving: true, error: '' })
+    if (collection !== null) await editIssueCollection(target.item, target.field, session.draft)
+    else if (shaped !== null) await editProjectField(target.item, target.field, shaped.value, shaped.clear)
+    const latest = inlineEditorsRef.current.get(key)
+    if (latest?.revision === session.revision && isCurrentInlineSession(latest)) removeInlineSession(key)
+  }
+
+  function handleInlineKeyDown(item: ProjectItem, field: ProjectField, event: KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      requestInlineEdit(item, field, false)
+    } else if (event.key === 'Enter') {
+      event.preventDefault()
+      void saveInlineEdit(item, field)
+    }
+  }
+
+  function inlineEditorFor(item: ProjectItem, field: ProjectField): InlineEditorState {
+    const session = inlineEditorsRef.current.get(inlineEditorKey(item.id, field.id))
+    const active = session && isCurrentInlineSession(session) ? session : null
+    return {
+      editing: active !== null,
+      draft: active?.draft ?? inlineInitialValue(item, field),
+      saving: active?.saving ?? false,
+      error: active?.error ?? '',
+      onBegin: () => requestInlineEdit(item, field, true),
+      onDraft: (draft) => updateInlineDraft(item, field, draft),
+      onSave: () => { void saveInlineEdit(item, field) },
+      onCancel: () => requestInlineEdit(item, field, false),
+      onKeyDown: (event) => handleInlineKeyDown(item, field, event)
+    }
+  }
 
   function commitOptimistic(projectKey: string, itemId: string, fieldId: string, value: unknown, clear: boolean) {
     const key = projectFieldMutationKey(projectKey, itemId, fieldId)
@@ -1269,9 +1499,9 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       <EmptyState message={activeQuery || viewFilter ? 'No items match this view’s filter.' : 'This view has no items yet. Recently added items can take a while to appear.'} />
     </div>}
     {!chooseView && table !== null && tableItems.length > 0 && <div className="quirky-tasks-projects__table-scroll">
-      {layout === 'TABLE' && <ProjectTable items={sortedItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={(key) => setCollapsedGroups((previous) => toggleSet(previous, key))} sort={sort} onSort={toggleSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} onOpen={openItem} actions={openItemActions} project={project} />}
-      {layout === 'BOARD' && <ProjectBoard items={tableItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={(key) => setCollapsedGroups((previous) => toggleSet(previous, key))} sort={sort} onSort={toggleSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} onMove={editProjectField} onOpen={openItem} actions={openItemActions} project={project} />}
-      {layout === 'ROADMAP' && <ProjectRoadmap model={roadmapModel} items={tableItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={(key) => setCollapsedGroups((previous) => toggleSet(previous, key))} sort={sort} onSort={toggleSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} zoom={zoom} onZoom={(value) => { setZoom(value); saveZoom(value) }} onToday={() => scrollToToday(roadmapScroller.current, roadmapModel.todayIndex, roadmapModel.tickWidth)} scroller={roadmapScroller} onOpen={openItem} actions={openItemActions} project={project} />}
+      {layout === 'TABLE' && <ProjectTable items={sortedItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} inlineCell={inlineEditorFor} onOpen={openItem} actions={openItemActions} project={project} />}
+      {layout === 'BOARD' && <ProjectBoard items={tableItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} inlineCell={inlineEditorFor} onMove={editProjectField} onOpen={openItem} actions={openItemActions} project={project} />}
+      {layout === 'ROADMAP' && <ProjectRoadmap model={roadmapModel} items={tableItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} inlineCell={inlineEditorFor} zoom={zoom} onZoom={requestRoadmapZoom} onToday={requestToday} scroller={roadmapScroller} onOpen={openItem} actions={openItemActions} project={project} />}
       {layout !== 'TABLE' && layout !== 'BOARD' && layout !== 'ROADMAP' && <div role="alert">{renderProjectError(new Error('unsupported_layout'))}</div>}
     </div>}
     {!loadingTable && !loadingViews && table === null && !mainError && !chooseView && <EmptyState message="Choose a project view to load its items." />}
@@ -1436,6 +1666,7 @@ function ProjectTable(props: {
   onFieldEdit(item: ProjectItem, field: ProjectField, value: unknown, clear?: boolean): Promise<void>
   onCollectionEdit(item: ProjectItem, field: ProjectField, value: string): Promise<void>
   onIssueTypeEdit(item: ProjectItem, issueType: { id: string; name: string }): Promise<void>
+  inlineCell(item: ProjectItem, field: ProjectField): InlineEditorState
   onOpen(item: ProjectItem): void
   actions(item: ProjectItem): ReactNode
   project: ProjectTarget
@@ -1456,16 +1687,16 @@ function ProjectTable(props: {
       const isCollapsed = props.collapsed.has(groupKey)
       const groupItems = groupField ? group.items : props.items
       return <Fragment key={groupKey}>
-        {groupField && <tr><th colSpan={props.columns.length + 1} className="quirky-tasks-project-table__group"><Button type="button" aria-expanded={!isCollapsed} className="quirky-tasks-project-table__group-toggle" onClick={() => props.onToggleGroup(groupKey)}>{isCollapsed ? '▸' : '▾'} {group.label} · {group.items.length}{group.range ? ` · ${group.range}` : ''}{group.current ? ' · Current' : ''}</Button></th></tr>}
+        {groupField && <tr><th colSpan={props.columns.length + 1} className="quirky-tasks-project-table__group"><Button type="button" aria-expanded={!isCollapsed} className="quirky-tasks-project-table__group-toggle" onClick={() => props.onToggleGroup(group.key)}>{isCollapsed ? '▸' : '▾'} {group.label} · {group.items.length}{group.range ? ` · ${group.range}` : ''}{group.current ? ' · Current' : ''}</Button></th></tr>}
         {!isCollapsed && groupItems.map((item) => <tr key={item.id} onDoubleClick={() => props.onOpen(item)} className="quirky-tasks-project-table__row">
           {props.columns.map((column, index) => <td key={column.id} className={index < 2 ? 'quirky-tasks-project-table__cell quirky-tasks-project-table__sticky' : 'quirky-tasks-project-table__cell'} style={stickyStyle(index)}>
             {column.kind === 'title'
               ? <Button type="button" className="quirky-tasks-project-table__title" onClick={() => props.onOpen(item)} title={String(item.content?.title ?? '')}>{String(item.content?.title ?? (isRestricted(item) ? 'Restricted item' : 'Untitled'))}</Button>
               : column.kind === 'type'
                 ? item.content?.kind === 'issue'
-                  ? <div className="quirky-tasks-project-table__type-cell"><span>Issue</span>{!hasIssueTypeField && <ProjectFieldCell item={item} field={ISSUE_TYPE_FIELD} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} />}</div>
+                  ? <div className="quirky-tasks-projects__type-cell"><span>Issue</span>{!hasIssueTypeField && <ProjectFieldCell item={item} field={ISSUE_TYPE_FIELD} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} inlineCell={props.inlineCell} />}</div>
                   : <span>{String(item.content?.kind === 'pullRequest' ? 'Pull request' : item.content?.kind === 'draft' ? 'Draft' : 'Restricted')}</span>
-                : <ProjectFieldCell item={item} field={column.field!} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} />}
+                : <ProjectFieldCell item={item} field={column.field!} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} inlineCell={props.inlineCell} />}
           </td>)}
           <td className="quirky-tasks-project-table__actions">{props.actions(item)}</td>
         </tr>)}
@@ -1483,6 +1714,7 @@ function ProjectFieldCell(props: {
   onFieldEdit(item: ProjectItem, field: ProjectField, value: unknown, clear?: boolean): Promise<void>
   onCollectionEdit(item: ProjectItem, field: ProjectField, value: string): Promise<void>
   onIssueTypeEdit(item: ProjectItem, issueType: { id: string; name: string }): Promise<void>
+  inlineCell(item: ProjectItem, field: ProjectField): InlineEditorState
 }) {
   const type = fieldDataType(props.field)
   const readonly = dataTypeIsReadOnly(props.field) || isRestricted(props.item) || isDraft(props.item)
@@ -1493,7 +1725,8 @@ function ProjectFieldCell(props: {
     const propName = type === 'USERS' || /assignee/i.test(props.field.name ?? '') ? 'assignees' : 'labels'
     const raw = props.item.content?.[propName]
     const values = Array.isArray(raw) ? raw.map((entry) => typeof entry === 'string' ? entry : String(record(entry)?.login ?? record(entry)?.name ?? '')).filter(Boolean).join(', ') : ''
-    return <InlineText value={values} ariaLabel={`${props.field.name ?? propName} for issue ${String(props.item.content?.number ?? '')}`} placeholder="Comma-separated values" onSave={(value) => props.onCollectionEdit(props.item, props.field, value)} />
+    const editor = props.inlineCell(props.item, props.field)
+    return <InlineText value={values} ariaLabel={`${props.field.name ?? propName} for issue ${String(props.item.content?.number ?? '')}`} placeholder="Comma-separated values" {...editor} />
   }
   if ((type === 'ISSUE_TYPE' || /issue.?type/i.test(props.field.name ?? '')) && isIssue(props.item)) {
     const currentType = record(props.item.content?.issueType)
@@ -1527,15 +1760,8 @@ function ProjectFieldCell(props: {
   if (type === 'TEXT' || type === 'NUMBER' || type === 'DATE') {
     const raw = fieldValue(props.item, props.field.id)
     const rawValue = typeof raw === 'string' || typeof raw === 'number' ? String(raw) : String(record(raw)?.text ?? record(raw)?.number ?? record(raw)?.date ?? '')
-    return <InlineText value={rawValue} ariaLabel={props.field.name ?? 'Project field'} type={type === 'NUMBER' ? 'number' : type === 'DATE' ? 'date' : 'text'} onSave={(value) => {
-      if (value === '') return props.onFieldEdit(props.item, props.field, undefined, true)
-      if (type === 'NUMBER') {
-        const number = Number(value)
-        if (!Number.isFinite(number)) return Promise.reject(new Error('Enter a finite number.'))
-        return props.onFieldEdit(props.item, props.field, { number })
-      }
-      return props.onFieldEdit(props.item, props.field, { [type === 'DATE' ? 'date' : 'text']: value })
-    }} />
+    const editor = props.inlineCell(props.item, props.field)
+    return <InlineText value={rawValue} ariaLabel={props.field.name ?? 'Project field'} type={type === 'NUMBER' ? 'number' : type === 'DATE' ? 'date' : 'text'} {...editor} />
   }
   if (type === 'LABELS' || type === 'USERS' || type === 'REPOSITORY' || type === 'PARENT_ISSUE') return <span className="ui-text-muted">{current}</span>
   return <span className="ui-text-muted">{current}</span>
@@ -1548,25 +1774,14 @@ function selectedOptionId(value: unknown, options: ProjectRecord[]): string {
   return options.some((option) => option.id === id) ? id : ''
 }
 
-function InlineText(props: { value: string; ariaLabel: string; onSave(value: string): Promise<void>; type?: string; placeholder?: string }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(props.value)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  useEffect(() => { if (!editing) setDraft(props.value) }, [props.value, editing])
-  if (!editing) return <Button type="button" className="quirky-tasks-projects__inline-trigger" aria-label={`Edit ${props.ariaLabel}`} onClick={() => setEditing(true)} title={props.value}>{props.value || '—'}</Button>
-  return <span className="quirky-tasks-projects__inline-editor">
-    <input autoFocus type={props.type ?? 'text'} aria-label={props.ariaLabel} placeholder={props.placeholder} value={draft} className="quirky-tasks-control quirky-tasks-projects__inline-input" onChange={(event) => setDraft(event.currentTarget.value)} onKeyDown={(event) => { if (event.key === 'Escape') { setDraft(props.value); setEditing(false) } if (event.key === 'Enter') { event.preventDefault(); void save() } }} />
-    <IconButton label={`Save ${props.ariaLabel}`} disabled={saving} onClick={() => void save()}>{saving ? '…' : '✓'}</IconButton>
-    <IconButton label={`Cancel ${props.ariaLabel} edit`} onClick={() => { setDraft(props.value); setEditing(false) }}>×</IconButton>
-    {error && <span className="quirky-tasks-projects__field-error" role="alert">{error}</span>}
-  </span>
-  async function save() {
-    if (saving || draft === props.value) { setEditing(false); return }
-    setSaving(true)
-    setError('')
-    try { await props.onSave(draft); setEditing(false) } catch (failure) { setError(errorMessage(failure)) } finally { setSaving(false) }
-  }
+function InlineText(props: { value: string; ariaLabel: string; editing: boolean; draft: string; saving: boolean; error: string; onBegin(): void; onDraft(value: string): void; onSave(): void; onCancel(): void; onKeyDown(event: KeyboardEvent<HTMLInputElement>): void; type?: string; placeholder?: string }) {
+  if (!props.editing) return <Button type="button" className="quirky-tasks-projects__inline-trigger" aria-label={`Edit ${props.ariaLabel}`} onClick={props.onBegin} title={props.value}>{props.value || '—'}</Button>
+  return <div className="quirky-tasks-projects__inline-editor">
+    <input autoFocus type={props.type ?? 'text'} aria-label={props.ariaLabel} placeholder={props.placeholder} value={props.draft} className="quirky-tasks-control quirky-tasks-projects__inline-input" onChange={(event) => props.onDraft(event.currentTarget.value)} onKeyDown={props.onKeyDown} />
+    <IconButton label={`Save ${props.ariaLabel}`} disabled={props.saving} onClick={props.onSave}>{props.saving ? '…' : '✓'}</IconButton>
+    <IconButton label={`Cancel ${props.ariaLabel} edit`} onClick={props.onCancel}>×</IconButton>
+    {props.error && <div className="quirky-tasks-projects__field-error"><InlineError message={props.error} /></div>}
+  </div>
 }
 
 
@@ -1586,13 +1801,14 @@ function ProjectBoard(props: {
   onFieldEdit(item: ProjectItem, field: ProjectField, value: unknown, clear?: boolean): Promise<void>
   onCollectionEdit(item: ProjectItem, field: ProjectField, value: string): Promise<void>
   onIssueTypeEdit(item: ProjectItem, issueType: { id: string; name: string }): Promise<void>
+  inlineCell(item: ProjectItem, field: ProjectField): InlineEditorState
   onMove(item: ProjectItem, field: ProjectField, value: unknown, clear: boolean): Promise<void>
   onOpen(item: ProjectItem): void
   actions(item: ProjectItem): ReactNode
   project: ProjectTarget
 }) {
   const group = props.view ? boardGroupField(props.view, props.fields) : null
-  if (!group) return <section className="quirky-tasks-project-board__fallback"><div role="status">This board view has no single-select or iteration field to group by, so Quirky is listing items instead.</div><ProjectTable items={props.items} fields={props.fields} columns={props.columns} widths={props.widths} issueTypesByItem={props.issueTypesByItem} onLoadIssueTypes={props.onLoadIssueTypes} view={props.view} groups={props.groups} collapsed={props.collapsed} onToggleGroup={props.onToggleGroup} sort={props.sort} onSort={props.onSort} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} onOpen={props.onOpen} actions={props.actions} project={props.project} /></section>
+  if (!group) return <section className="quirky-tasks-project-board__fallback"><div role="status">This board view has no single-select or iteration field to group by, so Quirky is listing items instead.</div><ProjectTable items={props.items} fields={props.fields} columns={props.columns} widths={props.widths} issueTypesByItem={props.issueTypesByItem} onLoadIssueTypes={props.onLoadIssueTypes} view={props.view} groups={props.groups} collapsed={props.collapsed} onToggleGroup={props.onToggleGroup} sort={props.sort} onSort={props.onSort} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} inlineCell={props.inlineCell} onOpen={props.onOpen} actions={props.actions} project={props.project} /></section>
   const columns = boardColumns(props.items, group)
   const type = fieldDataType(group)
   const boardOptions = group.options ?? []
@@ -1664,6 +1880,7 @@ function ProjectRoadmap(props: {
   onFieldEdit(item: ProjectItem, field: ProjectField, value: unknown, clear?: boolean): Promise<void>
   onCollectionEdit(item: ProjectItem, field: ProjectField, value: string): Promise<void>
   onIssueTypeEdit(item: ProjectItem, issueType: { id: string; name: string }): Promise<void>
+  inlineCell(item: ProjectItem, field: ProjectField): InlineEditorState
   zoom: RoadmapZoom
   onZoom(value: RoadmapZoom): void
   onToday(): void
@@ -1673,7 +1890,7 @@ function ProjectRoadmap(props: {
   project: ProjectTarget
 }) {
   const model = props.model
-  if (!model.placementFieldName) return <section className="quirky-tasks-project-roadmap__fallback"><div role="status">This roadmap view has no date or iteration field to place items on, so Quirky is listing items instead.</div><ProjectTable items={props.items} fields={props.fields} columns={props.columns} widths={props.widths} issueTypesByItem={props.issueTypesByItem} onLoadIssueTypes={props.onLoadIssueTypes} view={props.view} groups={props.groups} collapsed={props.collapsed} onToggleGroup={props.onToggleGroup} sort={props.sort} onSort={props.onSort} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} onOpen={props.onOpen} actions={props.actions} project={props.project} /></section>
+  if (!model.placementFieldName) return <section className="quirky-tasks-project-roadmap__fallback"><div role="status">This roadmap view has no date or iteration field to place items on, so Quirky is listing items instead.</div><ProjectTable items={props.items} fields={props.fields} columns={props.columns} widths={props.widths} issueTypesByItem={props.issueTypesByItem} onLoadIssueTypes={props.onLoadIssueTypes} view={props.view} groups={props.groups} collapsed={props.collapsed} onToggleGroup={props.onToggleGroup} sort={props.sort} onSort={props.onSort} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} inlineCell={props.inlineCell} onOpen={props.onOpen} actions={props.actions} project={props.project} /></section>
   const totalWidth = model.ticks.length * model.tickWidth
   return <section className="quirky-tasks-project-roadmap">
     <div className="quirky-tasks-project-roadmap__toolbar">

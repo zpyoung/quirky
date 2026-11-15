@@ -7,6 +7,11 @@ export type ProjectsControlRequest =
   | { action: 'column-panel'; open?: boolean }
   | { action: 'back-to-picker' }
   | { action: 'column'; fieldId: string; visible?: boolean; width?: number }
+  | { action: 'sort'; fieldId: string }
+  | { action: 'group'; group: string }
+  | { action: 'zoom'; zoom: 'month' | 'quarter' | 'year' }
+  | { action: 'today' }
+  | { action: 'edit'; itemId: string; fieldId: string; open: boolean }
 
 export type ProjectsControlResult = { delivered: number }
 /** Returns true when this mounted Projects view applied the request. */
@@ -19,11 +24,12 @@ const registrations = new WeakMap<UiPluginContext, Set<ProjectsControlHandler>>(
 
 export function parseProjectsControlRequest(input: unknown): ProjectsControlRequest {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
-    throw new Error('projects-control needs an action of picker, column-panel, back-to-picker or column.')
+    throw new Error('projects-control needs an action of picker, column-panel, back-to-picker, column, sort, group, zoom, today or edit.')
   }
   const raw = input as Record<string, unknown>
-  if (raw.action !== 'picker' && raw.action !== 'column-panel' && raw.action !== 'back-to-picker' && raw.action !== 'column') {
-    throw new Error('projects-control needs an action of picker, column-panel, back-to-picker or column.')
+  if (raw.action !== 'picker' && raw.action !== 'column-panel' && raw.action !== 'back-to-picker' && raw.action !== 'column' &&
+    raw.action !== 'sort' && raw.action !== 'group' && raw.action !== 'zoom' && raw.action !== 'today' && raw.action !== 'edit') {
+    throw new Error('projects-control needs an action of picker, column-panel, back-to-picker, column, sort, group, zoom, today or edit.')
   }
 
   if (raw.action === 'picker' || raw.action === 'column-panel') {
@@ -41,6 +47,36 @@ export function parseProjectsControlRequest(input: unknown): ProjectsControlRequ
       throw new Error('projects-control back-to-picker takes no other fields.')
     }
     return { action: 'back-to-picker' }
+  }
+
+  if (raw.action === 'sort') {
+    if (typeof raw.fieldId !== 'string' || !raw.fieldId.trim() || Object.keys(raw).some((key) => key !== 'action' && key !== 'fieldId')) {
+      throw new Error('projects-control sort needs a nonempty fieldId and no other fields.')
+    }
+    return { action: 'sort', fieldId: raw.fieldId }
+  }
+  if (raw.action === 'group') {
+    if (typeof raw.group !== 'string' || !raw.group.trim() || Object.keys(raw).some((key) => key !== 'action' && key !== 'group')) {
+      throw new Error('projects-control group needs a nonempty group and no other fields.')
+    }
+    return { action: 'group', group: raw.group }
+  }
+  if (raw.action === 'zoom') {
+    if ((raw.zoom !== 'month' && raw.zoom !== 'quarter' && raw.zoom !== 'year') || Object.keys(raw).some((key) => key !== 'action' && key !== 'zoom')) {
+      throw new Error('projects-control zoom needs month, quarter or year and no other fields.')
+    }
+    return { action: 'zoom', zoom: raw.zoom }
+  }
+  if (raw.action === 'today') {
+    if (Object.keys(raw).some((key) => key !== 'action')) throw new Error('projects-control today takes no other fields.')
+    return { action: 'today' }
+  }
+  if (raw.action === 'edit') {
+    if (typeof raw.itemId !== 'string' || !raw.itemId.trim() || typeof raw.fieldId !== 'string' || !raw.fieldId.trim() ||
+      typeof raw.open !== 'boolean' || Object.keys(raw).some((key) => key !== 'action' && key !== 'itemId' && key !== 'fieldId' && key !== 'open')) {
+      throw new Error('projects-control edit needs nonempty itemId and fieldId strings, a boolean open and no other fields.')
+    }
+    return { action: 'edit', itemId: raw.itemId, fieldId: raw.fieldId, open: raw.open }
   }
 
   const validField = typeof raw.fieldId === 'string' && raw.fieldId.trim().length > 0
