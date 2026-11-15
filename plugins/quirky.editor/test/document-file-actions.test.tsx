@@ -11,6 +11,7 @@ import { activeDocument } from '../src/window/activeDocument'
 import type { EditorView as EditorViewType } from '@codemirror/view'
 import { undo as undoMarkdown } from '@tiptap/pm/history'
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view'
+import { EditorUiControlProvider, createEditorUiControlReportScope, runEditorUiControl } from '../src/window/uiControl'
 
 import { parseNotebookRoot, serializeNotebook } from '../src/notebook/document'
 type SettingWrite = { id: string; value: unknown }
@@ -361,6 +362,8 @@ async function renderDocument(options: {
   const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.command.run') return { result: await runEditorUiControl(params.args) }
       if (method === 'quirky.editor/viewer' && viewerFeature) {
         const projected = projectViewerResponse(await viewerFeature.methods.viewer(params, {} as never))
         if (projected.buffer) viewerMutationResponses.push(projected.buffer)
@@ -555,6 +558,7 @@ async function renderDocument(options: {
     toast() {},
     togglePanel: (panel: string, open: boolean) => { panelToggles.push({ panel, open }) },
   } as unknown as UiPluginContext
+  const controlScope = createEditorUiControlReportScope(undefined, { surface: 'overlay:quirky.editor/close' })
   const group = document.createElement('div')
   group.className = 'qt-group qt-active'
   const hostedView = document.createElement('div')
@@ -589,16 +593,19 @@ async function renderDocument(options: {
       if (unmounted) return
       unmounted = true
       await act(async () => root.unmount())
+      controlScope.dispose()
       await viewerFeature?.dispose()
     }
   }
   mounted.push(surface)
   await act(async () => {
     root.render(
-      <>
-        <DocumentSurface context={context} input={{ bufferId: BUFFER_ID, tabId: TAB_ID, mode: options.mode }} />
-        {options.withCloseOverlay && <CloseOverlay />}
-      </>
+      <EditorUiControlProvider scope={controlScope}>
+        <>
+          <DocumentSurface context={context} input={{ bufferId: BUFFER_ID, tabId: TAB_ID, mode: options.mode }} />
+          {options.withCloseOverlay && <CloseOverlay context={context} />}
+        </>
+      </EditorUiControlProvider>
     )
   })
   await flushReact()
