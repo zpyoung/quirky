@@ -1,4 +1,5 @@
 import type { Handler, HostingEnv } from '../env'
+import type { BeginReviewSnapshot } from '../pr-review'
 import { isRecord } from '../data'
 import { createGitLabCheckMethods } from './checks'
 import { createGitLabClient, gitlabError } from './api'
@@ -10,7 +11,11 @@ import type { GitLabHandler, GitLabScope } from './types'
 const handlers = new WeakMap<HostingEnv, Record<string, GitLabHandler>>()
 
 /** Keep GitHub behavior intact and refuse GitHub-only operations on GitLab origins. */
-export function routeByProvider(env: HostingEnv, table: Record<string, Handler>): Record<string, Handler> {
+export function routeByProvider(
+  env: HostingEnv,
+  table: Record<string, Handler>,
+  options?: { beginReviewSnapshot?: BeginReviewSnapshot }
+): Record<string, Handler> {
   let gitlab = handlers.get(env)
   if (!gitlab) {
     const client = createGitLabClient(env)
@@ -34,7 +39,8 @@ export function routeByProvider(env: HostingEnv, table: Record<string, Handler>)
       const handle = gitlab[name]
       if (!handle) throw env.invalid('unsupported_provider', `GitLab hosting does not answer quirky.hosting/${name} yet.`)
       if (Object.hasOwn(params, 'prRepo')) assertRepositoryPin(env, scope, params.prRepo)
-      return handle(scope, params, caller)
+      const mode = name === 'forBranch' ? 'branch' : name === 'review' ? 'review' : undefined
+      return handle(scope, params, caller, mode ? options?.beginReviewSnapshot : undefined)
     }
   }
   return routed

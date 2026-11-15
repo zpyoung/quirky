@@ -1,6 +1,6 @@
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { HostingEnv } from '../env'
+import type { SnapshotRecorder, SnapshotResult } from '../pr-review'
 import { aheadBehind, normalizeBase, projectDefaultBase, remoteBaseExists, upstreamRef } from '../pr-create'
 import { isRecord, nonEmptyString, parseBranch, parsePositiveInteger, parseOid, providerReason } from '../pr-data'
 import { gitlabError, type GitLabClient, type GitLabResponse } from './api'
@@ -99,6 +99,33 @@ function unavailable(error: unknown, fetchedAt: number): ReviewLookup {
     message: safeMessage(reason),
     fetchedAt,
     ...(retryDisabledUntil === undefined ? {} : { retryDisabledUntil })
+  }
+}
+async function recordReviewSnapshot(recorder: SnapshotRecorder | undefined, result: ReviewLookup): Promise<void> {
+  if (!recorder) return
+  let projection: SnapshotResult
+  if (result.kind === 'found') {
+    projection = {
+      kind: 'found',
+      review: {
+        number: result.review.number,
+        url: result.review.url,
+        state: result.review.state,
+        checksStatus: result.review.checksStatus,
+        headRefName: result.review.headRefName,
+        headRefOid: result.review.headRefOid
+      },
+      fetchedAt: result.fetchedAt
+    }
+  } else if (result.kind === 'no-review') {
+    projection = { kind: 'no-review', fetchedAt: result.fetchedAt }
+  } else {
+    projection = { kind: 'unavailable', message: result.message, fetchedAt: result.fetchedAt }
+  }
+  try {
+    await recorder(projection)
+  } catch {
+    return
   }
 }
 
@@ -798,14 +825,23 @@ async function updateMergeRequest(
 }
 
 export function createGitLabReviewHandlers(env: HostingEnv, client: GitLabClient): Record<string, GitLabHandler> {
-  const forBranch: GitLabHandler = async (scope, params) => {
+  const forBranch: GitLabHandler = async (scope, params, caller, beginSnapshot) => {
     const branch = branchName(env, scope, params)
     if (params.number !== undefined) parseReviewNumber(env, params.number)
     if (params.fallbackPRNumber !== undefined) parseReviewNumber(env, params.fallbackPRNumber)
-    await requireAuth(env, scope, client)
+    if (params.fresh !== undefined && typeof params.fresh !== 'boolean') {
+      validationError(env, 'fresh must be a boolean.')
+    }
+    const recorder = caller && beginSnapshot ? await beginSnapshot(scope, params, caller, 'branch') : undefined
+    try {
+      await requireAuth(env, scope, client)
+    } catch (error) {
+      await recordReviewSnapshot(recorder, unavailable(error, Date.now()))
+      throw error
+    }
     const fresh = params.fresh === true
     const cacheName = `gitlab:for-branch:${branch}:${params.number ?? ''}:${params.fallbackPRNumber ?? ''}`
-    return cachedLookup(env, scope, cacheName, fresh, async () => {
+    const result = await cachedLookup(env, scope, cacheName, fresh, async () => {
       const fetchedAt = Date.now()
       try {
         const project = await getProject(env, scope, client)
@@ -814,12 +850,23 @@ export function createGitLabReviewHandlers(env: HostingEnv, client: GitLabClient
         return unavailable(error, fetchedAt)
       }
     })
+    await recordReviewSnapshot(recorder, result)
+    return result
   }
 
-  const review: GitLabHandler = async (scope, params) => {
+  const review: GitLabHandler = async (scope, params, caller, beginSnapshot) => {
     const number = parseReviewNumber(env, params.number)
-    await requireAuth(env, scope, client)
-    return cachedLookup(env, scope, `gitlab:review:${number}`, params.fresh === true, async () => {
+    if (params.fresh !== undefined && typeof params.fresh !== 'boolean') {
+      validationError(env, 'fresh must be a boolean.')
+    }
+    const recorder = caller && beginSnapshot ? await beginSnapshot(scope, params, caller, 'review') : undefined
+    try {
+      await requireAuth(env, scope, client)
+    } catch (error) {
+      await recordReviewSnapshot(recorder, unavailable(error, Date.now()))
+      throw error
+    }
+    const result = await cachedLookup(env, scope, `gitlab:review:${number}`, params.fresh === true, async () => {
       const fetchedAt = Date.now()
       try {
         const project = await getProject(env, scope, client)
@@ -829,6 +876,8 @@ export function createGitLabReviewHandlers(env: HostingEnv, client: GitLabClient
         return unavailable(error, fetchedAt)
       }
     })
+    await recordReviewSnapshot(recorder, result)
+    return result
   }
 
   const creationEligibility: GitLabHandler = async (scope, params) => gitlabEligibility(env, scope, params, client)

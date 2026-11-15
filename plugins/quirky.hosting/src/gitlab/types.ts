@@ -1,5 +1,6 @@
 import type { PluginCaller } from '@quirky/protocol'
-import type { Review } from '../pr-review'
+import type { BeginReviewSnapshot, Review } from '../pr-review'
+import type { Scope } from '../env'
 
 export type GitLabScope = Scope & {
   provider: 'gitlab'
@@ -12,5 +13,10 @@ export type GitLabReview = Omit<Review, 'provider'> & {
   detailedMergeStatus: string
 }
 
-export type GitLabHandler = (scope: GitLabScope, params: Record<string, unknown>, caller?: PluginCaller) => unknown
+export type GitLabHandler = (
+  scope: GitLabScope,
+  params: Record<string, unknown>,
+  caller?: PluginCaller,
+  beginReviewSnapshot?: BeginReviewSnapshot
+) => unknown
 export type GitLabHandlers = Record<string, GitLabHandler>
