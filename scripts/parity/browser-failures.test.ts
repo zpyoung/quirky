@@ -1,9 +1,10 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { runBrowserParity, validateOutcomes, type BrowserCheck, type BrowserParityReport } from './browser-run'
-import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, daemonStatus, readShimLogs, type BrowserWorld, type CliReceipt } from './browser-world'
+import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, daemonStatus, readShimLogs, startBrowserWorld, type BrowserWorld, type CliReceipt } from './browser-world'
 import type { RuntimeInfo } from '@quirky/protocol/node'
 import { startBrowserFixture } from './browser-fixture'
 import type { BrowserRow } from './browser-table'
@@ -13,6 +14,110 @@ import { actionChecks } from './browser-checks-actions'
 import { stateChecks } from './browser-checks-state'
 import { networkChecks } from './browser-checks-network'
 import { tabChecks } from './browser-checks-tabs'
+
+const PARITY_CHROME_CANDIDATES = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser'
+]
+const LINUX_PARITY_CHROME_CANDIDATES = PARITY_CHROME_CANDIDATES.slice(2)
+
+async function withBrowserChromeProbes<T>(
+  files: readonly string[],
+  executablePaths: readonly string[],
+  action: () => T | Promise<T>
+): Promise<T> {
+  const virtualPaths = new Set(PARITY_CHROME_CANDIDATES)
+  const fileSet = new Set(files)
+  const executableSet = new Set(executablePaths)
+  const originalStatSync = fs.statSync
+  const originalAccessSync = fs.accessSync
+  const statSpy = spyOn(fs, 'statSync').mockImplementation((path) => {
+    const candidate = String(path)
+    if (!virtualPaths.has(candidate)) return originalStatSync(path)
+    return { isFile: () => fileSet.has(candidate) } as fs.Stats
+  })
+  const accessSpy = spyOn(fs, 'accessSync').mockImplementation((path, mode) => {
+    const candidate = String(path)
+    if (virtualPaths.has(candidate)) {
+      if (executableSet.has(candidate)) return
+      throw Object.assign(new Error(`not executable: ${candidate}`), { code: 'EACCES' })
+    }
+    return originalAccessSync(path, mode)
+  })
+  try {
+    return await action()
+  } finally {
+    accessSpy.mockRestore()
+    statSpy.mockRestore()
+  }
+}
+
+test('browser parity selects installed Linux Chrome over a poisoned inherited override', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'parity-linux-chrome-'))
+  const previous = process.env.QUIRKY_BROWSER_CHROME
+  process.env.QUIRKY_BROWSER_CHROME = '/synthetic/poison'
+  try {
+    for (const candidate of LINUX_PARITY_CHROME_CANDIDATES) {
+      const env = await withBrowserChromeProbes([candidate], [candidate], () =>
+        createBrowserEnvironment(join(home, candidate.split('/').at(-1)!), resolve(import.meta.dir, '../..'))
+      )
+      expect(env.QUIRKY_BROWSER_CHROME).toBe(candidate)
+    }
+
+    const macOrder = await withBrowserChromeProbes(
+      PARITY_CHROME_CANDIDATES.slice(0, 2),
+      PARITY_CHROME_CANDIDATES.slice(0, 2),
+      () => createBrowserEnvironment(join(home, 'mac-order'), resolve(import.meta.dir, '../..'))
+    )
+    expect(macOrder.QUIRKY_BROWSER_CHROME).toBe(PARITY_CHROME_CANDIDATES[0])
+
+    const nonFileCandidate = await withBrowserChromeProbes(
+      [],
+      [PARITY_CHROME_CANDIDATES[0]!],
+      () => createBrowserEnvironment(join(home, 'non-file'), resolve(import.meta.dir, '../..'))
+    )
+    expect(nonFileCandidate.QUIRKY_BROWSER_CHROME).toBeUndefined()
+
+    const skippedInvalidCandidates = await withBrowserChromeProbes(
+      [LINUX_PARITY_CHROME_CANDIDATES[1]!, LINUX_PARITY_CHROME_CANDIDATES[2]!],
+      [LINUX_PARITY_CHROME_CANDIDATES[0]!, LINUX_PARITY_CHROME_CANDIDATES[2]!],
+      () => createBrowserEnvironment(join(home, 'candidate-validation'), resolve(import.meta.dir, '../..'))
+    )
+    expect(skippedInvalidCandidates.QUIRKY_BROWSER_CHROME).toBe(LINUX_PARITY_CHROME_CANDIDATES[2])
+  } finally {
+    if (previous === undefined) delete process.env.QUIRKY_BROWSER_CHROME
+    else process.env.QUIRKY_BROWSER_CHROME = previous
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('browser parity keeps missing Chrome visible when no installed candidate exists', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'parity-missing-chrome-'))
+  const previous = process.env.QUIRKY_BROWSER_CHROME
+  process.env.QUIRKY_BROWSER_CHROME = '/synthetic/poison'
+  try {
+    const env = await withBrowserChromeProbes([], [], () =>
+      createBrowserEnvironment(home, resolve(import.meta.dir, '../..'))
+    )
+    expect(env.QUIRKY_BROWSER_CHROME).toBeUndefined()
+    const startup = await withBrowserChromeProbes([], [], () =>
+      startBrowserWorld({ beforeBrowser: true, deadline: Date.now() + 20_000 }).then(
+        () => undefined,
+        (error: unknown) => error
+      )
+    )
+    expect(startup).toBeInstanceOf(BrowserFailure)
+    expect(startup).toMatchObject({ kind: 'missing-chrome' })
+  } finally {
+    if (previous === undefined) delete process.env.QUIRKY_BROWSER_CHROME
+    else process.env.QUIRKY_BROWSER_CHROME = previous
+    rmSync(home, { recursive: true, force: true })
+  }
+})
 
 test('daemon status retries transient health misses while the owned daemon remains alive', async () => {
   const runtime: RuntimeInfo = { pid: 37, port: 1, token: '', hookToken: '', daemonVersion: 'test', protocolVersion: 1, startedAt: 0 }
