@@ -28,10 +28,10 @@ async function bootWithChanges(): Promise<World> {
 
 const dialogBody = (dialog: HTMLElement) => text(q('p', dialog))
 
-/** Selects a row and presses its inline Revert button. */
-async function revert(path: string) {
+/** Selects a row and waits for its inline Revert button before pressing it. */
+async function revert(w: World, path: string) {
   await click(rowOf(path))
-  await click(byLabel(`Revert ${path}`))
+  await click(await w.win.waitFor(() => byLabel(`Revert ${path}`)))
 }
 
 test('SC-23: each Revert file dialog has Orca\'s text, focuses within the shared modal, and Cancel changes nothing', async () => {
@@ -43,7 +43,7 @@ test('SC-23: each Revert file dialog has Orca\'s text, focuses within the shared
     { path: 'README.md', title: 'Discard changes to "README.md"?', body: 'This will unstage and revert the changes to this file. This cannot be undone.', confirm: 'Discard' }
   ]
   for (const c of cases) {
-    await revert(c.path)
+    await revert(w, c.path)
     const dialog = await w.win.waitFor(() => dialogNamed(c.title))
     expect(dialogBody(dialog)).toBe(c.body)
     expect(buttonText(c.confirm, dialog)).toBeDefined()
@@ -60,22 +60,22 @@ test('SC-23: each Revert file dialog has Orca\'s text, focuses within the shared
 test('SC-19: confirming Revert file reverts the file, restores a deleted one, deletes an untracked one and unstages a staged one', async () => {
   const w = await bootWithChanges()
 
-  await revert('math.ts')
+  await revert(w, 'math.ts')
   await click(buttonText('Discard', await w.win.waitFor(() => dialogNamed('Discard changes to "math.ts"?'))))
   await w.win.waitFor(() => !rowOf('math.ts'))
   expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe('a\nb\nc\nd\ne\n')
 
-  await revert('c.ts')
+  await revert(w, 'c.ts')
   await click(buttonText('Restore', await w.win.waitFor(() => dialogNamed('Restore "c.ts"?'))))
   await w.win.waitFor(() => !rowOf('c.ts'))
   expect(readFileSync(join(w.dir, 'c.ts'), 'utf8')).toBe('sea\n')
 
-  await revert('notes.txt')
+  await revert(w, 'notes.txt')
   await click(buttonText('Delete', await w.win.waitFor(() => dialogNamed('Delete "notes.txt"?'))))
   await w.win.waitFor(() => !rowOf('notes.txt'))
   expect(existsSync(join(w.dir, 'notes.txt'))).toBe(false)
 
-  await revert('README.md')
+  await revert(w, 'README.md')
   await click(buttonText('Discard', await w.win.waitFor(() => dialogNamed('Discard changes to "README.md"?'))))
   await w.win.waitFor(() => !rowOf('README.md'))
   expect(readFileSync(join(w.dir, 'README.md'), 'utf8')).toBe('one\ntwo\n')
@@ -108,7 +108,7 @@ test('SC-9: Revert file on a committed change writes the base version back as an
   await w.win.waitFor(() => rowOf('math.ts', 'branch'))
   expect(q('.git-row__dirty', rowOf('math.ts')!)).toBeNull()
 
-  await revert('math.ts')
+  await revert(w, 'math.ts')
   await click(buttonText('Revert', await w.win.waitFor(() => dialogNamed('Revert "math.ts"?'))))
   await w.win.waitFor(() => !rowOf('math.ts'))
   expect(readFileSync(join(w.dir, 'math.ts'), 'utf8')).toBe('a\nb\nc\nd\ne\n')
