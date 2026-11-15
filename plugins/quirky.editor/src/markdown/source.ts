@@ -213,7 +213,7 @@ function supportedDetailsCount(source: string): number | null {
     }
     if (/^<summary/i.test(tag)) {
       if (!/^<summary>$/i.test(tag) || summaryOpen || details.length === 0 || details.at(-1) === true) return null
-      details[details.length - 1] = true
+      details.splice(details.length - 1, 1, true)
       summaryOpen = true
       summaryStart = match.index + tag.length
       continue
