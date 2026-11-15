@@ -156,6 +156,8 @@ function makeFactoryFixture(options: {
   pluginAlias?: string | ((home: string) => string)
   homeAlias?: (home: string) => string
   symlinkEscape?: boolean
+  danglingPluginSymlink?: boolean
+  scopeCreationFailure?: boolean
   guardFailure?: boolean
   fixtureFailure?: boolean
   buildFailure?: boolean
@@ -163,6 +165,10 @@ function makeFactoryFixture(options: {
   rendererFailure?: boolean
   processTableFailure?: boolean
   survivor?: boolean
+  buildSurvivor?: boolean
+  missingBuildRoot?: boolean
+  longAuthenticatedLog?: boolean
+  reuseBuildPid?: boolean
   reuseDaemonPid?: boolean
   worldStopFailure?: boolean
   uiStateFailure?: boolean
@@ -183,6 +189,7 @@ function makeFactoryFixture(options: {
     runtimeWritten: false,
     failProcessTable: false,
     reusedDaemonPid: false,
+    reusedBuildPid: false,
     helperEnv: undefined as Record<string, string> | undefined,
     preparedEnv: undefined as Record<string, string> | undefined,
     buildEnv: undefined as Record<string, string> | undefined,
@@ -212,20 +219,35 @@ function makeFactoryFixture(options: {
     if (pid === 701 && state.reusedDaemonPid) {
       return { pid, ppid: 1, pgid: 1, started: 'unrelated-reused-pid', state: 'S', command: '/usr/bin/unrelated-sentinel' }
     }
+    if (pid === 702 && state.reusedBuildPid) {
+      return { pid, ppid: 1, pgid: 702, started: 'unrelated-reused-build-pid', state: 'S', command: '/usr/bin/unrelated-build-sentinel' }
+    }
     return {
       pid,
-      ppid: process.pid,
-      pgid: process.pid,
+      ppid: pid === 703 ? (state.livePids.has(702) ? 702 : 1) : process.pid,
+      pgid: pid === 702 || pid === 703 ? 702 : process.pid,
       started: `owned-start-${pid}`,
       state: 'S',
-      command: pid === 701 ? `${process.execPath} packages/daemon/src/main.ts` : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+      command: pid === 701 ? `${process.execPath} packages/daemon/src/main.ts`
+        : pid === 702 ? `${process.execPath} packages/ui/build.ts`
+          : pid === 703 ? `${process.execPath} packages/ui/build-worker.ts`
+            : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
     }
   }
   const processSnapshot = (_ownedHome: string): Map<number, ProcessIdentity> => {
     if (state.failProcessTable) throw new Error('recording process table unavailable')
     const pids = new Set(state.livePids)
     if (state.reusedDaemonPid) pids.add(701)
-    return new Map([...pids].map(pid => [pid, currentIdentity(pid)]))
+    if (state.reusedBuildPid) pids.add(702)
+    return new Map([...pids]
+      .filter(pid => !(options.missingBuildRoot && pid === 702))
+      .map(pid => [pid, currentIdentity(pid)]))
+  }
+  const clearScopeProcesses = () => {
+    for (const pid of [...state.livePids]) {
+      if ((options.survivor && pid === 701) || (options.buildSurvivor && pid === 703)) continue
+      state.livePids.delete(pid)
+    }
   }
   const scope: FakeScope = {
     home,
@@ -235,8 +257,12 @@ function makeFactoryFixture(options: {
       if (command[1] === 'packages/ui/build.ts') {
         events.push('build.spawn')
         state.buildEnv = env
+        state.livePids.add(702)
         const exited = Promise.resolve(0).then(exitCode => {
           events.push('build.exit')
+          state.livePids.delete(702)
+          if (options.buildSurvivor) state.livePids.add(703)
+          if (options.reuseBuildPid) state.reusedBuildPid = true
           return exitCode
         })
         return { pid: 702, exited }
@@ -252,11 +278,11 @@ function makeFactoryFixture(options: {
     },
     async cleanup() {
       events.push('scope.cleanup')
-      if (!options.survivor) state.livePids.clear()
+      clearScopeProcesses()
     },
     killNow() {
       events.push('scope.killNow')
-      if (!options.survivor) state.livePids.clear()
+      clearScopeProcesses()
     },
     track() {}
   }
@@ -290,13 +316,18 @@ function makeFactoryFixture(options: {
   const tools = { fixtureBin, fetchPreload, egressLog: join(home, 'out', 'egress.log') }
   const writeOwnedLogs = () => {
     mkdirSync(outDir, { recursive: true })
-    const longLog = `${home} runtime-token hook-token https://u:p@127.0.0.1/path?token=runtime-token&extra=value#fragment-secret ${'λ'.repeat(7_000)}\n`
+    const longUrl = `wss://user:password@127.0.0.1/${'a'.repeat(9_000)}?auth=unknown-secret#fragment-secret`
+    const socketUrl = 'ws://socket-user:socket-password@127.0.0.1/rpc?auth=unknown-socket-secret#socket-fragment-secret'
+    const longLog = options.longAuthenticatedLog
+      ? `${home} ${longUrl}${'λ'.repeat(3_000)}\nuseful λ tail ${socketUrl}\n`
+      : `${home} runtime-token hook-token https://u:p@127.0.0.1/path?token=runtime-token&extra=value#fragment-secret ${'λ'.repeat(7_000)}\nuseful λ tail\n`
     writeFileSync(join(outDir, 'ui-build.log'), longLog)
     writeFileSync(join(outDir, 'daemon.log'), longLog)
   }
   const dependencies: Record<string, unknown> = {
     createScope: () => {
       events.push('scope.create')
+      if (options.scopeCreationFailure) throw new Error('recording scope creation failed')
       return scope
     },
     installCliFixtureTools: (ownedHome: string) => {
@@ -340,6 +371,8 @@ function makeFactoryFixture(options: {
       if (options.symlinkEscape) {
         mkdirSync(join(home, 'other-owned-directory'), { recursive: true })
         symlinkSync(join(home, 'other-owned-directory'), pluginsDir, 'dir')
+      } else if (options.danglingPluginSymlink) {
+        symlinkSync(join(home, 'missing-plugin-target'), pluginsDir, 'dir')
       } else {
         mkdirSync(pluginsDir, { recursive: true })
       }
@@ -451,7 +484,7 @@ test('CLI-files overlays generated private roots through preparation, build, dae
       expect(actual.state.buildEnv?.QUIRKY_PLUGINS_DIR).toBe(expectedPlugins)
       expect(actual.state.buildEnv?.QUIRKY_BUILTIN_PLUGINS_DIR).toBe(expectedPlugins)
       expect(actual.state.daemonEnv).toBe(actual.state.helperEnv)
-      expect(world.env).toBe(actual.state.helperEnv)
+      expect(actual.state.helperEnv).toBe(world.env)
       expect(actual.state.preparedEnv?.QUIRKY_PLUGINS_DIR).toBe(expectedPlugins)
       expect(actual.state.preparedEnv?.QUIRKY_BUILTIN_PLUGINS_DIR).toBe(expectedPlugins)
       expect(actual.state.preparedEnv?.QUIRKY_UI_DIR).toBe(actual.uiDir)
@@ -492,6 +525,23 @@ test('CLI-files refuses a plugin-root symlink escape before the builder can run'
     fixture.dispose()
   }
 })
+test('CLI-files refuses a dangling generated plugin-root symlink inside its home', async () => {
+  const fixture = makeFactoryFixture({ danglingPluginSymlink: true })
+  try {
+    const failure = await captureFailure(requireFactory()({}, fixture.dependencies))
+    expect(failure).toMatchObject({ kind: 'fixture-home' })
+    expect(fixture.events).not.toContain('build.spawn')
+    expect(fixture.events).not.toContain('daemon.spawn')
+    expect(failure.startupEvidence?.cleanup).toMatchObject({
+      ok: true,
+      evidence: { started: { daemon: false, browser: false }, scopeCleanupComplete: true, acquisitionSettled: true, homeRemoved: true }
+    })
+    expect(fixture.pluginsDir).toBe(join(fixture.home, 'builtin-plugins'))
+  } finally {
+    fixture.dispose()
+  }
+})
+
 
 test('CLI-files preserves pre-return browser identity and bounded sanitized renderer evidence after navigation failure', async () => {
   const fixture = makeFactoryFixture({ rendererFailure: true })
@@ -569,7 +619,14 @@ test('CLI-files guard, fixture and failed build retain pre-daemon accounting and
       const failure = await captureFailure(requireFactory()({}, fixture.dependencies))
       const evidence = failure.startupEvidence
       expect(evidence?.cleanup.evidence.started).toEqual({ daemon: false, browser: false })
-      expect(evidence?.cleanup.evidence.trackedIdentities).toEqual([])
+      if (fault === 'build') {
+        expect(evidence?.cleanup.evidence.trackedIdentities).toContainEqual(expect.objectContaining({
+          kind: 'build', pid: 702, pgid: 702, started: 'owned-start-702',
+          command: `${process.execPath} packages/ui/build.ts`, gone: true
+        }))
+      } else {
+        expect(evidence?.cleanup.evidence.trackedIdentities).toEqual([])
+      }
       expect(evidence?.cleanup).toMatchObject({
         ok: true,
         evidence: { homeRemoved: true, processIdentitiesGone: true, scopeCleanupComplete: true, acquisitionSettled: true, unresolvedAcquisition: false }
@@ -593,6 +650,89 @@ test('CLI-files guard, fixture and failed build retain pre-daemon accounting and
     }
   }
 })
+test('CLI-files fails closed when the spawned build root identity is missing', async () => {
+  const fixture = makeFactoryFixture({ buildFailure: true, missingBuildRoot: true })
+  try {
+    const failure = await captureFailure(requireFactory()({}, fixture.dependencies))
+    expect(failure.startupEvidence?.cleanup).toMatchObject({
+      ok: false,
+      evidence: { trackedIdentities: [], processIdentitiesGone: false, homeRemoved: false, scopeCleanupComplete: true }
+    })
+    expect(failure.startupEvidence?.cleanup.error?.toLowerCase()).toContain('build')
+  } finally {
+    fixture.dispose()
+  }
+})
+
+test('CLI-files does not certify a surviving build-group child when scope cleanup resolves', async () => {
+  const fixture = makeFactoryFixture({ buildFailure: true, buildSurvivor: true })
+  const originalNow = Date.now
+  let acceleratedNow = originalNow()
+  Date.now = () => fixture.events.includes('scope.cleanup') ? (acceleratedNow += 2_500) : originalNow()
+  try {
+    const failure = await captureFailure(requireFactory()({}, fixture.dependencies))
+    expect(failure.startupEvidence?.cleanup.ok).toBe(false)
+    expect(failure.startupEvidence?.cleanup.evidence).toMatchObject({
+      processIdentitiesGone: false,
+      homeRemoved: false,
+      scopeCleanupComplete: true
+    })
+    expect(failure.startupEvidence?.cleanup.evidence.trackedIdentities).toContainEqual(expect.objectContaining({
+      kind: 'build-child', pid: 703, pgid: 702, command: `${process.execPath} packages/ui/build-worker.ts`, gone: false
+    }))
+  } finally {
+    Date.now = originalNow
+    fixture.dispose()
+  }
+})
+
+test('CLI-files never adopts a reused build-root PID as a private-group identity', async () => {
+  const fixture = makeFactoryFixture({ buildFailure: true, reuseBuildPid: true })
+  try {
+    const failure = await captureFailure(requireFactory()({}, fixture.dependencies))
+    expect(failure.startupEvidence?.cleanup.ok).toBe(true)
+    expect(failure.startupEvidence?.cleanup.evidence.trackedIdentities).toContainEqual(expect.objectContaining({
+      kind: 'build', pid: 702, pgid: 702, started: 'owned-start-702', gone: true
+    }))
+    expect(failure.startupEvidence?.cleanup.evidence.trackedIdentities).not.toContainEqual(expect.objectContaining({
+      command: '/usr/bin/unrelated-build-sentinel'
+    }))
+  } finally {
+    fixture.dispose()
+  }
+})
+
+test('CLI-files removes credentials from a log tail whose boundary splits a long authenticated URL', async () => {
+  const fixture = makeFactoryFixture({ buildFailure: true, longAuthenticatedLog: true })
+  try {
+    const failure = await captureFailure(requireFactory()({}, fixture.dependencies))
+    const snapshot = JSON.stringify(failure.startupEvidence)
+    expect(snapshot).not.toContain('user:password')
+    expect(snapshot).not.toContain('auth=unknown-secret')
+    expect(snapshot).not.toContain('fragment-secret')
+    expect(snapshot).toContain('useful λ tail')
+  } finally {
+    fixture.dispose()
+  }
+})
+test('CLI-files leaves scope-creation failure unresolved instead of certifying empty cleanup', async () => {
+  const fixture = makeFactoryFixture({ scopeCreationFailure: true })
+  try {
+    const failure = await captureFailure(requireFactory()({}, fixture.dependencies))
+    expect(failure.message).toContain('recording scope creation failed')
+    expect(failure.startupEvidence?.cleanup.ok).toBe(false)
+    expect(failure.startupEvidence?.cleanup.evidence).toMatchObject({
+      trackedIdentities: [],
+      processIdentitiesGone: false,
+      acquisitionSettled: false
+    })
+    expect(fixture.events).toEqual(['scope.create'])
+  } finally {
+    fixture.dispose()
+  }
+})
+
+
 
 test('CLI-files keeps process-table uncertainty and a surviving root failed without calling either a measured leak', async () => {
   const failedTable = makeFactoryFixture({ rendererFailure: true, processTableFailure: true })
@@ -726,7 +866,7 @@ test('CLI-files ignores poisoned inherited plugin roots and builds only under it
         QUIRKY_BUILTIN_PLUGINS_DIR: fixture.pluginsDir,
         QUIRKY_UI_OUT: fixture.uiDir
       })
-      expect(world.env).toBe(fixture.state.helperEnv)
+      expect(fixture.state.helperEnv).toBe(world.env)
     } finally {
       await world.cleanup()
     }
@@ -761,6 +901,19 @@ test('CLI-files report transfers validated failed-startup evidence without fabri
   })
   expect(serialized).not.toContain('owned world cleanup identity could not be verified')
 })
+test('CLI-files runner removes unknown WebSocket URL secrets while preserving the path', async () => {
+  const evidence = validStartupEvidence({ daemon: true, browser: false })
+  evidence.diagnostics.logs.daemonTail =
+    'wss://user:pass@127.0.0.1/rpc?auth=unknown-socket-secret#socket-fragment-secret'
+  const failure = typedStartupError(evidence, 'missing-chrome', 'browser missing')
+  const report = await runCliFilesParity({ createWorld: async () => { throw failure } })
+  const serialized = JSON.stringify(report)
+  expect(serialized).not.toContain('user:pass')
+  expect(serialized).not.toContain('auth=unknown-socket-secret')
+  expect(serialized).not.toContain('socket-fragment-secret')
+  expect(serialized).toContain('wss://127.0.0.1/rpc')
+})
+
 
 test('CLI-files report accepts explicit clean pre-daemon accounting without inventing roots', async () => {
   const evidence = validStartupEvidence({ daemon: false, browser: false })
@@ -841,8 +994,8 @@ test('CLI-files runner retains and re-sanitizes actual factory startup evidence 
     expect(factoryFailure.startupEvidence).toBeDefined()
     const report = await runCliFilesParity({ createWorld: async () => { throw factoryFailure } })
     const json = JSON.stringify(report)
-    expect(report.buildElapsedMs).toBe((report as unknown as { startup?: StartupDiagnostics }).startup?.buildElapsedMs)
-    expect((report as unknown as { startup?: StartupDiagnostics }).startup?.phase).toBe('renderer')
+    expect(report.startup?.buildElapsedMs).toBe(report.buildElapsedMs)
+    expect(report.startup?.phase).toBe('renderer')
     expect(report.error?.message).toContain('local renderer navigation failed')
     for (const secret of [fixture.home, 'runtime-token', 'hook-token', 'u:p@127.0.0.1', 'fragment-secret', '?token=', '?extra=', '?arbitrary=', 'extra=value', 'arbitrary=value']) {
       expect(json).not.toContain(secret)
@@ -852,13 +1005,41 @@ test('CLI-files runner retains and re-sanitizes actual factory startup evidence 
       homeRemoved: true,
       daemonIdentityFound: true,
       browserIdentityFound: true,
-      trackedIdentities: [
+      trackedIdentities: expect.arrayContaining([
+        expect.objectContaining({ kind: 'build', pid: 702, gone: true }),
         expect.objectContaining({ kind: 'daemon', pid: 701, gone: true }),
         expect.objectContaining({ kind: 'browser', pid: 801, gone: true })
-      ]
+      ])
     })
   } finally {
     fixture.dispose()
   }
 })
 
+test('CLI-files never certifies a late returned browser PID whose start identity was not captured', async () => {
+  const fixture = makeFactoryFixture()
+  const opening = Promise.withResolvers<void>()
+  const late = Promise.withResolvers<typeof fixture.windows>()
+  const controller = new AbortController()
+  fixture.dependencies.openWindows = async () => {
+    opening.resolve()
+    return late.promise
+  }
+  try {
+    const failed = captureFailure(requireFactory()({ signal: controller.signal }, fixture.dependencies))
+    await opening.promise
+    controller.abort(new Error('renderer startup interrupted'))
+    late.resolve(fixture.windows)
+    const failure = await failed
+    expect(failure.message).toContain('renderer startup interrupted')
+    expect(failure.startupEvidence?.cleanup).toMatchObject({
+      ok: false,
+      evidence: { started: { daemon: true, browser: true }, homeRemoved: true, processIdentitiesGone: false }
+    })
+    expect(failure.startupEvidence?.cleanup.error).toContain('identity could not be verified')
+    expect(fixture.events.indexOf('browser.stop')).toBeLessThan(fixture.events.indexOf('world.stop'))
+  } finally {
+    late.resolve(fixture.windows)
+    fixture.dispose()
+  }
+})

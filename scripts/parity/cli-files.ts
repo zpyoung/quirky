@@ -292,7 +292,7 @@ function tailIsLocalJson(argv: readonly string[]): boolean {
 }
 function sanitizeText(text: string, home: string, tokens: readonly string[]): string {
   let output = text
-  output = output.replace(/https?:\/\/[^\s"'<>]+/gu, (address) => {
+  output = output.replace(/(?:https?|wss?):\/\/[^\s"'<>]+/giu, (address) => {
     try {
       const url = new URL(address)
       return `${url.protocol}//${url.host}${url.pathname}`

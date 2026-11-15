@@ -49,7 +49,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 function sanitizeDiagnostic(value: string, home: string, limit: number): string {
-  const redacted = value.replaceAll(home, '<soak-home>').replace(/https?:\/\/[^\s"'<>]+/g, (raw) => {
+  const redacted = value.replace(/(?:https?|wss?):\/\/[^\s"'<>]+/gi, (raw) => {
     const trailing = raw.match(/[),.;!?]+$/)?.[0] ?? ''
     try {
       const url = new URL(raw.slice(0, raw.length - trailing.length))
@@ -57,7 +57,7 @@ function sanitizeDiagnostic(value: string, home: string, limit: number): string 
     } catch {
       return raw
     }
-  })
+  }).replaceAll(home, '<soak-home>')
   return redacted.slice(0, limit)
 }
 
@@ -377,6 +377,8 @@ export async function openWindows(options: {
   const recordServer = (launched: BrowserServer): number | null => {
     const pid = launched.process().pid
     if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0) return null
+    browserPid = pid
+    report('launch')
     world.track(pid)
     writeFileSync(join(out, 'browser.pid'), `${pid}\n`)
     return pid
@@ -410,7 +412,6 @@ export async function openWindows(options: {
     server = await waitWithAbort(launch, 30_000, signal, 'Chromium launch')
     browserPid = recordServer(server)
     if (browserPid === null) throw new Error('Chromium server did not report its process id')
-    report('launch')
     throwIfAborted(signal)
 
     report('connect')
@@ -627,7 +628,6 @@ export async function openWindows(options: {
       try {
         server = await launch
         browserPid = recordServer(server)
-        if (browserPid !== null) report('launch')
       } catch {}
     }
     try {

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { accessSync, closeSync, constants, existsSync, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { daemonEntryHash, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
@@ -1061,10 +1061,17 @@ function canonicalCliFilesPath(path: string): string | undefined {
   const candidate = resolve(path)
   let existing = candidate
   try {
-    while (!existsSync(existing)) {
-      const parent = dirname(existing)
-      if (parent === existing) return undefined
-      existing = parent
+    while (true) {
+      try {
+        lstatSync(existing)
+        break
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (code !== 'ENOENT' && code !== 'ENOTDIR') return undefined
+        const parent = dirname(existing)
+        if (parent === existing) return undefined
+        existing = parent
+      }
     }
     return resolve(realpathSync(existing), relative(existing, candidate))
   } catch {
@@ -1108,7 +1115,7 @@ function tailUtf8(text: string, limit: number): string {
 }
 
 function stripCliFilesUrlSecrets(text: string): string {
-  return text.replace(/https?:\/\/[^\s"'<>]+/g, (raw) => {
+  return text.replace(/(?:https?|wss?):\/\/[^\s"'<>]+/gi, (raw) => {
     const trailing = raw.match(/[),.;!?]+$/)?.[0] ?? ''
     try {
       const url = new URL(raw.slice(0, raw.length - trailing.length))
@@ -1136,9 +1143,21 @@ function readOwnedCliFilesLog(home: string, path: string, tokens: readonly strin
     fd = openSync(canonicalPath, 'r')
     const size = fstatSync(fd).size
     const offset = Math.max(0, size - MAX_STDERR_BYTES - 4)
-    const buffer = Buffer.alloc(Math.min(size, MAX_STDERR_BYTES + 4))
-    const bytesRead = readSync(fd, buffer, 0, buffer.byteLength, offset)
-    return sanitizeCliFilesDiagnostic(buffer.subarray(0, bytesRead).toString('utf8'), home, tokens)
+    const prefixBytes = offset > 0 ? 1 : 0
+    const readOffset = offset - prefixBytes
+    const buffer = Buffer.alloc(Math.min(size - readOffset, MAX_STDERR_BYTES + 4 + prefixBytes))
+    const bytesRead = readSync(fd, buffer, 0, buffer.byteLength, readOffset)
+    let text = buffer.subarray(prefixBytes, bytesRead).toString('utf8')
+    if (prefixBytes > 0) {
+      const previousByte = buffer[0]!
+      const previousIsWhitespace = previousByte === 0x20 || (previousByte >= 0x09 && previousByte <= 0x0d)
+      if (!previousIsWhitespace) {
+        // The bounded read may start inside an authenticated URL, before its scheme and authority.
+        const boundary = text.search(/\s/)
+        text = boundary < 0 ? '' : text.slice(boundary + 1)
+      }
+    }
+    return sanitizeCliFilesDiagnostic(text, home, tokens)
   } catch {
     return undefined
   } finally {
@@ -1350,6 +1369,7 @@ export async function createCliFilesWorld(
   )
 
   const observed = new Map<string, { identity: ProcessIdentity; kind: string }>()
+  const buildRoots = new Map<string, ProcessIdentity>()
   const lateCleanupErrors: string[] = []
   const rendererObservations: WindowStartupObservation[] = []
   const tokens: string[] = []
@@ -1359,11 +1379,14 @@ export async function createCliFilesWorld(
   let startupLogs: CliFilesStartupDiagnostics['logs'] = {}
   let lateResourceUnresolved = false
   let startWorldSettled = true
+  let scopeAcquisitionSettled = true
   let rendererAcquisitionSettled = true
   let rendererStartedAt: number | undefined
   let rendererElapsedMs = 0
   let daemonStarted = false
   let browserStarted = false
+  let buildStarted = false
+  let buildIdentityCaptureFailed = false
   let daemonIdentityCaptureFailed = false
   let browserIdentityCaptureFailed = false
   let scopeCleanupComplete = true
@@ -1390,7 +1413,7 @@ export async function createCliFilesWorld(
     processIdentitiesGone: false,
     homeRemoved: false
   }
-  const acquisitionSettled = () => startWorldSettled && rendererAcquisitionSettled && buildPendingCount === 0
+  const acquisitionSettled = () => scopeAcquisitionSettled && startWorldSettled && rendererAcquisitionSettled && buildPendingCount === 0
   const startupDiagnostics = (): CliFilesStartupDiagnostics => freezeCliFilesValue({
     phase,
     elapsedMs: Math.max(0, Math.round(performance.now() - startupStartedAt)),
@@ -1426,6 +1449,32 @@ export async function createCliFilesWorld(
   }
 
   const processTable = dependencies.processSnapshot ?? processSnapshot
+  const captureBuildProcessIdentities = (snapshot: Map<number, ProcessIdentity>) => {
+    for (const root of buildRoots.values()) {
+      const currentRoot = snapshot.get(root.pid)
+      if (currentRoot && !sameProcess(root, currentRoot)) {
+        if (root.pgid === root.pid && [...snapshot.values()].some((identity) =>
+          identity.pid !== root.pid && identity.pgid === root.pgid && !observed.has(processIdentityKey(identity)))) {
+          buildIdentityCaptureFailed = true
+        }
+        continue
+      }
+      for (const identity of processTree(snapshot, root.pid)) {
+        if (identity.pid === root.pid) {
+          if (sameProcess(root, identity)) addObservedIdentity(observed, root, 'build')
+        } else {
+          addObservedIdentity(observed, identity, 'build-child')
+        }
+      }
+      if (root.pgid === root.pid) {
+        for (const identity of snapshot.values()) {
+          if (identity.pid !== root.pid && identity.pgid === root.pgid) {
+            addObservedIdentity(observed, identity, 'build-child')
+          }
+        }
+      }
+    }
+  }
 
   const captureOwnedProcessIdentities = (requireLive: boolean) => {
     if (!home) throw new CliWorldError('process-identity', 'owned process home is unavailable')
@@ -1444,6 +1493,7 @@ export async function createCliFilesWorld(
       if (browserStarted && !browserIdentity) browserIdentityCaptureFailed = true
       throw error
     }
+    captureBuildProcessIdentities(snapshot)
     if (selectedDaemonPid && Number.isSafeInteger(selectedDaemonPid) && selectedDaemonPid > 0) {
       const currentDaemon = snapshot.get(selectedDaemonPid)
       if (currentDaemon) {
@@ -1521,7 +1571,9 @@ export async function createCliFilesWorld(
     if (browserIdentity || browserIdentityCaptureFailed) return
     try {
       const snapshot = captureOwnedProcessIdentities(false)
-      if (!snapshot.has(pid) || browserIdentity?.pid !== pid) browserIdentityCaptureFailed = true
+      // The capture call assigns this closed-over identity.
+      const capturedIdentity = browserIdentity as ProcessIdentity | undefined
+      if (!snapshot.has(pid) || capturedIdentity?.pid !== pid) browserIdentityCaptureFailed = true
     } catch {
       browserIdentityCaptureFailed = true
     }
@@ -1635,7 +1687,7 @@ export async function createCliFilesWorld(
         cleanupErrors.push(home ? sanitizeCliFilesDiagnostic(errorText(error), home, tokens) : errorText(error))
       }
 
-      let processCaptureVerified = !daemonIdentityCaptureFailed && !browserIdentityCaptureFailed
+      let processCaptureVerified = true
       if (home) {
         try {
           captureOwnedProcessIdentities(false)
@@ -1726,10 +1778,14 @@ export async function createCliFilesWorld(
         kind === 'daemon' && (daemonPid === undefined || identity.pid === daemonPid))
       const browserRootObserved = !browserStarted || [...observed.values()].some(({ identity, kind }) =>
         kind === 'browser' && (browserPid === undefined || identity.pid === browserPid))
+      const buildRootObserved = !buildStarted || (buildRoots.size > 0 && [...buildRoots.keys()].every((key) => observed.get(key)?.kind === 'build'))
       const acquisitionsSettled = acquisitionSettled()
       const unresolvedAcquisition = lateResourceUnresolved || !acquisitionsSettled
       const processIdentitiesGone = processTableVerified && processCaptureVerified
-        && !unresolvedAcquisition && daemonRootObserved && browserRootObserved && gone.size === observed.size
+        && !unresolvedAcquisition && daemonRootObserved && browserRootObserved && buildRootObserved && gone.size === observed.size
+        && !daemonIdentityCaptureFailed && !browserIdentityCaptureFailed && !buildIdentityCaptureFailed
+      const homeCanBeRemoved = processTableVerified && processCaptureVerified && scopeCleanupComplete
+        && !unresolvedAcquisition && buildRootObserved && !buildIdentityCaptureFailed && gone.size === observed.size && cleanupErrors.length === 0
       cleanupEvidence = {
         trackedIdentities: home ? identityEvidence(observed, gone, home, tokens) : [],
         identities: home
@@ -1745,10 +1801,11 @@ export async function createCliFilesWorld(
         cleanupErrors.push(home ? sanitizeCliFilesDiagnostic(`owned processes remain: ${detail}`, home, tokens) : `owned processes remain: ${detail}`)
       }
       if (!daemonRootObserved || !browserRootObserved) cleanupErrors.push('started process root identity could not be verified')
+      if (!buildRootObserved || buildIdentityCaptureFailed) cleanupErrors.push('started build root identity could not be verified')
       if (!processIdentitiesGone) cleanupErrors.push('owned process identities could not be verified gone')
       if (!scopeCleanupComplete) cleanupErrors.push('owned process scope cleanup did not complete')
       if (!acquisitionsSettled) cleanupErrors.push('owned startup acquisition did not settle')
-      if (processIdentitiesGone && home) {
+      if (homeCanBeRemoved && home) {
         try {
           rmSync(home, { recursive: true, force: true })
           cleanupEvidence = { ...cleanupEvidence, homeRemoved: !existsSync(home) }
@@ -1772,6 +1829,7 @@ export async function createCliFilesWorld(
 
   try {
     ensureCliFilesWork(signal, deadline)
+    scopeAcquisitionSettled = false
     const injectedScope = dependencies.createScope?.()
     if (injectedScope) {
       home = realpathSync(injectedScope.home)
@@ -1779,6 +1837,7 @@ export async function createCliFilesWorld(
     } else {
       home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-cli-files-')))
     }
+    scopeAcquisitionSettled = true
     const installTools = dependencies.installCliFixtureTools ?? installCliFixtureTools
     tools = installTools(home)
     const createEnvironment = dependencies.createCliEnvironment ?? createCliEnvironment
@@ -1792,12 +1851,39 @@ export async function createCliFilesWorld(
       if (command[0] !== process.execPath) return
       if (command[1] === 'packages/ui/build.ts') {
         phase = 'build'
+        buildStarted = true
         buildPendingCount += 1
         const finishBuild = () => {
           buildElapsedMs = Math.max(0, Math.round(performance.now() - spawnedAt))
           buildPendingCount = Math.max(0, buildPendingCount - 1)
         }
-        void child.exited.then(finishBuild, finishBuild)
+        let buildRoot: ProcessIdentity | undefined
+        try {
+          const snapshot = processTable(home!)
+          const identity = snapshot.get(child.pid)
+          if (!identity || !identity.command.includes(command[1]!) || identity.pgid !== identity.pid) {
+            buildIdentityCaptureFailed = true
+          } else {
+            buildRoot = identity
+            buildRoots.set(processIdentityKey(identity), identity)
+            addObservedIdentity(observed, identity, 'build')
+            captureBuildProcessIdentities(snapshot)
+          }
+        } catch {
+          buildIdentityCaptureFailed = true
+        }
+        const captureBuildExit = () => {
+          if (!buildRoot) return
+          try {
+            captureBuildProcessIdentities(processTable(home!))
+          } catch {
+            buildIdentityCaptureFailed = true
+          }
+        }
+        void child.exited.then(
+          () => { captureBuildExit(); finishBuild() },
+          () => { captureBuildExit(); finishBuild() }
+        )
       }
       if (command[1] === 'packages/daemon/src/main.ts') {
         phase = 'daemon'
@@ -1821,9 +1907,11 @@ export async function createCliFilesWorld(
         addObservedIdentity(observed, identity, 'daemon')
       }
     }
+    scopeAcquisitionSettled = false
     scope = injectedScope
       ? safeProcessScope(injectedScope, env, observeSpawn)
       : createWorldScope(home, env, observeSpawn)
+    scopeAcquisitionSettled = true
     scopeCleanupComplete = false
     if (scope.home !== home) throw new CliWorldError('startup-failed', 'owned process scope home does not match the allocated home')
     if (!isAbsolute(process.execPath)) throw new CliWorldError('startup-failed', 'Bun executable path is not absolute')
@@ -1992,21 +2080,9 @@ export async function createCliFilesWorld(
       onStartup: recordRendererObservation
     })).then(async (opened) => {
       openingWindows = opened
-      if (abandoningWindowOpen || rendererSignal.aborted) {
-        try {
-          if (!browserStarted) {
-            browserPid = opened.browserPid
-            captureOwnedProcessIdentities(false)
-          }
-        } catch (error) {
-          browserIdentityCaptureFailed = true
-          lateCleanupErrors.push(sanitizeCliFilesDiagnostic(errorText(error), home!, tokens))
-        }
-        await stopLateWindow(opened)
-      } else {
-        if (!browserStarted) captureStartedBrowserIdentity(opened.browserPid)
-        windowSet = opened
-      }
+      if (!browserStarted) captureStartedBrowserIdentity(opened.browserPid)
+      if (abandoningWindowOpen || rendererSignal.aborted) await stopLateWindow(opened)
+      else windowSet = opened
       return opened
     })
     let openedWindows: SoakWindows | undefined

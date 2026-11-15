@@ -72,9 +72,12 @@ const current = {
   observations: [],
   requests: [],
   pidAtNavigation: false,
+  pidAtClose: false,
   tracked: [],
   serverClosed: 0,
   resolveConnect: undefined,
+  resolveLaunch: undefined,
+  launchReady: Promise.withResolvers(),
   connectReady: Promise.withResolvers(),
   browserClosedPromise: Promise.withResolvers(),
   browserClosedCount: 0,
@@ -144,7 +147,7 @@ function makePage() {
       if (scenario === 'old-request') sendStatus(page, 'ready')
       if (scenario === 'navigation-failure') {
         for (let index = 0; index < 7; index++) {
-          page.emit('pageerror', { message: \`renderer error \${index} at \${process.env.QUIRKY_HOME}\` })
+          page.emit('pageerror', { message: \`renderer error \${index} at \${process.env.QUIRKY_HOME} http://u:p@127.0.0.1:\${port}\${process.env.QUIRKY_HOME}/asset.js?auth=path-secret#fragment-secret WSS://u:p@127.0.0.1:\${port}/rpc?auth=socket-secret#socket-fragment-secret\` })
           if (index === 4) {
             page.emit('response', {
               url: () => \`http://127.0.0.1:\${port}/assets/\${index}.js?auth=response-secret#fragment-secret\`,
@@ -188,13 +191,22 @@ const browser = {
 const server = {
   process: () => ({ pid: 801 }),
   wsEndpoint: () => \`ws://127.0.0.1:\${port}\`,
-  async close() { current.serverClosed++ }
+  async close() {
+    current.pidAtClose = current.observations.some(({ browserPid }) => browserPid === 801)
+    current.serverClosed++
+  }
 }
 
 mock.module('playwright', () => ({
   chromium: {
     async launchServer() {
       current.events.push('launch')
+      current.launchReady.resolve()
+      if (scenario === 'late-launch-track-failure') {
+        const deferred = Promise.withResolvers()
+        current.resolveLaunch = deferred.resolve
+        return deferred.promise
+      }
       return server
     },
     connect() {
@@ -232,7 +244,10 @@ const world = {
       { id: 'retry', path: '/retry', repoId: 'repo-b', name: 'retry', isMain: false, status: 'failing' }
     ]
   },
-  track(pid) { current.tracked.push(pid) },
+  track(pid) {
+    current.tracked.push(pid)
+    if (scenario === 'track-failure' || scenario === 'late-launch-track-failure') throw new Error('owned browser tracking failed')
+  },
   control: {
     async callAny(method, params) {
       if (method === 'ui.state') return { windows: current.connectionIds.map((connId) => ({ connId })) }
@@ -286,7 +301,13 @@ const capture = async () => {
 }
 
 let result
-if (scenario === 'late-connect') {
+if (scenario === 'late-launch-track-failure') {
+  const pending = capture()
+  await current.launchReady.promise
+  controller.abort()
+  current.resolveLaunch?.(server)
+  result = await pending
+} else if (scenario === 'late-connect') {
   const pending = capture()
   await current.connectReady.promise
   controller.abort()
@@ -302,6 +323,7 @@ process.stdout.write(JSON.stringify({
   events: current.observations,
   requests: current.requests,
   pidAtNavigation: current.pidAtNavigation,
+  pidAtClose: current.pidAtClose,
   tracked: current.tracked,
   browserClosed: current.browserClosedCount,
   serverClosed: current.serverClosed
@@ -315,6 +337,7 @@ async function runRecordingWindowScenario(scenario: string): Promise<RecordingWi
   const out = join(root, 'out')
   mkdirSync(home)
   mkdirSync(out)
+  if (scenario === 'pid-write-failure') mkdirSync(join(out, 'browser.pid'))
   const moduleUrl = pathToFileURL(resolve(import.meta.dir, 'windows.ts')).href
   const child = Bun.spawn([process.execPath, '-e', recordingWindowSource(moduleUrl, scenario)], {
     env: { ...process.env, QUIRKY_HOME: home, QUIRKY_OUT: out },
@@ -346,6 +369,7 @@ type RecordingWindowRun = {
   requests: WindowRequestObservation[]
   pidAtNavigation: boolean
   tracked: number[]
+  pidAtClose: boolean
   browserClosed: number
   serverClosed: number
   finished?: {
@@ -462,6 +486,20 @@ test('aborts connection acquisition and closes the browser if it resolves late',
   expect(result.tracked).toEqual([801])
   expect(result.browserClosed).toBe(1)
   expect(result.serverClosed).toBe(1)
+})
+
+test('reports acquired browser identity before tracking or PID persistence fails, including late launch', async () => {
+  for (const scenario of ['track-failure', 'pid-write-failure', 'late-launch-track-failure']) {
+    const result = await runRecordingWindowScenario(scenario)
+    expect(result.resolved, scenario).toBe(false)
+    expect(result.events, scenario).toEqual(expect.arrayContaining([
+      expect.objectContaining({ stage: 'launch', browserPid: 801 })
+    ]))
+    expect(result.events.at(-1), scenario).toMatchObject({ stage: 'failed', browserPid: 801 })
+    expect(result.events.at(-1)?.message, scenario).toContain('launch')
+    expect(result.pidAtClose, scenario).toBe(true)
+    expect(result.serverClosed, scenario).toBe(1)
+  }
 })
 
 test('observes outgoing /rpc attempts across sockets without altering aggregate request metrics', () => {
