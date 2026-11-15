@@ -72,6 +72,7 @@ type TreeBaseProps = {
 }
 
 type DialogHandler = (dialog: DialogState) => void
+/** Starts a delete of `worktree`, with the workspaces nested below it when `descendants` is above 0. */
 type DeleteHandler = (worktree: Worktree, descendants: number) => void
 export type TreeProps = TreeBaseProps & (
   | { openDialog: DialogHandler; requestDelete: DeleteHandler; onOpenDialog?: DialogHandler; onRequestDelete?: DeleteHandler }
@@ -723,6 +724,7 @@ export function Tree({
   const renameRef = useRef<{ worktreeId: string; seq: number } | null>(null)
   const renameSeqRef = useRef(0)
   const renameDone = useRef(false)
+  const renameFocusRef = useRef<{ seq: number; input: HTMLInputElement } | null>(null)
   const renameFocusRowRef = useRef<HTMLElement | null>(null)
   const requestedMenuRef = useRef<{ targetId: string; trigger?: HTMLElement; originRow?: HTMLElement } | null>(null)
   const treeControlHandlerRef = useRef<{
@@ -737,14 +739,31 @@ export function Tree({
     })
   }, [context])
   useLayoutEffect(() => {
-    if (!renameSession) return
+    if (!renameSession) {
+      renameFocusRef.current = null
+      return
+    }
+    const previous = renameFocusRef.current
+    const newSession = previous?.seq !== renameSession.seq
     const preferred = renameFocusRowRef.current
-    const inputs = [...(treeRoot.current?.querySelectorAll<HTMLInputElement>('.worktree-rename') ?? [])]
-    const input = preferred?.querySelector<HTMLInputElement>('.worktree-rename') ??
-      inputs.find((candidate) => candidate.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId === renameSession.worktreeId)
+    let input = renameInputFor(renameSession.worktreeId)
+    if (input !== document.activeElement) {
+      const previousInput = newSession ? null : previous?.input
+      input = previousInput && treeRoot.current?.contains(previousInput)
+        ? previousInput
+        : preferred?.querySelector<HTMLInputElement>('.worktree-rename') ?? input
+    }
     renameFocusRowRef.current = null
-    input?.focus()
-    input?.select()
+    if (!input) return
+    if (newSession || previous?.input !== input) renameFocusRef.current = { seq: renameSession.seq, input }
+    if (document.activeElement === input) {
+      if (newSession) input.select()
+      return
+    }
+    const { selectionStart, selectionEnd, selectionDirection } = input
+    input.focus()
+    if (newSession) input.select()
+    else if (selectionStart !== null && selectionEnd !== null) input.setSelectionRange(selectionStart, selectionEnd, selectionDirection ?? 'none')
   }, [renameSession, model])
   const installMenu = (next: Omit<OpenMenu, 'seq'> | null) => {
     if (next === null) {

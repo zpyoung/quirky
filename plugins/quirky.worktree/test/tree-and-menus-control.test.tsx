@@ -601,6 +601,69 @@ test('closes before rename selection without stealing focus, and Enter plus blur
   expect(h.renames).toEqual([['w1', 'renamed']])
 })
 
+test('model refresh preserves the active rename draft and caret until an intentional commit', async () => {
+  const h = await mountTree()
+  expect((await dispatchTree(h, 'w1', 'start-rename')).delivered).toBe(1)
+  const input = h.host.querySelector<HTMLInputElement>('.worktree-rename')!
+  expect(document.activeElement).toBe(input)
+  expect(input.selectionStart).toBe(0)
+  expect(input.selectionEnd).toBe(input.value.length)
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  setter.call(input, 'my unfinished name')
+  input.setSelectionRange(3, 3)
+  await h.render({ worktrees: [worktree('w1', { unread: true })] })
+  expect(h.renames).toEqual([])
+  expect(h.host.querySelector('.worktree-rename')).toBe(input)
+  expect(document.activeElement).toBe(input)
+  expect(input.value).toBe('my unfinished name')
+  expect(input.selectionStart).toBe(3)
+  expect(input.selectionEnd).toBe(3)
+
+  expect((await dispatchTree(h, 'w1', 'start-rename')).delivered).toBe(1)
+  expect(document.activeElement).toBe(input)
+  expect(input.selectionStart).toBe(0)
+  expect(input.selectionEnd).toBe(input.value.length)
+  expect(h.renames).toEqual([])
+  await keydown(input, 'Enter')
+  input.dispatchEvent(new FocusEvent('blur', { bubbles: false }))
+  await flush()
+  expect(h.renames).toEqual([['w1', 'my unfinished name']])
+})
+
+test('model refresh preserves the active second pinned rename input without saving its draft', async () => {
+  const item = worktree('w1')
+  const base = buildTree({
+    worktrees: [item], repos: [REPO], groups: [], tags: [],
+    spec: { ...allSpecFromStock(DEFAULT_STOCK_OPTIONS, DEFAULT_ACTIVITY_PREFERENCES), display: { ...allSpecFromStock(DEFAULT_STOCK_OPTIONS, DEFAULT_ACTIVITY_PREFERENCES).display, groupBy: 'project' } },
+    viewId: 'all', projection: null, marks: new Map(), checks: new Map()
+  })
+  const source = base.groups.find((group) => group.kind === 'project')!
+  const project: ViewGroup = { ...source, key: 'project:r1', kind: 'project', title: 'QuirkyApp' }
+  const duplicate: ViewTree = {
+    ...base,
+    groups: [{ ...project, key: 'pinned', kind: 'pinned', title: 'Pinned' }, project]
+  }
+  const h = await mountTree({ worktrees: [item], model: duplicate, display: 'project' })
+  expect(h.host.querySelectorAll('.worktree-menu')).toHaveLength(2)
+  await openRowMenu(h, 'w1', 1)
+  await click(menuItem('Rename'))
+  const input = document.activeElement as HTMLInputElement
+  expect(input).toBe(h.host.querySelectorAll<HTMLInputElement>('.worktree-rename')[1])
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'not ready to save')
+  input.setSelectionRange(4, 4)
+  await h.render({ worktrees: [{ ...item, unread: true }], model: { ...duplicate } })
+  expect(h.renames).toEqual([])
+  expect(document.activeElement).toBe(input)
+  expect(h.host.querySelectorAll<HTMLInputElement>('.worktree-rename')[1]).toBe(input)
+  expect(input.value).toBe('not ready to save')
+  expect(input.selectionStart).toBe(4)
+  expect(input.selectionEnd).toBe(4)
+  await keydown(input, 'Enter')
+  input.dispatchEvent(new FocusEvent('blur', { bubbles: false }))
+  await flush()
+  expect(h.renames).toEqual([['w1', 'not ready to save']])
+})
+
 test('copies Path and Worktree name once while the earlier menu close is still pending', async () => {
   const h = await mountTree()
   const writes: string[] = []
