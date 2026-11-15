@@ -4142,6 +4142,10 @@
             "pane": {
               "type": "string",
               "description": "The pane ID; default: the focused pane."
+            },
+            "text": {
+              "type": "string",
+              "description": "The text to copy to the clipboard."
             }
           }
         }
@@ -4190,6 +4194,10 @@
             },
             "caseSensitive": {
               "type": "boolean"
+            },
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
             }
           }
         }

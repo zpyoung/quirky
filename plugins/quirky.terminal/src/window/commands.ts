@@ -433,7 +433,19 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
       input: textArg(args, 'device') ? { device: textArg(args, 'device') } : {},
       activate: true
     })),
-    copy: onPane(context, (controller, pane) => controller.copy(pane)),
+    copy: async (raw) => {
+      const args = argsOf(raw)
+      if (Object.prototype.hasOwnProperty.call(args, 'text')) {
+        if (typeof args.text !== 'string') throw new Error('text must be a string')
+        const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard
+        if (typeof clipboard?.writeText !== 'function') throw new Error('Clipboard access is unavailable in this window.')
+        await clipboard.writeText(args.text)
+        return { text: args.text }
+      }
+      const found = resolve(context, args, 'pane')
+      if ('ok' in found) return found
+      return found.controller.copy(textArg(args, 'pane'))
+    },
     'select-all': onPane(context, (controller, pane) => controller.selectAll(pane)),
     paste: onPane(context, async (controller, pane, args) => {
       if (typeof args.text === 'string') {

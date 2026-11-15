@@ -33,7 +33,7 @@ function customPalette(raw: string): Partial<ITheme> {
   const colors: Record<string, string> = {}
   for (const [key, value] of Object.entries(parsed)) {
     if (!ALLOWED.has(key) || typeof value !== 'string' || !HEX.test(value)) throw new Error(`invalid custom terminal color ${key}`)
-    colors[key] = value
+    Object.assign(colors, { [key]: value })
   }
   return colors
 }

@@ -1,7 +1,11 @@
 import { useEffect, type KeyboardEvent, type RefObject } from 'react'
 import { Button, IconButton } from '@quirky/ui'
+import type { UiPluginContext } from '@quirky/protocol'
+import { requestWindowCommand, searchCommand, searchNextCommand, searchPreviousCommand, searchCloseCommand, type WindowCommandDescriptor } from './commands'
 
 type Props = {
+  context: UiPluginContext
+  paneId: string
   query: string
   caseSensitive: boolean
   regex: boolean
@@ -9,11 +13,6 @@ type Props = {
   status: string
   inputRef: RefObject<HTMLInputElement | null>
   onQueryChange(query: string): void
-  onCaseSensitiveChange(value: boolean): void
-  onRegexChange(value: boolean): void
-  onNext(): void
-  onPrevious(): void
-  onClose(): void
 }
 
 
@@ -30,20 +29,31 @@ export function SearchBox(props: Props) {
     inputRef.current?.select()
   }, [inputRef])
 
+  const dispatch = (descriptor: WindowCommandDescriptor) => {
+    void requestWindowCommand(props.context, descriptor).catch((error: unknown) => {
+      props.context.toast('Could not run terminal action', error instanceof Error ? error.message : String(error), { kind: 'error' })
+    })
+  }
+  const toggleCaseSensitive = () => dispatch(searchCommand(props.paneId, { caseSensitive: !props.caseSensitive }))
+  const toggleRegex = () => dispatch(searchCommand(props.paneId, { regex: !props.regex }))
+  const next = () => dispatch(searchNextCommand(props.paneId))
+  const previous = () => dispatch(searchPreviousCommand(props.paneId))
+  const close = () => dispatch(searchCloseCommand(props.paneId))
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     event.stopPropagation()
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (event.key === 'Escape') {
       event.preventDefault()
-      props.onClose()
+      close()
     } else if (event.key === 'Enter') {
       event.preventDefault()
-      if (event.shiftKey) props.onPrevious()
-      else props.onNext()
+      if (event.shiftKey) previous()
+      else next()
     } else if (event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === 'g') {
       event.preventDefault()
-      if (event.shiftKey) props.onPrevious()
-      else props.onNext()
+      if (event.shiftKey) previous()
+      else next()
     }
   }
 
@@ -58,24 +68,24 @@ export function SearchBox(props: Props) {
         value={props.query}
         onChange={(event) => props.onQueryChange(event.target.value)}
       />
-      <Button type="button" className="tt-pane-search__action" title="Case sensitive" aria-pressed={props.caseSensitive} onClick={() => props.onCaseSensitiveChange(!props.caseSensitive)}>
+      <Button type="button" className="tt-pane-search__action" title="Case sensitive" aria-pressed={props.caseSensitive} onClick={toggleCaseSensitive}>
         Aa
       </Button>
-      <Button type="button" className="tt-pane-search__action" title="Regex" aria-pressed={props.regex} onClick={() => props.onRegexChange(!props.regex)}>
+      <Button type="button" className="tt-pane-search__action" title="Regex" aria-pressed={props.regex} onClick={toggleRegex}>
         .*
       </Button>
       <span data-pane-search-status className="tt-pane-search__status">
         {props.status}
       </span>
       <span className="tt-pane-search__divider" />
-      <IconButton className="tt-pane-search__action" type="button" label="Previous match" title="Previous match" onClick={props.onPrevious}>
+      <IconButton className="tt-pane-search__action" type="button" label="Previous match" title="Previous match" onClick={previous}>
         ↑
       </IconButton>
-      <IconButton className="tt-pane-search__action" type="button" label="Next match" title="Next match" onClick={props.onNext}>
+      <IconButton className="tt-pane-search__action" type="button" label="Next match" title="Next match" onClick={next}>
         ↓
       </IconButton>
       <span className="tt-pane-search__divider" />
-      <IconButton className="tt-pane-search__action" type="button" label="Close search" title="Close" onClick={props.onClose}>
+      <IconButton className="tt-pane-search__action" type="button" label="Close search" title="Close" onClick={close}>
         ×
       </IconButton>
     </div>
