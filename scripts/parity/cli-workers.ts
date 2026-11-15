@@ -19,7 +19,7 @@ export const WORKER_CHECK_IDS = [
 ] as const
 
 type ObjectValue = Record<string, unknown>
-type TerminalPane = { tabId: string; sessionId: string }
+type TerminalPane = { tabId: string; paneId: string; sessionId: string }
 
 function isObject(value: unknown): value is ObjectValue {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -646,37 +646,62 @@ function coordinatorRun(receipt: CliActorReceipt, runId: string): ObjectValue {
   return matches[0]!
 }
 
-function terminalPanes(value: unknown, label: string): TerminalPane[] {
-  const result = object(value, label)
-  const workspace = isObject(result.workspace) ? result.workspace : result
-  const panes: TerminalPane[] = []
-  const visit = (current: unknown, tabId?: string): void => {
-    if (Array.isArray(current)) {
-      current.forEach(entry => visit(entry, tabId))
+function assertCoordinatorWorkspace(value: unknown, worktreeId: string, identity: TerminalPane, label: string): void {
+  const workspace = object(value, label)
+  equal(nonEmptyText(workspace.id, `${label} ID`), worktreeId, `${label} ID`)
+  let claimedTab: ObjectValue | undefined
+  let tabCount = 0
+  const visitGroup = (value: unknown): void => {
+    const node = object(value, `${label} group`)
+    if (node.kind === 'split') {
+      visitGroup(node.first)
+      visitGroup(node.second)
       return
     }
-    if (!isObject(current)) return
-    if (current.kind === 'pane') {
-      if (tabId !== undefined && typeof current.session === 'string' && typeof current.id === 'string') {
-        panes.push({ tabId, sessionId: current.session })
-      }
-      return
-    }
-    if (Array.isArray(current.tabs)) {
-      for (const rawTab of current.tabs) {
-        if (isObject(rawTab) && typeof rawTab.id === 'string' && rawTab.root !== undefined) visit(rawTab.root, rawTab.id)
-        else visit(rawTab, tabId)
+    equal(node.kind, 'group', `${label} group kind`)
+    for (const tab of array(node.tabs, `${label} tabs`)) {
+      if (isObject(tab) && tab.id === identity.tabId) {
+        claimedTab = tab
+        tabCount++
       }
     }
-    if (current.root !== undefined) {
-      const nestedTabId = typeof current.id === 'string' && tabId === undefined ? current.id : tabId
-      visit(current.root, nestedTabId)
-    }
-    if (current.first !== undefined) visit(current.first, tabId)
-    if (current.second !== undefined) visit(current.second, tabId)
   }
-  visit(workspace.root)
-  return panes
+  visitGroup(workspace.root)
+  equal(tabCount, 1, `${label} claimed tab count`)
+  ensure(claimedTab !== undefined && claimedTab.kind !== 'view', `${label} claimed tab must be a terminal`)
+  let paneCount = 0
+  const visitPane = (value: unknown): void => {
+    const node = object(value, `${label} pane`)
+    if (node.kind === 'split') {
+      visitPane(node.first)
+      visitPane(node.second)
+      return
+    }
+    equal(node.kind, 'pane', `${label} pane kind`)
+    paneCount++
+    equal(node.id, identity.paneId, `${label} pane ID`)
+    equal(node.session, identity.sessionId, `${label} session ID`)
+  }
+  visitPane(claimedTab.root)
+  equal(paneCount, 1, `${label} claimed terminal pane count`)
+}
+
+export function assertCoordinatorTerminalEvidence(value: {
+  creation: unknown;
+  layout: unknown;
+  worktreeId: string;
+  baselineTabIds: readonly string[];
+}): { tabId: string; paneId: string; sessionId: string } {
+  const creation = object(value.creation, 'coordinator terminal creation')
+  const identity = {
+    tabId: nonEmptyText(creation.tab, 'coordinator terminal creation tab'),
+    paneId: nonEmptyText(creation.pane, 'coordinator terminal creation pane'),
+    sessionId: nonEmptyText(creation.session, 'coordinator terminal creation session')
+  }
+  ensure(!value.baselineTabIds.includes(identity.tabId), 'coordinator terminal creation reused a baseline tab')
+  assertCoordinatorWorkspace(creation.workspace, value.worktreeId, identity, 'coordinator terminal creation workspace')
+  assertCoordinatorWorkspace(value.layout, value.worktreeId, identity, 'coordinator terminal layout')
+  return identity
 }
 
 function tabIds(value: unknown, label: string): string[] {
@@ -700,14 +725,6 @@ function tabIds(value: unknown, label: string): string[] {
   return [...found]
 }
 
-function addedPane(panes: TerminalPane[], baseline: ReadonlySet<string>): TerminalPane {
-  const added = panes.filter(pane => !baseline.has(pane.tabId))
-  const tabIds = [...new Set(added.map(pane => pane.tabId))]
-  equal(tabIds.length, 1, 'coordinator terminal new tab count')
-  const matches = added.filter(pane => pane.tabId === tabIds[0])
-  equal(matches.length, 1, 'coordinator terminal pane count')
-  return matches[0]!
-}
 
 function phaseFixedIds(ids: readonly string[]): string[] {
   return ids.filter(id => !id.includes('poll'))
@@ -961,8 +978,9 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
     '--title', 'cli-parity-coordinator'
   ], 'workers-run-use')
   const createdLayout = await productCall(context, 'workers-coordinator-tab-layout', ['terminal', 'layout', '--worktree', worktreeId], 'workers-run-use')
-  const coordinatorPane = addedPane(terminalPanes(createdLayout, 'coordinator terminal layout'), new Set(baselineTabs))
-  ensure(terminalPanes(creation, 'coordinator terminal creation').some(pane => pane.sessionId === coordinatorPane.sessionId), 'coordinator tab creation did not return its session')
+  const coordinatorPane = assertCoordinatorTerminalEvidence({
+    creation, layout: createdLayout, worktreeId, baselineTabIds: baselineTabs
+  })
   const coordinatorSessionId = coordinatorPane.sessionId
   context.state.workersCoordinatorTabId = coordinatorPane.tabId
   context.state.workersCoordinatorSessionId = coordinatorSessionId

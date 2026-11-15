@@ -1,7 +1,12 @@
 import { expect, test } from 'bun:test'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { CliCheckContext } from './cli-checks'
 import { buildWorkerPreamble } from '../../plugins/quirky.orchestration/src/workers/preamble'
 import { parseWorkerPreamble } from './cli-worker-actor'
 import {
+  assertCoordinatorTerminalEvidence,
   assertControllerRefusal,
   assertDispatchEvidence,
   assertQuestionReplyEvidence,
@@ -21,6 +26,7 @@ import {
   assertWorktreeSummaryEvidence,
   assertWorktreeTaskEvidence,
   cleanupWorkerChecks,
+  runWorkerChecks,
   WORKER_CHECK_IDS
 } from './cli-workers'
 type SummaryFixture = {
@@ -594,3 +600,199 @@ test('worker cleanup joins a failed layout read without attempting unknown tabs'
   expect(calls).toEqual([['terminal', 'layout', '--worktree', 'worktree-1']])
   expect(errors).toEqual(['layout unavailable'])
 })
+
+function coordinatorTab() {
+  return { id: 'tab-16', root: { kind: 'pane', id: 'pane-15', session: 's-coordinator' } }
+}
+
+function baselineTab() {
+  return { id: 'tab-base', root: { kind: 'pane', id: 'pane-base', session: 's-base' } }
+}
+
+function targetTab() {
+  return { id: 'tab-18', root: { kind: 'pane', id: 'pane-17', session: 's-target' } }
+}
+
+function coordinatorWorkspace(tabs: unknown[] = [baselineTab(), coordinatorTab()]) {
+  return { id: 'wt-owned', root: { kind: 'group', id: 'group-1', tabs, activeTab: 'tab-16' } }
+}
+
+type CoordinatorFixture = { creation: Record<string, unknown>; layout: unknown }
+
+function coordinatorFixture(): CoordinatorFixture {
+  return {
+    creation: { tab: 'tab-16', pane: 'pane-15', session: 's-coordinator', workspace: coordinatorWorkspace() },
+    layout: coordinatorWorkspace()
+  }
+}
+
+const coordinatorIdentity = { tabId: 'tab-16', paneId: 'pane-15', sessionId: 's-coordinator' }
+const coordinatorPhase = new Error('COORDINATOR_PHASE_REACHED')
+
+async function coordinatorPrefix(fixture: CoordinatorFixture) {
+  const home = mkdtempSync(join(tmpdir(), 'cli-coordinator-prefix-'))
+  const state: Record<string, unknown> = { worktreeId: 'wt-owned', actorSessionId: 's-actor', actorRunId: 'run-owned' }
+  const calls: { id: string; argv: string[] }[] = []
+  const proofs: { id: string; evidence: Record<string, unknown> }[] = []
+  let created = false
+  const unexpected = () => { throw new Error('unexpected coordinator prefix operation') }
+  const context: CliCheckContext = {
+    world: {
+      home, env: {},
+      paths: { workerActorRoot: join(home, 'actors'), coordinatorCommand: 'fixture-coordinator' }
+    } as CliCheckContext['world'],
+    state,
+    check: () => {},
+    prove: (id, evidence) => { proofs.push({ id, evidence }) },
+    refuse: unexpected, importActor: unexpected, importActorRefusal: unexpected,
+    call: async (id, argv) => {
+      calls.push({ id, argv })
+      if (id === 'workers-terminal-layout-before') return coordinatorWorkspace([baselineTab()])
+      if (id === 'workers-coordinator-tab-create') {
+        created = true
+        return fixture.creation
+      }
+      if (id === 'workers-coordinator-tab-layout' && created) return fixture.layout
+      if (id === 'workers-run-use-coordinator-phase-1-session-1') throw coordinatorPhase
+      return unexpected()
+    }
+  }
+  let error: unknown
+  try {
+    await runWorkerChecks(context)
+  } catch (caught) {
+    error = caught
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+  return { error, state, calls, proofs }
+}
+
+const coordinatorSchedules: [string, (fixture: CoordinatorFixture) => void][] = [
+  ['target first', fixture => { fixture.layout = coordinatorWorkspace([baselineTab(), targetTab(), coordinatorTab()]) }],
+  ['target last', fixture => { fixture.layout = coordinatorWorkspace([baselineTab(), coordinatorTab(), targetTab()]) }],
+  ['target active', fixture => {
+    const layout = coordinatorWorkspace([baselineTab(), targetTab(), coordinatorTab()])
+    layout.root.activeTab = 'tab-18'
+    fixture.layout = layout
+  }],
+  ['split workspace groups', fixture => {
+    fixture.layout = {
+      id: 'wt-owned', root: {
+        kind: 'split', first: coordinatorWorkspace([baselineTab(), targetTab()]).root,
+        second: { ...coordinatorWorkspace([coordinatorTab()]).root, id: 'group-2' }
+      }
+    }
+  }],
+  ['target already in creation workspace', fixture => {
+    fixture.creation.workspace = coordinatorWorkspace([baselineTab(), targetTab(), coordinatorTab()])
+    fixture.layout = coordinatorWorkspace([baselineTab(), coordinatorTab(), targetTab()])
+  }]
+]
+
+for (const [label, schedule] of coordinatorSchedules) {
+  test(`coordinator discovery binds the creation receipt with ${label}`, async () => {
+    const fixture = coordinatorFixture()
+    schedule(fixture)
+    const result = await coordinatorPrefix(fixture)
+    expect(assertCoordinatorTerminalEvidence({ ...fixture, worktreeId: 'wt-owned', baselineTabIds: ['tab-base'] })).toEqual(coordinatorIdentity)
+    expect(result.error).toBe(coordinatorPhase)
+    expect(result.state.workersCoordinatorTabId).toBe(coordinatorIdentity.tabId)
+    expect(result.state.workersCoordinatorSessionId).toBe(coordinatorIdentity.sessionId)
+    expect(result.calls.at(-1)!.argv).toEqual(['session', 'get', 's-coordinator'])
+  })
+}
+
+type CoordinatorMutation = [string, (fixture: CoordinatorFixture) => void]
+const malformedCoordinatorFields: CoordinatorMutation[] = []
+for (const field of ['tab', 'pane', 'session']) {
+  malformedCoordinatorFields.push([`missing receipt ${field}`, fixture => { delete fixture.creation[field] }])
+  for (const value of [null, '', 42, [], {}]) {
+    malformedCoordinatorFields.push([`receipt ${field} is ${JSON.stringify(value)}`, fixture => { fixture.creation[field] = value }])
+  }
+}
+
+const wrongCoordinatorIdentity: CoordinatorMutation[] = [
+  ...['tab', 'pane', 'session'].map((field): CoordinatorMutation =>
+    [`wrong receipt ${field}`, fixture => { fixture.creation[field] = 'wrong-id' }]),
+  ['readback relocates the session to another tab', fixture => {
+    fixture.layout = coordinatorWorkspace([baselineTab(), { ...coordinatorTab(), id: 'tab-other' }])
+  }],
+  ['readback relocates the session to another pane', fixture => {
+    fixture.layout = coordinatorWorkspace([baselineTab(), { id: 'tab-16', root: { kind: 'pane', id: 'pane-other', session: 's-coordinator' } }])
+  }]
+]
+
+for (const side of ['creation', 'layout'] as const) {
+  const replace = (fixture: CoordinatorFixture, workspace: unknown) => {
+    if (side === 'creation') fixture.creation.workspace = workspace
+    else fixture.layout = workspace
+  }
+  const controls: [string, unknown[]][] = [
+    ['missing coordinator tab', [baselineTab()]],
+    ['wrong session in claimed pane', [baselineTab(), { id: 'tab-16', root: { kind: 'pane', id: 'pane-15', session: 's-other' } }]],
+    ['duplicate claimed tabs', [baselineTab(), coordinatorTab(), coordinatorTab()]],
+    ['view-only claimed tab', [baselineTab(), { id: 'tab-16', kind: 'view', viewId: 'view-1' }]],
+    ['view tab hiding a terminal root', [baselineTab(), { ...coordinatorTab(), kind: 'view' }]],
+    ['second terminal pane', [baselineTab(), { id: 'tab-16', root: { kind: 'split', first: coordinatorTab().root, second: targetTab().root } }]],
+    ['duplicate claimed pane', [baselineTab(), { id: 'tab-16', root: { kind: 'split', first: coordinatorTab().root, second: coordinatorTab().root } }]],
+    ['malformed second terminal pane', [baselineTab(), { id: 'tab-16', root: { kind: 'split', first: coordinatorTab().root, second: { kind: 'pane', id: 42, session: null } } }]],
+    ['missing split child', [baselineTab(), { id: 'tab-16', root: { kind: 'split', first: coordinatorTab().root } }]]
+  ]
+  for (const [label, tabs] of controls) {
+    wrongCoordinatorIdentity.push([`${side} ${label}`, fixture => { replace(fixture, coordinatorWorkspace(tabs)) }])
+  }
+}
+
+const wrongCoordinatorWorkspace: CoordinatorMutation[] = [
+  ['baseline tab reuse despite a new tab', fixture => {
+    Object.assign(fixture.creation, { tab: 'tab-base', pane: 'pane-base', session: 's-base' })
+  }]
+]
+for (const side of ['creation', 'layout'] as const) {
+  for (const workspace of [undefined, null, '', 42, [], {}, { ...coordinatorWorkspace(), id: 'wt-other' }]) {
+    wrongCoordinatorWorkspace.push([`${side} workspace is ${JSON.stringify(workspace)}`, fixture => {
+      if (side === 'creation') fixture.creation.workspace = workspace
+      else fixture.layout = workspace
+    }])
+  }
+  for (const id of [undefined, null, '', 42, [], {}]) {
+    wrongCoordinatorWorkspace.push([`${side} workspace ID is ${JSON.stringify(id)}`, fixture => {
+      const workspace = { ...coordinatorWorkspace(), id }
+      if (side === 'creation') fixture.creation.workspace = workspace
+      else fixture.layout = workspace
+    }])
+  }
+}
+
+const coordinatorCorruptions = [...malformedCoordinatorFields, ...wrongCoordinatorIdentity, ...wrongCoordinatorWorkspace]
+for (const [label, mutate] of coordinatorCorruptions) {
+  test(`coordinator discovery refuses ${label} without taking custody`, async () => {
+    const fixture = coordinatorFixture()
+    mutate(fixture)
+    expect(() => assertCoordinatorTerminalEvidence({
+      ...fixture, worktreeId: 'wt-owned', baselineTabIds: ['tab-base']
+    })).toThrow('coordinator terminal')
+    const result = await coordinatorPrefix(fixture)
+    expect(result.error).toBeInstanceOf(Error)
+    expect((result.error as Error).message).toContain('coordinator terminal')
+    expect(result.error).not.toBe(coordinatorPhase)
+    expect(result.state).not.toHaveProperty('workersCoordinatorTabId')
+    expect(result.state).not.toHaveProperty('workersCoordinatorSessionId')
+    expect(result.state.workersTerminalBaseline).toEqual(['tab-base'])
+    expect(result.state.workersTerminalCreationStarted).toBe(true)
+    expect(result.calls.map(call => call.id)).toEqual([
+      'workers-terminal-layout-before', 'workers-coordinator-tab-create', 'workers-coordinator-tab-layout'
+    ])
+    expect(result.proofs).toEqual([])
+    const closed: string[] = []
+    const errors: string[] = []
+    await cleanupWorkerChecks({ state: result.state }, async argv => {
+      if (argv[1] === 'layout') return coordinatorWorkspace([baselineTab(), coordinatorTab(), targetTab()])
+      closed.push(argv[3]!)
+      return { closed: true }
+    }, errors)
+    expect(closed).toEqual(['tab-16', 'tab-18'])
+    expect(errors).toEqual([])
+  })
+}
