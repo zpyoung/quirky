@@ -37,7 +37,6 @@ export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClos
   }, [])
 
   const close = () => {
-    alive.current = false
     onClose()
   }
 
@@ -69,6 +68,7 @@ export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClos
       await context.call('quirky.git/setBase', { worktree, ...params })
       await onChanged()
       if (!alive.current) return
+      setSaving(false)
       close()
     } catch (e) {
       if (!alive.current) return

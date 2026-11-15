@@ -305,7 +305,10 @@ describe('scenario 25: committing only some files', () => {
     await click(shipButton(element))
     expect(fake.called('quirky.git/stage')).toHaveLength(1)
     expect(fake.called('quirky.git/commit')).toHaveLength(0)
-    expect(errorLine(element)?.textContent).toContain('The branch or HEAD changed')
+    expect(errorLine(element)).toBeNull()
+    expect(message(element)?.value).toBe('wrong branch')
+    expect(fake.reports.at(-1)).toMatchObject({ branch: 'other-branch', busy: null })
+    expect(shipButton(element)?.disabled).toBe(false)
     unmount()
   })
 
@@ -567,9 +570,23 @@ describe('scenario 28: a step that can not run', () => {
 
 describe('scenario 29: a step fails', () => {
   const rejected = (f: Fake) => {
-    f.status = statusOf([], { upstreamStatus: up(4, 0) })
+    f.status = statusOf([], { ahead: 4, behind: 0, upstreamStatus: up(4, 0) })
     f.on('quirky.git/push', () => {
       throw failure('Push rejected: remote has newer commits.', { reason: 'non-fast-forward' })
+    })
+    const fetchedUpstream = { ...up(4, 1), sha: 'c'.repeat(40) }
+    f.on('quirky.git/fetch', () => {
+      f.status = statusOf([], { ahead: 4, behind: 1, upstreamStatus: fetchedUpstream })
+      return { ok: true }
+    })
+    f.on('quirky.git/pull', () => {
+      f.status = statusOf([], {
+        head: 'd'.repeat(40),
+        ahead: 5,
+        behind: 0,
+        upstreamStatus: { ...fetchedUpstream, ahead: 5, behind: 0 }
+      })
+      return { ok: true }
     })
   }
 
@@ -587,11 +604,17 @@ describe('scenario 29: a step fails', () => {
     unmount()
   })
 
-  test('Pull first runs a pull and the line clears on the next attempt', async () => {
+  test('Pull first runs a pull and clears the line after it settles', async () => {
     const { fake, element, unmount } = await open(rejected)
     await click(shipButton(element))
     await click(q(errorLine(element)!, '.ui-inline-error__action'))
+    await s.waitForState(element, () =>
+      fake.called('quirky.git/pull').length === 1 &&
+      fake.reports.at(-1)?.behind === 0 &&
+      fake.reports.at(-1)?.busy === null
+    )
     expect(fake.called('quirky.git/pull')).toHaveLength(1)
+    expect(fake.called('quirky.git/pull').at(-1)?.params).toEqual({ worktree: 'feat' })
     expect(errorLine(element)).toBeNull()
     unmount()
   })
