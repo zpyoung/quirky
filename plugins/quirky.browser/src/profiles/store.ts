@@ -1,6 +1,25 @@
-import { randomUUID } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync, type Stats } from 'node:fs'
-import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { randomBytes, randomUUID } from 'node:crypto'
+import {
+  chmodSync,
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  fsyncSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+  type Stats
+} from 'node:fs'
+import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { validateValue, type Schema } from '@quirky/protocol'
 import { fault } from '../runtime/errors'
 
@@ -95,10 +114,131 @@ function lstatIfPresent(path: string): Stats | undefined {
   }
 }
 
+export type BrowserStoreRecovery = {
+  readonly quarantinedPath: string
+  readonly recoveredProfileIds: readonly string[]
+}
+
+type FileIdentity = Pick<Stats, 'dev' | 'ino'>
+type RecoveryHooks = {
+  afterScan?: () => void
+  beforeIdentityCheck?: () => void
+  beforeRename?: () => void
+  afterQuarantine?: () => void
+}
+type ScannedProfileChild = { name: string; identity: FileIdentity; adopted: boolean }
+type RecoveryScan = {
+  profilesRoot: string
+  rootIdentity?: FileIdentity
+  children: ScannedProfileChild[]
+  adoptedChildren: ScannedProfileChild[]
+  profiles: BrowserProfile[]
+}
+type TemporaryFile = { path: string; identity: FileIdentity }
+type QuarantineResult =
+  | { outcome: 'quarantined'; path: string }
+  | { outcome: 'changed' }
+  | { outcome: 'moved-unexpected'; path: string }
+  | { outcome: 'occupied' }
+  | { outcome: 'failed' }
+type DecodedState = { state: BrowserState } | { error: string }
+
+let recoveryHooks: RecoveryHooks | null = null
+
+/** Test-only hook for exercising browser metadata recovery race conditions. */
+export function setBrowserStoreRecoveryHooksForTests(hooks: RecoveryHooks | null): void {
+  recoveryHooks = hooks
+}
+
+function sameIdentity(info: Stats, identity: FileIdentity): boolean {
+  return info.dev === identity.dev && info.ino === identity.ino
+}
+
+function isErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && 'code' in error && error.code === code
+}
+
+function decodeState(contents: string): DecodedState {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(contents) as unknown
+  } catch {
+    return { error: 'persisted browser metadata is unreadable' }
+  }
+  const failure = validateValue(STATE_SCHEMA, parsed, 'browser metadata')
+  if (failure) return { error: 'persisted browser metadata has an invalid schema' }
+  const state = parsed as BrowserState
+  if (state.profiles.some((profile) => !isValidProfileId(profile.id)) || state.pages.some((page) => !isValidProfileId(page.profileId))) {
+    return { error: 'persisted browser metadata contains an unsafe profile identifier' }
+  }
+  if (state.pages.some((page) =>
+    page.worktreeId !== null && typeof page.worktreeId !== 'string' ||
+    page.loadError !== null && validateValue(LOAD_ERROR_SCHEMA, page.loadError, 'page load error')
+  )) {
+    return { error: 'persisted browser metadata contains invalid page metadata' }
+  }
+  return { state }
+}
+
+function unlinkTemporaryFile(temporary: TemporaryFile): void {
+  try {
+    const info = lstatSync(temporary.path)
+    if (info.isFile() && !info.isSymbolicLink() && sameIdentity(info, temporary.identity)) unlinkSync(temporary.path)
+  } catch {
+    // Cleanup must not remove an entry that replaced our temporary file.
+  }
+}
+
+function guardedQuarantine(path: string, identity: FileIdentity): QuarantineResult {
+  const candidates = new Set<string>()
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    let candidate: string
+    do {
+      candidate = `${path}.corrupt-${Date.now()}-${randomBytes(4).toString('hex')}`
+    } while (candidates.has(candidate))
+    candidates.add(candidate)
+
+    try {
+      lstatSync(candidate)
+      continue
+    } catch (error) {
+      if (!isErrorCode(error, 'ENOENT')) continue
+    }
+
+    recoveryHooks?.beforeIdentityCheck?.()
+    let current: Stats
+    try {
+      current = lstatSync(path)
+    } catch {
+      return { outcome: 'changed' }
+    }
+    if (!current.isFile() || current.isSymbolicLink() || !sameIdentity(current, identity)) return { outcome: 'changed' }
+
+    recoveryHooks?.beforeRename?.()
+    try {
+      renameSync(path, candidate)
+    } catch {
+      return { outcome: 'failed' }
+    }
+
+    try {
+      const moved = lstatSync(candidate)
+      if (moved.isFile() && !moved.isSymbolicLink() && sameIdentity(moved, identity)) {
+        return { outcome: 'quarantined', path: candidate }
+      }
+    } catch {
+      // Missing or inaccessible destination is still an unexpected move.
+    }
+    return { outcome: 'moved-unexpected', path: candidate }
+  }
+  return { outcome: 'occupied' }
+}
+
 export class BrowserStore {
   private readonly canonicalDataDir: string
   private readonly statePath: string
   private state: BrowserState
+  readonly recovery: BrowserStoreRecovery | null
 
   constructor(readonly dataDir: string) {
     mkdirSync(dataDir, { recursive: true, mode: 0o700 })
@@ -106,39 +246,213 @@ export class BrowserStore {
     if (dataDirectoryInfo.isSymbolicLink() || !dataDirectoryInfo.isDirectory()) {
       throw fault('invalid_argument', 'browser data directory is not a safe directory')
     }
-    chmodSync(dataDir, 0o700)
     this.canonicalDataDir = realpathSync(dataDir)
     this.statePath = join(this.canonicalDataDir, 'browser-state.json')
-    this.state = this.readState()
+    const loaded = this.readState()
+    this.state = loaded.state
+    this.recovery = loaded.recovery
+    chmodSync(dataDir, 0o700)
     if (!this.state.profiles.some((profile) => profile.id === 'default')) {
       this.state.profiles.unshift({ id: 'default', label: 'Default', scope: 'default' })
       this.persist()
     }
   }
 
-  private readState(): BrowserState {
-    if (!existsSync(this.statePath)) return { profiles: [], pages: [] }
-    let parsed: unknown
+  private readState(): { state: BrowserState; recovery: BrowserStoreRecovery | null } {
+    if (!existsSync(this.statePath)) return { state: { profiles: [], pages: [] }, recovery: null }
+
+    let initialInfo: Stats
     try {
-      parsed = JSON.parse(readFileSync(this.statePath, 'utf8')) as unknown
+      initialInfo = lstatSync(this.statePath)
     } catch {
       throw fault('browser_error', 'persisted browser metadata is unreadable')
     }
-    const failure = validateValue(STATE_SCHEMA, parsed, 'browser metadata')
-    if (failure) throw fault('browser_error', 'persisted browser metadata has an invalid schema')
-    const state = parsed as BrowserState
-    if (state.profiles.some((profile) => !isValidProfileId(profile.id)) || state.pages.some((page) => !isValidProfileId(page.profileId))) {
-      throw fault('browser_error', 'persisted browser metadata contains an unsafe profile identifier')
+    if (initialInfo.isSymbolicLink() || !initialInfo.isFile()) {
+      let contents: string
+      try {
+        contents = readFileSync(this.statePath, 'utf8')
+      } catch {
+        throw fault('browser_error', 'persisted browser metadata is unreadable')
+      }
+      const decoded = decodeState(contents)
+      if ('error' in decoded) throw fault('browser_error', decoded.error)
+      return { state: decoded.state, recovery: null }
     }
-    if (state.pages.some((page) =>
-      page.worktreeId !== null && typeof page.worktreeId !== 'string' ||
-      page.loadError !== null && validateValue(LOAD_ERROR_SCHEMA, page.loadError, 'page load error')
-    )) {
-      throw fault('browser_error', 'persisted browser metadata contains invalid page metadata')
+
+    let descriptor: number | undefined
+    let identity: FileIdentity
+    let contents: string
+    try {
+      descriptor = openSync(this.statePath, constants.O_RDONLY | constants.O_NOFOLLOW)
+      const descriptorInfo = fstatSync(descriptor)
+      if (!descriptorInfo.isFile()) throw new Error('browser metadata is not a regular file')
+      identity = { dev: descriptorInfo.dev, ino: descriptorInfo.ino }
+      contents = readFileSync(descriptor, 'utf8')
+      closeSync(descriptor)
+      descriptor = undefined
+    } catch {
+      if (descriptor !== undefined) {
+        try {
+          closeSync(descriptor)
+        } catch {
+          // Preserve the unreadable-store error.
+        }
+      }
+      throw fault('browser_error', 'persisted browser metadata is unreadable')
     }
-    return state
+
+    const decoded = decodeState(contents)
+    if ('state' in decoded) return { state: decoded.state, recovery: null }
+    return this.recoverCorruptState(identity)
   }
 
+  private scanRecoveryProfiles(): RecoveryScan {
+    try {
+      if (realpathSync(this.dataDir) !== this.canonicalDataDir) {
+        throw new Error('browser data directory changed during recovery')
+      }
+    } catch {
+      throw fault('invalid_argument', 'profile storage root is not a safe directory')
+    }
+
+    const profilesRoot = join(this.canonicalDataDir, 'profiles')
+    let rootInfo: Stats | undefined
+    try {
+      rootInfo = lstatIfPresent(profilesRoot)
+    } catch {
+      throw fault('invalid_argument', 'profile storage root is not a safe directory')
+    }
+    if (rootInfo && (rootInfo.isSymbolicLink() || !rootInfo.isDirectory())) {
+      throw fault('invalid_argument', 'profile storage root is not a safe directory')
+    }
+
+    const children: ScannedProfileChild[] = []
+    if (rootInfo) {
+      let names: string[]
+      try {
+        names = readdirSync(profilesRoot)
+      } catch {
+        throw fault('invalid_argument', 'profile storage root is not a safe directory')
+      }
+      for (const name of names) {
+        let info: Stats
+        try {
+          info = lstatSync(join(profilesRoot, name))
+        } catch {
+          throw fault('invalid_argument', 'profile storage root is not a safe directory')
+        }
+        const adopted = name !== 'default' && isValidProfileId(name) && info.isDirectory() && !info.isSymbolicLink()
+        children.push({ name, identity: { dev: info.dev, ino: info.ino }, adopted })
+      }
+    }
+
+    const adoptedChildren = children.filter((child) => child.adopted).sort((a, b) => a.name.localeCompare(b.name))
+    const shortLabelCounts = new Map<string, number>()
+    for (const child of adoptedChildren) {
+      const shortLabel = child.name.slice('profile_'.length, 'profile_'.length + 8)
+      shortLabelCounts.set(shortLabel, (shortLabelCounts.get(shortLabel) ?? 0) + 1)
+    }
+    const profiles = adoptedChildren.map((child) => {
+      const suffix = child.name.slice('profile_'.length)
+      const shortSuffix = suffix.slice(0, 8)
+      const labelSuffix = shortLabelCounts.get(shortSuffix) === 1 ? shortSuffix : suffix
+      return { id: child.name, label: `Recovered profile ${labelSuffix}`, scope: 'isolated' as const }
+    })
+    return {
+      profilesRoot,
+      ...(rootInfo ? { rootIdentity: { dev: rootInfo.dev, ino: rootInfo.ino } } : {}),
+      children,
+      adoptedChildren,
+      profiles
+    }
+  }
+
+  private revalidateRecoveryScan(scan: RecoveryScan): void {
+    try {
+      if (realpathSync(this.dataDir) !== this.canonicalDataDir) throw new Error('browser data directory changed during recovery')
+      const currentRoot = lstatIfPresent(scan.profilesRoot)
+      if (scan.rootIdentity) {
+        if (!currentRoot || currentRoot.isSymbolicLink() || !currentRoot.isDirectory() || !sameIdentity(currentRoot, scan.rootIdentity)) {
+          throw new Error('profile storage root changed during recovery')
+        }
+      } else if (currentRoot) {
+        throw new Error('profile storage root changed during recovery')
+      }
+      for (const child of scan.adoptedChildren) {
+        const current = lstatIfPresent(join(scan.profilesRoot, child.name))
+        if (!current || current.isSymbolicLink() || !current.isDirectory() || !sameIdentity(current, child.identity)) {
+          throw new Error('adopted profile directory changed during recovery')
+        }
+      }
+    } catch {
+      throw fault('invalid_argument', 'profile storage root is not a safe directory')
+    }
+  }
+
+  private writeRecoveryTemporary(state: BrowserState): TemporaryFile {
+    const path = join(this.canonicalDataDir, `.browser-state.json.${randomUUID()}.tmp`)
+    let descriptor: number | undefined
+    let identity: FileIdentity | undefined
+    try {
+      descriptor = openSync(path, 'wx', 0o600)
+      const info = fstatSync(descriptor)
+      identity = { dev: info.dev, ino: info.ino }
+      writeFileSync(descriptor, `${JSON.stringify(state)}\n`)
+      fsyncSync(descriptor)
+      closeSync(descriptor)
+      descriptor = undefined
+      return { path, identity }
+    } catch {
+      if (descriptor !== undefined) {
+        try {
+          closeSync(descriptor)
+        } catch {
+          // Preserve the save error.
+        }
+      }
+      if (identity) unlinkTemporaryFile({ path, identity })
+      throw fault('browser_error', 'browser metadata could not be saved')
+    }
+  }
+
+  private recoverCorruptState(identity: FileIdentity): { state: BrowserState; recovery: BrowserStoreRecovery } {
+    const scan = this.scanRecoveryProfiles()
+    recoveryHooks?.afterScan?.()
+    const state: BrowserState = {
+      profiles: [{ id: 'default', label: 'Default', scope: 'default' }, ...scan.profiles],
+      pages: []
+    }
+    const temporary = this.writeRecoveryTemporary(state)
+    try {
+      this.revalidateRecoveryScan(scan)
+      const result = guardedQuarantine(this.statePath, identity)
+      if (result.outcome === 'changed') {
+        throw fault('browser_error', 'persisted browser metadata changed during recovery')
+      }
+      if (result.outcome === 'moved-unexpected') {
+        throw fault('browser_error', `persisted browser metadata changed during recovery; a file was set aside as ${basename(result.path)}`)
+      }
+      if (result.outcome === 'occupied' || result.outcome === 'failed') {
+        throw fault('browser_error', `persisted browser metadata at ${this.statePath} could not be set aside`)
+      }
+
+      recoveryHooks?.afterQuarantine?.()
+      try {
+        linkSync(temporary.path, this.statePath)
+      } catch (error) {
+        if (isErrorCode(error, 'EEXIST')) {
+          throw fault('browser_error', `persisted browser metadata changed during recovery; the unreadable file was set aside as ${basename(result.path)}`)
+        }
+        throw fault('browser_error', `persisted browser metadata at ${this.statePath} was set aside as ${result.path}, but rebuilt metadata could not be installed`)
+      }
+      return {
+        state,
+        recovery: { quarantinedPath: result.path, recoveredProfileIds: scan.profiles.map((profile) => profile.id) }
+      }
+    } finally {
+      unlinkTemporaryFile(temporary)
+    }
+  }
   private persist(): void {
     const temporary = `${this.statePath}.${randomUUID()}.tmp`
     try {

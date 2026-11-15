@@ -9,12 +9,14 @@ import type {
   RevisionRepair,
   VerdictRecord
 } from './store'
+import type { WorkspaceKind } from './folder-workspace'
 
 export type ObjectiveCapability = 'off' | 'gated' | 'on'
 type ObjectiveRole = 'planner' | 'implementer' | 'reviewer' | 'integrator'
 type ReviewRole = 'reviewer' | 'integrator'
 
 export interface ObjectiveWorld {
+  workspaceKind?: WorkspaceKind
   planMode: ObjectiveCapability
   contract?: ObjectivePayload
   capabilities?: Partial<Record<'plan' | 'implement' | 'review' | 'check' | 'land', ObjectiveCapability>>
@@ -1286,6 +1288,9 @@ export function nextStep(world: ObjectiveWorld, journal: ObjectiveJournalEntry[]
   const attempts = latestAttempts(journal)
   const identity = currentIdentity(world)
   const bar = landingBar(world)
+  if (world.workspaceKind === 'folder' && bar !== 'files-on-disk') {
+    return { action: null, reason: 'landing-bar-requires-git' }
+  }
   const revision = world.revision
   if (identity && revision && (bar === 'pushed-ref' || bar === 'hosted-review' || bar === 'merged')) {
     const historyProblem = remoteHistoryProblem(world, revision.number, identity)
@@ -1509,6 +1514,8 @@ export function stopObjective(
       const detail = 'The planner failed 3 times without an accepted plan.'
       return park('plan-failed', 'planner-retry-exhausted', detail)
     }
+    case 'landing-bar-requires-git':
+      return park('landing-failed', 'landing-bar-requires-git', 'Folder workspaces support only files-on-disk landing.')
     case 'draft-rejections-exhausted': {
       const detail = 'Draft rejected 3 times without an accepted plan.'
       return park('plan-failed', `draft-rejections-exhausted:${draftStage(world)}`, detail)

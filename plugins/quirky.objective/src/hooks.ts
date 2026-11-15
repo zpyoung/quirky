@@ -1,4 +1,5 @@
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync } from 'node:fs'
+import { realpath, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { OrchestrationSubmission, OrchestrationSubmissionVerdict, PluginContext } from '@quirky/protocol'
 import {
@@ -11,7 +12,8 @@ import { implementerReportProblems, integratorReportProblems, plannerReportProbl
 import type { ImplementerReport, IntegratorReport, PlannerReport, RepairPlannerReport, ReviewerReport } from './plan'
 import { integratorSpec, objectivePrompt, repairPlannerSpec, reviewerSpec } from './prompts'
 import type { ObjectiveStore } from './store'
-import { baselineProblems, captureContentIdentity, runCriterionCheck, runEnrollmentGate, type ObjectiveRuntime } from './checks'
+import { baselineProblems, captureContentIdentity, captureTaskBaseline, runCriterionCheck, runEnrollmentGate, type ObjectiveRuntime } from './checks'
+import type { TaskBaseline, WorkspaceKind } from './folder-workspace'
 import { commitLocalBranch, readLocalGitHead, recordFilesOnDisk } from './landing'
 import type { ObjectiveAction } from './decide'
 import {
@@ -20,7 +22,7 @@ import {
 } from './remote-landing'
 
 export interface ObjectiveEnrollment {
-  watcherId: string; kind: string; workspacePath: string; worktreeId?: string | null; terminalAtMs?: number | null
+  watcherId: string; kind: string; workspacePath: string; worktreeId?: string | null; repoId?: string | null; terminalAtMs?: number | null
   kindPayload: ObjectivePayload; capabilities: Record<string, 'off' | 'gated' | 'on'>
 
   enabled?: boolean; paused?: boolean; parkReason?: string | null; malformed?: string
@@ -81,6 +83,32 @@ function readIssuedReport(path: string): { value: unknown } | { problem: { code:
   }
 }
 
+function reportDirectory(root: string, watcherId: string, create: boolean): string {
+  if (!watcherId || watcherId === '.' || watcherId === '..' || /[/\\\0]/.test(watcherId)) {
+    throw new Error('report-path-mismatch')
+  }
+  let directory = root
+  for (const component of ['.quirky', 'objective', watcherId]) {
+    directory = join(directory, component)
+    try {
+      if (create) {
+        try { mkdirSync(directory, { mode: 0o700 }) } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+        }
+      }
+      const entry = lstatSync(directory)
+      if (!entry.isDirectory() || entry.isSymbolicLink()) throw new Error('not a directory')
+    } catch {
+      throw new Error('report-path-mismatch')
+    }
+  }
+  return directory
+}
+
+function baselineIdentity(baseline: TaskBaseline): string {
+  return baseline.kind === 'folder' ? baseline.contentIdentity : `objective-tree:${baseline.treeOid}`
+}
+
 /** Implements the registered kind using only daemon and plugin public methods. */
 export function createObjectiveHooks(context: PluginContext, store: ObjectiveStore) {
   async function inspect(watcherId: string): Promise<Inspection | null> {
@@ -100,6 +128,7 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       contract: enrollment.kindPayload, capabilities: enrollment.capabilities,
       ...(snapshot ? { contentIdentity: snapshot.contentIdentity, observedAtMs: snapshot.observedAtMs } : {}),
       worktreeId: enrollment.worktreeId ?? null,
+      ...(snapshot?.world.workspaceKind === undefined ? {} : { workspaceKind: snapshot.world.workspaceKind }),
       ...(snapshot?.world.git === undefined ? {} : { git: snapshot.world.git }),
       ...(snapshot?.world.remote === undefined ? {} : { remote: snapshot.world.remote }),
       revision: revision ? {
@@ -117,9 +146,24 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       rejectedDrafts: store.rejectedDrafts(watcherId), overruns: store.overruns(watcherId), repairs: store.repairs(watcherId)
     }
   }
-  function runtime(enrollment: ObjectiveEnrollment): ObjectiveRuntime {
-    return { context, store, enrollment,
-      captureContentIdentity: () => captureContentIdentity(context, enrollment.workspacePath, context.dataDir, enrollment.watcherId) }
+  async function runtime(enrollment: ObjectiveEnrollment): Promise<ObjectiveRuntime> {
+    const workspace = await resolveWorkspace((method, params) => context.call(method, params), enrollment.kindPayload.worktree)
+    if (!enrollment.worktreeId || enrollment.kindPayload.worktree !== `id:${enrollment.worktreeId}` ||
+      workspace.id !== enrollment.worktreeId ||
+      (enrollment.repoId != null && workspace.repoId !== enrollment.repoId)) {
+      throw new Error('worktree-unresolved: the registered workspace identity changed')
+    }
+    let workspacePath: string
+    try {
+      workspacePath = await realpath(enrollment.workspacePath)
+      if (workspace.kind === 'folder' &&
+        (workspacePath !== enrollment.workspacePath || workspace.path !== enrollment.workspacePath)) throw new Error('path changed')
+      if (workspacePath !== await realpath(workspace.path) || !(await stat(workspacePath)).isDirectory()) throw new Error('path changed')
+    } catch {
+      throw new Error('worktree-unresolved: the registered workspace path changed or disappeared')
+    }
+    return { context, store, enrollment: { ...enrollment, workspacePath }, workspaceKind: workspace.kind,
+      captureContentIdentity: () => captureContentIdentity(context, workspacePath, context.dataDir, enrollment.watcherId, workspace.kind) }
   }
   async function agentFor(payload: ObjectivePayload, role: 'planner' | 'implementer' | 'reviewer' | 'integrator'): Promise<string> {
     const configured = payload.roleAgents[role]
@@ -172,9 +216,13 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
     journal: ObjectiveJournalEntry[],
     contentIdentity: string | null,
     terminal: boolean,
-    next: { action: ObjectiveAction | null; reason?: string }
+    next: { action: ObjectiveAction | null; reason?: string },
+    workspaceKind?: WorkspaceKind
   ): Promise<ObjectiveCompletion> {
     const requestedBar = enrollment.kindPayload.landingBar
+    if (workspaceKind === 'folder' && requestedBar !== 'files-on-disk') {
+      return { requestedBar, reachedBar: null, state: 'blocked', reason: 'landing-bar-requires-git', handoff: null, mergedEvidence: null }
+    }
     const revision = store.revision(enrollment.watcherId)
     const landings = store.landings(enrollment.watcherId)
     const matches = (row: (typeof landings)[number]) =>
@@ -200,7 +248,8 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
           : files ? 'files-on-disk' : null
 
     if (requestedBar === 'files-on-disk' && files) {
-      return { requestedBar, reachedBar, state: 'landed', reason: 'files-on-disk landing bar reached', handoff: link, mergedEvidence: null }
+      return { requestedBar, reachedBar: workspaceKind === 'folder' ? 'files-on-disk' : reachedBar, state: 'landed',
+        reason: 'files-on-disk landing bar reached', handoff: workspaceKind === 'folder' ? null : link, mergedEvidence: null }
     }
     if (requestedBar === 'committed-local-branch' && committed) {
       return { requestedBar, reachedBar, state: 'landed', reason: 'committed-local-branch landing bar reached', handoff: link, mergedEvidence: null }
@@ -249,6 +298,21 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       const raw = record(input.kindPayload) ? input.kindPayload : {}
       const workspace = await resolveWorkspace((method, params) => context.call(method, params), typeof raw.worktree === 'string' ? raw.worktree : 'active')
       const kindPayload = objectivePayload(input.kindPayload, `id:${workspace.id}`)
+      if (workspace.kind === 'folder') {
+        if (kindPayload.landingBar !== 'files-on-disk') {
+          throw new Error('landing-bar-requires-git: folder workspaces support only files-on-disk')
+        }
+        if (Number.isInteger(kindPayload.maxConcurrency) && kindPayload.maxConcurrency >= 1 && kindPayload.maxConcurrency <= 1024) {
+          kindPayload.maxConcurrency = 1
+        }
+      }
+      let workspacePath: string
+      try {
+        workspacePath = await realpath(workspace.path)
+        if (!(await stat(workspacePath)).isDirectory()) throw new Error('not a directory')
+      } catch {
+        throw new Error('worktree-unresolved: the registered workspace directory is unavailable')
+      }
       if (kindPayload.landingBar === 'hosted-review' || kindPayload.landingBar === 'merged') {
         try {
           const resolved = await context.call('quirky.hosting/repository', { worktree: workspace.id })
@@ -264,7 +328,7 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
         }
       }
       return {
-        workspaceKey: `local::${workspace.path}`, workspacePath: workspace.path,
+        workspaceKey: `local::${workspacePath}`, workspacePath,
         executionHostId: 'local', schedulerOwner: 'daemon', worktreeId: workspace.id, repoId: workspace.repoId,
         kindPayload
       }
@@ -274,11 +338,13 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       if (problems.length) throw new Error(problems.join('; '))
     },
     async read({ enrollment }: { enrollment: ObjectiveEnrollment }): Promise<ObjectiveSnapshot & { world: HookWorld }> {
-      const contentIdentity = await runtime(enrollment).captureContentIdentity()
+      const run = await runtime(enrollment)
+      const contentIdentity = await run.captureContentIdentity()
       const currentWorld = world(enrollment)
-      currentWorld.git = await readLocalGitHead(context, enrollment.workspacePath)
-      if (enrollment.kindPayload.landingBar === 'pushed-ref' ||
-        enrollment.kindPayload.landingBar === 'hosted-review' || enrollment.kindPayload.landingBar === 'merged') {
+      currentWorld.workspaceKind = run.workspaceKind
+      currentWorld.git = run.workspaceKind === 'folder' ? { branch: null, headSha: null } : await readLocalGitHead(context, enrollment.workspacePath)
+      if (run.workspaceKind === 'git' && (enrollment.kindPayload.landingBar === 'pushed-ref' ||
+        enrollment.kindPayload.landingBar === 'hosted-review' || enrollment.kindPayload.landingBar === 'merged')) {
         currentWorld.remote = await observeRemoteLanding(
           context, enrollment.workspacePath, enrollment.worktreeId, enrollment.kindPayload
         )
@@ -295,10 +361,12 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       const bar = enrollment.kindPayload.landingBar
       if (bar === 'pushed-ref' || bar === 'hosted-review' || bar === 'merged') {
         return (async () => {
-          const contentIdentity = await runtime(enrollment).captureContentIdentity()
+          const run = await runtime(enrollment)
+          const contentIdentity = await run.captureContentIdentity()
           const currentWorld = world(enrollment)
-          currentWorld.git = await readLocalGitHead(context, enrollment.workspacePath)
-          currentWorld.remote = await observeRemoteLanding(
+          currentWorld.workspaceKind = run.workspaceKind
+          currentWorld.git = run.workspaceKind === 'folder' ? { branch: null, headSha: null } : await readLocalGitHead(context, enrollment.workspacePath)
+          if (run.workspaceKind === 'git') currentWorld.remote = await observeRemoteLanding(
             context, enrollment.workspacePath, enrollment.worktreeId, enrollment.kindPayload
           )
           const observedAtMs = Date.now()
@@ -313,11 +381,13 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       return paceObjective({ ...snapshot, world: world(snapshot.world.enrollment, snapshot) }, journal)
     },
     resolveOutcome({ attempt, enrollment }: { attempt: { attemptId: string; action: Action }; enrollment: ObjectiveEnrollment }):
-      { effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string } | Promise<{ effect: 'landed' } | null> | null {
+      { effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string } | Promise<{ effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string } | null> | null {
       const { action } = attempt
       const watcherId = enrollment.watcherId
       if (action.kind === 'push-ref' || action.kind === 'open-hosted-review') {
-        return resolveRemoteLandingOutcome(runtime(enrollment), action, attempt.attemptId, enrollment.worktreeId)
+        return runtime(enrollment).then(async run => run.workspaceKind === 'folder'
+          ? { effect: 'not-landed' as const, reason: 'landing-bar-requires-git' }
+          : resolveRemoteLandingOutcome(run, action, attempt.attemptId, enrollment.worktreeId))
       }
       if (action.kind === 'activate-plan') {
         return store.revision(watcherId)?.sourceAttemptId === action.plannerAttemptId &&
@@ -346,6 +416,11 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       return null
     },
     async execute({ action, enrollment, attemptId }: { action: Action; enrollment: ObjectiveEnrollment; attemptId: string }) {
+      const run = await runtime(enrollment)
+      if (run.workspaceKind === 'folder' && (enrollment.kindPayload.landingBar !== 'files-on-disk' ||
+        action.kind === 'commit-local-branch' || action.kind === 'push-ref' || action.kind === 'open-hosted-review')) {
+        return { effect: 'not-landed', reason: 'landing-bar-requires-git' }
+      }
       if (action.kind === 'activate-plan') {
         if (!action.plannerAttemptId || !action.digest) throw new Error('Plan activation is missing its draft authority')
         store.activate(enrollment.watcherId, action.plannerAttemptId, action.digest)
@@ -355,7 +430,6 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
         store.applyRepair(enrollment.watcherId, action.revision, action.repairEpisode, action.plannerAttemptId, action.digest)
         return { effect: 'landed' }
       }
-      const run = runtime(enrollment)
       if (action.kind === 'push-ref' || action.kind === 'open-hosted-review') {
         const inspection = await inspect(enrollment.watcherId)
         if (!inspection) return { effect: 'not-landed', reason: 'objective-watcher-unavailable' }
@@ -375,15 +449,15 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       const revision = store.revision(enrollment.watcherId)
       const task = action.kind === 'dispatch-node' ? revision?.plan.plan.tasks.find(task => task.taskKey === action.taskKey) : undefined
       if (action.kind === 'dispatch-node' && (!task || revision?.number !== action.revision)) throw new Error('The assigned task is not in the approved revision')
-      const contentIdentity = await run.captureContentIdentity()
-      const directory = join(enrollment.workspacePath, '.quirky', 'objective', enrollment.watcherId)
-      mkdirSync(directory, { recursive: true, mode: 0o700 })
+      const baseline = await captureTaskBaseline(run)
+      const contentIdentity = baselineIdentity(baseline)
+      const directory = reportDirectory(run.enrollment.workspacePath, enrollment.watcherId, true)
       const path = join(directory, `${attemptId}.json`)
       const repair = action.kind === 'dispatch-planner' && action.plannerMode === 'repair'
       store.issue({ attemptId, watcherId: enrollment.watcherId, role,
         revision: role === 'planner' && !repair ? null : revision?.number ?? null,
         plannerMode: role === 'planner' ? (repair ? 'repair' : 'initial') : undefined,
-        baselineTree: contentIdentity.slice('objective-tree:'.length), contentIdentity,
+        baseline, ...(baseline.kind === 'git' ? { baselineTree: baseline.treeOid } : {}), contentIdentity,
         taskKey: task?.taskKey ?? null, reportPath: path, issuedAtMs: Date.now() })
       const inspection = await inspect(enrollment.watcherId)
       const progress = deriveProgress(world(enrollment), inspection?.journal ?? []).tasks
@@ -433,6 +507,13 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       const path = submission.payload?.reportPath
       if (typeof path !== 'string' || !path) return rejected('missing-report', 'A successful worker must provide its report path.')
       if (path !== issued.reportPath) return rejected('report-path-mismatch', 'Use the exact report path issued for this attempt, not an alias.')
+      let run: ObjectiveRuntime
+      try { run = await runtime(enrollment) } catch (error) {
+        return rejected('worktree-unresolved', error instanceof Error ? error.message : String(error))
+      }
+      try { reportDirectory(run.enrollment.workspacePath, enrollment.watcherId, false) } catch {
+        return rejected('report-path-mismatch', 'Report directory components must be real directories beneath the workspace.')
+      }
       const parsed = readIssuedReport(path)
       if ('problem' in parsed) return rejected(parsed.problem.code, parsed.problem.reason)
       const report = parsed.value
@@ -450,13 +531,21 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
           : task ? implementerReportProblems(report, task, enrollment.kindPayload.writeTerritory) : ['The assigned task is no longer in the approved revision.']
       let afterIdentity: string | null = null
       if (issued.role !== 'planner') {
-        const run = runtime(enrollment)
-        afterIdentity = await run.captureContentIdentity()
+        let afterBaseline: TaskBaseline
+        try {
+          afterBaseline = await captureTaskBaseline(run)
+        } catch {
+          store.recordOverrun({ attemptId: issued.attemptId, watcherId: issued.watcherId, revision: issued.revision,
+            taskKey: issued.taskKey, observedPaths: [], outsidePaths: [], unreportedPaths: [],
+            code: 'baseline-comparison-failed', recordedAtMs: Date.now() })
+          return rejected('baseline-comparison-failed', 'The post-worker workspace could not be observed.')
+        }
+        afterIdentity = baselineIdentity(afterBaseline)
         const identity = afterIdentity
         const filesModified = record(report) && Array.isArray(report.filesModified) && report.filesModified.every(path => typeof path === 'string')
           ? report.filesModified : undefined
         const baseline = await baselineProblems({ ...run, captureContentIdentity: async () => identity }, issued,
-          issued.role === 'implementer' ? filesModified : undefined)
+          issued.role === 'implementer' ? filesModified : undefined, afterBaseline)
         if (baseline.length) return rejected(baseline[0]!.split(':')[0]!, baseline.join('; '))
       }
       if (problems.length) return rejected('invalid-report', problems.join('; '))
@@ -500,15 +589,18 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       const historicalRemote = terminal && (link !== null || landings.some(row =>
         (row.rung === 'pushed-ref' || row.rung === 'hosted-review') && row.payload.revision === revision?.number
       ))
-      const contentIdentity = historicalRemote ? null : await runtime(enrollment).captureContentIdentity()
-      const git = historicalRemote
-        ? { branch: null, headSha: null }
-        : await readLocalGitHead(context, enrollment.workspacePath)
+      const historicalFolder = terminal ? landings.filter(row => row.rung === 'files-on-disk' &&
+        row.payload.revision === revision?.number && /^objective-folder-v1:[0-9a-f]{64}$/.test(row.contentIdentity)).at(-1) : undefined
+      const run = historicalRemote || historicalFolder ? null : await runtime(enrollment)
+      const workspaceKind = historicalFolder ? 'folder' : run?.workspaceKind
+      const contentIdentity = historicalFolder?.contentIdentity ?? (historicalRemote ? null : await run!.captureContentIdentity())
+      const git = !run || workspaceKind === 'folder' ? { branch: null, headSha: null } : await readLocalGitHead(context, enrollment.workspacePath)
       const currentWorld = world(enrollment)
+      currentWorld.workspaceKind = workspaceKind
       if (contentIdentity !== null) currentWorld.contentIdentity = contentIdentity
       currentWorld.observedAtMs = Date.now()
       currentWorld.git = git
-      if (!historicalRemote && (enrollment.kindPayload.landingBar === 'pushed-ref' ||
+      if (run?.workspaceKind === 'git' && (enrollment.kindPayload.landingBar === 'pushed-ref' ||
         enrollment.kindPayload.landingBar === 'hosted-review' || enrollment.kindPayload.landingBar === 'merged')) {
         currentWorld.remote = await observeRemoteLanding(
           context, enrollment.workspacePath, enrollment.worktreeId, enrollment.kindPayload
@@ -522,7 +614,7 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       }
       const draftReport = progress.draft ? store.report(progress.draft.plannerAttemptId) : null
       const draftPlan = draftReport?.report as PlannerReport | RepairPlannerReport | undefined
-      const completion = await completionFor(enrollment, inspection.journal, contentIdentity, terminal, next)
+      const completion = await completionFor(enrollment, inspection.journal, contentIdentity, terminal, next, workspaceKind)
       const displayNext = completion.state === 'landed'
         ? { action: null, reason: 'objective-bar-reached' }
         : completion.state === 'waiting'

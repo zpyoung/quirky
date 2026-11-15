@@ -1,7 +1,10 @@
+import { Buffer } from 'node:buffer'
 import { appendFileSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { PluginContext, RunOptions } from '@quirky/protocol'
 import type { ObjectivePayload } from './contract'
+import { captureFolderObservation, isTaskBaseline } from './folder-workspace'
+import type { FolderEntry, FolderObservation, TaskBaseline, WorkspaceKind } from './folder-workspace'
 import type { Issued, ObjectiveStore, OverrunRecord } from './store'
 
 export interface ObjectiveRuntime {
@@ -9,6 +12,7 @@ export interface ObjectiveRuntime {
   store: ObjectiveStore
   enrollment: { watcherId: string; workspacePath: string; kindPayload: ObjectivePayload }
   captureContentIdentity: () => Promise<string>
+  workspaceKind?: WorkspaceKind
 }
 
 export interface IndexSuppressionFlags {
@@ -180,9 +184,27 @@ export async function captureContentIdentity(
   context: PluginContext,
   workspacePath: string,
   dataDir: string,
-  watcherId: string
+  watcherId: string,
+  workspaceKind?: WorkspaceKind
 ): Promise<string> {
+  if (workspaceKind === 'folder') {
+    return (await captureFolderObservation(workspacePath)).contentIdentity
+  }
   return `objective-tree:${await captureTreeOid(context, workspacePath, dataDir, watcherId)}`
+}
+
+export async function captureTaskBaseline(runtime: ObjectiveRuntime): Promise<TaskBaseline> {
+  if (runtime.workspaceKind === 'folder') {
+    return captureFolderObservation(runtime.enrollment.workspacePath)
+  }
+  const identity = await runtime.captureContentIdentity()
+  const treeOid = /^objective-tree:([0-9a-f]{40}|[0-9a-f]{64})$/.exec(identity)?.[1]
+  if (!treeOid) throw new Error('Git returned an invalid workspace content identity')
+  return { kind: 'git', treeOid }
+}
+
+function compareUtf8(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'))
 }
 
 function inTerritory(path: string, patterns: string[]): boolean {
@@ -215,26 +237,77 @@ function reportPathRelative(workspacePath: string, reportPath: string): string {
   return relative(workspacePath, reportPath).split(sep).join('/')
 }
 
+function issuedBaseline(runtime: ObjectiveRuntime, issued: Issued): TaskBaseline | null {
+  const workspaceKind = runtime.workspaceKind ?? 'git'
+  if (issued.baseline === null) return null
+
+  let baseline: TaskBaseline
+  if (issued.baseline === undefined) {
+    if (workspaceKind !== 'git' ||
+      typeof issued.baselineTree !== 'string' ||
+      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(issued.baselineTree)) return null
+    baseline = { kind: 'git', treeOid: issued.baselineTree }
+  } else {
+    if (!isTaskBaseline(issued.baseline)) return null
+    baseline = issued.baseline
+  }
+
+  if (baseline.kind !== workspaceKind) return null
+  if (baseline.kind === 'git') {
+    if (issued.baselineTree !== undefined && issued.baselineTree !== null &&
+      (typeof issued.baselineTree !== 'string' || issued.baselineTree !== baseline.treeOid)) return null
+    if (issued.contentIdentity !== undefined && issued.contentIdentity !== null &&
+      issued.contentIdentity !== `objective-tree:${baseline.treeOid}`) return null
+  } else {
+    if (issued.baselineTree !== undefined && issued.baselineTree !== null) return null
+    if (issued.contentIdentity !== undefined && issued.contentIdentity !== null &&
+      issued.contentIdentity !== baseline.contentIdentity) return null
+  }
+  return baseline
+}
+
+function folderChangedPaths(before: FolderObservation, after: FolderObservation): string[] {
+  const beforeByPath = new Map<string, FolderEntry>(before.entries.map(entry => [entry.path, entry]))
+  const afterByPath = new Map<string, FolderEntry>(after.entries.map(entry => [entry.path, entry]))
+  const paths = new Set([...beforeByPath.keys(), ...afterByPath.keys()])
+  return [...paths].filter(path => {
+    const previous = beforeByPath.get(path)
+    const current = afterByPath.get(path)
+    return previous === undefined || current === undefined ||
+      previous.kind !== current.kind ||
+      previous.executable !== current.executable ||
+      previous.digest !== current.digest
+  }).sort(compareUtf8)
+}
+
 export async function baselineProblems(
   runtime: ObjectiveRuntime,
   issued: Issued,
-  filesModified?: string[]
+  filesModified?: string[],
+  afterBaseline?: TaskBaseline
 ): Promise<string[]> {
-  const baselineTree = issued.baselineTree
-  if (typeof baselineTree !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(baselineTree)) {
+  const baseline = issuedBaseline(runtime, issued)
+  if (!baseline) {
     recordOverrun(runtime, issued, [], [], [], 'invalid-baseline-tree')
     return ['invalid-baseline-tree']
   }
 
   let observedPaths: string[]
   try {
-    const identity = await runtime.captureContentIdentity()
-    const afterTree = identity.startsWith('objective-tree:') ? identity.slice('objective-tree:'.length) : ''
-    if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(afterTree)) throw new Error('Git returned an invalid workspace content identity')
-    const raw = await runGit(runtime.context, runtime.enrollment.workspacePath, [
-      'diff-tree', '--no-commit-id', '-r', '-z', '--name-only', baselineTree, afterTree
-    ])
-    observedPaths = raw.split('\0').filter(path => path.length > 0)
+    const after = afterBaseline === undefined ? await captureTaskBaseline(runtime) : afterBaseline
+    if (!isTaskBaseline(after) || after.kind !== baseline.kind) {
+      throw new Error('Workspace content observation did not match its baseline kind')
+    }
+    if (baseline.kind === 'folder' && after.kind === 'folder') {
+      observedPaths = folderChangedPaths(baseline, after)
+    } else if (baseline.kind === 'git' && after.kind === 'git') {
+      const raw = await runGit(runtime.context, runtime.enrollment.workspacePath, [
+        'diff-tree', '--no-commit-id', '-r', '-z', '--name-only', baseline.treeOid, after.treeOid
+      ])
+      observedPaths = raw.split('\0').filter(path => path.length > 0).sort(compareUtf8)
+    } else {
+      throw new Error('Workspace content observation did not match its baseline kind')
+    }
   } catch {
     recordOverrun(runtime, issued, [], [], [], 'baseline-comparison-failed')
     return ['baseline-comparison-failed']
@@ -251,9 +324,9 @@ export async function baselineProblems(
   if (issued.role !== 'implementer' && issued.role !== 'integrator') return []
 
   const territory = runtime.enrollment.kindPayload.writeTerritory
-  const outsidePaths = observedPaths.filter(path => !inTerritory(path, territory))
+  const outsidePaths = observedPaths.filter(path => !inTerritory(path, territory)).sort(compareUtf8)
   const unreportedPaths = issued.role === 'implementer'
-    ? observedPaths.filter(path => inTerritory(path, territory) && !(filesModified ?? []).includes(path))
+    ? observedPaths.filter(path => inTerritory(path, territory) && !(filesModified ?? []).includes(path)).sort(compareUtf8)
     : []
   if (outsidePaths.length === 0 && unreportedPaths.length === 0) return []
 
@@ -262,7 +335,7 @@ export async function baselineProblems(
   return [
     ...outsidePaths.map(path => `observed-change-outside-write-territory:${path}`),
     ...unreportedPaths.map(path => `unreported-observed-change:${path}`)
-  ]
+  ].sort(compareUtf8)
 }
 
 interface CheckAction {

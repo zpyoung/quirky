@@ -40,9 +40,14 @@ type CompletedCheck = JournalEntry & {
 }
 
 /** UUIDv8 uses the first 128 SHA-256 bits; version and RFC variant bits are set after hashing. */
-export function orchestrationRequestIdForAttemptFingerprint(fingerprint: string): string {
+export function orchestrationRequestIdForAttemptFingerprint(watcherId: string, fingerprint: string): string {
+  return uuidV8(sha256(`heimdall-dispatch-v2\0${JSON.stringify([watcherId, fingerprint])}`))
+}
+
+function legacyPreparedRequestIdForFingerprint(fingerprint: string): string {
   return uuidV8(sha256(`heimdall-dispatch-v1\0${fingerprint}`))
 }
+
 function indeterminateWorkerResult(requestId: string, detail: string, error?: unknown): DispatchResult {
   return {
     kind: 'indeterminate',
@@ -347,7 +352,7 @@ export function createOrchestrationAdapter(
     },
     async dispatch(enrollment, attempt, request) {
       if (disposed) return { kind: 'refused', reason: 'adapter-disposed', detail: 'orchestration adapter is disposed' }
-      const requestId = preparedRequestId(attempt)
+      const requestId = preparedRequestId(enrollment, attempt)
       if (requestId === null || !attempt.workerRequest || !sameJson(attempt.workerRequest, request)) {
         return { kind: 'refused', reason: 'invalid-prepared-request', detail: 'worker request does not match its persisted attempt' }
       }
@@ -367,7 +372,7 @@ export function createOrchestrationAdapter(
     async recover(enrollment, attempt) {
       const request = attempt.workerRequest
       if (store.readOnly || disposed || !request) return null
-      const requestId = preparedRequestId(attempt)
+      const requestId = preparedRequestId(enrollment, attempt)
       if (requestId === null || !validWorkerRequest(request)) {
         return { kind: 'indeterminate', requestId: attempt.requestId ?? 'unknown', detail: 'persisted worker replay data is incomplete' }
       }
@@ -477,9 +482,14 @@ export function createOrchestrationAdapter(
   }
 }
 
-function preparedRequestId(attempt: Attempt): string | null {
-  const requestId = orchestrationRequestIdForAttemptFingerprint(attempt.fingerprint)
-  return attempt.requestId === requestId ? requestId : null
+function preparedRequestId(enrollment: Enrollment, attempt: Attempt): string | null {
+  const requestId = attempt.requestId
+  if (typeof requestId !== 'string') return null
+  if (
+    requestId === orchestrationRequestIdForAttemptFingerprint(enrollment.watcherId, attempt.fingerprint) ||
+    requestId === legacyPreparedRequestIdForFingerprint(attempt.fingerprint)
+  ) return requestId
+  return null
 }
 
 function validWorkerRequest(request: WorkerRequest): boolean {
