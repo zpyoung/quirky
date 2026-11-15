@@ -78,7 +78,13 @@ export const CLI_SCHEMA_REQUIREMENTS: readonly CliSchemaRequirement[] = [
   { id: 'open-changes-mode', rowIds: ['file-open-changed'],
     target: { kind: 'ui-command-arg', command: 'command:quirky.git/open-changes', property: 'mode' }, schema: { type: 'string', enumEquals: ['edit', 'diff', 'both'] } },
   { id: 'open-changes-area', rowIds: ['file-open-changed'],
-    target: { kind: 'ui-command-arg', command: 'command:quirky.git/open-changes', property: 'area' }, schema: { type: 'string', enumIncludes: ['staged', 'unstaged'] } }
+    target: { kind: 'ui-command-arg', command: 'command:quirky.git/open-changes', property: 'area' }, schema: { type: 'string', enumIncludes: ['staged', 'unstaged'] } },
+  { id: 'project-set-external-visibility-flag', rowIds: ['repo-set'],
+    target: { kind: 'cli-flag', words: 'worktree project-set', flag: 'external-worktree-visibility' }, schema: { type: 'string', enumEquals: ['show', 'hide', 'inherit'] } },
+  { id: 'set-project-metadata-visibility', rowIds: ['repo-set'],
+    target: { kind: 'method-param', method: 'quirky.worktree/setProjectMetadata', property: 'externalVisibility' }, schema: { type: 'string', enumEquals: ['show', 'hide', 'inherit'] } },
+  { id: 'options-external-visibility-default', rowIds: ['repo-set'],
+    target: { kind: 'cli-flag', words: 'worktree options', flag: 'external-visibility-default' }, schema: { type: 'string', enumEquals: ['show', 'hide'] } }
 ]
 
 const observationRowsById = new Map<string, Set<string>>()
@@ -563,7 +569,11 @@ const pluginReferences: Array<{ rowId: string; plugin: string; commandId: string
   { rowId: 'project-setups', plugin: 'quirky.repo', commandId: 'list' },
   { rowId: 'repo-add', plugin: 'quirky.repo', commandId: 'add' },
   { rowId: 'repo-list', plugin: 'quirky.repo', commandId: 'list' },
-  { rowId: 'repo-set', plugin: 'quirky.repo', commandId: 'set' },
+  { rowId: 'repo-set', plugin: 'quirky.worktree', commandId: 'project-set' },
+  { rowId: 'repo-set', plugin: 'quirky.worktree', commandId: 'project-show' },
+  { rowId: 'repo-set', plugin: 'quirky.worktree', commandId: 'list' },
+  { rowId: 'repo-set', plugin: 'quirky.worktree', commandId: 'external-inbox' },
+  { rowId: 'repo-set', plugin: 'quirky.worktree', commandId: 'options' },
   { rowId: 'repo-set-base-ref', plugin: 'quirky.repo', commandId: 'set' },
   { rowId: 'repo-show', plugin: 'quirky.repo', commandId: 'show' },
   { rowId: 'repo-search-refs', plugin: 'quirky.repo', commandId: 'search-refs' },

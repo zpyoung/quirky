@@ -729,11 +729,12 @@ test('observation-only covered rows require compiled observation and schema cont
   }
 })
 
-test('catalog refuses each missing or weakened public file argument contract', () => {
+test('catalog refuses each missing or weakened public argument contract', () => {
   const rows = loadCliTable()
   expect(CLI_SCHEMA_REQUIREMENTS.map(requirement => requirement.id)).toEqual([
     'editor-open-window', 'editor-open-window-flag', 'window-command-conn',
-    'open-diff-focus', 'open-diff-source', 'open-changes-focus', 'open-changes-mode', 'open-changes-area'
+    'open-diff-focus', 'open-diff-source', 'open-changes-focus', 'open-changes-mode', 'open-changes-area',
+    'project-set-external-visibility-flag', 'set-project-metadata-visibility', 'options-external-visibility-default'
   ])
   const properties = (catalog: SyntheticCatalog, name: string, kind: 'method' | 'command') =>
     (kind === 'method' ? catalog.methods.find(entry => entry.name === name)!.params
@@ -765,7 +766,7 @@ test('catalog refuses each missing or weakened public file argument contract', (
 
 test('checked-in manifests and kernel schemas satisfy every file argument requirement', () => {
   const catalog = syntheticCatalog()
-  for (const name of ['quirky.editor', 'quirky.git']) {
+  for (const name of ['quirky.editor', 'quirky.git', 'quirky.worktree']) {
     const manifest = JSON.parse(readFileSync(resolve(import.meta.dir, `../../plugins/${name}/quirky-plugin.json`), 'utf8'))
     for (const method of catalog.methods.filter(entry => entry.plugin === name)) {
       method.params = manifest.contributes.method.find((entry: { id: string }) => `${name}/${entry.id}` === method.name).params
@@ -776,6 +777,84 @@ test('checked-in manifests and kernel schemas satisfy every file argument requir
   }
   catalog.methods.find(entry => entry.name === 'ui.window.command.run')!.params = KERNEL_METHOD_SCHEMAS['ui.window.command.run'].params
   validateCatalog(catalog, loadCliTable())
+})
+
+test('catalog rejects every weakened external-worktree visibility capability', () => {
+  const rows = loadCliTable()
+  const visibilityMethods: Record<string, true> = {
+    'quirky.worktree/projectMetadata': true,
+    'quirky.worktree/setProjectMetadata': true
+  }
+  const removeFlag = (entry: Record<string, unknown> | undefined, flagName: string): void => {
+    if (!entry || !Array.isArray(entry.flags)) return
+    entry.flags = (entry.flags as Array<{ name: string }>).filter(flag => flag.name !== flagName)
+  }
+  const shrinkFlagEnum = (entry: Record<string, unknown> | undefined, flagName: string): void => {
+    if (!entry || !Array.isArray(entry.flags)) return
+    const flag = (entry.flags as Array<{ name: string; enum?: string[] }>).find(candidate => candidate.name === flagName)
+    if (flag) flag.enum = ['show', 'hide']
+  }
+  const removeCommandRecordsNamingMethods = (entries: Array<Record<string, unknown>>): Array<Record<string, unknown>> =>
+    entries.filter(entry => {
+      const methods = Array.isArray(entry.methods) ? entry.methods : []
+      return !methods.some(method => typeof method === 'string' && visibilityMethods[method] === true) &&
+        !(typeof entry.method === 'string' && visibilityMethods[entry.method] === true)
+    })
+  const mutations: Array<(catalog: SyntheticCatalog) => void> = [
+    catalog => {
+      catalog.methods = catalog.methods.filter(method => visibilityMethods[method.name] !== true)
+      catalog.commands = removeCommandRecordsNamingMethods(catalog.commands)
+      catalog.cli.commands = removeCommandRecordsNamingMethods(catalog.cli.commands)
+    },
+    catalog => {
+      removeFlag(catalog.commands.find(entry => entry.command === 'worktree project-set'), 'external-worktree-visibility')
+      removeFlag(catalog.cli.commands.find(entry => entry.words === 'worktree project-set'), 'external-worktree-visibility')
+    },
+    catalog => {
+      shrinkFlagEnum(catalog.commands.find(entry => entry.command === 'worktree project-set'), 'external-worktree-visibility')
+      shrinkFlagEnum(catalog.cli.commands.find(entry => entry.words === 'worktree project-set'), 'external-worktree-visibility')
+    },
+    catalog => {
+      const method = catalog.methods.find(entry => entry.name === 'quirky.worktree/setProjectMetadata')
+      const properties = method?.params.properties as Record<string, { enum?: string[] }> | undefined
+      if (properties?.externalVisibility) properties.externalVisibility.enum = ['show', 'hide']
+    },
+    catalog => {
+      removeFlag(catalog.commands.find(entry => entry.command === 'worktree options'), 'external-visibility-default')
+      removeFlag(catalog.cli.commands.find(entry => entry.words === 'worktree options'), 'external-visibility-default')
+    }
+  ]
+
+  for (const mutate of mutations) {
+    const catalog = syntheticCatalog()
+    mutate(catalog)
+    expect(codeOf(() => validateCatalog(catalog, rows))).toBe('catalog-mismatch')
+  }
+})
+
+test('repo-set mappings separate external visibility from the default-base check', () => {
+  const repoSet = CLI_MAPPINGS.filter(mapping => mapping.rowId === 'repo-set')
+  expect(repoSet.map(mapping => mapping.words)).toEqual([
+    'worktree project-set',
+    'worktree project-show',
+    'worktree list',
+    'worktree external-inbox',
+    'worktree options'
+  ])
+  expect(repoSet.every(mapping => mapping.plugin === 'quirky.worktree')).toBe(true)
+
+  const baseRef = CLI_MAPPINGS.filter(mapping => mapping.rowId === 'repo-set-base-ref')
+  expect(baseRef.map(mapping => mapping.words)).toEqual(['repo set'])
+  expect(baseRef[0]!.flags.map(flag => flag.name)).toContain('default-base')
+
+  const row = loadCliTable().find(candidate => candidate.id === 'repo-set')!
+  expect(row.checks).toEqual(['repo-set'])
+  const reduced = reduceCliRows(
+    [row], [], new Set(),
+    new Map([[row.id, ['command:worktree project-set']]])
+  )[0]!
+  expect(reduced.status).toBe('not-run')
+  expect(reduced.executed).toBe(false)
 })
 
 test('core observation-only coverage points to a separate run without claiming execution', () => {
