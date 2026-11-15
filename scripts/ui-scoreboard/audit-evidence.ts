@@ -1,8 +1,19 @@
 import * as ts from 'typescript'
 import { posix } from 'node:path'
-import type { Candidate, CandidateCategory, CoverageFile, Evidence, PluginInventory, Ref, Route, SourceFile } from './contracts'
+import type { Candidate, CandidateCategory, CoverageFile, Evidence, PluginInventory, Ref, Route } from './contracts'
 
 export type ResolvedRef = { file: string; source: ts.SourceFile; start: number; end: number; text: string }
+
+export type EvidenceResolver = {
+  resolveRef(ref: Ref): ResolvedRef | Evidence
+  resolveTarget(source: ts.SourceFile, expression: ts.Expression): string | undefined
+}
+
+type EvidenceSources = {
+  directory: string
+  files: ReadonlySet<string>
+  parsedSource(file: string): ts.SourceFile | undefined
+}
 
 type RecordValue = Record<string, unknown>
 type FunctionNode = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction | ts.MethodDeclaration | ts.ConstructorDeclaration | ts.GetAccessorDeclaration | ts.SetAccessorDeclaration
@@ -247,17 +258,6 @@ function scriptKind(file: string): ts.ScriptKind {
   return ts.ScriptKind.TS
 }
 
-const parsedSnapshots = new WeakMap<SourceFile, { file: string; content: string; source: ts.SourceFile }>()
-
-/** Reuses unchanged snapshot parses while keeping in-memory mutation audits fresh. */
-function parsedSnapshot(snapshot: SourceFile): ts.SourceFile {
-  const cached = parsedSnapshots.get(snapshot)
-  if (cached?.file === snapshot.file && cached.content === snapshot.content) return cached.source
-  const source = ts.createSourceFile(snapshot.file, snapshot.content, ts.ScriptTarget.Latest, true, scriptKind(snapshot.file))
-  parsedSnapshots.set(snapshot, { file: snapshot.file, content: snapshot.content, source })
-  return source
-}
-
 function canonicalPluginFile(file: string, directory: string): boolean {
   if (file.length === 0 || file.includes('\\') || file.startsWith('/') || /^[A-Za-z]:/.test(file)) return false
   const segments = file.split('/')
@@ -267,32 +267,64 @@ function canonicalPluginFile(file: string, directory: string): boolean {
   return file.startsWith(prefix)
 }
 
-/** Resolves a unique exact quote from one of the plugin's discovered UI files. */
+/** Captures one UI graph and lazily shares read-only source trees within an audit. */
+export function createEvidenceResolver(plugin: PluginInventory, files: readonly string[]): EvidenceResolver {
+  const graph = new Set(files)
+  const texts = new Map<string, string>()
+  for (const source of plugin.sources) {
+    if (graph.has(source.file) && !texts.has(source.file)) texts.set(source.file, source.content)
+  }
+  const parsed = new Map<string, ts.SourceFile>()
+  const sources: EvidenceSources = {
+    directory: plugin.directory,
+    files: graph,
+    parsedSource(file) {
+      const text = texts.get(file)
+      if (text === undefined) return undefined
+      let source = parsed.get(file)
+      if (source === undefined) {
+        source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, scriptKind(file))
+        parsed.set(file, source)
+      }
+      return source
+    },
+  }
+  return {
+    resolveRef(ref) {
+      if (typeof ref?.file !== 'string' || !canonicalPluginFile(ref.file, sources.directory) || !graph.has(ref.file)) {
+        return evidence('evidence-path-invalid', `Evidence file is not a canonical UI path in the plugin graph: ${String(ref?.file)}`)
+      }
+      const text = texts.get(ref.file)
+      if (text === undefined) {
+        return evidence('evidence-path-invalid', `Evidence file has no captured source: ${ref.file}`)
+      }
+      const quote = typeof ref.quote === 'string' ? ref.quote : ''
+      if (quote.length === 0) return evidence('evidence-missing', `Evidence quote is empty in ${ref.file}`)
+
+      let first = -1
+      let count = 0
+      for (let offset = text.indexOf(quote); offset !== -1; offset = text.indexOf(quote, offset + 1)) {
+        if (first === -1) first = offset
+        count += 1
+        if (count > 1) break
+      }
+      if (count === 0) return evidence('evidence-missing', `Evidence quote was not found in ${ref.file}: ${JSON.stringify(quote)}`)
+
+      const source = sources.parsedSource(ref.file)!
+      if (count > 1) {
+        return evidence('evidence-ambiguous', `Evidence quote occurs more than once in ${ref.file}: ${JSON.stringify(quote)}`, ref.file, source, first)
+      }
+      return { file: ref.file, source, start: first, end: first + quote.length, text: quote }
+    },
+    resolveTarget(source, expression) {
+      return resolveExpressionTarget(sources, source, expression)
+    },
+  }
+}
+
+/** Resolves a unique exact quote from the current captured UI sources. */
 export function resolveRef(plugin: PluginInventory, files: readonly string[], ref: Ref): ResolvedRef | Evidence {
-  if (typeof ref?.file !== 'string' || !canonicalPluginFile(ref.file, plugin.directory) || !files.includes(ref.file)) {
-    return evidence('evidence-path-invalid', `Evidence file is not a canonical UI path in the plugin graph: ${String(ref?.file)}`)
-  }
-  const sourceFile = plugin.sources.find((source) => source.file === ref.file)
-  if (sourceFile === undefined) {
-    return evidence('evidence-path-invalid', `Evidence file has no captured source: ${ref.file}`)
-  }
-  const quote = typeof ref.quote === 'string' ? ref.quote : ''
-  if (quote.length === 0) return evidence('evidence-missing', `Evidence quote is empty in ${ref.file}`)
-
-  let first = -1
-  let count = 0
-  for (let offset = sourceFile.content.indexOf(quote); offset !== -1; offset = sourceFile.content.indexOf(quote, offset + 1)) {
-    if (first === -1) first = offset
-    count += 1
-    if (count > 1) break
-  }
-  if (count === 0) return evidence('evidence-missing', `Evidence quote was not found in ${ref.file}: ${JSON.stringify(quote)}`)
-
-  const source = parsedSnapshot(sourceFile)
-  if (count > 1) {
-    return evidence('evidence-ambiguous', `Evidence quote occurs more than once in ${ref.file}: ${JSON.stringify(quote)}`, ref.file, source, first)
-  }
-  return { file: ref.file, source, start: first, end: first + quote.length, text: quote }
+  return createEvidenceResolver(plugin, files).resolveRef(ref)
 }
 
 /** Maps a resolved quote to its unique candidate anchor, using an explicit anchor only to disambiguate. */
@@ -397,10 +429,10 @@ export function resolveVia(ref: ResolvedRef): { node: ts.FunctionLikeDeclaration
 
 const CODE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'] as const
 
-function uiImportTarget(fromFile: string, specifier: string, files: readonly string[], plugin: PluginInventory): string | undefined {
+function uiImportTarget(fromFile: string, specifier: string, sources: EvidenceSources): string | undefined {
   if (!specifier.startsWith('.')) return undefined
   const base = posix.normalize(posix.join(posix.dirname(fromFile), specifier))
-  if (!canonicalPluginFile(base, plugin.directory) && !files.includes(base)) return undefined
+  if (!canonicalPluginFile(base, sources.directory) && !sources.files.has(base)) return undefined
   const candidates: string[] = []
   const extension = posix.extname(base)
   if (extension.length > 0) {
@@ -413,7 +445,7 @@ function uiImportTarget(fromFile: string, specifier: string, files: readonly str
     candidates.push(base, ...CODE_EXTENSIONS.map((suffix) => `${base}${suffix}`))
     for (const suffix of CODE_EXTENSIONS) candidates.push(`${base}/index${suffix}`)
   }
-  return candidates.find((candidate) => files.includes(candidate) && canonicalPluginFile(candidate, plugin.directory))
+  return candidates.find((candidate) => sources.files.has(candidate) && canonicalPluginFile(candidate, sources.directory))
 }
 
 function literalString(expression: ts.Expression): string | undefined {
@@ -433,18 +465,17 @@ function topLevelConst(source: ts.SourceFile, name: string, exportedOnly = false
   return matches
 }
 
-function namedImportSource(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, localName: string): { source: ts.SourceFile; importedName: string } | undefined {
+function namedImportSource(sources: EvidenceSources, source: ts.SourceFile, localName: string): { source: ts.SourceFile; importedName: string } | undefined {
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.importClause || statement.importClause.isTypeOnly) continue
     const namedBindings = statement.importClause.namedBindings
     if (!namedBindings || !ts.isNamedImports(namedBindings)) continue
     const specifier = namedBindings.elements.find((entry) => !entry.isTypeOnly && entry.name.text === localName)
     if (!specifier) continue
-    const target = uiImportTarget(source.fileName, statement.moduleSpecifier.text, files, plugin)
+    const target = uiImportTarget(source.fileName, statement.moduleSpecifier.text, sources)
     if (target === undefined) return undefined
-    const captured = plugin.sources.find((entry) => entry.file === target)
-    if (captured === undefined) return undefined
-    const imported = parsedSnapshot(captured)
+    const imported = sources.parsedSource(target)
+    if (imported === undefined) return undefined
     return { source: imported, importedName: specifier.propertyName?.text ?? specifier.name.text }
   }
   return undefined
@@ -505,7 +536,7 @@ function hasEnclosingBinding(use: ts.Identifier, name: string): boolean {
   return false
 }
 
-function constantLiteral(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, use: ts.Identifier): string | undefined {
+function constantLiteral(sources: EvidenceSources, source: ts.SourceFile, use: ts.Identifier): string | undefined {
   const name = use.text
   if (hasEnclosingBinding(use, name)) return undefined
 
@@ -516,29 +547,29 @@ function constantLiteral(plugin: PluginInventory, files: readonly string[], sour
   }
   if (local.length > 1) return undefined
 
-  const imported = namedImportSource(plugin, files, source, name)
+  const imported = namedImportSource(sources, source, name)
   if (imported === undefined) return undefined
   const declarations = topLevelConst(imported.source, imported.importedName, true)
   if (declarations.length !== 1 || declarations[0]!.initializer === undefined) return undefined
   return literalString(declarations[0]!.initializer)
 }
 
-function templateSubstitution(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, expression: ts.Expression): string | undefined {
+function templateSubstitution(sources: EvidenceSources, source: ts.SourceFile, expression: ts.Expression): string | undefined {
   const literal = literalString(expression)
   if (literal !== undefined) return literal
-  if (ts.isIdentifier(expression)) return constantLiteral(plugin, files, source, expression)
+  if (ts.isIdentifier(expression)) return constantLiteral(sources, source, expression)
   return undefined
 }
 
-function resolveExpressionTarget(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, expression: ts.Expression): string | undefined {
+function resolveExpressionTarget(sources: EvidenceSources, source: ts.SourceFile, expression: ts.Expression): string | undefined {
   const literal = literalString(expression)
   if (literal !== undefined) return literal
-  if (ts.isIdentifier(expression)) return constantLiteral(plugin, files, source, expression)
+  if (ts.isIdentifier(expression)) return constantLiteral(sources, source, expression)
   if (!ts.isTemplateExpression(expression)) return undefined
 
   let result = expression.head.text
   for (const span of expression.templateSpans) {
-    const substitution = templateSubstitution(plugin, files, source, span.expression)
+    const substitution = templateSubstitution(sources, source, span.expression)
     if (substitution === undefined) return undefined
     result += substitution + span.literal.text
   }
@@ -547,6 +578,6 @@ function resolveExpressionTarget(plugin: PluginInventory, files: readonly string
 
 /** Resolves literals and one-hop top-level const or named-import targets; no general evaluation is performed. */
 export function resolveTarget(plugin: PluginInventory, files: readonly string[], source: ts.SourceFile, expression: ts.Expression): string | undefined {
-  return resolveExpressionTarget(plugin, files, source, expression)
+  return createEvidenceResolver(plugin, files).resolveTarget(source, expression)
 }
 
