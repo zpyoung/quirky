@@ -683,6 +683,53 @@ describe('automation run dispatcher', () => {
     expect(createCount(harness)).toBe(0)
   })
 
+  test('restart attaches independent watches without waiting for a held journal read', async () => {
+    const harness = fixture()
+    const held = Promise.withResolvers<ScriptedMessage[]>()
+    const reading = Promise.withResolvers<void>()
+    const runs = ['held', 'ready'].map((name) => {
+      const definition = makeDefinition(`restart-${name}`, now)
+      harness.addDefinition(definition)
+      const run = harness.store.createRun(definition.id, { trigger: 'scheduled', scheduledFor: now, now })
+      const session = {
+        id: `s_${name}`, kind: 'structured' as const, agent: 'claude', worktreeId: 'wt-existing',
+        cwd: '/repo-a/work', title: 'Claude', status: 'done' as const, createdAt: now, lastActivityAt: now,
+        exitCode: null, exitSignal: null, exitCause: null, restorable: false, launchSettings: null
+      } satisfies ScriptedSession
+      harness.sessions.set(session.id, session)
+      harness.store.claimRun(run.id, now)
+      harness.store.updateRun(run.id, {
+        status: 'dispatched', sessionId: session.id, workspaceId: session.worktreeId,
+        dispatchState: { messageCursor: 0, reused: false, observedWorking: true, observationStartedAt: now }
+      }, now)
+      return run
+    })
+    successfulClaudeResult(harness, 's_ready', 'recovered independently')
+    const call = harness.context.call.bind(harness.context)
+    const intercepted = spyOn(harness.context, 'call').mockImplementation((method, params) => {
+      if (method === 'quirky.structured/messages' && params?.session === 's_held') {
+        reading.resolve()
+        return held.promise
+      }
+      return call(method, params)
+    })
+    let started = false
+    const starting = harness.dispatcher.start().then(() => { started = true })
+    try {
+      await reading.promise
+      await nextTurn()
+      expect(started).toBe(true)
+      expect((await waitRun(harness, runs[1]!.id, 'completed')).outputSnapshot?.content).toBe('recovered independently')
+      expect(harness.store.getRun(runs[0]!.id)?.status).toBe('dispatched')
+      expect(createCount(harness)).toBe(0)
+    } finally {
+      harness.dispatcher.dispose()
+      held.resolve([])
+      await starting
+      intercepted.mockRestore()
+    }
+  })
+
   test('startup safely dispatches scheduled pending runs and is idempotent', async () => {
     const harness = fixture()
     const { run } = newRun(harness)

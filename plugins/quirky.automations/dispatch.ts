@@ -365,7 +365,7 @@ function setupError(result: WorktreeCreateResult, decision: 'run' | 'skip'): str
 
 export function createAutomationDispatcher(context: AutomationDispatchContext, hooks: AutomationDispatchHooks): AutomationDispatcher {
   const engine = createSupervision(context)
-  const watches = new Map<string, { controller: AbortController; firstSample: Promise<void> }>()
+  const watches = new Map<string, AbortController>()
   const setupDelays = new Map<ReturnType<typeof setTimeout>, () => void>()
   const activeProvenanceCapabilities = new Set<string>()
   const revokeProvenanceCapability = (dispatchToken: string): void => {
@@ -376,10 +376,10 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
   let startTask: Promise<void> | null = null
 
   const stopWatching = (runId: string): void => {
-    const watch = watches.get(runId)
-    if (!watch) return
+    const controller = watches.get(runId)
+    if (!controller) return
     watches.delete(runId)
-    watch.controller.abort()
+    controller.abort()
   }
 
   const update = (runId: string, patch: AutomationRunPatch): AutomationRun | null => {
@@ -625,14 +625,12 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     })
   }
 
-  const watch = (runId: string): Promise<void> => {
-    if (disposed) return Promise.resolve()
-    const existing = watches.get(runId)
-    if (existing) return existing.firstSample
+  const watch = (runId: string): void => {
+    if (disposed || watches.has(runId)) return
     const run = hooks.store.getRun(runId)
-    if (!run || run.status !== 'dispatched' || !run.sessionId || !run.dispatchState) return Promise.resolve()
+    if (!run || run.status !== 'dispatched' || !run.sessionId || !run.dispatchState) return
     const definition = hooks.store.get(run.automationId)
-    if (!definition) return Promise.resolve()
+    if (!definition) return
     const sessionId = run.sessionId
     const initialCursor = run.dispatchState.messageCursor
     const target = {
@@ -641,112 +639,98 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       agent: typeof run.launchSettings?.agent === 'string' ? run.launchSettings.agent : definition.agentId
     }
     const controller = new AbortController()
-    const { promise: firstSample, resolve } = Promise.withResolvers<void>()
-    let firstSamplePending = true
-    const settleFirstSample = (): void => {
-      if (!firstSamplePending) return
-      firstSamplePending = false
-      resolve()
-    }
     const done = { kind: 'done' as const, value: undefined }
-    const activeWatch = { controller, firstSample }
-    watches.set(runId, activeWatch)
-    void Promise.resolve().then(() => engine.watchStructured({
+    watches.set(runId, controller)
+    void engine.watchStructured({
       target,
       signal: controller.signal,
       journal: () => {
         const current = hooks.store.getRun(runId)
         return { afterSeq: current?.dispatchState?.messageCursor ?? initialCursor }
       },
-      onSample: async (sample, signal) => {
-        try {
-          return await hooks.inLane(run.automationId, async () => {
-            if (disposed || signal.aborted) return done
-            const current = hooks.store.getRun(runId)
-            if (!current || current.status !== 'dispatched' || !current.sessionId || !current.dispatchState) {
-              if (!current || finalStatus(current.status)) stopWatching(runId)
-              return done
-            }
-            const currentDefinition = hooks.store.get(current.automationId)
-            if (!currentDefinition) {
-              stopWatching(runId)
-              return done
-            }
-            if (current.sessionId !== sessionId) {
-              finish(runId, 'dispatch_failed', 'Structured session identity no longer matches the dispatched run.')
-              return done
-            }
-            if (!sample.session.ok) {
-              finish(runId, 'dispatch_failed', `Structured runner was lost while observing this run: ${messageOf(sample.session.error)}`)
-              return done
-            }
-            if (!sample.journal.ok) {
-              finish(runId, 'dispatch_failed', `Structured runner was lost while observing this run: ${messageOf(sample.journal.error)}`)
-              return done
-            }
-            const session = sample.session.value
-            const messages = sample.journal.value.messages
-            const state = current.dispatchState
-            const agentId = typeof current.launchSettings?.agent === 'string' ? current.launchSettings.agent : currentDefinition.agentId
-            if (!sessionIsStructured(session) || session.id !== current.sessionId || session.agent !== agentId || session.worktreeId !== current.workspaceId) {
-              finish(runId, 'dispatch_failed', 'Structured session identity no longer matches the dispatched run.')
-              return done
-            }
-            const providerResult = postCursorResult(messages, state.messageCursor, agentId)
-            const output = latestOutput(messages, state.messageCursor, providerResult)
-            if (providerResult) {
-              const usage = collectedUsage(current, messages, providerResult, agentId, session, hooks.clock())
-              const outputSnapshot = output ? {
-                format: 'plain_text' as const,
-                content: output.content,
-                capturedAt: hooks.clock(),
-                truncated: output.truncated
-              } : undefined
-              if (!providerResult.success) {
-                finish(runId, 'dispatch_failed', providerResult.error, {
-                  ...(outputSnapshot ? { outputSnapshot } : {}), ...(usage ? { usage } : {})
-                })
-              } else {
-                finish(runId, 'completed', null, {
-                  ...(outputSnapshot ? { outputSnapshot } : {}), ...(usage ? { usage } : {})
-                })
-              }
-              return done
-            }
-            if (session.status === 'waiting') {
-              finish(runId, 'dispatch_failed', 'Structured provider is waiting for approval or user input; unattended automations cannot answer it.', {
-                ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
-              })
-              if (!disposed) {
-                try { await engine.stop({ kind: 'structured', session: session.id }) } catch {}
-              }
-              return done
-            }
-            if (session.status === 'exited') {
-              finish(runId, 'dispatch_failed', 'Structured runner exited without a successful post-dispatch provider result.', {
-                ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
-              })
-              return done
-            }
-            if (hooks.clock() - state.observationStartedAt >= OBSERVATION_DEADLINE_MS) {
-              finish(runId, 'dispatch_failed', 'Structured run exceeded the six-hour observation deadline.', {
-                ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
-              })
-              if (!disposed) {
-                try { await engine.stop({ kind: 'structured', session: session.id }) } catch {}
-              }
-              return done
-            }
-            if (session.status === 'working' && !state.observedWorking) {
-              update(runId, { dispatchState: { ...state, observedWorking: true } })
-            }
-            return { kind: 'continue' }
-          })
-        } finally {
-          settleFirstSample()
+      onSample: (sample, signal) => hooks.inLane(run.automationId, async () => {
+        if (disposed || signal.aborted) return done
+        const current = hooks.store.getRun(runId)
+        if (!current || current.status !== 'dispatched' || !current.sessionId || !current.dispatchState) {
+          if (!current || finalStatus(current.status)) stopWatching(runId)
+          return done
         }
-      }
-    })).catch(async (error: unknown) => {
+        const currentDefinition = hooks.store.get(current.automationId)
+        if (!currentDefinition) {
+          stopWatching(runId)
+          return done
+        }
+        if (current.sessionId !== sessionId) {
+          finish(runId, 'dispatch_failed', 'Structured session identity no longer matches the dispatched run.')
+          return done
+        }
+        if (!sample.session.ok) {
+          finish(runId, 'dispatch_failed', `Structured runner was lost while observing this run: ${messageOf(sample.session.error)}`)
+          return done
+        }
+        if (!sample.journal.ok) {
+          finish(runId, 'dispatch_failed', `Structured runner was lost while observing this run: ${messageOf(sample.journal.error)}`)
+          return done
+        }
+        const session = sample.session.value
+        const messages = sample.journal.value.messages
+        const state = current.dispatchState
+        const agentId = typeof current.launchSettings?.agent === 'string' ? current.launchSettings.agent : currentDefinition.agentId
+        if (!sessionIsStructured(session) || session.id !== current.sessionId || session.agent !== agentId || session.worktreeId !== current.workspaceId) {
+          finish(runId, 'dispatch_failed', 'Structured session identity no longer matches the dispatched run.')
+          return done
+        }
+        const providerResult = postCursorResult(messages, state.messageCursor, agentId)
+        const output = latestOutput(messages, state.messageCursor, providerResult)
+        if (providerResult) {
+          const usage = collectedUsage(current, messages, providerResult, agentId, session, hooks.clock())
+          const outputSnapshot = output ? {
+            format: 'plain_text' as const,
+            content: output.content,
+            capturedAt: hooks.clock(),
+            truncated: output.truncated
+          } : undefined
+          if (!providerResult.success) {
+            finish(runId, 'dispatch_failed', providerResult.error, {
+              ...(outputSnapshot ? { outputSnapshot } : {}), ...(usage ? { usage } : {})
+            })
+          } else {
+            finish(runId, 'completed', null, {
+              ...(outputSnapshot ? { outputSnapshot } : {}), ...(usage ? { usage } : {})
+            })
+          }
+          return done
+        }
+        if (session.status === 'waiting') {
+          finish(runId, 'dispatch_failed', 'Structured provider is waiting for approval or user input; unattended automations cannot answer it.', {
+            ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
+          })
+          if (!disposed) {
+            try { await engine.stop({ kind: 'structured', session: session.id }) } catch {}
+          }
+          return done
+        }
+        if (session.status === 'exited') {
+          finish(runId, 'dispatch_failed', 'Structured runner exited without a successful post-dispatch provider result.', {
+            ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
+          })
+          return done
+        }
+        if (hooks.clock() - state.observationStartedAt >= OBSERVATION_DEADLINE_MS) {
+          finish(runId, 'dispatch_failed', 'Structured run exceeded the six-hour observation deadline.', {
+            ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
+          })
+          if (!disposed) {
+            try { await engine.stop({ kind: 'structured', session: session.id }) } catch {}
+          }
+          return done
+        }
+        if (session.status === 'working' && !state.observedWorking) {
+          update(runId, { dispatchState: { ...state, observedWorking: true } })
+        }
+        return { kind: 'continue' }
+      })
+    }).catch(async (error: unknown) => {
       if (disposed || controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return
       const current = hooks.store.getRun(runId)
       if (!current) return
@@ -758,10 +742,8 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
         })
       } catch {}
     }).finally(() => {
-      settleFirstSample()
-      if (watches.get(runId) === activeWatch) watches.delete(runId)
+      if (watches.get(runId) === controller) watches.delete(runId)
     }).catch(() => {})
-    return firstSample
   }
 
   const verifyOrFinish = async (runId: string, snapshot: Snapshot, target: AutomationTarget): Promise<VerifyResult | null> => {
@@ -1004,13 +986,12 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       for (const run of activeRuns) {
         if (disposed) return
         if (run.status === 'pending' && run.trigger === 'scheduled') {
-          const dispatched = await dispatch(run.id)
-          if (dispatched?.status === 'dispatched') await watch(run.id)
+          await dispatch(run.id)
           continue
         }
         if (run.status === 'dispatched') {
           const current = hooks.store.getRun(run.id)
-          if (current?.status === 'dispatched' && current.sessionId && current.dispatchState) await watch(current.id)
+          if (current?.status === 'dispatched' && current.sessionId && current.dispatchState) void watch(current.id)
           else if (current?.status === 'dispatched') {
             await hooks.inLane(run.automationId, () => finish(run.id, 'dispatch_failed', 'Dispatched run has no durable message cursor; it cannot be safely reconciled.'))
           }
@@ -1033,7 +1014,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
   const dispose = (): void => {
     if (disposed) return
     disposed = true
-    for (const { controller } of watches.values()) controller.abort()
+    for (const controller of watches.values()) controller.abort()
     watches.clear()
     engine.dispose()
     for (const [timer, resolve] of setupDelays) {
