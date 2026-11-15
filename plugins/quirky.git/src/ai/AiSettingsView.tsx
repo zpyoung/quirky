@@ -190,7 +190,7 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
       ? generators(agents)
       : agents.agents.filter(isUsable)
   const fallback = agents === null ? '' : choices.find((choice) => choice.id === agents.defaultAgent)?.id ?? choices[0]?.id ?? ''
-  const persist = async (fields: { agent?: string; args?: string; template?: string; launchOptions?: RecipeLaunchOptions | null }) => {
+  async function persist(fields: { agent?: string; args?: string; template?: string; launchOptions?: RecipeLaunchOptions | null }): Promise<void> {
     try {
       const result = (await context.call('quirky.git/setAiRecipe', { worktree, action, scope: 'global', ...fields })) as { recipe: Recipe }
       onRecipe(result.recipe)
@@ -198,13 +198,20 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
       context.toast('Could not save the AI recipe', messageOf(error))
     }
   }
-  const [agent, changeAgent] = useDraft(recipe?.agent ?? '', (next) => {
+  async function saveAgent(next: string): Promise<void> {
     const oldProvider = (recipe?.agent ?? '') || fallback
     const nextProvider = next || fallback
-    return persist({ agent: next, ...(oldProvider === nextProvider ? {} : { launchOptions: null }) })
-  })
-  const [args, changeArgs] = useDraft(recipe?.args ?? '', (next) => persist({ args: next }))
-  const [template, changeTemplate] = useDraft(recipe?.template ?? DEFAULT_TEMPLATE, (next) => persist({ template: next }))
+    await persist({ agent: next, ...(oldProvider === nextProvider ? {} : { launchOptions: null }) })
+  }
+  function saveArgs(next: string): Promise<void> {
+    return persist({ args: next })
+  }
+  function saveTemplate(next: string): Promise<void> {
+    return persist({ template: next })
+  }
+  const [agent, changeAgent] = useDraft(recipe?.agent ?? '')
+  const [args, changeArgs] = useDraft(recipe?.args ?? '')
+  const [template, changeTemplate] = useDraft(recipe?.template ?? DEFAULT_TEMPLATE)
   const provider = agent || fallback
   const optionValue = agent === (recipe?.agent ?? '') ? recipe?.launchOptions ?? {} : {}
   const listed = choices.some((choice) => choice.id === agent) || agent === '' || (action === 'commitMessage' && agent === CUSTOM_AGENT)
@@ -222,7 +229,7 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
           className="ui-text-field__input"
           aria-label={`${title} agent`}
           value={agent}
-          onChange={(event) => changeAgent(event.target.value)}
+          onChange={(event) => changeAgent(event.target.value, saveAgent)}
         >
           <option value="">Default agent</option>
           {!listed && <option value={agent}>{agent}</option>}
@@ -240,7 +247,7 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
         aria-label={`${title} CLI arguments`}
         spellCheck={false}
         value={args}
-        onChange={(event) => changeArgs(event.target.value)}
+        onChange={(event) => changeArgs(event.target.value, saveArgs)}
       />
       <LaunchOptionsEditor
         key={`${action}:${provider}`}
@@ -262,11 +269,11 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
             rows={4}
             spellCheck={false}
             value={template}
-            onChange={(event) => changeTemplate(event.target.value)}
+            onChange={(event) => changeTemplate(event.target.value, saveTemplate)}
           />
         </FormRow>
         <div className="ui-cluster">
-          <Button type="button" disabled={template === DEFAULT_TEMPLATE} onClick={() => changeTemplate(DEFAULT_TEMPLATE, '')}>
+          <Button type="button" disabled={template === DEFAULT_TEMPLATE} onClick={() => changeTemplate(DEFAULT_TEMPLATE, saveTemplate, '')}>
             Reset
           </Button>
         </div>
@@ -299,7 +306,7 @@ function AiSettingsBody({ context, worktree }: { context: UiPluginContext; workt
   const [enabled, setEnabled] = useState(settings.enabled)
   useEffect(() => setEnabled(settings.enabled), [settings.enabled])
 
-  const write = async (name: string, value: boolean | string) => {
+  async function write(name: string, value: boolean | string): Promise<void> {
     try {
       await context.call('setting.set', { id: SETTING(name), value })
     } catch (error) {
@@ -307,7 +314,10 @@ function AiSettingsBody({ context, worktree }: { context: UiPluginContext; workt
       setEnabled(readSettings(context).enabled)
     }
   }
-  const [custom, changeCustom] = useDraft(settings.custom, (next) => write('ai-custom-command', next))
+  function saveCustom(next: string): Promise<void> {
+    return write('ai-custom-command', next)
+  }
+  const [custom, changeCustom] = useDraft(settings.custom)
   const switchId = useId()
 
   return (
@@ -336,7 +346,7 @@ function AiSettingsBody({ context, worktree }: { context: UiPluginContext; workt
         aria-label="Custom command"
         spellCheck={false}
         value={custom}
-        onChange={(event) => changeCustom(event.target.value)}
+        onChange={(event) => changeCustom(event.target.value, saveCustom)}
         help="Command line Quirky runs when a recipe uses Custom command."
       />
       {ACTIONS.map(({ action, title }) => (

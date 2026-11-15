@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
+import { messageOf } from '../panel/format'
 
 /** One agent as `quirky.agents/list` reports it, with the fields the AI actions need. */
 export type AgentInfo = { id: string; label: string; installed: boolean; enabled: boolean; isDefault: boolean; canGenerate: boolean }
@@ -27,37 +28,61 @@ export function hasCustomCommand(context: UiPluginContext): boolean {
 }
 
 export type Agents = {
-  /** Null until the first read finishes, and after a read that failed. */
+  /** The last successfully read list, or null before the first successful read. */
   list: AgentList | null
   /** True once a read finished, whether or not it worked. */
   settled: boolean
+  /** The latest read failure, cleared by a successful read. */
+  error: string | null
+  retry(): void
+}
+
+type AgentState = Omit<Agents, 'retry'>
+async function readAgents(
+  context: UiPluginContext,
+  active: boolean,
+  latest: MutableRefObject<number>,
+  alive: MutableRefObject<boolean>,
+  setState: Dispatch<SetStateAction<AgentState>>
+): Promise<void> {
+  if (!active || !alive.current) return
+  const request = ++latest.current
+  try {
+    const result = (await context.call('quirky.agents/list', {})) as AgentList
+    if (alive.current && request === latest.current) setState({ list: result, settled: true, error: null })
+  } catch (error) {
+    if (alive.current && request === latest.current) {
+      setState((previous) => ({ ...previous, settled: true, error: messageOf(error) }))
+    }
+  }
 }
 
 /**
  * The agents Quirky can launch, read when `active` turns on and again whenever the agents
- * plugin announces a change.
+ * plugin announces a change. Stale reads never replace a newer result.
  */
 export function useAgents(context: UiPluginContext, active: boolean): Agents {
-  const [state, setState] = useState<Agents>({ list: null, settled: false })
+  const [state, setState] = useState<AgentState>({ list: null, settled: false, error: null })
+  const latest = useRef(0)
+  const alive = useRef(false)
+
+  function retryAgents(): void {
+    void readAgents(context, active, latest, alive, setState)
+  }
+
   useEffect(() => {
     if (!active) return
-    let alive = true
-    const read = async () => {
-      try {
-        const result = (await context.call('quirky.agents/list', {})) as AgentList
-        if (alive) setState({ list: result, settled: true })
-      } catch {
-        if (alive) setState((prev) => (prev.settled ? prev : { list: null, settled: true }))
-      }
-    }
-    void read()
+    alive.current = true
+    void readAgents(context, active, latest, alive, setState)
     const unsubscribe = context.subscribe((event) => {
-      if (event.type === 'quirky.agents/changed') void read()
+      if (event.type === 'quirky.agents/changed') void readAgents(context, active, latest, alive, setState)
     })
     return () => {
-      alive = false
+      alive.current = false
+      latest.current += 1
       unsubscribe()
     }
-  }, [context, active])
-  return state
+  }, [context, active, latest, alive, setState])
+
+  return { ...state, retry: retryAgents }
 }
