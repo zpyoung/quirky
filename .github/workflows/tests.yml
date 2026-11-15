@@ -122,7 +122,11 @@ jobs:
             echo "No installed Chrome or Chromium executable found" >&2
             exit 1
           fi
-          timeout --signal=TERM --kill-after=2s 5s "$chrome" --version
+          version_started=$SECONDS
+          version_status=0
+          timeout --signal=TERM --kill-after=5s 20s "$chrome" --version || version_status=$?
+          echo "Chrome version probe: $((SECONDS - version_started))s (exit $version_status)"
+          if [ "$version_status" -ne 0 ]; then exit "$version_status"; fi
           restriction=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
           if [ -f "$restriction" ] && [ "$(cat "$restriction")" = 1 ]; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -148,6 +152,7 @@ jobs:
           trap 'exit 130' INT
           trap 'exit 143' TERM
           mkdir -p "$root/home" "$root/config" "$root/cache" "$root/profile"
+          smoke_started=$SECONDS
           timeout --signal=TERM --kill-after=5s 20s env \
             HOME="$root/home" XDG_CONFIG_HOME="$root/config" XDG_CACHE_HOME="$root/cache" \
             "$chrome" --headless --dump-dom --disable-background-networking \
@@ -155,12 +160,14 @@ jobs:
             'data:text/html,<html><body>quirky-linux-chrome</body></html>' \
             > "$root/dom.html" 2> "$root/chrome.log" &
           smoke_pid=$!
-          if wait "$smoke_pid"; then
+          smoke_status=0
+          wait "$smoke_pid" || smoke_status=$?
+          echo "Chrome sandbox smoke: $((SECONDS - smoke_started))s (exit $smoke_status)"
+          if [ "$smoke_status" -eq 0 ]; then
             grep -q 'quirky-linux-chrome' "$root/dom.html"
           else
-            status=$?
             cat "$root/chrome.log" >&2
-            exit "$status"
+            exit "$smoke_status"
           fi
 
       - name: Run shard

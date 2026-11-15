@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { discover, macosOnly } from '../suite'
+import { createProcessScope } from '../test-support/process-scope'
 
 type Step = { id?: string; name?: string; uses?: string; run?: string; if?: string | boolean; with?: Record<string, unknown>; env?: Record<string, string> }
 type Job = {
@@ -150,6 +153,92 @@ describe('sandboxed Linux browser acceptance', () => {
     expect(script).toContain('sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0')
     expect(script.match(/sudo sysctl[^\n]*/g)).toEqual(['sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0'])
   })
+
+  for (const [mode, expectedExit] of [
+    ['slow-version', 0],
+    ['missing-browser', 1],
+    ['version-failure', 7],
+    ['smoke-failure', 9],
+    ['missing-marker', 1],
+  ] as const) {
+    test(`Chrome preparation handles ${mode} without weakening acceptance`, async () => {
+      const root = mkdtempSync(join(tmpdir(), 'quirky-chrome-preparation-'))
+      const bin = join(root, 'bin')
+      const runnerTemp = join(root, 'runner-temp')
+      const home = join(root, 'home')
+      const chrome = join(bin, 'chrome')
+      const scope = createProcessScope()
+      try {
+        for (const directory of [bin, runnerTemp, home]) mkdirSync(directory)
+        const timeout = join(bin, 'timeout')
+        // bash subprocess deadlines cannot be advanced with fake timers
+        writeFileSync(timeout, `#!${process.execPath}
+const args = process.argv.slice(2)
+while (args[0]?.startsWith('--')) args.shift()
+const seconds = Number(args.shift()?.replace(/s$/, ''))
+if (!Number.isFinite(seconds) || seconds <= 0) process.exit(2)
+const child = Bun.spawn(args, { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })
+let expired = false
+const timer = setTimeout(() => { expired = true; child.kill('SIGKILL') }, seconds * 1000)
+const code = await child.exited
+clearTimeout(timer)
+process.exit(expired ? 124 : code)
+`)
+        writeFileSync(chrome, `#!${process.execPath}
+const mode = process.env.CHROME_PREPARATION_CASE
+if (process.argv.includes('--version')) {
+  if (mode === 'slow-version') await Bun.sleep(6000)
+  if (mode === 'version-failure') process.exit(7)
+  console.log('Owned Chrome stand-in')
+} else {
+  if (mode === 'smoke-failure') process.exit(9)
+  console.log(mode === 'missing-marker' ? '<p>wrong document</p>' : '<p>quirky-linux-chrome</p>')
+}
+`)
+        const sudo = join(bin, 'sudo')
+        writeFileSync(sudo, '#!/bin/sh\nprintf "unexpected sudo invocation\\n" >&2\nexit 91\n')
+        for (const executable of [timeout, chrome, sudo]) chmodSync(executable, 0o700)
+        const candidate = mode === 'missing-browser' ? join(root, 'missing-chrome') : chrome
+        const script = prepare()!.run!
+          .replace(/\/usr\/bin\/(?:google-chrome(?:-stable)?|chromium(?:-browser)?)/g, candidate)
+          .replace('/proc/sys/kernel/apparmor_restrict_unprivileged_userns', join(root, 'absent-restriction'))
+        const child = scope.spawn(['bash', '-c', script], {
+          env: {
+            ...process.env,
+            ...scope.env,
+            PATH: `${bin}:${process.env.PATH ?? ''}`,
+            HOME: home,
+            QUIRKY_HOME: home,
+            RUNNER_TEMP: runnerTemp,
+            CHROME_PREPARATION_CASE: mode,
+            BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0',
+          },
+          stdin: 'ignore',
+          stdout: 'pipe',
+          stderr: 'pipe',
+        })
+        const [code, stdout, stderr] = await Promise.all([
+          child.exited,
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+        ])
+        expect({ code, stderr }).toEqual({ code: expectedExit, stderr: mode === 'missing-browser' ? 'No installed Chrome or Chromium executable found\n' : '' })
+        if (mode !== 'missing-browser') {
+          expect(stdout).toMatch(new RegExp(`Chrome version probe: \\d+s \\(exit ${mode === 'version-failure' ? 7 : 0}\\)`))
+        }
+        if (mode === 'slow-version' || mode === 'smoke-failure' || mode === 'missing-marker') {
+          expect(stdout).toMatch(new RegExp(`Chrome sandbox smoke: \\d+s \\(exit ${mode === 'smoke-failure' ? 9 : 0}\\)`))
+        }
+        expect(readdirSync(runnerTemp)).toEqual([])
+      } finally {
+        try {
+          await scope.cleanup()
+        } finally {
+          rmSync(root, { recursive: true, force: true })
+        }
+      }
+    }, 30_000)
+  }
 })
 
 describe('Linux test coverage routing', () => {
