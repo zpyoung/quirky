@@ -738,10 +738,34 @@ test('shows button focus return, leaves right-click without a return target, and
   await waitFor(() => menu() === null)
   expect(document.activeElement?.classList.contains('worktree-menu')).toBe(true)
 
-  expect((await dispatchTree(h, 'w1', 'start-rename')).delivered).toBe(1)
+  await openRowMenu(h, 'w1', 1)
+  await click(menuItem('Rename'))
   expect(h.host.querySelectorAll('.worktree-rename').length).toBeGreaterThan(0)
   expect(document.activeElement?.outerHTML ?? 'no active element').toContain('worktree-rename')
   expect(h.renames).toEqual([])
+  const input = document.activeElement as HTMLInputElement
+  expect(input).toBe(h.host.querySelectorAll<HTMLInputElement>('.worktree-rename')[1])
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'duplicate-retry')
+  h.world.commandFailure = new Error('cancel unavailable')
+  await keydown(input, 'Escape')
+  expect(document.activeElement).toBe(input)
+  expect(h.renames).toEqual([])
+  h.world.commandFailure = null
+  const cancelGate = deferred<unknown>()
+  h.world.holdOperation = 'cancel-rename'
+  h.world.commandGate = cancelGate.promise
+  await keydown(input, 'Escape')
+  const duplicateInput = h.host.querySelector<HTMLInputElement>('.worktree-rename')!
+  await act(async () => duplicateInput.focus())
+  expect(h.renames).toEqual([])
+  await act(async () => cancelGate.reject(new Error('delayed cancel unavailable')))
+  await flush()
+  expect(document.activeElement).toBe(input)
+  expect(h.renames).toEqual([])
+  h.world.holdOperation = null
+  h.world.commandGate = null
+  await keydown(input, 'Enter')
+  expect(h.renames).toEqual([['w1', 'duplicate-retry']])
 })
 
 test('reports bridge failures for open, fold, rename, and copy, but keeps close-menu quiet', async () => {

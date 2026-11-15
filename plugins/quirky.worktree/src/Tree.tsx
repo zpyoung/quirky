@@ -423,6 +423,22 @@ function WorktreeRowView({
     })
   }
   const childLabel = `${childCount} ${childCount === 1 ? 'child' : 'children'} of ${worktree.name}${childAttention === 'error' ? ', one errored' : childAttention === 'waiting' ? ', one waiting on you' : ''}`
+  const onRowContextMenu = (event: MouseEvent<HTMLLIElement>) => {
+    event.preventDefault()
+    disarmHover()
+    onMenu(worktree, event.clientX, event.clientY, undefined, event.currentTarget)
+  }
+  const onMenuButtonClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    disarmHover()
+    onMenu(
+      worktree,
+      bounds.left,
+      bounds.bottom,
+      event.currentTarget,
+      event.currentTarget.closest<HTMLElement>('[data-worktree-id]') ?? undefined
+    )
+  }
 
   const finishRename = (value: string | null) => {
     if (renameDone.current) return
@@ -441,11 +457,7 @@ function WorktreeRowView({
       draggable={worktree.kind === 'git' && !renaming}
       onDragStart={(event) => onDragStart(worktree, event)}
       onDragEnd={onDragEnd}
-      onContextMenu={(event) => {
-        event.preventDefault()
-        disarmHover()
-        onMenu(worktree, event.clientX, event.clientY, undefined, event.currentTarget)
-      }}
+      onContextMenu={onRowContextMenu}
     >
       <div
         className="worktree-row"
@@ -523,11 +535,7 @@ function WorktreeRowView({
                 className="worktree-menu"
                 label={`Actions for ${worktree.name}`}
                 aria-haspopup="menu"
-                onClick={(event) => {
-                  const box = event.currentTarget.getBoundingClientRect()
-                  disarmHover()
-                  onMenu(worktree, box.left, box.bottom, event.currentTarget, event.currentTarget.closest<HTMLElement>('[data-worktree-id]') ?? undefined)
-                }}
+                onClick={onMenuButtonClick}
               >
                 ⋯
               </IconButton>
@@ -1186,6 +1194,8 @@ export function Tree({
       if (hidden) return []
       const repo = repoById.get(worktree.repoId)
       const projectName = repo ? repoLabel(repo) : worktree.repoId
+      const onRenameCommit = (name: string) => commitRename(worktree, name)
+      const onRenameCancel = () => { void requestRenameCancel(worktree.id) }
       return [
         <WorktreeRowView
           key={worktree.id}
@@ -1216,8 +1226,8 @@ export function Tree({
           onMenu={(item, x, y, trigger, originRow) =>
             requestContextMenuAt('workspace', item.id, x, y, trigger !== undefined, trigger, originRow)
           }
-          onRenameCommit={(name) => commitRename(worktree, name)}
-          onRenameCancel={() => { void requestRenameCancel(worktree.id) }}
+          onRenameCommit={onRenameCommit}
+          onRenameCancel={onRenameCancel}
           onDragStart={(item, event) => {
             if (item.kind !== 'git') return
             draggedWorktree.current = item
@@ -1499,19 +1509,28 @@ export function Tree({
     requestContextMenuAt(kind, target, bounds.left, bounds.bottom, true, button, originRow)
   }
 
-  const renameInputFor = (target: string): HTMLInputElement | null =>
-    [...(treeRoot.current?.querySelectorAll<HTMLInputElement>('.worktree-rename') ?? [])].find((input) =>
-      input.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId === target
-    ) ?? null
+  const renameInputFor = (target: string): HTMLInputElement | null => {
+    const active = document.activeElement
+    const root = treeRoot.current
+    if (active instanceof HTMLInputElement && root?.contains(active) &&
+      active.classList.contains('worktree-rename') &&
+      active.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId === target) return active
+    for (const input of root?.querySelectorAll<HTMLInputElement>('.worktree-rename') ?? []) {
+      if (input.closest<HTMLElement>('[data-worktree-id]')?.dataset.worktreeId === target) return input
+    }
+    return null
+  }
 
   const requestRenameCancel = (target: string): Promise<boolean> => {
     const session = renameRef.current
     if (!session || session.worktreeId !== target) return Promise.resolve(false)
+    const input = renameInputFor(target)
     renameDone.current = true
     return runTreeControl(target, 'cancel-rename', { seq: session.seq }).then((accepted) => {
       if (!accepted && renameRef.current?.seq === session.seq) {
+        if (input?.isConnected) input.focus()
+        else renameInputFor(target)?.focus()
         renameDone.current = false
-        renameInputFor(target)?.focus()
       }
       return accepted
     })
