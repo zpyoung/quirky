@@ -772,12 +772,12 @@ export class LoopDriver {
       this.turnSentAt = this.now()
       this.busyEdgeAt = null
       try {
-        await this.supervision.send({
+        await this.awaitCall(this.supervision.send({
           session: sessionId,
           text: prompt,
           requireIdle: true,
           expectedAfterSeq: cursor
-        })
+        }), signal)
         onDelivered(prompt, treeBefore, cursor)
         this.store.consumeSteerNotes(this.loopId, notes.map((note) => note.id), n)
         const pending = this.pendingPrompt

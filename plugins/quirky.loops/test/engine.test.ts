@@ -30,6 +30,9 @@ afterEach(async () => {
 })
 
 type ScriptedTurn = 'settle' | 'exit' | 'hold'
+type SendBarrier = { entered: () => void; wait: Promise<void>; release: () => void; settled: () => void }
+type JournalReadGate = { entered: () => void; wait: Promise<void>; release: () => void }
+type HeldJournalRead = { entered: Promise<void>; release: () => void }
 type ProcessHandler = (argv: readonly string[], options?: RunOptions) => Promise<RunResult>
 type ProcessCall = { argv: string[]; options?: RunOptions }
 
@@ -80,8 +83,10 @@ class Runtime {
   readonly journalCursorsAfterFailure: number[] = []
   pendingAsks: { id: string; sessionId: string; envelope: { status: 'pending' } }[] = []
   private sessionCount = 0
-  private sendBarrier: { entered: () => void; wait: Promise<void>; release: () => void } | null = null
+  private sendBarrier: SendBarrier | null = null
   private activeSendRelease: (() => void) | null = null
+  private journalReadGateAfterFailure: JournalReadGate | null = null
+  private journalReadGate: JournalReadGate | null = null
   private readonly database: Database
   private readonly pluginStore: PluginStore
   readonly context: PluginContext
@@ -166,11 +171,32 @@ class Runtime {
   close(): void {
     this.database.close()
   }
-  holdNextSend(): { entered: Promise<void>; release: () => void } {
+  storedJournalCursor(loopId: string): number {
+    return this.pluginStore.get<{ journal_cursor: number }>(
+      'SELECT journal_cursor FROM loops WHERE id = ?', loopId
+    )?.journal_cursor ?? 0
+  }
+  holdNextSend(): { entered: Promise<void>; release: () => void; settled: Promise<void> } {
     const entered = Promise.withResolvers<void>()
     const released = Promise.withResolvers<void>()
-    this.sendBarrier = { entered: entered.resolve, wait: released.promise, release: released.resolve }
+    const settled = Promise.withResolvers<void>()
+    this.sendBarrier = {
+      entered: entered.resolve,
+      wait: released.promise,
+      release: released.resolve,
+      settled: settled.resolve
+    }
     this.activeSendRelease = released.resolve
+    return { entered: entered.promise, release: released.resolve, settled: settled.promise }
+  }
+  holdJournalReadAfterFailure(): HeldJournalRead {
+    const entered = Promise.withResolvers<void>()
+    const released = Promise.withResolvers<void>()
+    this.journalReadGateAfterFailure = {
+      entered: entered.resolve,
+      wait: released.promise,
+      release: released.resolve
+    }
     return { entered: entered.promise, release: released.resolve }
   }
   releasePendingOperations(): void {
@@ -180,6 +206,12 @@ class Runtime {
     barrier?.release()
     this.activeSendRelease?.()
     this.activeSendRelease = null
+    for (const gate of [this.journalReadGateAfterFailure, this.journalReadGate]) {
+      gate?.entered()
+      gate?.release()
+    }
+    this.journalReadGateAfterFailure = null
+    this.journalReadGate = null
   }
 
   private wakeWaiters(): void {
@@ -271,6 +303,7 @@ class Runtime {
         barrier.entered()
         await barrier.wait
         this.activeSendRelease = null
+        barrier.settled()
       }
       const session = this.sessions.get(sessionId)
       const journal = this.journals.get(sessionId) ?? []
@@ -296,10 +329,18 @@ class Runtime {
       if (this.failedJournalCursors.length > 0) {
         this.journalCursorsAfterFailure.push(afterSeq)
         this.wakeWaiters()
+        const gate = this.journalReadGate
+        this.journalReadGate = null
+        if (gate) {
+          gate.entered()
+          await gate.wait
+        }
       }
       if (this.sends.length > 0 && this.failedJournalResponsesAfterSend.length > 0) {
         this.failedJournalCursors.push(afterSeq)
         const response = this.failedJournalResponsesAfterSend.shift()
+        this.journalReadGate = this.journalReadGateAfterFailure
+        this.journalReadGateAfterFailure = null
         this.wakeWaiters()
         return response
       }
@@ -383,14 +424,17 @@ function wrapSupervisionMethod(
   engine: SupervisionEngine,
   method: Extract<keyof SupervisionEngine, string>,
   calls: SupervisionCall[],
-  observeSample?: (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => void
+  observeSample?: (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => void,
+  beforeWatch?: (input: StructuredWatch<unknown>) => void
 ): void {
   const target = engine as unknown as Record<string, (...args: unknown[]) => unknown>
   const original = target[method]!.bind(engine)
   spyOn(target, method).mockImplementation((...args) => {
     calls.push({ method, args })
-    if (method !== 'watchStructured' || !observeSample) return original(...args)
+    if (method !== 'watchStructured') return original(...args)
     const input = args[0] as StructuredWatch<unknown>
+    beforeWatch?.(input)
+    if (!observeSample) return original(input)
     return original({
       ...input,
       onSample: async (sample: StructuredSample, signal: AbortSignal) => {
@@ -402,7 +446,10 @@ function wrapSupervisionMethod(
   })
 }
 
-function spyOnSupervisionEngine(observeSample?: (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => void) {
+function spyOnSupervisionEngine(
+  observeSample?: (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => void,
+  beforeWatch?: (input: StructuredWatch<unknown>) => void
+) {
   const calls: SupervisionCall[] = []
   const create = supervision.createSupervision
   const factory = spyOn(supervision, 'createSupervision')
@@ -412,7 +459,7 @@ function spyOnSupervisionEngine(observeSample?: (sample: StructuredSample, decis
       'create', 'resume', 'send', 'readMessages', 'watchStructured', 'wake',
       'runCheck', 'cancelCheck', 'stop', 'stopOwned', 'dispose'
     ] as const) {
-      wrapSupervisionMethod(engine, method, calls, observeSample)
+      wrapSupervisionMethod(engine, method, calls, observeSample, beforeWatch)
     }
     return engine
   })
@@ -501,6 +548,80 @@ function flushFakeRpcs(): Promise<void> {
   setImmediate(flushed.resolve)
   return flushed.promise
 }
+async function assertJournalFailureRetainsLoopCursor(response: unknown): Promise<void> {
+  const runtime = rig()
+  runtime.turns.push('hold')
+  const failedWatchSample = Promise.withResolvers<{
+    sample: StructuredSample
+    decision: supervision.WatchDecision<unknown>
+  }>()
+  let busyBeforeSettledEdge = false
+  let settledBeforeWatch = false
+  let postSendReadBeforeWatch = false
+  let failureArmed = false
+  let recoveryReadGate: HeldJournalRead | null = null
+  let storedCursorBeforeFailure: number | undefined
+  const engine = spyOnSupervisionEngine(
+    (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => {
+      if (sample.session.ok && sample.session.value.status === 'done') {
+        failedWatchSample.resolve({ sample, decision })
+      }
+    },
+    () => {
+      if (failureArmed) return
+      const sessionId = runtime.sends[0]?.session
+      if (sessionId === undefined) return
+      failureArmed = true
+      const sendIndex = runtime.calls.findIndex(({ method }) => method === 'quirky.structured/send')
+      postSendReadBeforeWatch = sendIndex >= 0 && runtime.calls.some(
+        (call, index) => index > sendIndex && call.method === 'quirky.structured/messages'
+      )
+      busyBeforeSettledEdge = runtime.sessions.get(sessionId)?.status === 'working'
+      storedCursorBeforeFailure = runtime.storedJournalCursor(created.id)
+      runtime.failedJournalResponsesAfterSend.push(response)
+      recoveryReadGate = runtime.holdJournalReadAfterFailure()
+      runtime.respond(sessionId, 'settled after journal recovery')
+      settledBeforeWatch = true
+    }
+  )
+  const loops = service(runtime)
+  await loops.start()
+  const created = await loops.create(input())
+
+  try {
+    const { sample: failedSample, decision: failedDecision } = await failedWatchSample.promise
+    const heldRead = recoveryReadGate
+    if (heldRead === null) throw new Error('the watch did not arm the recovery journal gate')
+
+    expect(engine.calls.some(({ method }) => method === 'watchStructured')).toBe(true)
+    expect(postSendReadBeforeWatch).toBe(true)
+    expect(busyBeforeSettledEdge).toBe(true)
+    expect(settledBeforeWatch).toBe(true)
+    expect(failedSample.afterSeq).toBe(0)
+    expect(failedSample.session).toMatchObject({ ok: true, value: { status: 'done' } })
+    expect(failedSample.journal).toMatchObject({ ok: false, error: { code: 'invalid-response' } })
+    expect(failedDecision).toMatchObject({ kind: 'continue' })
+
+    await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
+    await runtime.until(() => runtime.journalCursorsAfterFailure.length > 0 ? true : null)
+    await heldRead.entered
+
+    expect(runtime.failedJournalCursors).toEqual([0])
+    expect(runtime.journalCursorsAfterFailure[0]).toBe(0)
+    expect(runtime.journalCursorsAfterFailure[0]).toBe(runtime.failedJournalCursors[0])
+    expect(storedCursorBeforeFailure).toBe(1)
+    expect(runtime.storedJournalCursor(created.id)).toBe(storedCursorBeforeFailure)
+    expect(loops.get(created.id)).toMatchObject({ state: 'running', iterationsCompleted: 0 })
+    expect(loops.get(created.id).iterationsCompleted).toBe(0)
+    expect(loops.iterations(created.id).some((attempt) => attempt.endReason === 'settled')).toBe(false)
+
+    heldRead.release()
+    await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
+    expect(loops.iterations(created.id)).toMatchObject([{ endReason: 'settled' }])
+  } finally {
+    recoveryReadGate?.release()
+  }
+}
 
 
 describe('LoopService background engine', () => {
@@ -519,6 +640,7 @@ describe('LoopService background engine', () => {
     expect(runtime.created).toEqual([])
     expect(await loops.list()).toEqual([])
   })
+
 
   test('applies documented config defaults and accepts finite fractional cost caps', () => {
     const config = normalizeLoopConfig({
@@ -607,23 +729,18 @@ describe('LoopService background engine', () => {
   })
 
   test('holds the loop journal cursor after an unverifiable journal read', async () => {
-    const runtime = rig()
-    runtime.turns.push('hold')
-    runtime.failedJournalResponsesAfterSend.push(null)
-    const loops = service(runtime)
-    await loops.start()
-    const created = await loops.create(input())
+    await assertJournalFailureRetainsLoopCursor(null)
+  })
 
-    await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
-    await runtime.until(() => runtime.journalCursorsAfterFailure.length > 0 ? true : null)
-
-    expect(runtime.failedJournalCursors).toEqual([0])
-    expect(runtime.journalCursorsAfterFailure[0]).toBe(0)
-    expect(loops.get(created.id).iterationsCompleted).toBe(0)
-
-    runtime.respond(runtime.sends[0]!.session, 'settled after journal recovery')
-    await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
-    expect(loops.iterations(created.id)).toMatchObject([{ endReason: 'settled' }])
+  test('holds the loop journal cursor after a foreign-session journal row', async () => {
+    const foreignRow: StructuredMessage = {
+      sessionId: 'foreign-session',
+      seq: 2,
+      role: 'assistant',
+      text: 'settled after journal recovery',
+      at: Date.now()
+    }
+    await assertJournalFailureRetainsLoopCursor([foreignRow])
   })
 
   test('waits for private exclusion before persisting, publishing or starting a git loop', async () => {
@@ -955,6 +1072,43 @@ describe('LoopService background engine', () => {
     expect(engine.calls.some(({ method }) => method === 'resume')).toBe(true)
     expect(runtime.created).toHaveLength(1)
     expect(restarted.iterations(created.id).map(({ n, attempt }) => [n, attempt])).toEqual([[1, 1], [1, 2]])
+  })
+  test('shutdown returns before a held send and restart interrupts without replay', async () => {
+    const runtime = rig()
+    const send = runtime.holdNextSend()
+    const first = service(runtime)
+    await first.start()
+    const created = await first.create(input({ ...input().config, sessionPolicy: 'continue', caps: {} }))
+    await send.entered
+
+    let shutdownReturned = false
+    const shuttingDown = first.shutdown().then(() => {
+      shutdownReturned = true
+    })
+    try {
+      await runtime.until(() => runtime.stopped.length > 0 ? true : null)
+      await flushFakeRpcs()
+      expect(shutdownReturned).toBe(true)
+
+      activeServices.splice(activeServices.indexOf(first), 1)
+      const restarted = service(runtime)
+      await restarted.start()
+      expect(restarted.get(created.id)).toMatchObject({ state: 'paused', pauseReason: 'interrupted-by-restart' })
+      expect(restarted.iterations(created.id)).toMatchObject([{ n: 1, attempt: 1, endReason: 'interrupted' }])
+      expect(runtime.sendAttempts).toHaveLength(1)
+      expect(runtime.sends).toHaveLength(0)
+      expect(runtime.created).toHaveLength(1)
+
+      send.release()
+      await send.settled
+      await flushFakeRpcs()
+      expect(runtime.sendAttempts).toHaveLength(1)
+      expect(runtime.sends).toHaveLength(0)
+    } finally {
+      send.release()
+      await send.settled
+      await shuttingDown
+    }
   })
 
   test('excludes approval holds from active time when a session event wakes the watcher', async () => {
