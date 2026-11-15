@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import type { QuirkyClient, Repo, Session, UiState, Worktree, WorktreeCreateResult } from '@quirky/protocol'
+import { UI_CONTROL_COMMAND } from '../src/ui-control'
 import { builtinsDir, makeHomeWithoutAutoHooks, startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { startHeadlessWindow, type HeadlessWindow } from '../../../packages/ui/test/fixtures/headless-window'
@@ -165,6 +166,23 @@ const pendingRow = (name: string) =>
   sidebarElements<HTMLElement>('section.repo li').find((row) =>
     !row.hasAttribute('data-worktree-id') && row.textContent?.includes(name)
   )
+
+test('ui.command.run routes a Create control to the repo reported by the open dialog', async () => {
+  const w = await boot()
+  const api = await addProject(w, 'api')
+  const listedRepo = ((await w.agent.callAny('quirky.repo/list', {})) as Repo[]).find((repo) => repo.id === api.repo.id)
+  expect(listedRepo?.id).toBe(api.repo.id)
+  const dialog = await openCreate(w, api)
+  const target = listedRepo!.id
+
+  expect(await reportedDialog(w, 'create')).toEqual({ kind: 'create', repoId: target })
+  await w.agent.callAny('ui.command.run', {
+    id: UI_CONTROL_COMMAND,
+    args: { action: 'control', scope: 'create-dialog', target, operation: 'set-advanced', payload: { open: true } }
+  })
+  await w.win.waitFor(() => button(dialog, 'Advanced')?.getAttribute('aria-expanded') === 'true')
+  expect(await reportedDialog(w, 'create')).toEqual({ kind: 'create', repoId: target })
+}, SLOW)
 
 test('SC-28: a blank name still creates, with the generated name as the placeholder', async () => {
   const w = await boot()
@@ -336,6 +354,7 @@ test('creating from an existing branch hides the base and passes the branch', as
   expect(field(dialog, 'Base')).toBeDefined()
   await setText(field(dialog, 'Existing branch')!, 'feat')
   expect(field(dialog, 'Base')).toBeUndefined()
+  await w.win.waitFor(() => !button(dialog, 'Create')!.disabled)
   await click(button(dialog, 'Create')!)
   const made = await named(w, 'feat')
   expect(made.branch).toBe('feat')
@@ -388,6 +407,7 @@ test('a failed create shows its error inline, clears pending, and permits retry 
   await click(field<HTMLInputElement>(dialog, 'Create more')!)
   await click(button(dialog, 'Branch')!)
   await setText(field(dialog, 'Existing branch')!, 'ghost')
+  await w.win.waitFor(() => !button(dialog, 'Create')!.disabled)
   await click(button(dialog, 'Create')!)
   await w.win.waitFor(() => {
     const message = dialog.querySelector('[role="alert"]')?.textContent ?? ''

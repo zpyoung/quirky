@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { createProcessScope } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import type { CliParityReport, CliParityRow, CliReceipt } from './cli-run'
+import { CLI_FILE_OBSERVATION_BINDINGS } from './cli-table'
 
 const checkout = join(import.meta.dir, '../..')
 
@@ -47,14 +48,22 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
       expect(rows.get(id)).not.toHaveProperty('followUp')
     }
     expect(report.receipts.filter(receipt => excludedIds.includes(receipt.id))).toEqual([])
-    const gapIds = ['file-diff', 'file-open-changed', 'file-open-render']
-    for (const id of gapIds) {
-      expect(rows.get(id), id).toMatchObject({ status: 'gap', executed: false })
+    const rendererIds = ['file-diff', 'file-open-changed', 'file-open-render']
+    for (const id of rendererIds) {
+      expect(rows.get(id), id).toMatchObject({ status: 'separate-run', executed: false, checks: [] })
       expect(rows.get(id)!.reason).toBeTruthy()
     }
+    for (const [id, observations] of Object.entries(CLI_FILE_OBSERVATION_BINDINGS)) {
+      expect(rows.get(id)!.observations).toEqual({
+        checks: [...observations], command: 'bun scripts/parity/cli-files.ts --json', executed: false
+      })
+    }
+    const observationIds = new Set(Object.values(CLI_FILE_OBSERVATION_BINDINGS).flat())
+    expect(report.receipts.filter(receipt => observationIds.has(receipt.id))).toEqual([])
     expect(report.rows.filter(row => row.status === 'passed')).toHaveLength(92)
     expect(report.rows.filter(row => row.status === 'mapped-only')).toHaveLength(0)
-    expect(report.rows.filter(row => row.status === 'gap').map(row => row.id).sort()).toEqual([...gapIds].sort())
+    expect(report.rows.filter(row => row.status === 'gap')).toEqual([])
+    expect(report.rows.filter(row => row.status === 'separate-run')).toHaveLength(3)
     expect(report.rows.some(row => row.status === 'delegated')).toBe(true)
     expect(report.rows.filter(row => row.status === 'failed' || row.status === 'not-run')).toEqual([])
     for (const row of report.rows.filter(row => row.status === 'passed')) {

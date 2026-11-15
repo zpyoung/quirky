@@ -46,11 +46,40 @@ export type CliTableRow = {
 }
 
 export const CLI_FILE_OBSERVATION_BINDINGS: Readonly<Record<string, readonly string[]>> = {
-  'file-open': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path'],
-  'file-open-render': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path'],
-  'file-diff': ['files-review-diff', 'files-review-reuse', 'files-window-routing'],
-  'file-open-changed': ['files-review-changed', 'files-window-routing']
+  'file-open': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path', 'files-editor-window-focus'],
+  'file-open-render': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path', 'files-editor-window-focus', 'files-window-refusals'],
+  'file-diff': ['files-review-diff', 'files-review-reuse', 'files-window-routing', 'files-window-refusals', 'files-review-focus-window', 'files-review-background', 'files-review-source'],
+  'file-open-changed': ['files-review-changed', 'files-window-routing', 'files-window-refusals', 'files-review-focus-window', 'files-changed-modes']
 }
+
+export type CliSchemaRequirement = {
+  id: string
+  rowIds: string[]
+  target:
+    | { kind: 'method-param'; method: string; property: string }
+    | { kind: 'cli-flag'; words: string; flag: string }
+    | { kind: 'ui-command-arg'; command: string; property: string }
+  schema: { type: 'integer' | 'boolean' | 'string'; minimum?: number; enumIncludes?: string[]; enumEquals?: string[] }
+}
+
+export const CLI_SCHEMA_REQUIREMENTS: readonly CliSchemaRequirement[] = [
+  { id: 'editor-open-window', rowIds: ['file-open', 'file-open-render'],
+    target: { kind: 'method-param', method: 'quirky.editor/open', property: 'window' }, schema: { type: 'integer', minimum: 1 } },
+  { id: 'editor-open-window-flag', rowIds: ['file-open', 'file-open-render'],
+    target: { kind: 'cli-flag', words: 'editor open', flag: 'window' }, schema: { type: 'integer' } },
+  { id: 'window-command-conn', rowIds: ['file-diff', 'file-open-changed'],
+    target: { kind: 'method-param', method: 'ui.window.command.run', property: 'connId' }, schema: { type: 'integer', minimum: 1 } },
+  { id: 'open-diff-focus', rowIds: ['file-diff'],
+    target: { kind: 'ui-command-arg', command: 'command:quirky.git/open-diff', property: 'focus' }, schema: { type: 'boolean' } },
+  { id: 'open-diff-source', rowIds: ['file-diff'],
+    target: { kind: 'ui-command-arg', command: 'command:quirky.git/open-diff', property: 'source' }, schema: { type: 'string', enumIncludes: ['staged', 'unstaged'] } },
+  { id: 'open-changes-focus', rowIds: ['file-open-changed'],
+    target: { kind: 'ui-command-arg', command: 'command:quirky.git/open-changes', property: 'focus' }, schema: { type: 'boolean' } },
+  { id: 'open-changes-mode', rowIds: ['file-open-changed'],
+    target: { kind: 'ui-command-arg', command: 'command:quirky.git/open-changes', property: 'mode' }, schema: { type: 'string', enumEquals: ['edit', 'diff', 'both'] } },
+  { id: 'open-changes-area', rowIds: ['file-open-changed'],
+    target: { kind: 'ui-command-arg', command: 'command:quirky.git/open-changes', property: 'area' }, schema: { type: 'string', enumIncludes: ['staged', 'unstaged'] } }
+]
 
 const observationRowsById = new Map<string, Set<string>>()
 for (const [rowId, ids] of Object.entries(CLI_FILE_OBSERVATION_BINDINGS)) {
@@ -427,7 +456,10 @@ export function validateInventory(
       return fail('missing-check', `row ${row.id} is missing its required file-observation binding`)
     }
     if (row.disposition === 'covered') {
-      if (row.checks.length === 0) return fail('missing-check', `covered row ${row.id} has no behavioral check`)
+      if (row.checks.length === 0 && (!row.observations?.length ||
+        !CLI_SCHEMA_REQUIREMENTS.some(requirement => requirement.rowIds.includes(row.id)))) {
+        return fail('missing-check', `covered row ${row.id} has no compiled behavioral or renderer contract`)
+      }
     } else if (row.checks.length !== 0) {
       return fail('missing-check', `${row.disposition} row ${row.id} cannot claim behavioral checks`)
     }
@@ -908,6 +940,40 @@ function verifyKernelCommand(catalog: ApiCatalog, mapping: CliCatalogMapping): A
   return entry
 }
 
+function verifySchemaRequirements(catalog: ApiCatalog, rows: CliTableRow[]): void {
+  for (const requirement of CLI_SCHEMA_REQUIREMENTS) {
+    if (!rows.some(row => requirement.rowIds.includes(row.id) &&
+      row.disposition !== 'excluded' && row.disposition !== 'delegated')) continue
+    const target = requirement.target
+    let schemas: unknown[]
+    if (target.kind === 'cli-flag') {
+      const publicEntry = catalog.commands.find(entry => entry.command === target.words)
+      const pluginEntry = catalog.cli.commands.find(entry => entry.words === target.words)
+      schemas = [publicEntry?.flags.find(flag => flag.name === target.flag), pluginEntry?.flags.find(flag => flag.name === target.flag)]
+    } else {
+      const container = target.kind === 'method-param'
+        ? catalog.methods.find(entry => entry.name === target.method)?.params
+        : catalog.uiCommands.find(entry => entry.id === target.command)?.args
+      schemas = [isRecord(container) && isRecord(container.properties) ? container.properties[target.property] : undefined]
+    }
+    for (const schema of schemas) {
+      const expected = requirement.schema
+      if (!isRecord(schema) || schema.type !== expected.type ||
+        (expected.minimum !== undefined && schema.minimum !== expected.minimum)) {
+        return fail('invalid-method-schema', `${requirement.id} has a missing or weakened schema`)
+      }
+      if (expected.enumIncludes || expected.enumEquals) {
+        const values = schema.enum
+        if (!stringArray(values) ||
+          expected.enumIncludes?.some(value => !values.includes(value)) ||
+          (expected.enumEquals && !equalStringArrays([...values].sort(), [...expected.enumEquals].sort()))) {
+          return fail('invalid-method-schema', `${requirement.id} has a missing or weakened enum`)
+        }
+      }
+    }
+  }
+}
+
 function validateCatalogChecked(
   catalogInput: unknown,
   rows: CliTableRow[],
@@ -919,6 +985,7 @@ function validateCatalogChecked(
     return fail('invalid-catalog', 'expected schemaVersion 2 with methods, commands, cli and uiCommands')
   }
   const catalog = catalogInput as unknown as ApiCatalog
+  verifySchemaRequirements(catalog, rows)
   const rowsById = new Map(rows.map((row) => [row.id, row]))
   const refsByRow = new Map<string, string[]>()
   for (const row of rows) refsByRow.set(row.id, [])

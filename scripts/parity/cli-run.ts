@@ -21,7 +21,7 @@ export type CliReceipt = {
 export type CliCheckFailure = { checkId: string; kind: string; message: string; stderrTail?: string }
 export type CliParityRow = {
   id: string
-  status: 'passed' | 'mapped-only' | 'gap' | 'excluded' | 'delegated' | 'failed' | 'not-run'
+  status: 'passed' | 'mapped-only' | 'gap' | 'excluded' | 'delegated' | 'failed' | 'not-run' | 'separate-run'
   executed: boolean
   checks: string[]
   catalogRefs: string[]
@@ -86,11 +86,11 @@ export function parseCliOutput(stdout: string, format: 'json' | 'jsonl', exitCod
   return result
 }
 
-type CliRefusal = { code: string; message: string; data?: unknown }
+export type CliRefusal = { code: string; message: string; data?: unknown }
 
-function parseCliRefusal(stdout: string, exitCode: number): CliRefusal {
+export function parseCliRefusal(stdout: string, exitCode: number, expectedExit: 1 | 2 = 1): CliRefusal {
   if (exitCode === 0) throw new CliRunFailure('unexpected-success', 'CLI refusal command unexpectedly succeeded')
-  if (exitCode !== 1) throw new CliRunFailure('cli-exit', `CLI refusal command exited ${exitCode}`)
+  if (exitCode !== expectedExit) throw new CliRunFailure('cli-exit', `CLI refusal command exited ${exitCode}`)
   if (Buffer.byteLength(stdout) > 16 * 1024 * 1024) throw new CliRunFailure('stdout-overflow', 'CLI stdout exceeded 16 MiB')
   let value: unknown
   try {
@@ -110,6 +110,9 @@ function parseCliRefusal(stdout: string, exitCode: number): CliRefusal {
   const message = Reflect.get(error, 'message')
   if (typeof code !== 'string' || code.length === 0 || typeof message !== 'string' || message.length === 0) {
     throw new CliRunFailure('malformed-output', 'CLI did not emit a single JSON error envelope')
+  }
+  if (exitCode === 2 && code !== 'usage') {
+    throw new CliRunFailure('malformed-output', 'CLI exit 2 requires a usage error envelope')
   }
   return { code, message, ...(Object.hasOwn(error, 'data') ? { data: Reflect.get(error, 'data') } : {}) }
 }
@@ -172,6 +175,9 @@ export function reduceCliRows(
     } else if (row.checks.length > 0 && row.checks.every(id => successful.has(id) && proven.has(id)) && result.catalogRefs.length > 0) {
       result.status = 'passed'
       result.executed = true
+    }
+    if (row.checks.length === 0 && row.observations?.length && result.catalogRefs.length > 0) {
+      result.status = 'separate-run'
     }
     return result
   })
