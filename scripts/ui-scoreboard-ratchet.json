@@ -1,5 +1,6 @@
 {
   "host": ["compatibility-tokens"],
+  "quirky.browser": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.feedback": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.handoff": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.loops": ["commands", "compatibility-tokens", "empty", "error", "loading"],
@@ -14,6 +15,8 @@
   "quirky.session-info": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.orchestration": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.palette": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.ledger": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.vault": ["commands", "compatibility-tokens", "empty", "error", "loading"],
-  "quirky.sidebar-extras": ["commands", "compatibility-tokens", "empty", "error", "loading"]
+  "quirky.sidebar-extras": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.automations": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }

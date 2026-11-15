@@ -41,6 +41,12 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
       - run: bun node_modules/playwright/cli.js install --with-deps chromium
+      - name: Prove mounted feedback detection
+        run: |
+          export QUIRKY_HOME="$(mktemp -d)"
+          trap 'rm -rf "$QUIRKY_HOME"' EXIT
+          bun -e 'import { chromiumPath } from "./scripts/soak/windows.ts"; if (!chromiumPath()) throw new Error("Chromium required for feedback proof")'
+          bun test scripts/soak/feedback.e2e.test.ts
       - name: Run isolated soak
         env:
           MINUTES: ${{ github.event_name == 'pull_request' && '30' || inputs.minutes || '30' }}
