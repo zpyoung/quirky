@@ -8,11 +8,13 @@ import {
   type RepairPlannerReport,
   type ReviewerReport
 } from './plan'
+import { isTaskBaseline, type TaskBaseline } from './folder-workspace'
 
 export interface Issued {
   attemptId: string; watcherId: string; role: 'planner' | 'implementer' | 'reviewer' | 'integrator'
   revision: number | null; taskKey: string | null; reportPath: string; issuedAtMs: number
   plannerMode?: 'initial' | 'repair'; baselineTree?: string | null; contentIdentity?: string | null
+  baseline?: TaskBaseline | null
 }
 export interface AcceptedReport {
   attemptId: string; watcherId: string; dispatchId: string; role: Issued['role']
@@ -159,11 +161,12 @@ INSERT INTO landing_v3 (watcher_id, rung, content_identity, attempt_id, payload_
 DROP TABLE landing;
 ALTER TABLE landing_v3 RENAME TO landing;
 `
+const migrationV3ToV4 = 'ALTER TABLE issued ADD COLUMN baseline_json TEXT;'
 
 
 const issuedColumns = `attempt_id AS attemptId, watcher_id AS watcherId, role, revision, task_key AS taskKey,
   report_path AS reportPath, issued_at_ms AS issuedAtMs, planner_mode AS plannerMode,
-  baseline_tree AS baselineTree, content_identity AS contentIdentity`
+  baseline_tree AS baselineTree, content_identity AS contentIdentity, baseline_json AS baselineJson`
 const reportColumns = 'attempt_id AS attemptId, watcher_id AS watcherId, dispatch_id AS dispatchId, role, report_json AS json, digest, accepted_at_ms AS acceptedAtMs'
 const revisionColumns = 'watcher_id AS watcherId, number, plan_json AS json, digest, source_attempt_id AS sourceAttemptId, approved_at_ms AS approvedAtMs'
 const checkColumns = `attempt_id AS attemptId, watcher_id AS watcherId, revision, kind, target_key AS targetKey,
@@ -182,10 +185,11 @@ const repairColumns = `watcher_id AS watcherId, revision, ordinal, attempt_id AS
   before_digest AS beforeDigest, after_digest AS afterDigest, touched_task_keys_json AS touchedTaskKeysJson,
   patch_json AS patchJson, applied_at_ms AS appliedAtMs`
 
-type IssuedRow = Omit<Issued, 'plannerMode' | 'baselineTree' | 'contentIdentity'> & {
+type IssuedRow = Omit<Issued, 'plannerMode' | 'baselineTree' | 'contentIdentity' | 'baseline'> & {
   plannerMode: 'initial' | 'repair' | null
   baselineTree: string | null
   contentIdentity: string | null
+  baselineJson: string | null
 }
 type ReportRow = Omit<AcceptedReport, 'report'> & { json: string }
 type RevisionRow = Omit<Revision, 'plan'> & { json: string }
@@ -198,12 +202,62 @@ type OverrunRow = Omit<OverrunRecord, 'observedPaths' | 'outsidePaths' | 'unrepo
 type RevisionRepairRow = Omit<RevisionRepair, 'touchedTaskKeys' | 'patch'> & {
   touchedTaskKeysJson: string; patchJson: string
 }
-function decodeIssued({ plannerMode, baselineTree, contentIdentity, ...row }: IssuedRow): Issued {
+function decodeBaseline(baselineJson: string | null): TaskBaseline | null | undefined {
+  if (baselineJson === null) return undefined
+  try {
+    const baseline: unknown = JSON.parse(baselineJson)
+    return isTaskBaseline(baseline) ? baseline : null
+  } catch {
+    return null
+  }
+}
+
+function encodeTaskBaseline(baseline: TaskBaseline): string {
+  if (baseline.kind === 'git') return JSON.stringify({ kind: 'git', treeOid: baseline.treeOid })
+  return JSON.stringify({
+    kind: 'folder',
+    version: 1,
+    contentIdentity: baseline.contentIdentity,
+    entries: baseline.entries.map(({ path, kind, executable, digest }) => ({ path, kind, executable, digest }))
+  })
+}
+
+function sameBaseline(left: TaskBaseline | null | undefined, right: TaskBaseline | null | undefined): boolean {
+  if (left === undefined || left === null || right === undefined || right === null) return left === right
+  return encodeTaskBaseline(left) === encodeTaskBaseline(right)
+}
+
+function baselineMatchesIssuedFields(
+  baseline: TaskBaseline,
+  baselineTree: string | null | undefined,
+  contentIdentity: string | null | undefined
+): boolean {
+  if (baseline.kind === 'git') {
+    return (baselineTree == null || baselineTree === baseline.treeOid) &&
+      (contentIdentity == null || contentIdentity === `objective-tree:${baseline.treeOid}`)
+  }
+  return baselineTree == null && (contentIdentity == null || contentIdentity === baseline.contentIdentity)
+}
+
+function validateIssuedBaseline(issued: Issued): void {
+  const baseline = issued.baseline
+  if (baseline === undefined) return
+  if (baseline === null || !isTaskBaseline(baseline) ||
+    !baselineMatchesIssuedFields(baseline, issued.baselineTree, issued.contentIdentity)) {
+    throw new Error('invalid-baseline-tree')
+  }
+}
+
+function decodeIssued({ plannerMode, baselineTree, contentIdentity, baselineJson, ...row }: IssuedRow): Issued {
+  const decodedBaseline = decodeBaseline(baselineJson)
+  const baseline = decodedBaseline !== undefined && decodedBaseline !== null &&
+    !baselineMatchesIssuedFields(decodedBaseline, baselineTree, contentIdentity) ? null : decodedBaseline
   return {
     ...row,
     ...(plannerMode === null ? {} : { plannerMode }),
     ...(baselineTree === null ? {} : { baselineTree }),
-    ...(contentIdentity === null ? {} : { contentIdentity })
+    ...(contentIdentity === null ? {} : { contentIdentity }),
+    ...(baseline === undefined ? {} : { baseline })
   }
 }
 function decodeReport({ json, ...row }: ReportRow): AcceptedReport { return { ...row, report: JSON.parse(json) } }
@@ -233,7 +287,7 @@ function revisionRepairRow(db: PluginStore, watcherId: string, number: number): 
 
 /** Keeps report acceptance immutable and plan activation replay-safe across daemon restarts. */
 export function createObjectiveStore(context: PluginContext): ObjectiveStore {
-  const db = context.openStore([migrationV1, migrateV1ToV2, migrationV2ToV3], { newerVersion: 'read-only' })
+  const db = context.openStore([migrationV1, migrateV1ToV2, migrationV2ToV3, migrationV3ToV4], { newerVersion: 'read-only' })
   if (!db.readOnly) db.exec('PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;')
   const getReport = (attemptId: string): AcceptedReport | null => {
     const row = db.get<ReportRow>(`SELECT ${reportColumns} FROM report WHERE attempt_id=?`, attemptId)
@@ -241,21 +295,28 @@ export function createObjectiveStore(context: PluginContext): ObjectiveStore {
   }
   return {
     issue(issued: Issued): void {
+      if (issued.baseline === null || (issued.baseline !== undefined && !isTaskBaseline(issued.baseline))) {
+        throw new Error('invalid-baseline-tree')
+      }
       const existingRow = db.get<IssuedRow>(`SELECT ${issuedColumns} FROM issued WHERE attempt_id=?`, issued.attemptId)
       const existing = existingRow ? decodeIssued(existingRow) : null
       if (existing) {
         if (existing.watcherId !== issued.watcherId || existing.role !== issued.role || existing.revision !== issued.revision ||
           existing.taskKey !== issued.taskKey || existing.reportPath !== issued.reportPath || existing.plannerMode !== issued.plannerMode ||
           (existing.baselineTree ?? null) !== (issued.baselineTree ?? null) ||
-          (existing.contentIdentity ?? null) !== (issued.contentIdentity ?? null)) {
+          (existing.contentIdentity ?? null) !== (issued.contentIdentity ?? null) ||
+          !sameBaseline(existing.baseline, issued.baseline)) {
           throw new Error('Attempt was already issued with different authority')
         }
+        validateIssuedBaseline(issued)
         return
       }
+      validateIssuedBaseline(issued)
       db.run(`INSERT INTO issued
-        (attempt_id, watcher_id, role, revision, task_key, report_path, issued_at_ms, planner_mode, baseline_tree, content_identity)
-        VALUES (?,?,?,?,?,?,?,?,?,?)`, issued.attemptId, issued.watcherId, issued.role, issued.revision, issued.taskKey,
-      issued.reportPath, issued.issuedAtMs, issued.plannerMode ?? null, issued.baselineTree ?? null, issued.contentIdentity ?? null)
+        (attempt_id, watcher_id, role, revision, task_key, report_path, issued_at_ms, planner_mode, baseline_tree, content_identity, baseline_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`, issued.attemptId, issued.watcherId, issued.role, issued.revision, issued.taskKey,
+      issued.reportPath, issued.issuedAtMs, issued.plannerMode ?? null, issued.baselineTree ?? null,
+      issued.contentIdentity ?? null, issued.baseline === undefined ? null : encodeTaskBaseline(issued.baseline))
     },
     issued(watcherId: string): Issued[] {
       return db.all<IssuedRow>(`SELECT ${issuedColumns} FROM issued WHERE watcher_id=? ORDER BY issued_at_ms, attempt_id`, watcherId).map(decodeIssued)
