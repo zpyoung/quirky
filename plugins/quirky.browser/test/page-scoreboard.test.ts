@@ -87,18 +87,8 @@ test('all owned files and the page surface have no failure evidence', () => {
   expect(ownedFailures).toEqual([])
 })
 
-test('remaining failures are confined to the three design files', () => {
-  const evidence = auditFailures()
-  const designFileSuffixes = [
-    'src/design-window/DesignWindow.tsx',
-    'src/markup/MarkupOverlay.tsx',
-    'src/design/payload.ts',
-  ]
-
-  expect(evidence.length).toBeGreaterThan(0)
-  expect(evidence.every(({ source }) =>
-    source !== undefined && designFileSuffixes.some((suffix) => source.file.endsWith(suffix))
-  )).toBe(true)
+test('no Browser scoreboard failures remain after design coverage', () => {
+  expect(auditFailures()).toEqual([])
 })
 
 test('the page states are witnessed by the required components', () => {

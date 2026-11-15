@@ -4,8 +4,7 @@ import type { PaneTab } from './pane-contract'
 import { setLiveDesignPageKeys, type DesignAction } from './design-window/DesignWindow'
 import { BrowserPaneWindow, focusBrowserAddress, focusBrowserFind, focusedBrowserPane, runFocusedBrowserDesign } from './window/BrowserPaneWindow'
 import { registerPreferencesUi } from './preferences-ui'
-import { dispatchPaneUiControl } from './ui-control'
-
+import { dispatchDesignControl, dispatchPaneUiControl } from './ui-control'
 const PAGE_VIEW = 'view:quirky.browser/page'
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
 
@@ -97,6 +96,7 @@ function commandHandlers(context: UiPluginContext): Record<string, BrowserComman
   return {
     'new-tab': (args) => openBrowserTab(context, args),
     paneUiControl: (args) => dispatchPaneUiControl(context, args),
+    designControl: (args) => dispatchDesignControl(context, args),
     design: (raw) => {
       const { action, pane } = argsOf(raw)
       if (!isDesignAction(action)) return { started: false, reason: 'Design action must be grab, annotate, draw, or cancel.' }
