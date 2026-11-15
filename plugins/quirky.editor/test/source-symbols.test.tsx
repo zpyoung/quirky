@@ -1773,3 +1773,68 @@ test.each(['definition', 'references'] as const)('a current public %s menu contr
   })
   else expect(surface.container.querySelector('.qe-source-locations h2')?.textContent).toBe('References to greet')
 })
+
+async function startMenuReferences(surface: MountedDocument): Promise<void> {
+  await surface.dispatch(surface.address('source:'), 'menu-open', { kind: 'editor', line: 4, column: 27, x: 10, y: 10 })
+  const button = [...surface.container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    .find((item) => item.textContent === 'Find References')
+  if (!button) throw new Error('The captured editor menu has no Find References action.')
+  await act(async () => button.click())
+  await tickUi()
+}
+
+test.each(['identity', 'dispatch'] as const)('a pending panel close cannot overwrite completed UI references after a late %s failure', async (stage) => {
+  const identity = Promise.withResolvers<unknown>()
+  const dispatch = Promise.withResolvers<void>()
+  const answer = Promise.withResolvers<NavigationResult>()
+  let held = false
+  const surface = await mountDocument({
+    content: SYMBOL_TEXT, navigation: () => answer.promise,
+    windowSelf: () => held && stage === 'identity' ? identity.promise : { connId: 22 }
+  })
+  await startMenuReferences(surface)
+  expect(surface.report().sourceSymbols?.status).toBe('pending')
+  const call = surface.context.call.bind(surface.context)
+  surface.context.call = async (method, params = {}) => {
+    if (held && stage === 'dispatch' && method === 'ui.window.command.run') await dispatch.promise
+    return call(method, params)
+  }
+  held = true
+  await act(async () => { surface.container.querySelector<HTMLButtonElement>('[aria-label="Close results"]')!.click() })
+  await act(async () => { answer.resolve(symbolAnswer()); await answer.promise })
+  const report = structuredClone(surface.report().sourceSymbols)
+  expect(report).toEqual({ status: 'list', kind: 'references', count: 1, truncated: false, error: null })
+  await act(async () => {
+    if (stage === 'identity') {
+      identity.reject(new Error('old close identity failure'))
+      await identity.promise.catch(() => {})
+    } else {
+      dispatch.reject(new Error('old close dispatch failure'))
+      await dispatch.promise.catch(() => {})
+    }
+  })
+  await tickUi()
+  expect(surface.report().sourceSymbols).toEqual(report)
+  expect(surface.container.querySelector('.qe-source-locations h2')?.textContent).toBe('References to greet')
+  expect(surface.container.querySelectorAll('.ui-list-row')).toHaveLength(1)
+  expect(surface.openCalls).toEqual([])
+})
+
+test('a current result click still reports identity failures after an intent-owned UI lookup', async () => {
+  let failIdentity = false
+  const surface = await mountDocument({
+    content: SYMBOL_TEXT, navigation: () => symbolAnswer(),
+    windowSelf: () => {
+      if (failIdentity) throw new Error('current result identity failure')
+      return { connId: 22 }
+    }
+  })
+  await startMenuReferences(surface)
+  expect(surface.report().sourceSymbols?.status).toBe('list')
+  failIdentity = true
+  await act(async () => { surface.container.querySelector<HTMLButtonElement>('.ui-list-row__main')!.click() })
+  await tickUi()
+  expect(surface.container.textContent).toContain('The daemon did not identify this window.')
+  expect(surface.report().sourceSymbols?.error).toBe('The daemon did not identify this window.')
+  expect(surface.openCalls).toEqual([])
+})

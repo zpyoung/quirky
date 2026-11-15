@@ -433,9 +433,7 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
 
   const bridgeFailure = useCallback((token?: string) => {
     const origin = optionsRef.current
-    const owner = token === undefined
-      ? intentRef.current
-      : intentRef.current?.token === token ? intentRef.current : null
+    const owner = token !== undefined && intentRef.current?.token === token ? intentRef.current : null
     const explicitIntent = token !== undefined
     const revision = origin.revision.current
     const request = requestRef.current
@@ -451,10 +449,8 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
         if (owner === null || owner.token !== dispatchedIntent || !intentIsCurrent(owner)) return
       } else if (explicitIntent) {
         if (owner === null || !intentIsCurrent(owner)) return
-      } else if (owner !== null) {
-        if (!intentIsCurrent(owner)) return
-      } else if (intentRef.current !== null || requestRef.current !== request ||
-          current.revision.current !== revision || panelRef.current?.generation !== generation) return
+      } else if (requestRef.current !== request || current.revision.current !== revision ||
+          panelRef.current?.generation !== generation) return
       const kind = owner?.kind ?? activeRef.current?.kind ?? reportRef.current.kind ?? 'definition'
       invalidateIntent()
       cancelActive(message, false)
