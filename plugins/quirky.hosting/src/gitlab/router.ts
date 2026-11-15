@@ -1,5 +1,6 @@
 import type { Handler, HostingEnv } from '../env'
 import { isRecord } from '../data'
+import { createGitLabCheckMethods } from './checks'
 import { createGitLabClient, gitlabError } from './api'
 import { createGitLabIdentityHandlers, resolveGitLabScope } from './identity'
 import { createGitLabReviewHandlers } from './reviews'
@@ -15,6 +16,7 @@ export function routeByProvider(env: HostingEnv, table: Record<string, Handler>)
     const client = createGitLabClient(env)
     gitlab = {
       ...createGitLabIdentityHandlers(env, client),
+      ...createGitLabCheckMethods(env, client),
       ...createGitLabReviewHandlers(env, client),
       ...createGitLabDiscussionHandlers(env, client)
     }
@@ -32,7 +34,7 @@ export function routeByProvider(env: HostingEnv, table: Record<string, Handler>)
       const handle = gitlab[name]
       if (!handle) throw env.invalid('unsupported_provider', `GitLab hosting does not answer quirky.hosting/${name} yet.`)
       if (Object.hasOwn(params, 'prRepo')) assertRepositoryPin(env, scope, params.prRepo)
-      return handle(scope, params)
+      return handle(scope, params, caller)
     }
   }
   return routed
