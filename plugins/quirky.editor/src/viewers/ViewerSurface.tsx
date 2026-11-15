@@ -1708,7 +1708,7 @@ export function ViewerSurface(props: SurfaceProps) {
       {(buffer.kind === 'audio' || buffer.kind === 'video') && <Badge>{metadata.contentType ?? 'Media'}</Badge>}
       {canOpenDefault && <Button type="button" onClick={requestOpenDefault}>Open in Default App</Button>}
     </header>
-    {changed && <p className="viewer-notice" role="status">File changed on disk. Reload the viewer. <Button type="button" onClick={requestReload} disabled={loading}>Reload</Button></p>}
+    {changed && buffer.kind !== 'csv' && <p className="viewer-notice" role="status">File changed on disk. Reload the viewer. <Button type="button" onClick={requestReload} disabled={loading}>Reload</Button></p>}
     {loading && !isTooLarge && <div role="status"><NoticeLine>{loadingMessage}</NoticeLine></div>}
     {visibleError && <InlineError message={visibleError} action={!isTooLarge ? { label: changed ? 'Reload' : 'Retry', onAction: changed ? requestReload : requestRetry } : undefined} />}
     {commandError && <InlineError message={commandError} action={{ label: 'Retry', onAction: requestRetry }} />}

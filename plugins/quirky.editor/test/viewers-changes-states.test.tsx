@@ -1198,3 +1198,35 @@ test('a newer PDF search prevents an older search-owned page RPC from changing t
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', { configurable: true, value: originalGetContext })
   }
 })
+
+test('every enabled changed-on-disk CSV Reload button dispatches ordered recovery in its window', async () => {
+  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const fixture = makeFixture(async (method, params) => {
+    calls.push({ method, params })
+    if (params.action === 'metadata') return { paged: true, rows: null, columns: 2 }
+    if (params.action === 'page') return { rows: CSV_ROWS, nextPage: null, offset: 0 }
+    return {}
+  })
+  const surface = await mountViewer(fixture, makeBuffer('csv', '', { size: 1024 * 1024, external: 'changed' }))
+  await flush()
+  const reloads = [...surface.element.querySelectorAll<HTMLButtonElement>('button')].filter((button) => button.textContent === 'Reload')
+  expect(reloads.length).toBeGreaterThan(0)
+  expect(surface.element.textContent).toContain('changed on disk')
+  for (const button of reloads) {
+    expect(button.disabled).toBe(false)
+    const start = calls.length
+    await act(async () => button.click())
+    await flush()
+    const recovery = calls.slice(start)
+    const reloadCalls = recovery.filter(({ method, params }) => method === 'quirky.editor/view' && params.action === 'reload')
+    expect(reloadCalls).toEqual([{ method: 'quirky.editor/view', params: { bufferId: 'b1', action: 'reload' } }])
+    const reloadIndex = recovery.findIndex(({ method, params }) => method === 'quirky.editor/view' && params.action === 'reload')
+    const pageIndex = recovery.findIndex(({ method, params }) => method === 'quirky.editor/viewer' && params.action === 'page' && params.page === 0)
+    expect(pageIndex).toBeGreaterThan(reloadIndex)
+    expect(fixture.calls.filter(({ method }) => method === 'ui.window.command.run').at(-1)?.params).toMatchObject({
+      connId: 22,
+      id: 'command:quirky.editor/ui-control',
+      args: { target: 'csv:["b1","t1"]', action: 'reload' }
+    })
+  }
+})
