@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { chromium, type Browser, type BrowserServer, type Page } from 'playwright'
 import { type UiModel, type UiSlotEntry, type UiToolEntry, type ThemeInfo } from '@quirky/protocol'
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
@@ -37,6 +37,14 @@ import {
   referenceFor,
   type GoldenReferences
 } from './goldens'
+import {
+  prepareRuntimeAssets,
+  runtimeAssetEnvironment,
+  snapshotRuntimeAssets,
+  verifyRuntimeAssets,
+  type AssetSnapshot,
+  type RuntimeAssets
+} from './runtime-assets'
 
 const UI_DIST_RELATIVE = 'packages/ui/dist'
 const DAEMON_ENTRY = 'packages/daemon/src/main.ts'
@@ -88,6 +96,17 @@ function sanitizedError(error: unknown, secrets: string[]): string {
     .replace(/([?#&]token=)[^\s&#]*/gi, '$1<redacted>')
     .replace(/\b((?:rpc|hook)?token)\s*[:=]\s*([^\s,;}\]]+)/gi, '$1=<redacted>')
   return message.slice(0, 2_000)
+}
+function registerPathSecret(path: string, secrets: string[]): void {
+  const aliases = [path]
+  try { aliases.push(realpathSync(path)) } catch {}
+  for (const alias of aliases) {
+    if (!secrets.includes(alias)) secrets.push(alias)
+    const alternate = /^\/private\/(?:var|tmp)\//.test(alias)
+      ? alias.slice('/private'.length)
+      : /^\/(?:var|tmp)\//.test(alias) ? `/private${alias}` : null
+    if (alternate && !secrets.includes(alternate)) secrets.push(alternate)
+  }
 }
 
 function abortError(signal: AbortSignal): Error {
@@ -196,46 +215,6 @@ function validateOptions(options: CaptureOptions): { repoRoot: string; outputDir
   return { repoRoot, outputDir }
 }
 
-function uiAssetPath(repoRoot: string, pluginId: string, moduleUrl: string): string {
-  const pathname = new URL(moduleUrl, 'http://quirky.capture.invalid').pathname
-  const parts = pathname.split('/').filter(Boolean).map((part) => decodeURIComponent(part))
-  if (parts.length < 3 || parts[0] !== 'plugins' || parts[1] !== pluginId) {
-    throw new Error(`invalid public UI module URL for ${pluginId}`)
-  }
-  const pluginRoot = resolve(repoRoot, 'plugins', pluginId)
-  const path = resolve(pluginRoot, ...parts.slice(2))
-  const fromPlugin = relative(pluginRoot, path)
-  if (fromPlugin === '' || fromPlugin === '..' || fromPlugin.startsWith(`..${sep}`) || isAbsolute(fromPlugin)) {
-    throw new Error(`UI module path escapes its plugin directory: ${pluginId}`)
-  }
-  return path
-}
-
-function verifyUiAssets(repoRoot: string, model?: UiModel): void {
-  const uiDir = join(repoRoot, UI_DIST_RELATIVE)
-  const assets = [
-    'index.html',
-    'main.js',
-    'main.css',
-    'xterm.css',
-    'vendor/react.js',
-    'vendor/react-dom.js',
-    'vendor/react-dom-client.js',
-    'vendor/jsx-runtime.js'
-  ]
-  for (const asset of assets) {
-    const path = join(uiDir, asset)
-    if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`UI asset is missing: ${path}; build the UI or omit --skip-build`)
-  }
-  if (model) {
-    for (const [pluginId, module] of Object.entries(model.modules)) {
-      const asset = uiAssetPath(repoRoot, pluginId, module.url)
-      if (!existsSync(asset) || !statSync(asset).isFile()) {
-        throw new Error(`built UI module for ${pluginId} is missing: ${asset}; build the UI or omit --skip-build`)
-      }
-    }
-  }
-}
 
 async function readStreamTail(stream: ReadableStream<Uint8Array>): Promise<string> {
   const reader = stream.getReader()
@@ -1206,7 +1185,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
   assertBrowserExecutable(executable)
 
   const scope = createProcessScope()
-  const secrets = [scope.home]
+  const secrets: string[] = []
   let env: Record<string, string> = {}
   let prepared: PreparedCaptureFixtureHome | undefined
   let fixtures: RegisteredCaptureFixtures | undefined
@@ -1246,12 +1225,38 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
     persistProgress()
   }
 
-  try {
-    env = createIsolatedRuntimeEnvironment(scope.home, { repoRoot, uiDir: join(repoRoot, UI_DIST_RELATIVE) })
-    throwIfAborted(options.signal)
-    if (options.skipBuild) verifyUiAssets(repoRoot)
-    else await runOwnedCommand(scope, [process.execPath, join(repoRoot, BUILD_ENTRY)], repoRoot, env, options.timeoutMs, options.signal)
+  const fillMissingCells = (message: string) => {
+    if (!manifest) return
+    for (const cell of cells) {
+      const key = `${cell.targetId}\0${cell.theme}`
+      if (!results.has(key)) results.set(key, failedCell(cell, references, message))
+    }
+    manifest.captures = cells.map((cell) => results.get(`${cell.targetId}\0${cell.theme}`)!)
+    for (const capture of manifest.captures) {
+      if (capture.status === 'failed' && !manifest.failures.some((failure) => failure.startsWith(`${capture.targetId} (${capture.theme}):`))) {
+        manifest.failures.push(`${capture.targetId} (${capture.theme}): ${capture.error ?? 'capture failed'}`)
+      }
+    }
+  }
 
+  try {
+    registerPathSecret(scope.home, secrets)
+    const baseEnv = createIsolatedRuntimeEnvironment(scope.home, { repoRoot, uiDir: join(repoRoot, UI_DIST_RELATIVE) })
+    throwIfAborted(options.signal)
+    const assets: RuntimeAssets = await prepareRuntimeAssets({
+      repoRoot,
+      home: scope.home,
+      skipBuild: options.skipBuild,
+      signal: options.signal
+    })
+    if (assets.ownedRoot) registerPathSecret(assets.ownedRoot, secrets)
+    throwIfAborted(options.signal)
+    env = runtimeAssetEnvironment(baseEnv, assets)
+    if (!options.skipBuild) {
+      await runOwnedCommand(scope, [process.execPath, join(repoRoot, BUILD_ENTRY)], repoRoot, env, options.timeoutMs, options.signal)
+    }
+    const assetSnapshot: AssetSnapshot = snapshotRuntimeAssets(assets)
+    throwIfAborted(options.signal)
     prepared = await prepareCaptureFixtureHome(scope.home, { timeoutMs: options.timeoutMs, signal: options.signal, env })
     daemon = scope.spawn([process.execPath, join(repoRoot, DAEMON_ENTRY)], {
       cwd: repoRoot,
@@ -1263,7 +1268,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
     daemonOutput = outputTail(daemon.stdout)
     daemonErrors = outputTail(daemon.stderr)
     const runtime = await waitForRuntime(scope.home, daemon, options.timeoutMs, options.signal)
-    secrets.push(runtime.token)
+    secrets.push(runtime.token, runtime.hookToken)
 
     const connecting = connectDaemon({ home: scope.home, role: 'cli', name: 'ui-screenshot-review', autostart: false })
     try {
@@ -1289,7 +1294,6 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
     cells = captureCells(targets, selectedThemes)
     const commit = (await runOwnedCommand(scope, ['git', '-C', repoRoot, 'rev-parse', 'HEAD'], repoRoot, env, options.timeoutMs, options.signal)).stdout
     if (!/^[0-9a-f]{40,64}$/i.test(commit)) throw new Error('could not identify the repository commit for the capture manifest')
-    verifyUiAssets(repoRoot, model)
 
     const themeInventory = selectedThemeList(await rpc(activeClient, 'theme.list', {}, options.timeoutMs, options.signal))
     const themes = Object.fromEntries(THEMES.map((appearance) => [appearance, chooseTheme(themeInventory, appearance)])) as Record<CaptureTheme, RendererTheme>
@@ -1396,6 +1400,11 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       secrets,
       pageErrors
     }
+    await verifyRuntimeAssets(assets, assetSnapshot, model, {
+      port: runtime.port,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal
+    })
     await bounded(page.goto(`http://127.0.0.1:${runtime.port}/#token=${encodeURIComponent(runtime.token)}`, {
       waitUntil: 'domcontentloaded',
       timeout: options.timeoutMs
@@ -1446,17 +1455,21 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       if (options.signal?.aborted) break
     }
 
-    manifest.captures = cells.map((cell) => results.get(`${cell.targetId}\0${cell.theme}`) ?? failedCell(cell, references, 'capture cell was not attempted'))
-    for (const capture of manifest.captures) {
-      if (capture.status === 'failed' && !manifest.failures.some((failure) => failure.startsWith(`${capture.targetId} (${capture.theme}):`))) {
-        manifest.failures.push(`${capture.targetId} (${capture.theme}): ${capture.error ?? 'capture failed'}`)
-      }
-    }
+    fillMissingCells('capture cell was not attempted')
     syncProgress()
+    if (!options.signal?.aborted) {
+      await verifyRuntimeAssets(assets, assetSnapshot, model, {
+        port: runtime.port,
+        timeoutMs: options.timeoutMs,
+        signal: options.signal
+      })
+    }
   } catch (error) {
     thrown = error
     if (manifest) {
-      manifest.failures.push(sanitizedError(error, secrets))
+      const message = sanitizedError(error, secrets)
+      fillMissingCells(message)
+      manifest.failures.push(message)
       syncProgress()
     }
   } finally {

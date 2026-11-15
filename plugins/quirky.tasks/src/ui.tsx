@@ -12,6 +12,7 @@ import { IssueSurface } from './issue/IssueSurface'
 import { NewIssueDialog } from './issue/NewIssueDialog'
 import { ProjectsSurface } from './projects/ProjectsSurface'
 import { ROW_MENU_COMMAND, runRowMenu } from './list/row-menu'
+import { LIST_CONTROL_COMMAND, runListControl } from './list/list-control'
 import { PROJECTS_CONTROL_COMMAND, runProjectsControl } from './projects/control'
 import { ISSUE_CONTROL_COMMAND, runIssueControl } from './issue/issue-control'
 
@@ -293,6 +294,7 @@ export function activate(context: UiPluginContext): void {
     return () => root.unmount()
   })
   context.provide(ROW_MENU_COMMAND, (input: unknown) => runRowMenu(context, input))
+  context.provide(LIST_CONTROL_COMMAND, (input: unknown) => runListControl(context, input))
   context.provide(PROJECTS_CONTROL_COMMAND, (input: unknown) => runProjectsControl(context, input))
   context.provide(ISSUE_CONTROL_COMMAND, (input: unknown) => runIssueControl(context, input))
   context.provide('command:quirky.tasks/open', async (raw: unknown) => {
