@@ -191,6 +191,7 @@ type Config = {
   collapsed?: ReadonlySet<string>
   model?: ViewTree
   treeProps?: Partial<TreeProps>
+  withoutGroupAction?: boolean
 }
 type Mounted = {
   context: UiPluginContext
@@ -271,6 +272,7 @@ async function mountTree(options: Config = {}): Promise<Mounted> {
       onGroupAction: (group, action) => { groupActions.push([group.key, action]) },
       ...current.treeProps
     }
+    if (current.withoutGroupAction) delete props.onGroupAction
     await act(async () => { root.render(createElement(Tree, props)); await Promise.resolve() })
     await flush()
   }
@@ -338,6 +340,7 @@ test('rejects malformed tree-control payloads, unknown operations, and hidden or
   expect((await dispatchTree(h, 'child', 'open-workspace-menu', { x: 1 })).delivered).toBe(0)
   expect((await dispatchTree(h, 'child', 'open-workspace-menu', { x: Number.NaN, y: 1 })).delivered).toBe(0)
   expect((await dispatchTree(h, 'child', 'open-workspace-menu', { x: 1, y: 2, focus: 'yes' as unknown as boolean })).delivered).toBe(0)
+  expect((await dispatchTree(h, 'child', 'open-workspace-menu', { x: 1, y: Number.POSITIVE_INFINITY })).delivered).toBe(0)
   expect((await dispatchTree(h, 'child', 'open-workspace-menu', { x: 1, y: 2, other: true })).delivered).toBe(0)
   expect((await dispatchTree(h, 'missing', 'copy-path')).delivered).toBe(0)
   expect((await dispatchTree(h, 'w1', 'not-a-tree-operation')).delivered).toBe(0)
@@ -346,15 +349,43 @@ test('rejects malformed tree-control payloads, unknown operations, and hidden or
   expect((await dispatchTree(h, 'group:g1', 'toggle-fold')).delivered).toBe(0)
   expect((await dispatchTree(h, 'lane:in-progress', 'toggle-fold')).delivered).toBe(0)
   expect((await dispatchTree(h, 'child', 'toggle-fold')).delivered).toBe(0)
-  expect(h.host.querySelector('[role="menu"]')).toBeNull()
 
-  const malformed = control('w1', 'copy-path') as unknown as Record<string, unknown>
+  expect((await dispatchTree(h, 'parent', 'open-workspace-menu', { x: 1, y: 2, focus: false })).delivered).toBe(1)
+  expect((await dispatchTree(h, 'parent', 'close-menu', { seq: -1 })).delivered).toBe(0)
+  expect(menu()).not.toBeNull()
+  expect((await dispatchTree(h, 'parent', 'close-menu', { seq: 1, extra: true })).delivered).toBe(0)
+  expect(menu()).not.toBeNull()
+  expect((await dispatchTree(h, 'parent', 'close-menu', { seq: 1 })).delivered).toBe(1)
+  expect(menu()).toBeNull()
+
+  expect((await dispatchTree(h, 'parent', 'start-rename')).delivered).toBe(1)
+  expect((await dispatchTree(h, 'parent', 'cancel-rename', { seq: Number.NaN })).delivered).toBe(0)
+  expect((await dispatchTree(h, 'parent', 'cancel-rename', { seq: 1, extra: true })).delivered).toBe(0)
+  expect(h.host.querySelector('.worktree-rename')).not.toBeNull()
+  expect((await dispatchTree(h, 'parent', 'cancel-rename', { seq: 1 })).delivered).toBe(1)
+  expect(h.host.querySelector('.worktree-rename')).toBeNull()
+
+  const malformed = control('parent', 'copy-path') as unknown as Record<string, unknown>
   for (const payload of [null, [], 'text', 42]) {
     expect(() => dispatchUiControl(h.context, { ...malformed, payload })).toThrow()
   }
   expect(dispatchUiControl(h.context, { ...malformed, payload: new Date() }).delivered).toBe(0)
   expect(dispatchUiControl(h.context, { ...malformed, payload: Object.create({ inherited: true }) }).delivered).toBe(0)
   expect(h.toasts).toEqual([])
+})
+test('derives menu coordinates and default focus from the visible trigger', async () => {
+  const h = await mountTree()
+  const trigger = menuButton(h, 'w1')!
+  trigger.focus()
+  expect((await dispatchTree(h, 'w1', 'open-workspace-menu')).delivered).toBe(1)
+  expect(menu()).not.toBeNull()
+  await keydown(menu()!, 'Escape')
+  expect(document.activeElement).toBe(trigger)
+
+  expect((await dispatchTree(h, 'w1', 'open-workspace-menu', { focus: false })).delivered).toBe(1)
+  expect(menu()).not.toBeNull()
+  await keydown(menu()!, 'Escape')
+  expect(document.activeElement).not.toBe(trigger)
 })
 
 test('includes visible empty projects and synthetic nested sections, but excludes folded descendants', async () => {
@@ -464,6 +495,19 @@ test('routes project and section create actions through interception and preserv
   expect((await dispatchTree(h, 'g1', 'new-section')).delivered).toBe(1)
   expect(h.dialogs.slice(-2)).toEqual([{ kind: 'create', repoId: 'r1' }, { kind: 'group', action: 'new-section' }])
   expect(h.groupActions.slice(-2)).toEqual([['project:r1', 'new-worktree'], ['section:g1', 'new-section']])
+
+  const interceptedCount = h.groupActions.length
+  const absentDialogCount = h.dialogs.length
+  await h.render({ withoutGroupAction: true })
+  await click(labelled(h.host, 'New worktree in r1'))
+  await click(labelled(h.host, 'New section'))
+  expect(h.groupActions).toHaveLength(interceptedCount)
+  expect(h.dialogs.slice(absentDialogCount)).toEqual([{ kind: 'create', repoId: 'r1' }, { kind: 'group', action: 'new-section' }])
+
+  const absentCommandCount = h.dialogs.length
+  expect((await dispatchTree(h, 'r1', 'new-worktree')).delivered).toBe(1)
+  expect((await dispatchTree(h, 'g1', 'new-section')).delivered).toBe(1)
+  expect(h.dialogs.slice(absentCommandCount)).toEqual([{ kind: 'create', repoId: 'r1' }, { kind: 'group', action: 'new-section' }])
 })
 
 test('refuses delayed create actions after their header target is removed or hidden', async () => {
@@ -557,7 +601,7 @@ test('closes before rename selection without stealing focus, and Enter plus blur
   expect(h.renames).toEqual([['w1', 'renamed']])
 })
 
-test('copies a selected submenu item once while the earlier menu close is still pending', async () => {
+test('copies Path and Worktree name once while the earlier menu close is still pending', async () => {
   const h = await mountTree()
   const writes: string[] = []
   const clipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
@@ -572,8 +616,19 @@ test('copies a selected submenu item once while the earlier menu close is still 
     await waitFor(() => writes.length === 1)
     expect(writes).toEqual(['/repo/QuirkyApp/w1'])
     gate.resolve(undefined)
-    await flush()
+    await waitFor(() => menu() === null)
     expect(writes).toHaveLength(1)
+
+    const nameGate = deferred<unknown>()
+    h.world.commandGate = nameGate.promise
+    await openRowMenu(h, 'w1')
+    await click(menuItem('Copy'))
+    await click(menuItem('Worktree name'))
+    await waitFor(() => writes.length === 2)
+    expect(writes).toEqual(['/repo/QuirkyApp/w1', 'w1'])
+    nameGate.resolve(undefined)
+    await waitFor(() => menu() === null)
+    expect(writes).toHaveLength(2)
   } finally {
     if (clipboard) Object.defineProperty(navigator, 'clipboard', clipboard)
     else Reflect.deleteProperty(navigator, 'clipboard')

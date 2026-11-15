@@ -27,10 +27,12 @@ const preferences = { ...DEFAULT_ACTIVITY_PREFERENCES }
 
 type Call = { method: string; params: Record<string, unknown> }
 type Toast = { title: string; body: string }
+type OpenedView = { id: string; input?: unknown }
 type Fake = {
   context: UiPluginContext
   calls: Call[]
   toasts: Toast[]
+  opened: OpenedView[]
   emit(type: string): Promise<void>
 }
 type CallHandler = (method: string, params: Record<string, unknown>) => unknown | Promise<unknown>
@@ -39,6 +41,7 @@ type EventListener = (event: QuirkyEvent) => void | Promise<void>
 function fakeContext(callHandler?: CallHandler): Fake {
   const calls: Call[] = []
   const toasts: Toast[] = []
+  const opened: OpenedView[] = []
   const listeners = new Set<EventListener>()
   const context = {
     pluginId: 'quirky.worktree',
@@ -51,12 +54,13 @@ function fakeContext(callHandler?: CallHandler): Fake {
     log() {},
     subscribe(listener: EventListener) { listeners.add(listener); return () => void listeners.delete(listener) },
     onConnection() { return () => {} },
-    openView() {}
+    openView(id: string, input?: unknown) { opened.push({ id, input }) }
   } as unknown as UiPluginContext
   return {
     context,
     calls,
     toasts,
+    opened,
     async emit(type: string) {
       await Promise.all([...listeners].map((listener) => listener({ type, data: {} } as QuirkyEvent)))
     }
@@ -314,17 +318,115 @@ function workerRow(): OrchestrationWorkerRow {
   } as OrchestrationWorkerRow
 }
 
+function remoteWorkerRow(): OrchestrationWorkerRow {
+  const row = workerRow()
+  return {
+    ...row,
+    resource: {
+      ownerDispatchId: row.dispatchId, ownershipState: 'user_owned', releaseState: 'not_requested',
+      worktreeId: 'wt-auto', sessionId: 'remote-session'
+    },
+    projection: { ...row.projection, host: { kind: 'remote', id: 'remote-host' } }
+  } as OrchestrationWorkerRow
+}
+
 const workerSession: Session = {
   id: 'worker-session', kind: 'terminal', agent: 'claude', worktreeId: 'wt-auto', cwd: '/repo/wt-auto',
   title: 'Worker terminal', status: 'running', createdAt: 1, lastActivityAt: 1,
   exitCode: null, exitSignal: null, exitCause: null, restorable: false
 }
 
-async function renderWorker(fake: Fake, row = workerRow()): Promise<void> {
+const coordinatorSession: Session = { ...workerSession, id: 'coordinator-session', title: 'Coordinator terminal' }
+
+async function renderWorker(
+  fake: Fake,
+  row = workerRow(),
+  sessions: readonly Session[] = [workerSession]
+): Promise<void> {
   await render(createElement(OrchestrationRows, {
-    context: fake.context, workers: [row], sessions: [workerSession], worktreeId: 'wt-auto'
+    context: fake.context, workers: [row], sessions, worktreeId: 'wt-auto'
   }))
 }
+
+test('remote workers show host and custody without requiring a local worker session', async () => {
+  const fake = fakeContext()
+  await renderWorker(fake, remoteWorkerRow(), [coordinatorSession])
+  expect(host.textContent).toContain('remote-host')
+  expect(host.textContent).toContain('User-owned')
+  expect(host.textContent).not.toContain('Worker terminal')
+  expect(host.querySelector('button[aria-label="Open Agent label output"]')).not.toBeNull()
+})
+
+test('released remote worker custody rows remain hidden', async () => {
+  const remote = remoteWorkerRow()
+  const released: OrchestrationWorkerRow = {
+    ...remote,
+    resource: {
+      ownerDispatchId: remote.dispatchId, ownershipState: 'user_owned', releaseState: 'released',
+      worktreeId: 'wt-auto', sessionId: 'remote-session'
+    }
+  }
+  await renderWorker(fakeContext(), released, [coordinatorSession])
+  expect(host.querySelector('[aria-label="Orchestration workers"]')).toBeNull()
+  expect(host.textContent).toBe('')
+})
+
+test('remote task terminals open the returned remote output view and input', async () => {
+  const target = {
+    kind: 'remote_output',
+    taskId: 'task-1',
+    dispatchId: 'dispatch-1',
+    viewId: 'view:quirky.orchestration/remote-worker-output',
+    input: { dispatchId: 'dispatch-1' }
+  }
+  const fake = fakeContext(async () => target)
+  await renderWorker(fake, remoteWorkerRow(), [coordinatorSession])
+  await clickButton('Open Agent label output')
+  expect(fake.calls).toContainEqual({
+    method: 'quirky.orchestration/taskTerminal', params: { taskId: 'task-1' }
+  })
+  expect(fake.opened).toEqual([{ id: target.viewId, input: target.input }])
+  expect(fake.toasts).toEqual([])
+})
+
+test('remote task and dispatch mismatches toast without opening a view', async () => {
+  const cases = [
+    {
+      target: {
+        kind: 'remote_output', taskId: 'task-other', dispatchId: 'dispatch-1',
+        viewId: 'view:quirky.orchestration/remote-worker-output', input: { dispatchId: 'dispatch-1' }
+      },
+      toast: { title: 'Could not open worker', body: 'The task no longer has a current inspectable assignment.' }
+    },
+    {
+      target: {
+        kind: 'remote_output', taskId: 'task-1', dispatchId: 'dispatch-new',
+        viewId: 'view:quirky.orchestration/remote-worker-output', input: { dispatchId: 'dispatch-new' }
+      },
+      toast: { title: 'Could not open worker terminal', body: 'The task assignment changed; refresh the sidebar before opening its terminal.' }
+    }
+  ]
+  for (const item of cases) {
+    const fake = fakeContext(async () => item.target)
+    await renderWorker(fake, remoteWorkerRow(), [coordinatorSession])
+    await clickButton('Open Agent label output')
+    expect(fake.toasts).toEqual([item.toast])
+    expect(fake.opened).toEqual([])
+  }
+})
+
+test('local task terminals open the returned session target in the session view', async () => {
+  const fake = fakeContext(async () => ({
+    taskId: 'task-1', dispatchId: 'dispatch-1', sessionId: 'returned-session', worktreeId: 'returned-worktree'
+  }))
+  await renderWorker(fake)
+  await clickButton('Open Agent label terminal')
+  expect(fake.opened).toEqual([{
+    id: 'view:quirky.session/worktree',
+    input: { worktree: 'returned-worktree', session: 'returned-session' }
+  }])
+  expect(fake.toasts).toEqual([])
+})
 
 test('orchestration rows toast when a task no longer has an inspectable assignment', async () => {
   const fake = fakeContext(async () => ({}))
