@@ -1,5 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
@@ -8,7 +9,6 @@ import type { DropPreviewReport } from '../src/report'
 import type * as React from 'react'
 import type { Root } from 'react-dom/client'
 import type { ToolPanelFrame as ToolPanelFrameComponent } from '@quirky/ui'
-import { UI_CONTROL_COMMAND } from '../src/ui-control'
 import { sectionHeading } from './window/dom'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
@@ -659,10 +659,15 @@ function setup(
           return { connId: 1 }
         case 'ui.window.command.run': {
           if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
-          if (params.id !== UI_CONTROL_COMMAND) throw new Error(`unexpected command ${String(params.id)}`)
-          const handler = provided.get(UI_CONTROL_COMMAND) as ((args: unknown) => unknown) | undefined
-          if (!handler) throw new Error(`unexpected command ${UI_CONTROL_COMMAND}`)
-          return { result: await handler(params.args) }
+          const args = params.args
+          const handler = provided.get(String(params.id))
+          if (typeof handler === 'function') {
+            return { result: await (handler as (args: unknown) => unknown)(args) }
+          }
+          const scoped = params.id === UI_CONTROL_COMMAND &&
+            typeof args === 'object' && args !== null && !Array.isArray(args) && 'scope' in args
+          if (scoped) return { result: dispatchUiControl(context, args) }
+          throw new Error(`unexpected command ${String(params.id)}`)
         }
         case 'quirky.worktree/views':
           return { views: [], needsYouHidden: false, rowFact: 'last-activity' }
@@ -712,8 +717,9 @@ function setup(
 
   activate(context)
   const mount = provided.get(SLOT) as Mount
-  const flush = async () => act(async () => {
-    for (let i = 0; i < 8; i++) await Promise.resolve()
+  const flush = (action?: () => void) => act(async () => {
+    action?.()
+    for (let i = 0; i < 12; i++) await Promise.resolve()
   })
   return {
     world,
@@ -743,22 +749,16 @@ function setup(
       await flush()
     },
     async setLayout(next: UiLayout) {
-      await act(async () => {
+      await flush(() => {
         current = next
         for (const listener of layoutListeners) listener(next)
-        await Promise.resolve()
       })
-      await flush()
     },
     async click(element: Element) {
-      await act(async () => {
-        ;(element as HTMLElement).click()
-        await Promise.resolve()
-      })
-      await flush()
+      await flush(() => (element as HTMLElement).click())
     },
     async emit(type: string) {
-      await emit({ type, data: {} } as QuirkyEvent)
+      await act(async () => { await emit({ type, data: {} } as QuirkyEvent) })
     },
     deferNextSet() {
       const gate = callGate()

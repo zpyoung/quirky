@@ -28,8 +28,8 @@ const STYLESHEETS = [
   'packages/ui/src/design-system/compatibility-tokens.css',
   'packages/ui/src/design-system/tokens.css',
   'packages/ui/src/design-system/components.css',
-  'packages/ui/src/design-system/icons/icons.css',
   'packages/ui/src/design-system/worktree-primitives.css',
+  'packages/ui/src/design-system/icons/icons.css',
   'packages/ui/src/design-system/worktree-tree.css'
 ]
 const HEIGHT = 768
@@ -39,6 +39,8 @@ const CENTER_WIDTH = 330
 let browser: Browser | null = null
 let browserBundle = ''
 let panelHeaderRegressionBundle = ''
+let previousQuirkyHome: string | undefined
+let isolatedHome = ''
 
 function browserEntry(): string {
   const uiModule = join(ROOT, 'packages/ui/src/design-system/index.ts')
@@ -47,6 +49,7 @@ function browserEntry(): string {
   const worktreeBoardModule = join(ROOT, 'plugins/quirky.worktree/src/WorktreeBoard.tsx')
   const filterMenuModule = join(ROOT, 'plugins/quirky.worktree/src/FilterMenu.tsx')
   const viewTypesModule = join(ROOT, 'plugins/quirky.worktree/src/view-types.ts')
+  const uiControlModule = join(ROOT, 'plugins/quirky.worktree/src/ui-control.ts')
   return `
     import { createElement as h, useRef, useState } from 'react'
     import { createRoot } from 'react-dom/client'
@@ -55,6 +58,7 @@ function browserEntry(): string {
     import { DEFAULT_STOCK_OPTIONS } from ${JSON.stringify(controlTypesModule)}
     import { FilterMenu } from ${JSON.stringify(filterMenuModule)}
     import { DEFAULT_ACTIVITY_PREFERENCES } from ${JSON.stringify(viewTypesModule)}
+    import { dispatchUiControl, UI_CONTROL_COMMAND } from ${JSON.stringify(uiControlModule)}
     import { Badge, Button, ExpandingIconButton, IconButton, ListRow, Popover, Tabs, ToolPanelFrame } from ${JSON.stringify(uiModule)}
 
     function FilterMenuRegressionFixture() {
@@ -105,13 +109,24 @@ function browserEntry(): string {
     projectActionResult.hidden = true
     projectActionResult.style.cssText = 'position:fixed;left:4px;bottom:4px;z-index:10;padding:4px;background:white;color:black'
     document.body.append(projectActionResult)
+    const currentWindow = window as Window & { dispatchUiControl?: typeof dispatchUiControl }
+    currentWindow.dispatchUiControl = dispatchUiControl
     const treeContext = {
-      call: async () => [],
+      call: async (method, params = {}) => {
+        if (method === 'ui.window.self') return { connId: 1 }
+        if (method === 'ui.window.command.run') {
+          if (params.connId !== 1 || params.id !== UI_CONTROL_COMMAND) throw new Error('Unexpected window command descriptor')
+          const dispatch = currentWindow.dispatchUiControl
+          if (!dispatch) throw new Error('dispatchUiControl is not exposed on the current window')
+          return { result: dispatch(treeContext, params.args) }
+        }
+        return []
+      },
       toast: () => {},
       log: () => {},
       subscribe: () => () => {},
       onConnection: () => () => {}
-    }
+    } as Parameters<typeof dispatchUiControl>[0]
     const worktreeRows = [
       { id: 'primary', name: 'main', primary: true },
       { id: 'ordinary', name: 'feature-qa-new-features-3', primary: false, needsYou: true },
@@ -408,6 +423,9 @@ function pageMarkup(): string {
 
 beforeAll(async () => {
   if (!existsSync(chromium.executablePath())) return
+  previousQuirkyHome = process.env.QUIRKY_HOME
+  isolatedHome = mkdtempSync(join(tmpdir(), 'quirky-g3-51-narrow-sidebar-home-'))
+  process.env.QUIRKY_HOME = isolatedHome
   const tempDir = mkdtempSync(join(tmpdir(), 'quirky-worktree-narrow-sidebar-'))
   try {
     const entrypoint = join(tempDir, 'browser-entry.ts')
@@ -447,7 +465,15 @@ beforeAll(async () => {
 }, 60_000)
 
 afterAll(async () => {
-  await browser?.close()
+  try {
+    await browser?.close()
+  } finally {
+    if (isolatedHome) {
+      rmSync(isolatedHome, { recursive: true, force: true })
+      if (previousQuirkyHome === undefined) delete process.env.QUIRKY_HOME
+      else process.env.QUIRKY_HOME = previousQuirkyHome
+    }
+  }
 }, 60_000)
 
 test.skipIf(!existsSync(chromium.executablePath()))('keeps tool and project headers readable in two narrow side panels', async () => {

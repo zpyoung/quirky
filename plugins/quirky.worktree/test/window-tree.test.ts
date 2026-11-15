@@ -152,15 +152,27 @@ async function openMenu(win: HeadlessWindow, name: string, project?: string): Pr
   const row = card(name, project)
   if (!row) throw new Error(`no worktree row for ${project}/${name}`)
   await click(button(row, `Actions for ${name}`)!)
-  return win.waitFor(() => document.querySelector<HTMLElement>('[role="menu"]') ?? undefined)
+  return win.waitFor(() => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]')
+    return menu?.getAttribute('aria-label') === `Actions for ${name}` && document.activeElement === menu
+      ? menu
+      : undefined
+  })
 }
 
 const item = (label: string): HTMLElement | undefined => menuItem(document, label)
 
 async function choose(win: HeadlessWindow, label: string): Promise<void> {
   const target = await win.waitFor(() => item(label))
+  const opensSubmenu = target.getAttribute('aria-haspopup') === 'menu'
   target.click()
-  await Bun.sleep(20)
+  try {
+    await win.waitFor(() => opensSubmenu
+      ? target.getAttribute('aria-expanded') === 'true'
+      : document.querySelector('[role="menu"]') === null)
+  } catch (error) {
+    throw new Error(`Menu selection ${label}: connected=${target.isConnected}, expanded=${target.getAttribute('aria-expanded')}, menus=${[...document.querySelectorAll('[role="menu"]')].map((menu) => menu.getAttribute('aria-label')).join(', ')}`, { cause: error })
+  }
 }
 
 test('SC-44: the sidebar reports project and group membership, primary worktrees, and nested children', async () => {

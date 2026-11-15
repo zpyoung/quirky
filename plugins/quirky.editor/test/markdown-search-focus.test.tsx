@@ -6,6 +6,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
 import { searchMarkdown, type SearchMatch } from '../src/markdown/source'
+import { createEditorUiControlReportScope, EditorUiControlProvider } from '../src/window/uiControl'
 
 type Mode = 'preview' | 'rich'
 type PreviewSearchResponse = { total: number; matches: SearchMatch[] }
@@ -115,7 +116,8 @@ async function renderSurface(
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
-  await act(async () => root.render(<MarkdownSurface {...props} />))
+  const scope = createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document', context })
+  await act(async () => root.render(<EditorUiControlProvider scope={scope}><MarkdownSurface {...props} /></EditorUiControlProvider>))
   let unmounted = false
   const surface: MountedSurface = {
     element,
@@ -124,6 +126,7 @@ async function renderSurface(
       if (unmounted) return
       unmounted = true
       await act(async () => root.unmount())
+      scope.dispose()
     }
   }
   surfaces.push(surface)

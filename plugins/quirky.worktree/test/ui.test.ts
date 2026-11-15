@@ -3,8 +3,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { basename } from 'node:path'
 import type { AgentDisplayState, AgentStatusSummary, Ask, ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext, Worktree, WorkspaceOriginView } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import { DEFAULT_STOCK_OPTIONS, type CleanupCandidate, type CleanupRemovalResult, type StockWorktreeOptions, type WorktreeControl } from '../src/control-types'
-import { UI_CONTROL_COMMAND } from '../src/ui-control'
 import type * as React from 'react'
 import type { Root } from 'react-dom/client'
 import type { ToolPanelFrame as ToolPanelFrameComponent } from '@quirky/ui'
@@ -217,13 +217,20 @@ function setup(layout: UiLayout = { worktree: null, view: null, panel: null, sid
           return { connId: 1, ...(world.desktopClientId === null ? {} : { desktopClientId: world.desktopClientId }) }
         case 'ui.window.command.run': {
           if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
-          if (params.id !== UI_CONTROL_COMMAND) throw new Error(`unexpected command ${String(params.id)}`)
-          const handler = provided.get(String(params.id)) as ((args: unknown) => unknown) | undefined
-          if (!handler) throw new Error(`unexpected command ${String(params.id)}`)
-          world.windowCommandStarted?.()
-          if (world.windowCommandGate) await world.windowCommandGate
-          const result = await handler(params.args)
-          world.windowCommandDispatched?.()
+          const args = params.args
+          const handler = provided.get(String(params.id))
+          let result: unknown
+          if (typeof handler === 'function') {
+            world.windowCommandStarted?.()
+            if (world.windowCommandGate) await world.windowCommandGate
+            result = await (handler as (args: unknown) => unknown)(args)
+            world.windowCommandDispatched?.()
+          } else {
+            const scoped = params.id === UI_CONTROL_COMMAND &&
+              typeof args === 'object' && args !== null && !Array.isArray(args) && 'scope' in args
+            if (!scoped) throw new Error(`unexpected command ${String(params.id)}`)
+            result = dispatchUiControl(context, args)
+          }
           return { result }
         }
         case 'quirky.worktree/origins':
@@ -565,7 +572,10 @@ const pendingRow = (name: string, repoName: string) =>
     const text = row.textContent?.replace(/\s+/g, ' ').trim() ?? ''
     return text.includes(name) && text.includes('Creating…')
   })
-const click = (element: Element) => act(async () => void (element as HTMLElement).click())
+const click = (element: Element) => act(async () => {
+  ;(element as HTMLElement).click()
+  for (let i = 0; i < 12; i++) await Promise.resolve()
+})
 const buttonNamed = (root: ParentNode, name: string) =>
   [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
     button.getAttribute('aria-label') === name || button.textContent?.replace(/\s+/g, ' ').trim() === name
@@ -616,6 +626,7 @@ const noticeAction = (line: Element | undefined, label: string) =>
 const contextMenu = (element: Element, x = 30, y = 40) =>
   act(async () => {
     element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y }))
+    for (let i = 0; i < 12; i++) await Promise.resolve()
   })
 const menu = () =>
   [...document.body.querySelectorAll<HTMLElement>('[role="menu"]')]
@@ -646,6 +657,7 @@ const press = (key: string) => act(async () => {
   } else {
     window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
   }
+  for (let i = 0; i < 12; i++) await Promise.resolve()
 })
 const typeInto = (input: HTMLInputElement, value: string) =>
   act(async () => {
@@ -1700,7 +1712,31 @@ test.each(['Cancel', 'Escape'])('Worktree details discards reference edits on %s
   await chooseMore('Details…')
   await click(dialogButton('Unlink'))
   expect(h.callsTo('quirky.worktree/unlinkReference')).toEqual([])
+  const treeOpenRequest = {
+    connId: 1,
+    id: UI_CONTROL,
+    args: {
+      action: 'control',
+      scope: 'tree',
+      target: 'w2',
+      operation: 'open-workspace-menu',
+      payload: { x: expect.any(Number), y: expect.any(Number), focus: true }
+    }
+  }
+  const treeCloseRequest = {
+    connId: 1,
+    id: UI_CONTROL,
+    args: {
+      action: 'control',
+      scope: 'tree',
+      target: 'w2',
+      operation: 'close-menu',
+      payload: { seq: expect.any(Number) }
+    }
+  }
   expect(h.callsTo('ui.window.command.run')).toEqual([
+    treeOpenRequest,
+    treeCloseRequest,
     openDetailsRequest,
     { connId: 1, id: UI_CONTROL, args: { action: 'unlink-reference', worktree: 'w2', url: 'https://example.com/saved' } }
   ])
@@ -1711,6 +1747,8 @@ test.each(['Cancel', 'Escape'])('Worktree details discards reference edits on %s
   await click(dialogButton('Add reference'))
   expect(h.callsTo('quirky.worktree/linkReference')).toEqual([])
   expect(h.callsTo('ui.window.command.run')).toEqual([
+    treeOpenRequest,
+    treeCloseRequest,
     openDetailsRequest,
     { connId: 1, id: UI_CONTROL, args: { action: 'unlink-reference', worktree: 'w2', url: 'https://example.com/saved' } },
     { connId: 1, id: UI_CONTROL, args: { action: 'add-reference', worktree: 'w2', url: 'https://example.com/draft', label: 'Draft task' } }

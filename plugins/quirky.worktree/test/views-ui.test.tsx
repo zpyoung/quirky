@@ -1,12 +1,12 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import type { ProjectGroup, QuirkyEvent, Repo, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import type * as React from 'react'
 import type { Root } from 'react-dom/client'
 import type { ToolPanelFrame as ToolPanelFrameComponent } from '@quirky/ui'
 import { DEFAULT_STOCK_OPTIONS, type WorktreeControl } from '../src/control-types'
-import { UI_CONTROL_COMMAND } from '../src/ui-control'
 import { allSpecFromStock, DEFAULT_ACTIVITY_PREFERENCES, DEFAULT_VIEWS_STATE, type SavedView, type Tag, type ViewId, type ViewsState } from '../src/view-types'
 import { sectionHeading } from './window/dom'
 
@@ -95,10 +95,12 @@ function setup() {
   const listeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
   const layoutListeners = new Set<(layout: UiLayout) => void>()
   let layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null }
-  const emit = (type: string) => act(async () => {
+  const emit = async (type: string) => {
     await Promise.all([...listeners].map((listener) => listener({ type, data: {} } as QuirkyEvent)))
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
+    const tick = Promise.withResolvers<void>()
+    setTimeout(tick.resolve, 0)
+    await tick.promise
+  }
   const listed = () => world.worktrees.map((worktree) => ({ ...worktree, tagIds: [...(world.assignments[worktree.id] ?? [])] }))
 
   const context = {
@@ -114,10 +116,15 @@ function setup() {
           return { connId: 1 }
         case 'ui.window.command.run': {
           if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
-          if (params.id !== UI_CONTROL_COMMAND) throw new Error(`unexpected command ${String(params.id)}`)
-          const handler = provided.get(UI_CONTROL_COMMAND) as ((args: unknown) => unknown) | undefined
-          if (!handler) throw new Error(`unexpected command ${UI_CONTROL_COMMAND}`)
-          return { result: await handler(params.args) }
+          const args = params.args
+          const handler = provided.get(String(params.id))
+          if (typeof handler === 'function') {
+            return { result: await (handler as (args: unknown) => unknown)(args) }
+          }
+          const scoped = params.id === UI_CONTROL_COMMAND &&
+            typeof args === 'object' && args !== null && !Array.isArray(args) && 'scope' in args
+          if (scoped) return { result: dispatchUiControl(context, args) }
+          throw new Error(`unexpected command ${String(params.id)}`)
         }
         case 'quirky.repo/list':
           return [...REPOS]
@@ -165,7 +172,7 @@ function setup() {
             else current.delete(String(params.tagId))
             world.assignments[id] = [...current]
           }
-          void emit('quirky.worktree/tagsChanged')
+          await emit('quirky.worktree/tagsChanged')
           return {}
         }
         case 'quirky.worktree/views':
@@ -174,7 +181,7 @@ function setup() {
         case 'quirky.worktree/setViews': {
           world.views = structuredClone(params.state as ViewsState)
           world.setViewsCalls.push(structuredClone(world.views))
-          void emit('quirky.worktree/viewsChanged')
+          await emit('quirky.worktree/viewsChanged')
           return structuredClone(world.views)
         }
         case 'quirky.worktree/activeView': {
@@ -231,7 +238,7 @@ function setup() {
     world,
     calls,
     reports,
-    emit,
+    emit: async (type: string) => act(async () => { await emit(type) }),
     async mountInto(element: HTMLElement) {
       const frameRoot = createRoot(element)
       const bodyRef = { current: null as HTMLDivElement | null }
@@ -267,28 +274,29 @@ afterEach(async () => {
   document.body.replaceChildren()
 })
 
-const settle = () => act(async () => {
-  for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+const settle = (action?: () => void) => act(async () => {
+  action?.()
+  for (let i = 0; i < 10; i++) {
+    const tick = Promise.withResolvers<void>()
+    setTimeout(tick.resolve, 0)
+    await tick.promise
+  }
 })
 const click = async (element: Element | null | undefined, init: MouseEventInit = {}) => {
   if (!element) throw new Error('nothing to click')
-  await act(async () => {
+  await settle(() => {
     element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }))
   })
-  await settle()
 }
 const typeInto = (input: HTMLInputElement, value: string) => act(async () => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
   input.dispatchEvent(new Event('input', { bubbles: true }))
 })
-const pressEscape = async () => {
-  await act(async () => {
-    const active = document.activeElement
-    const target = active instanceof HTMLElement && active.closest('[role="menu"], [role="dialog"]') ? active : window
-    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
-  })
-  await settle()
-}
+const pressEscape = () => settle(() => {
+  const active = document.activeElement
+  const target = active instanceof HTMLElement && active.closest('[role="menu"], [role="dialog"]') ? active : window
+  target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+})
 const norm = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim()
 const buttonNamed = (root: ParentNode, name: string) =>
   [...root.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.getAttribute('aria-label') === name || norm(button.textContent) === name)
