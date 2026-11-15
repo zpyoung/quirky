@@ -383,7 +383,7 @@ function wrapSupervisionMethod(
   engine: SupervisionEngine,
   method: Extract<keyof SupervisionEngine, string>,
   calls: SupervisionCall[],
-  observeSample?: (sample: StructuredSample) => void
+  observeSample?: (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => void
 ): void {
   const target = engine as unknown as Record<string, (...args: unknown[]) => unknown>
   const original = target[method]!.bind(engine)
@@ -393,16 +393,16 @@ function wrapSupervisionMethod(
     const input = args[0] as StructuredWatch<unknown>
     return original({
       ...input,
-      onSample: async (sample, signal) => {
+      onSample: async (sample: StructuredSample, signal: AbortSignal) => {
         const decision = await input.onSample(sample, signal)
-        observeSample(sample)
+        observeSample(sample, decision)
         return decision
       }
     })
   })
 }
 
-function spyOnSupervisionEngine(observeSample?: (sample: StructuredSample) => void) {
+function spyOnSupervisionEngine(observeSample?: (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => void) {
   const calls: SupervisionCall[] = []
   const create = supervision.createSupervision
   const factory = spyOn(supervision, 'createSupervision')
@@ -967,6 +967,62 @@ describe('LoopService background engine', () => {
 
   test('charges working time before an approval event interrupts a held working sample', async () => {
     await assertApprovalHoldAccounting(true, true)
+  })
+
+  test('approval time cannot satisfy the no-busy settlement timeout after a stale sample', async () => {
+    const runtime = rig()
+    const clock = new ManualClock()
+    runtime.turns.push('hold')
+    const call = runtime.context.call.bind(runtime.context)
+    const send = spyOn(runtime.context, 'call').mockImplementation(async (method, params) => {
+      const value = await call(method, params)
+      if (method === 'quirky.structured/send') {
+        const sessionId = String(params?.session)
+        runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'running' })
+      }
+      return value
+    })
+    let idleSample = Promise.withResolvers<'continue' | 'done'>()
+    spyOnSupervisionEngine((sample, decision) => {
+      if (sample.session.ok && sample.session.value.status === 'running') idleSample.resolve(decision.kind)
+    })
+    const loops = service(runtime, clock.now)
+    const journal = Promise.withResolvers<unknown>()
+    try {
+      await loops.start()
+      const created = await loops.create(input())
+      expect(await idleSample.promise).toBe('continue')
+      const sessionId = runtime.sends[0]!.session
+      runtime.failedJournalResponsesAfterSend.push(journal.promise)
+      runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+      await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
+      await flushFakeRpcs()
+      runtime.pendingAsks = [{ id: 'ask-idle-clock', sessionId, envelope: { status: 'pending' } }]
+      runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'waiting' })
+      runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+      await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'needs-you')
+
+      clock.advance(5000)
+      runtime.pendingAsks = []
+      runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'running' })
+      runtime.emit('quirky.ask/resolved', { askId: 'ask-idle-clock' })
+      idleSample = Promise.withResolvers<'continue' | 'done'>()
+      journal.resolve([])
+      expect(await idleSample.promise).toBe('continue')
+      idleSample = Promise.withResolvers<'continue' | 'done'>()
+      expect(await idleSample.promise).toBe('continue')
+      expect(loops.get(created.id).iterationsCompleted).toBe(0)
+      expect(loops.get(created.id).state).toBe('running')
+
+      clock.advance(25)
+      runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+      const paused = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
+      expect(paused.iterationsCompleted).toBe(1)
+      expect(loops.iterations(created.id)).toMatchObject([{ endReason: 'settled' }])
+    } finally {
+      journal.resolve([])
+      send.mockRestore()
+    }
   })
 
   test('pauses a configured cost cap when provider usage is unavailable instead of treating it as zero', async () => {

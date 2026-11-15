@@ -921,6 +921,7 @@ export class LoopDriver {
         onSample: async (sample, watchSignal) => {
           this.assertActive(watchSignal)
           if (sampleHoldRevision !== holdRevision) {
+            lastTick = this.now()
             this.supervision.wake(sessionId)
             return { kind: 'continue' }
           }
@@ -932,6 +933,7 @@ export class LoopDriver {
           const asks = await this.approvalPending(sessionId, watchSignal)
           this.assertActive(watchSignal)
           if (sampleHoldRevision !== holdRevision) {
+            lastTick = this.now()
             this.supervision.wake(sessionId)
             return { kind: 'continue' }
           }
