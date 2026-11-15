@@ -6,6 +6,13 @@ import { formatDiagnostic, runSpawnLint, scanSourceContent } from './spawn-lint'
 
 const file = 'plugins/example/a.ts'
 const hit = 'process/no-direct-spawn: Use the shared process runner.'
+const spawnDiagnostic = (column: number, line = 1) => ({
+  file, line, column, rule: 'process/no-direct-spawn', message: 'Use the shared process runner.',
+})
+const escapedGlobalDiagnostic = (column: number, line = 1) => ({
+  file, line, column, rule: 'process/no-escaped-global',
+  message: 'Read Bun, Atomics, process, module and the global object only through a static, allowed member.',
+})
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 function put(root: string, path: string, source: string) {
@@ -70,6 +77,58 @@ test.each(spawnGapCases)('preserves the %s hit and column after large padding', 
     file, line: 1, column: padding + column, rule: 'process/no-direct-spawn', message: 'Use the shared process runner.',
   }])
 })
+const taskOneErrorCases = [
+  ['Bun root alias', 'const b = Bun; b.spawn([])', escapedGlobalDiagnostic(11)],
+  ['computed Bun member', 'const k = "spawn"; Bun[k]([])', escapedGlobalDiagnostic(20)],
+  ['optional computed Bun member', 'Bun?.[k]?.([])', escapedGlobalDiagnostic(1)],
+  ['Bun through Reflect', 'Reflect.get(Bun, "spawn")([])', escapedGlobalDiagnostic(13)],
+  ['Bun argument', 'run(Bun)', escapedGlobalDiagnostic(5)],
+  ['Bun property argument', 'Object.values(Bun)', escapedGlobalDiagnostic(15)],
+  ['Bun spread', 'const b = { ...Bun }', escapedGlobalDiagnostic(16)],
+  ['Bun shorthand property', 'const o = { Bun }', escapedGlobalDiagnostic(13)],
+  ['Bun default export', 'export default Bun', escapedGlobalDiagnostic(16)],
+  ['Bun in array literal', 'const [b] = [Bun]; b.spawn([])', escapedGlobalDiagnostic(14)],
+  ['Bun parameter default', 'function f(b = Bun) { b.spawn([]) }', escapedGlobalDiagnostic(16)],
+  ['globalThis alias', 'const g = globalThis; g.Bun.spawn([])', escapedGlobalDiagnostic(11)],
+  ['globalThis Bun alias', 'const B = globalThis.Bun; B.spawn([])', escapedGlobalDiagnostic(11)],
+  ['global Bun alias', 'const B = global["Bun"]; B.spawn([])', escapedGlobalDiagnostic(11)],
+  ['self Bun argument', 'f(self.Bun)', escapedGlobalDiagnostic(3)],
+  ['dynamic globalThis member', 'globalThis[k]', escapedGlobalDiagnostic(1)],
+  ['Bun namespace import escape', 'import * as B from "bun"; f(B)', escapedGlobalDiagnostic(29)],
+  ['Bun default import escape', 'import B from "bun"; const c = B; c.spawn([])', escapedGlobalDiagnostic(32)],
+  ['dynamic Bun import escape', 'const b = await import("bun"); b.spawn([])', escapedGlobalDiagnostic(17)],
+  ['Bun rest destructuring', 'const { ...rest } = Bun; rest.spawn([])', escapedGlobalDiagnostic(9)],
+  ['computed Bun destructuring', 'const { [k]: s } = Bun', escapedGlobalDiagnostic(9)],
+  ['globalThis Bun destructuring', 'const { Bun: B } = globalThis', escapedGlobalDiagnostic(9)],
+  ['nested Bun destructuring spawn', 'const { Bun: { spawn } } = globalThis', spawnDiagnostic(16)],
+  ['whole Bun re-export', 'export * from "bun"', escapedGlobalDiagnostic(1)],
+  ['Bun namespace re-export', 'export * as B from "bun"', escapedGlobalDiagnostic(1)],
+  ['Bun default re-export', 'export { default } from "bun"', escapedGlobalDiagnostic(10)],
+  ['global Bun spawn', 'global.Bun.spawn([])', spawnDiagnostic(1)],
+  ['self Bun spawnSync', 'self.Bun.spawnSync([])', spawnDiagnostic(1)],
+  ['nested globalThis Bun shell', 'globalThis.globalThis.Bun.$`true`', spawnDiagnostic(1)],
+  ['Bun import-equals spawn', 'import B = require("bun"); B.spawn([])', spawnDiagnostic(28)],
+  ['Bun openInEditor', 'Bun.openInEditor("x")', spawnDiagnostic(1)],
+  ['imported openInEditor', 'import { openInEditor } from "bun"', spawnDiagnostic(10)],
+  ['Bun spawn instantiation', 'const f = Bun.spawn<any>', spawnDiagnostic(11)],
+  ['Bun spawn instantiation in type argument', 'const f = Bun.spawn<typeof Bun.spawn>', spawnDiagnostic(11)],
+  ['globalThis Bun spawnSync instantiation', 'const f = globalThis.Bun.spawnSync<unknown>', spawnDiagnostic(11)],
+  ['Bun shell instantiation', 'const f = Bun.$<unknown>', spawnDiagnostic(11)],
+  ['Bun spawn class heritage', 'class C extends Bun.spawn {}', spawnDiagnostic(17)],
+  ['Bun instantiation escape', 'const b = Bun<any>', escapedGlobalDiagnostic(11)],
+  ['ambient Bun declaration', 'declare const Bun: any; f(Bun)', escapedGlobalDiagnostic(27)],
+  ['ambient self declaration', 'declare global { var self: any }\nf(self)', escapedGlobalDiagnostic(3, 2)],
+  ['sibling-scope self shadow', 'let x; { const self = 1 }\nf(self)', escapedGlobalDiagnostic(3, 2)],
+] as const
+test.each(taskOneErrorCases)('reports exact task 1 diagnostic and padded column: %s', (_name, source, expected) => {
+  expect(scanSourceContent(file, source)).toEqual([expected])
+  const padding = 1_048_577
+  const paddedLines = source.split('\n')
+  paddedLines[expected.line - 1] = `${' '.repeat(padding)}${paddedLines[expected.line - 1]!}`
+  expect(scanSourceContent(file, paddedLines.join('\n'))).toEqual([{
+    ...expected, column: expected.column + padding,
+  }])
+})
 const genericInstantiationCases = (['spawn', 'spawnSync', '$'] as const).map(member =>
   [`generic ${member} instantiation`, `const f = Bun.${member}<unknown>`, 1] as const)
 const extractionCases = [
@@ -107,7 +166,6 @@ test('type arguments and type-only Bun references do not add runtime hits', () =
     'interface C extends Bun.spawn {}',
     'export type { spawn } from "bun"',
     'export { type spawn } from "bun"',
-    'export * from "bun"',
     'import type { default as B } from "bun"; B.spawn([])',
     'const other = { spawn: () => 0 }; other.spawn()',
   ]) expect(scanSourceContent(file, source)).toEqual([])
@@ -137,8 +195,30 @@ test.each([
   'const s = `require("child_process") Bun.spawn([])`', 'type R = ReturnType<typeof Bun.spawn>',
   'ctx.process.run({}); ctx.process.spawn({}); Bun.file("x")', 'import { YAML } from "bun"',
   'import type B from "bun"; type R = typeof B.spawn', 'import { type spawn } from "bun"',
-  'type C = typeof globalThis.Bun.spawn', 'const b = Bun; b.spawn([])',
 ])('ignores prose, Bun types, and allowed APIs: %s', source => { expect(scanSourceContent(file, source)).toEqual([]) })
+const taskOneAllowedCases = [
+  ['scenario 7 entry 1', 'Bun.file("x").text(); Bun.env.HOME; Bun["version"]; const { file, env: { HOME } } = Bun'],
+  ['scenario 7 entry 2', 'globalThis.setTimeout(f, 1); globalThis.Bun.file("x"); global.process.env.HOME; self.crypto.randomUUID(); const { setTimeout: st } = globalThis; const { Bun: { file } } = globalThis'],
+  ['scenario 7 entry 3', 'typeof Bun; typeof globalThis.Bun; "Bun" in globalThis; typeof process'],
+  ['scenario 7 entry 8', 'import * as BunRuntime from "bun"; import { YAML } from "bun"; const J = (BunRuntime as typeof BunRuntime & { JSONC: unknown }).JSONC'],
+  ['scenario 7 entry 9', 'class C { self = 1; process() {} }; o.self; o.global; o.Bun; ({ Bun: 1, process: 2 }); Bun: for (;;) break Bun'],
+  ['scenario 7 entry 10', 'let x: typeof globalThis; type T = typeof Bun; function f(e: globalThis.KeyboardEvent) {}'],
+  ['scenario 8 local self', 'const self = { x: 1 }; f(self)'],
+  ['scenario 8 local global', 'const global = new Map(); g(global?.[k])'],
+  ['scenario 8 local process parameter', 'function f(process) { return process }'],
+  ['scenario 8 local Bun parameter', 'function f(Bun) { return Bun }'],
+  ['scenario 8 local Atomics catch binding', 'try {} catch (Atomics) { Atomics.wait() }'],
+  ['scenario 8 unrelated self import', 'import self from "./x"; f(self)'],
+  ['scenario 8 unrelated process import', 'import process from "./process"; f(process); process.getBuiltinModule(x)'],
+  ['scenario 8 unrelated loader import', 'import { getBuiltinModule } from "./loader"; getBuiltinModule(x)'],
+  ['scenario 13 Bun file instantiation', 'const f = Bun.file<any>'],
+  ['scenario 13 allowed Bun member instantiation', 'const f = (Bun as any).file<any>; f("x")'],
+  ['scenario 13 Bun file heritage', 'class C extends Bun.file {}'],
+  ['scenario 13 Bun spawn interface heritage', 'interface C extends Bun.spawn {}'],
+] as const
+test.each(taskOneAllowedCases)('keeps applicable task 1 controls allowed: %s', (_name, source) => {
+  expect(scanSourceContent(file, source)).toEqual([])
+})
 test('reports exact positions, ordering, and padded source without truncation', () => {
   expect(scanSourceContent(file, 'Bun.spawn([])').map(formatDiagnostic)).toEqual([`${file}:1:1 ${hit}`])
   expect(scanSourceContent(file, 'Bun.spawn([]); Bun.spawnSync([])\n  Bun.$`true`').map(formatDiagnostic)).toEqual([
