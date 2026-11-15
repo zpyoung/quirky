@@ -1814,7 +1814,7 @@ function ProjectFieldCell(props: {
     const raw = props.item.content?.[propName]
     const values = Array.isArray(raw) ? raw.map((entry) => typeof entry === 'string' ? entry : String(record(entry)?.login ?? record(entry)?.name ?? '')).filter(Boolean).join(', ') : ''
     const editor = props.inlineCell(props.item, props.field)
-    return <InlineText value={values} ariaLabel={`${props.field.name ?? propName} for issue ${String(props.item.content?.number ?? '')}`} placeholder="Comma-separated values" {...editor} />
+    return <InlineText value={values} ariaLabel={`${props.field.name ?? propName} for issue ${String(props.item.content?.number ?? '')}`} placeholder="Comma-separated values" editing={editor.editing} draft={editor.draft} saving={editor.saving} error={editor.error} onBegin={editor.onBegin} onDraft={editor.onDraft} onSave={editor.onSave} onCancel={editor.onCancel} onKeyDown={editor.onKeyDown} />
   }
   if ((type === 'ISSUE_TYPE' || /issue.?type/i.test(props.field.name ?? '')) && isIssue(props.item)) {
     const currentType = record(props.item.content?.issueType)
@@ -1831,7 +1831,7 @@ function ProjectFieldCell(props: {
     const raw = fieldValue(props.item, props.field.id)
     const rawValue = typeof raw === 'string' || typeof raw === 'number' ? String(raw) : String(record(raw)?.text ?? record(raw)?.number ?? record(raw)?.date ?? '')
     const editor = props.inlineCell(props.item, props.field)
-    return <InlineText value={rawValue} ariaLabel={props.field.name ?? 'Project field'} type={type === 'NUMBER' ? 'number' : type === 'DATE' ? 'date' : 'text'} {...editor} />
+    return <InlineText value={rawValue} ariaLabel={props.field.name ?? 'Project field'} type={type === 'NUMBER' ? 'number' : type === 'DATE' ? 'date' : 'text'} editing={editor.editing} draft={editor.draft} saving={editor.saving} error={editor.error} onBegin={editor.onBegin} onDraft={editor.onDraft} onSave={editor.onSave} onCancel={editor.onCancel} onKeyDown={editor.onKeyDown} />
   }
   if (type === 'LABELS' || type === 'USERS' || type === 'REPOSITORY' || type === 'PARENT_ISSUE') return <span className="ui-text-muted">{current}</span>
   return <span className="ui-text-muted">{current}</span>
