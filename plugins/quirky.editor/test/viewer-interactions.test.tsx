@@ -3,12 +3,18 @@ import { act } from 'react'
 import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
-
-import type { EditorUiControlAddress, EditorUiControlReportScope } from '../src/window/uiControl'
+import {
+  EDITOR_UI_CONTROL_COMMAND,
+  EditorUiControlProvider,
+  createEditorUiControlReportScope,
+  type EditorUiControlAddress,
+  type EditorUiControlReportScope
+} from '../src/window/uiControl'
 
 type ControlHandler = (...args: unknown[]) => unknown
+type WindowBridge = { handlers: Map<string, ControlHandler> }
 type ControlReport = { mounted?: boolean; bufferId?: string; tabId?: string; uiControls?: EditorUiControlAddress[] }
 type ControlRuntime = {
   context: UiPluginContext
@@ -16,11 +22,15 @@ type ControlRuntime = {
   reportScopes: EditorUiControlReportScope[]
   reports: ControlReport[]
   provided: Map<string, ControlHandler>
+  windows: Map<number, WindowBridge>
+  commandRoutes: number[]
+  executeCalls: string[]
   invoke(method: string, params: Record<string, unknown>): Promise<unknown>
 }
 type Mounted = {
   element: HTMLElement
   runtime: ControlRuntime
+  scope: EditorUiControlReportScope
   commands(): CommandHandlers | undefined
   report(): ControlReport
   addresses(): EditorUiControlAddress[]
@@ -35,10 +45,9 @@ let NotebookSurface: ComponentType<SurfaceProps>
 let ViewerSurface: ComponentType<SurfaceProps>
 let activate: (context: UiPluginContext) => void
 let deactivate: () => void
-let createEditorUiControlReportScope: (onReport: (report: unknown) => void, options: { surface: string }) => EditorUiControlReportScope
-let EditorUiControlProvider: ComponentType<{ scope: EditorUiControlReportScope; children: ReactNode }>
 let mounted: Mounted[]
 let runtimes: ControlRuntime[]
+let controlFixture: ControlRuntime | null
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -48,18 +57,22 @@ beforeAll(async () => {
   ;({ NotebookSurface } = await import('../src/notebook/NotebookSurface'))
   ;({ ViewerSurface } = await import('../src/viewers/ViewerSurface'))
   ;({ activate, deactivate } = await import('../src/ui'))
-  ;({ createEditorUiControlReportScope, EditorUiControlProvider } = await import('../src/window/uiControl'))
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
 })
-beforeEach(() => { mounted = []; runtimes = [] })
+beforeEach(() => {
+  mounted = []
+  runtimes = []
+  controlFixture = null
+})
 afterEach(async () => {
   for (const surface of mounted) await surface.unmount()
   mounted = []
   for (const runtime of runtimes) for (const scope of runtime.reportScopes) scope.dispose()
   deactivate()
   runtimes = []
+  controlFixture = null
   document.body.innerHTML = ''
 })
 
@@ -101,25 +114,41 @@ function createControlRuntime(delegate: SurfaceProps['onAction']): ControlRuntim
   const calls: { method: string; params?: Record<string, unknown> }[] = []
   const reportScopes: EditorUiControlReportScope[] = []
   const reports: ControlReport[] = []
-  let context: UiPluginContext
+  const commandRoutes: number[] = []
+  const executeCalls: string[] = []
+  const subscribers = new Set<(event: { type: string }) => void>()
+  const ownerHandlers = new Map<string, ControlHandler>([[EDITOR_UI_CONTROL_COMMAND, async () => {
+    throw new Error('the owner window must not receive this click')
+  }]])
+  const windows = new Map<number, WindowBridge>([
+    [11, { handlers: ownerHandlers }],
+    [22, { handlers: provided }]
+  ])
   const invoke = (method: string, params: Record<string, unknown>) => delegate(method, params)
-  context = {
+  const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       if (method === 'ui.window.self') return { connId: 22 }
       if (method === 'ui.window.command.run') {
+        const connId = params.connId as number
+        commandRoutes.push(connId)
         const id = typeof params.id === 'string' ? params.id : ''
-        const handler = provided.get(id)
+        if (!id) throw new Error('Missing command ID')
+        const handler = windows.get(connId)?.handlers.get(id)
         if (!handler) throw new Error(`Missing command handler: ${id}`)
         return { result: await handler(params.args) }
       }
       return invoke(method, params)
     },
     provide(id: string, handler: unknown) {
-      if (typeof handler === 'function') provided.set(id, handler as ControlHandler)
+      if (typeof handler !== 'function') throw new Error(`Expected handler for ${id}`)
+      provided.set(id, handler as ControlHandler)
     },
-    subscribe: () => () => {},
+    subscribe(handler: (event: { type: string }) => void) {
+      subscribers.add(handler)
+      return () => subscribers.delete(handler)
+    },
     onConnection: () => () => {},
     getSetting(name: string) {
       const settings: Record<string, unknown> = {
@@ -136,16 +165,24 @@ function createControlRuntime(delegate: SurfaceProps['onAction']): ControlRuntim
         editorFontZoomLevel: 0,
         editorMinimapEnabled: false
       }
-      return settings[name]
+      return Object.hasOwn(settings, name) ? settings[name] : 300
     },
     getLayout: () => ({ worktree: 'wt-editor-viewers', view: null, panel: null }),
-    executeCommand: async () => {},
+    executeCommand: async (id: string) => { executeCalls.push(id) },
     toast: () => {}
   } as unknown as UiPluginContext
   activate(context)
-  const runtime = { context, calls, reportScopes, reports, provided, invoke }
+  const activatedHandler = provided.get(EDITOR_UI_CONTROL_COMMAND)
+  if (!activatedHandler) throw new Error('activate did not provide the editor UI control command')
+  windows.get(22)!.handlers.set(EDITOR_UI_CONTROL_COMMAND, activatedHandler)
+  const runtime = { context, calls, reportScopes, reports, provided, windows, commandRoutes, executeCalls, invoke }
   runtimes.push(runtime)
   return runtime
+}
+
+function getControlFixture(): ControlRuntime {
+  if (controlFixture === null) controlFixture = createControlRuntime(async () => ({}))
+  return controlFixture
 }
 
 async function renderSurface(
@@ -155,12 +192,15 @@ async function renderSurface(
   onDraft: SurfaceProps['onDraft'] = () => {},
   existingRuntime?: ControlRuntime
 ): Promise<Mounted> {
-  const runtime = existingRuntime ?? createControlRuntime(onAction)
+  const runtime = existingRuntime ?? getControlFixture()
   let report: ControlReport = {}
   const scope = createEditorUiControlReportScope((value) => {
     report = value as ControlReport
     runtime.reports.push(report)
-  }, { surface: 'view:quirky.editor/document' })
+  }, {
+    surface: 'view:quirky.editor/document',
+    context: runtime.context
+  })
   runtime.reportScopes.push(scope)
   scope.report({ mounted: true, bufferId: buffer.id, tabId: buffer.tabId })
   let commands: CommandHandlers | undefined
@@ -169,7 +209,7 @@ async function renderSurface(
     buffer,
     fontSize: 13,
     onDraft,
-    onAction: runtime.invoke,
+    onAction,
     onView() {},
     registerCommandHandlers(handlers) {
       commands = handlers
@@ -189,6 +229,7 @@ async function renderSurface(
     element,
     runtime,
     commands: () => commands,
+    scope,
     report: () => report,
     addresses: () => report.uiControls ?? [],
     async dispatch(action, data, target) {
@@ -196,7 +237,7 @@ async function renderSurface(
         candidate.actions.includes(action) && (target === undefined || candidate.target === target || candidate.target.startsWith(target))
       )
       if (!address) throw new Error(`No mounted viewer control for ${action}.`)
-      const handler = runtime.provided.get('command:quirky.editor/ui-control')
+      const handler = runtime.provided.get(EDITOR_UI_CONTROL_COMMAND)
       if (!handler) throw new Error('The activate-provided UI control handler is unavailable.')
       let result: unknown
       let failure: { reason: unknown } | undefined
