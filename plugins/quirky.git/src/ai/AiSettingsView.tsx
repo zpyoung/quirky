@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useId, useState } from 'react'
-import { Button, EmptyState, FormRow, SectionHeader, TextField } from '@quirky/ui'
+import { useCallback, useEffect, useId, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import { createRoot } from 'react-dom/client'
 import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { isRecord } from '../daemon/validation'
@@ -29,40 +29,69 @@ const SETTING = (name: string) => `setting:quirky.git/${name}`
 
 type Recipes = Partial<Record<AiAction, Recipe>>
 
+type RecipeState = { recipes: Recipes; loading: boolean; error: string | null }
+type RecipeReadResult = { recipe: Recipe | null; error: string | null }
+
+async function readRecipes(
+  context: UiPluginContext,
+  worktree: string,
+  latest: MutableRefObject<number>,
+  alive: MutableRefObject<boolean>,
+  setState: Dispatch<SetStateAction<RecipeState>>
+): Promise<void> {
+  const request = ++latest.current
+  setState((previous) => ({ ...previous, loading: true }))
+  const results = await Promise.all(
+    ACTIONS.map(async ({ action }): Promise<RecipeReadResult> => {
+      try {
+        return { recipe: (await context.call('quirky.git/aiRecipe', { worktree, action })) as Recipe | null, error: null }
+      } catch (error) {
+        return { recipe: null, error: messageOf(error) }
+      }
+    })
+  )
+  if (!alive.current || request !== latest.current) return
+  const error = results.find((result) => result.error !== null)?.error
+  if (error !== null && error !== undefined) {
+    setState((previous) => ({ ...previous, loading: false, error: `Could not read the AI recipes: ${error}` }))
+    return
+  }
+  const updates = results.flatMap((result): Array<[AiAction, Recipe]> =>
+    result.recipe ? [[result.recipe.action, result.recipe]] : []
+  )
+  setState((previous) => ({
+    recipes: Object.fromEntries([...Object.entries(previous.recipes), ...updates]) as Recipes,
+    loading: false,
+    error: null
+  }))
+}
+
 /** The recipes in effect for the worktree's repository, read again on every `aiChanged`. */
-function useRecipes(context: UiPluginContext, worktree: string): [Recipes, (recipe: Recipe) => void] {
-  const [recipes, setRecipes] = useState<Recipes>({})
+function useRecipes(context: UiPluginContext, worktree: string) {
+  const [state, setState] = useState<RecipeState>({ recipes: {}, loading: true, error: null })
+  const latest = useRef(0)
+  const alive = useRef(false)
+  function retryRecipes(): void {
+    void readRecipes(context, worktree, latest, alive, setState)
+  }
   useEffect(() => {
-    let alive = true
-    const read = async () => {
-      const results = await Promise.all(
-        ACTIONS.map(async ({ action }) => {
-          try {
-            return (await context.call('quirky.git/aiRecipe', { worktree, action })) as Recipe
-          } catch (error) {
-            context.toast('Could not read the AI recipes', messageOf(error))
-            return null
-          }
-        })
-      )
-      if (!alive) return
-      setRecipes((prev) => {
-        const next: Recipes = { ...prev }
-        for (const recipe of results) if (recipe) next[recipe.action] = recipe
-        return next
-      })
-    }
-    void read()
+    alive.current = true
+    void readRecipes(context, worktree, latest, alive, setState)
     const unsubscribe = context.subscribe((event) => {
-      if (event.type === 'quirky.git/aiChanged' || event.type === 'quirky.agents/changed') void read()
+      if (event.type === 'quirky.git/aiChanged' || event.type === 'quirky.agents/changed') {
+        void readRecipes(context, worktree, latest, alive, setState)
+      }
     })
     return () => {
-      alive = false
+      alive.current = false
+      latest.current += 1
       unsubscribe()
     }
-  }, [context, worktree])
-  const put = useCallback((recipe: Recipe) => setRecipes((prev) => ({ ...prev, [recipe.action]: recipe })), [])
-  return [recipes, put]
+  }, [context, worktree, latest, alive, setState])
+  const putRecipe = useCallback((recipe: Recipe) => {
+    setState((previous) => ({ ...previous, recipes: { ...previous.recipes, [recipe.action]: recipe } }))
+  }, [])
+  return { ...state, put: putRecipe, retry: retryRecipes }
 }
 
 type AiSettings = { enabled: boolean; custom: string }
@@ -109,6 +138,24 @@ function nameSessionChoices(value: unknown, worktree: string): NameSessionChoice
     return [{ id: item.id, label: typeof item.title === 'string' && item.title !== '' ? item.title : item.id }]
   })
 }
+type NameSessionState = { choices: NameSessionChoice[]; settled: boolean; error: string | null }
+
+async function readNameSessions(
+  context: UiPluginContext,
+  worktree: string,
+  latest: MutableRefObject<number>,
+  setState: Dispatch<SetStateAction<NameSessionState>>
+): Promise<void> {
+  const request = ++latest.current
+  try {
+    const value = await context.call('quirky.session/list', { worktree })
+    if (request === latest.current) setState({ choices: nameSessionChoices(value, worktree), settled: true, error: null })
+  } catch (error) {
+    if (request === latest.current) {
+      setState((previous) => ({ ...previous, settled: true, error: messageOf(error) }))
+    }
+  }
+}
 
 function NameActionControls({ context, worktree, action, agent, args, template, launchOptions }: {
   context: UiPluginContext
@@ -119,27 +166,24 @@ function NameActionControls({ context, worktree, action, agent, args, template, 
   template: string
   launchOptions: RecipeLaunchOptions | null
 }) {
-  const [sessions, setSessions] = useState<NameSessionChoice[]>([])
+  const [sessions, setSessions] = useState<NameSessionState>({ choices: [], settled: false, error: null })
   const [session, setSession] = useState('')
-  const [sessionError, setSessionError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const sessionId = useId()
   const [working, setWorking] = useState(false)
+  const latestSessions = useRef(0)
+  function retrySessions(): void {
+    void readNameSessions(context, worktree, latestSessions, setSessions)
+  }
   useEffect(() => {
-    let alive = true
     setSession('')
     setName('')
-    void context.call('quirky.session/list', { worktree }).then((value) => {
-      if (alive) {
-        setSessions(nameSessionChoices(value, worktree))
-        setSessionError(null)
-      }
-    }).catch((reason: unknown) => {
-      if (alive) setSessionError(messageOf(reason))
-    })
-    return () => { alive = false }
-  }, [context, worktree, action])
+    void readNameSessions(context, worktree, latestSessions, setSessions)
+    return () => {
+      latestSessions.current += 1
+    }
+  }, [context, worktree, action, latestSessions])
 
   const generate = async () => {
     setWorking(true)
@@ -171,15 +215,18 @@ function NameActionControls({ context, worktree, action, agent, args, template, 
           setName('')
         }}>
           <option value="">{action === 'conversationName' ? 'Select a conversation' : 'Use Git changes only'}</option>
-          {sessions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+          {sessions.choices.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
       </FormRow>
-      {sessionError && <p className="ui-error-text" role="alert">{sessionError}</p>}
+      {action === 'conversationName' && sessions.settled && sessions.error === null && sessions.choices.length === 0 && (
+        <EmptyState message="No captured conversations in this worktree." />
+      )}
+      {sessions.error !== null && <InlineError message={sessions.error} action={{ label: 'Retry', onAction: retrySessions }} />}
       <Button type="button" disabled={working || agent === '' || (action === 'conversationName' && session === '')} onClick={() => void generate()}>
         {working ? 'Generating name…' : action === 'branchName' ? 'Generate branch name' : 'Generate conversation name'}
       </Button>
       {name !== '' && <TextField label="Suggested name" readOnly value={name} />}
-      {error && <p className="ui-error-text" role="alert">{error}</p>}
+      {error !== null && <InlineError message={error} />}
     </div>
   )
 }
@@ -195,7 +242,7 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
       const result = (await context.call('quirky.git/setAiRecipe', { worktree, action, scope: 'global', ...fields })) as { recipe: Recipe }
       onRecipe(result.recipe)
     } catch (error) {
-      context.toast('Could not save the AI recipe', messageOf(error))
+      context.toast('Could not save the AI recipe', messageOf(error), { kind: 'error' })
     }
   }
   async function saveAgent(next: string): Promise<void> {
@@ -302,7 +349,8 @@ function AiSettingsView({ context, input }: { context: UiPluginContext; input: u
 function AiSettingsBody({ context, worktree }: { context: UiPluginContext; worktree: string }) {
   const settings = useAiSettings(context)
   const agents = useAgents(context, true)
-  const [recipes, putRecipe] = useRecipes(context, worktree)
+  const recipeState = useRecipes(context, worktree)
+  const { recipes, put: putRecipe, retry: retryRecipes, loading: recipesLoading, error: recipeError } = recipeState
   const [enabled, setEnabled] = useState(settings.enabled)
   useEffect(() => setEnabled(settings.enabled), [settings.enabled])
 
@@ -310,7 +358,7 @@ function AiSettingsBody({ context, worktree }: { context: UiPluginContext; workt
     try {
       await context.call('setting.set', { id: SETTING(name), value })
     } catch (error) {
-      context.toast('Could not change the setting', messageOf(error))
+      context.toast('Could not change the setting', messageOf(error), { kind: 'error' })
       setEnabled(readSettings(context).enabled)
     }
   }
@@ -326,6 +374,11 @@ function AiSettingsBody({ context, worktree }: { context: UiPluginContext; workt
         title="Source Control AI defaults"
         actions={<Button type="button" onClick={() => context.openView(SESSIONS_VIEW_ID, { worktree })}>Close</Button>}
       />
+      {(recipesLoading || !agents.settled) && <div role="status"><NoticeLine>Loading AI settings…</NoticeLine></div>}
+      {recipeError !== null && <InlineError message={recipeError} action={{ label: 'Retry', onAction: retryRecipes }} />}
+      {agents.error !== null && (
+        <InlineError message={`Could not read the agents: ${agents.error}`} action={{ label: 'Retry', onAction: agents.retry }} />
+      )}
       <FormRow label="Show Source Control AI actions" htmlFor={switchId}>
         <input
           id={switchId}

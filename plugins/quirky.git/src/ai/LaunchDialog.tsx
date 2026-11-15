@@ -1,8 +1,8 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, Dialog, FormRow, TextField } from '@quirky/ui'
+import { Button, Dialog, EmptyState, FormRow, InlineError, NoticeLine, TextField } from '@quirky/ui'
 import { messageOf } from '../panel/format'
-import { initialAgent, isUsable, useAgents } from './agents'
+import { initialAgent, isUsable, useAgents, type Agents } from './agents'
 import { DEFAULT_TEMPLATE, type FixAction, type LaunchParams, type Recipe } from './types'
 import type { RecipeLaunchOptions } from '../daemon/recipe-options'
 import { LaunchOptionsEditor } from './LaunchOptionsEditor'
@@ -18,6 +18,28 @@ const TITLES: Readonly<Record<FixAction, string>> = {
 }
 
 type Preview = { prompt: string; recipe: Recipe }
+type PreviewState = { preview: Preview | null; loading: boolean; error: string | null }
+
+async function readPreview(
+  context: UiPluginContext,
+  worktree: string,
+  action: FixAction,
+  latest: MutableRefObject<number>,
+  alive: MutableRefObject<boolean>,
+  setState: Dispatch<SetStateAction<PreviewState>>
+): Promise<void> {
+  const request = ++latest.current
+  setState((previous) => ({ ...previous, loading: true, error: null }))
+  try {
+    const preview = (await context.call('quirky.git/aiFixPreview', { worktree, action })) as Preview
+    if (alive.current && request === latest.current) setState({ preview, loading: false, error: null })
+  } catch (error) {
+    if (alive.current && request === latest.current) {
+      setState((previous) => ({ ...previous, loading: false, error: messageOf(error) }))
+    }
+  }
+}
+
 
 type Props = {
   context: UiPluginContext
@@ -51,7 +73,7 @@ function hasLaunchChoices(value: RecipeLaunchOptions | null): boolean {
   return value !== null && value !== undefined && (value.model !== undefined || Object.keys(value.optionValues ?? {}).length > 0)
 }
 
-type FormProps = Props & { preview: Preview; agents: ReturnType<typeof useAgents> }
+type FormProps = Props & { preview: Preview; agents: Agents }
 
 function LaunchForm({ context, action, preview, agents, onClose, start }: FormProps) {
   const { recipe } = preview
@@ -105,7 +127,11 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
   return (
     <>
       <div className="ui-stack">
-        {agents.list !== null && usable.length > 0 ? (
+        {agents.error !== null && (
+          <InlineError message={`Could not read the agents: ${agents.error}`} action={{ label: 'Retry', onAction: agents.retry }} />
+        )}
+        {!agents.settled && <div role="status"><NoticeLine>Detecting agents...</NoticeLine></div>}
+        {agents.list !== null && usable.length > 0 && (
           <FormRow label="Agent" htmlFor={agentId}>
             <select id={agentId} className="ui-text-field__input" aria-label="Agent" value={agent} onChange={(event) => setPicked(event.target.value)}>
               {!known && agent !== '' && <option value={agent}>{agent}</option>}
@@ -116,12 +142,8 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
               ))}
             </select>
           </FormRow>
-        ) : (
-          <div className="ui-stack">
-            <span className="ui-text-field__label">Agent</span>
-            <span className="ui-text-muted">{agents.settled ? 'No enabled agents' : 'Detecting agents...'}</span>
-          </div>
         )}
+        {agents.settled && agents.error === null && usable.length === 0 && <EmptyState message="No enabled agents" />}
         <div className="ui-stack">
           <FormRow label="Prompt template" htmlFor={templateId}>
             <textarea
@@ -173,11 +195,7 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
           )}
         </div>
       </div>
-      {failure !== null && (
-        <p className="ui-error-text" role="alert">
-          {failure}
-        </p>
-      )}
+      {failure !== null && <InlineError message={failure} />}
       <div className="ui-cluster">
         <Button type="button" onClick={onClose}>Cancel</Button>
         <Button type="button" variant="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={() => void go()}>
@@ -195,37 +213,32 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
 export function LaunchDialog(props: Props) {
   const { context, worktree, action, onClose } = props
   const agents = useAgents(context, true)
-  const [preview, setPreview] = useState<Preview | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [state, setState] = useState<PreviewState>({ preview: null, loading: true, error: null })
+  const latest = useRef(0)
+  const alive = useRef(false)
+
+  function retryPreview(): void {
+    void readPreview(context, worktree, action, latest, alive, setState)
+  }
 
   useEffect(() => {
-    let alive = true
-    context
-      .call('quirky.git/aiFixPreview', { worktree, action })
-      .then((result) => {
-        if (alive) setPreview(result as Preview)
-      })
-      .catch((e: unknown) => {
-        if (alive) setError(messageOf(e))
-      })
+    alive.current = true
+    void readPreview(context, worktree, action, latest, alive, setState)
     return () => {
-      alive = false
+      alive.current = false
+      latest.current += 1
     }
-  }, [context, worktree, action])
+  }, [context, worktree, action, latest, alive, setState])
 
   return (
     <Dialog open title={TITLES[action]} onClose={onClose}>
       <p className="ui-text-muted">Review and edit the full command input before starting an agent.</p>
-      {preview !== null && <LaunchForm {...props} preview={preview} agents={agents} />}
-      {preview === null && error === null && <p className="ui-text-muted">Loading…</p>}
-      {error !== null && (
+      {state.preview !== null && <LaunchForm {...props} preview={state.preview} agents={agents} />}
+      {state.preview === null && state.loading && <div role="status"><NoticeLine>Loading…</NoticeLine></div>}
+      {state.error !== null && (
         <>
-          <p className="ui-error-text" role="alert">
-            {error}
-          </p>
-          <div className="ui-cluster">
-            <Button type="button" onClick={onClose}>Cancel</Button>
-          </div>
+          <InlineError message={state.error} action={{ label: 'Retry', onAction: retryPreview }} />
+          {state.preview === null && <div className="ui-cluster"><Button type="button" onClick={onClose}>Cancel</Button></div>}
         </>
       )}
     </Dialog>

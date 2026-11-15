@@ -66,7 +66,7 @@ export function useAgents(context: UiPluginContext, active: boolean): Agents {
   const latest = useRef(0)
   const alive = useRef(false)
 
-  function retryAgents(): void {
+  function retry(): void {
     void readAgents(context, active, latest, alive, setState)
   }
 
@@ -84,5 +84,5 @@ export function useAgents(context: UiPluginContext, active: boolean): Agents {
     }
   }, [context, active, latest, alive, setState])
 
-  return { ...state, retry: retryAgents }
+  return { ...state, retry }
 }

@@ -92,7 +92,7 @@ export function CommitSparkle({ context, worktree, scope, files, message, commit
     try {
       await context.call('quirky.git/cancelGenerate', { worktree })
     } catch (error) {
-      context.toast('Could not stop the generation', messageOf(error))
+      context.toast('Could not stop the generation', messageOf(error), { kind: 'error' })
     }
   }
 
@@ -137,7 +137,7 @@ export function CommitSparkle({ context, worktree, scope, files, message, commit
       {dialog && (
         <GenerateDialog
           context={context}
-          agents={agents.list}
+          agents={agents}
           onClose={() => setDialog(false)}
           onGenerate={(choice) => {
             setDialog(false)
