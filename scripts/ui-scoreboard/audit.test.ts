@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
+import * as ts from 'typescript'
 import type { CheckResult, CoverageFile, Inventory, PluginInventory, Ref } from './contracts'
 import { auditPlugin } from './audit'
 
@@ -56,6 +57,80 @@ function actionFixture(content: string, classification: Record<string, unknown>,
 }
 function cell(data: AuditFixture, id: string) { return data.results().find((result) => result.id === id)! }
 function codes(data: AuditFixture, id: string) { return cell(data, id).evidence.map((item) => item.code) }
+
+describe('audit-scoped evidence reuse', () => {
+  test('bounds full-source parsing across root and fragment witnesses without losing routes', () => {
+    const calls = Array.from({ length: 24 }, (_, id) => `context.call('acme.app/save', { id: ${id} })`)
+    const lines = calls.map((call) => `  <button onClick={() => ${call}}>Save</button>`)
+    const content = `export function Main() {\nreturn <>\n${lines.join('\n')}\n</>\n}`
+    const actions = calls.map((call) => ({
+      site: ref(`onClick={() => ${call}}`),
+      route: { invoke: ref(call), target: 'acme.app/save' },
+    }))
+    const coverage: CoverageFile = {
+      schemaVersion: 1,
+      surfaces: {
+        'view:acme.app/main': Object.fromEntries(['loading', 'empty', 'error'].map((state) => [
+          state, { applicable: false, reason: 'No asynchronous state', evidence: [ref('export function Main')] },
+        ])) as CoverageFile['surfaces'][string],
+      },
+      states: [], notState: [], actions: actions.slice(0, 12),
+    }
+    const data = fixture(content, coverage, {}, {
+      actions: { schemaVersion: 1, surfaces: {}, states: [], notState: [], actions: actions.slice(12) },
+    })
+    const parser = spyOn(ts, 'createSourceFile')
+    try {
+      const results = data.results()
+      expect(results.map(({ id, status, applicable }) => [id, status, applicable])).toEqual([
+        ['loading', 'pass', false], ['empty', 'pass', false], ['error', 'pass', false], ['commands', 'pass', true],
+      ])
+      expect(results[3]!.evidence).toEqual(calls.map((_, index) => ({
+        code: 'action-routed', message: 'Action routes through acme.app/save', basis: 'source-audit',
+        api: 'acme.app/save', cli: 'quirky acme.app save',
+        source: { file, line: index + 3, column: lines[index]!.indexOf('context.call') + 1 },
+        coverageFile: index < 12 ? 'plugins/acme.app/ui-scoreboard.json' : 'plugins/acme.app/ui-scoreboard/actions.json',
+      })))
+      expect(parser.mock.calls.filter(([path, text]) => path === file && text === content).length).toBeLessThanOrEqual(4)
+    } finally {
+      parser.mockRestore()
+    }
+  })
+
+  test('fresh audits observe in-place source, coverage and route contribution mutations', () => {
+    const content = `export function Main() { return <button onClick={() => ${save}}>Save</button> }`
+    const coverage: CoverageFile = {
+      schemaVersion: 1,
+      surfaces: {
+        'view:acme.app/main': Object.fromEntries(['loading', 'empty', 'error'].map((state) => [
+          state, { applicable: false, reason: 'No asynchronous state', evidence: [ref('export function Main')] },
+        ])) as CoverageFile['surfaces'][string],
+      },
+      states: [], notState: [], actions: [{ site: ref('onClick'), route: { invoke: ref(save), target: 'acme.app/save' } }],
+    }
+    const data = fixture(content, coverage)
+    const original = data.results()
+    expect(original.every((result) => result.status === 'pass')).toBe(true)
+    data.plugin.sources[0]!.content = `\n${content}`
+    const shifted = data.results()
+    expect(shifted.every((result) => result.status === 'pass')).toBe(true)
+    expect(shifted[3]!.evidence[0]!.source!.line).toBe(2)
+    expect(original[3]!.evidence[0]!.source!.line).toBe(1)
+
+    const load = "context.call('acme.app/load', {})"
+    data.plugin.sources[0]!.content = content.replace(save, load)
+    expect(data.results()[3]!.evidence.some((item) => item.code === 'evidence-missing')).toBe(true)
+    coverage.actions[0] = { site: ref('onClick'), route: { invoke: ref(load), target: 'acme.app/load' } }
+    data.plugin.coverage!.content = JSON.stringify(coverage)
+    data.plugin.contributions!.methods = ['acme.app/save']
+    expect(data.results()[3]!.evidence.some((item) => item.code === 'route-undeclared')).toBe(true)
+    data.plugin.contributions!.methods.push('acme.app/load')
+    data.plugin.contributions!.cliCommands[0]!.methods.push('acme.app/load')
+    const updated = data.results()
+    expect(updated.every((result) => result.status === 'pass')).toBe(true)
+    expect(updated[3]!.evidence[0]).toMatchObject({ code: 'action-routed', api: 'acme.app/load', cli: 'quirky acme.app save' })
+  })
+})
 
 describe('quote-bound source audit', () => {
   test('passes shared states and the action public route, including contained leaf candidates', () => {
