@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:te
 import type { ProjectGroup, QuirkyEvent, Repo, UiPluginContext } from '@quirky/protocol'
 import { act, createElement } from 'react'
 import type { Root } from 'react-dom/client'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import { DEFAULT_STOCK_OPTIONS, type WorktreeControl } from '../src/control-types'
 import type { TreeProps } from '../src/Tree'
 import { buildTree } from '../src/view-model'
@@ -34,6 +35,10 @@ const context = {
   call: async (method: string, params: Record<string, unknown> = {}) => {
     calls.push({ method, params })
     if (method === 'quirky.worktree/tags') return tagReply
+    if (method === 'ui.window.command.run') {
+      if (params.connId !== 7 || params.id !== UI_CONTROL_COMMAND) throw new Error('Unexpected window command descriptor')
+      return { result: dispatchUiControl(context, params.args) }
+    }
     if (method === 'ui.window.self') return { connId: 7 }
     if (method === 'quirky.worktree/tagCreate') return { tag: { id: 'tag_new', name: params.name, color: null } }
     return []
@@ -157,8 +162,14 @@ beforeEach(() => {
 
 const rowOf = (id: string) => host.querySelector<HTMLElement>(`[data-worktree-id="${id}"]`)!
 const buttonLabelled = (within: ParentNode, label: string) => within.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!
+const flushControl = async () => {
+  for (let i = 0; i < 12; i++) await Promise.resolve()
+}
 const click = (element: Element, init: MouseEventInit = {}) =>
-  act(async () => void element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init })))
+  act(async () => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...init }))
+    await flushControl()
+  })
 const menu = () => document.querySelector<HTMLElement>('[role="menu"]')
 const visibleText = (node: Node): string => {
   if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
@@ -169,7 +180,10 @@ const labelOf = (item: Element) => visibleText(item).replace(/\s+/g, ' ').trim()
 const menuLabels = () => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].map(labelOf)
 const menuItem = (label: string) => [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => labelOf(item) === label)!
 const pressKey = (element: Element, key: string) =>
-  act(async () => void element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })))
+  act(async () => {
+    element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+    await flushControl()
+  })
 const typeInto = (input: HTMLInputElement, value: string) =>
   act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
@@ -432,7 +446,10 @@ test('the row menu lists its actions in the fixed order with Delete set apart in
 
 test('right-clicking a row opens the same menu at the pointer', async () => {
   await mount({ worktrees: [worktree('a', 'alpha')] })
-  await act(async () => void rowOf('a').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 })))
+  await act(async () => {
+    rowOf('a').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 50 }))
+    await flushControl()
+  })
   const opened = menu()
   expect(opened).not.toBeNull()
   expect(opened?.getAttribute('aria-label')).toBe('Actions for alpha')
