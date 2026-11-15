@@ -2,6 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test'
 import * as ts from 'typescript'
 import type { CheckResult, CoverageFile, Inventory, PluginInventory, Ref } from './contracts'
 import { auditPlugin } from './audit'
+import { parseCoverage } from './audit-evidence'
 
 const file = 'plugins/acme.app/src/ui.tsx'
 const ref = (quote: string, path = file): Ref => ({ file: path, quote })
@@ -472,6 +473,75 @@ describe('quote-bound source audit', () => {
   test('computed literal decisive handler names still require a public route', () => {
     const data = actionFixture('const props = { [\"onClick\"]: () => change() }', { transient: 'draft', reason: 'Unsaved' }, '[\"onClick\"]')
     expect(codes(data, 'commands')).toContain('transient-not-allowed')
+  })
+
+  const barrierReason = 'Keeps overlay events from shell listeners'
+  const barrierClassification = { notAction: 'barrier', reason: barrierReason } as const
+  const barrierFailure = 'A barrier must be a jsx handler that only calls stopPropagation() and preventDefault() on its event parameter'
+
+  test('parses barrier action classifications', () => {
+    const barrier = { site: ref('onClick'), notAction: 'barrier', reason: 'x' } as const
+    const parsed = parseCoverage(JSON.stringify({ schemaVersion: 1, surfaces: {}, states: [], notState: [], actions: [barrier] }))
+    expect(parsed.actions).toEqual([barrier])
+  })
+
+  test.each([
+    ['inline block handler', '<div onClick={(event) => { event.stopPropagation() }} />', 'onClick'],
+    ['prevent default and stop propagation', '<div onContextMenu={(e) => { e.preventDefault(); e.stopPropagation() }} />', 'onContextMenu'],
+    ['inline expression handler', '<div onClick={(e) => e.stopPropagation()} />', 'onClick'],
+    ['function declaration handler', 'function stop(event: SyntheticEvent): void { event.stopPropagation() }\n<div onClick={stop} />', 'onClick'],
+    ['const arrow handler', 'const stop = (event: SyntheticEvent) => event.stopPropagation();\n<div onDoubleClick={stop} />', 'onDoubleClick']
+  ])('accepts a strict event barrier: %s', (_name, content, site) => {
+    const data = actionFixture(content, barrierClassification, site)
+    expect(cell(data, 'commands')).toMatchObject({ status: 'pass' })
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({ code: 'action-not-user', message: barrierReason }))
+  })
+
+  test.each([
+    ['module function', 'export function stop(event) { event.stopPropagation() }\nexport function View() { return <button onClick={stop}>Print</button> }'],
+    ['module const', 'const stop = (event) => event.stopPropagation();\nexport function View() { return <button onClick={stop}>Print</button> }'],
+    ['enclosing function local', 'export function View() { function stop(event) { event.stopPropagation() } return <button onClick={stop}>Print</button> }'],
+    ['enclosing const local', 'export function View() { const stop = (event) => event.stopPropagation(); return <button onClick={stop}>Print</button> }'],
+    ['enclosing closure', 'export function View() { const stop = (event) => event.stopPropagation(); return () => <button onClick={stop}>Print</button> }'],
+  ])('accepts a barrier binding visible from its JSX use: %s', (_name, content) => {
+    const data = actionFixture(content, barrierClassification, 'onClick')
+    expect(cell(data, 'commands').status).toBe('pass')
+    expect(codes(data, 'commands')).toContain('action-not-user')
+  })
+
+  test.each([
+    ['another function const', 'export function unused() { const print = (event) => event.stopPropagation(); return print }\nexport function View() { return <button onClick={print}>Print</button> }'],
+    ['another function declaration', 'export function unused() { function print(event) { event.stopPropagation() } return print }\nexport function View() { return <button onClick={print}>Print</button> }'],
+    ['sibling block const', 'export function View() { { const print = (event) => event.stopPropagation(); } { return <button onClick={print}>Print</button> } }'],
+    ['sibling block function', 'export function View() { { function print(event) { event.stopPropagation() } } { return <button onClick={print}>Print</button> } }'],
+    ['nested block escaped', 'export function View() { { const print = (event) => event.stopPropagation(); } return <button onClick={print}>Print</button> }'],
+  ])('rejects an out-of-scope barrier binding: %s', (_name, content) => {
+    const data = actionFixture(content, barrierClassification, 'onClick')
+    expect(cell(data, 'commands').status).toBe('fail')
+    expect(codes(data, 'commands')).toContain('barrier-invalid')
+  })
+
+  test.each([
+    ['extra call', '<div onClick={(e) => { e.stopPropagation(); destroy() }} />', 'onClick'],
+    ['prevent default only', '<div onClick={(e) => { e.preventDefault() }} />', 'onClick'],
+    ['call argument', '<div onClick={(e) => { e.stopPropagation(destroy()) }} />', 'onClick'],
+    ['another receiver', '<div onClick={(e) => { other.stopPropagation() }} />', 'onClick'],
+    ['optional call', '<div onClick={(e) => e.stopPropagation?.()} />', 'onClick'],
+    ['another method', '<div onClick={(e) => e.stopImmediatePropagation()} />', 'onClick'],
+    ['comma expression', '<div onClick={(e) => (e.preventDefault(), e.stopPropagation())} />', 'onClick'],
+    ['async handler', '<div onClick={async (e) => { e.stopPropagation() }} />', 'onClick'],
+    ['parameter default', '<div onClick={(e = destroy()) => { e.stopPropagation() }} />', 'onClick'],
+    ['destructured parameter', '<div onClick={({ stopPropagation }) => stopPropagation()} />', 'onClick'],
+    ['shadowing parameter', 'function stop(e) { e.stopPropagation() }\nfunction View(stop) { return <div onClick={stop} /> }', 'onClick'],
+    ['let binding', 'let stop = (e) => e.stopPropagation();\n<div onClick={stop} />', 'onClick'],
+    ['reassigned declaration', 'function stop(e) { e.stopPropagation() }\nstop = destroy;\n<div onClick={stop} />', 'onClick'],
+    ['imported handler', "import { stop } from './stop'\n<div onClick={stop} />", 'onClick'],
+    ['property access', '<div onClick={handlers.stop} />', 'onClick'],
+    ['non-JSX candidate', "el.addEventListener('click', (e) => e.stopPropagation())", "el.addEventListener('click'"]
+  ])('rejects an invalid event barrier: %s', (_name, content, site) => {
+    const data = actionFixture(content, barrierClassification, site)
+    expect(cell(data, 'commands').status).toBe('fail')
+    expect(cell(data, 'commands').evidence).toContainEqual(expect.objectContaining({ code: 'barrier-invalid', message: `${barrierFailure} [plugins/acme.app/ui-scoreboard.json]` }))
   })
 
   test('restricts lifecycle/subscription and validates forwarding shape', () => {
