@@ -33,8 +33,12 @@ export interface VerdictRecord {
   checksRun: IntegratorReport['checksRun']; summary: string; digest: string; acceptedAtMs: number
 }
 export interface LandingRecord {
-  watcherId: string; rung: 'files-on-disk' | 'committed-local-branch'; contentIdentity: string; attemptId: string
-  payload: Record<string, unknown>; recordedAtMs: number
+  watcherId: string
+  rung: 'files-on-disk' | 'committed-local-branch' | 'pushed-ref' | 'hosted-review'
+  contentIdentity: string
+  attemptId: string
+  payload: Record<string, unknown>
+  recordedAtMs: number
 }
 export interface DraftRejection {
   attemptId: string; watcherId: string; digest: string; reason: string | null; rejectedAtMs: number
@@ -140,6 +144,22 @@ function migrateV1ToV2(db: PluginStore): void {
     );
   `)
 }
+const migrationV2ToV3 = `
+CREATE TABLE landing_v3 (
+  watcher_id TEXT NOT NULL,
+  rung TEXT NOT NULL CHECK (rung IN ('files-on-disk','committed-local-branch','pushed-ref','hosted-review')),
+  content_identity TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  recorded_at_ms INTEGER NOT NULL,
+  PRIMARY KEY (watcher_id, rung, content_identity)
+);
+INSERT INTO landing_v3 (watcher_id, rung, content_identity, attempt_id, payload_json, recorded_at_ms)
+  SELECT watcher_id, rung, content_identity, attempt_id, payload_json, recorded_at_ms FROM landing;
+DROP TABLE landing;
+ALTER TABLE landing_v3 RENAME TO landing;
+`
+
 
 const issuedColumns = `attempt_id AS attemptId, watcher_id AS watcherId, role, revision, task_key AS taskKey,
   report_path AS reportPath, issued_at_ms AS issuedAtMs, planner_mode AS plannerMode,
@@ -213,7 +233,7 @@ function revisionRepairRow(db: PluginStore, watcherId: string, number: number): 
 
 /** Keeps report acceptance immutable and plan activation replay-safe across daemon restarts. */
 export function createObjectiveStore(context: PluginContext): ObjectiveStore {
-  const db = context.openStore([migrationV1, migrateV1ToV2], { newerVersion: 'read-only' })
+  const db = context.openStore([migrationV1, migrateV1ToV2, migrationV2ToV3], { newerVersion: 'read-only' })
   if (!db.readOnly) db.exec('PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;')
   const getReport = (attemptId: string): AcceptedReport | null => {
     const row = db.get<ReportRow>(`SELECT ${reportColumns} FROM report WHERE attempt_id=?`, attemptId)

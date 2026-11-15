@@ -302,7 +302,7 @@ export async function runCliParity(options: CliRunOptions = {}): Promise<CliPari
           throw error
         }
       },
-      async refuse(id, argv, executeOptions: { cwd?: string } = {}) {
+      async refuse(id, argv, executeOptions: { cwd?: string; expectedExit?: 1 | 2 } = {}) {
         const signal = cleanupMode ? cleanupController.signal : controller.signal
         signal.throwIfAborted()
         const remaining = (cleanupMode ? cleanupDeadline : started + 340_000) - Date.now()
@@ -315,7 +315,7 @@ export async function runCliParity(options: CliRunOptions = {}): Promise<CliPari
             signal, timeoutMs: Math.min(15_000, remaining), cwd: executeOptions.cwd
           })
           recordReceipt(id, args, raw, 'json')
-          return parseCliRefusal(raw.stdout, raw.exitCode)
+          return parseCliRefusal(raw.stdout, raw.exitCode, executeOptions.expectedExit ?? 1)
         } catch (error) {
           if (!receipts.some(receipt => receipt.id === id) && error && typeof error === 'object' &&
               'stdoutBytes' in error && typeof error.stdoutBytes === 'number' &&
