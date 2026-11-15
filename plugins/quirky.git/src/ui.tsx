@@ -39,7 +39,7 @@ export function activate(context: UiPluginContext): void {
   ))
   context.provide(DIFF_VIEW_ID, mountGitUiControls(context, DIFF_VIEW_ID, mountDiffView))
   context.provide(AI_SETTINGS_VIEW_ID, mountGitUiControls(context, AI_SETTINGS_VIEW_ID, mountAiSettings))
-  context.provide(GIT_UI_CONTROL_COMMAND, (args) => dispatchGitUiControl(context, args))
+  context.provide(GIT_UI_CONTROL_COMMAND, (args: unknown) => dispatchGitUiControl(context, args))
   for (const [id, handler] of Object.entries(commandHandlers(context))) {
     context.provide(`command:quirky.git/${id}`, handler)
   }

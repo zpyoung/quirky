@@ -363,6 +363,7 @@ export function fakeContext(initial: UiLayout, requestedConnectionId?: number): 
       nativeBrowser: createNativeBrowserCapability(),
       nativeDropPaths: async () => null,
       readClipboardText: async () => '',
+      log() {},
       provide: (id, implementation) => void fake.provided.set(id, implementation),
       async call(method, params = {}) {
         fake.calls.push({ method, params })

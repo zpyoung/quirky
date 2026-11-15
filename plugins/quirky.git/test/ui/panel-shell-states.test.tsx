@@ -77,7 +77,7 @@ for (const [query, oversized] of [['x'.repeat(2048), false], ['x'.repeat(2049), 
 for (const hasUpstream of [true, false]) {
   test(`clean shared empty state preserves tracking sentence (upstream=${hasUpstream})`, async () => {
     const { element } = await open((fake) => {
-      fake.status = statusOf([], hasUpstream ? {} : { upstream: null, upstreamStatus: { hasUpstream: false, ahead: 0, behind: 0, behindPatchEquivalent: null } })
+      fake.status = statusOf([], hasUpstream ? {} : { upstream: null, upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } })
     })
     expect(q(element, '[data-git-clean][role="status"] .ui-empty-state__message')?.textContent).toBe(`Nothing changed against origin/main${hasUpstream ? ' · up to date with origin/zoe/feat' : ''}`)
   })

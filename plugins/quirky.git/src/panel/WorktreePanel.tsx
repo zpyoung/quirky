@@ -70,6 +70,7 @@ const BUSY_LABELS: Readonly<Record<GitBusyOp, string>> = {
 /** A failed ship step, as the error line shows it: the wording and the one next action worth offering. */
 type ShipFailure = {
   identity: string
+  owner: string
   message: string
   retry?: () => void
   pull?: boolean
@@ -304,7 +305,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const ticksRef = useRef(ticks)
   ticksRef.current = ticks
   const aiFix = useAiFix(context, worktree)
-  const [shipError, setShipError] = useState<ShipFailure | null>(null)
+  const [shipError, setShipErrorState] = useState<ShipFailure | null>(null)
+  const shipErrorRef = useRef<ShipFailure | null>(null)
+  const setShipError = (update: ShipFailure | null | ((previous: ShipFailure | null) => ShipFailure | null)) => {
+    const next = typeof update === 'function' ? update(shipErrorRef.current) : update
+    shipErrorRef.current = next
+    setShipErrorState(next)
+  }
   const [dialog, setDialogState] = useState<DialogState | null>(null)
   const dialogRef = useRef<DialogState | null>(null)
   const setDialog = (next: DialogState | null) => {
@@ -421,6 +428,16 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       action,
       ...(data === undefined ? {} : { data })
     }, () => isCurrentOwner(generation))
+  }
+  const postShipErrorControl = (action: string): void => {
+    const failure = shipError
+    if (failure === null) return
+    postLocalControl({
+      surface: PANEL_ID,
+      target: `ship-error:${worktree}`,
+      generation: failure.identity,
+      action
+    }, () => isCurrentOwner(failure.owner) && shipErrorRef.current === failure)
   }
   const [submodules, setSubmodules] = useState<Record<string, SubmoduleState>>({})
   const createIntent = useRef(0)
@@ -819,6 +836,9 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     const session = headerMenuRef.current
     if (session !== null) postMenuClose(headerMenuChoice, `header-menu:${worktree}`, session, () => currentHeaderMenu(session))
   }
+  const onFilterControl = (action: 'filter-open' | 'filter-close') => postMainControl(action)
+  const onMenuOpen = (position: { x: number; y: number }) => postMainControl('header-menu-open', position)
+  const onMenuAction = (action: string, data?: Record<string, unknown>) => postHeaderMenuAction(action, data)
   const postRowMenuAction = (session: RowMenuSession, action: string, data?: Record<string, unknown>) =>
     postMenuChoice(rowMenuChoice, `row-menu:${worktree}:${session.path}`, session, action, data, () => isCurrentRowMenu(session))
   const postRowMenuClose = (session: RowMenuSession) =>
@@ -1232,9 +1252,9 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     })
   }
 
-  const failWith = (failure: Omit<ShipFailure, 'identity'>) => {
+  const failWith = (failure: Omit<ShipFailure, 'identity' | 'owner'>) => {
     if (!isCurrentOwner(owner.generation)) return
-    setShipError({ ...failure, identity: newGitUiGeneration() })
+    setShipError({ ...failure, owner: owner.generation, identity: newGitUiGeneration() })
   }
 
   const remote = async (
@@ -1322,6 +1342,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     const upstreamSha = statusAtStart?.upstreamStatus.sha
     const reviewKey = reviewPushKeyRef.current
     if (githubReview.kind === 'found') {
+      if (reviewKey === null) return null
       let target: PushTargetResult | undefined
       try {
         target = pushTargetResult(await context.call('quirky.git/pushTarget', { worktree, purpose: 'review' }))
@@ -1892,6 +1913,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     }
   }
 
+  const currentShipError = shipError?.owner === owner.generation ? shipError : null
   const currentPrActions = aiEnabled && githubReview.kind === 'found' &&
     githubReview.review.state !== 'closed' && githubReview.review.state !== 'merged'
     ? PR_AI_ACTIONS
@@ -1899,17 +1921,17 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const customizeActions = [...new Set<FixAction>([
     ...(aiEnabled ? ['branchSummary' as const] : []),
     ...currentPrActions.map(({ action }) => action),
-    ...(aiEnabled && shipError?.fix ? [shipError.fix] : []),
+    ...(aiEnabled && currentShipError?.fix ? [currentShipError.fix] : []),
     ...(aiEnabled && operation !== 'none' && unresolved > 0 ? ['resolveConflicts' as const] : [])
   ])]
   const quickFixActions = [...new Set<FixAction>([
-    ...(aiEnabled && shipError?.fix ? [shipError.fix] : []),
+    ...(aiEnabled && currentShipError?.fix ? [currentShipError.fix] : []),
     ...(aiEnabled && operation !== 'none' && unresolved > 0 ? ['resolveConflicts' as const] : [])
   ])]
   const isOfferedFixAction = (value: unknown): value is FixAction =>
     typeof value === 'string' && customizeActions.includes(value as FixAction)
-  const hasShipErrorAction = shipError !== null &&
-    (shipError.pull || shipError.fetch || shipError.details !== undefined || shipError.retry !== undefined)
+  const hasShipErrorAction = currentShipError !== null &&
+    (currentShipError.pull || currentShipError.fetch || currentShipError.details !== undefined || currentShipError.retry !== undefined)
   const headerMenuActionNames = [
     'close',
     'view-mode',
@@ -1965,8 +1987,6 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   if (step?.enabled) addMainActions('ship-step')
   if (shipBarPossible && step !== null) addMainActions('ship-menu-open')
   if (activeCreateIntent.current !== null) addMainActions('cancel-create-review')
-  if (hasShipErrorAction) addMainActions('ship-error-action')
-  if (shipError !== null) addMainActions('ship-error-dismiss')
   if (operation !== 'none' && unresolved > 0) addMainActions('review-conflicts')
   if (operation !== 'none' && unresolved === 0 && busyLabel === null) addMainActions('continue-operation')
   if ((operation === 'merge' || operation === 'rebase') && busyLabel === null) addMainActions('abort-operation')
@@ -2000,6 +2020,12 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   const shipMenuAddress = shipMenuAt !== null && shipMenuActionNames.length > 0
     ? { surface: PANEL_ID, target: `ship-menu:${worktree}`, generation: shipMenuAt.generation, actions: shipMenuActionNames }
     : null
+  const shipErrorAddress = currentShipError === null ? null : {
+    surface: PANEL_ID,
+    target: `ship-error:${worktree}`,
+    generation: currentShipError.identity,
+    actions: ['ship-error-dismiss', ...(hasShipErrorAction && busyLabel === null ? ['ship-error-action'] : [])]
+  }
 
   const openBaseDialog = () => setDialog({ kind: 'base', owner: owner.generation, generation: newGitUiGeneration() })
   const openLaunchDialog = (action: FixAction) => {
@@ -2102,9 +2128,10 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       }
       case 'row-toggle-mark': {
         if (!only(['path']) || typeof data?.path !== 'string') return false
-        const file = shown.find((candidate) => candidate.path === data.path)
-        if (!file || file.mark === undefined || file.conflict !== undefined || rowEntries(data.path).some((entry) => entry.conflict !== undefined)) return false
-        return startReserved(`mark:${data.path}`, () => toggleMark(data.path))
+        const path = data.path
+        const file = shown.find((candidate) => candidate.path === path)
+        if (!file || file.mark === undefined || file.conflict !== undefined || rowEntries(path).some((entry) => entry.conflict !== undefined)) return false
+        return startReserved(`mark:${path}`, () => toggleMark(path))
       }
       case 'row-toggle-submodule': {
         if (!only(['path']) || typeof data?.path !== 'string') return false
@@ -2160,33 +2187,6 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       case 'cancel-create-review':
         if (!emptyData || activeCreateIntent.current === null) return false
         cancelCreateReview()
-        return true
-      case 'ship-error-action': {
-        if (!only(['identity']) || typeof data?.identity !== 'string' ||
-            shipError === null || data.identity !== shipError.identity || busyLabel !== null) return false
-        if (shipError.pull) return startReserved('ship', () => runMenu('pull'))
-        if (shipError.fetch) return startReserved('ship', () => runMenu('fetch'))
-        if (shipError.details !== undefined) {
-          const fix = shipError.fix ?? (shipError.details.title === 'Commit Failed' ? 'fixCommitFailure' : 'fixPushFailure')
-          setDialog({
-            kind: 'details',
-            owner: owner.generation,
-            generation: newGitUiGeneration(),
-            title: shipError.details.title,
-            output: shipError.details.output,
-            fix
-          })
-          return true
-        }
-        if (shipError.retry !== undefined) {
-          shipError.retry()
-          return true
-        }
-        return false
-      }
-      case 'ship-error-dismiss':
-        if ((data !== undefined && !only(['identity'])) || (data !== undefined && data.identity !== shipError?.identity) || shipError === null) return false
-        setShipError(null)
         return true
       case 'review-conflicts':
         if (!emptyData || operation === 'none' || unresolved === 0) return false
@@ -2359,12 +2359,43 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     setLaunch(null)
     return true
   }
+  const handleShipErrorControl = (control: GitUiControl): boolean => {
+    const failure = shipErrorRef.current
+    if (failure === null || failure !== currentShipError || failure.identity !== control.generation ||
+        failure.owner !== owner.generation || !isCurrentOwner(failure.owner) ||
+        control.target !== `ship-error:${worktree}` ||
+        (control.data !== undefined && Object.keys(control.data).length !== 0)) return false
+    if (control.action === 'ship-error-dismiss') {
+      setShipError(null)
+      return true
+    }
+    if (control.action !== 'ship-error-action' || busyLabel !== null) return false
+    if (failure.pull) return startReserved('ship', () => runMenu('pull'))
+    if (failure.fetch) return startReserved('ship', () => runMenu('fetch'))
+    if (failure.details !== undefined) {
+      setDialog({
+        kind: 'details',
+        owner: owner.generation,
+        generation: newGitUiGeneration(),
+        title: failure.details.title,
+        output: failure.details.output,
+        fix: failure.fix ?? (failure.details.title === 'Commit Failed' ? 'fixCommitFailure' : 'fixPushFailure')
+      })
+      return true
+    }
+    if (failure.retry !== undefined) {
+      failure.retry()
+      return true
+    }
+    return false
+  }
   useGitUiControl(context, mainAddress, handleWorktreeControl)
   useGitUiControl(context, headerAddress, handleHeaderMenuControl)
   useGitUiControl(context, rowAddress, handleRowMenuControl)
   useGitUiControl(context, shipMenuAddress, handleShipMenuControl)
   useGitUiControl(context, dialogAddress, handleDialogControl)
   useGitUiControl(context, launchAddress, handleLaunchControl)
+  useGitUiControl(context, shipErrorAddress, handleShipErrorControl)
   const areaSections = AREA_ORDER.map((area) => ({
     id: area,
     count: entries.filter((entry) => entry.area === area && (query === '' || matchesFilter(entry.path, query))).length
@@ -2426,18 +2457,18 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     await refreshAll()
     if (dialogRef.current === baseSession && isCurrentOwner(baseSession.owner)) refreshReview()
   }
-  const errorView: ShipErrorView | null = shipError === null ? null : {
-    message: shipError.message,
-    ...(shipError.pull
-      ? { action: { label: 'Pull first', onAction: () => postMainControl('ship-error-action', { identity: shipError.identity }) } }
-      : shipError.fetch
-        ? { action: { label: 'Fetch first', onAction: () => postMainControl('ship-error-action', { identity: shipError.identity }) } }
-        : shipError.details
-          ? { action: { label: 'Details', onAction: () => postMainControl('ship-error-action', { identity: shipError.identity }) } }
-          : shipError.retry
-            ? { action: { label: 'Retry', onAction: () => postMainControl('ship-error-action', { identity: shipError.identity }) } }
+  const errorView: ShipErrorView | null = currentShipError === null ? null : {
+    message: currentShipError.message,
+    ...(currentShipError.pull
+      ? { action: { label: 'Pull first', onAction: () => postShipErrorControl('ship-error-action') } }
+      : currentShipError.fetch
+        ? { action: { label: 'Fetch first', onAction: () => postShipErrorControl('ship-error-action') } }
+        : currentShipError.details
+          ? { action: { label: 'Details', onAction: () => postShipErrorControl('ship-error-action') } }
+          : currentShipError.retry
+            ? { action: { label: 'Retry', onAction: () => postShipErrorControl('ship-error-action') } }
             : {}),
-    ...(shipError.fix !== undefined && fixFor(shipError.fix) ? { extra: <FixSplitButton {...fixFor(shipError.fix)!} /> } : {})
+    ...(currentShipError.fix !== undefined && fixFor(currentShipError.fix) ? { extra: <FixSplitButton {...fixFor(currentShipError.fix)!} /> } : {})
   }
 
   if (data.unavailable !== null) {
@@ -2453,14 +2484,14 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       <Header
         filter={filter}
         filterOpen={filterOpen}
-        onFilterControl={(action) => postMainControl(action)}
+        onFilterControl={onFilterControl}
         onFilter={setFilter}
         viewMode={viewMode}
         menuGeneration={headerMenu?.generation ?? null}
         menuPosition={headerMenu?.position ?? null}
-        onMenuOpen={(position) => postMainControl('header-menu-open', position)}
+        onMenuOpen={onMenuOpen}
         onMenuClose={postHeaderMenuClose}
-        onMenuAction={postHeaderMenuAction}
+        onMenuAction={onMenuAction}
         summarize={aiEnabled}
         prActions={currentPrActions}
         aiSettings
@@ -2535,7 +2566,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       <div className="ui-stack" data-git-ship>
         {status && operation !== 'none' && (
           <>
-            {errorView && <ShipErrorLine error={errorView} onDismiss={() => postMainControl('ship-error-dismiss', { identity: shipError?.identity ?? '' })} />}
+            {errorView && <ShipErrorLine error={errorView} onDismiss={() => postShipErrorControl('ship-error-dismiss')} />}
             <OperationCard
               operation={operation}
               unresolved={unresolved}
@@ -2586,7 +2617,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
             }
             writtenBy={writtenBy}
             error={errorView}
-            onDismissError={() => postMainControl('ship-error-dismiss', { identity: shipError?.identity ?? '' })}
+            onDismissError={() => postShipErrorControl('ship-error-dismiss')}
             selecting={ticks !== null}
             aside={
               <>

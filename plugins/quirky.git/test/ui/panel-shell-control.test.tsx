@@ -856,3 +856,41 @@ test('same-turn default AI requests reserve one launch without customized launch
     await settle()
   } finally { panel.unmount() }
 })
+
+test('reported ship-error addresses support commands without private state and reject replaced errors', async () => {
+  const panel = await controlled((fake) => fake.on('quirky.git/commit', () => {
+    throw failure('fixture commit failed', { reason: 'hook', summary: 'fixture commit failed', output: 'fixture hook output' })
+  }))
+  try {
+    await type(message(panel.element), 'keep the draft')
+    await click(primary(panel.element))
+    const first = panel.address('ship-error-dismiss')
+    expect(await panel.send(first, 'ship-error-dismiss')).toEqual({ delivered: true })
+    expect(errorLine(panel.element)).toBeNull()
+    await click(primary(panel.element))
+    const current = panel.address('ship-error-dismiss')
+    expect([current.target, current.generation]).not.toEqual([first.target, first.generation])
+    expect(await panel.send(first, 'ship-error-dismiss')).toEqual({ delivered: false })
+    expect(errorLine(panel.element)?.textContent).toContain('fixture commit failed')
+    expect(await panel.send(current, 'ship-error-dismiss')).toEqual({ delivered: true })
+    expect(errorLine(panel.element)).toBeNull()
+  } finally { panel.unmount() }
+})
+
+test('refused base-dialog Close retains its draft and leaves the original completion callback usable', async () => {
+  const panel = await controlled()
+  try {
+    await panel.send(panel.address('change-base'), 'change-base')
+    const base = dialog()!
+    await type(byLabel(base, 'Search branches') as HTMLInputElement, 'keep this search')
+    panel.fake.on('ui.window.command.run', () => { throw new Error('fixture close refused') })
+    await click(buttonText(base, 'Close'))
+    expect(dialog()).toBe(base)
+    expect((byLabel(base, 'Search branches') as HTMLInputElement).value).toBe('keep this search')
+    expect(panel.fake.toastOptions.at(-1)).toMatchObject({ kind: 'error' })
+    panel.fake.on('ui.window.command.run', (params) => ({ result: panel.dispatch(params.args) }))
+    await click(buttonText(base, 'Use Primary'))
+    expect(panel.fake.called('quirky.git/setBase')).toHaveLength(1)
+    expect(dialog()).toBeNull()
+  } finally { panel.unmount() }
+})
