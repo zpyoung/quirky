@@ -31,6 +31,7 @@ type Props = {
   anchor: HTMLElement
   display: ViewDisplay
   rowFact: RowFact
+  writeBusy?: boolean
   onDisplay(patch: Partial<ViewDisplay>): void
   onRowFact(fact: RowFact): void
   onSaveAsView(): void
@@ -38,7 +39,7 @@ type Props = {
 }
 
 /** The Display menu: how the tree is grouped, sorted and annotated. Choices apply at once and the menu closes. */
-export function DisplayMenu({ anchor, display, rowFact, onDisplay, onRowFact, onSaveAsView, onClose }: Props) {
+export function DisplayMenu({ anchor, display, rowFact, writeBusy = false, onDisplay, onRowFact, onSaveAsView, onClose }: Props) {
   const items: PopupItem[] = [
     { label: 'Group by', heading: true },
     ...GROUP_BY.map(({ id, label }) => ({ label, checked: display.groupBy === id, onSelect: () => onDisplay({ groupBy: id }) })),
@@ -47,7 +48,7 @@ export function DisplayMenu({ anchor, display, rowFact, onDisplay, onRowFact, on
     { label: 'Project order', heading: true, separatorBefore: true },
     ...PROJECT_ORDER.map(({ id, label }) => ({ label, checked: display.projectOrder === id, onSelect: () => onDisplay({ projectOrder: id }) })),
     { label: 'Right side shows', heading: true, separatorBefore: true },
-    ...(Object.keys(ROW_FACT_LABELS) as RowFact[]).map((id) => ({ label: ROW_FACT_LABELS[id], checked: rowFact === id, onSelect: () => onRowFact(id) })),
+    ...(Object.keys(ROW_FACT_LABELS) as RowFact[]).map((id) => ({ label: ROW_FACT_LABELS[id], checked: rowFact === id, enabled: !writeBusy, onSelect: () => onRowFact(id) })),
     { label: 'Show asleep', checked: display.showAsleep, separatorBefore: true, onSelect: () => onDisplay({ showAsleep: !display.showAsleep }) },
     { label: 'Show nested children', checked: display.showNested, onSelect: () => onDisplay({ showNested: !display.showNested }) },
     { label: 'Save as view…', separatorBefore: true, onSelect: onSaveAsView }
