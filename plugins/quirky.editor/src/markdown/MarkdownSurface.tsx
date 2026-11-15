@@ -11,7 +11,7 @@ import type { MarkdownReviewNote } from './note-store'
 import type { MarkdownFormat } from './operations'
 import { isSafeMarkdownLink } from './operations'
 import { extractHeadings, splitFrontMatter, slugHeading, utf8Bytes } from './source'
-import { createMarkdownExtensions } from './tiptap'
+import { createMarkdownExtensions, serializeMarkdown } from './tiptap'
 import { findRichMatches, revealRichSearchMatch, RichSearchHighlight, type RichSearchRange } from './search'
 import { filterSlashCatalog, SLASH_CATALOG, type SlashItem } from './slashCatalog'
 import { MermaidDiagram } from './MermaidDiagram'
@@ -43,14 +43,33 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function useMarkdownSession(buffer: SurfaceProps['buffer'], acknowledged?: React.RefObject<number>, localDraft?: React.RefObject<string | null>) {
+type MarkdownWrite = { text: string; prefix: string; canonical?: { source: string; value: string | null } }
+
+function acknowledgesMarkdownWrite(write: MarkdownWrite | null | undefined, parts: { body: string; prefix: string } | undefined) {
+  if (!write || !parts || parts.prefix !== write.prefix) return false
+  if (parts.body === write.text) return true
+  if (write.canonical?.source !== parts.body) write.canonical = { source: parts.body, value: serializeMarkdown(parts.body) }
+  return write.canonical?.value === write.text
+}
+
+type MarkdownSessionOptions = {
+  acknowledged?: React.RefObject<number>
+  draft?: React.RefObject<string | null>
+  write?: React.RefObject<MarkdownWrite | null>
+  parts?: { body: string; prefix: string }
+}
+
+function useMarkdownSession(buffer: SurfaceProps['buffer'], options?: MarkdownSessionOptions) {
   const identity = JSON.stringify([buffer.id, buffer.tabId, buffer.path, buffer.relativePath, buffer.worktreeId, buffer.mode])
   const source = sourceValue(buffer)
-  const previous = useRef<{ identity: string; source: string; scope: string } | null>(null)
+  const previous = useRef<{ identity: string; source: string; revision: number; scope: string } | null>(null)
+  const write = options?.write?.current
   if (!previous.current || previous.current.identity !== identity ||
-    (previous.current.source !== source && acknowledged?.current !== buffer.contentRevision && localDraft?.current !== source)) {
-    previous.current = { identity, source, scope: crypto.randomUUID() }
-  } else previous.current.source = source
+    ((previous.current.source !== source || previous.current.revision !== buffer.contentRevision) && options?.acknowledged?.current !== buffer.contentRevision && options?.draft?.current !== source &&
+      !acknowledgesMarkdownWrite(write, options?.parts))) {
+    previous.current = { identity, source, revision: buffer.contentRevision, scope: crypto.randomUUID() }
+  } else { previous.current.source = source; previous.current.revision = buffer.contentRevision }
+  if (options?.draft?.current === source) options.draft.current = null
   const scope = previous.current.scope
   const scopeRef = useRef(scope)
   const activeRef = useRef(true)
@@ -546,7 +565,7 @@ function documentLinkTarget(currentPath: string, documentPath: string): string {
 function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const content = sourceValue(props.buffer)
   const localDraft = useRef<string | null>(null)
-  const { scope, isCurrent } = useMarkdownSession(props.buffer, undefined, localDraft)
+  const { scope, isCurrent } = useMarkdownSession(props.buffer, { draft: localDraft })
   const [read, setRead] = useState<{ scope: string; status: 'loading' | 'ready' | 'error'; eligibility: { richEligible: boolean; reason: string | null; openAnywayAvailable: boolean } | null; error: string | null }>({
     scope,
     status: 'loading',
@@ -667,7 +686,12 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 
 function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const revision = useRef(props.buffer.contentRevision)
-  const { scope, isCurrent } = useMarkdownSession(props.buffer, revision)
+  const observedRevision = useRef(props.buffer.contentRevision)
+  const { scope, isCurrent } = useMarkdownSession(props.buffer, { acknowledged: revision })
+  if (observedRevision.current !== props.buffer.contentRevision) {
+    observedRevision.current = props.buffer.contentRevision
+    revision.current = props.buffer.contentRevision
+  }
   const [previewRead, setPreviewRead] = useState<{
     scope: string
     status: 'loading' | 'ready' | 'error'
@@ -818,7 +842,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       if (isCurrent(requestScope) && searchPopup.isCurrent()) setActionError(errorText(cause))
       throw cause
     }
-  }, [isCurrent, matchCase, props.buffer.contentRevision, props.buffer.id, props.onAction, query, replaceText, scope, wholeWord])
+  }, [isCurrent, matchCase, props.buffer.contentRevision, props.buffer.id, props.onAction, query, replaceText, scope, wholeWord, searchPopup.generation])
 
   const exportPdf = useCallback(async () => {
     const requestScope = scope
@@ -1003,8 +1027,8 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           setSearchResult(null)
           setSearchStatus('idle')
         }} onKeyDown={(event) => { if (event.key === 'Enter') void searchControls.run('find', { query }) }} />
-        <label className="markdown-check"><input type="checkbox" aria-label="Match case" title="Match case in preview" checked={matchCase} onChange={(event) => { void searchControls.run('options', { matchCase: event.currentTarget.checked }) }} /> Match case</label>
-        <label className="markdown-check"><input type="checkbox" aria-label="Match whole word" title="Match whole word in preview" checked={wholeWord} onChange={(event) => { void searchControls.run('options', { wholeWord: event.currentTarget.checked }) }} /> Match whole word</label>
+        <label className="markdown-check"><input type="checkbox" aria-label="Match case" checked={matchCase} title="Match case in preview" onChange={(event) => { void searchControls.run('options', { matchCase: event.currentTarget.checked }) }} /> Match case</label>
+        <label className="markdown-check"><input type="checkbox" aria-label="Match whole word" checked={wholeWord} title="Match whole word in preview" onChange={(event) => { void searchControls.run('options', { wholeWord: event.currentTarget.checked }) }} /> Match whole word</label>
         <Button type="button" onClick={() => { void searchControls.run('find', { query }) }}>Find</Button>
         <Button type="button" title="Previous preview match" onClick={() => { void searchControls.run('previous') }}>Previous</Button>
         <Button type="button" title="Next preview match" onClick={() => { void searchControls.run('next') }}>Next</Button>
@@ -1043,8 +1067,9 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const { buffer, onAction, onView, context } = props
   const revision = useRef(buffer.contentRevision)
-  const { scope, isCurrent } = useMarkdownSession(buffer, revision)
+  const applying = useRef<MarkdownWrite | null>(null)
   const split = markdownSource(buffer)
+  const { scope, isCurrent } = useMarkdownSession(buffer, { acknowledged: revision, write: applying, parts: split })
   const source = sourceValue(buffer)
   const extensions = useMemo(() => [...createMarkdownExtensions(), RichSearchHighlight], [])
   const readOnly = buffer.readOnly
@@ -1437,6 +1462,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     if (markdown === lastAcknowledged.current && pendingText.current === null) return
     const work = queue.current.then(async () => {
       if (!isCurrent(requestScope) || markdown === lastAcknowledged.current) return
+      applying.current = { text: markdown, prefix: split.prefix }
       try {
         const result = await onAction(MARKDOWN_METHOD, methodParams(buffer.id, {
           action: 'apply',
@@ -1459,6 +1485,8 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           setFlushErrorScope(requestScope)
         }
         throw cause
+      } finally {
+        if (applying.current?.text === markdown) applying.current = null
       }
     })
     queue.current = work.catch(() => {})
@@ -1481,12 +1509,15 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   useEffect(() => {
     if (!editor) return
     const source = sourceValue(buffer)
-    const sourceBody = splitFrontMatter(source).body
+    const parts = splitFrontMatter(source)
+    const sourceBody = parts.body
     if (revision.current === buffer.contentRevision && lastAcknowledged.current === null) {
       lastAcknowledged.current = editor.getMarkdown()
       pendingText.current = null
     } else if (buffer.contentRevision !== revision.current) {
-      if (pendingText.current !== null && editor.getMarkdown() !== lastAcknowledged.current) {
+      if (acknowledgesMarkdownWrite(applying.current, parts)) {
+        revision.current = buffer.contentRevision
+      } else if (pendingText.current !== null && editor.getMarkdown() !== lastAcknowledged.current) {
         reportFlushError('The Markdown draft changed elsewhere. Your local rich edit is retained; switch to source or compare before retrying.')
       } else {
         editor.commands.setContent(sourceBody, { contentType: 'markdown', emitUpdate: false })
@@ -2087,7 +2118,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const sendPopup = useMarkdownPopup(scope, notesOpen && sendMenu, sendSessionRef.current)
   const templatesPopup = useMarkdownPopup(scope, templatesOpen, templateSessionRef.current)
   const [pendingControl, setPendingControl] = useState<{ kind: string; generation: string } | null>(null)
-  const controlBusy = useRef<{ scope: string; token: symbol } | null>(null)
+  const controlBusy = useMemo(() => new Map<string, symbol>(), [])
   const currentBuffer = useRef(buffer)
   currentBuffer.current = buffer
   function selectionIsCurrent() {
@@ -2114,6 +2145,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   }
   async function handleMarkdownControl(kind: string, { action, data = {} }: EditorUiControl) {
     const popup = popupFor(kind)
+    const owner = popup?.generation ?? (kind === 'selection' ? selectionGeneration : scope)
     const live = () => isCurrent(scope) && (!popup || popup.isCurrent()) && (kind !== 'link' || selectionIsCurrent())
     if (!live()) return false
     if (kind === 'search') {
@@ -2186,7 +2218,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       }
       if (action !== 'submit' || readOnly || !controlData(data, ['text']) || (Object.hasOwn(data, 'text') && typeof data.text !== 'string')) return false
       if (noteEdit ? !notes.some(note => note.id === noteEdit) : !noteSelection.current || noteSelection.current.doc !== editor?.state.doc || noteSelection.current.version !== documentEpoch.current) return false
-      if (controlBusy.current?.scope === scope) return false
+      if (controlBusy.has(owner)) return false
       const text = typeof data.text === 'string' ? data.text : noteBody
       setNoteBody(text)
       if (text.trim() === '' || utf8Bytes(text) > MAX_NOTE_BODY_BYTES) {
@@ -2255,9 +2287,9 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         if (!['source','preview','retry-flush','export-pdf','refresh-notes','copy-notes','refresh-headings','retry-capabilities'].includes(action)) return false
       }
     } else return false
-    if (controlBusy.current?.scope === scope) return false
+    if (controlBusy.has(owner)) return false
     const token = Symbol()
-    controlBusy.current = { scope, token }
+    controlBusy.set(owner, token)
     const pendingGeneration = popup?.generation
     if (pendingGeneration && ['note','send','templates'].includes(kind)) setPendingControl({ kind, generation: pendingGeneration })
     try {
@@ -2323,9 +2355,8 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           action: 'add', selection: { text: captured!.text, startLine: captured!.startLine, endLine: captured!.endLine, mode: 'rich' }, text
         })
         if (!live()) return
-        await loadNotes(true)
-        if (!live()) return
         notePopup.invalidate(); setNoteComposer(false); setNoteBody(''); setNoteEdit(null); noteSelection.current = null
+        await loadNotes(true)
       } else if (kind === 'send') {
         const selected = data.target === 'existing' ? agentTargets.sessions.find(value => value.id === (data.sessionId ?? sendTarget)) : null
         if (selected) setSendTarget(selected.id)
@@ -2363,7 +2394,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       }
       throw cause
     } finally {
-      if (controlBusy.current?.token === token) controlBusy.current = null
+      if (controlBusy.get(owner) === token) controlBusy.delete(owner)
       if (isCurrent(scope) && pendingGeneration) setPendingControl(value => value?.generation === pendingGeneration ? null : value)
     }
   }
@@ -2672,7 +2703,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 }
 
 export function MarkdownSurface(props: SurfaceProps): React.JSX.Element {
-  const identity = JSON.stringify([props.buffer.id, props.buffer.tabId, props.buffer.path, props.buffer.worktreeId, props.buffer.mode])
+  const identity = JSON.stringify([props.buffer.id, props.buffer.tabId, props.buffer.mode])
   if (props.buffer.mode === 'source') return <SourceSurface key={identity} props={props} />
   if (props.buffer.mode === 'preview') return <PreviewSurface key={identity} props={props} />
   return <RichSurface key={identity} props={props} />

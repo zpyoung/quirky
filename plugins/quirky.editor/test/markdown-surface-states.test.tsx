@@ -596,7 +596,7 @@ test('rich editor initialization renders shared pending state before TipTap is r
   const { renderToString } = await import('react-dom/server')
   const call: Call = async () => ({ richEligible: true })
   const context = { pluginId: 'quirky.editor', call } as unknown as UiPluginContext
-  const props: SurfaceProps = { context, buffer: makeBuffer('rich', ''), fontSize: 13, onDraft() {}, onAction: call, onView() {}, registerCommandHandlers() { return () => {} } }
+  const props: SurfaceProps = { context, buffer: makeBuffer('rich', ''), fontSize: 13, onDraft() {}, onAction: async (method, params) => call(method, params), onView() {}, registerCommandHandlers() { return () => {} } }
   const scope = createEditorUiControlReportScope(undefined, { surface: SURFACE, context })
   const host = document.createElement('div'); host.innerHTML = renderToString(<EditorUiControlProvider scope={scope}><MarkdownSurface {...props} /></EditorUiControlProvider>)
   expect(notice(host, 'Preparing rich editor…')).not.toBeNull()
@@ -712,8 +712,8 @@ test('an activated document mount preserves its report and parent controls besid
   }
   const context: UiPluginContext = {
     pluginId: 'quirky.editor',
-    provide(id, handler) { provided.set(id, handler as (...args: unknown[]) => unknown) },
-    async call(method, params = {}) {
+    provide(id: string, handler: unknown) { provided.set(id, handler as (...args: unknown[]) => unknown) },
+    async call(method: string, params: Record<string, unknown> = {}) {
       contextCalls.push({ method, params })
       if (method === 'ui.window.self') return { connId: 11 }
       if (method === 'ui.window.command.run') {
@@ -733,7 +733,7 @@ test('an activated document mount preserves its report and parent controls besid
     },
     subscribe: () => () => {},
     onConnection: () => () => {},
-    getSetting(name) { return settings[name] },
+    getSetting(name: string) { return settings[name] },
     getLayout: () => ({ worktree: `id:${info.worktreeId}`, view: null, panel: null, sidebar: true, focus: 'view' }),
     setContext() {}, toast() {}, togglePanel() {}, confirm: async () => true
   } as unknown as UiPluginContext
@@ -2010,5 +2010,147 @@ test('a delayed link check cannot navigate or clear a same-kind reopened link fo
   } finally {
     checked.resolve({ safe: true, kind: 'external' })
     await pending
+  }
+})
+
+test('an apply acknowledgement projected before its RPC reply keeps the mounted rich generation and newer local draft', async () => {
+  const reply = deferred<unknown>()
+  let acknowledged: EditorSurfaceBuffer | undefined
+  const surface = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') return reply.promise
+    return {}
+  } })
+  const original = (await waitFor(() => surface.address('rich'), 'rich acknowledgement origin')).generation
+  const editor = surface.element.querySelector<HTMLElement>('.ProseMirror')!
+  await selectRichText(surface, 'alpha')
+  const changed = surface.control('selection', 'format', { value: 'bold' })
+  try {
+    const applied = await waitFor(() => surface.calls.find(call => call.method === 'quirky.editor/markdown' && call.params.action === 'apply'), 'pending apply request')
+    acknowledged = makeBuffer('rich', 'alpha', { draft: String(applied.params.text), contentRevision: 2, revision: 2 })
+    await surface.update(acknowledged)
+    expect(surface.address('rich')?.generation).toBe(original)
+    expect(errorMessage(surface.element, 'The Markdown draft changed elsewhere. Your local rich edit is retained; switch to source or compare before retrying.')).toBeNull()
+    expect(editor.querySelector('strong')?.textContent).toBe('alpha')
+    await typeRichText(editor, ' newer')
+    expect(editor.textContent).toBe('alpha newer')
+  } finally {
+    reply.resolve({ buffer: acknowledged, sourcePreserved: true })
+    await changed
+  }
+  expect(editor.textContent).toBe('alpha newer')
+  expect(surface.address('rich')?.generation).toBe(original)
+  expect(surface.calls.filter(call => call.method === 'quirky.editor/markdown' && call.params.action === 'apply')).toHaveLength(1)
+})
+
+test('renaming a mounted rich buffer before debounce preserves and flushes its local text', async () => {
+  const surface = await renderSurface('rich', { content: 'alpha' })
+  const editor = surface.element.querySelector<HTMLElement>('.ProseMirror')!
+  await typeRichText(editor, ' newer')
+  await surface.update({ path: '/tmp/markdown-states/renamed.md', relativePath: 'renamed.md', name: 'renamed.md', revision: 2 })
+  expect(surface.element.querySelector('.ProseMirror')?.textContent).toBe('alpha newer')
+  await act(async () => { await surface.commands()!.flush!() })
+  expect(surface.calls.filter(call => call.method === 'quirky.editor/markdown' && call.params.action === 'apply').at(-1)?.params.text).toBe('alpha newer')
+})
+
+test('preview replacement uses the current revision after an external update', async () => {
+  const surface = await renderSurface('preview', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return { previewAvailable: true, imageUrls: {} }
+    if (method === 'quirky.editor/markdown' && params.action === 'search') return { total: 1, matches: [{ from: 0, to: 5, line: 1, text: 'alpha' }] }
+    if (method === 'quirky.editor/markdown' && params.action === 'replace') {
+      if (params.expectedRevision !== 2) throw new Error('stale fixture revision')
+      return { replacements: 1 }
+    }
+    return {}
+  } })
+  await surface.update({ content: 'alpha alpha', contentRevision: 2, revision: 2 })
+  await surface.control('preview', 'replace', { query: 'alpha' })
+  expect(await surface.control('search', 'replace-all', { text: 'beta' })).toEqual({ delivered: true })
+  expect(surface.calls.filter(call => call.method === 'quirky.editor/markdown' && call.params.action === 'replace').at(-1)?.params.expectedRevision).toBe(2)
+})
+
+test('preview replacement acknowledges a close-reopened search session with unchanged drafts', async () => {
+  let replacements = 0
+  const surface = await renderSurface('preview', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return { previewAvailable: true, imageUrls: {} }
+    if (method === 'quirky.editor/markdown' && params.action === 'search') return { total: 1, matches: [{ from: 0, to: 5, line: 1, text: 'alpha' }] }
+    if (method === 'quirky.editor/markdown' && params.action === 'replace') return { replacements: ++replacements }
+    return {}
+  } })
+  await surface.control('preview', 'replace', { query: 'alpha' })
+  await surface.control('search', 'replace-all', { text: 'beta' })
+  await surface.control('preview', 'dismiss-feedback')
+  await surface.control('search', 'close')
+  await surface.control('preview', 'replace', { query: 'alpha' })
+  await surface.control('search', 'replace-all', { text: 'beta' })
+  expect([...surface.element.querySelectorAll('[role="status"]')].some(element => element.textContent?.includes('2 replacement(s)'))).toBe(true)
+})
+
+test('a committed Add note is not retryable as a new write when its inventory refresh fails', async () => {
+  let listed = 0
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') {
+      if (++listed === 2) throw new Error('fixture reload failed')
+      return { notes: listed > 2 ? [notesNote('persisted note')] : [] }
+    }
+    return {}
+  } })
+  await notesOpenAdd(surface)
+  await expect(surface.control('note', 'submit', { text: 'persisted note' })).rejects.toThrow('fixture reload failed')
+  expect(surface.address('note')).toBeUndefined()
+  expect(surface.element.querySelector('textarea[aria-label="Add note for the AI"]')).toBeNull()
+  await surface.control('rich', 'refresh-notes')
+  expect(surface.element.textContent).toContain('persisted note')
+  expect(notesCalls(surface, 'quirky.editor/notes', 'add')).toHaveLength(1)
+})
+
+test('an early rich acknowledgement preserves frontmatter and untouched Markdown syntax without replacing its generation', async () => {
+  const prefix = '---\r\ntitle: fixture\r\n---\r\n'
+  const reply = deferred<unknown>()
+  const surface = await renderSurface('rich', { content: prefix + '* alpha\n', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') return reply.promise
+    return {}
+  } })
+  const original = (await waitFor(() => surface.address('rich'), 'preserved-syntax origin')).generation
+  await selectRichText(surface, 'alpha')
+  const changed = surface.control('selection', 'format', { value: 'bold' })
+  let acknowledged: EditorSurfaceBuffer | undefined
+  try {
+    const applied = await waitFor(() => surface.calls.find(call => call.method === 'quirky.editor/markdown' && call.params.action === 'apply'), 'preserved-syntax apply')
+    const body = String(applied.params.text).replace(/^- /m, '* ') + '\n'
+    acknowledged = makeBuffer('rich', prefix + '* alpha\n', { draft: prefix + body, dirty: true, contentRevision: 2, revision: 2 })
+    await surface.update(acknowledged)
+    expect(surface.address('rich')?.generation).toBe(original)
+    expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(acknowledged.draft?.startsWith(prefix)).toBe(true)
+  } finally {
+    reply.resolve({ buffer: acknowledged, sourcePreserved: true })
+    await changed
+  }
+})
+
+test('an older note write cannot block or unlock a replacement composer write', async () => {
+  const old = deferred<unknown>(), current = deferred<unknown>()
+  let writes = 0
+  const surface = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'add') return ++writes === 1 ? old.promise : current.promise
+    return {}
+  } })
+  await notesOpenAdd(surface)
+  const first = surface.control('note', 'submit', { text: 'first note' })
+  await waitFor(() => writes === 1, 'first pending note write')
+  await surface.control('note', 'cancel')
+  const replacement = await notesOpenAdd(surface)
+  const second = surface.control('note', 'submit', { text: 'second note' })
+  try {
+    await waitFor(() => writes === 2, 'replacement pending note write')
+    old.resolve({})
+    await first
+    const field = replacement.querySelector<HTMLTextAreaElement>('textarea')!
+    expect(field.value).toBe('second note')
+    expect(field.disabled).toBe(true)
+    expect(surface.address('note')?.actions).not.toContain('submit')
+  } finally {
+    old.resolve({}); current.resolve({})
+    await first; await second
   }
 })
