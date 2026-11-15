@@ -5,6 +5,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcError, RpcErrorCode, type UiPluginContext } from '@quirky/protocol'
 import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
+import { createEditorUiControlReportScope, EditorUiControlProvider } from '../src/window/uiControl'
 
 const WORKTREE = 'wt-editor-origin'
 const HTTP_LINK = 'https://example.test/docs'
@@ -24,6 +25,8 @@ let createRoot: (container: HTMLElement) => Root
 let MarkdownSurface: ComponentType<SurfaceProps>
 let originalPlatform: PropertyDescriptor | undefined
 let surfaces: MountedSurface[]
+let deactivateUi: (() => void) | undefined
+const activatedHandlers = new Map<string, (args?: unknown) => unknown>()
 
 beforeAll(async () => {
   // React DOM and TipTap inspect window while initializing, so load them only after Happy DOM is registered.
@@ -31,22 +34,44 @@ beforeAll(async () => {
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   ;({ createRoot } = await import('react-dom/client'))
   ;({ MarkdownSurface } = await import('../src/markdown/MarkdownSurface'))
+  // UI activation imports React DOM, so load it only after Happy DOM is registered.
+  const ui = await import('../src/ui')
+  deactivateUi = ui.deactivate
+  ui.activate({
+    pluginId: 'quirky.editor',
+    call: async () => ({}),
+    provide(id: string, handler: unknown) {
+      if (typeof handler !== 'function') throw new Error(`Expected handler for ${id}`)
+      activatedHandlers.set(id, handler as (args?: unknown) => unknown)
+    },
+    subscribe: () => () => {},
+    getSetting: () => 300,
+    getLayout: () => ({}),
+    toast: () => {}
+  } as unknown as UiPluginContext)
 })
 afterAll(async () => {
+  deactivateUi?.()
   await GlobalRegistrator.unregister()
 })
 beforeEach(() => {
   surfaces = []
   originalPlatform = Object.getOwnPropertyDescriptor(navigator, 'platform')
   Object.defineProperty(navigator, 'platform', { configurable: true, value: 'MacIntel' })
+  document.addEventListener('click', preventHappyDomAnchorNavigation, true)
 })
 afterEach(async () => {
   for (const surface of surfaces) await surface.unmount()
   surfaces = []
+  document.removeEventListener('click', preventHappyDomAnchorNavigation, true)
   document.body.innerHTML = ''
   if (originalPlatform) Object.defineProperty(navigator, 'platform', originalPlatform)
   else Reflect.deleteProperty(navigator, 'platform')
 })
+
+function preventHappyDomAnchorNavigation(event: MouseEvent): void {
+  if (event.target instanceof Element && event.target.closest('a[href]')) event.preventDefault()
+}
 
 function makeBuffer(mode: 'preview' | 'rich', content: string, readOnly = false): EditorSurfaceBuffer {
   return {
@@ -86,6 +111,12 @@ async function renderSurface(mode: 'preview' | 'rich', content: string, options:
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.command.run') {
+        const handler = activatedHandlers.get(String(params.id))
+        if (!handler) throw new Error(`Missing activated command handler: ${String(params.id)}`)
+        return { result: await handler(params.args) }
+      }
       if (method === 'quirky.editor/markdown' && params.action === 'documents') {
         return options.documentsResult?.(String(params.query ?? '')) ?? { documents: [], total: 0, truncated: false }
       }
@@ -120,12 +151,21 @@ async function renderSurface(mode: 'preview' | 'rich', content: string, options:
   const element = document.createElement('div')
   document.body.append(element)
   const root: Root = createRoot(element)
-  await act(async () => root.render(<MarkdownSurface {...props} />))
+  const scope = createEditorUiControlReportScope(undefined, {
+    surface: 'view:quirky.editor/document',
+    context
+  })
+  await act(async () => root.render(
+    <EditorUiControlProvider scope={scope}><MarkdownSurface {...props} /></EditorUiControlProvider>
+  ))
   const mounted: MountedSurface = {
     element,
     calls,
     selections,
-    async unmount() { await act(async () => root.unmount()) }
+    async unmount() {
+      await act(async () => root.unmount())
+      scope.dispose()
+    }
   }
   surfaces.push(mounted)
   return mounted
