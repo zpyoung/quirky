@@ -126,6 +126,12 @@ const taskOneErrorCases = [
   ['global shorthand assignment target', '({ Bun } = globalThis)', escapedGlobalDiagnostic(4)],
   ['global renamed assignment target', '({ Bun: Bun } = globalThis)', escapedGlobalDiagnostic(4)],
   ['global rest assignment target', '({ ...Bun } = globalThis)', escapedGlobalDiagnostic(4)],
+  ['type-only declaration merged with ambient global', 'interface Bun {}\ndeclare const Bun: any;\nBun.spawn([])', spawnDiagnostic(1, 3)],
+  ['wrapped import.meta loader', '(import.meta).require("child_process")', spawnDiagnostic(1)],
+  ['asserted import.meta loader', '(import.meta as any).require(name)', dynamicCodeDiagnostic(1)],
+  ['local Bun namespace export', 'import * as B from "bun";\nexport { B }', escapedGlobalDiagnostic(10, 2)],
+  ['aliased local loader export', 'import { getBuiltinModule as g } from "node:process";\nexport { g as loader }', dynamicCodeDiagnostic(10, 2)],
+  ['nested binding default source', 'const { x: { spawn } =\nBun } = obj', spawnDiagnostic(14)],
 ] as const
 test.each(taskOneErrorCases)('reports exact task 1 diagnostic and padded column: %s', (_name, source, expected) => {
   expect(scanSourceContent(file, source)).toEqual([expected])
@@ -140,6 +146,14 @@ test('checks evaluated defaults separately from destructuring write targets', ()
   expect(scanSourceContent(file, '({ Bun = Bun } = globalThis)')).toEqual([
     escapedGlobalDiagnostic(4), escapedGlobalDiagnostic(10),
   ])
+})
+test.each([
+  'import * as B from "bun"; export type { B }',
+  'import * as B from "bun"; export { type B }',
+  'import * as B from "./local"; export { B }',
+  'class Bun {}; f(Bun)',
+])('preserves local and type-only export controls: %s', source => {
+  expect(scanSourceContent(file, source)).toEqual([])
 })
 const blockingCases = [
   ['Bun.sleepSync(10)', 1],

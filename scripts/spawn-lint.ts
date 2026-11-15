@@ -187,6 +187,14 @@ function ambientDeclaration(node: ts.Node): boolean {
   return false
 }
 
+function runtimeDeclaration(node: ts.Declaration): boolean {
+  if (ambientDeclaration(node) || ts.isInterfaceDeclaration(node) || ts.isTypeAliasDeclaration(node) || ts.isTypeParameterDeclaration(node)) return false
+  if (ts.isImportClause(node) || ts.isImportEqualsDeclaration(node)) return !node.isTypeOnly
+  if (ts.isNamespaceImport(node)) return !node.parent.isTypeOnly
+  if (ts.isImportSpecifier(node)) return !node.isTypeOnly && !node.parent.parent.isTypeOnly
+  return true
+}
+
 function destructuringWriteTarget(node: ts.Node): boolean {
   let current = node
   while (current.parent) {
@@ -282,13 +290,13 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
       }
       checker = ts.createProgram([file], { noLib: true, noResolve: true, allowJs: true }, host).getTypeChecker()
     }
-    const symbol = ts.isShorthandPropertyAssignment(node.parent) ?
-      checker.getShorthandAssignmentValueSymbol(node.parent) : checker.getSymbolAtLocation(node)
+    const symbol = ts.isShorthandPropertyAssignment(node.parent) ? checker.getShorthandAssignmentValueSymbol(node.parent) :
+      ts.isExportSpecifier(node.parent) ? checker.getExportSpecifierLocalTargetSymbol(node.parent) : checker.getSymbolAtLocation(node)
     for (const declaration of symbol?.declarations ?? []) {
       if (declaration.getSourceFile() !== sourceFile) continue
       const kind = imports.get(declaration)
       if (kind) return kind
-      if (!ambientDeclaration(declaration)) return undefined
+      if (runtimeDeclaration(declaration)) return undefined
     }
     return Object.hasOwn(globalRoots, node.text) ? globalRoots[node.text] : undefined
   }
@@ -299,11 +307,12 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
     let kind: RootKind | undefined
     if (ts.isIdentifier(value)) kind = resolveIdentifier(value)
     else if (ts.isPropertyAccessExpression(value) || ts.isElementAccessExpression(value)) {
-      const receiver = rootKind(value.expression)
+      const receiverExpression = unwrapExpression(value.expression)
+      const receiver = rootKind(receiverExpression)
       const name = staticMember(value)
       const policy = receiver && name !== undefined ? memberPolicy(receiver, name) : undefined
       if (policy && !isAccessRule(policy)) kind = policy
-      else if (!receiver && ts.isMetaProperty(value.expression) && value.expression.keywordToken === ts.SyntaxKind.ImportKeyword &&
+      else if (!receiver && ts.isMetaProperty(receiverExpression) && receiverExpression.keywordToken === ts.SyntaxKind.ImportKeyword &&
         name === 'require') kind = 'loader'
     } else if (ts.isCallExpression(value)) {
       const callee = rootKind(value.expression)
@@ -366,7 +375,8 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
     if ((ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === outer) {
       return staticMember(parent) !== undefined
     }
-    if ((ts.isVariableDeclaration(parent) || ts.isParameter(parent)) && parent.initializer === outer && ts.isObjectBindingPattern(parent.name)) {
+    if ((ts.isVariableDeclaration(parent) || ts.isParameter(parent) || ts.isBindingElement(parent)) &&
+      parent.initializer === outer && ts.isObjectBindingPattern(parent.name)) {
       checkPattern(parent.name, kind)
       return true
     }
@@ -377,7 +387,18 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
     return false
   }
   const visitRuntime = (node: ts.Node): void => {
-    if (inTypePosition(node) || ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node) || ts.isExportDeclaration(node)) return
+    if (ts.isExportDeclaration(node)) {
+      if (!node.moduleSpecifier && !node.isTypeOnly && node.exportClause && ts.isNamedExports(node.exportClause)) {
+        for (const specifier of node.exportClause.elements) {
+          const name = specifier.propertyName ?? specifier.name
+          if (specifier.isTypeOnly || !ts.isIdentifier(name)) continue
+          const kind = resolveIdentifier(name)
+          if (kind) add(name, escapeRule(kind))
+        }
+      }
+      return
+    }
+    if (inTypePosition(node) || ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node)) return
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
       const receiver = rootKind(node.expression)
       const member = staticMember(node)
