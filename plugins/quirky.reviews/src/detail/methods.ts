@@ -1253,8 +1253,10 @@ export function detailMethods(env: ReviewsEnv): ReviewMethodTable {
         }
         applyIfOwner(env, selected, (state) => {
           const existing = selectedSurface === 'detail' ? state.detail.checks : checksOf(state, selected.worktree).checks
-          const detailsById = isRecord(existing?.detailsById) ? { ...existing.detailsById } : {}
-          detailsById[String(checkRunId)] = details
+          const detailsById = {
+            ...(isRecord(existing?.detailsById) ? existing.detailsById : {}),
+            ...Object.fromEntries([[String(checkRunId), details]]),
+          }
           const next = { ...(existing ?? { number: selected.number, checks: [] }), detailsById }
           assignChecks(state, selected, next)
         })
