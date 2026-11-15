@@ -1,5 +1,5 @@
 import { Badge, Button, Dialog, EmptyState, IconButton, InlineError, NoticeLine, Tabs, TextField } from '@quirky/ui'
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import type { ItemTarget, ProjectTarget, TasksSurfaceProps } from '../contracts'
 import { Markdown } from '../issue/Markdown'
 import { openReview } from '../review-navigation'
@@ -311,6 +311,52 @@ function shapeInlineField(field: ProjectField, draft: string): InlineFieldShape 
   if (type === 'DATE') return { clear: false, value: { date: draft } }
   if (type === 'TEXT') return { clear: false, value: { text: draft } }
   return { clear: false, error: 'This field cannot be edited inline.' }
+}
+
+function shapeSelectField(field: ProjectField, selected: string): InlineFieldShape {
+  if (selected === '') return { clear: true }
+  return fieldDataType(field) === 'ITERATION'
+    ? { clear: false, value: { iterationId: selected } }
+    : { clear: false, value: { singleSelectOptionId: selected } }
+}
+
+function shapeMultiSelect(values: string[]): InlineFieldShape {
+  return values.length === 0 ? { clear: true } : { clear: false, value: { multiSelectOptionIds: values } }
+}
+
+function selectedMultiOptionIds(value: unknown): string[] {
+  const row = record(value)
+  return Array.isArray(value)
+    ? value.flatMap((entry) => {
+        const id = typeof entry === 'string' ? entry : nonEmpty(record(entry)?.id)
+        return id ? [id] : []
+      })
+    : Array.isArray(row?.multiSelectOptionIds) ? row.multiSelectOptionIds.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
+function resolveIssueTypeChoice(choices: ReadonlyArray<{ id: string; name?: string }>, selectedId: string): { id: string; name: string } | null {
+  const choice = choices.find((candidate) => candidate.id === selectedId)
+  return choice ? { id: choice.id, name: String(choice.name ?? choice.id) } : null
+}
+
+function resolveBoardMove(columns: ProjectBoardColumn[], item: ProjectItem, field: ProjectField, destination: ProjectBoardColumn): InlineFieldShape | null {
+  if (isRestricted(item) || isDraft(item)) return null
+  const source = columns.find((column) => column.items.some((candidate) => candidate.id === item.id))
+  const target = columns.find((column) => column.id === destination.id)
+  if (!source || source.readOnly || !target || target.readOnly) return null
+  if (target.value === null) return { clear: true }
+  return fieldDataType(field) === 'ITERATION'
+    ? { clear: false, value: { iterationId: target.value } }
+    : { clear: false, value: { singleSelectOptionId: target.value } }
+}
+
+function cumulativeStickyOffsets(widths: number[]): number[] {
+  let offset = 0
+  return widths.map((width) => {
+    const current = offset
+    offset += width
+    return current
+  })
 }
 
 type ProjectFieldOverride = { projectKey: string; itemId: string; fieldId: string; clear: boolean; pending: boolean; value?: unknown }
@@ -830,7 +876,7 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
         return true
       }
       const existing = inlineEditorsRef.current.get(key)
-      if (!existing || !isCurrentInlineSession(existing)) return false
+      if (!existing || !isCurrentInlineSession(existing) || !editableInlineCell(request.itemId, request.fieldId)) return false
       removeInlineSession(key)
       return true
     }
@@ -953,6 +999,47 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       onCancel: () => requestInlineEdit(item, field, false),
       onKeyDown: (event) => handleInlineKeyDown(item, field, event)
     }
+  }
+
+  function handleSelectChange(item: ProjectItem, field: ProjectField, selected: string): void {
+    if (fieldDataType(field) !== 'SINGLE_SELECT' && fieldDataType(field) !== 'ITERATION') return
+    const shaped = shapeSelectField(field, selected)
+    void editProjectField(item, field, shaped.value, shaped.clear)
+  }
+
+  function handleMultiSelectChange(item: ProjectItem, field: ProjectField, selected: string[]): void {
+    if (fieldDataType(field) !== 'MULTI_SELECT') return
+    const shaped = shapeMultiSelect(selected)
+    void editProjectField(item, field, shaped.value, shaped.clear)
+  }
+
+  function handleIssueTypeChange(item: ProjectItem, choices: ReadonlyArray<{ id: string; name?: string }>, selectedId: string): void {
+    const choice = resolveIssueTypeChoice(choices, selectedId)
+    if (choice) void updateIssueType(item, choice)
+  }
+
+  function applyBoardMove(itemId: string, destinationValue: string, destinationColumnId?: string): void {
+    if (!project || layout !== 'BOARD' || table === null || tableItems.length === 0 || chooseView || !currentView) return
+    const field = boardGroupField(currentView, tableFields)
+    if (!field) return
+    const item = tableItems.find((candidate) => candidate.id === itemId)
+    if (!item) return
+    const columns = boardColumns(tableItems, field)
+    const destination = destinationColumnId === undefined
+      ? columns.find((column) => column.value === (destinationValue === '' ? null : destinationValue))
+      : columns.find((column) => column.id === destinationColumnId)
+    if (!destination) return
+    const shaped = resolveBoardMove(columns, item, field, destination)
+    if (shaped) void editProjectField(item, field, shaped.value, shaped.clear)
+  }
+
+  function handleBoardMove(item: ProjectItem, destinationValue: string): void {
+    applyBoardMove(item.id, destinationValue)
+  }
+
+  function handleBoardDrop(event: DragEvent<HTMLElement>, destinationColumnId: string): void {
+    event.preventDefault()
+    applyBoardMove(event.dataTransfer.getData('text/quirky-project-item'), '', destinationColumnId)
   }
 
   function commitOptimistic(projectKey: string, itemId: string, fieldId: string, value: unknown, clear: boolean) {
@@ -1495,15 +1582,15 @@ export function ProjectsSurface({ context, state, refresh }: TasksSurfaceProps) 
       {loadingViews ? <div role="status"><NoticeLine>Loading project views…</NoticeLine></div> : views.length > 0 && <div className="quirky-tasks-projects__view-choices">{views.map((view) => <Button key={view.id} type="button" disabled={!supportedLayout(view.layout)} title={supportedLayout(view.layout) ? undefined : `Quirky does not support ${String(view.layout ?? 'unknown')} views yet.`} onClick={() => void changeView(view.id)}>{view.name} · {layoutLabel(view.layout)}{!supportedLayout(view.layout) ? ' · Unsupported' : ''}</Button>)}</div>}
     </section>}
     {loadingTable && table === null && <div role="status" aria-label="Loading project view" className="quirky-tasks-projects__skeletons"><NoticeLine>Loading project items…</NoticeLine>{Array.from({ length: 6 }, (_, index) => <div key={index} className="quirky-tasks-projects__skeleton" />)}</div>}
-    {!chooseView && !loadingViews && !mainError && selectedView && table !== null && tableItems.length === 0 && <div role="status" className="quirky-tasks-projects__empty-state">
+    {!chooseView && !loadingViews && !mainError && selectedView && table !== null && tableItems.length === 0 && supportedLayout(layout) && <div role="status" className="quirky-tasks-projects__empty-state">
       <EmptyState message={activeQuery || viewFilter ? 'No items match this view’s filter.' : 'This view has no items yet. Recently added items can take a while to appear.'} />
     </div>}
-    {!chooseView && table !== null && tableItems.length > 0 && <div className="quirky-tasks-projects__table-scroll">
-      {layout === 'TABLE' && <ProjectTable items={sortedItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} inlineCell={inlineEditorFor} onOpen={openItem} actions={openItemActions} project={project} />}
-      {layout === 'BOARD' && <ProjectBoard items={tableItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} inlineCell={inlineEditorFor} onMove={editProjectField} onOpen={openItem} actions={openItemActions} project={project} />}
-      {layout === 'ROADMAP' && <ProjectRoadmap model={roadmapModel} items={tableItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onFieldEdit={editProjectField} onCollectionEdit={editIssueCollection} onIssueTypeEdit={updateIssueType} inlineCell={inlineEditorFor} zoom={zoom} onZoom={requestRoadmapZoom} onToday={requestToday} scroller={roadmapScroller} onOpen={openItem} actions={openItemActions} project={project} />}
-      {layout !== 'TABLE' && layout !== 'BOARD' && layout !== 'ROADMAP' && <div role="alert">{renderProjectError(new Error('unsupported_layout'))}</div>}
+    {!chooseView && table !== null && tableItems.length > 0 && supportedLayout(layout) && <div className="quirky-tasks-projects__table-scroll">
+      {layout === 'TABLE' && <ProjectTable items={sortedItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onSelectChange={handleSelectChange} onMultiSelectChange={handleMultiSelectChange} onIssueTypeChange={handleIssueTypeChange} inlineCell={inlineEditorFor} onOpen={openItem} actions={openItemActions} project={project} />}
+      {layout === 'BOARD' && <ProjectBoard items={tableItems} fallbackItems={sortedItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onSelectChange={handleSelectChange} onMultiSelectChange={handleMultiSelectChange} onIssueTypeChange={handleIssueTypeChange} inlineCell={inlineEditorFor} onMove={handleBoardMove} onDrop={handleBoardDrop} onOpen={openItem} actions={openItemActions} project={project} />}
+      {layout === 'ROADMAP' && <ProjectRoadmap model={roadmapModel} items={tableItems} fallbackItems={sortedItems} fields={tableFields} columns={columns} widths={deviceColumns.widths} issueTypesByItem={issueTypesByItem} onLoadIssueTypes={loadIssueTypes} view={selectedView ?? undefined} groups={tableGroups} collapsed={collapsedGroups} onToggleGroup={requestGroupToggle} sort={sort} onSort={requestSort} onSelectChange={handleSelectChange} onMultiSelectChange={handleMultiSelectChange} onIssueTypeChange={handleIssueTypeChange} inlineCell={inlineEditorFor} zoom={zoom} onZoom={requestRoadmapZoom} onToday={requestToday} scroller={roadmapScroller} onOpen={openItem} actions={openItemActions} project={project} />}
     </div>}
+    {!chooseView && table !== null && selectedView && !supportedLayout(layout) && <section className="quirky-tasks-projects__error-card"><InlineError message={projectErrorText(new Error('unsupported_layout'), 'load')} action={{ label: 'Retry', onAction: () => { void refreshProject() } }} /><Button type="button" onClick={() => void openLink(projectUrl(project))}>Open in GitHub</Button></section>}
     {!loadingTable && !loadingViews && table === null && !mainError && !chooseView && <EmptyState message="Choose a project view to load its items." />}
     {actionHelp && <Dialog
       open
@@ -1663,17 +1750,16 @@ function ProjectTable(props: {
   onToggleGroup(key: string): void
   sort: { fieldId: string; direction: 'asc' | 'desc' | 'view' } | null
   onSort(id: string): void
-  onFieldEdit(item: ProjectItem, field: ProjectField, value: unknown, clear?: boolean): Promise<void>
-  onCollectionEdit(item: ProjectItem, field: ProjectField, value: string): Promise<void>
-  onIssueTypeEdit(item: ProjectItem, issueType: { id: string; name: string }): Promise<void>
+  onSelectChange(item: ProjectItem, field: ProjectField, selected: string): void
+  onMultiSelectChange(item: ProjectItem, field: ProjectField, selected: string[]): void
+  onIssueTypeChange(item: ProjectItem, choices: ReadonlyArray<{ id: string; name?: string }>, selectedId: string): void
   inlineCell(item: ProjectItem, field: ProjectField): InlineEditorState
   onOpen(item: ProjectItem): void
   actions(item: ProjectItem): ReactNode
   project: ProjectTarget
 }) {
   const widths = props.columns.map((column) => Math.max(60, props.widths[column.id] ?? (column.id === 'title' ? 360 : column.id === 'type' ? 140 : 140)))
-  const lefts: number[] = []
-  for (let index = 0; index < widths.length; index += 1) lefts[index] = widths.slice(0, index).reduce((sum, width) => sum + width, 0)
+  const lefts = cumulativeStickyOffsets(widths)
   const stickyStyle = (index: number): CSSProperties => index < 2 ? { left: lefts[index] } : {}
   const groupField = props.view?.groupByFields?.[0] ?? null
   const hasIssueTypeField = props.fields.some((field) => fieldDataType(field) === 'ISSUE_TYPE' || /issue.?type/i.test(field.name ?? ''))
@@ -1694,9 +1780,9 @@ function ProjectTable(props: {
               ? <Button type="button" className="quirky-tasks-project-table__title" onClick={() => props.onOpen(item)} title={String(item.content?.title ?? '')}>{String(item.content?.title ?? (isRestricted(item) ? 'Restricted item' : 'Untitled'))}</Button>
               : column.kind === 'type'
                 ? item.content?.kind === 'issue'
-                  ? <div className="quirky-tasks-projects__type-cell"><span>Issue</span>{!hasIssueTypeField && <ProjectFieldCell item={item} field={ISSUE_TYPE_FIELD} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} inlineCell={props.inlineCell} />}</div>
+                  ? <div className="quirky-tasks-projects__type-cell"><span>Issue</span>{!hasIssueTypeField && <ProjectFieldCell item={item} field={ISSUE_TYPE_FIELD} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onSelectChange={props.onSelectChange} onMultiSelectChange={props.onMultiSelectChange} onIssueTypeChange={props.onIssueTypeChange} inlineCell={props.inlineCell} />}</div>
                   : <span>{String(item.content?.kind === 'pullRequest' ? 'Pull request' : item.content?.kind === 'draft' ? 'Draft' : 'Restricted')}</span>
-                : <ProjectFieldCell item={item} field={column.field!} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} inlineCell={props.inlineCell} />}
+                : <ProjectFieldCell item={item} field={column.field!} project={props.project} issueTypes={props.issueTypesByItem[item.id]} onLoadIssueTypes={props.onLoadIssueTypes} onSelectChange={props.onSelectChange} onMultiSelectChange={props.onMultiSelectChange} onIssueTypeChange={props.onIssueTypeChange} inlineCell={props.inlineCell} />}
           </td>)}
           <td className="quirky-tasks-project-table__actions">{props.actions(item)}</td>
         </tr>)}
@@ -1711,9 +1797,9 @@ function ProjectFieldCell(props: {
   project: ProjectTarget
   issueTypes?: Array<{ id: string; name: string }>
   onLoadIssueTypes(item: ProjectItem): void
-  onFieldEdit(item: ProjectItem, field: ProjectField, value: unknown, clear?: boolean): Promise<void>
-  onCollectionEdit(item: ProjectItem, field: ProjectField, value: string): Promise<void>
-  onIssueTypeEdit(item: ProjectItem, issueType: { id: string; name: string }): Promise<void>
+  onSelectChange(item: ProjectItem, field: ProjectField, selected: string): void
+  onMultiSelectChange(item: ProjectItem, field: ProjectField, selected: string[]): void
+  onIssueTypeChange(item: ProjectItem, choices: ReadonlyArray<{ id: string; name?: string }>, selectedId: string): void
   inlineCell(item: ProjectItem, field: ProjectField): InlineEditorState
 }) {
   const type = fieldDataType(props.field)
@@ -1732,31 +1818,13 @@ function ProjectFieldCell(props: {
     const currentType = record(props.item.content?.issueType)
     const choices = props.issueTypes ?? options
     if (choices.length === 0 && currentType === null) return <Button type="button" className="quirky-tasks-projects__field-action" onFocus={() => props.onLoadIssueTypes(props.item)} onClick={() => props.onLoadIssueTypes(props.item)}>Load issue types</Button>
-    return <select aria-label="Issue type" className="quirky-tasks-control" value={String(currentType?.id ?? '')} onFocus={() => props.onLoadIssueTypes(props.item)} onChange={(event) => {
-      const selected = choices.find((candidate) => candidate.id === event.currentTarget.value)
-      if (selected) void props.onIssueTypeEdit(props.item, { id: selected.id, name: String(selected.name ?? selected.id) })
-    }}><option value="" disabled>Choose issue type</option>{currentType !== null && !choices.some((option) => option.id === currentType.id) && <option value={String(currentType.id)}>{String(currentType.name ?? currentType.id)}</option>}{choices.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select>
+    return <select aria-label="Issue type" className="quirky-tasks-control" value={String(currentType?.id ?? '')} onFocus={() => props.onLoadIssueTypes(props.item)} onClick={() => props.onLoadIssueTypes(props.item)} onChange={(event) => props.onIssueTypeChange(props.item, choices, event.currentTarget.value)}><option value="" disabled>Choose issue type</option>{currentType !== null && !choices.some((option) => option.id === currentType.id) && <option value={String(currentType.id)}>{String(currentType.name ?? currentType.id)}</option>}{choices.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select>
   }
   if (type === 'MULTI_SELECT') {
-    const raw = fieldValue(props.item, props.field.id)
-    const row = record(raw)
-    const selected = Array.isArray(raw)
-      ? raw.flatMap((entry) => {
-          const value = typeof entry === 'string' ? entry : nonEmpty(record(entry)?.id)
-          return value ? [value] : []
-        })
-      : Array.isArray(row?.multiSelectOptionIds) ? row.multiSelectOptionIds.filter((value): value is string => typeof value === 'string') : []
-    return <select multiple size={Math.max(2, Math.min(5, options.length))} aria-label={props.field.name ?? 'Project field'} className="quirky-tasks-control quirky-tasks-projects__multi-select" value={selected} onChange={(event) => {
-      const values = Array.from(event.currentTarget.selectedOptions, (option) => option.value)
-      if (values.length === 0) void props.onFieldEdit(props.item, props.field, undefined, true)
-      else void props.onFieldEdit(props.item, props.field, { multiSelectOptionIds: values })
-    }}>{options.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select>
+    const selected = selectedMultiOptionIds(fieldValue(props.item, props.field.id))
+    return <select multiple size={Math.max(2, Math.min(5, options.length))} aria-label={props.field.name ?? 'Project field'} className="quirky-tasks-control quirky-tasks-projects__multi-select" value={selected} onChange={(event) => props.onMultiSelectChange(props.item, props.field, Array.from(event.currentTarget.selectedOptions, (option) => option.value))}>{options.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select>
   }
-  if (type === 'SINGLE_SELECT' || type === 'ITERATION') return <select aria-label={props.field.name ?? 'Project field'} className="quirky-tasks-control" value={selectedOptionId(fieldValue(props.item, props.field.id), options)} onChange={(event) => {
-    const selected = event.currentTarget.value
-    if (!selected) void props.onFieldEdit(props.item, props.field, undefined, true)
-    else void props.onFieldEdit(props.item, props.field, type === 'ITERATION' ? { iterationId: selected } : { singleSelectOptionId: selected })
-  }}><option value="">No {props.field.name ?? 'field'}</option>{options.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select>
+  if (type === 'SINGLE_SELECT' || type === 'ITERATION') return <select aria-label={props.field.name ?? 'Project field'} className="quirky-tasks-control" value={selectedOptionId(fieldValue(props.item, props.field.id), options)} onChange={(event) => props.onSelectChange(props.item, props.field, event.currentTarget.value)}><option value="">No {props.field.name ?? 'field'}</option>{options.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select>
   if (type === 'TEXT' || type === 'NUMBER' || type === 'DATE') {
     const raw = fieldValue(props.item, props.field.id)
     const rawValue = typeof raw === 'string' || typeof raw === 'number' ? String(raw) : String(record(raw)?.text ?? record(raw)?.number ?? record(raw)?.date ?? '')
@@ -1787,6 +1855,7 @@ function InlineText(props: { value: string; ariaLabel: string; editing: boolean;
 
 function ProjectBoard(props: {
   items: ProjectItem[]
+  fallbackItems: ProjectItem[]
   fields: ProjectField[]
   columns: Array<{ id: string; label: string; field: ProjectField | null; kind: 'title' | 'type' | 'field' }>
   widths: Record<string, number>
@@ -1798,19 +1867,19 @@ function ProjectBoard(props: {
   onToggleGroup(key: string): void
   sort: { fieldId: string; direction: 'asc' | 'desc' | 'view' } | null
   onSort(id: string): void
-  onFieldEdit(item: ProjectItem, field: ProjectField, value: unknown, clear?: boolean): Promise<void>
-  onCollectionEdit(item: ProjectItem, field: ProjectField, value: string): Promise<void>
-  onIssueTypeEdit(item: ProjectItem, issueType: { id: string; name: string }): Promise<void>
+  onSelectChange(item: ProjectItem, field: ProjectField, selected: string): void
+  onMultiSelectChange(item: ProjectItem, field: ProjectField, selected: string[]): void
+  onIssueTypeChange(item: ProjectItem, choices: ReadonlyArray<{ id: string; name?: string }>, selectedId: string): void
   inlineCell(item: ProjectItem, field: ProjectField): InlineEditorState
-  onMove(item: ProjectItem, field: ProjectField, value: unknown, clear: boolean): Promise<void>
+  onMove(item: ProjectItem, destinationValue: string): void
+  onDrop(event: DragEvent<HTMLElement>, destinationColumnId: string): void
   onOpen(item: ProjectItem): void
   actions(item: ProjectItem): ReactNode
   project: ProjectTarget
 }) {
   const group = props.view ? boardGroupField(props.view, props.fields) : null
-  if (!group) return <section className="quirky-tasks-project-board__fallback"><div role="status">This board view has no single-select or iteration field to group by, so Quirky is listing items instead.</div><ProjectTable items={props.items} fields={props.fields} columns={props.columns} widths={props.widths} issueTypesByItem={props.issueTypesByItem} onLoadIssueTypes={props.onLoadIssueTypes} view={props.view} groups={props.groups} collapsed={props.collapsed} onToggleGroup={props.onToggleGroup} sort={props.sort} onSort={props.onSort} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} inlineCell={props.inlineCell} onOpen={props.onOpen} actions={props.actions} project={props.project} /></section>
+  if (!group) return <section className="quirky-tasks-project-board__fallback"><div role="status"><NoticeLine>This board view has no single-select or iteration field to group by, so Quirky is listing items instead.</NoticeLine></div><ProjectTable items={props.fallbackItems} fields={props.fields} columns={props.columns} widths={props.widths} issueTypesByItem={props.issueTypesByItem} onLoadIssueTypes={props.onLoadIssueTypes} view={props.view} groups={props.groups} collapsed={props.collapsed} onToggleGroup={props.onToggleGroup} sort={props.sort} onSort={props.onSort} onSelectChange={props.onSelectChange} onMultiSelectChange={props.onMultiSelectChange} onIssueTypeChange={props.onIssueTypeChange} inlineCell={props.inlineCell} onOpen={props.onOpen} actions={props.actions} project={props.project} /></section>
   const columns = boardColumns(props.items, group)
-  const type = fieldDataType(group)
   const boardOptions = group.options ?? []
   const currentValue = (item: ProjectItem): string => {
     const raw = fieldValue(item, group.id)
@@ -1819,19 +1888,8 @@ function ProjectBoard(props: {
     const option = boardOptions.find((candidate) => candidate.id === id || candidate.name === name)
     return option?.id ?? id ?? ''
   }
-  const move = (item: ProjectItem, column: ProjectBoardColumn) => {
-    if (column.readOnly || isRestricted(item) || isDraft(item)) return
-    if (column.value === null) void props.onMove(item, group, undefined, true)
-    else void props.onMove(item, group, type === 'ITERATION' ? { iterationId: column.value } : { singleSelectOptionId: column.value }, false)
-  }
   return <div className="quirky-tasks-project-board">
-    {columns.map((column) => <section key={column.id} aria-label={column.label} className={column.readOnly ? 'quirky-tasks-project-board__column quirky-tasks-project-board__column--readonly' : 'quirky-tasks-project-board__column'} onDragOver={(event) => { if (!column.readOnly) event.preventDefault() }} onDrop={(event) => {
-      event.preventDefault()
-      if (column.readOnly) return
-      const itemId = event.dataTransfer.getData('text/quirky-project-item')
-      const item = props.items.find((candidate) => candidate.id === itemId)
-      if (item) move(item, column)
-    }}>
+    {columns.map((column) => <section key={column.id} aria-label={column.label} className={column.readOnly ? 'quirky-tasks-project-board__column quirky-tasks-project-board__column--readonly' : 'quirky-tasks-project-board__column'} onDragOver={(event) => { if (!column.readOnly) event.preventDefault() }} onDrop={(event) => props.onDrop(event, column.id)}>
       <h3 className="quirky-tasks-project-board__column-title">{column.label} <span className="ui-text-muted">{column.items.length}</span>{column.readOnly && <span className="ui-text-muted"> · Read only</span>}</h3>
       {column.items.map((item) => {
         const itemValue = currentValue(item)
@@ -1841,11 +1899,7 @@ function ProjectBoard(props: {
           <Button type="button" className="quirky-tasks-project-board__card-title" onClick={() => props.onOpen(item)}>{item.content?.kind === 'pullRequest' ? '⑂ ' : '● '}{String(item.content?.title ?? 'Restricted item')}</Button>
           <span className="quirky-tasks-project-board__card-meta">{item.content?.kind === 'pullRequest' ? 'PR' : item.content?.kind === 'issue' ? 'Issue' : 'Draft'} {item.content?.number ? `#${item.content.number}` : ''} · {String(item.content?.repository ?? 'Repository unavailable')}</span>
           <div className="quirky-tasks-project-board__assignees">{assigneeAvatars(item).map((user) => <span key={user.login} title={user.login} className="quirky-tasks-project-board__avatar">{user.avatarUrl ? <img src={user.avatarUrl} alt={user.login} /> : user.login.slice(0, 2).toUpperCase()}</span>)}</div>
-          <label className="quirky-tasks-project-board__move">Move card<select aria-label={`Move ${String(item.content?.title ?? 'item')}`} value={itemValue} disabled={column.readOnly || isRestricted(item) || isDraft(item)} className="quirky-tasks-control" onChange={(event) => {
-            const selected = event.currentTarget.value
-            const next = columns.find((candidate) => candidate.value === selected) ?? columns.find((candidate) => candidate.value === null)
-            if (next) move(item, next)
-          }}><option value="">No {group.name ?? 'field'}</option>{isDeleted && <option value={itemValue} disabled>Deleted option · Read only</option>}{boardOptions.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select></label>
+          <label className="quirky-tasks-project-board__move">Move card<select aria-label={`Move ${String(item.content?.title ?? 'item')}`} value={itemValue} disabled={column.readOnly || isRestricted(item) || isDraft(item)} className="quirky-tasks-control" onChange={(event) => props.onMove(item, event.currentTarget.value)}><option value="">No {group.name ?? 'field'}</option>{isDeleted && <option value={itemValue} disabled>Deleted option · Read only</option>}{boardOptions.map((option) => <option key={option.id} value={option.id}>{String(option.name ?? option.id)}</option>)}</select></label>
           {props.actions(item)}
         </article>
       })}
@@ -1867,6 +1921,7 @@ function ProjectRoadmap(props: {
   model: RoadmapTimeline
   items: ProjectItem[]
   fields: ProjectField[]
+  fallbackItems: ProjectItem[]
   columns: Array<{ id: string; label: string; field: ProjectField | null; kind: 'title' | 'type' | 'field' }>
   widths: Record<string, number>
   issueTypesByItem: Record<string, Array<{ id: string; name: string }>>
@@ -1877,9 +1932,9 @@ function ProjectRoadmap(props: {
   onToggleGroup(key: string): void
   sort: { fieldId: string; direction: 'asc' | 'desc' | 'view' } | null
   onSort(id: string): void
-  onFieldEdit(item: ProjectItem, field: ProjectField, value: unknown, clear?: boolean): Promise<void>
-  onCollectionEdit(item: ProjectItem, field: ProjectField, value: string): Promise<void>
-  onIssueTypeEdit(item: ProjectItem, issueType: { id: string; name: string }): Promise<void>
+  onSelectChange(item: ProjectItem, field: ProjectField, selected: string): void
+  onMultiSelectChange(item: ProjectItem, field: ProjectField, selected: string[]): void
+  onIssueTypeChange(item: ProjectItem, choices: ReadonlyArray<{ id: string; name?: string }>, selectedId: string): void
   inlineCell(item: ProjectItem, field: ProjectField): InlineEditorState
   zoom: RoadmapZoom
   onZoom(value: RoadmapZoom): void
@@ -1890,7 +1945,7 @@ function ProjectRoadmap(props: {
   project: ProjectTarget
 }) {
   const model = props.model
-  if (!model.placementFieldName) return <section className="quirky-tasks-project-roadmap__fallback"><div role="status">This roadmap view has no date or iteration field to place items on, so Quirky is listing items instead.</div><ProjectTable items={props.items} fields={props.fields} columns={props.columns} widths={props.widths} issueTypesByItem={props.issueTypesByItem} onLoadIssueTypes={props.onLoadIssueTypes} view={props.view} groups={props.groups} collapsed={props.collapsed} onToggleGroup={props.onToggleGroup} sort={props.sort} onSort={props.onSort} onFieldEdit={props.onFieldEdit} onCollectionEdit={props.onCollectionEdit} onIssueTypeEdit={props.onIssueTypeEdit} inlineCell={props.inlineCell} onOpen={props.onOpen} actions={props.actions} project={props.project} /></section>
+  if (!model.placementFieldName) return <section className="quirky-tasks-project-roadmap__fallback"><div role="status"><NoticeLine>This roadmap view has no date or iteration field to place items on, so Quirky is listing items instead.</NoticeLine></div><ProjectTable items={props.fallbackItems} fields={props.fields} columns={props.columns} widths={props.widths} issueTypesByItem={props.issueTypesByItem} onLoadIssueTypes={props.onLoadIssueTypes} view={props.view} groups={props.groups} collapsed={props.collapsed} onToggleGroup={props.onToggleGroup} sort={props.sort} onSort={props.onSort} onSelectChange={props.onSelectChange} onMultiSelectChange={props.onMultiSelectChange} onIssueTypeChange={props.onIssueTypeChange} inlineCell={props.inlineCell} onOpen={props.onOpen} actions={props.actions} project={props.project} /></section>
   const totalWidth = model.ticks.length * model.tickWidth
   return <section className="quirky-tasks-project-roadmap">
     <div className="quirky-tasks-project-roadmap__toolbar">
@@ -1911,7 +1966,7 @@ function ProjectRoadmap(props: {
           const to = placement.to.toISOString().slice(0, 10)
           return <div key={placement.itemId} className="quirky-tasks-project-roadmap__grid quirky-tasks-project-roadmap__row">
             <div className="quirky-tasks-project-roadmap__item">
-              <Button type="button" className="quirky-tasks-project-roadmap__item-title" onClick={() => { if (item) props.onOpen(item) }}>{placement.title}</Button>
+              <Button type="button" className="quirky-tasks-project-roadmap__item-title" onClick={item === undefined ? undefined : () => props.onOpen(item)}>{placement.title}</Button>
               {item && props.actions(item)}
             </div>
             <div className="quirky-tasks-project-roadmap__timeline">

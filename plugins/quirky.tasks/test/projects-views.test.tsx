@@ -338,9 +338,19 @@ async function changeSelect(select: HTMLSelectElement, value: string): Promise<v
 
 async function changeMultiSelect(select: HTMLSelectElement, values: string[]): Promise<void> {
   await act(async () => {
-    const selected = new Set(values)
-    for (const option of [...select.options]) option.selected = selected.has(option.value)
-    select.dispatchEvent(new Event('change', { bubbles: true }))
+    const previous = Object.getOwnPropertyDescriptor(select, 'selectedOptions')
+    Object.defineProperty(select, 'selectedOptions', {
+      configurable: true,
+      get: () => [...select.options].filter((option) => option.selected)
+    })
+    try {
+      const selected = new Set(values)
+      for (const option of [...select.options]) option.selected = selected.has(option.value)
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    } finally {
+      if (previous) Object.defineProperty(select, 'selectedOptions', previous)
+      else Reflect.deleteProperty(select, 'selectedOptions')
+    }
   })
   await settle()
 }
@@ -1108,3 +1118,430 @@ test('11c. Invalid requests change no state and inapplicable controls report zer
   expect(await dispatch(h, { action: 'edit', itemId: 'unknown', fieldId: 'TEXT', open: true })).toEqual({ delivered: 0 })
 })
 
+type HarnessDataTransfer = {
+  effectAllowed: string
+  setData(format: string, value: string): void
+  getData(format: string): string
+}
+
+function projectRow(container: HTMLElement, title: string): HTMLElement {
+  const found = [...container.querySelectorAll<HTMLElement>('.quirky-tasks-project-table__row')].find((row) =>
+    row.querySelector('.quirky-tasks-project-table__title')?.textContent?.trim() === title
+  )
+  if (!found) throw new Error(`no project row titled ${JSON.stringify(title)}`)
+  return found
+}
+
+function boardColumn(container: HTMLElement, label: string): HTMLElement {
+  const found = container.querySelector<HTMLElement>(`.quirky-tasks-project-board__column[aria-label=${JSON.stringify(label)}]`)
+  if (!found) throw new Error(`no board column ${JSON.stringify(label)}`)
+  return found
+}
+
+function makeDataTransfer(): HarnessDataTransfer {
+  const values = new Map<string, string>()
+  return {
+    effectAllowed: 'none',
+    setData(format, value) { values.set(format, value) },
+    getData(format) { return values.get(format) ?? '' }
+  }
+}
+
+function dragEvent(type: string, transfer: HarnessDataTransfer): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', { value: transfer })
+  return event
+}
+
+async function startDrag(card: HTMLElement): Promise<HarnessDataTransfer> {
+  const transfer = makeDataTransfer()
+  await act(async () => card.dispatchEvent(dragEvent('dragstart', transfer)))
+  await settle()
+  return transfer
+}
+
+async function dropTransfer(target: HTMLElement, transfer: HarnessDataTransfer): Promise<Event> {
+  const event = dragEvent('drop', transfer)
+  await act(async () => target.dispatchEvent(event))
+  await settle()
+  return event
+}
+
+async function dropItem(target: HTMLElement, itemId: string): Promise<Event> {
+  const transfer = makeDataTransfer()
+  transfer.setData('text/quirky-project-item', itemId)
+  return await dropTransfer(target, transfer)
+}
+
+function installRepositoryMatch(h: Harness, identity = { host: 'github.com', owner: 'acme', repo: 'quirky' }): void {
+  h.handlers.set('quirky.repo/list', () => [{ id: 'repo-1', kind: 'git', name: 'quirky', path: '/tmp/quirky' }])
+  h.handlers.set('quirky.worktree/list', () => [{ id: 'worktree-1', repoId: 'repo-1', isMain: true }])
+  h.handlers.set('quirky.hosting/repository', () => ({ origin: identity }))
+  h.handlers.set('quirky.tasks/navigate', () => ({}))
+  h.handlers.set('quirky.reviews/open', () => ({}))
+}
+
+test('8. Board table fallback renders one advisory and routes sort and inline edit', async () => {
+  const h = harness()
+  const fixture = defaultFixture()
+  fixture.view = { ...fixture.view, layout: 'BOARD', fields: [NOTES] }
+  fixture.layout = 'BOARD'
+  fixture.fields = [NOTES]
+  fixture.items = [
+    item('I1', 'Zulu', { TEXT: { text: 'Zulu notes' } }),
+    item('I2', 'Alpha', { TEXT: { text: 'Alpha notes' } })
+  ]
+  addFixture(h, PROJECT, fixture)
+  const container = await mount(h)
+  const noticeText = 'This board view has no single-select or iteration field to group by, so Quirky is listing items instead.'
+
+  expect(container.querySelectorAll('[role="status"] .ui-notice-line')).toHaveLength(1)
+  expect(container.querySelector('[role="status"] .ui-notice-line .ui-notice-line__text')?.textContent).toBe(noticeText)
+  expect(rowTitles(container)).toEqual(['Zulu', 'Alpha'])
+  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0)
+  expect(container.querySelector('.ui-empty-state')).toBeNull()
+
+  await click(headerButton(container, 'Title'))
+  expect(rowTitles(container)).toEqual(['Alpha', 'Zulu'])
+  await click(button(container, 'Edit Notes'))
+  expect(container.querySelector<HTMLInputElement>('input[aria-label="Notes"]')?.value).toBe('Alpha notes')
+  await click(button(container, 'Cancel Notes edit'))
+  expect(container.querySelector('input[aria-label="Notes"]')).toBeNull()
+  expect(controlArgs(h)).toEqual([
+    { action: 'sort', fieldId: 'title' },
+    { action: 'edit', itemId: 'I2', fieldId: 'TEXT', open: true },
+    { action: 'edit', itemId: 'I2', fieldId: 'TEXT', open: false }
+  ])
+  expectBridgeRequests(h, controlArgs(h))
+  expect(calls(h, 'quirky.tasks/projectEdit')).toEqual([])
+})
+
+test('9. Roadmap fallback stays usable and unsupported layouts use one shared error with existing routes', async () => {
+  const fallback = harness()
+  const fixture = roadmapFixture({
+    fields: [NOTES],
+    items: [
+      item('I1', 'Zulu', { TEXT: { text: 'Zulu notes' } }),
+      item('I2', 'Alpha', { TEXT: { text: 'Alpha notes' } })
+    ]
+  })
+  addFixture(fallback, PROJECT, fixture)
+  const fallbackContainer = await mount(fallback)
+  const noticeText = 'This roadmap view has no date or iteration field to place items on, so Quirky is listing items instead.'
+  expect(fallbackContainer.querySelectorAll('[role="status"] .ui-notice-line')).toHaveLength(1)
+  expect(fallbackContainer.querySelector('[role="status"] .ui-notice-line .ui-notice-line__text')?.textContent).toBe(noticeText)
+  await click(headerButton(fallbackContainer, 'Title'))
+  expect(rowTitles(fallbackContainer)).toEqual(['Alpha', 'Zulu'])
+  await click(button(fallbackContainer, 'Edit Notes'))
+  expect(fallbackContainer.querySelector<HTMLInputElement>('input[aria-label="Notes"]')?.value).toBe('Alpha notes')
+  await click(button(fallbackContainer, 'Cancel Notes edit'))
+  expect(controlArgs(fallback)).toEqual([
+    { action: 'sort', fieldId: 'title' },
+    { action: 'edit', itemId: 'I2', fieldId: 'TEXT', open: true },
+    { action: 'edit', itemId: 'I2', fieldId: 'TEXT', open: false }
+  ])
+  expectBridgeRequests(fallback, controlArgs(fallback))
+
+  const unsupported = harness()
+  const calendar = defaultFixture()
+  calendar.view = { ...calendar.view, layout: 'CALENDAR', fields: [NOTES] }
+  calendar.layout = 'CALENDAR'
+  calendar.fields = [NOTES]
+  addFixture(unsupported, PROJECT, calendar)
+  const container = await mount(unsupported)
+  const errorMessage = 'This project view layout is unsupported. Choose a table, board, or roadmap view. The original view remains available on GitHub.'
+  expect(container.querySelectorAll('.ui-inline-error[role="alert"] .ui-inline-error__message')).toHaveLength(1)
+  expect(container.querySelector('.ui-inline-error[role="alert"] .ui-inline-error__message')?.textContent).toBe(errorMessage)
+  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1)
+
+  const previousCalls = calls(unsupported, 'quirky.tasks/projectView').length
+  await click(button(container, 'Retry'))
+  const retryCalls = calls(unsupported, 'quirky.tasks/projectView').slice(previousCalls)
+  expect(retryCalls.some((call) => call.params.action === 'refresh' && call.params.viewId === 'V1')).toBe(true)
+  await click(button(container, 'Open in GitHub'))
+  expect(unsupported.commands).toEqual([{
+    id: 'command:quirky.tasks/open-link',
+    args: { url: PROJECT.url }
+  }])
+  expect(container.querySelectorAll('.ui-inline-error[role="alert"] .ui-inline-error__message')).toHaveLength(1)
+  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1)
+})
+
+test('12a. Table fields preserve single-select, iteration, and multi-select write shapes', async () => {
+  const h = harness()
+  const iteration = {
+    id: 'ITERATION',
+    name: 'Sprint',
+    dataType: 'ITERATION',
+    options: [{ id: 'SPRINT_1', name: 'Sprint 1' }, { id: 'SPRINT_2', name: 'Sprint 2' }]
+  }
+  const multi = {
+    id: 'MULTI',
+    name: 'Tags',
+    dataType: 'MULTI_SELECT',
+    options: [{ id: 'TAG_A', name: 'A' }, { id: 'TAG_B', name: 'B' }]
+  }
+  const fixture = defaultFixture()
+  fixture.fields = [STATUS, NOTES, iteration, multi]
+  fixture.view = { ...fixture.view, fields: fixture.fields }
+  fixture.items = [item('I1', 'Improve project table', {
+    STATUS: { singleSelectOptionId: 'TODO' },
+    TEXT: { text: 'Original' },
+    ITERATION: { iterationId: 'SPRINT_1' },
+    MULTI: { multiSelectOptionIds: ['TAG_A'] }
+  })]
+  addFixture(h, PROJECT, fixture)
+  const container = await mount(h)
+
+  await changeSelect(container.querySelector<HTMLSelectElement>('select[aria-label="Status"]')!, 'DONE')
+  await changeSelect(container.querySelector<HTMLSelectElement>('select[aria-label="Status"]')!, '')
+  await changeSelect(container.querySelector<HTMLSelectElement>('select[aria-label="Sprint"]')!, 'SPRINT_2')
+  await changeSelect(container.querySelector<HTMLSelectElement>('select[aria-label="Sprint"]')!, '')
+  await changeMultiSelect(container.querySelector<HTMLSelectElement>('select[aria-label="Tags"]')!, ['TAG_B'])
+  await changeMultiSelect(container.querySelector<HTMLSelectElement>('select[aria-label="Tags"]')!, [])
+
+  expect(calls(h, 'quirky.tasks/projectEdit', 'field').map((call) => call.params)).toEqual([
+    { action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'STATUS', host: 'github.com', value: { singleSelectOptionId: 'DONE' } },
+    { action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'STATUS', host: 'github.com', clear: true },
+    { action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'ITERATION', host: 'github.com', value: { iterationId: 'SPRINT_2' } },
+    { action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'ITERATION', host: 'github.com', clear: true },
+    { action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'MULTI', host: 'github.com', value: { multiSelectOptionIds: ['TAG_B'] } },
+    { action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'MULTI', host: 'github.com', clear: true }
+  ])
+  for (const call of calls(h, 'quirky.tasks/projectEdit', 'field')) expect(Object.hasOwn(call.params, 'value')).toBe(call.params.clear !== true)
+})
+
+test('12b. Issue types load on both focus and click, and unknown choices do not write', async () => {
+  const h = harness()
+  const issueType = { id: 'ISSUE_TYPE', name: 'Issue type', dataType: 'ISSUE_TYPE', options: [] }
+  const fixture = defaultFixture()
+  fixture.fields = [STATUS, NOTES, issueType]
+  fixture.view = { ...fixture.view, fields: fixture.fields }
+  fixture.items = [
+    item('I1', 'First issue', { STATUS: { singleSelectOptionId: 'TODO' }, TEXT: { text: 'One' } }),
+    item('I2', 'Second issue', { STATUS: { singleSelectOptionId: 'TODO' }, TEXT: { text: 'Two' } })
+  ]
+  addFixture(h, PROJECT, fixture)
+  const container = await mount(h)
+  const firstRow = projectRow(container, 'First issue')
+  const focusButton = firstRow.querySelector<HTMLButtonElement>('.quirky-tasks-projects__field-action')!
+  await act(async () => focusButton.focus())
+  await settle()
+  expect(calls(h, 'quirky.tasks/projectEdit', 'issueType').some((call) => call.params.itemId === 'I1' && call.params.issueTypeId === undefined)).toBe(true)
+
+  const secondRow = projectRow(container, 'Second issue')
+  const clickButton = secondRow.querySelector<HTMLButtonElement>('.quirky-tasks-projects__field-action')!
+  await act(async () => clickButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })))
+  await settle()
+  expect(calls(h, 'quirky.tasks/projectEdit', 'issueType').some((call) => call.params.itemId === 'I2' && call.params.issueTypeId === undefined)).toBe(true)
+
+  const firstSelect = projectRow(container, 'First issue').querySelector<HTMLSelectElement>('select[aria-label="Issue type"]')!
+  const unknown = document.createElement('option')
+  unknown.value = 'UNKNOWN'
+  unknown.textContent = 'Unknown'
+  firstSelect.add(unknown)
+  await changeSelect(firstSelect, 'UNKNOWN')
+  expect(calls(h, 'quirky.tasks/projectEdit', 'issueType').filter((call) => call.params.issueTypeId !== undefined)).toEqual([])
+  await changeSelect(projectRow(container, 'First issue').querySelector<HTMLSelectElement>('select[aria-label="Issue type"]')!, 'BUG')
+  await changeSelect(projectRow(container, 'Second issue').querySelector<HTMLSelectElement>('select[aria-label="Issue type"]')!, 'FEATURE')
+
+  expect(calls(h, 'quirky.tasks/projectEdit', 'issueType').filter((call) => call.params.issueTypeId !== undefined).map((call) => call.params)).toEqual([
+    { action: 'issueType', projectId: 'PVT_1', itemId: 'I1', kind: 'issue', number: 7, host: 'github.com', issueTypeId: 'BUG' },
+    { action: 'issueType', projectId: 'PVT_1', itemId: 'I2', kind: 'issue', number: 8, host: 'github.com', issueTypeId: 'FEATURE' }
+  ])
+})
+
+test('12c. Board dropdown and drag-drop share move shaping, including clear and iteration targets', async () => {
+  const h = harness()
+  const board = defaultFixture()
+  board.view = { ...board.view, layout: 'BOARD' }
+  board.layout = 'BOARD'
+  board.items = [item('I1', 'Move card', { STATUS: { singleSelectOptionId: 'TODO' }, TEXT: { text: 'Original' } })]
+  addFixture(h, PROJECT, board)
+  const container = await mount(h)
+
+  await changeSelect(container.querySelector<HTMLSelectElement>('select[aria-label="Move Move card"]')!, 'DONE')
+  expect(calls(h, 'quirky.tasks/projectEdit', 'field').at(-1)?.params).toEqual({
+    action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'STATUS', host: 'github.com', value: { singleSelectOptionId: 'DONE' }
+  })
+  await changeSelect(container.querySelector<HTMLSelectElement>('select[aria-label="Move Move card"]')!, '')
+  expect(calls(h, 'quirky.tasks/projectEdit', 'field').at(-1)?.params).toEqual({
+    action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'STATUS', host: 'github.com', clear: true
+  })
+
+  const card = boardColumn(container, 'No Status').querySelector<HTMLElement>('.quirky-tasks-project-board__card')!
+  const transfer = await startDrag(card)
+  expect(transfer.getData('text/quirky-project-item')).toBe('I1')
+  expect(transfer.effectAllowed).toBe('move')
+  const drop = await dropTransfer(boardColumn(container, 'Done'), transfer)
+  expect(drop.defaultPrevented).toBe(true)
+  expect(calls(h, 'quirky.tasks/projectEdit', 'field').at(-1)?.params).toEqual({
+    action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'STATUS', host: 'github.com', value: { singleSelectOptionId: 'DONE' }
+  })
+
+  const iteration = { id: 'ITERATION', name: 'Sprint', dataType: 'ITERATION', options: [{ id: 'SPRINT_1', name: 'Sprint 1' }, { id: 'SPRINT_2', name: 'Sprint 2' }] }
+  const iterationBoard: ViewFixture = {
+    view: { id: 'V1', number: 1, name: 'Iteration board', layout: 'BOARD', fields: [iteration], verticalGroupByFields: [iteration] },
+    layout: 'BOARD',
+    fields: [iteration],
+    items: [item('I1', 'Iteration issue', { ITERATION: { iterationId: 'SPRINT_1' } })]
+  }
+  const iterationHarness = harness()
+  addFixture(iterationHarness, PROJECT, iterationBoard)
+  const iterationContainer = await mount(iterationHarness)
+  const iterationCard = boardColumn(iterationContainer, 'Sprint 1').querySelector<HTMLElement>('.quirky-tasks-project-board__card')!
+  const iterationTransfer = await startDrag(iterationCard)
+  await dropTransfer(boardColumn(iterationContainer, 'Sprint 2'), iterationTransfer)
+  expect(calls(iterationHarness, 'quirky.tasks/projectEdit', 'field').at(-1)?.params).toEqual({
+    action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'ITERATION', host: 'github.com', value: { iterationId: 'SPRINT_2' }
+  })
+  await changeSelect(iterationContainer.querySelector<HTMLSelectElement>('select[aria-label="Move Iteration issue"]')!, '')
+  expect(calls(iterationHarness, 'quirky.tasks/projectEdit', 'field').at(-1)?.params).toEqual({
+    action: 'field', projectId: 'PVT_1', itemId: 'I1', fieldId: 'ITERATION', host: 'github.com', clear: true
+  })
+})
+
+test('12d. Fabricated board drops reject unknown, restricted, draft, readonly destination, and readonly source cards', async () => {
+  const h = harness()
+  const board = defaultFixture()
+  board.view = { ...board.view, layout: 'BOARD' }
+  board.layout = 'BOARD'
+  board.fields = [STATUS]
+  board.view = { ...board.view, fields: board.fields }
+  board.items = [
+    item('I1', 'Todo issue', { STATUS: { singleSelectOptionId: 'TODO' } }),
+    item('I2', 'Deleted-option issue', { STATUS: { singleSelectOptionId: 'GONE' } }),
+    { id: 'I3', content: null, fieldValues: [{ fieldId: 'STATUS', value: { singleSelectOptionId: 'TODO' } }] },
+    { id: 'I4', type: 'DRAFT_ISSUE', content: { kind: 'draft', title: 'Draft issue' }, fieldValues: [{ fieldId: 'STATUS', value: { singleSelectOptionId: 'TODO' } }] }
+  ]
+  addFixture(h, PROJECT, board)
+  const container = await mount(h)
+  const done = boardColumn(container, 'Done')
+  const deleted = boardColumn(container, 'Deleted: GONE')
+  const noStatus = boardColumn(container, 'No Status')
+
+  await dropItem(done, 'UNKNOWN_ITEM')
+  await dropItem(deleted, 'I1')
+  await dropItem(done, 'I3')
+  await dropItem(done, 'I4')
+  await dropItem(noStatus, 'I2')
+  expect(calls(h, 'quirky.tasks/projectEdit')).toEqual([])
+})
+
+test('12e. Table, board, and dated or undated roadmap titles delegate to issue and PR routes', async () => {
+  const tableHarness = harness()
+  installRepositoryMatch(tableHarness)
+  const tableFixture = defaultFixture()
+  tableFixture.items = [
+    item('I1', 'Improve project table', { STATUS: { singleSelectOptionId: 'TODO' }, TEXT: { text: 'Original' } }),
+    item('I2', 'Fix pull request', { STATUS: { singleSelectOptionId: 'TODO' }, TEXT: { text: 'PR' } }, {
+      kind: 'pullRequest',
+      number: 8,
+      url: 'https://github.com/acme/quirky/pull/8'
+    })
+  ]
+  addFixture(tableHarness, PROJECT, tableFixture)
+  const table = await mount(tableHarness)
+  const issueRow = projectRow(table, 'Improve project table')
+  await click(issueRow.querySelector<HTMLElement>('.quirky-tasks-project-table__title')!)
+  const cells = issueRow.querySelectorAll('td')
+  expect(cells[0]?.style.left).toBe('0px')
+  expect(cells[1]?.style.left).toBe('360px')
+  await act(async () => issueRow.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true })))
+  await settle()
+  await click(projectRow(table, 'Fix pull request').querySelector<HTMLElement>('.quirky-tasks-project-table__title')!)
+  expect(calls(tableHarness, 'quirky.tasks/navigate')).toHaveLength(2)
+  expect(calls(tableHarness, 'quirky.tasks/navigate')[0]?.params.detail).toMatchObject({
+    kind: 'issue', number: 7, worktree: 'worktree-1'
+  })
+  expect(calls(tableHarness, 'quirky.reviews/open')).toEqual([{
+    method: 'quirky.reviews/open',
+    params: { worktree: 'worktree-1', number: 8, tab: 'conversation', prRepo: { host: 'github.com', owner: 'acme', repo: 'quirky' } }
+  }])
+
+  const boardHarness = harness()
+  installRepositoryMatch(boardHarness)
+  const boardFixture = defaultFixture()
+  boardFixture.view = { ...boardFixture.view, layout: 'BOARD' }
+  boardFixture.layout = 'BOARD'
+  boardFixture.items = [item('I1', 'Board issue', { STATUS: { singleSelectOptionId: 'TODO' }, TEXT: { text: 'Original' } })]
+  addFixture(boardHarness, PROJECT, boardFixture)
+  const board = await mount(boardHarness)
+  await click(boardColumn(board, 'Todo').querySelector<HTMLElement>('.quirky-tasks-project-board__card-title')!)
+  expect(calls(boardHarness, 'quirky.tasks/navigate')).toHaveLength(1)
+
+  const datedHarness = harness()
+  installRepositoryMatch(datedHarness)
+  addFixture(datedHarness, PROJECT, roadmapFixture({ items: [item('I1', 'Dated roadmap issue', { DATE: '2026-01-14', TEXT: { text: 'Original' } })] }))
+  const dated = await mount(datedHarness)
+  await click(dated.querySelector<HTMLElement>('.quirky-tasks-project-roadmap__item-title')!)
+  expect(calls(datedHarness, 'quirky.tasks/navigate')).toHaveLength(1)
+
+  const undatedHarness = harness()
+  installRepositoryMatch(undatedHarness)
+  addFixture(undatedHarness, PROJECT, roadmapFixture({ items: [item('I1', 'Undated roadmap issue', { TEXT: { text: 'Original' } })] }))
+  const undated = await mount(undatedHarness)
+  const undatedDetails = undated.querySelector('details')
+  if (!undatedDetails) throw new Error('undated roadmap items were not rendered')
+  await click(undatedDetails.querySelector('summary')!)
+  await click(button(undated, 'Undated roadmap issue'))
+  expect(calls(undatedHarness, 'quirky.tasks/navigate')).toHaveLength(1)
+})
+
+test('12f. Restricted, draft, and unmatched project titles keep preview and guidance behavior', async () => {
+  const restrictedHarness = harness()
+  const restricted = defaultFixture()
+  restricted.fields = [NOTES]
+  restricted.view = { ...restricted.view, fields: restricted.fields }
+  restricted.items = [{ id: 'I1', content: null, fieldValues: [] }]
+  addFixture(restrictedHarness, PROJECT, restricted)
+  const restrictedContainer = await mount(restrictedHarness)
+  await click(button(restrictedContainer, 'Restricted item'))
+  expect(restrictedContainer.querySelector('[role="dialog"]')?.textContent).toContain('Restricted project content cannot be opened or edited.')
+  expect(calls(restrictedHarness, 'quirky.tasks/navigate')).toEqual([])
+
+  const draftHarness = harness()
+  const draft = defaultFixture()
+  draft.fields = [NOTES]
+  draft.view = { ...draft.view, fields: draft.fields }
+  draft.items = [{ id: 'I1', type: 'DRAFT_ISSUE', content: { kind: 'draft', title: 'Draft project card' }, fieldValues: [] }]
+  addFixture(draftHarness, PROJECT, draft)
+  const draftContainer = await mount(draftHarness)
+  await click(button(draftContainer, 'Draft project card'))
+  expect(draftContainer.querySelector('[role="dialog"]')?.textContent).toContain('Draft project cards do not have an issue or pull-request detail page.')
+  expect(calls(draftHarness, 'quirky.tasks/navigate')).toEqual([])
+
+  const unmatchedHarness = harness()
+  const unmatched = defaultFixture()
+  unmatched.fields = [NOTES]
+  unmatched.view = { ...unmatched.view, fields: unmatched.fields }
+  unmatched.items = [item('I1', 'Unmatched issue', { TEXT: { text: 'Original' } }, {
+    repository: 'another/project',
+    url: 'https://github.com/another/project/issues/7'
+  })]
+  addFixture(unmatchedHarness, PROJECT, unmatched)
+  unmatchedHarness.handlers.set('quirky.repo/list', () => [])
+  const unmatchedContainer = await mount(unmatchedHarness)
+  await click(button(unmatchedContainer, 'Unmatched issue'))
+  expect(unmatchedContainer.querySelector('[role="dialog"]')?.textContent).toContain('No registered local worktree is available for the Project item detail route.')
+  expect(calls(unmatchedHarness, 'quirky.tasks/navigate')).toEqual([])
+})
+test('5c. Closing an editor stops delivering after its column or group row disappears', async () => {
+  const hiddenHarness = harness()
+  const hiddenContainer = await mount(hiddenHarness)
+  expect(await dispatch(hiddenHarness, { action: 'edit', itemId: 'I1', fieldId: 'TEXT', open: true })).toEqual({ delivered: 1 })
+  expect(await dispatch(hiddenHarness, { action: 'column', fieldId: 'TEXT', visible: false })).toEqual({ delivered: 1 })
+  expect(hiddenContainer.querySelector('input[aria-label="Notes"]')).toBeNull()
+  expect(await dispatch(hiddenHarness, { action: 'edit', itemId: 'I1', fieldId: 'TEXT', open: false })).toEqual({ delivered: 0 })
+  localStorage.clear()
+
+  const collapsedHarness = harness()
+  const fixture = defaultFixture()
+  fixture.view = { ...fixture.view, groupByFields: [STATUS] }
+  addFixture(collapsedHarness, PROJECT, fixture)
+  const collapsedContainer = await mount(collapsedHarness)
+  expect(await dispatch(collapsedHarness, { action: 'edit', itemId: 'I1', fieldId: 'TEXT', open: true })).toEqual({ delivered: 1 })
+  expect(await dispatch(collapsedHarness, { action: 'group', group: 'TODO' })).toEqual({ delivered: 1 })
+  expect(collapsedContainer.querySelector('input[aria-label="Notes"]')).toBeNull()
+  expect(await dispatch(collapsedHarness, { action: 'edit', itemId: 'I1', fieldId: 'TEXT', open: false })).toEqual({ delivered: 0 })
+})
