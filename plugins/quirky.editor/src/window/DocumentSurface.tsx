@@ -1,5 +1,5 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState, type DragEvent as ReactDragEvent, type FocusEvent as ReactFocusEvent, type ReactNode } from 'react'
-import { Badge, Button, Dialog, FormRow, IconButton, TextField } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, FormRow, IconButton, InlineError, NoticeLine, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { EditorBufferInfo, EditorSurfaceAction, EditorSurfaceBuffer, EditorSurfaceCommandHandler, EditorSurfaceCommandHandlers, SurfaceProps } from '../types'
 import { activeDocument, registerActiveDocument, type ActiveDocumentCommand, type ActiveDocumentRegistration } from './activeDocument'
@@ -252,8 +252,8 @@ export async function droppedFileTargets(
 /** One session-free hosted document view inside the terminal workspace. */
 export function DocumentSurface({ context, input }: Props) {
   const parsed = documentInput(input)
-  if (!parsed) return <div className="qe-document-message" role="alert">The document tab has no buffer ID.</div>
-  return <DocumentBody key={`${parsed.bufferId}:${parsed.tabId ?? ''}`} context={context} input={parsed} />
+  if (!parsed) return <div className="qe-document-message"><InlineError message="The document tab has no buffer ID." /></div>
+  return <DocumentBody key={JSON.stringify([parsed.bufferId, parsed.tabId])} context={context} input={parsed} />
 }
 
 function DocumentBody({ context, input }: { context: UiPluginContext; input: DocumentInput }) {
@@ -263,6 +263,9 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const bufferRef = useRef<EditorSurfaceBuffer | null>(null)
   bufferRef.current = buffer
   const [hydrateError, setHydrateError] = useState<string | null>(null)
+  const [hydrationAttempt, setHydrationAttempt] = useState(0)
+  const lastHydrationAttempt = useRef(0)
+  const retryDocument = () => { setHydrationAttempt((attempt) => attempt + 1); refresh() }
   const { settings, error: settingsError } = useEditorSettings(context)
   const [uiError, setUiError] = useState<string | null>(null)
   const [sourceError, setSourceError] = useState<string | null>(null)
@@ -310,29 +313,30 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   })
 
   useEffect(() => {
+    const retrying = lastHydrationAttempt.current !== hydrationAttempt
+    lastHydrationAttempt.current = hydrationAttempt
     if (!info) {
       if (state) setBuffer(null)
       return
     }
     const current = bufferRef.current
-    if (current && current.id === info.id && current.contentRevision === info.contentRevision) {
+    if (!retrying && current && current.id === info.id && current.contentRevision === info.contentRevision) {
       const merged = { ...current, ...info, content: current.content, draft: current.draft }
       if (current.revision !== info.revision || current.external !== info.external || current.diskContent !== info.diskContent) setBuffer(merged)
-      setHydrateError(null)
       return
     }
     let cancelled = false
-    setHydrateError(null)
     void hydrateBuffer(context, info).then((hydrated) => {
       if (cancelled) return
       const latest = bufferRef.current
       if (latest && latest.id === hydrated.id && latest.contentRevision > hydrated.contentRevision) return
+      setHydrateError(null)
       setBuffer(hydrated)
     }).catch((reason: unknown) => {
       if (!cancelled) setHydrateError(messageOf(reason))
     })
     return () => { cancelled = true }
-  }, [context, info, state])
+  }, [context, hydrationAttempt, info, state])
 
   const reconcileDraftObservation = useCallback((observedBuffer: EditorSurfaceBuffer) => {
     if (observedBuffer.contentRevision < ackRevision.current) return
@@ -1036,8 +1040,10 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }
 
   if (!buffer) {
-    if (stateError) return <div className="qe-document-message" role="alert"><p>{stateError}</p><Button onClick={refresh}>Retry</Button></div>
-    return <div className="qe-document-message" role="status">Loading document…</div>
+    const error = stateError ?? hydrateError
+    if (error) return <div className="qe-document-message"><InlineError message={error} action={{ label: 'Retry', onAction: retryDocument }} /></div>
+    if (state && !info) return <div className="qe-document-message"><EmptyState message="This document is no longer open." action={{ label: 'Retry', onAction: retryDocument }} /></div>
+    return <div className="qe-document-message" role="status" aria-live="polite"><NoticeLine>Loading document…</NoticeLine></div>
   }
 
   const external = buffer.external
@@ -1189,13 +1195,14 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
         </section>
       )}
       {undoReloadUntil > Date.now() && <Button className="qe-undo-reload" onClick={() => void runViewAction('undoReload').catch(handleError)}>Undo reload</Button>}
-      {(uiError || settingsError || buffer.error || draftConflict) && (
-        <div className="qe-document-error" role="alert">
-          <span>{uiError ?? settingsError ?? draftConflict ?? buffer.error}</span>
-          {buffer.error && <Button onClick={() => void context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: buffer.relativePath, mode: actualMode, focus: true }).then(() => refresh()).catch(handleError)}>Retry</Button>}
-          {draftConflict && <Button onClick={() => setCompareOpen(true)}>Compare local text</Button>}
-        </div>
-      )}
+      <div className="qe-document-error">
+        {uiError && <InlineError message={uiError} />}
+        {settingsError && <InlineError message={settingsError} />}
+        {stateError && <InlineError message={stateError} action={{ label: 'Retry', onAction: retryDocument }} />}
+        {hydrateError && <InlineError message={hydrateError} action={{ label: 'Retry', onAction: retryDocument }} />}
+        {buffer.error && <InlineError message={buffer.error} action={{ label: 'Retry', onAction: () => { void context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: buffer.relativePath, mode: actualMode, focus: true }).then(() => refresh()).catch(handleError) } }} />}
+        {draftConflict && <InlineError message={draftConflict} action={{ label: 'Compare local text', onAction: () => setCompareOpen(true) }} />}
+      </div>
       <div className="qe-document-content">
         {showChanges && <ChangesSurface
           context={context}
