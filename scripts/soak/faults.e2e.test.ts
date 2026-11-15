@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { main } from '../soak.ts'
 import type { FaultCheck, FaultKind, Sample, SoakReport } from './contracts.ts'
 
-const FAULT_CHECK: Record<FaultKind, FaultCheck> = {
+type LegacyFaultKind = Exclude<FaultKind, 'feedback'>
+
+const FAULT_CHECK: Record<LegacyFaultKind, FaultCheck> = {
   leak: 'children',
   zombies: 'zombies',
   storm: 'events',
@@ -37,7 +39,7 @@ function lastSample(path: string): Sample {
   return JSON.parse(lines[lines.length - 1]!) as Sample
 }
 
-async function runFault(kind: FaultKind): Promise<void> {
+async function runFault(kind: LegacyFaultKind): Promise<void> {
   const out = mkdtempSync(join(tmpdir(), `quirky-soak-fault-${kind}-`))
   try {
     const code = await main(['--windows', '0', '--minutes', '0.4', '--out', out, '--fault', kind])
