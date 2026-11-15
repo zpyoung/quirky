@@ -1772,6 +1772,45 @@ test('two outstanding cell draft acknowledgements preserve the current typing se
   expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([7, 11])
 })
 
+test('a locally acknowledged raw reorder stales earlier rich cell addresses', async () => {
+  const cells = [makeCell('first cell'), makeCell('second cell')]
+  const content = notebookContent(cells)
+  const reordered = notebookContent([cells[1]!, cells[0]!])
+  const submitted: string[] = []
+  const calls: Record<string, unknown>[] = []
+  const surface = await renderNotebook(makeBuffer('b1', content), async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') return runtimeState()
+    return {}
+  }, makeContext(), () => {}, (draft) => submitted.push(draft))
+  await flush()
+  const richAddress = addressFor(surface, 'notebook:b1')
+  expect(richAddress.actions).toContain('run-cell')
+  expect(await runControl(surface, 'notebook:b1', 'mode', { value: 'source' })).toEqual({ delivered: true })
+  await surface.rerender(makeBuffer('b1', content, { mode: 'source' }))
+  await flush()
+
+  const textarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-source')!
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('The textarea value setter is unavailable.')
+  await act(async () => {
+    setter.call(textarea, reordered)
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  expect(submitted).toEqual([reordered])
+  await surface.rerender(makeBuffer('b1', content, { mode: 'source', draft: reordered, contentRevision: 2 }))
+  await flush()
+  expect(await runControl(surface, 'notebook:b1', 'mode', { value: 'rich' })).toEqual({ delivered: true })
+  await surface.rerender(makeBuffer('b1', reordered, { mode: 'rich', contentRevision: 2 }))
+  await flush()
+
+  expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('second cell')
+  expect(addressFor(surface, 'notebook:b1').generation).not.toBe(richAddress.generation)
+  expect(await runAddress(surface, richAddress, 'run-cell', { index: 0, mode: 'in-place' }))
+    .toEqual({ delivered: false })
+  expect(calls.filter(({ action }) => action === 'run')).toEqual([])
+})
+
 async function runMermaidScenario(code: string): Promise<void> {
   const home = await mkdtemp(join(tmpdir(), 'quirky-mermaid-test-'))
   try {

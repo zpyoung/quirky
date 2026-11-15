@@ -26,6 +26,7 @@ type NotebookSession = {
   generation: string
   sourceSignature: string
   structureSignature: string
+  cellIdentityOrder: string[]
   pendingStructure: boolean
   pendingStructureAckRevision: number | null
 }
@@ -73,6 +74,47 @@ function notebookSourceSignature(parsed: NotebookParse, content: string): string
 function notebookStructureSignature(cells: NotebookParse['cells']): string {
   return JSON.stringify(cells.map((cell, index) => [cell.id ?? `position:${index}`, cell.cell_type]))
 }
+function notebookCellIdentityOrder(cells: NotebookParse['cells']): string[] {
+  return cells.map((cell) => {
+    const identity = { ...cell }
+    delete identity.outputs
+    delete identity.execution_count
+    return JSON.stringify(identity)
+  })
+}
+
+function notebookCellOrderRemapped(previous: readonly string[], current: readonly string[]): boolean {
+  if (previous.length !== current.length) return true
+  const counts = new Map<string, number>()
+  const firstIndexes = new Map<string, number>()
+  let changed = 0
+  for (let index = 0; index < previous.length; index += 1) {
+    const identity = previous[index]!
+    counts.set(identity, (counts.get(identity) ?? 0) + 1)
+    if (!firstIndexes.has(identity)) firstIndexes.set(identity, index)
+    if (identity !== current[index]) changed += 1
+  }
+  if (changed === 0) return false
+  const remaining = new Map(counts)
+  let sameCells = true
+  for (const identity of current) {
+    const count = remaining.get(identity)
+    if (count === undefined) {
+      sameCells = false
+      break
+    }
+    if (count === 1) remaining.delete(identity)
+    else remaining.set(identity, count - 1)
+  }
+  if (sameCells && remaining.size === 0) return true
+  for (let index = 0; index < current.length; index += 1) {
+    if (previous[index] === current[index]) continue
+    const count = counts.get(current[index]!)
+    if (count !== undefined && (count > 1 || firstIndexes.get(current[index]!) !== index)) return true
+  }
+  return changed > 1
+}
+
 
 function hasControlData(
   data: unknown,
@@ -168,12 +210,13 @@ export function NotebookSurface(props: SurfaceProps) {
   const cells = parsed.valid ? parsed.cells : []
   const sourceSignature = useMemo(() => notebookSourceSignature(parsed, content), [parsed, content])
   const structureSignature = useMemo(() => notebookStructureSignature(cells), [cells])
+  const cellIdentityOrder = useMemo(() => notebookCellIdentityOrder(cells), [cells])
   const controlSurface = useEditorUiControlSurface()
   const publishControlReport = useEditorUiControlReport()
   const bufferId = buffer.id
   const worktreeId = buffer.worktreeId
   const sourceMode = buffer.mode === 'source'
-  const submittedNotebooks = useRef<Array<{ bufferId: string; content: string }>>([])
+  const submittedNotebooks = useRef<Array<{ bufferId: string; content: string; raw: boolean }>>([])
   const sessionRef = useRef<NotebookSession | null>(null)
   if (sessionRef.current === null) {
     sessionRef.current = {
@@ -184,26 +227,36 @@ export function NotebookSurface(props: SurfaceProps) {
       generation: crypto.randomUUID(),
       sourceSignature,
       structureSignature,
+      cellIdentityOrder,
       pendingStructure: false,
       pendingStructureAckRevision: null
     }
   } else {
     const previous = sessionRef.current
     const bufferChanged = previous.bufferId !== bufferId || previous.worktreeId !== worktreeId
-    const structureChanged = previous.structureSignature !== structureSignature
     const contentChanged = previous.content !== content
     const localEcho = contentChanged && submittedNotebooks.current.some(
       (submitted) => submitted.bufferId === bufferId && submitted.content === content
     )
+    const localRawEcho = contentChanged && submittedNotebooks.current.some(
+      (submitted) => submitted.bufferId === bufferId && submitted.content === content && submitted.raw
+    )
+    const preserveRawStructure = localRawEcho && !parsed.valid
+    const observedStructureSignature = preserveRawStructure ? previous.structureSignature : structureSignature
+    const observedCellIdentityOrder = preserveRawStructure ? previous.cellIdentityOrder : cellIdentityOrder
+    const structureChanged = previous.structureSignature !== observedStructureSignature
+    const localRawRemapping = localRawEcho && parsed.valid &&
+      notebookCellOrderRemapped(previous.cellIdentityOrder, observedCellIdentityOrder)
     const sourceChanged = sourceSignature !== previous.sourceSignature
     const waitingForStructure = !bufferChanged && previous.pendingStructure
     const acknowledgedStructureRevision = waitingForStructure &&
       previous.pendingStructureAckRevision !== null &&
       buffer.contentRevision >= previous.pendingStructureAckRevision
     const expectedStructureChange = waitingForStructure && (
-      structureChanged || sourceChanged && !localEcho || acknowledgedStructureRevision
+      structureChanged || localRawRemapping || sourceChanged && !localEcho || acknowledgedStructureRevision
     )
-    const rotate = bufferChanged || structureChanged || sourceChanged && !localEcho || acknowledgedStructureRevision
+    const rotate = bufferChanged || structureChanged || localRawRemapping ||
+      sourceChanged && !localEcho || acknowledgedStructureRevision
     sessionRef.current = {
       bufferId,
       content,
@@ -211,7 +264,8 @@ export function NotebookSurface(props: SurfaceProps) {
       worktreeId,
       generation: rotate ? crypto.randomUUID() : previous.generation,
       sourceSignature,
-      structureSignature,
+      structureSignature: observedStructureSignature,
+      cellIdentityOrder: observedCellIdentityOrder,
       pendingStructure: waitingForStructure && !expectedStructureChange,
       pendingStructureAckRevision: waitingForStructure && !expectedStructureChange
         ? previous.pendingStructureAckRevision
@@ -459,8 +513,8 @@ export function NotebookSurface(props: SurfaceProps) {
     return { ...expected, generation }
   }
 
-  const submitNotebookDraft = (draft: string) => {
-    submittedNotebooks.current.push({ bufferId, content: draft })
+  const submitNotebookDraft = (draft: string, raw = false) => {
+    submittedNotebooks.current.push({ bufferId, content: draft, raw })
     onDraft(draft)
   }
 
@@ -531,7 +585,7 @@ export function NotebookSurface(props: SurfaceProps) {
       const current = sessionRef.current
       if (structural && isCurrentSession(operationSession) && current?.pendingStructure &&
         typeof revision === 'number' && Number.isSafeInteger(revision) &&
-        revision > buffer.contentRevision) {
+        revision >= buffer.contentRevision) {
         sessionRef.current = { ...current, pendingStructureAckRevision: revision }
       }
       return isCurrentSession(operationSession)
@@ -579,7 +633,7 @@ export function NotebookSurface(props: SurfaceProps) {
     if (!updateEnvironmentPrompt(prompt, expected, { choices: [], pending: true, error: null, settled: false })) return false
     try {
       const result = asRecord(await action('environments', {}, expected))
-      if (!isEnvironmentPromptCurrent(prompt, expected)) return false
+      if (!isEnvironmentPromptCurrent(prompt, expected)) return true
       const environments = Array.isArray(result.environments)
         ? result.environments.map(asRecord).filter((entry): entry is ApiRecord & Environment =>
           typeof entry.path === 'string' && typeof entry.name === 'string')
@@ -1334,7 +1388,7 @@ export function NotebookSurface(props: SurfaceProps) {
       style={{ fontSize: props.fontSize }}
       spellCheck={false}
       value={content}
-      onChange={(event) => submitNotebookDraft(event.currentTarget.value)}
+      onChange={(event) => submitNotebookDraft(event.currentTarget.value, true)}
     /> : parsed.valid ? <main className="notebook-cells">
       {cells.length === 0 && <EmptyState message="Empty notebook" />}
       {cells.length > CELL_PAGE_SIZE && <nav aria-label="Notebook cell pages">
