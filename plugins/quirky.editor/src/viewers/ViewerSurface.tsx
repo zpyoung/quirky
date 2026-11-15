@@ -701,7 +701,7 @@ function CsvSurface({
       </>}
     </header>
     {changedBanner}
-    {error && <InlineError message={error} action={{ label: 'Retry', onAction: () => request('retry') }} />}
+    {error && <div className="viewer-error"><InlineError message={error} action={{ label: 'Retry', onAction: () => request('retry') }} /></div>}
     {metadata?.limits && metadata.paged && <p>Limits: {metadata.limits.maxColumns} columns · {bytesLabel(metadata.limits.maxRecordBytes ?? 0)} per record · {metadata.limits.maxCachedPages} cached pages</p>}
     {loading && <div role="status"><NoticeLine>Loading CSV page…</NoticeLine></div>}
     {!loading && !error && dataRows.length === 0 && <EmptyState
