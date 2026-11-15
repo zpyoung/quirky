@@ -347,8 +347,7 @@ Each `actions` entry requires `site` and exactly one of `route`, `transient` or
   `invoke` identifies the public route expression; `target` records its
   resolved value.
 - `transient` is `caret`, `hover` or `draft`, with a nonempty `reason`.
-- `notAction` is `lifecycle`, `subscription` or `forwarded`, also with a
-  nonempty `reason`.
+- `notAction` is `lifecycle`, `subscription`, `forwarded` or `barrier`, with a nonempty `reason`; a `barrier` is accepted only for a JSX handler with one plain event parameter whose body contains only zero-argument `stopPropagation()`/`preventDefault()` calls, including at least one `stopPropagation()`, and a referenced function must have one unique, unreassigned function declaration or `const` function binding lexically visible at the JSX use.
 
 The classifications have these restrictions:
 

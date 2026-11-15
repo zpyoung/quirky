@@ -56,7 +56,7 @@ function reviewsState(): ReviewsState {
     revision: 1,
     detail: {
       target: { worktree: WORKTREE, number: 12, prRepo: REPO }, tab: 'conversation', generation: 1, loading: false, error: null,
-      review, details: { item: { viewerCanUpdate: true } }, checks,
+      review: { ...review, assignees: [], requestedReviewers: [], reviews: [] }, details: { item: { viewerCanUpdate: true } }, checks,
       comments: { number: 12, comments: [], partial: false, partialFailures: [] },
       files: { number: 12, files: [], truncated: false, filesUnavailable: false, partialFailures: [] },
       audience: 'all', grouping: 'grouped', expandedChecks: [], queuedComments: [], checksCollapsed: false,
@@ -113,6 +113,7 @@ function makeContext(connId = 41, worktree: string | null = WORKTREE) {
       if (method === 'quirky.reviews/state') return reviewsState()
       if (method === 'quirky.worktree/list') return []
       if (method === 'quirky.reviews/creationDefaults') return { defaults: DEFAULTS }
+      if (method === 'quirky.tasks/state') return {}
       return undefined
     },
     subscribe(listener: (event: QuirkyEvent) => void | Promise<void>) {

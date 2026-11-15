@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Button, EmptyState, TextField, SectionHeader } from '@quirky/ui'
+import { Button, EmptyState, InlineError, NoticeLine, TextField, SectionHeader } from '@quirky/ui'
 import { currentRevisionOf, errorMessage, ledgerRequest } from './api'
 import { ledgerStyles as styles } from './styles'
 import type { LedgerResponse } from './types'
@@ -8,6 +8,47 @@ import type { LedgerResponse } from './types'
 function repoIdFrom(input: unknown): string {
   if (typeof input !== 'object' || input === null || !('repoId' in input) || typeof input.repoId !== 'string') return ''
   return input.repoId
+}
+
+function fetchLedgerSettings(context: UiPluginContext, repoId: string): Promise<LedgerResponse> {
+  return ledgerRequest(context, { operation: 'list', target: { owner: { tier: 'project', id: repoId } } })
+}
+
+function saveLedgerSettings(context: UiPluginContext, repoId: string, revision: number, staleAfterDays: number): Promise<LedgerResponse> {
+  return ledgerRequest(context, {
+    operation: 'settings',
+    target: { owner: { tier: 'project', id: repoId } },
+    ifLedgerRevision: revision,
+    staleAfterDays
+  })
+}
+
+async function load(
+  context: UiPluginContext,
+  repoId: string,
+  generation: { current: number },
+  setError: (value: string) => void,
+  setResponse: (value: LedgerResponse | null) => void,
+  setDays: (value: string) => void
+): Promise<void> {
+  const current = ++generation.current
+  setError('')
+  if (!repoId) {
+    setError('A repository is required to load ledger settings.')
+    setResponse(null)
+    return
+  }
+  try {
+    const next = await fetchLedgerSettings(context, repoId)
+    if (generation.current !== current) return
+    setResponse(next)
+    setDays(String(next.ledger?.staleAfterDays ?? 90))
+  } catch (reason) {
+    if (generation.current === current) {
+      setError(errorMessage(reason))
+      setResponse(null)
+    }
+  }
 }
 
 export function LedgerSettings({ context, input, report }: { context: UiPluginContext; input?: unknown; report?(state: unknown): void }) {
@@ -19,37 +60,15 @@ export function LedgerSettings({ context, input, report }: { context: UiPluginCo
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const generation = useRef(0)
-
-  const load = useCallback(async () => {
-    const current = ++generation.current
-    setError('')
-    if (!repoId) {
-      setError('A repository is required to load ledger settings.')
-      setResponse(null)
-      return
-    }
-    try {
-      const next = await ledgerRequest(context, { operation: 'list', target: { owner: { tier: 'project', id: repoId } } })
-      if (generation.current !== current) return
-      setResponse(next)
-      setDays(String(next.ledger?.staleAfterDays ?? 90))
-    } catch (reason) {
-      if (generation.current === current) {
-        setError(errorMessage(reason))
-        setResponse(null)
-      }
-    }
-  }, [context, repoId])
-
   useEffect(() => {
-    void load()
+    void load(context, repoId, generation, setError, setResponse, setDays)
     return () => { generation.current++ }
-  }, [load])
+  }, [context, repoId])
   useEffect(() => context.subscribe((event) => {
-    if (event.type.startsWith('quirky.ledger/')) void load()
-  }), [context, load])
+    if (event.type.startsWith('quirky.ledger/')) void load(context, repoId, generation, setError, setResponse, setDays)
+  }), [context, repoId])
 
-  const save = async () => {
+  async function save() {
     if (!response?.ledger) return
     if (!days.trim()) {
       setError('Enter an integer from 0 to 3650 days.')
@@ -64,12 +83,7 @@ export function LedgerSettings({ context, input, report }: { context: UiPluginCo
     setSaved(false)
     setError('')
     try {
-      const next = await ledgerRequest(context, {
-        operation: 'settings',
-        target: { owner: { tier: 'project', id: repoId } },
-        ifLedgerRevision: response.ledger.revision,
-        staleAfterDays: value
-      })
+      const next = await saveLedgerSettings(context, repoId, response.ledger.revision, value)
       setResponse(next)
       setDays(String(next.ledger?.staleAfterDays ?? value))
       setSaved(true)
@@ -84,8 +98,8 @@ export function LedgerSettings({ context, input, report }: { context: UiPluginCo
   return (
     <section style={{ ...styles.root, ...styles.settings }} aria-label="Ledger settings">
       <SectionHeader title="Ledger Staleness" />
-      {!response && !error && <p style={styles.muted}>Loading ledger settings…</p>}
-      {error && <p role="alert" style={styles.error}>{error}</p>}
+      {!response && !error && <NoticeLine>Loading ledger settings…</NoticeLine>}
+      {error && <InlineError message={error} action={{ label: response ? 'Reload' : 'Retry', onAction: () => void load(context, repoId, generation, setError, setResponse, setDays) }} />}
       {response?.ledger ? <>
         <TextField
           label="Ledger Staleness"
@@ -96,10 +110,8 @@ export function LedgerSettings({ context, input, report }: { context: UiPluginCo
         <div style={styles.actions}>
           <Button variant="primary" disabled={busy || days === String(response.ledger.staleAfterDays)} onClick={() => void save()}>Save</Button>
           {saved && <span role="status">Saved</span>}
-          {error && <Button onClick={() => void load()}>Reload</Button>}
         </div>
       </> : response && <EmptyState message="This project has no ledger yet. File an entry to create one." />}
-      {error && !response && <Button onClick={() => void load()}>Retry</Button>}
     </section>
   )
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Button, EmptyState, FormRow, SectionHeader, StatusDot } from '@quirky/ui'
+import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, StatusDot } from '@quirky/ui'
 import { createPortal } from 'react-dom'
 import { NATIVE_BROWSER_PREVIEW_SCHEME } from '@quirky/protocol'
 import type { NativeBrowserHandle, UiPluginContext } from '@quirky/protocol'
@@ -8,6 +8,8 @@ import type { DesignAnnotation, DesignPayload, DesignRead, DesignScreenshot, Des
 import { DESIGN_FULL_SCREENSHOT_MAX_BYTES } from '../design-contract'
 import { guestProgram } from '../design/guest'
 import { clampPayload } from '../design/payload'
+import { registerDesignController, requestDesignControl } from '../ui-control'
+import type { DesignControlArgs } from '../ui-control'
 type AnnotationPageSnapshot = { annotations: DesignAnnotation[]; heldIds: ReadonlySet<string> }
 type AnnotationPageMemory = { snapshot: AnnotationPageSnapshot; listeners: Set<() => void> }
 const EMPTY_ANNOTATION_PAGE: AnnotationPageSnapshot = { annotations: [], heldIds: new Set<string>() }
@@ -161,14 +163,13 @@ const highlightLabelStyle: CSSProperties = {
   textOverflow: 'ellipsis'
 }
 const annotationFeedbackStyle: CSSProperties = { minHeight: 'calc(var(--ui-row-double) * 3)', resize: 'vertical' }
-const errorMessageStyle: CSSProperties = { color: 'var(--ui-failing)' }
 
 export type DesignAction = 'grab' | 'annotate' | 'draw' | 'cancel'
 export type DesignPane = { id: string; mode: 'native' | 'watch'; page: string | null; url: string; title: string; loading: boolean; error: string | null; worktreeId: string }
 type Operation = { opId: string; mode: 'grab' | 'annotate'; pane: DesignPane; identity: string; startedAt: number; nativeHandle: NativeBrowserHandle | null; generation: number }
 type AnnotationDraft = { paneId: string; pageId: string; payload: DesignPayload; editingId: string | null; intent: 'change' | 'question'; comment: string }
 type SelectionMenu = { payload: DesignPayload; op: Operation }
-type SendTarget = { kind: 'session'; value: DesignTarget } | { kind: 'agent'; id: string; label: string }
+type SendTarget = { kind: 'session'; session: string } | { kind: 'agent'; id: string }
 type ClipboardProbe = { editable: boolean; selected: boolean }
 type WriteText = (payload: DesignPayload, successMessage: string, rearm: boolean, expectedIdentity?: string) => Promise<boolean>
 type WriteImage = (screenshot: DesignScreenshot, successMessage: string, rearm: boolean, expectedIdentity?: string) => Promise<boolean>
@@ -1012,7 +1013,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
     try {
       const result = recordOf(await context.call('quirky.browser/designSend', {
         pane: pane.id, annotations: snapshot,
-        ...(target.kind === 'session' ? { session: target.value.session } : { agent: target.id })
+        ...(target.kind === 'session' ? { session: target.session } : { agent: target.id })
       }))
       if (result && (result.delivery === 'pasted' || result.delivery === 'command-line')) {
         const sentRevisions = new Map(snapshot.map((annotation) => [annotation.id, annotation.revision]))
@@ -1049,10 +1050,129 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
     }
   }, [context, onMessage])
 
+  const requestDesignAction = (action: Omit<DesignControlArgs, 'pane'>): void => {
+    if (!pane) return
+    void requestDesignControl(context, { ...action, pane: pane.id }).catch((error: unknown) => onMessage(errorText(error), 'error'))
+  }
+
+  const designControllerRef = useRef<(args: DesignControlArgs) => void>(() => {})
+  designControllerRef.current = (args) => {
+    switch (args.action) {
+      case 'toggle-grab':
+        if (armPendingRef.current || interactionLocked || currentOperation?.mode === 'annotate') return
+        if (currentOperation?.mode === 'grab') void cancelOperation()
+        else void startOperation('grab')
+        return
+      case 'toggle-annotate':
+        if (armPendingRef.current || interactionLocked || currentOperation?.mode === 'grab') return
+        if (currentOperation?.mode === 'annotate') void cancelOperation()
+        else void startOperation('annotate')
+        return
+      case 'draw':
+        if (armPendingRef.current || operationPending || interactionLocked) return
+        void beginDraw()
+        return
+      case 'copy-selection':
+        if (!selectionMenu) return
+        void writeText(selectionMenu.payload, 'Copied', true, selectionMenu.op.identity)
+        return
+      case 'copy-selection-screenshot': {
+        if (!selectionMenu || selectionMenu.op.pane.mode === 'native') return
+        const identity = selectionMenu.op.identity
+        void capture(null, selectionMenu.payload.target.rectViewport).then((image) => {
+          if (identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current) !== identity) return
+          if (image) void writeImage(image, 'Screenshotted', true, identity)
+          else onMessage('No screenshot available for this element.', 'error')
+        }).catch((error: unknown) => {
+          if (identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current) === identity) onMessage(errorText(error), 'error')
+        })
+        return
+      }
+      case 'select-another':
+        if (!selectionMenu) return
+        setSelectionMenu(null)
+        void startOperation(selectionMenu.op.mode)
+        return
+      case 'cancel-selection':
+        setSelectionMenu(null)
+        void cancelOperation()
+        return
+      case 'set-intent':
+        if (!draft || !args.intent) return
+        setDraft({ ...draft, intent: args.intent })
+        return
+      case 'save-annotation':
+        if (!draft) return
+        saveDraft()
+        return
+      case 'close-annotation':
+        setDraft(null)
+        return
+      case 'edit-annotation': {
+        const annotation = args.annotation === undefined ? undefined : annotations[args.annotation - 1]
+        if (!annotation) {
+          onMessage(`Annotation ${args.annotation} is not on this page.`, 'error')
+          return
+        }
+        editAnnotation(annotation)
+        return
+      }
+      case 'delete-annotation': {
+        const annotation = args.annotation === undefined ? undefined : annotations[args.annotation - 1]
+        if (!annotation) {
+          onMessage(`Annotation ${args.annotation} is not on this page.`, 'error')
+          return
+        }
+        removeAnnotation(annotation.id)
+        return
+      }
+      case 'copy-annotation': {
+        const annotation = args.annotation === undefined ? undefined : annotations[args.annotation - 1]
+        if (!annotation) {
+          onMessage(`Annotation ${args.annotation} is not on this page.`, 'error')
+          return
+        }
+        void copyAnnotations([annotation])
+        return
+      }
+      case 'toggle-annotations':
+        if (!annotations.length) return
+        setCollapsed(!collapsed)
+        return
+      case 'open-targets':
+        if (!notesAvailable.length) return
+        void openTargets()
+        return
+      case 'close-targets':
+        setTargetsOpen(false)
+        return
+      case 'copy-annotations':
+        if (!annotations.length) return
+        void copyAnnotations(annotations)
+        return
+      case 'clear-annotations':
+        if (!annotations.length || !annotationPageId) return
+        updateAnnotations(annotationPageId, () => [])
+        return
+      case 'send-annotations':
+        if (args.session !== undefined) void sendTo({ kind: 'session', session: args.session })
+        else if (args.agent !== undefined) void sendTo({ kind: 'agent', id: args.agent })
+        return
+      default:
+        return
+    }
+  }
+
+  useEffect(() => {
+    if (!pane) return
+    return registerDesignController(context, pane.id, (args) => designControllerRef.current(args))
+  }, [context, pane?.id])
+
   const copiedCurrentElement = copiedSelectionRef.current?.identity === currentIdentity
   const grabHint = copiedCurrentElement
     ? pane?.mode === 'watch' ? 'Copied — press S to screenshot, or select another element. Esc cancels.' : 'Copied — select another element. Esc cancels.'
     : pane?.mode === 'watch' ? 'Click an element, or hover and press C to copy / S to screenshot. Esc cancels.' : 'Click an element, or hover and press C to copy. Esc cancels.'
+  const onMarkupClose = () => setMarkupScreenshot(null)
 
   const panel = pageHost ? createPortal(<div className="qbp-design-overlay" aria-label="Browser design mode" style={designOverlayStyle}>
     {hoverPayload && currentOperation?.mode === 'grab' && pageGeometry && pageGeometry.width > 0 ? <div aria-label={`${hoverPayload.target.tagName}${hoverPayload.target.accessibility.role ? ` role=${hoverPayload.target.accessibility.role}` : ''}${hoverPayload.target.accessibility.accessibleName ? ` “${hoverPayload.target.accessibility.accessibleName}”` : ''} ${Math.round(hoverPayload.target.rectViewport.width)}×${Math.round(hoverPayload.target.rectViewport.height)}`} style={{
@@ -1080,53 +1200,43 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         }}
         aria-label={`Edit annotation ${index + 1}: ${annotation.comment}`}
         title={annotation.comment}
-        onClick={(event) => { event.stopPropagation(); editAnnotation(annotation) }}
+        onClick={(event) => { event.stopPropagation(); requestDesignAction({ action: 'edit-annotation', annotation: index + 1 }) }}
       >{index + 1}</Button>
     })}
     {selectionMenu ? <div role="menu" aria-label="Selected element actions" style={menuPanelStyle}>
       <SectionHeader title={elementLabel(selectionMenu.payload)} />
-      {copyError ? <p style={errorMessageStyle} role="alert">{copyError}</p> : null}
-      <Button style={menuButtonStyle} role="menuitem" onClick={() => void writeText(selectionMenu.payload, 'Copied', true, selectionMenu.op.identity)}>Copy</Button>
-      <Button style={menuButtonStyle} role="menuitem" disabled={selectionMenu.op.pane.mode === 'native'} title={selectionMenu.op.pane.mode === 'native' ? 'Native cropped screenshots are unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Copy a PNG crop of this element'} onClick={() => {
-        if (selectionMenu.op.pane.mode === 'native') return
-        const identity = selectionMenu.op.identity
-        void capture(null, selectionMenu.payload.target.rectViewport).then((image) => {
-          if (identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current) !== identity) return
-          if (image) void writeImage(image, 'Screenshotted', true, identity)
-          else onMessage('No screenshot available for this element.', 'error')
-        }).catch((error: unknown) => {
-          if (identityOf(currentPaneRef.current, currentWatchRef.current, currentFrameSizeRef.current) === identity) onMessage(errorText(error), 'error')
-        })
-      }}>Copy Screenshot</Button>
-      <Button style={menuButtonStyle} role="menuitem" onClick={() => { setSelectionMenu(null); void startOperation(selectionMenu.op.mode) }}>Select another element</Button>
-      <Button style={menuButtonStyle} role="menuitem" onClick={() => { setSelectionMenu(null); void cancelOperation() }}>Cancel</Button>
+      {copyError ? <InlineError message={copyError} /> : null}
+      <Button style={menuButtonStyle} role="menuitem" onClick={() => requestDesignAction({ action: 'copy-selection' })}>Copy</Button>
+      <Button style={menuButtonStyle} role="menuitem" disabled={selectionMenu.op.pane.mode === 'native'} title={selectionMenu.op.pane.mode === 'native' ? 'Native cropped screenshots are unavailable: the pinned public SDK has no supported page snapshot capability.' : 'Copy a PNG crop of this element'} onClick={() => requestDesignAction({ action: 'copy-selection-screenshot' })}>Copy Screenshot</Button>
+      <Button style={menuButtonStyle} role="menuitem" onClick={() => requestDesignAction({ action: 'select-another' })}>Select another element</Button>
+      <Button style={menuButtonStyle} role="menuitem" onClick={() => requestDesignAction({ action: 'cancel-selection' })}>Cancel</Button>
     </div> : null}
     {draft ? <div role="dialog" aria-modal="false" aria-label={draft.editingId ? 'Edit browser annotation' : 'Add browser annotation'} style={menuPanelStyle}>
       <SectionHeader title={draft.editingId ? 'Edit browser annotation' : 'Add browser annotation'} />
       <span style={{ overflowWrap: 'anywhere' }}>{elementLabel(draft.payload)}</span>
       <div style={actionGroupStyle} role="group" aria-label="Annotation intent">
-        <Button variant={draft.intent === 'change' ? 'primary' : 'secondary'} aria-pressed={draft.intent === 'change'} onClick={() => setDraft({ ...draft, intent: 'change' })}>Change</Button>
-        <Button variant={draft.intent === 'question' ? 'primary' : 'secondary'} aria-pressed={draft.intent === 'question'} onClick={() => setDraft({ ...draft, intent: 'question' })}>Question</Button>
+        <Button variant={draft.intent === 'change' ? 'primary' : 'secondary'} aria-pressed={draft.intent === 'change'} onClick={() => requestDesignAction({ action: 'set-intent', intent: 'change' })}>Change</Button>
+        <Button variant={draft.intent === 'question' ? 'primary' : 'secondary'} aria-pressed={draft.intent === 'question'} onClick={() => requestDesignAction({ action: 'set-intent', intent: 'question' })}>Question</Button>
       </div>
       <FormRow htmlFor={feedbackId} label="Feedback">
         <textarea id={feedbackId} className="ui-text-field__input" aria-label="Feedback" maxLength={MAX_COMMENT} value={draft.comment} placeholder="Describe what the agent should change here..." style={annotationFeedbackStyle} onChange={(event) => setDraft({ ...draft, comment: event.target.value.slice(0, MAX_COMMENT) })} onKeyDown={(event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); saveDraft() }
-          if (event.key === 'Escape') { event.preventDefault(); setDraft(null) }
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); requestDesignAction({ action: 'save-annotation' }) }
+          if (event.key === 'Escape') { event.preventDefault(); requestDesignAction({ action: 'close-annotation' }) }
         }} />
       </FormRow>
       <small style={noteDetailsStyle}>{draft.comment.length}/{MAX_COMMENT} characters · {draft.payload.page.sanitizedUrl}</small>
       <div style={{ ...actionGroupStyle, justifyContent: 'flex-end' }}>
-        <Button onClick={() => setDraft(null)}>Cancel</Button>
-        <Button variant="primary" disabled={!draft.comment.trim()} onClick={saveDraft}>{draft.editingId ? 'Save' : 'Add'}</Button>
+        <Button onClick={() => requestDesignAction({ action: 'close-annotation' })}>Cancel</Button>
+        <Button variant="primary" disabled={!draft.comment.trim()} onClick={() => requestDesignAction({ action: 'save-annotation' })}>{draft.editingId ? 'Save' : 'Add'}</Button>
       </div>
     </div> : null}
     {targetsOpen ? <div role="menu" aria-label="Send notes to" style={menuPanelStyle}>
       <SectionHeader title="Send notes to" />
-      {targetsLoading ? <span role="status">Loading targets…</span> : null}
+      {targetsLoading ? <div role="status"><NoticeLine>Loading targets…</NoticeLine></div> : null}
       {!targetsLoading && targets ? <>
         <section aria-label="Running agents" style={targetGroupsStyle}>
           <SectionHeader title="Running agents" />
-          {targets.sessions.map((target) => <Button key={target.session} style={targetButtonStyle} role="menuitem" disabled={!target.sendable || !notesAvailable.length} title={target.sendable ? undefined : target.reason ?? 'This agent cannot currently accept input.'} onClick={() => void sendTo({ kind: 'session', value: target })}>
+          {targets.sessions.map((target) => <Button key={target.session} style={targetButtonStyle} role="menuitem" disabled={!target.sendable || !notesAvailable.length} title={target.sendable ? undefined : target.reason ?? 'This agent cannot currently accept input.'} onClick={() => requestDesignAction({ action: 'send-annotations', session: target.session })}>
             <span style={targetStatusStyle}><StatusDot status={target.sendable ? 'working' : 'idle'} />{target.label} · {target.state ?? target.status} · {formatAge(target.lastActivityAt)}</span>
             <span>{target.title || 'Untitled agent session'}</span>
             {!target.sendable ? <span style={targetReasonStyle}>{target.reason ?? 'This agent cannot currently accept input.'}</span> : null}
@@ -1135,19 +1245,19 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         </section>
         <section aria-label="New agent" style={targetGroupsStyle}>
           <SectionHeader title="New agent" />
-          {targets.agents.map((agent) => <Button key={agent.id} style={menuButtonStyle} role="menuitem" disabled={!notesAvailable.length} onClick={() => void sendTo({ kind: 'agent', id: agent.id, label: agent.label })}>{agent.label}</Button>)}
+          {targets.agents.map((agent) => <Button key={agent.id} style={menuButtonStyle} role="menuitem" disabled={!notesAvailable.length} onClick={() => requestDesignAction({ action: 'send-annotations', agent: agent.id })}>{agent.label}</Button>)}
           {!targets.agents.length ? <EmptyState message="No new-agent targets are available." /> : null}
         </section>
       </> : null}
-      <Button style={menuButtonStyle} onClick={() => setTargetsOpen(false)}>Close</Button>
+      <Button style={menuButtonStyle} onClick={() => requestDesignAction({ action: 'close-targets' })}>Close</Button>
     </div> : null}
     {annotations.length ? <section data-quirky-native-mask aria-label="Browser annotations" style={annotationTrayStyle}>
       <div style={annotationTrayHeadStyle}>
         <SectionHeader title="Browser annotations" actions={<>
-          <Button aria-expanded={!collapsed} onClick={() => setCollapsed(!collapsed)}>{annotations.length} annotation{annotations.length === 1 ? '' : 's'}</Button>
-          <Button disabled={!notesAvailable.length} onClick={() => void openTargets()}>Send</Button>
-          <Button disabled={!annotations.length} onClick={() => void copyAnnotations(annotations)}>Copy All</Button>
-          <Button variant="destructive" aria-label="Clear all annotations" onClick={() => annotationPageId && updateAnnotations(annotationPageId, () => [])}>Clear</Button>
+          <Button aria-expanded={!collapsed} onClick={() => requestDesignAction({ action: 'toggle-annotations' })}>{annotations.length} annotation{annotations.length === 1 ? '' : 's'}</Button>
+          <Button disabled={!notesAvailable.length} onClick={() => requestDesignAction({ action: 'open-targets' })}>Send</Button>
+          <Button disabled={!annotations.length} onClick={() => requestDesignAction({ action: 'copy-annotations' })}>Copy All</Button>
+          <Button variant="destructive" aria-label="Clear all annotations" onClick={() => requestDesignAction({ action: 'clear-annotations' })}>Clear</Button>
         </>} />
       </div>
       {!collapsed ? <div style={annotationListStyle}>{annotations.map((annotation, index) => <article style={annotationNoteStyle} key={annotation.id}>
@@ -1155,13 +1265,13 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         <p style={noteTextStyle}><span>{annotation.intent === 'change' ? 'Change' : 'Question'}: </span>{annotation.comment}</p>
         <small style={noteDetailsStyle}>{annotation.payload.page.sanitizedUrl}</small>
         <div style={actionGroupStyle}>
-          <Button onClick={() => editAnnotation(annotation)}>Edit</Button>
-          <Button variant="destructive" onClick={() => removeAnnotation(annotation.id)}>Delete</Button>
-          <Button onClick={() => void copyAnnotations([annotation])}>Copy</Button>
+          <Button onClick={() => requestDesignAction({ action: 'edit-annotation', annotation: index + 1 })}>Edit</Button>
+          <Button variant="destructive" onClick={() => requestDesignAction({ action: 'delete-annotation', annotation: index + 1 })}>Delete</Button>
+          <Button onClick={() => requestDesignAction({ action: 'copy-annotation', annotation: index + 1 })}>Copy</Button>
         </div>
       </article>)}</div> : null}
     </section> : null}
-    {markupScreenshot ? <MarkupOverlay screenshot={markupScreenshot} onClose={() => setMarkupScreenshot(null)} onCopied={() => onMessage('Markup copied — paste it into your agent.', 'info')} onError={(message) => onMessage(message, 'error')} /> : null}
+    {markupScreenshot && pane ? <MarkupOverlay context={context} pane={pane.id} screenshot={markupScreenshot} onClose={onMarkupClose} onCopied={() => onMessage('Markup copied — paste it into your agent.', 'info')} onError={(message) => onMessage(message, 'error')} /> : null}
   </div>, pageHost) : null
 
   return <>
@@ -1174,11 +1284,7 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         aria-busy={operationPending}
         disabled={grabDisabled}
         title={nativeUnavailable ? WATCH_ONLY_TITLE : 'Grab page element (Mod+C)'}
-        onClick={() => {
-          if (armPendingRef.current) return
-          if (currentOperation?.mode === 'grab') void cancelOperation()
-          else void startOperation('grab')
-        }}
+        onClick={() => requestDesignAction({ action: 'toggle-grab' })}
       >{operationPending ? 'Arming…' : 'Grab'}</Button>
       <Button
         type="button"
@@ -1188,13 +1294,9 @@ export function DesignWindow({ context, pane, nativeHandle, pageHost, nativePage
         aria-busy={operationPending}
         disabled={annotateDisabled}
         title={nativeUnavailable ? WATCH_ONLY_TITLE : 'Annotate page element (Mod+Shift+C)'}
-        onClick={() => {
-          if (armPendingRef.current) return
-          if (currentOperation?.mode === 'annotate') void cancelOperation()
-          else void startOperation('annotate')
-        }}
+        onClick={() => requestDesignAction({ action: 'toggle-annotate' })}
       >{operationPending ? 'Arming…' : 'Annotate'}{annotations.length ? ` (${annotations.length})` : ''}</Button>
-      <Button type="button" variant={Boolean(markupScreenshot) ? 'primary' : 'secondary'} aria-pressed={Boolean(markupScreenshot)} disabled={drawingDisabled} title={nativeUnavailable ? WATCH_ONLY_TITLE : pane?.mode === 'native' ? 'Draw is not available in Native mode. Switch to Watch to draw on a screenshot.' : 'Draw on screenshot'} onClick={() => void beginDraw()}>Draw</Button>
+      <Button type="button" variant={Boolean(markupScreenshot) ? 'primary' : 'secondary'} aria-pressed={Boolean(markupScreenshot)} disabled={drawingDisabled} title={nativeUnavailable ? WATCH_ONLY_TITLE : pane?.mode === 'native' ? 'Draw is not available in Native mode. Switch to Watch to draw on a screenshot.' : 'Draw on screenshot'} onClick={() => requestDesignAction({ action: 'draw' })}>Draw</Button>
       {currentOperation ? <span style={hintStyle} role="status">{currentOperation.mode === 'grab' ? grabHint : 'Click an element to annotate. Esc cancels.'}</span> : null}
     </div>
     {panel}

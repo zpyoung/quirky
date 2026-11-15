@@ -218,3 +218,65 @@ test('concurrent requests for different panes never run on the other request\'s 
   expect(first?.reason).toContain('pane-1')
   expect(focusedBrowserPane()).toBe('pane-2')
 })
+test('designControl dispatches to pane ids from paneState and reports mounted delivery', async () => {
+  paneState = { tabs: [pane('pane-1', 'native'), pane('pane-2', 'watch')], active: 'pane-1', history: [] }
+  const provided = new Map<string, unknown>()
+  const context = makeContext(provided)
+  activate(context)
+  const state = await context.call('quirky.browser/paneState', {}) as PaneState
+  const ids = state.tabs.map((tab) => tab.id)
+  const view = provided.get('view:quirky.browser/page')
+  const run = provided.get('command:quirky.browser/designControl')
+  if (typeof view !== 'function' || typeof run !== 'function') throw new Error('Browser page view and designControl command must be provided')
+  const runControl = async (args: unknown): Promise<unknown> => {
+    let result: unknown
+    await act(async () => { result = await (run as CommandHandler)(args) })
+    return result
+  }
+  const dispose: (() => void)[] = []
+  const elements = new Map<string, HTMLElement>()
+  try {
+    for (const id of ids) {
+      const element = document.createElement('div')
+      document.body.append(element)
+      elements.set(id, element)
+      await act(async () => {
+        dispose.push((view as (element: HTMLElement, props: { input?: unknown }) => () => void)(element, { input: { pane: id } }))
+        await settleUI()
+      })
+    }
+    await act(async () => {
+      const delay = Promise.withResolvers<void>()
+      setTimeout(delay.resolve, 5)
+      await delay.promise
+    })
+
+    const pane2 = ids[1]!
+    const pane1 = ids[0]!
+    expect(await runControl({ action: 'toggle-grab', pane: pane2 })).toEqual({
+      pane: pane2, action: 'toggle-grab', delivered: 1
+    })
+    expect(elements.get(pane2)?.textContent).toContain('Design tools require a ready, nonblank browser page.')
+    expect(elements.get(pane1)?.textContent).not.toContain('Design tools require a ready, nonblank browser page.')
+
+    expect(await runControl({ action: 'toggle-grab', pane: pane1 })).toEqual({
+      pane: pane1, action: 'toggle-grab', delivered: 1
+    })
+    expect(elements.get(pane1)?.textContent).toContain('Native browser design tools are unavailable until its sandboxed page is ready.')
+    expect(elements.get(pane2)?.textContent).not.toContain('Native browser design tools are unavailable until its sandboxed page is ready.')
+
+    expect(await runControl({ action: 'toggle-grab', pane: 'pane-9' })).toEqual({
+      pane: 'pane-9', action: 'toggle-grab', delivered: 0
+    })
+    expect(await runControl({ action: 'markup-undo', pane: pane1 })).toEqual({
+      pane: pane1, action: 'markup-undo', delivered: 0
+    })
+    await act(async () => { dispose.splice(1, 1)[0]!() })
+    expect(await runControl({ action: 'toggle-grab', pane: pane2 })).toEqual({
+      pane: pane2, action: 'toggle-grab', delivered: 0
+    })
+  } finally {
+    await act(async () => { for (const unmount of dispose.reverse()) unmount() })
+    for (const element of elements.values()) element.remove()
+  }
+})

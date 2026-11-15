@@ -792,6 +792,24 @@
       { "id": "editorSidebarWidth", "type": "number", "default": 350, "minimum": 220, "maximum": 900, "title": "Editor Sidebar Width", "description": "Preferred sidebar width in CSS pixels." }
     ],
     "command": [
+      {
+        "id": "ui-control",
+        "title": "Editor UI Control",
+        "palette": false,
+        "description": "Deliver a validated local action to a mounted Editor surface.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "surface": { "type": "string" },
+            "target": { "type": "string" },
+            "generation": { "type": "string" },
+            "action": { "type": "string" },
+            "data": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["surface", "target", "generation", "action"],
+          "additionalProperties": false
+        }
+      },
       { "id": "open", "title": "Open File", "description": "Open an authorized worktree-relative file.", "args": { "type": "object", "properties": { "worktree": { "type": "string" }, "path": { "type": "string" }, "focus": { "type": "boolean" }, "preview": { "type": "boolean" } }, "required": ["path"], "additionalProperties": false } },
       { "id": "quick-open", "title": "Go to File", "description": "Open Quick Open." },
       { "id": "search", "title": "Search Files", "description": "Search file contents." },
