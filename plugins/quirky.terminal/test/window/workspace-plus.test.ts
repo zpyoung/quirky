@@ -14,6 +14,7 @@ import {
   group,
   groupSplit,
   key,
+  installWindowCommands,
   loadWorkspace,
   makeWorkspace,
   mountFixture,
@@ -87,6 +88,7 @@ async function mountWithMenuItems(menuItems: UiMenuItemEntry[]) {
     'quirky.worktree/resolve': () => ({ repoId: 'repo-1' }),
     'ui.contributions': () => ({ menuItems })
   })
+  installWindowCommands(fake)
   const executed: { id: string; args: unknown }[] = []
   fake.context.executeCommand = async (id, args) => {
     executed.push({ id, args })

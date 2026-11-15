@@ -1,11 +1,12 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
-import { act } from 'react'
+import { act, type ComponentType, type ReactNode } from 'react'
 import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
-import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer } from '../src/types'
 import type { ChangesSurfaceProps } from '../src/window/ChangesSurface'
+import type { SourceEditor as SourceEditorComponent } from '../src/window/SourceEditor'
+import type { activate as Activate, deactivate as Deactivate } from '../src/ui'
 import {
   EDITOR_UI_CONTROL_COMMAND,
   EditorUiControlProvider,
@@ -19,9 +20,16 @@ type KeptSubscription = {
   options?: { worktreeId?: string | null }
 }
 type ControlHandler = (args?: unknown) => Promise<{ delivered: boolean }> | { delivered: boolean }
-type ActivatePlugin = (context: UiPluginContext) => void
-type DeactivatePlugin = () => void
-type ControlReport = { bufferId?: string; uiControls?: EditorUiControlAddress[]; [key: string]: unknown }
+type ControlReport = {
+  mounted?: boolean
+  bufferId?: string | null
+  tabId?: string | null
+  mode?: string | null
+  fixtureMarker?: string
+  uiControls?: EditorUiControlAddress[]
+  [key: string]: unknown
+}
+type CommandHandler = (args?: unknown) => unknown
 type Mounted = {
   element: HTMLElement
   isResourceLive(url: string): boolean
@@ -34,15 +42,17 @@ type Mounted = {
   report(): ControlReport
   bridgeCalls(): { method: string; params: Record<string, unknown> }[]
   invoke(address: EditorUiControlAddress, action: string, data?: Record<string, unknown>): Promise<{ delivered: boolean }>
-  dispatch(address: EditorUiControlAddress, action: string, data?: Record<string, unknown>): Promise<{ delivered: boolean }>
+  dispatch(address: EditorUiControlAddress, action: string, data?: Record<string, unknown>): Promise<unknown>
   subscriptions: KeptSubscription[]
   diffCallCount(): number
+  controlCalls: { method: string; params: Record<string, unknown> }[]
   update(buffer: EditorSurfaceBuffer): Promise<void>
   unmount(): Promise<void>
 }
 type FixtureOptions = {
   deferFirstRender?: boolean
   malformedResponse?: boolean
+  interactive?: boolean
   onDraft?: (content: string) => void
   tabId?: string | null
   deferDiffCalls?: number[]
@@ -55,44 +65,41 @@ type FixtureOptions = {
 
 let createRoot: (container: HTMLElement) => Root
 let ChangesSurface: ComponentType<ChangesSurfaceProps>
-let activatePlugin: ActivatePlugin
-let deactivatePlugin: DeactivatePlugin
+let SourceEditorControlScope: ComponentType<{ context: UiPluginContext; children: ReactNode }>
+let activateEditor: typeof Activate
+let deactivateEditor: typeof Deactivate
 let activatedControlHandler: ControlHandler | undefined
 let mounted: Mounted[]
+let controlActive = false
 
 beforeAll(async () => {
   // SourceEditor and CodeMirror inspect window at module initialization; load them after Happy DOM.
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   ;({ createRoot } = await import('react-dom/client'))
-  ;({ activate: activatePlugin, deactivate: deactivatePlugin } = await import('../src/ui'))
   ;({ ChangesSurface } = await import('../src/window/ChangesSurface'))
-  const provided = new Map<string, ControlHandler>()
-  const activationContext = {
-    pluginId: 'quirky.editor',
-    async call() { return {} },
-    provide(id: string, handler: unknown) {
-      if (typeof handler !== 'function') throw new Error(`Missing activated handler for ${id}.`)
-      provided.set(id, handler as ControlHandler)
-    },
-    subscribe() { return () => {} },
-    getSetting() { return 300 },
-    getLayout() { return {} },
-    async executeCommand() {},
-    toast() {}
-  } as unknown as UiPluginContext
-  activatePlugin(activationContext)
-  activatedControlHandler = provided.get(EDITOR_UI_CONTROL_COMMAND)
-  if (!activatedControlHandler) throw new Error('The editor control command was not provided by activate.')
+  const source = await import('../src/window/SourceEditor') as {
+    SourceEditor: typeof SourceEditorComponent
+    SourceEditorControlScope: ComponentType<{ context: UiPluginContext; children: ReactNode }>
+  }
+  SourceEditorControlScope = source.SourceEditorControlScope
+  ;({ activate: activateEditor, deactivate: deactivateEditor } = await import('../src/ui'))
 })
+
 afterAll(async () => {
-  deactivatePlugin()
+  deactivateEditor()
   await GlobalRegistrator.unregister()
 })
-beforeEach(() => { mounted = [] })
+beforeEach(() => {
+  mounted = []
+  controlActive = false
+})
 afterEach(async () => {
   for (const surface of mounted) await surface.unmount()
   mounted = []
+  if (controlActive) deactivateEditor()
+  controlActive = false
+  activatedControlHandler = undefined
   document.body.innerHTML = ''
 })
 
@@ -154,15 +161,24 @@ async function renderChanges(
       html: `<article><h1>${heading}</h1><img src="${resourceUrl(leaseId)}" alt="Preview image"></article>`
     }
   }
+  const handlers = new Map<string, CommandHandler>()
+  const controlCalls: { method: string; params: Record<string, unknown> }[] = []
   const context = {
     pluginId: 'quirky.editor',
+    provide(id: string, handler: CommandHandler) { handlers.set(id, handler) },
     async call(method: string, params: Record<string, unknown> = {}) {
-      if (method === 'ui.window.self' || method === 'ui.window.command.run') {
+      controlCalls.push({ method, params })
+      if (method === 'ui.window.self') {
         bridgeRequests.push({ method, params })
-        if (options.bridgeError && method === 'ui.window.command.run') throw new Error(options.bridgeError)
-        if (method === 'ui.window.self') return { connId: 22 }
-        const handler = activatedControlHandler
-        if (!handler) throw new Error('The activated editor control handler is unavailable.')
+        return { connId: 22 }
+      }
+      if (method === 'ui.window.command.run') {
+        bridgeRequests.push({ method, params })
+        if (options.bridgeError) throw new Error(options.bridgeError)
+        if (params.connId !== 22) throw new Error('Changes controls must stay in this window.')
+        const handler = handlers.get(String(params.id)) ??
+          (String(params.id) === EDITOR_UI_CONTROL_COMMAND ? activatedControlHandler : undefined)
+        if (!handler) throw new Error(`No activated handler for ${String(params.id)}.`)
         return { result: await handler(params.args) }
       }
       if (method === 'quirky.git/diff') {
@@ -220,12 +236,17 @@ async function renderChanges(
       }
       return {}
     },
+    getSetting() { return 320 },
     subscribe(listener: KeptSubscription['listener'], options?: KeptSubscription['options']) {
       subscriptions.push({ listener, options })
       return () => {}
     },
     setContext() {},
-    toast() {}
+    toast() {},
+    togglePanel() {},
+    setPanelBadge() {},
+    getLayout() { return {} },
+    mountView() { return () => {} }
   } as unknown as UiPluginContext
   const props: ChangesSurfaceProps = {
     context,
@@ -244,18 +265,35 @@ async function renderChanges(
     onError() {},
     registerCommandHandlers: () => () => {}
   }
+  if (!controlActive) {
+    activateEditor({ ...context, subscribe: () => () => {} })
+    controlActive = true
+    activatedControlHandler = handlers.get(EDITOR_UI_CONTROL_COMMAND) as ControlHandler | undefined
+    if (!activatedControlHandler) throw new Error('The editor control command was not provided by activate.')
+  }
   const reportScope = createEditorUiControlReportScope((value) => {
     report = value as ControlReport
   }, { surface: 'view:quirky.editor/document' })
-  reportScope.report({ bufferId: buffer.id, fixtureMarker: 'preserved' })
+  reportScope.report({
+    mounted: true,
+    bufferId: buffer.id,
+    tabId: options.tabId ?? buffer.tabId,
+    mode: 'source',
+    fixtureMarker: 'preserved'
+  })
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
-  const render = (nextBuffer: EditorSurfaceBuffer) => (
-    <EditorUiControlProvider scope={reportScope}>
-      <ChangesSurface {...props} buffer={nextBuffer} tabId={options.tabId ?? nextBuffer.tabId} />
-    </EditorUiControlProvider>
-  )
+  const render = (nextBuffer: EditorSurfaceBuffer) => {
+    const child = <ChangesSurface {...props} buffer={nextBuffer} tabId={options.tabId ?? nextBuffer.tabId} />
+    return (
+      <EditorUiControlProvider scope={reportScope}>
+        {options.interactive
+          ? <SourceEditorControlScope context={context}>{child}</SourceEditorControlScope>
+          : child}
+      </EditorUiControlProvider>
+    )
+  }
   await act(async () => root.render(render(buffer)))
   let unmounted = false
   const surface: Mounted = {
@@ -278,9 +316,10 @@ async function renderChanges(
       pendingDiffs.delete(call)
       resolve()
     },
-    controls: () => report.uiControls ?? [],
+    controls: () => report.uiControls?.filter(({ target }) => target.startsWith('changes:')) ?? [],
     report: () => report,
     bridgeCalls: () => [...bridgeRequests],
+    controlCalls,
     async invoke(address, action, data) {
       const handler = activatedControlHandler
       if (!handler) throw new Error('The activated editor control handler is unavailable.')
@@ -293,12 +332,33 @@ async function renderChanges(
       })
     },
     async dispatch(address, action, data) {
-      let result: { delivered: boolean } = { delivered: false }
-      await act(async () => { result = await surface.invoke(address, action, data) })
-      return result
+      if (!options.interactive) {
+        let result: { delivered: boolean } = { delivered: false }
+        await act(async () => { result = await surface.invoke(address, action, data) })
+        return result
+      }
+      return await context.call('ui.window.command.run', {
+        connId: 22,
+        id: EDITOR_UI_CONTROL_COMMAND,
+        args: {
+          surface: address.surface,
+          target: address.target,
+          generation: address.generation,
+          action,
+          ...(data === undefined ? {} : { data })
+        }
+      })
     },
     async update(nextBuffer) {
-      await act(async () => root.render(render(nextBuffer)))
+      await act(async () => {
+        reportScope.report({
+          mounted: true,
+          bufferId: nextBuffer.id,
+          tabId: options.tabId ?? nextBuffer.tabId,
+          mode: 'source'
+        })
+        root.render(render(nextBuffer))
+      })
     },
     async unmount() {
       if (unmounted) return
@@ -989,4 +1049,59 @@ test('Changes releases a stale preview lease when Markdown path and worktree cha
   expect(surface.element.querySelector('.qe-changes-markdown-preview img')?.getAttribute('src')).toBe(currentUrl)
   expect(surface.liveResourceCount()).toBe(1)
   expect(surface.isResourceLive(currentUrl!)).toBe(true)
+})
+test('Changes inherits the activated document report and source bridge for its real CodeMirror editor', async () => {
+  const buffer = makeBuffer('text', 'Working file\n', 'alpha alpha\nbeta\n')
+  const drafts: string[] = []
+  const surface = await renderChanges(buffer, {
+    original: 'HEAD version\n',
+    modified: 'Staged index\n'
+  }, { interactive: true, onDraft: (content) => drafts.push(content) })
+  await flush()
+
+  expect(surface.report()).toMatchObject({
+    mounted: true,
+    bufferId: buffer.id,
+    tabId: buffer.tabId,
+    mode: 'source'
+  })
+  const sourceAddresses = surface.report().uiControls?.filter(({ target }) => target.startsWith('source:')) ?? []
+  expect(sourceAddresses).toHaveLength(1)
+  const source = sourceAddresses[0]!
+  expect(source).toMatchObject({
+    surface: 'view:quirky.editor/document',
+    target: `source:${JSON.stringify([buffer.id, buffer.tabId])}`
+  })
+  const head = surface.element.querySelector<HTMLElement>('.cm-editor[aria-label="HEAD version"]')
+  const modified = surface.element.querySelector<HTMLElement>('.cm-editor[aria-label="Modified editor"]')
+  expect(head?.querySelector('.cm-content')?.textContent).toContain('HEAD version')
+  expect(modified?.querySelector('.cm-content')?.textContent).toContain('alpha alpha')
+  expect(modified?.querySelector('.cm-content')?.textContent).not.toContain('Staged index')
+  expect(head?.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('false')
+  expect(modified?.querySelector('.cm-content')?.getAttribute('contenteditable')).toBe('true')
+
+  let found: unknown
+  await act(async () => { found = await surface.dispatch(source, 'find', { query: 'alpha' }) })
+  expect(found).toEqual({ result: { delivered: true } })
+  expect(surface.element.querySelector<HTMLInputElement>('input[aria-label="Find in source"]')?.value).toBe('alpha')
+
+  let replaced: unknown
+  await act(async () => {
+    replaced = await surface.dispatch(source, 'replace-all', { query: 'alpha', replacement: 'z' })
+  })
+  expect(replaced).toEqual({ result: { delivered: true } })
+  expect(modified?.querySelector('.cm-content')?.textContent).toContain('z z')
+  expect(drafts.at(-1)).toBe('z z\nbeta\n')
+  expect(surface.controlCalls.some(({ method }) => method === 'quirky.editor/save')).toBe(false)
+  expect(surface.report().uiControls?.filter(({ target }) => target.startsWith('source:'))).toHaveLength(1)
+  await surface.update({ ...buffer, draft: drafts.at(-1)!, contentRevision: buffer.contentRevision + 1 })
+  expect(surface.report().uiControls?.find(({ target }) => target === source.target)?.generation).toBe(source.generation)
+
+  await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
+  await flush()
+  const inlineSource = surface.report().uiControls?.find(({ target }) => target.startsWith('source:'))
+  expect(inlineSource?.target).toBe(source.target)
+  expect(inlineSource?.generation).not.toBe(source.generation)
+  expect(surface.element.querySelector('[aria-label="HEAD version"]')).toBeNull()
+  expect(surface.element.querySelector('[aria-label="Modified editor"] .cm-content')?.textContent).toContain('z z')
 })

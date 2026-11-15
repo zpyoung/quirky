@@ -4458,7 +4458,17 @@
       },
       {
         "id": "rename-tab",
-        "title": "Rename Active Tab"
+        "title": "Rename Active Tab",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID to rename; default: the focused tab."
+            }
+          }
+        }
       },
       {
         "id": "reopen-tab",
@@ -4496,6 +4506,7 @@
                 "tab",
                 "pane",
                 "plus",
+                "actions",
                 "quick-commands"
               ],
               "description": "Which menu to open."
@@ -4503,6 +4514,14 @@
             "target": {
               "type": "string",
               "description": "The tab, pane or group ID the menu belongs to; default: the focused one."
+            },
+            "x": {
+              "type": "number",
+              "description": "Optional pointer x-coordinate."
+            },
+            "y": {
+              "type": "number",
+              "description": "Optional pointer y-coordinate."
             }
           },
           "required": [
@@ -4512,7 +4531,17 @@
       },
       {
         "id": "close-menu",
-        "title": "Close Terminal Menu"
+        "title": "Close Terminal Menu",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "type": "string",
+              "description": "The tab, pane or group ID whose workspace menu to close; default: the focused workspace."
+            }
+          }
+        }
       },
       {
         "id": "toggle-floating",
@@ -4527,7 +4556,9 @@
         "title": "Minimize Floating Workspace Panel"
       },
       {"id":"quick-command-dialog","title":"Quick Command Dialog","palette":false,"args":{"type":"object","properties":{"action":{"type":"string","enum":["open","toggle-advanced","toggle-append-enter"]},"command":{"type":"string","description":"A quick command ID from quirky terminal quick-command list --all; open edits it, and without it open adds one."},"repo":{"type":"string","description":"The repo a new Project-scoped command belongs to."}},"required":["action"],"additionalProperties":false}},
-      {"id":"copy-quick-command","title":"Copy Quick Command","palette":false,"args":{"type":"object","properties":{"command":{"type":"string","description":"A quick command ID from quirky terminal quick-command list --all."}},"required":["command"],"additionalProperties":false}}
+      {"id":"copy-quick-command","title":"Copy Quick Command","palette":false,"args":{"type":"object","properties":{"command":{"type":"string","description":"A quick command ID from quirky terminal quick-command list --all."}},"required":["command"],"additionalProperties":false}},
+      {"id":"run-menu-item","title":"Run Terminal Menu Item","palette":false,"args":{"type":"object","properties":{"item":{"type":"string"},"session":{"type":"string"},"worktree":{"type":"string"},"workspace":{"type":"string"},"group":{"type":"string"}},"required":["item"],"additionalProperties":false}},
+      {"id":"workspace-menu-action","title":"Terminal Workspace Menu Action","palette":false,"args":{"type":"object","properties":{"action":{"type":"string","enum":["copy-id","choose-agent","hidden-tabs","run-group-command"]},"target":{"type":"string"},"kind":{"type":"string","enum":["tab","pane","session"]},"agent":{"type":"string"},"background":{"type":"boolean"},"open":{"type":"boolean"},"command":{"type":"string"},"args":{"type":"object","additionalProperties":true}},"required":["action","target"],"additionalProperties":false}}
     ],
     "menu-item": [
       {"id":"new-emulator","menu":"quirky.terminal/tab","title":"New Mobile Emulator","command":"new-emulator","after":"quick-commands"},

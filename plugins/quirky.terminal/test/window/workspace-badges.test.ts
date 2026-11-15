@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import type { Session } from '@quirky/protocol'
-import { callsTo, click, conceptualWorkspace, fire, fakeDaemon, loadWorkspace, mountFixture, session, simpleWorkspace, startRecording, stopRecording, unloadWorkspace, type MountedWorkspace } from './workspace-support'
+import { callsTo, click, conceptualWorkspace, fire, fakeDaemon, loadWorkspace, mountFixture, session, settle, simpleWorkspace, startRecording, stopRecording, unloadWorkspace, type MountedWorkspace } from './workspace-support'
 
 let mounted: MountedWorkspace | null = null
 
@@ -72,15 +72,28 @@ describe('the tab strip draws session badges', () => {
     expect(tabs.map((tab) => tab.querySelectorAll('.qt-badge').length)).toEqual([0, 2, 0])
   })
 
-  test('clicking a chip with a command runs it with its args and does not activate the tab', async () => {
+  test('clicking a command badge uses the current session badge wrapper without activating the tab', async () => {
     mounted = await mountFixture(fakeDaemon(conceptualWorkspace(), { sessions: ['s-1', 's-2', 's-3', 's-4', 's-5'].map((id) => session(id, id === 's-1' ? { badges } : {})) }))
     const executed: unknown[][] = []
     mounted.fake.context.executeCommand = async (...args: unknown[]) => void executed.push(args)
     const before = callsTo(mounted.fake, 'activateTab').length
 
     await click(mounted.q('[data-tab="tab-1"] .qt-badge'))
+    await settle()
 
-    expect(executed).toEqual([['command:acme.handoff/jump', { session: 's-9', lineage: '1' }]])
+    expect(executed).toEqual([['command:quirky.session/run-badge', { session: 's-1', badge: 'acme.handoff/lineage:1' }]])
+    expect(callsTo(mounted.fake, 'activateTab')).toHaveLength(before)
+  })
+
+  test('a rejected session badge wrapper toasts its failure once without activating the tab', async () => {
+    mounted = await mountFixture(fakeDaemon(conceptualWorkspace(), { sessions: ['s-1', 's-2', 's-3', 's-4', 's-5'].map((id) => session(id, id === 's-1' ? { badges } : {})) }))
+    mounted.fake.context.executeCommand = async () => { throw new Error('provider offline') }
+    const before = callsTo(mounted.fake, 'activateTab').length
+
+    await click(mounted.q('[data-tab="tab-1"] .qt-badge'))
+    await settle()
+
+    expect(mounted.fake.toasts).toEqual([{ title: 'Could not run session badge', body: 'provider offline' }])
     expect(callsTo(mounted.fake, 'activateTab')).toHaveLength(before)
   })
 

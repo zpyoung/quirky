@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { CONTROL_ICON_MARKUP } from '../../../../packages/ui/src/design-system/icons/generated-controls'
 import { TOOL_ICON_MARKUP } from '../../../../packages/ui/src/design-system/icons/generated-tools'
 import type { TabIcon, ViewTab } from '../../src/layout/types'
+import { waitFor } from '../e2e-support'
 import {
   callsTo,
   click,
@@ -15,6 +16,7 @@ import {
   loadWorkspace,
   makeWorkspace,
   session,
+  settle,
   mountFixture,
   mouse,
   pane,
@@ -138,6 +140,27 @@ async function flushResize(resize: ResizeHarness) {
 }
 const drag = (type: string, init: MouseEventInit = {}) => mouse(type, init)
 
+async function waitForOverflow(view: MountedWorkspace, open: boolean, moreVisible = true): Promise<void> {
+  await act(async () => {
+    await waitFor(
+      `hidden tabs menu to ${open ? 'open' : 'close'}`,
+      () => {
+        const more = view.q<HTMLButtonElement>('.qt-tab-more')
+        const popup = document.querySelector<HTMLElement>('.ui-popup')
+        const menu = popup?.querySelector('[role="menu"]')
+        const popupReady = open ? menu !== null && menu !== undefined : popup === null
+        const moreReady = moreVisible ? more !== null : more === null
+        const expanded = open ? more?.getAttribute('aria-expanded') === 'true' : more === null || more?.getAttribute('aria-expanded') === 'false'
+        return view.controller().getSnapshot().overflowGroup === (open ? 'grp-1' : null)
+          && popupReady
+          && moreReady
+          && expanded
+      },
+      2_000
+    )
+  })
+}
+
 
 describe('SC-11: clicking a tab activates it', () => {
   test('a click on an inactive tab activates it by ID', async () => {
@@ -181,16 +204,52 @@ describe('SC-11: clicking a tab activates it', () => {
     expect(view.q('[data-pane="pane-3"]')).toBeNull()
   })
 
-  test('widening until every tab fits removes the more button, even though it took width from the viewport', async () => {
+  test('widening until every tab fits closes the addressed overflow menu with its button', async () => {
     const resize = observeResize()
     try {
       const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3)))))
       const layout = installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
       await flushResize(resize)
       expect(view.q('.qt-tab-more')).not.toBeNull()
+      await click(view.q('.qt-tab-more'))
+      await waitForOverflow(view, true)
+      expect(view.controller().getSnapshot().overflowGroup).toBe('grp-1')
+      expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action').map(({ args }) => args)).toEqual([
+        { action: 'hidden-tabs', target: 'grp-1', open: true }
+      ])
       layout.setWidth(320)
       await flushResize(resize)
+      await waitForOverflow(view, false, false)
       expect(view.q('.qt-tab-more')).toBeNull()
+      expect(view.controller().getSnapshot().overflowGroup).toBeNull()
+      expect(document.querySelector('.ui-popup')).toBeNull()
+    } finally {
+      resize.restore()
+    }
+  })
+
+  test('outside and Escape close Hidden tabs through the addressed local menu action', async () => {
+    const resize = observeResize()
+    try {
+      const view = await mount(fakeDaemon(makeWorkspace(group('grp-1', terminalTabs(3)))))
+      installTabLayout(view, 220, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100 })
+      await flushResize(resize)
+      await click(view.q('.qt-tab-more'))
+      await waitForOverflow(view, true)
+      await fire(document.body, mouse('mousedown'))
+      await waitForOverflow(view, false)
+      expect(view.controller().getSnapshot().overflowGroup).toBeNull()
+      await click(view.q('.qt-tab-more'))
+      await waitForOverflow(view, true)
+      await key(document.querySelector('[role="menu"]')!, 'Escape')
+      await waitForOverflow(view, false)
+      expect(view.controller().getSnapshot().overflowGroup).toBeNull()
+      expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action').map(({ args }) => args)).toEqual([
+        { action: 'hidden-tabs', target: 'grp-1', open: true },
+        { action: 'hidden-tabs', target: 'grp-1', open: false },
+        { action: 'hidden-tabs', target: 'grp-1', open: true },
+        { action: 'hidden-tabs', target: 'grp-1', open: false }
+      ])
     } finally {
       resize.restore()
     }
@@ -407,6 +466,7 @@ describe('SC-11: clicking a tab activates it', () => {
       expect(getComputedStyle(first).visibility).toBe('hidden')
 
       await click(view.q('.qt-tab-more'))
+      await settle()
       const rows = [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')]
       expect(rows).toHaveLength(2)
       expect(rows[0]!.textContent).toContain('Terminal 1')
@@ -471,16 +531,27 @@ describe('SC-11: clicking a tab activates it', () => {
       const layout = installTabLayout(view, 200, { 'tab-1': 100, 'tab-2': 100, 'tab-3': 100, 'tab-4': 100 })
       await flushResize(resize)
       await click(view.q('.qt-tab-more'))
+      await settle()
+      expect(view.controller().getSnapshot().overflowGroup).toBe('grp-1')
+      expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action').map(({ args }) => args)).toEqual([
+        { action: 'hidden-tabs', target: 'grp-1', open: true }
+      ])
       const rows = [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')]
       expect(rows.map((row) => row.textContent)).toEqual(['Terminal 2', 'Terminal 3', 'Terminal 4'])
       expect(rows.every((row) => row.querySelector('svg.ui-tool-icon') !== null)).toBe(true)
 
       await click(rows[2]!)
+      await settle()
       expect(callsTo(view.fake, 'activateTab')).toEqual([{ tab: 'tab-4' }])
       await flushResize(resize)
       expect(layout.visible('tab-4')).toBe(true)
       expect(view.q('.qt-tab-more')!.textContent).toBe('3 more')
       expect(document.querySelector('.ui-popup')).toBeNull()
+      expect(view.controller().getSnapshot().overflowGroup).toBeNull()
+      expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action').map(({ args }) => args)).toEqual([
+        { action: 'hidden-tabs', target: 'grp-1', open: true },
+        { action: 'hidden-tabs', target: 'grp-1', open: false }
+      ])
     } finally {
       scroll.mockRestore()
       resize.restore()
@@ -496,6 +567,7 @@ describe('SC-11: clicking a tab activates it', () => {
       await flushResize(resize)
       scroll.mockClear()
       await click(view.q('.qt-tab-more'))
+      await settle()
       const row = [...document.querySelectorAll<HTMLElement>('.ui-popup [role="menuitem"]')].find((candidate) => candidate.textContent?.includes('Terminal 4'))!
       await click(row)
       expect(scroll.mock.contexts.some((target) => (target as HTMLElement).dataset?.tab === 'tab-4')).toBe(true)
@@ -525,19 +597,39 @@ describe('SC-12: closing a tab', () => {
 describe('SC-9: renaming a tab', () => {
   async function open(view: MountedWorkspace, tabId = 'tab-1') {
     await fire(view.q(`[data-tab="${tabId}"]`), mouse('dblclick'))
+    await settle()
     return view.q<HTMLInputElement>('input[aria-label="Tab title"]')!
   }
 
-  test('double-click opens a field with the current title; Enter sends renameTab', async () => {
+  test('double-click opens a field through the local rename command; Enter sends renameTab', async () => {
     const view = await mount()
     const input = await open(view)
     expect(input.value).toBe('Terminal 1')
+    expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/rename-tab').map(({ connId, id, args }) => ({ connId, id, args }))).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/rename-tab', args: { tab: 'tab-1' } }
+    ])
     await type(input, 'Build')
     await key(input, 'Enter')
     expect(callsTo(view.fake, 'renameTab')).toEqual([{ tab: 'tab-1', title: 'Build' }])
     expect(view.q('input[aria-label="Tab title"]')).toBeNull()
   })
 
+  test('rename bridge failure toasts once without running in the owner window', async () => {
+    const view = await mount()
+    const executed: unknown[][] = []
+    view.fake.context.executeCommand = async (...args: unknown[]) => void executed.push(args)
+    const call = view.fake.context.call.bind(view.fake.context)
+    view.fake.context.call = async (method, params) => {
+      if (method === 'ui.window.self') throw new Error('window offline')
+      return call(method, params)
+    }
+    await fire(view.q('[data-tab="tab-1"]'), mouse('dblclick'))
+    await settle()
+    expect(view.q('input[aria-label="Tab title"]')).toBeNull()
+    expect(view.fake.toasts).toEqual([{ title: 'Could not rename the tab', body: 'window offline' }])
+    expect(view.fake.callsTo('ui.window.command.run')).toEqual([])
+    expect(executed).toEqual([])
+  })
   test('Escape leaves the title alone', async () => {
     const view = await mount()
     const input = await open(view)
