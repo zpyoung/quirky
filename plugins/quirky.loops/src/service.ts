@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, appendFileSync, statSync, writeSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import type { PluginCaller, PluginContext, PluginStore, ProcessRunner, StoreMigration, StructuredMessage } from '@quirky/protocol'
+import { createSupervision, type SupervisionEngine } from '@quirky/supervision'
+
 import { EvidenceEngine } from './evidence'
 import { mergeLoopConfig, normalizeLoopConfig, validateLoopAgent } from './config'
 import { computePacing } from './pacing'
@@ -175,6 +177,7 @@ function cloneSnapshot(snapshot: LoopSnapshot): LoopSnapshot {
 
 export class LoopService implements LoopServiceContract {
   private readonly store: LoopStore
+  private readonly supervision: SupervisionEngine
   private readonly evidence: EvidenceEngineContract
   private readonly timing?: LoopTiming
   private readonly drivers = new Map<string, LoopDriver>()
@@ -188,7 +191,17 @@ export class LoopService implements LoopServiceContract {
     const openStore = context.openStore as OpenReadOnlyStore
     const pluginStore = openStore.call(context, loopMigrations(), { newerVersion: 'read-only' })
     this.store = new LoopStore(pluginStore)
-    this.evidence = new EvidenceEngine(context)
+    this.supervision = createSupervision(context, {
+      clock: {
+        now: () => this.now(),
+        setTimer: (callback, ms) => {
+          const timer = setTimeout(callback, ms)
+          return () => clearTimeout(timer)
+        }
+      }
+    })
+    this.evidence = new EvidenceEngine(context, this.supervision)
+
   }
 
   start(): Promise<void> {
@@ -647,6 +660,7 @@ export class LoopService implements LoopServiceContract {
       context: this.context,
       store: this.store,
       evidence: this.evidence,
+      supervision: this.supervision,
       loopId,
       timing: this.timing,
       hooks: {
@@ -665,11 +679,12 @@ export class LoopService implements LoopServiceContract {
   private async stopSession(sessionId: string | null): Promise<void> {
     if (sessionId === null) return
     try {
-      await this.context.call('quirky.structured/stop', { session: sessionId })
+      await this.supervision.stop({ kind: 'structured', session: sessionId })
     } catch (error) {
       this.context.log(`could not stop loop session ${sessionId}: ${errorMessage(error)}`)
     }
   }
+
   private async closeSession(loopId: string, sessionId: string | null): Promise<void> {
     if (sessionId === null) return
     try {
@@ -747,5 +762,6 @@ export class LoopService implements LoopServiceContract {
       }))
     }
     await this.evidence.shutdown().catch((error: unknown) => this.context.log(`loop evidence shutdown failed: ${errorMessage(error)}`))
+    this.supervision.dispose()
   }
 }

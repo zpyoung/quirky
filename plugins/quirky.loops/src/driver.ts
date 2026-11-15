@@ -1,4 +1,6 @@
 import { appendFileSync } from 'node:fs'
+import { createSupervision, type SupervisionEngine } from '@quirky/supervision'
+
 import { RpcErrorCode, type PluginContext, type Session, type StructuredMessage } from '@quirky/protocol'
 import { decideNext } from './decision'
 import { computePacing } from './pacing'
@@ -39,10 +41,12 @@ export type LoopDriverOptions = {
   context: PluginContext
   store: LoopStore
   evidence: EvidenceEngineContract
+  supervision?: SupervisionEngine
   loopId: string
   timing?: LoopTiming
   hooks: LoopDriverHooks
 }
+
 
 type Observation = { kind: 'settled' } | { kind: 'crashed'; detail: string }
 type PendingPrompt = { sessionId: string; text: string; afterSeq: number; candidates: number[] }
@@ -52,6 +56,10 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function isAbortError(error: unknown): boolean {
+  return isObject(error) && error.name === 'AbortError'
+}
+
 function sessionOf(value: unknown): Session {
   if (!isObject(value) || typeof value.id !== 'string' || typeof value.status !== 'string' || typeof value.worktreeId !== 'string') {
     throw new Error('structured session API returned an invalid session')
@@ -59,21 +67,7 @@ function sessionOf(value: unknown): Session {
   return value as unknown as Session
 }
 
-function messagesOf(value: unknown): StructuredMessage[] {
-  if (!Array.isArray(value)) throw new Unverifiable('structured messages API returned an invalid journal')
-  const messages: StructuredMessage[] = []
-  for (const item of value) {
-    if (!isObject(item) || typeof item.sessionId !== 'string' || typeof item.seq !== 'number' ||
-      !Number.isInteger(item.seq) || item.seq < 1 ||
-      (item.role !== 'user' && item.role !== 'assistant' && item.role !== 'tool' && item.role !== 'system' && item.role !== 'result') ||
-      typeof item.text !== 'string' || typeof item.at !== 'number' || !Number.isFinite(item.at)) {
-      throw new Unverifiable('structured messages API returned an invalid journal entry')
-    }
-    const message = item as unknown as StructuredMessage
-    messages.push(message)
-  }
-  return messages
-}
+
 
 
 function pendingSessionAsk(value: unknown, sessionId: string): boolean {
@@ -143,6 +137,8 @@ export class LoopDriver {
   private readonly context: PluginContext
   private readonly store: LoopStore
   private readonly evidence: EvidenceEngineContract
+  private readonly supervision: SupervisionEngine
+  private readonly ownsSupervision: boolean
   private readonly loopId: string
   private readonly hooks: LoopDriverHooks
   private readonly pollMs: number
@@ -162,22 +158,36 @@ export class LoopDriver {
   private busyEdgeAt: number | null = null
   private lastHumanAt: number | null = null
   private lastRateLimit: StructuredMessage | null = null
+  private watchingSessionId: string | null = null
 
   constructor(options: LoopDriverOptions) {
     this.context = options.context
     this.store = options.store
     this.evidence = options.evidence
+    this.now = options.timing?.now ?? Date.now
+    this.ownsSupervision = options.supervision === undefined
+    this.supervision = options.supervision ?? createSupervision(options.context, {
+      clock: {
+        now: () => this.now(),
+        setTimer: (callback, ms) => {
+          const timer = setTimeout(callback, ms)
+          return () => clearTimeout(timer)
+        }
+      }
+    })
     this.loopId = options.loopId
     this.hooks = options.hooks
     this.pollMs = options.timing?.pollMs ?? DEFAULT_POLL_MS
     this.userIdleMs = options.timing?.userIdleMs ?? DEFAULT_USER_IDLE_MS
     this.noBusyEdgeMs = options.timing?.noBusyEdgeMs ?? DEFAULT_NO_BUSY_EDGE_MS
-    this.now = options.timing?.now ?? Date.now
   }
 
   start(): void {
     if (this.runPromise !== null) return
-    this.runPromise = this.run().finally(() => this.hooks.finished(this))
+    this.runPromise = this.run().finally(() => {
+      if (this.ownsSupervision) this.supervision.dispose()
+      this.hooks.finished(this)
+    })
   }
   waitForFinish(): Promise<void> {
     return this.runPromise ?? Promise.resolve()
@@ -186,6 +196,7 @@ export class LoopDriver {
   wake(): void {
     for (const resolve of this.wakeWaiters) resolve()
     this.wakeWaiters.clear()
+    if (this.watchingSessionId !== null) this.supervision.wake(this.watchingSessionId)
   }
 
   observeMessage(message: StructuredMessage): void {
@@ -273,6 +284,8 @@ export class LoopDriver {
     if (this.stopNowRequested) throw new StopNow()
   }
 
+
+
   private async awaitCall<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
     if (!signal) return await operation
     if (this.shuttingDown) throw new DriverCancelled()
@@ -298,15 +311,14 @@ export class LoopDriver {
   private async call(
     method: string,
     params: Record<string, unknown>,
-    signal?: AbortSignal,
-    acceptStopNowResult = false
+    signal?: AbortSignal
   ): Promise<unknown> {
     this.assertActive(signal)
     const result = await this.awaitCall(this.context.call(method, params), signal)
-    if (acceptStopNowResult && this.stopNowRequested && !this.shuttingDown) return result
     this.assertActive(signal)
     return result
   }
+
 
   private async delay(ms: number, signal?: AbortSignal): Promise<void> {
     this.assertActive(signal)
@@ -380,19 +392,22 @@ export class LoopDriver {
   }
 
   private async readMessages(sessionId: string, afterSeq: number, signal?: AbortSignal): Promise<StructuredMessage[]> {
-    let result: unknown
+    let messages: StructuredMessage[]
     try {
-      result = await this.call('quirky.structured/messages', {
+      messages = await this.awaitCall(this.supervision.readMessages({
         session: sessionId,
         afterSeq,
         limit: MESSAGE_LIMIT,
         tail: true
-      }, signal)
+      }), signal)
     } catch (error) {
       if (error instanceof DriverCancelled || error instanceof StopNow) throw error
+      if (isAbortError(error)) {
+        this.assertActive(signal)
+        throw error
+      }
       throw new Unverifiable(error instanceof Error ? error.message : String(error))
     }
-    const messages = messagesOf(result)
     let maxSeq = afterSeq
     for (const message of messages) {
       maxSeq = Math.max(maxSeq, message.seq)
@@ -416,14 +431,14 @@ export class LoopDriver {
       return null
     }
   }
-  private async startStructuredSession(method: string, params: Record<string, unknown>, signal: AbortSignal): Promise<Session> {
+  private async startStructuredSession(start: () => Promise<unknown>, signal: AbortSignal): Promise<Session> {
     this.assertActive(signal)
-    const operation = this.context.call(method, params)
+    const operation = start()
     let value: unknown
     try {
       value = await this.awaitCall(operation, signal)
     } catch (error) {
-      if (this.shuttingDown) {
+      if (this.shuttingDown || signal.aborted) {
         void operation.then((lateValue) => this.cleanupLateStructuredSession(lateValue), () => undefined)
       }
       throw error
@@ -457,6 +472,25 @@ export class LoopDriver {
     } catch (error) {
       if (error instanceof DriverCancelled || error instanceof StopNow) throw error
       return null
+    }
+  }
+
+  private async stopOwnedSession(sessionId?: string | null): Promise<void> {
+    const target = sessionId ?? this.current()?.sessionId
+    if (!target) return
+    try {
+      await this.supervision.stop({ kind: 'structured', session: target })
+    } catch (error) {
+      if (!this.shuttingDown && !this.stopNowRequested) this.context.log(`could not stop loop session ${target}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  private async closeOwnedSession(sessionId: string | null): Promise<void> {
+    if (sessionId === null) return
+    try {
+      await this.context.call('quirky.session/close', { session: sessionId })
+      this.store.forgetOwnedMessages(this.loopId, sessionId)
+    } catch (error) {
+      if (!this.shuttingDown && !this.stopNowRequested) this.context.log(`could not close loop session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -499,24 +533,6 @@ export class LoopDriver {
     return this.commit({ ...current, state: 'running', phase: 'working', pauseReason: null, pauseDetail: null })
   }
 
-  private async stopOwnedSession(sessionId?: string | null): Promise<void> {
-    const target = sessionId ?? this.current()?.sessionId
-    if (!target) return
-    try {
-      await this.context.call('quirky.structured/stop', { session: target })
-    } catch (error) {
-      if (!this.shuttingDown && !this.stopNowRequested) this.context.log(`could not stop loop session ${target}: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
-  private async closeOwnedSession(sessionId: string | null): Promise<void> {
-    if (sessionId === null) return
-    try {
-      await this.context.call('quirky.session/close', { session: sessionId })
-      this.store.forgetOwnedMessages(this.loopId, sessionId)
-    } catch (error) {
-      if (!this.shuttingDown && !this.stopNowRequested) this.context.log(`could not close loop session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
-    }
-  }
 
   private async loadWorktreeSession(forceFresh: boolean, signal: AbortSignal): Promise<{ sessionId: string; newConversation: boolean }> {
     const loop = this.requireLoop()
@@ -530,23 +546,25 @@ export class LoopDriver {
     let newConversation: boolean
 
     if (needsNativeResume) {
-      session = await this.startStructuredSession('quirky.structured/resume', { session: loop.sessionId, prompt: '' }, signal)
+      session = await this.startStructuredSession(() =>
+        this.supervision.resume({ session: loop.sessionId!, prompt: '' }), signal)
       newConversation = false
     } else if (!wantsFresh && loop.sessionId !== null) {
       session = await this.waitForReady(loop.sessionId, signal)
       this.assertActive(signal)
       newConversation = false
     } else {
-      const params: Record<string, unknown> = {
+      const params = {
         worktree: `id:${loop.worktreeId}`,
         agent: loop.agent,
         prompt: '',
         ...(loop.model === undefined ? {} : { model: loop.model }),
         ...(loop.options === undefined ? {} : { options: loop.options })
       }
-      session = await this.startStructuredSession('quirky.structured/create', params, signal)
+      session = await this.startStructuredSession(() => this.supervision.create(params), signal)
       newConversation = true
     }
+
 
     if (session.worktreeId !== loop.worktreeId || session.agent !== loop.agent) {
       await this.stopOwnedSession(session.id)
@@ -748,19 +766,14 @@ export class LoopDriver {
       this.turnSentAt = this.now()
       this.busyEdgeAt = null
       try {
-        const sent = await this.call('quirky.structured/send', {
+        await this.supervision.send({
           session: sessionId,
           text: prompt,
           requireIdle: true,
           expectedAfterSeq: cursor
-        }, signal, true)
-        if (!isObject(sent) || sent.ok !== true) {
-          this.assertActive(signal)
-          throw new Error('structured send did not confirm prompt delivery')
-        }
+        })
         onDelivered(prompt, treeBefore, cursor)
         this.store.consumeSteerNotes(this.loopId, notes.map((note) => note.id), n)
-        this.assertActive(signal)
         const pending = this.pendingPrompt
         if (pending) {
           for (const seq of pending.candidates) this.store.markOwnedMessage(this.loopId, sessionId, seq)
@@ -772,6 +785,7 @@ export class LoopDriver {
           claimed: pending !== null && pending.candidates.length > 0
         })
         this.pendingPrompt = null
+        this.assertActive(signal)
         let journal: StructuredMessage[] = []
         try {
           journal = await this.readMessages(sessionId, cursor, signal)
@@ -794,6 +808,11 @@ export class LoopDriver {
         }
         if (this.stopNowRequested || error instanceof StopNow) throw new StopNow()
         if (this.shuttingDown || error instanceof DriverCancelled) throw new DriverCancelled()
+        if (isAbortError(error)) {
+          this.assertActive(signal)
+          throw error
+        }
+
         if (isObject(error) && (error.code === RpcErrorCode.Conflict || error.code === 'conflict')) {
           let refreshed: StructuredMessage[]
           try {
@@ -824,54 +843,71 @@ export class LoopDriver {
     const sentAt = this.turnSentAt ?? this.now()
     let lastTick = sentAt
     let observedSeq = sentSeq
-    while (true) {
-      this.assertActive(signal)
-      const current = await this.session(sessionId, signal)
-      this.assertActive(signal)
-      if (current?.status === 'exited') return { kind: 'crashed', detail: `structured session ${sessionId} exited` }
-
-      const asks = await this.approvalPending(sessionId, signal)
-      this.assertActive(signal)
-      if (asks === true || current?.status === 'waiting') this.setNeedsYou()
-      else if (asks === false && current) this.setRunningFromNeedsYou()
-
-      let messages: StructuredMessage[] = []
-      let journalKnown = true
-      try {
-        messages = await this.readMessages(sessionId, observedSeq, signal)
-        observedSeq = messages.reduce((seq, message) => Math.max(seq, message.seq), observedSeq)
-      } catch (error) {
-        if (!(error instanceof Unverifiable)) throw error
-        journalKnown = false
-      }
-      this.assertActive(signal)
-      const humanAt = lastHumanMessageAt(messages, this.store, this.loopId, sessionId)
-      if (humanAt !== null) this.recordHumanMessage(humanAt)
-      if (current && isBusy(current.status)) busyEdge = true
-      if (this.busyEdgeAt !== null && this.turnSentAt !== null && this.busyEdgeAt >= this.turnSentAt) busyEdge = true
-
-      const now = this.now()
-      const userQuiet = this.lastHumanAt === null || now - this.lastHumanAt >= this.userIdleMs
-      const eligible = current !== null && current.status !== 'waiting' && asks === false && journalKnown && userQuiet
-      if (eligible) {
-        this.setRunningFromNeedsYou()
-        this.setEligible(true)
-        if (isIdle(current.status)) {
-          if (!busyEdge) noBusyEligibleMs += Math.max(0, now - lastTick)
-          if (busyEdge || noBusyEligibleMs >= this.noBusyEdgeMs) {
-            this.acceptedPrompts.splice(0, this.acceptedPrompts.length, ...this.acceptedPrompts.filter(
-              (candidate) => candidate.sessionId !== sessionId || candidate.afterSeq !== sentSeq
-            ))
-            return { kind: 'settled' }
+    const loop = this.requireLoop()
+    this.watchingSessionId = sessionId
+    try {
+      return await this.supervision.watchStructured<Observation>({
+        target: { sessionId, worktreeId: loop.worktreeId, agent: loop.agent },
+        pollMs: this.pollMs,
+        signal,
+        journal: () => ({ afterSeq: observedSeq, limit: MESSAGE_LIMIT, tail: true }),
+        onSample: async (sample, watchSignal) => {
+          this.assertActive(watchSignal)
+          const current = sample.session.ok ? sample.session.value : null
+          if (current?.status === 'exited') {
+            return { kind: 'done', value: { kind: 'crashed', detail: `structured session ${sessionId} exited` } }
           }
+
+          const asks = await this.approvalPending(sessionId, watchSignal)
+          this.assertActive(watchSignal)
+          if (asks === true || current?.status === 'waiting') this.setNeedsYou()
+          else if (asks === false && current) this.setRunningFromNeedsYou()
+          let messages: StructuredMessage[] = []
+          const journalKnown = sample.journal.ok
+          if (sample.journal.ok) {
+            messages = sample.journal.value.messages
+            observedSeq = sample.journal.value.maxSeq
+            if (observedSeq > sample.afterSeq && !this.store.readOnly) {
+              this.store.saveJournalCursor(this.loopId, sessionId, observedSeq)
+            }
+          }
+          for (const message of messages) {
+            if (messageHasRateLimit(message)) this.lastRateLimit = message
+            if (message.role === 'user') this.isAcceptedPrompt(message)
+          }
+          const humanAt = lastHumanMessageAt(messages, this.store, this.loopId, sessionId)
+          if (humanAt !== null) this.recordHumanMessage(humanAt)
+          if (current && isBusy(current.status)) busyEdge = true
+          if (this.busyEdgeAt !== null && this.turnSentAt !== null && this.busyEdgeAt >= this.turnSentAt) busyEdge = true
+
+          const now = this.now()
+          const userQuiet = this.lastHumanAt === null || now - this.lastHumanAt >= this.userIdleMs
+          const eligible = current !== null && current.status !== 'waiting' && asks === false && journalKnown && userQuiet
+          if (eligible) {
+            this.setRunningFromNeedsYou()
+            this.setEligible(true)
+            if (current && isIdle(current.status)) {
+              if (!busyEdge) noBusyEligibleMs += Math.max(0, now - lastTick)
+              if (busyEdge || noBusyEligibleMs >= this.noBusyEdgeMs) {
+                this.acceptedPrompts.splice(0, this.acceptedPrompts.length, ...this.acceptedPrompts.filter(
+                  (candidate) => candidate.sessionId !== sessionId || candidate.afterSeq !== sentSeq
+                ))
+                return { kind: 'done', value: { kind: 'settled' } }
+              }
+            }
+          } else {
+            this.setEligible(false)
+            if (!journalKnown || current === null) this.updatePhase('waiting')
+          }
+          lastTick = now
+          return { kind: 'continue' }
         }
-      } else {
-        this.setEligible(false)
-        if (!journalKnown || current === null) this.updatePhase('waiting')
-      }
-      lastTick = now
-      await this.delay(this.pollMs, signal)
-      this.assertActive(signal)
+      })
+    } catch (error) {
+      if (isAbortError(error)) this.assertActive(signal)
+      throw error
+    } finally {
+      this.watchingSessionId = null
     }
   }
 
