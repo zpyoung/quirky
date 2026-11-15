@@ -618,6 +618,31 @@ test('ViewTabs fences delayed closes by menu session and revisions by tab data',
   expect(document.querySelector('[role="menu"][aria-label="View actions"]')).toBeNull()
 })
 
+test('ViewTabs replaces a context menu without letting its delayed close close the replacement', async () => {
+  const bridge = createContextHarness()
+  await mount(host, tabsElement(tabsProps(bridge.context)))
+  const needsYou = host.querySelector<HTMLElement>('[role="tab"][data-view-id="needs-you"]')!
+  await act(async () => needsYou.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 8, clientY: 9 })))
+  await settle()
+  expect(menuItemNamed('Hide Needs you')).not.toBeNull()
+
+  bridge.defer('close-view-menu')
+  const saved = host.querySelector<HTMLElement>('[role="tab"][data-view-id="view_a"]')!
+  await act(async () => saved.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true })))
+  await settle()
+  expect(bridge.pending).toHaveLength(1)
+  expect(scopedArgs(bridge.pending[0]!.args).operation).toBe('close-view-menu')
+
+  await act(async () => saved.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 24 })))
+  await settle()
+  expect(menuItemNamed('Delete view')).not.toBeNull()
+  expect(menuItemNamed('Hide Needs you')).toBeNull()
+
+  await bridge.releaseNext()
+  expect(menuItemNamed('Delete view')).not.toBeNull()
+  expect(menuItemNamed('Hide Needs you')).toBeNull()
+})
+
 test('ViewTabs preserves selection and roving keyboard focus while write actions are disabled', async () => {
   const bridge = createContextHarness()
   const selected: ViewId[] = []

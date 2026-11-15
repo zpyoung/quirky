@@ -209,7 +209,7 @@ export function ViewTabs({
           y = payload.y
         }
         if (dataRevision !== undefined && dataRevision !== state.tabRevision) return false
-        if (state.viewMenu !== null || !actionableTab(id, state.views, state.needsYouHidden, state.activeId)) return false
+        if (!actionableTab(id, state.views, state.needsYouHidden, state.activeId)) return false
         const trigger = tabButton(id)
         if (!trigger?.isConnected) return false
         const bounds = trigger.getBoundingClientRect()
