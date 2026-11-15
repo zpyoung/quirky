@@ -1,17 +1,19 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react'
-import { Button, EmptyState, IconButton } from '@quirky/ui'
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { Button, IconButton, InlineError, NoticeLine } from '@quirky/ui'
 import type { MountCleanup } from '@quirky/protocol'
 
 import { paneLeaves, paneRects, roundRatio } from '../../layout/tree'
 import type { DividerRect, PaneRect } from '../../layout/tree'
 import type { Edge, Group, PaneLeaf, PaneNode, Tab, TerminalTab, ViewTab } from '../../layout/types'
 import { DockHost } from '../dock/DockHost'
+import type { PaneReport, TerminalPaneHandle } from '../pane/TerminalPaneView'
 import { CollapseIcon, CloseIcon, ExpandIcon, GripIcon } from './icons'
 import type { ControllerState, PaneDropTarget, WorkspaceController } from './controller'
 import { isViewTab } from '../../layout/types'
 import { useBoxSize } from './useBoxSize'
 import { byPaneId, px, STRUCTURED_VIEW_ID } from './model'
 import { getTerminalAccessorySource, type TerminalAccessory } from './accessories'
+import { runWorkspaceViewAction } from './view-actions'
 
 /** The minimum pane width and terminal-content height, before a vertical header band. */
 export const MIN_PANE_PX = 50
@@ -45,6 +47,18 @@ export function InlineField({ label, initial, className, onCommit, onCancel }: {
     if (commit) onCommit(value)
     else onCancel()
   }
+  const onInlineKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    event.stopPropagation()
+    if (event.key === 'Enter') {
+      if (event.nativeEvent.isComposing || event.keyCode === 229) return
+      event.preventDefault()
+      finish(true)
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      finish(false)
+    }
+  }
+  const onInlineBlur = () => finish(true)
 
   return (
     <input
@@ -53,18 +67,8 @@ export function InlineField({ label, initial, className, onCommit, onCancel }: {
       aria-label={label}
       value={value}
       onChange={(event) => setValue(event.target.value)}
-      onKeyDown={(event) => {
-        event.stopPropagation()
-        if (event.key === 'Enter') {
-          if (event.nativeEvent.isComposing || event.keyCode === 229) return
-          event.preventDefault()
-          finish(true)
-        } else if (event.key === 'Escape') {
-          event.preventDefault()
-          finish(false)
-        }
-      }}
-      onBlur={() => finish(true)}
+      onKeyDown={onInlineKeyDown}
+      onBlur={onInlineBlur}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
@@ -74,41 +78,42 @@ export function InlineField({ label, initial, className, onCommit, onCancel }: {
 
 function StructuredHost({ controller, session }: { controller: WorkspaceController; session: string }) {
   const host = useRef<HTMLDivElement>(null)
-  const [failed, setFailed] = useState(false)
+  const [structuredFailure, setStructuredFailure] = useState<string | null>(null)
   useEffect(() => {
     const element = host.current
     if (!element) return
+    setStructuredFailure(null)
     try {
       return controller.context.mountView(STRUCTURED_VIEW_ID, element, { session })
-    } catch {
-      setFailed(true)
+    } catch (error) {
+      setStructuredFailure(`Could not open structured session: ${error instanceof Error ? error.message : String(error)}`)
     }
   }, [controller, session])
   return (
     <div className="qt-structured">
       <div ref={host} className="qt-structured-body" />
-      {failed ? <EmptyState message="The structured session view is not available." /> : null}
+      {structuredFailure ? <InlineError message={structuredFailure} /> : null}
     </div>
   )
 }
 
 function HostedViewLayer({ controller, tab }: { controller: WorkspaceController; tab: ViewTab }) {
   const host = useRef<HTMLDivElement>(null)
-  const [failure, setFailure] = useState<string | null>(null)
+  const [hostedFailure, setHostedFailure] = useState<string | null>(null)
   const mounted = useRef<MountCleanup | null>(null)
   const appliedInput = useRef<string | null>(null)
   const inputKey = JSON.stringify(tab.input ?? {})
   useEffect(() => {
     const element = host.current
     if (!element) return
-    setFailure(null)
+    setHostedFailure(null)
     appliedInput.current = inputKey
     try {
       mounted.current = controller.context.mountView(tab.viewId, element, { ...(tab.input ?? {}), tabId: tab.id }) as MountCleanup
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       controller.context.log(`could not mount ${tab.viewId} in tab ${tab.id}: ${message}`)
-      setFailure(message)
+      setHostedFailure(message)
     }
     return () => {
       mounted.current?.()
@@ -120,7 +125,7 @@ function HostedViewLayer({ controller, tab }: { controller: WorkspaceController;
     const element = host.current
     if (!element || appliedInput.current === inputKey) return
     const input = { ...(tab.input ?? {}), tabId: tab.id }
-    setFailure(null)
+    setHostedFailure(null)
     try {
       if (mounted.current?.updateInput?.(input) !== true) {
         mounted.current?.()
@@ -131,13 +136,13 @@ function HostedViewLayer({ controller, tab }: { controller: WorkspaceController;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       controller.context.log(`could not update ${tab.viewId} in tab ${tab.id}: ${message}`)
-      setFailure(message)
+      setHostedFailure(message)
     }
   }, [controller, tab.id, tab.viewId, inputKey])
   return (
     <div className="qt-structured qt-hosted-view" data-hosted-view={tab.id}>
       <div ref={host} className="qt-structured-body" />
-      {failure ? <EmptyState message={failure} /> : null}
+      {hostedFailure ? <InlineError message={hostedFailure} /> : null}
     </div>
   )
 }
@@ -155,21 +160,29 @@ function PaneAccessoryMount({
   accessory: TerminalAccessory
 }) {
   const host = useRef<HTMLDivElement>(null)
+  const [accessoryFailure, setAccessoryFailure] = useState<string | null>(null)
   useEffect(() => {
     const element = host.current
     if (!element) return
+    setAccessoryFailure(null)
     let unmount: (() => void) | void
     try {
       unmount = controller.context.mountView(accessory.view, element, { sessionId, paneId })
     } catch (error) {
       controller.context.log(`terminal accessory ${accessory.id} could not mount: ${error instanceof Error ? error.message : String(error)}`)
+      setAccessoryFailure(`Could not open ${accessory.title}: ${error instanceof Error ? error.message : String(error)}`)
       return
     }
     return () => {
       if (typeof unmount === 'function') unmount()
     }
   }, [controller, sessionId, paneId, accessory.id, accessory.plugin, accessory.view])
-  return <div ref={host} className="qt-pane-accessory" data-terminal-accessory={accessory.id} aria-label={accessory.title} />
+  return (
+    <div className="qt-pane-accessory" data-terminal-accessory={accessory.id} aria-label={accessory.title}>
+      <div ref={host} />
+      {accessoryFailure ? <InlineError message={accessoryFailure} /> : null}
+    </div>
+  )
 }
 
 function PaneAccessories({ controller, sessionId, paneId }: { controller: WorkspaceController; sessionId: string; paneId: string }) {
@@ -204,7 +217,7 @@ function ExitOverlay({ controller, leaf }: { controller: WorkspaceController; le
   return (
     <div className="qt-exit" role="alert" data-exit-overlay={leaf.id}>
       <strong>Terminal exited</strong>
-      <span>{exitText(leaf.exit!)}</span>
+      <NoticeLine>{exitText(leaf.exit!)}</NoticeLine>
       <div className="qt-exit-actions">
         <Button variant="secondary" onClick={() => void controller.closePane(leaf.id)}>
           Close
@@ -411,6 +424,8 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
         const focused = focusedGroup && tab.activePane === leaf.id
         const structured = session?.kind === 'structured'
         const reserveHeaderBand = multi || Boolean(leaf.title) || (state.rename?.kind === 'pane' && state.rename.id === leaf.id)
+        const onHandle = (handle: TerminalPaneHandle | null) => controller.registerHandle(leaf.id, handle)
+        const onState = (report: PaneReport) => controller.setPaneState(leaf.id, report)
         return (
           <div
             key={leaf.id}
@@ -423,12 +438,12 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
             onFocus={structured ? () => void controller.focusPane(leaf.id) : undefined}
             onContextMenu={(event) => {
               event.preventDefault()
-              controller.openMenu('pane', leaf.id, { x: event.clientX, y: event.clientY })
+              void runWorkspaceViewAction(controller.context, { workspace: controller.workspaceId, action: 'open-pane-menu', pane: leaf.id, x: event.clientX, y: event.clientY })
             }}
           >
             <div className={reserveHeaderBand ? 'qt-pane-content qt-pane-content-reserved' : 'qt-pane-content'}>
               {!session ? (
-                <p className="qt-muted qt-pad">Loading session...</p>
+                <div className="qt-muted qt-pad" role="status"><NoticeLine>Loading session…</NoticeLine></div>
               ) : session.kind === 'structured' ? (
                 <StructuredHost controller={controller} session={leaf.session} />
               ) : (
@@ -444,9 +459,9 @@ function TerminalPaneLayer({ controller, state, group, tab }: Props & { tab: Ter
                   interactive={leaf.exit === null && session.status !== 'exited'}
                   dragging={state.dragging}
                   terminalEpoch={state.epoch}
-                  onHandle={(handle) => controller.registerHandle(leaf.id, handle)}
+                  onHandle={onHandle}
                   onFocus={() => void controller.focusPane(leaf.id)}
-                  onState={(report) => controller.setPaneState(leaf.id, report)}
+                  onState={onState}
                   themeSource={controller.options.themeSource ?? controller.root ?? undefined}
                   createWebgl={controller.options.createWebgl}
                 />

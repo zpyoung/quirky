@@ -268,7 +268,7 @@ describe('window commands route to the focused workspace', () => {
     await wired.run('clear-pane-title')
     expect(wired.calls('setPaneTitle')).toEqual([{ pane: 'pane-3', title: '' }])
     await wired.run('recent-tab')
-    expect(wired.last().dialog).toEqual({ kind: 'switch-tabs', title: 'Switch tabs' })
+    expect(wired.last().dialog).toEqual({ kind: 'switch-tabs', title: 'Switch tabs', generation: expect.any(String) })
   })
 
   test('zoom changes one pane, the focused one unless a pane is named', async () => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { Button, Checkbox, Dialog, TextField } from '@quirky/ui'
 
 type Props = {
@@ -14,21 +14,23 @@ export function SaveViewDialog({ summary, busy = false, onSave, onClose }: Props
   const [name, setName] = useState('')
   const [starred, setStarred] = useState(true)
   const trimmed = name.trim()
+  const onSaveSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (busy || trimmed.length === 0 || trimmed.length > 60) return
+    onSave(trimmed, starred)
+  }
   return (
     <Dialog open title="Save view" onClose={onClose}>
       <form
         className="ui-stack"
-        onSubmit={(event) => {
-          event.preventDefault()
-          if (trimmed) onSave(trimmed, starred)
-        }}
+        onSubmit={onSaveSubmit}
       >
         <TextField type="text" label="Name" id="worktree-view-name" autoFocus maxLength={60} value={name} onChange={(event) => setName(event.target.value)} />
         <p className="ui-help-text">{summary}</p>
         <Checkbox label="Show as a tab" checked={starred} onChange={setStarred} />
         <div className="ui-actions">
           <Button type="button" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={busy || !trimmed}>Save view</Button>
+          <Button type="submit" variant="primary" disabled={busy || !trimmed || trimmed.length > 60}>Save view</Button>
         </div>
       </form>
     </Dialog>

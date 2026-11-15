@@ -149,6 +149,7 @@ describe('SC-1: agent panes offer the handoff, shell panes do not', () => {
     view.fake.calls.splice(0)
     await click(row(view, 'Hand Off to Another Agent'))
     expect(view.fake.callsTo('ui.window.command.run').map((call) => call.params)).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/workspace-view-action', args: { workspace: 'wt-main', action: 'close-menu' } },
       { connId: 41, id: 'command:quirky.terminal/run-menu-item', args: { item: HANDOFF.id, session: 's-3' } }
     ])
     expect(view.fake.callsTo('ui.contributions')).toHaveLength(1)
@@ -293,6 +294,7 @@ describe('public menu contribution commands', () => {
     await click(row(view, 'Acme New'))
 
     expect(view.fake.callsTo('ui.window.command.run').map((call) => call.params)).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/workspace-view-action', args: { workspace: 'wt-main', action: 'close-menu' } },
       {
         connId: 41,
         id: 'command:quirky.terminal/run-menu-item',

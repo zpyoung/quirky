@@ -12,6 +12,7 @@ import {
   fakeContext,
   fakeDaemon,
   group,
+  fire,
   groupSplit,
   key,
   installWindowCommands,
@@ -186,7 +187,7 @@ describe('SC-22: the + menu', () => {
     expect(rows(view)).toEqual(['Claude (background)'])
     await key(input, 'Enter')
     expect(view.last().menu).toBeNull()
-    expect(view.last().dialog).toEqual({ kind: 'new-session', title: 'New Claude (background) session' })
+    expect(view.last().dialog).toEqual({ kind: 'new-session', title: 'New Claude (background) session', generation: expect.any(String) })
   })
 
   test('the plus button toggles the menu', async () => {
@@ -230,7 +231,7 @@ describe('SC-22: the + menu', () => {
     await open(view)
     await type(search(view), 'Claude')
     await click(row(view, 'Claude'))
-    expect(view.last().dialog).toEqual({ kind: 'new-session', title: 'New Claude session' })
+    expect(view.last().dialog).toEqual({ kind: 'new-session', title: 'New Claude session', generation: expect.any(String) })
     expect(callsTo(view.fake, 'newTab')).toEqual([])
   })
 
@@ -254,7 +255,7 @@ describe('SC-22: the + menu', () => {
     const view = await mount()
     await open(view)
     await click(row(view, 'Codex'))
-    expect(view.last().dialog).toEqual({ kind: 'new-session', title: 'New Codex session' })
+    expect(view.last().dialog).toEqual({ kind: 'new-session', title: 'New Codex session', generation: expect.any(String) })
     await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, ' review the diff ')
     await click(view.q('[role="dialog"] button[type="submit"]'))
     expect(callsTo(view.fake, 'newTab')).toEqual([{ workspace: 'wt-main', group: 'grp-1', agent: 'codex', prompt: 'review the diff' }])
@@ -524,4 +525,69 @@ describe('dropping files', () => {
     expect(dropText(data)).toBe("'/tmp/w/api/a b.txt' /tmp/w/api/c.txt")
     expect(dropText({ files: [], getData: () => '' })).toBe('')
   })
+})
+
+test.each(['button', 'form', 'meta', 'ctrl'])('prompt %s submission uses the exact-window command and preserves raw text until controller trimming', async (gesture) => {
+  const ws = makeWorkspace(group('grp-1', [tab('tab-1', pane('pane-1', 's-1'))]))
+  const view = (mounted = await mountFixture(fakeDaemon(ws, { agents: AGENTS }), {
+    provider: true, extra: {
+      'ui.contributions': () => ({ menuItems: [] }),
+      'quirky.terminal/quickCommands': () => ({ commands: [] }),
+      'quirky.worktree/resolve': () => ({ repoId: 'repo-1' })
+    }
+  }))
+  const ownerCalls: unknown[] = []
+  view.fake.context.executeCommand = async (...args) => { ownerCalls.push(args) }
+  await act(async () => { await view.controller().chooseAgent('grp-1', 'codex', false) })
+  const generation = view.last().dialog.generation
+  await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, ' review the diff ')
+  if (gesture === 'button') await click(view.q('button[type="submit"]'))
+  else if (gesture === 'form') await fire(view.q('form'), new Event('submit', { bubbles: true, cancelable: true }))
+  else await key(view.q('[role="dialog"] textarea')!, 'Enter', gesture === 'meta' ? { metaKey: true } : { ctrlKey: true })
+  await settle()
+  const commands = view.fake.callsTo('ui.window.command.run').filter((call) => call.params.id === 'command:quirky.terminal/workspace-view-action')
+  expect(commands.map((call) => call.params)).toEqual([{
+    connId: 41, id: 'command:quirky.terminal/workspace-view-action',
+    args: { workspace: 'wt-main', action: 'submit-session', kind: 'new-session', generation, prompt: ' review the diff ' }
+  }])
+  expect(callsTo(view.fake, 'newTab')).toEqual([{ workspace: 'wt-main', group: 'grp-1', agent: 'codex', prompt: 'review the diff' }])
+  expect(ownerCalls).toEqual([])
+})
+
+test('pending prompt command shows progress, refuses cancellation, and preserves its draft on failure', async () => {
+  const ws = makeWorkspace(group('grp-1', [tab('tab-1', pane('pane-1', 's-1'))]))
+  const request = Promise.withResolvers<{ workspace: typeof ws }>()
+  const view = (mounted = await mountFixture(fakeDaemon(ws, { agents: AGENTS }), {
+    provider: true, extra: {
+      'quirky.terminal/newTab': () => request.promise,
+      'ui.contributions': () => ({ menuItems: [] }),
+      'quirky.terminal/quickCommands': () => ({ commands: [] }),
+      'quirky.worktree/resolve': () => ({ repoId: 'repo-1' })
+    }
+  }))
+  try {
+    await act(async () => { await view.controller().chooseAgent('grp-1', 'codex', false) })
+    const generation = view.last().dialog.generation
+    await type(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')!, ' keep this draft ')
+    await click(view.q('button[type="submit"]'))
+    expect(view.q('[role="status"] .ui-notice-line')?.textContent).toBe('Starting session…')
+    expect(view.q('[role="dialog"] .ui-inline-error')).toBeNull()
+    expect(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')?.readOnly).toBe(true)
+    expect(view.q<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true)
+    await click([...view.element.querySelectorAll('button')].find((button) => button.textContent === 'Cancel')!)
+    expect(view.fake.toasts).toEqual([{ title: 'Could not run workspace action', body: 'session request is pending' }])
+    expect(view.last().dialog.generation).toBe(generation)
+    await act(async () => request.reject(new Error('start refused')))
+    await settle()
+    expect(view.q('[role="dialog"] .ui-inline-error')?.textContent).toBe('start refused')
+    expect(view.q('[role="status"] .ui-notice-line')).toBeNull()
+    expect(view.q<HTMLTextAreaElement>('[role="dialog"] textarea')?.value).toBe(' keep this draft ')
+    expect(view.last().dialog.generation).toBe(generation)
+    expect(callsTo(view.fake, 'newTab')).toHaveLength(1)
+  } finally {
+    await act(async () => {
+      request.resolve({ workspace: ws })
+      await settle()
+    })
+  }
 })

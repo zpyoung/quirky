@@ -163,10 +163,17 @@ export function DraftCard({ draft, onBodyChange, onCancel, onSubmit, onTooLarge,
   )
 }
 
+export type NoteCardHandle = { edit(): boolean; cancelEdit(): boolean }
+export type NoteCardControls = {
+  request(action: 'edit' | 'cancel-edit'): void
+  register(handle: NoteCardHandle): () => void
+}
+
 type SavedProps = {
   note: Note
   /** The card's send menu. */
   send: ReactNode
+  controls: NoteCardControls
   /** Resolves false when the edit was not saved, which keeps the editor open. */
   onEdit(body: string): Promise<boolean>
   onDelete(): void
@@ -179,7 +186,7 @@ type SavedProps = {
  * leave it as it was, and Save is enabled only for a non-empty text that differs. Delete note
  * deletes at once.
  */
-export function SavedCard({ note, send, onEdit, onDelete, remeasure }: SavedProps) {
+export function SavedCard({ note, send, controls, onEdit, onDelete, remeasure }: SavedProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(note.body)
   const [saving, setSaving] = useState(false)
@@ -188,7 +195,31 @@ export function SavedCard({ note, send, onEdit, onDelete, remeasure }: SavedProp
   const card = useRemeasure(remeasure)
   const area = useRef<HTMLTextAreaElement>(null)
   const fieldId = useId()
+  const editingRef = useRef(false)
+  const savingRef = useRef(false)
+  const latest = useRef({ body: note.body, shown })
+  latest.current = { body: note.body, shown }
+  const handle = useRef<NoteCardHandle | null>(null)
+  if (handle.current === null) {
+    handle.current = {
+      edit() {
+        if (editingRef.current || savingRef.current) return false
+        editingRef.current = true
+        setDraft(latest.current.shown ?? latest.current.body)
+        setEditing(true)
+        return true
+      },
+      cancelEdit() {
+        if (!editingRef.current || savingRef.current) return false
+        editingRef.current = false
+        setEditing(false)
+        setDraft(latest.current.body)
+        return true
+      }
+    }
+  }
 
+  useEffect(() => controls.register(handle.current!), [controls])
   useEffect(() => setShown(null), [note.body])
   useLayoutEffect(() => {
     if (!editing || !area.current) return
@@ -201,20 +232,18 @@ export function SavedCard({ note, send, onEdit, onDelete, remeasure }: SavedProp
   const canSave = !saving && trimmed !== '' && trimmed !== note.body
 
   const save = async () => {
-    if (!canSave) return
+    if (!canSave || !editingRef.current || savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     const saved = await onEdit(trimmed)
     if (!alive.current) return
+    savingRef.current = false
     setSaving(false)
     if (saved) {
+      editingRef.current = false
       setShown(trimmed)
       setEditing(false)
     }
-  }
-
-  const cancel = () => {
-    setEditing(false)
-    setDraft(note.body)
   }
 
   const label = `Note ${rangeLabel(note).toLowerCase()}`
@@ -224,10 +253,7 @@ export function SavedCard({ note, send, onEdit, onDelete, remeasure }: SavedProp
       <IconButton
         label="Edit note"
         title="Edit note"
-        onClick={() => {
-          setDraft(shown ?? note.body)
-          setEditing(true)
-        }}
+        onClick={() => controls.request('edit')}
       >
         {'✎'}
       </IconButton>
@@ -259,7 +285,7 @@ export function SavedCard({ note, send, onEdit, onDelete, remeasure }: SavedProp
                   event.stopPropagation()
                   if (event.key === 'Escape') {
                     event.preventDefault()
-                    cancel()
+                    controls.request('cancel-edit')
                   } else if (event.key === 'Enter' && !event.nativeEvent.isComposing && event.keyCode !== 229 && !event.shiftKey) {
                     event.preventDefault()
                     void save()
@@ -268,7 +294,7 @@ export function SavedCard({ note, send, onEdit, onDelete, remeasure }: SavedProp
               />
             </FormRow>
             <div className="ui-cluster" style={{ justifyContent: 'flex-end' }}>
-              <Button disabled={saving} onClick={cancel}>Cancel</Button>
+              <Button disabled={saving} onClick={() => controls.request('cancel-edit')}>Cancel</Button>
               <Button variant="primary" disabled={!canSave} onClick={() => void save()}>Save</Button>
             </div>
           </div>
@@ -279,3 +305,4 @@ export function SavedCard({ note, send, onEdit, onDelete, remeasure }: SavedProp
     </div>
   )
 }
+

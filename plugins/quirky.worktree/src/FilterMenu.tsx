@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import type { ProjectGroup, Repo, WorktreeStatus } from '@quirky/protocol'
-import { Button, Checkbox, Popover, TextField } from '@quirky/ui'
+import { Button, Checkbox, EmptyState, InlineError, Popover, TextField } from '@quirky/ui'
 import { ACTIVITY_WINDOWS, type ActivityWindow, type Tag, type ViewFilter } from './view-types'
 
 export const ACTIVITY_WINDOW_LABELS: Record<ActivityWindow, string> = {
@@ -152,7 +152,7 @@ export function FilterMenu({ anchor, filter, activityError = null, tags, section
     <Popover open label="Filter" anchor={anchor} onClose={onClose}>
       <div className="ui-stack worktree-tree-filter">
         <Group label="Tags">
-          {tags.length === 0 ? <p className="ui-help-text">No tags yet.</p> : tags.map((tag) => (
+          {tags.length === 0 ? <EmptyState message="No tags yet." /> : tags.map((tag) => (
             <span className="worktree-tree-filter__choice" key={tag.id}>
               <Checkbox label={tag.name} checked={filter.tagIds.includes(tag.id)} onChange={(checked) => toggle('tagIds', tag.id, checked)} />
               <span className="ui-swatch" data-color={tag.color ?? 'grey'} aria-hidden="true" />
@@ -205,7 +205,7 @@ export function FilterMenu({ anchor, filter, activityError = null, tags, section
             <Checkbox label="Except default branch" checked={activity.alwaysShowDefaultBranchWorkspace} onChange={(checked) => setActivity({ alwaysShowDefaultBranchWorkspace: checked })} />
           )}
         </Group>
-        {activityError && <p className="ui-error-text" role="alert">Workspace activity filters unavailable: {activityError}</p>}
+        {activityError && <InlineError message={`Workspace activity filters unavailable: ${activityError}`} />}
         <Group label="Hide">
           <Checkbox label="Merged/closed reviews" checked={activity.hideCompletedReviewWorkspaces} onChange={(checked) => setActivity({ hideCompletedReviewWorkspaces: checked })} />
           <Checkbox label="Passing checks" checked={activity.hidePassingCheckWorkspaces} onChange={(checked) => setActivity({ hidePassingCheckWorkspaces: checked })} />
