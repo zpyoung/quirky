@@ -131,18 +131,6 @@ async function requireAuth(env: HostingEnv, scope: GitLabScope, client: GitLabCl
   if (!credentials.token) throw gitlabError(env, 'auth_required', AUTH_REQUIRED_MESSAGE)
 }
 
-function suppliedRepositoryMatches(env: HostingEnv, scope: GitLabScope, params: Record<string, unknown>): void {
-  if (!Object.hasOwn(params, 'prRepo')) return
-  const supplied = params.prRepo
-  if (!isRecord(supplied) || typeof supplied.host !== 'string' || typeof supplied.owner !== 'string' || typeof supplied.repo !== 'string') {
-    throw gitlabError(env, 'repository_mismatch', 'The requested review repository does not match this worktree.')
-  }
-  if (supplied.host.toLowerCase() !== scope.origin.host.toLowerCase() ||
-      supplied.owner.toLowerCase() !== scope.origin.owner.toLowerCase() ||
-      supplied.repo.toLowerCase() !== scope.origin.repo.toLowerCase()) {
-    throw gitlabError(env, 'repository_mismatch', 'The requested review repository does not match this worktree.')
-  }
-}
 
 function parseReviewNumber(env: HostingEnv, value: unknown): number {
   const number = parsePositiveInteger(value)
@@ -321,7 +309,8 @@ async function lookupByNumber(
   project: Project,
   number: number,
   fetchedAt: number,
-  client: GitLabClient
+  client: GitLabClient,
+  expected?: { branch: string; head?: string }
 ): Promise<ReviewLookup> {
   let response: GitLabResponse
   try {
@@ -333,7 +322,15 @@ async function lookupByNumber(
   if (response.status === 404) return noReview(fetchedAt)
   requireSuccess(env, response)
   if (!isRecord(response.json)) throw gitlabError(env, 'schema_drift', safeMessage('schema_drift'))
-  if (response.json.project_id !== undefined && !sameProject(response.json.project_id, project.id)) {
+  if (expected) {
+    if (!sameProject(response.json.project_id, project.id)
+        || !sameProject(response.json.source_project_id, project.id)
+        || parseBranch(response.json.source_branch) !== expected.branch
+        || ((response.json.state === 'closed' || response.json.state === 'merged') && response.json.sha !== scope.worktree.head)
+        || (expected.head !== undefined && response.json.sha !== expected.head)) {
+      return noReview(fetchedAt)
+    }
+  } else if (response.json.project_id !== undefined && !sameProject(response.json.project_id, project.id)) {
     throw gitlabError(env, 'schema_drift', safeMessage('schema_drift'))
   }
   const review = await normalizeReview(env, scope, response.json, client)
@@ -345,6 +342,12 @@ function openedRows(items: unknown[], projectId: string | number, branch: string
     && sameProject(item.project_id, projectId)
     && sameProject(item.source_project_id, projectId)
     && parseBranch(item.source_branch) === branch)
+}
+
+function listedNumber(env: HostingEnv, row: Record<string, unknown>): number {
+  const number = parsePositiveInteger(row.iid)
+  if (!number) throw gitlabError(env, 'schema_drift', safeMessage('schema_drift'))
+  return number
 }
 
 function newestFirst(rows: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -385,15 +388,13 @@ async function lookupBranch(
   }
   const open = newestFirst(opened)[0]
   if (open) {
-    const review = await normalizeReview(env, scope, open, client)
-    return review ? found(review, fetchedAt) : diffPending(fetchedAt)
+    return lookupByNumber(env, scope, project, listedNumber(env, open), fetchedAt, client, { branch })
   }
 
   const head = scope.worktree.head
   const terminal = newestFirst(rows.filter((row) => (row.state === 'merged' || row.state === 'closed') && typeof head === 'string' && row.sha === head))[0]
   if (terminal) {
-    const review = await normalizeReview(env, scope, terminal, client)
-    return review ? found(review, fetchedAt) : diffPending(fetchedAt)
+    return lookupByNumber(env, scope, project, listedNumber(env, terminal), fetchedAt, client, { branch, head })
   }
 
   const fallbackNumber = params.fallbackPRNumber === undefined ? undefined : parseReviewNumber(env, params.fallbackPRNumber)
@@ -585,6 +586,7 @@ function mrTitle(raw: Record<string, unknown>): string {
 
 async function createCandidates(
   scope: GitLabScope,
+  projectId: string | number,
   branch: string,
   base: string,
   title: string,
@@ -593,6 +595,8 @@ async function createCandidates(
   const items = await listMergeRequests(scope, branch, client)
   return items.filter((item): item is Record<string, unknown> => isRecord(item)
     && isOpen(item)
+    && sameProject(item.project_id, projectId)
+    && sameProject(item.source_project_id, projectId)
     && parseBranch(item.source_branch) === branch
     && parseBranch(item.target_branch) === base
     && (title === '' || mrTitle(item) === title))
@@ -605,13 +609,14 @@ function unknownCompletion(env: HostingEnv): Error {
 async function reconcileCreate(
   env: HostingEnv,
   scope: GitLabScope,
+  projectId: string | number,
   branch: string,
   base: string,
   title: string,
   client: GitLabClient,
   onConflict: boolean
 ): Promise<{ number: number; url: string; existing: boolean } | undefined> {
-  const candidates = await createCandidates(scope, branch, base, onConflict ? '' : title, client)
+  const candidates = await createCandidates(scope, projectId, branch, base, onConflict ? '' : title, client)
   if (candidates.length !== 1) return undefined
   const number = parsePositiveInteger(candidates[0]?.iid)
   if (!number) return undefined
@@ -628,31 +633,42 @@ async function createMergeRequest(
   const branch = currentBranch(env, scope)
   requestedCreateBranch(env, params, branch)
   const suppliedBody = requestedCreateBody(env, params)
-  await requireAuth(env, scope, client)
+  const eligibility = await gitlabEligibility(env, scope, params, client)
+  if (eligibility.reason === 'existing_review' && isRecord(eligibility.review)) {
+    const existingNumber = parsePositiveInteger(eligibility.review.number)
+    if (existingNumber) return { number: existingNumber, url: projectWebUrl(scope, existingNumber), existing: true }
+  }
+  if (eligibility.eligible !== true) {
+    const blocker = Array.isArray(eligibility.blockers) && isRecord(eligibility.blockers[0])
+      ? eligibility.blockers[0]
+      : undefined
+    const reason = blocker && typeof blocker.reason === 'string' ? blocker.reason : 'lookup_unavailable'
+    const message = blocker && typeof blocker.message === 'string'
+      ? blocker.message
+      : 'Could not verify whether this branch already has a merge request.'
+    throw env.invalid(reason, message)
+  }
 
   const project = await getProject(env, scope, client)
-  const selection = await selectedBase(env, scope, params, project)
-  const base = selection.base
-  if (!base) throw gitlabError(env, 'validation_error', 'Could not determine a target branch for this merge request.')
-  if (base.toLowerCase() === branch.toLowerCase()) validationError(env, 'head must be different from the target branch.')
+  const base = nonEmptyString(eligibility.defaultBase)
+  if (!base) throw env.invalid('missing_remote_base', 'Could not determine a base branch for this repository.')
   const requestTitle = params.draft === true ? titleWithDraftPrefix(title) : title
   const description = await templateBody(scope, suppliedBody, params.useTemplate === true)
   const request = { source_branch: branch, target_branch: base, title: requestTitle, description }
-
   let response: GitLabResponse
   try {
     response = await client.request(scope, { method: 'POST', path: mergeRequestsPath(scope), body: request })
   } catch (error) {
     const reason = reasonOf(error)
     if (reason === 'already_exists') {
-      const existing = await reconcileCreate(env, scope, branch, base, requestTitle, client, true)
+      const existing = await reconcileCreate(env, scope, project.id, branch, base, requestTitle, client, true)
       if (existing) return existing
       throw error
     }
     if (!['network_error', 'timeout', 'server_error', 'output_limit', 'schema_drift'].includes(reason)) throw error
     let recovered: { number: number; url: string; existing: boolean } | undefined
     try {
-      recovered = await reconcileCreate(env, scope, branch, base, requestTitle, client, false)
+      recovered = await reconcileCreate(env, scope, project.id, branch, base, requestTitle, client, false)
     } catch {
       recovered = undefined
     }
@@ -662,7 +678,7 @@ async function createMergeRequest(
   }
 
   if (response.status === 409) {
-    const existing = await reconcileCreate(env, scope, branch, base, requestTitle, client, true)
+    const existing = await reconcileCreate(env, scope, project.id, branch, base, requestTitle, client, true)
     if (existing) return existing
     throw statusError(env, response)
   }
@@ -673,7 +689,7 @@ async function createMergeRequest(
     if (!['network_error', 'timeout', 'server_error', 'output_limit', 'schema_drift'].includes(reason)) throw error
     let recovered: { number: number; url: string; existing: boolean } | undefined
     try {
-      recovered = await reconcileCreate(env, scope, branch, base, requestTitle, client, false)
+      recovered = await reconcileCreate(env, scope, project.id, branch, base, requestTitle, client, false)
     } catch {
       recovered = undefined
     }
@@ -686,7 +702,7 @@ async function createMergeRequest(
   if (!created) {
     let recovered: { number: number; url: string; existing: boolean } | undefined
     try {
-      recovered = await reconcileCreate(env, scope, branch, base, requestTitle, client, false)
+      recovered = await reconcileCreate(env, scope, project.id, branch, base, requestTitle, client, false)
     } catch {
       recovered = undefined
     }
@@ -798,7 +814,6 @@ export function createGitLabReviewHandlers(env: HostingEnv, client: GitLabClient
   }
 
   const review: GitLabHandler = async (scope, params) => {
-    suppliedRepositoryMatches(env, scope, params)
     const number = parseReviewNumber(env, params.number)
     await requireAuth(env, scope, client)
     return cachedLookup(env, scope, `gitlab:review:${number}`, params.fresh === true, async () => {

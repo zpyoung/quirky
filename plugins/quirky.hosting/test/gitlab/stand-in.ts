@@ -15,11 +15,13 @@ export type GitLabStandIn = {
   host: string
   requests: GitLabRequestRecord[]
   mergeRequests: Record<string, any>[]
+  listMergeRequests: Record<string, any>[] | undefined
   discussions: Record<string, any>[]
   scopes: string[]
   approvals: Record<string, any>
   failures: Map<string, GitLabFailure>
   createMode: GitLabCreateMode
+  conflictCandidates: Record<string, any>[]
   close(): void
 }
 
@@ -60,6 +62,8 @@ export function mergeRequest(overrides: Record<string, unknown> = {}): Record<st
 export function startGitLab(): GitLabStandIn {
   let requests: GitLabRequestRecord[] = []
   let mergeRequests: Record<string, any>[] = []
+  let listMergeRequests: Record<string, any>[] | undefined
+  let conflictCandidates: Record<string, any>[] = []
   let discussions: Record<string, any>[] = []
   let scopes = ['api']
   let approvals: Record<string, any> = { approved: false, approvals_left: 1, approved_by: [] }
@@ -102,6 +106,13 @@ export function startGitLab(): GitLabStandIn {
     }
   }
 
+  function mergeRequestSummary(value: Record<string, any>): Record<string, any> {
+    const summary = mergeRequestResponse(value)
+    delete summary.diff_refs
+    delete summary.head_pipeline
+    return summary
+  }
+
   function findMergeRequest(iidText: string): Record<string, any> | undefined {
     const iid = Number(iidText)
     if (!Number.isSafeInteger(iid)) return undefined
@@ -136,18 +147,22 @@ export function startGitLab(): GitLabStandIn {
 
     if (parts.length === 1) {
       if (method === 'GET') {
-        let matches = mergeRequests.filter((value) => query.source_branch === undefined || value.source_branch === query.source_branch)
+        let matches = (listMergeRequests ?? mergeRequests).filter((value) => query.source_branch === undefined || value.source_branch === query.source_branch)
         if (query.state !== 'all') matches = matches.filter((value) => value.state === 'opened' || value.state === 'open')
         if (query.order_by === 'updated_at') {
           const direction = query.sort === 'asc' ? 1 : -1
           matches = [...matches].sort((a, b) => direction * (Date.parse(a.updated_at ?? '') - Date.parse(b.updated_at ?? '')))
         }
-        return json(matches.map(mergeRequestResponse))
+        return json(matches.map(mergeRequestSummary))
       }
       if (method === 'POST') {
-        if (createMode === 'conflict') return json({ message: 'Merge request already exists' }, 409)
-        if (createMode === 'lost-empty') return lostResponse()
         const payload = isRecord(body) ? body : {}
+        if (createMode === 'conflict') {
+          mergeRequests.push(...conflictCandidates.map((value) => ({ ...value })))
+          conflictCandidates = []
+          return json({ message: 'Merge request already exists' }, 409)
+        }
+        if (createMode === 'lost-empty') return lostResponse()
         const iid = mergeRequests.reduce((highest, value) => Math.max(highest, Number(value.iid) || 0), 5) + 1
         const title = typeof payload.title === 'string' ? payload.title : ''
         const created = mergeRequest({
@@ -316,6 +331,8 @@ export function startGitLab(): GitLabStandIn {
     set requests(value: GitLabRequestRecord[]) { requests = value },
     get mergeRequests() { return mergeRequests },
     set mergeRequests(value: Record<string, any>[]) { mergeRequests = value },
+    get listMergeRequests() { return listMergeRequests },
+    set listMergeRequests(value: Record<string, any>[] | undefined) { listMergeRequests = value },
     get discussions() { return discussions },
     set discussions(value: Record<string, any>[]) { discussions = value },
     get scopes() { return scopes },
@@ -325,6 +342,8 @@ export function startGitLab(): GitLabStandIn {
     get failures() { return failures },
     set failures(value: Map<string, GitLabFailure>) { failures = value },
     get createMode() { return createMode },
+    get conflictCandidates() { return conflictCandidates },
+    set conflictCandidates(value: Record<string, any>[]) { conflictCandidates = value },
     set createMode(value: GitLabCreateMode) { createMode = value },
     close() {
       if (closed) return

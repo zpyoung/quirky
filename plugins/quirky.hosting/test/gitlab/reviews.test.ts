@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { bootHosting, type HostingTest } from '../helpers'
 import { bootGitLab, type GitLabWorld } from './world'
@@ -21,6 +21,28 @@ const projectPath = (world: GitLabWorld) => `/api/v4/projects/${encodeURICompone
 const listPath = (world: GitLabWorld) => `${projectPath(world)}/merge_requests`
 const reviewPath = (world: GitLabWorld, number: number) => `${listPath(world)}/${number}`
 const reviewUrl = (world: GitLabWorld, number: number) => `${world.server.url}/${world.identity.owner}/${world.identity.repo}/-/merge_requests/${number}`
+
+async function expectCreateBlocked(
+  world: GitLabWorld,
+  expectedReason: string,
+  message: string,
+  params: Record<string, unknown> = {}
+): Promise<void> {
+  await expect(world.call('create', { title: 'Add x', ...params })).rejects.toMatchObject({
+    message, ...reason(expectedReason)
+  })
+  expect(world.server.requests.filter((request) => request.method === 'POST')).toHaveLength(0)
+}
+
+function runGit(world: GitLabWorld, args: string[]): string {
+  const result = Bun.spawnSync(['git', ...args], { cwd: world.repoPath, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
+  if (result.exitCode !== 0) throw new Error(`git fixture setup failed: ${new TextDecoder().decode(result.stderr)}`)
+  return new TextDecoder().decode(result.stdout).trim()
+}
+
+function ignoreTemplateFixture(world: GitLabWorld): void {
+  appendFileSync(join(world.repoPath, '.git', 'info', 'exclude'), '\n/.gitlab/merge_request_templates/Default.md\n')
+}
 
 async function listenForEvents(world: GitLabWorld): Promise<unknown[]> {
   const events: unknown[] = []
@@ -88,6 +110,7 @@ test('forBranch normalizes the complete GitLab review shape and caches non-fresh
     fetchedAt: expect.any(Number)
   })
   expect(result.review.updatedAt).toEqual(expect.any(String))
+  expect(world.server.requests.filter((request) => request.path === reviewPath(world, 5))).toHaveLength(1)
   const requestsAfterFirstRead = world.server.requests.length
   await world.call('forBranch')
   expect(world.server.requests).toHaveLength(requestsAfterFirstRead)
@@ -132,6 +155,44 @@ test('forBranch only reuses closed or merged requests when their head equals the
   }
 })
 
+test('forBranch hydrates selected terminal rows from the merge-request detail endpoint', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  world.server.mergeRequests = [mergeRequest({
+    state: 'merged',
+    sha: head,
+    diff_refs: { base_sha: 'b'.repeat(40), start_sha: 'c'.repeat(40), head_sha: head }
+  })]
+  expect(await world.call('forBranch', { fresh: true })).toMatchObject({
+    kind: 'found', review: { number: 5, state: 'merged', headRefOid: head }
+  })
+  expect(world.server.requests.filter((request) => request.path === reviewPath(world, 5))).toHaveLength(1)
+})
+
+test.each([
+  ['project', mergeRequest({ project_id: 99 })],
+  ['source project', mergeRequest({ source_project_id: 99 })],
+  ['branch', mergeRequest({ source_branch: 'another-branch' })],
+  ['newly closed head', mergeRequest({ state: 'closed', sha: 'd'.repeat(40) })],
+  ['newly merged head', mergeRequest({ state: 'merged', sha: 'd'.repeat(40) })]
+])('forBranch rechecks the hydrated %s before normalization', async (_field, detail) => {
+  const world = await boot()
+  world.server.mergeRequests = [detail]
+  world.server.listMergeRequests = [mergeRequest()]
+  expect(await world.call('forBranch', { fresh: true })).toMatchObject({ kind: 'no-review' })
+  expect(world.server.requests.filter((request) => request.path === reviewPath(world, 5))).toHaveLength(1)
+  expect(world.server.requests.some((request) => request.path === `${reviewPath(world, 5)}/approvals`)).toBe(false)
+})
+
+test('forBranch rechecks the terminal head after hydration', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  world.server.mergeRequests = [mergeRequest({ state: 'merged', sha: 'd'.repeat(40) })]
+  world.server.listMergeRequests = [mergeRequest({ state: 'merged', sha: head })]
+  expect(await world.call('forBranch', { fresh: true })).toMatchObject({ kind: 'no-review' })
+  expect(world.server.requests.filter((request) => request.path === reviewPath(world, 5))).toHaveLength(1)
+})
+
 test('forBranch reads a linked number directly and uses fallbackPRNumber after a branch miss', async () => {
   const world = await boot()
   world.server.mergeRequests = [mergeRequest()]
@@ -153,6 +214,7 @@ test('a missing diff is retryable and reported as diff_pending', async () => {
     kind: 'unavailable', reason: 'diff_pending', message: 'GitLab is still preparing this merge request.',
     fetchedAt: expect.any(Number), nextAutoRetryAt: expect.any(Number)
   })
+  expect(world.server.requests.filter((request) => request.path === reviewPath(world, 5))).toHaveLength(1)
 })
 
 test('approval data maps into review decisions and tolerates unavailable approvals', async () => {
@@ -244,7 +306,7 @@ test('project and review lookup caches share the environment cache and fresh byp
   expect(world.server.requests.filter((request) => request.path === listPath(world))).toHaveLength(2)
 })
 
-test('creationEligibility reports existing, dirty, default-branch, and authentication blockers', async () => {
+test('creationEligibility reports an existing review blocker', async () => {
   const existingWorld = await boot()
   existingWorld.server.mergeRequests = [mergeRequest()]
   expect(await existingWorld.call('creationEligibility')).toMatchObject({
@@ -253,16 +315,22 @@ test('creationEligibility reports existing, dirty, default-branch, and authentic
     review: { number: 5 }
   })
 
-  await existingWorld.cleanup()
+})
+
+test('creationEligibility reports a dirty-tree blocker', async () => {
   const dirtyWorld = await boot()
   writeFileSync(join(dirtyWorld.repoPath, 'untracked.txt'), 'dirty\n')
   expect(await dirtyWorld.call('creationEligibility')).toMatchObject({ eligible: false, reason: 'dirty_tree', blockers: [{ reason: 'dirty_tree' }] })
 
-  await dirtyWorld.cleanup()
+})
+
+test('creationEligibility reports a default-branch blocker', async () => {
   const defaultBranchWorld = await boot({ branch: 'main' })
   expect(await defaultBranchWorld.call('creationEligibility')).toMatchObject({ eligible: false, reason: 'default_branch', blockers: [{ reason: 'default_branch' }] })
 
-  await defaultBranchWorld.cleanup()
+})
+
+test('creationEligibility reports an authentication blocker without requests', async () => {
   const unauthenticatedWorld = await boot({ token: null })
   expect(await unauthenticatedWorld.call('creationEligibility')).toMatchObject({
     eligible: false, reason: 'authentication_required', blockers: [{
@@ -289,6 +357,71 @@ test('create validates title and head before making any GitLab request', async (
   expect(world.server.requests).toEqual([])
 })
 
+test('create returns an existing same-branch merge request without posting', async () => {
+  const world = await boot()
+  world.server.mergeRequests = [mergeRequest()]
+  expect(await world.call('create', { title: 'Add x' })).toEqual({
+    number: 5, url: reviewUrl(world, 5), existing: true
+  })
+  expect(world.server.requests.filter((request) => request.method === 'POST')).toHaveLength(0)
+})
+
+test('create rechecks a dirty tree before posting', async () => {
+  const world = await boot()
+  writeFileSync(join(world.repoPath, 'untracked.txt'), 'dirty\n')
+  await expectCreateBlocked(world, 'dirty_tree', 'Commit or discard local changes before creating a merge request.')
+})
+
+test('create rechecks an unpublished branch before posting', async () => {
+  const world = await boot()
+  runGit(world, ['branch', '--unset-upstream', 'feature'])
+  await expectCreateBlocked(world, 'no_upstream', 'Publish this branch and configure its upstream before creating a merge request.')
+})
+
+test('create rechecks an unpushed branch before posting', async () => {
+  const world = await boot()
+  runGit(world, ['-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.test', 'commit', '--quiet', '--allow-empty', '-m', 'local ahead'])
+  await expectCreateBlocked(world, 'branch_ahead', 'Push local commits to the configured upstream before creating a merge request.')
+})
+
+test('create rechecks a behind branch before posting', async () => {
+  const world = await boot()
+  const base = runGit(world, ['rev-parse', 'HEAD'])
+  const upstream = runGit(world, ['commit-tree', `${base}^{tree}`, '-p', base, '-m', 'remote ahead'])
+  runGit(world, ['update-ref', 'refs/remotes/origin/feature', upstream])
+  await expectCreateBlocked(world, 'branch_behind', 'Sync this branch with its upstream before creating a merge request.')
+})
+
+test('create rechecks a diverged branch before posting', async () => {
+  const world = await boot()
+  const base = runGit(world, ['rev-parse', 'HEAD'])
+  runGit(world, ['-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.test', 'commit', '--quiet', '--allow-empty', '-m', 'local divergence'])
+  const upstream = runGit(world, ['commit-tree', `${base}^{tree}`, '-p', base, '-m', 'remote divergence'])
+  runGit(world, ['update-ref', 'refs/remotes/origin/feature', upstream])
+  await expectCreateBlocked(world, 'branch_behind', 'Sync this branch with its upstream before creating a merge request.')
+})
+
+test('create refuses the repository default branch before posting', async () => {
+  const world = await boot({ branch: 'main' })
+  await expectCreateBlocked(world, 'default_branch', 'A merge request cannot be created from the repository default branch.')
+})
+
+test('create refuses its own branch as a base before posting', async () => {
+  const world = await boot()
+  await expectCreateBlocked(world, 'default_branch', 'A merge request cannot be created from the repository default branch.', { base: 'feature' })
+})
+
+test('create requires a known remote base before posting', async () => {
+  const world = await boot()
+  await expectCreateBlocked(world, 'missing_remote_base', 'The base branch unavailable is not present on a configured remote.', { base: 'unavailable' })
+})
+
+test('create requires a successful review lookup before posting', async () => {
+  const world = await boot()
+  world.server.failures.set(`GET ${listPath(world)}`, { status: 500 })
+  await expectCreateBlocked(world, 'lookup_unavailable', 'Could not verify whether this branch already has a merge request.')
+})
+
 test('create opens a draft merge request, emits changed, and invalidates review caches', async () => {
   const world = await boot()
   const events = await listenForEvents(world)
@@ -308,6 +441,7 @@ test('create opens a draft merge request, emits changed, and invalidates review 
 
 test('create reads the GitLab merge-request template and ignores oversized templates', async () => {
   const world = await boot()
+  ignoreTemplateFixture(world)
   const directory = join(world.repoPath, '.gitlab', 'merge_request_templates')
   mkdirSync(directory, { recursive: true })
   writeFileSync(join(directory, 'Default.md'), 'tmpl')
@@ -316,6 +450,7 @@ test('create reads the GitLab merge-request template and ignores oversized templ
 
   await world.cleanup()
   const oversizedWorld = await boot()
+  ignoreTemplateFixture(oversizedWorld)
   const oversizedDirectory = join(oversizedWorld.repoPath, '.gitlab', 'merge_request_templates')
   mkdirSync(oversizedDirectory, { recursive: true })
   writeFileSync(join(oversizedDirectory, 'Default.md'), 'x'.repeat(64 * 1024 + 1))
@@ -323,20 +458,50 @@ test('create reads the GitLab merge-request template and ignores oversized templ
   expect(oversizedWorld.server.requests.find((request) => request.method === 'POST')?.body).toMatchObject({ description: '' })
 })
 
-test('create reconciles a conflict to the existing merge request', async () => {
+
+test('create reconciles 409 only to a same-project candidate', async () => {
   const world = await boot()
-  world.server.mergeRequests = [mergeRequest()]
   world.server.createMode = 'conflict'
+  world.server.conflictCandidates = [
+    mergeRequest(),
+    mergeRequest({ iid: 8, project_id: 99 }),
+    mergeRequest({ iid: 9, source_project_id: 99 })
+  ]
   expect(await world.call('create', { title: 'Add x' })).toEqual({ number: 5, url: reviewUrl(world, 5), existing: true })
+  expect(world.server.requests.filter((request) => request.method === 'POST')).toHaveLength(1)
+
 })
 
-test('create reconciles lost responses and reports unknown completion if no request can be found', async () => {
+test('create refuses a fork-only candidate after 409', async () => {
+  const forkOnly = await boot()
+  forkOnly.server.createMode = 'conflict'
+  forkOnly.server.conflictCandidates = [mergeRequest({ source_project_id: 99 })]
+  await expect(forkOnly.call('create', { title: 'Add x' })).rejects.toMatchObject({
+    message: 'A matching GitLab resource already exists.', ...reason('already_exists')
+  })
+  expect(forkOnly.server.requests.filter((request) => request.method === 'POST')).toHaveLength(1)
+
+})
+
+test('create refuses ambiguous same-project candidates after 409', async () => {
+  const ambiguous = await boot()
+  ambiguous.server.createMode = 'conflict'
+  ambiguous.server.conflictCandidates = [mergeRequest(), mergeRequest({ iid: 8 })]
+  await expect(ambiguous.call('create', { title: 'Add x' })).rejects.toMatchObject(reason('already_exists'))
+  expect(ambiguous.server.requests.filter((request) => request.method === 'POST')).toHaveLength(1)
+})
+
+
+test('create reconciles lost responses only to current-project candidates and reports unknown completion', async () => {
   const world = await boot()
+  world.server.mergeRequests = [mergeRequest({ iid: 4, source_project_id: 99 })]
   world.server.createMode = 'lost-created'
   expect(await world.call('create', { title: 'Add x' })).toEqual({ number: 6, url: reviewUrl(world, 6), existing: false })
+  expect(world.server.requests.filter((request) => request.method === 'POST')).toHaveLength(1)
 
   await world.cleanup()
   const lostWorld = await boot()
+  lostWorld.server.mergeRequests = [mergeRequest({ source_project_id: 99 })]
   lostWorld.server.createMode = 'lost-empty'
   let failure: unknown
   try {
@@ -347,6 +512,7 @@ test('create reconciles lost responses and reports unknown completion if no requ
   expect(failure).toMatchObject({
     message: 'GitLab may have created the merge request. Refresh before retrying.', ...reason('unknown_completion')
   })
+  expect(lostWorld.server.requests.filter((request) => request.method === 'POST')).toHaveLength(1)
 })
 
 test('ready and draft actions remove or add the Draft title prefix only when needed', async () => {
