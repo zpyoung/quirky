@@ -21,15 +21,6 @@ const ownedNames = [
   fragmentPath,
   ...ownedSurfaces,
 ]
-const followUpFiles: Record<string, true> = {
-  'plugins/quirky.browser/src/preferences-window/BrowserProfileMenu.tsx': true,
-  'plugins/quirky.browser/src/ui.tsx': true,
-  'plugins/quirky.browser/src/window/BrowserPaneWindow.tsx': true,
-  'plugins/quirky.browser/src/window/useDisclosureMenu.ts': true,
-  'plugins/quirky.browser/src/design-window/DesignWindow.tsx': true,
-  'plugins/quirky.browser/src/design/payload.ts': true,
-  'plugins/quirky.browser/src/markup/MarkupOverlay.tsx': true,
-}
 const passingAuditCodes: Record<string, true> = {
   'state-covered': true,
   'state-not-applicable': true,
@@ -93,22 +84,17 @@ test('the scoreboard has no failure evidence naming owned files, surfaces, or th
   expect(ownedFailures).toEqual([])
 })
 
-test('remaining scoreboard failures are confined to the documented follow-up', () => {
-  const evidence = auditFailures()
-
-  expect(evidence.length).toBeGreaterThan(0)
-  expect(evidence.every(({ source, targetId }) =>
-    (source !== undefined && followUpFiles[source.file] === true) || targetId === 'view:quirky.browser/page'
-  )).toBe(true)
+test('no Browser scoreboard failures remain after page and design coverage', () => {
+  expect(auditFailures()).toEqual([])
 })
 
-test('Browser compatibility tokens pass and the plugin is not enrolled in the ratchet', () => {
+test('Browser compatibility tokens pass and the plugin is enrolled in the ratchet', () => {
   const { inventory } = snapshot()
   const tokenCheck = checkPlugin(inventory, 'quirky.browser').find(({ id }) => id === 'compatibility-tokens')
 
   expect(tokenCheck).toMatchObject({ status: 'pass' })
   const ratchet = JSON.parse(readFileSync(join(repoRoot, 'scripts/ui-scoreboard-ratchet.json'), 'utf8')) as Record<string, unknown>
-  expect(Object.hasOwn(ratchet, 'quirky.browser')).toBe(false)
+  expect(ratchet['quirky.browser']).toEqual(['commands', 'compatibility-tokens', 'empty', 'error', 'loading'])
 })
 
 test.each(['states', 'actions'] as const)('removing the first %s entry exposes its source file', (kind) => {
