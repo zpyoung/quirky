@@ -5,6 +5,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path'
 import type { PluginInfo } from '@quirky/protocol'
 import { connectDaemon, readRuntime } from '../packages/protocol/src/node'
 import type { QuirkyClient } from '../packages/protocol/src/client'
+import type { OwnerGrantSummary } from '../plugins/quirky.mobile/src/daemon/owner-store'
 import { createProcessScope } from './test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from './ui-review/fixtures'
 
@@ -47,6 +48,7 @@ export type SweepResult = {
   mobileListenerHosts: (string | null)[]
   mobileStateErrors?: (string | null)[]
   ownerGrants: unknown
+  seededOwnerGrant?: OwnerGrantSummary
   credentialStatus: unknown
   newCorruptOnThirdStart: string[]
   newCorruptAfterRestart?: string[]
@@ -172,7 +174,10 @@ export function sweepFailures(result: SweepResult): string[] {
     const quarantines = [...(result.newCorruptAfterRestart ?? []), ...result.newCorruptOnThirdStart]
     for (const name of quarantines) failures.push(`healthy-quarantine:${name}`)
     const grants = result.ownerGrants
-    if (!Array.isArray(grants) || grants.length !== 1 || typeof grants[0] !== 'object' || grants[0] === null || grants[0].name !== 'sweep') {
+    const seed = result.seededOwnerGrant
+    if (!seed || !Array.isArray(grants) || grants.length !== 1 || typeof grants[0] !== 'object' || grants[0] === null ||
+      Object.keys(grants[0]).length !== Object.keys(seed).length ||
+      !Object.entries(seed).every(([key, value]) => grants[0][key] === value)) {
       failures.push('healthy-owner-grants')
     }
     if (!Array.isArray(result.credentialStatus) || !result.credentialStatus.some((status) =>
@@ -347,8 +352,16 @@ async function sweepInRoot(root: string, options: { mode: CorruptionMode; repoRo
     result.activeBefore = initial.filter((plugin) => plugin.state === 'active').map((plugin) => plugin.id)
     result.firstStartReport = reportPlugins(initial)
     await stop()
+    const grant = {
+      grantId: randomUUID(), name: 'sweep', endpoint: 'ws://127.0.0.1:1',
+      token: randomBytes(24).toString('hex'), createdAt: Date.now()
+    }
+    result.seededOwnerGrant = {
+      grantId: grant.grantId, name: grant.name, endpoint: grant.endpoint,
+      scope: 'owner-cli', createdAt: grant.createdAt
+    }
     const seeds = [
-      [JSON_STORES[1]!.path, { version: 1, grants: [{ grantId: randomUUID(), name: 'sweep', endpoint: 'ws://127.0.0.1:1', token: randomBytes(24).toString('hex'), createdAt: Date.now() }] }],
+      [JSON_STORES[1]!.path, { version: 1, grants: [grant] }],
       [JSON_STORES[2]!.path, { zcode: { 'base-url': 'https://api.z.ai' } }]
     ] as const
     for (const [path, value] of seeds) {

@@ -69,6 +69,12 @@ function damageResult(): SweepResult {
 function healthyResult(): SweepResult {
   const result = damageResult()
   result.mode = 'healthy'
+  const grant = {
+    grantId: 'ca7b9ef1-19fc-4b59-a3d7-9044c739578a', name: 'sweep',
+    endpoint: 'ws://127.0.0.1:1', scope: 'owner-cli', createdAt: 1_700_000_000_000
+  }
+  Object.assign(result, { seededOwnerGrant: grant })
+  result.ownerGrants = [{ ...grant }]
   result.stores = JSON_STORES.map((store) => ({
     path: store.path,
     kind: 'json',
@@ -436,6 +442,25 @@ describe('helpers', () => {
     const result = healthyResult()
     violate(result)
     expect(sweepFailures(result)).toEqual([expected])
+  })
+
+  test.each([
+    ['grantId', 'f67ad93b-6f99-457c-8001-ac7c153b9218'],
+    ['endpoint', 'ws://127.0.0.1:2'],
+    ['scope', 'mobile'],
+    ['createdAt', 1_700_000_000_001]
+  ] as const)('healthy mode detects replacement of the seeded grant %s', (field, value) => {
+    const result = healthyResult()
+    expect(sweepFailures(result)).toEqual([])
+    const grants = result.ownerGrants as Record<string, unknown>[]
+    grants[0]![field] = value
+    expect(sweepFailures(result)).toEqual(['healthy-owner-grants'])
+  })
+
+  test('healthy mode rejects a name-only grant instead of the persisted seed', () => {
+    const result = healthyResult()
+    result.ownerGrants = [{ name: 'sweep' }]
+    expect(sweepFailures(result)).toEqual(['healthy-owner-grants'])
   })
 
   test('CLI validation failures exit 2 and print usage without starting a sweep', () => {
