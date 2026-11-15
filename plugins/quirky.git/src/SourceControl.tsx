@@ -22,7 +22,7 @@ export function SourceControl({ context, report }: Props) {
   const [notices, setNotices] = useState<ShownNotice[]>([])
   const seq = useRef(0)
   const notify = useCallback((notice: Notice) => setNotices((list) => addNotice(list, notice, ++seq.current)), [])
-  const dismiss = useCallback((id: string) => setNotices((list) => list.filter((n) => n.id !== id)), [])
+  const removeNotice = useCallback((id: string, sequence: number) => setNotices((list) => list.filter((n) => n.id !== id || n.seq !== sequence)), [])
   const drafts = useRef(new Map<string, string>())
   const store = useRef({ get: (worktree: string) => drafts.current.get(worktree) ?? '', set: (worktree: string, text: string) => void drafts.current.set(worktree, text) })
   const offered = useRef(new Set<string>())
@@ -52,7 +52,7 @@ export function SourceControl({ context, report }: Props) {
           />
         )}
       </ToolPanelFrame>
-      <Notices notices={notices} current={worktree} onDismiss={dismiss} />
+      <Notices context={context} notices={notices} current={worktree} remove={removeNotice} />
     </div>
   )
 }
