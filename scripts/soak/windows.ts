@@ -2,7 +2,7 @@ import { existsSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium, type Browser, type BrowserServer, type Page } from 'playwright'
 import type { FixtureWorktree } from '../ui-review/fixtures.ts'
-import type { WindowRecord } from './contracts.ts'
+import type { WindowRecord, WindowRequestObservation } from './contracts.ts'
 import type { SoakWorld } from './world.ts'
 
 type WindowMetrics = {
@@ -158,7 +158,17 @@ function isRpcSocket(url: string): boolean {
   }
 }
 
-function attachMetrics(page: Page, metrics: WindowMetrics, allRequests: Map<string, number>, home: string): void {
+export function attachMetrics(
+  page: Page,
+  metrics: WindowMetrics,
+  allRequests: Map<string, number>,
+  home: string,
+  observer?: {
+    index: number
+    worktree: string
+    onRequest: (request: WindowRequestObservation) => void
+  },
+): void {
   page.on('websocket', (socket) => {
     if (!isRpcSocket(socket.url())) return
     metrics.sockets++
@@ -171,11 +181,19 @@ function attachMetrics(page: Page, metrics: WindowMetrics, allRequests: Map<stri
         return
       }
       if (request === null || typeof request !== 'object' || Array.isArray(request)) return
-      const method = (request as Record<string, unknown>).method
+      const requestRecord = request as Record<string, unknown>
+      const method = requestRecord.method
       if (typeof method !== 'string') return
       metrics.requests.set(method, (metrics.requests.get(method) ?? 0) + 1)
       allRequests.set(method, (allRequests.get(method) ?? 0) + 1)
       metrics.lastRequestAt = Date.now()
+      observer?.onRequest({
+        at: performance.now(),
+        index: observer.index,
+        worktree: observer.worktree,
+        method,
+        params: requestRecord.params,
+      })
     })
   })
   page.on('pageerror', (error) => {
@@ -270,7 +288,9 @@ export async function openWindows(options: {
   out: string
   signal: AbortSignal
   browserArgs?: readonly string[]
+  onRequest?: (request: WindowRequestObservation) => void
 }): Promise<SoakWindows> {
+
   const { world, count, executable, out, signal } = options
   const worktrees = assignWorktrees(world.fixtures.worktrees, count)
   const sessions: OpenWindow[] = []
@@ -355,7 +375,11 @@ export async function openWindows(options: {
         pageErrors: 0,
         pageErrorExamples: []
       }
-      attachMetrics(page, metrics, requests, world.home)
+      attachMetrics(page, metrics, requests, world.home, options.onRequest === undefined ? undefined : {
+        index,
+        worktree: worktrees[index]!.id,
+        onRequest: options.onRequest,
+      })
       pages.push(page)
 
       throwIfAborted(signal)

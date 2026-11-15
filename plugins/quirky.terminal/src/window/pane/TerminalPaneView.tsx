@@ -31,6 +31,8 @@ import { ContextLossGuard, loseWebglContext, webglBudget } from './webgl'
 import { MobileDriverOverlay } from './MobileDriverOverlay'
 import { createPaneExtras } from './extras'
 import { createKittyGraphics } from './kittyGraphics'
+import { InlineError, NoticeLine } from '@quirky/ui'
+import { copyTextCommand, requestWindowCommand } from './commands'
 
 /** The most characters a search query may have. */
 export const MAX_SEARCH_QUERY = 1000
@@ -77,6 +79,7 @@ export type TerminalPaneHandle = {
 
 export type TerminalPaneProps = {
   context: UiPluginContext
+  paneId: string
   sessionId: string
   /** The owning worktree ID, or `floating` when this pane has no worktree owner. */
   workspaceId?: string
@@ -179,6 +182,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
   const [view, setView] = useState<View>({ cols: 80, rows: 24, fontSize: settings['font-size'], webgl: false })
   const [hint, setHint] = useState<string | null>(null)
   const [popover, setPopover] = useState<Popover | null>(null)
+  const [connection, setConnection] = useState<{ session: string; status: 'connecting' | 'ready' | 'error'; message?: string }>({ session: sessionId, status: 'connecting' })
   const zoom = useRef<number | null>(null)
   const sentSize = useRef<{ cols: number; rows: number } | null>(null)
   const draggingRef = useRef(dragging)
@@ -303,6 +307,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     const host = hostRef.current
     const screen = screenRef.current
     if (!host || !screen) return
+    setConnection({ session: sessionId, status: 'connecting' })
     const initial = latest.current.settings
     const linkClickSettings = {
       'link-click': initial['link-click'],
@@ -360,6 +365,11 @@ export function TerminalPaneView(props: TerminalPaneProps) {
     const extrasReady = extras.sync(initial)
 
     const copyText = (text: string) => void Promise.resolve(navigator.clipboard?.writeText(text)).catch(() => {})
+    const copyLinkText = (text: string) => {
+      void requestWindowCommand(context, copyTextCommand(text)).catch((error: unknown) => {
+        context.toast('Could not copy link', messageOf(error), { kind: 'error' })
+      })
+    }
     const openTarget = (target: string, reveal: boolean) => {
       void context
         .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })
@@ -429,13 +439,13 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       const items: PopoverItem[] =
         kind === 'url'
           ? [
-              { label: 'Open', run: (event) => openUrlTarget(target, event) },
-              { label: 'Copy Link', run: () => copyText(target) }
+              { label: 'Open', onSelect: (event) => { setPopover(null); openUrlTarget(target, event) } },
+              { label: 'Copy Link', onSelect: () => { setPopover(null); copyLinkText(target) } }
             ]
           : [
-              { label: 'Open with Default App', run: () => openTarget(target, false) },
-              { label: 'Reveal in Finder', run: () => openTarget(target, true) },
-              { label: 'Copy Path', run: () => copyText(target) }
+              { label: 'Open with Default App', onSelect: () => { setPopover(null); openTarget(target, false) } },
+              { label: 'Reveal in Finder', onSelect: () => { setPopover(null); openTarget(target, true) } },
+              { label: 'Copy Path', onSelect: () => { setPopover(null); copyLinkText(target) } }
             ]
       setPopover({ x: event.clientX, y: event.clientY, items })
     }
@@ -443,10 +453,10 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       if (term.hasSelection()) return
       // The window model can update before deferred plugin events or React props.
       for (const key of LINK_CLICK_SETTING_KEYS) {
-        linkClickSettings[key] = latest.current.settings[key]
+        Object.assign(linkClickSettings, { [key]: latest.current.settings[key] })
         try {
           const value = context.getSetting(key)
-          if (value === 'actions' || value === 'open' || value === 'terminal') linkClickSettings[key] = value
+          if (value === 'actions' || value === 'open' || value === 'terminal') Object.assign(linkClickSettings, { [key]: value })
         } catch {
           // A disabled setting retains the owning pane's effective default.
         }
@@ -472,7 +482,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
       setPopover({
         x: event.clientX,
         y: event.clientY,
-        items: [{ label: 'Open task terminal', run: () => void openTaskTerminal(context, taskId) }]
+        items: [{ label: 'Open task terminal', onSelect: () => { setPopover(null); void openTaskTerminal(context, taskId) } }]
       })
     }
     const activateUri = (event: MouseEvent, uri: string) => {
@@ -994,7 +1004,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
             }
             unsubscribe = subscribeStream(attached.streamId)
           } catch (attachError) {
-            if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${attachError instanceof Error ? attachError.message : String(attachError)}\x1b[0m\r\n`)
+            if (!disposed) setConnection({ session: sessionId, status: 'error', message: `Could not attach: ${messageOf(attachError)}` })
           }
           return
         }
@@ -1005,7 +1015,7 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         } else {
           streamId = null
           detach(targetStreamId)
-          term.write(`\r\n\x1b[31mCould not resync: ${error instanceof Error ? error.message : String(error)}\x1b[0m\r\n`)
+          setConnection({ session: sessionId, status: 'error', message: `Could not resync: ${messageOf(error)}` })
         }
         return
       }
@@ -1044,14 +1054,15 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         await extrasReady
         if (disposed) return
         writeReplay({ write: (bytes, done) => graphics.write(bytes, true, done) }, base64ToBytes(result.replay), gate)
+        setConnection({ session: sessionId, status: 'ready' })
         if (result.live === false) {
           readOnly = true
           return
         }
         unsubscribe = subscribeStream(result.streamId)
       })
-      .catch((error: Error) => {
-        if (!disposed) term.write(`\r\n\x1b[31mCould not attach: ${error.message}\x1b[0m\r\n`)
+      .catch((error: unknown) => {
+        if (!disposed) setConnection({ session: sessionId, status: 'error', message: `Could not attach: ${messageOf(error)}` })
       })
 
     let appliedColors = colors
@@ -1235,9 +1246,23 @@ export function TerminalPaneView(props: TerminalPaneProps) {
         className="terminal-pane-screen"
         style={{ left: settings['padding-x'], right: settings['padding-x'], top: settings['padding-y'], bottom: settings['padding-y'] }}
       />
+      {connection.session !== sessionId || connection.status !== 'ready' ? (
+        <div
+          data-terminal-connection-state
+          style={{ position: 'absolute', insetInline: 'var(--ui-space-8)', top: 'var(--ui-space-8)', zIndex: 10, pointerEvents: 'none', background: 'var(--ui-surface)', color: 'var(--ui-text)' }}
+        >
+          {connection.session === sessionId && connection.status === 'error' ? (
+            <InlineError message={connection.message!} />
+          ) : (
+            <div role="status"><NoticeLine>Connecting terminal…</NoticeLine></div>
+          )}
+        </div>
+      ) : null}
       <MobileDriverOverlay context={context} sessionId={sessionId} />
       {search ? (
         <SearchBox
+          context={context}
+          paneId={props.paneId}
           query={search.query}
           caseSensitive={search.caseSensitive}
           regex={search.regex}
@@ -1246,11 +1271,6 @@ export function TerminalPaneView(props: TerminalPaneProps) {
           onQueryChange={(query) => {
             if (query.length <= MAX_SEARCH_QUERY) applySearch({ ...search, query })
           }}
-          onCaseSensitiveChange={(caseSensitive) => applySearch({ ...search, caseSensitive })}
-          onRegexChange={(regex) => applySearch({ ...search, regex })}
-          onNext={() => void runFind('next', false)}
-          onPrevious={() => void runFind('previous', false)}
-          onClose={closeSearch}
         />
       ) : null}
       {hint ? (

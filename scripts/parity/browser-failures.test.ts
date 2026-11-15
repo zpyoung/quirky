@@ -8,6 +8,7 @@ import type { RuntimeInfo } from '@quirky/protocol/node'
 import { startBrowserFixture } from './browser-fixture'
 import type { BrowserRow } from './browser-table'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
+import { stageBuiltinPlugins } from '../soak/world'
 import { actionChecks } from './browser-checks-actions'
 import { stateChecks } from './browser-checks-state'
 import { networkChecks } from './browser-checks-network'
@@ -94,7 +95,7 @@ test('daemon status refuses a health reply received after its retry budget', asy
   expect(status).toBe(false)
 })
 
-test('builtin plugin fixture links every checkout plugin except Accounts', () => {
+test('builtin plugin fixture stages every checkout plugin except Accounts', () => {
   const repoRoot = resolve(import.meta.dir, '../..')
   const checkout = realpathSync(repoRoot)
   const pluginsRoot = join(checkout, 'plugins')
@@ -111,20 +112,91 @@ test('builtin plugin fixture links every checkout plugin except Accounts', () =>
         return { name: entry.name, id: manifest.id }
       })
     const included = expected.filter((plugin) => plugin.id !== 'quirky.accounts')
-    const fixture = createBuiltinPluginsDirectory(home, checkout)
+    const env: Record<string, string> = {}
+    const fixture = createBuiltinPluginsDirectory(home, checkout, env)
 
     expect(fixture.includedPlugins).toEqual(included.map(({ id }) => id).sort())
     expect(fixture.excludedPlugins).toEqual(['quirky.accounts'])
     expect(readdirSync(fixture.directory).sort()).toEqual(included.map(({ name }) => name).sort())
+    expect(env.QUIRKY_PLUGINS_DIR).toBe(fixture.directory)
+    expect(env.QUIRKY_BUILTIN_PLUGINS_DIR).toBe(fixture.directory)
     for (const plugin of included) {
-      const link = join(fixture.directory, plugin.name)
-      expect(lstatSync(link).isSymbolicLink()).toBe(true)
-      const target = realpathSync(link)
-      expect(target).toBe(realpathSync(join(pluginsRoot, plugin.name)))
-      expect(target.startsWith(`${checkout}${sep}`)).toBe(true)
+      const staged = join(fixture.directory, plugin.name)
+      expect(lstatSync(staged).isSymbolicLink()).toBe(false)
+      expect(lstatSync(staged).isDirectory()).toBe(true)
+      expect(realpathSync(staged).startsWith(`${realpathSync(home)}${sep}`)).toBe(true)
+      expect(readFileSync(join(staged, 'quirky-plugin.json'), 'utf8')).toBe(readFileSync(join(pluginsRoot, plugin.name, 'quirky-plugin.json'), 'utf8'))
     }
   } finally {
     rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('Browser preparation reuses staged outputs and excludes Accounts without touching checkout output', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quirky-browser-staging-'))
+  const checkout = join(root, 'checkout')
+  const home = join(root, 'home')
+  const names = ['quirky.accounts', 'quirky.palette', 'quirky.headless']
+  const snapshot = (directory: string) => {
+    const rows: unknown[] = []
+    const visit = (path: string) => {
+      const stat = lstatSync(path)
+      rows.push([path, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs,
+        stat.isFile() ? readFileSync(path).toString('base64') : 'directory'])
+      if (stat.isDirectory()) for (const child of readdirSync(path).sort()) visit(join(path, child))
+    }
+    visit(directory)
+    return rows
+  }
+  try {
+    mkdirSync(home, { recursive: true })
+    for (const name of names) {
+      const plugin = join(checkout, 'plugins', name)
+      mkdirSync(join(plugin, 'src'), { recursive: true })
+      writeFileSync(join(plugin, 'quirky-plugin.json'), JSON.stringify({ id: name, name, version: '1.0.0' }))
+      writeFileSync(join(plugin, 'src', 'main.ts'), 'export function activate() {}\n')
+      if (name !== 'quirky.headless') {
+        mkdirSync(join(plugin, 'dist'))
+        writeFileSync(join(plugin, 'dist', 'canary.txt'), `${name} source output\n`)
+      }
+    }
+    writeFileSync(join(checkout, 'plugins', 'quirky.palette', 'src', 'ui.tsx'), 'export function activate() { return "fixture" }\n')
+    const before = snapshot(join(checkout, 'plugins'))
+    const staged = stageBuiltinPlugins(checkout, home)
+    const preparationEnv = createIsolatedRuntimeEnvironment(home, { repoRoot: checkout })
+    preparationEnv.QUIRKY_PLUGINS_DIR = staged
+    preparationEnv.QUIRKY_BUILTIN_PLUGINS_DIR = staged
+    const browserEnv = createBrowserEnvironment(home, checkout)
+    const fixture = createBuiltinPluginsDirectory(home, checkout, browserEnv)
+    Object.assign(preparationEnv, browserEnv)
+
+    expect(fixture.directory).toBe(staged)
+    expect(fixture.includedPlugins).toEqual(['quirky.headless', 'quirky.palette'])
+    expect(fixture.excludedPlugins).toEqual(['quirky.accounts'])
+    expect(existsSync(join(staged, 'quirky.accounts'))).toBe(false)
+    expect(browserEnv.QUIRKY_PLUGINS_DIR).toBe(staged)
+    expect(browserEnv.QUIRKY_BUILTIN_PLUGINS_DIR).toBe(staged)
+    expect(preparationEnv.QUIRKY_PLUGINS_DIR).toBe(preparationEnv.QUIRKY_BUILTIN_PLUGINS_DIR)
+    expect(lstatSync(staged).isSymbolicLink()).toBe(false)
+    for (const name of fixture.includedPlugins) expect(lstatSync(join(staged, name)).isSymbolicLink()).toBe(false)
+
+    const output = join(preparationEnv.QUIRKY_PLUGINS_DIR, 'quirky.palette', 'dist')
+    const build = await Bun.build({
+      entrypoints: [join(staged, 'quirky.palette', 'src', 'ui.tsx')],
+      outdir: output,
+      target: 'browser',
+      naming: 'ui.js'
+    })
+    expect(build.success).toBe(true)
+    expect(lstatSync(output).isDirectory()).toBe(true)
+    expect(lstatSync(output).isSymbolicLink()).toBe(false)
+    const served = join(preparationEnv.QUIRKY_BUILTIN_PLUGINS_DIR, 'quirky.palette', 'dist', 'ui.js')
+    expect(realpathSync(served).startsWith(`${realpathSync(home)}${sep}`)).toBe(true)
+    expect(readFileSync(served, 'utf8')).toBe(await build.outputs[0]!.text())
+    expect(existsSync(join(checkout, 'plugins', 'quirky.headless', 'dist'))).toBe(false)
+    expect(snapshot(join(checkout, 'plugins'))).toEqual(before)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 })
 
