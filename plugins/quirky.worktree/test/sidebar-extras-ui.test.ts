@@ -698,6 +698,7 @@ function setup(
         view: { id, input }
       }
       current = next
+      for (const listener of layoutListeners) listener(next)
     },
     closeView() {},
     togglePanel() {},
