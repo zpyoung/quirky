@@ -247,9 +247,13 @@ async function mountExpanded(options: { state?: TasksState; handlers?: Record<st
     'quirky.tasks/issueChoices': (params) => params.kind === 'source' ? { source: 'origin', sources: [{ id: 'origin', label: 'Origin' }] } : params.kind === 'labels' ? { available: true, labels: ['bug'] } : { available: true, assignees: [{ login: 'alex', avatarUrl: null }] },
     'quirky.hosting/viewer': () => ({ login: 'zach' }),
     'ui.tool.open': () => ({}),
-    'quirky.reviews/open': () => ({ opened: true }),
     'ui.window.self': () => ({ connId: 7 }),
-    'ui.window.command.run': async (params) => ({ result: await (provided.get(params.id as string) as (args: unknown) => unknown)(params.args) }),
+    'ui.window.command.run': async (params) => {
+      const implementation = provided.get(String(params.id))
+      if (typeof implementation !== 'function') throw new Error('offline')
+      return { result: await (implementation as (args: unknown) => unknown)(params.args) }
+    },
+    'quirky.reviews/open': () => ({ opened: true }),
     ...options.handlers
   }
   const context = {
@@ -261,6 +265,7 @@ async function mountExpanded(options: { state?: TasksState; handlers?: Record<st
       return handler(params)
     },
     subscribe: (listener: (event: Event) => void) => { listeners.add(listener); return () => listeners.delete(listener) },
+    onConnection: () => () => undefined,
     toast: (title: string) => void toasts.push(title),
     confirm: async (request: { title: string }) => { confirms.push(request); return true },
     executeCommand: async (id: string, args: unknown) => { commands.push({ id, args }) },
