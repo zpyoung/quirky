@@ -981,6 +981,7 @@ export async function runWorkerChecks(context: CliCheckContext): Promise<void> {
   const coordinatorPane = assertCoordinatorTerminalEvidence({
     creation, layout: createdLayout, worktreeId, baselineTabIds: baselineTabs
   })
+  context.prove('workers-coordinator-tab-layout', { worktreeId, ...coordinatorPane, creationMatched: true })
   const coordinatorSessionId = coordinatorPane.sessionId
   context.state.workersCoordinatorTabId = coordinatorPane.tabId
   context.state.workersCoordinatorSessionId = coordinatorSessionId

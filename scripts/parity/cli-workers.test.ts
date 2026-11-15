@@ -698,6 +698,10 @@ for (const [label, schedule] of coordinatorSchedules) {
     expect(assertCoordinatorTerminalEvidence({ ...fixture, worktreeId: 'wt-owned', baselineTabIds: ['tab-base'] })).toEqual(coordinatorIdentity)
     expect(result.error).toBe(coordinatorPhase)
     expect(result.state.workersCoordinatorTabId).toBe(coordinatorIdentity.tabId)
+    expect(result.proofs).toEqual([{
+      id: 'workers-coordinator-tab-layout',
+      evidence: { worktreeId: 'wt-owned', ...coordinatorIdentity, creationMatched: true }
+    }])
     expect(result.state.workersCoordinatorSessionId).toBe(coordinatorIdentity.sessionId)
     expect(result.calls.at(-1)!.argv).toEqual(['session', 'get', 's-coordinator'])
   })
