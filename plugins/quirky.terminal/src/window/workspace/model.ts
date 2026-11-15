@@ -36,12 +36,12 @@ export function readWorkspaceSettings(context: Pick<UiPluginContext, 'getSetting
   for (const id of Object.keys(WORKSPACE_DEFAULTS)) {
     try {
       const value = context.getSetting(id)
-      if (value !== undefined && value !== null) settings[id] = value
+      if (value !== undefined && value !== null) Object.assign(settings, { [id]: value })
     } catch {
       // an unknown setting keeps its default
     }
   }
-  for (const [id, value] of Object.entries(overrides)) if (id in settings) settings[id] = value
+  for (const [id, value] of Object.entries(overrides)) if (id in settings) Object.assign(settings, { [id]: value })
   return settings as WorkspaceSettings
 }
 

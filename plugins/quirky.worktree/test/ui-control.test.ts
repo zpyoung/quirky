@@ -65,13 +65,17 @@ describe('Worktree UI control command', () => {
         properties: {
           action: {
             type: 'string',
-            enum: ['open-workspace-menu', 'close-workspace-menu', 'open-vm-menu', 'close-vm-menu', 'add-reference', 'unlink-reference']
+            enum: ['open-workspace-menu', 'close-workspace-menu', 'open-vm-menu', 'close-vm-menu', 'add-reference', 'unlink-reference', 'control']
           },
           workspace: { type: 'string' },
           vm: { type: 'string' },
           worktree: { type: 'string' },
           url: { type: 'string' },
-          label: { type: 'string' }
+          label: { type: 'string' },
+          scope: { type: 'string' },
+          target: { type: 'string' },
+          operation: { type: 'string' },
+          payload: { type: 'object', additionalProperties: true }
         },
         required: ['action'],
         additionalProperties: false

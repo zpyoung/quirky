@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import * as ts from 'typescript'
 import type { Candidate, CoverageFile, Evidence, PluginInventory, Ref, SourceFile } from './contracts'
-import { parseCoverage, resolveRef, resolveTarget, resolveVia, selectCandidate } from './audit-evidence'
+import { createEvidenceResolver, parseCoverage, resolveRef, resolveTarget, resolveVia, selectCandidate } from './audit-evidence'
+import type { ResolvedRef } from './audit-evidence'
 
 const file = 'plugins/acme.app/src/ui.tsx'
 const source = (path: string, content: string): SourceFile => ({ file: path, content })
@@ -119,6 +120,18 @@ describe('source quote resolution', () => {
       expect(original).toMatchObject({ start: 0, text: 'if (busy)' })
       expect(shifted.source.getLineAndCharacterOfPosition(shifted.start)).toEqual({ line: 1, character: 0 })
     }
+  })
+
+  test('keeps diagnostic locations fresh when the captured source is edited in place', () => {
+    const captured = source(file, 'if (busy) return <EmptyState />\n')
+    const inventory = plugin([captured])
+    const original = resolveRef(inventory, [file], ref('if (busy)'))
+    if (evidence(original)) throw new Error(original.message)
+    captured.content = '// heading\nif (busy) return <EmptyState />\nif (busy) return null\n'
+    expect(resolveRef(inventory, [file], ref('if (busy)'))).toMatchObject({
+      code: 'evidence-ambiguous',
+      source: { file, line: 2, column: 1 }
+    })
   })
 
   test('returns evidence-missing for changed and deleted witnesses', () => {
@@ -248,6 +261,19 @@ describe('one-hop route target resolution', () => {
     expect(resolveTarget(plugin([source(ui, literalContent)]), [ui], literal.source, literal.expression)).toBe('view:acme.app/main')
   })
 
+  test('rechecks imported route constants after an in-place snapshot edit', () => {
+    const ids = 'plugins/acme.app/src/ids.ts'
+    const content = "import { API } from './ids'; context.call(API)"
+    const imported = source(ids, "export const API = 'acme.app/save'")
+    const inventory = plugin([source(file, content), imported])
+    const parsed = routeArgument(content)
+    expect(resolveTarget(inventory, [file, ids], parsed.source, parsed.expression)).toBe('acme.app/save')
+    imported.content = "export const API = 'acme.app/remove'"
+    expect(resolveTarget(inventory, [file, ids], parsed.source, parsed.expression)).toBe('acme.app/remove')
+    imported.content = 'export const API = chooseRoute()'
+    expect(resolveTarget(inventory, [file, ids], parsed.source, parsed.expression)).toBeUndefined()
+  })
+
   test('does not follow a second constant hop or evaluate calls and interpolated const initializers', () => {
     const cases = [
       "const FIRST = 'acme.app/'; const API = FIRST; context.call(`${API}save`)",
@@ -306,3 +332,283 @@ describe('one-hop route target resolution', () => {
   })
 })
 
+describe('snapshot-scoped evidence resolution', () => {
+  test('reuses one parsed source without bypassing quote and path validation', () => {
+    const content = 'const a = 1\nconst b = 2\nconst duplicate = "same same"\n'
+    const missingSourceFile = 'plugins/acme.app/src/missing.tsx'
+    const inventory = plugin([source(file, content)])
+    const parser = spyOn(ts, 'createSourceFile')
+
+    try {
+      const resolver = createEvidenceResolver(inventory, [file, missingSourceFile])
+      const first = resolver.resolveRef(ref('const a = 1'))
+      const second = resolver.resolveRef(ref('const b = 2'))
+      const ambiguous = resolver.resolveRef(ref('same'))
+
+      expectResolved(first)
+      expectResolved(second)
+      expect(first.source).toBe(second.source)
+      expect(first.start).toBe(0)
+      expect(second.start).toBe(12)
+      expect(parser).toHaveBeenCalledTimes(1)
+      expect(parser).toHaveBeenCalledWith(file, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+      expect(ambiguous).toMatchObject({
+        code: 'evidence-ambiguous',
+        message: `Evidence quote occurs more than once in ${file}: "same"`,
+        basis: 'source-audit',
+        source: { file, line: 3, column: 20 }
+      })
+
+      expect(resolver.resolveRef(ref(''))).toMatchObject({
+        code: 'evidence-missing',
+        message: `Evidence quote is empty in ${file}`,
+        basis: 'source-audit'
+      })
+      for (const quote of ['not present', 'const a = 3']) {
+        expect(resolver.resolveRef(ref(quote))).toMatchObject({
+          code: 'evidence-missing',
+          message: `Evidence quote was not found in ${file}: ${JSON.stringify(quote)}`,
+          basis: 'source-audit'
+        })
+      }
+
+      const invalidPaths = [
+        `/repo/${file}`,
+        'C:/plugins/acme.app/src/ui.tsx',
+        'plugins/acme.app/../other.tsx',
+        'plugins/acme.app/src/./ui.tsx',
+        'plugins/acme.app/src//ui.tsx',
+        'plugins\\acme.app\\src\\ui.tsx',
+        'plugins/acme.app/src/other.tsx'
+      ]
+      for (const invalidPath of invalidPaths) {
+        expect(resolver.resolveRef(ref('const a = 1', invalidPath))).toMatchObject({
+          code: 'evidence-path-invalid',
+          message: `Evidence file is not a canonical UI path in the plugin graph: ${invalidPath}`,
+          basis: 'source-audit'
+        })
+      }
+      expect(resolver.resolveRef(ref('anything', missingSourceFile))).toMatchObject({
+        code: 'evidence-path-invalid',
+        message: `Evidence file has no captured source: ${missingSourceFile}`,
+        basis: 'source-audit'
+      })
+      expect(parser).toHaveBeenCalledTimes(1)
+    } finally {
+      parser.mockRestore()
+    }
+  })
+
+  test('uses the first captured source and parses lazily', () => {
+    const firstContent = 'const first = 1\n'
+    const secondContent = 'const second = 2\n'
+    const inventory = plugin([source(file, firstContent), source(file, secondContent)])
+    const parser = spyOn(ts, 'createSourceFile')
+
+    try {
+      const resolver = createEvidenceResolver(inventory, [file])
+      expect(parser).not.toHaveBeenCalled()
+
+      const first = resolver.resolveRef(ref('const first = 1'))
+      expectResolved(first)
+      expect(first.source.text).toBe(firstContent)
+      expect(resolver.resolveRef(ref('const second = 2'))).toMatchObject({
+        code: 'evidence-missing',
+        basis: 'source-audit'
+      })
+      expect(parser).toHaveBeenCalledTimes(1)
+      expect(parser).toHaveBeenCalledWith(file, firstContent, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    } finally {
+      parser.mockRestore()
+    }
+  })
+
+  test('preserves the JSX parser kind for JSX evidence', () => {
+    const jsxFile = 'plugins/acme.app/src/widget.jsx'
+    const content = '<button />'
+    const parser = spyOn(ts, 'createSourceFile')
+
+    try {
+      const resolver = createEvidenceResolver(plugin([source(jsxFile, content)]), [jsxFile])
+      const result = resolver.resolveRef(ref('<button />', jsxFile))
+      expectResolved(result)
+      expect(parser).toHaveBeenCalledTimes(1)
+      expect(parser).toHaveBeenCalledWith(jsxFile, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.JSX)
+    } finally {
+      parser.mockRestore()
+    }
+  })
+
+  test('keeps overlapping quote occurrences ambiguous', () => {
+    const overlapFile = 'plugins/acme.app/src/overlap.ts'
+    const result = resolveRef(plugin([source(overlapFile, 'aaa')]), [overlapFile], ref('aa', overlapFile))
+
+    expect(result).toMatchObject({
+      code: 'evidence-ambiguous',
+      message: `Evidence quote occurs more than once in ${overlapFile}: "aa"`,
+      basis: 'source-audit',
+      source: { file: overlapFile, line: 1, column: 1 }
+    })
+  })
+
+  test('shares imported-target parsing with evidence quotes in the imported file', () => {
+    const ui = 'plugins/acme.app/src/ui.tsx'
+    const ids = 'plugins/acme.app/src/ids.ts'
+    const uiContent = "import { API as prefix } from './ids';\ncontext.call(`${prefix}`)\ncontext.call(prefix)"
+    const idsContent = "export const API = 'acme.app/save'\n"
+    const identifier = expression(uiContent, 'prefix', ui)
+    const template = expression(uiContent, '`${prefix}`', ui)
+    const parser = spyOn(ts, 'createSourceFile')
+
+    try {
+      const resolver = createEvidenceResolver(plugin([source(ui, uiContent), source(ids, idsContent)]), [ui, ids])
+      const results = Array.from({ length: 4 }, () => resolver.resolveTarget(identifier.source, identifier.expression))
+      expect(results).toEqual(['acme.app/save', 'acme.app/save', 'acme.app/save', 'acme.app/save'])
+      expect(resolver.resolveTarget(template.source, template.expression)).toBe('acme.app/save')
+
+      const importedEvidence = resolver.resolveRef(ref("export const API = 'acme.app/save'", ids))
+      expectResolved(importedEvidence)
+      expect(importedEvidence.start).toBe(0)
+      expect(parser).toHaveBeenCalledTimes(1)
+      expect(parser).toHaveBeenCalledWith(ids, idsContent, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+      expect(parser.mock.calls.map(([path]) => path)).toEqual([ids])
+      expect(parser.mock.results[0]?.value).toBe(importedEvidence.source)
+      expect(importedEvidence.source.languageVersion).toBe(ts.ScriptTarget.Latest)
+      expect(importedEvidence.source.statements[0]?.parent).toBe(importedEvidence.source)
+    } finally {
+      parser.mockRestore()
+    }
+  })
+
+  test('keeps unsupported imported target forms unresolved', () => {
+    const ui = 'plugins/acme.app/src/ui.tsx'
+    const ids = 'plugins/acme.app/src/ids.ts'
+    const outside = 'plugins/other/ids.ts'
+    const cases: { content: string; files: string[]; extraSources?: SourceFile[] }[] = [
+      {
+        content: "import { API } from './ids'; function use(API: string) { context.call(API) }",
+        files: [ui, ids],
+        extraSources: [source(ids, "export const API = 'acme.app/save'")]
+      },
+      {
+        content: "import { API } from './ids'; context.call(API)",
+        files: [ui, ids],
+        extraSources: [source(ids, "const PREFIX = 'acme.app/'; export const API = PREFIX")]
+      },
+      {
+        content: "import { API } from './ids'; context.call(API)",
+        files: [ui, ids],
+        extraSources: [source(ids, 'export const API = makeApi()')]
+      },
+      {
+        content: "import { type API } from './ids'; context.call(API)",
+        files: [ui, ids],
+        extraSources: [source(ids, "export const API = 'acme.app/save'")]
+      },
+      {
+        content: "import { API } from './missing'; context.call(API)",
+        files: [ui]
+      },
+      {
+        content: "import { API } from '../../other/ids.ts'; context.call(API)",
+        files: [ui, outside],
+        extraSources: [source(outside, "export const API = 'acme.app/save'")]
+      }
+    ]
+
+    for (const scenario of cases) {
+      const parsed = routeArgument(scenario.content, ui)
+      const resolver = createEvidenceResolver(
+        plugin([source(ui, scenario.content), ...(scenario.extraSources ?? [])]),
+        scenario.files
+      )
+      expect(resolver.resolveTarget(parsed.source, parsed.expression)).toBeUndefined()
+    }
+  })
+
+  test('keeps text and graph membership snapshots isolated between sessions', () => {
+    const originalContent = 'const a = 1\nconst b = 2\nconst duplicate = "same same"\n'
+    const changedContent = '\nconst a = 3\nconst b = 2\nconst duplicate = "same same"\n'
+    const addedFile = 'plugins/acme.app/src/added.tsx'
+    const captured = source(file, originalContent)
+    const inventory = plugin([captured, source(addedFile, 'added source')])
+    const files = [file]
+    const parser = spyOn(ts, 'createSourceFile')
+
+    try {
+      const firstSession = createEvidenceResolver(inventory, files)
+      const firstA = firstSession.resolveRef(ref('const a = 1'))
+      const firstB = firstSession.resolveRef(ref('const b = 2'))
+      expectResolved(firstA)
+      expectResolved(firstB)
+      expect(firstA.source).toBe(firstB.source)
+      expect(firstA.start).toBe(0)
+      expect(firstB.start).toBe(12)
+
+      captured.content = changedContent
+      files.push(addedFile)
+
+      const firstStillOriginal = firstSession.resolveRef(ref('const a = 1'))
+      const firstRejectsChangedText = firstSession.resolveRef(ref('const a = 3'))
+      const firstRejectsAddedPath = firstSession.resolveRef(ref('', addedFile))
+      expectResolved(firstStillOriginal)
+      expect(firstStillOriginal.source).toBe(firstA.source)
+      expect(firstStillOriginal.start).toBe(0)
+      expect(firstRejectsChangedText).toMatchObject({ code: 'evidence-missing', basis: 'source-audit' })
+      expect(firstRejectsAddedPath).toMatchObject({ code: 'evidence-path-invalid', basis: 'source-audit' })
+
+      const secondSession = createEvidenceResolver(inventory, files)
+      const secondA = secondSession.resolveRef(ref('const a = 3'))
+      const secondB = secondSession.resolveRef(ref('const b = 2'))
+      const secondRejectsOldText = secondSession.resolveRef(ref('const a = 1'))
+      const secondSeesAddedPath = secondSession.resolveRef(ref('', addedFile))
+      expectResolved(secondA)
+      expectResolved(secondB)
+      expect(secondA.source).toBe(secondB.source)
+      expect(secondA.source).not.toBe(firstA.source)
+      expect(secondA.start).toBe(1)
+      expect(secondB.start).toBe(13)
+      expect(secondRejectsOldText).toMatchObject({ code: 'evidence-missing', basis: 'source-audit' })
+      expect(secondSeesAddedPath).toMatchObject({ code: 'evidence-missing', basis: 'source-audit' })
+
+      expect(parser).toHaveBeenCalledTimes(2)
+      expect(parser.mock.calls.map(([path]) => path)).toEqual([file, file])
+      expect(parser).toHaveBeenCalledWith(file, originalContent, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+      expect(parser).toHaveBeenCalledWith(file, changedContent, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    } finally {
+      parser.mockRestore()
+    }
+  })
+
+  test('standalone wrappers observe current source inputs on every call', () => {
+    const captured = source(file, 'const a = 1\n')
+    const inventory = plugin([captured])
+    const first = resolveRef(inventory, [file], ref('const a = 1'))
+    expectResolved(first)
+
+    captured.content = 'const a = 2\n'
+    expect(resolveRef(inventory, [file], ref('const a = 1'))).toMatchObject({
+      code: 'evidence-missing',
+      basis: 'source-audit'
+    })
+    const changed = resolveRef(inventory, [file], ref('const a = 2'))
+    expectResolved(changed)
+    expect(changed.source).not.toBe(first.source)
+
+    const ui = 'plugins/acme.app/src/routes.tsx'
+    const ids = 'plugins/acme.app/src/ids.ts'
+    const uiContent = "import { API } from './ids';\ncontext.call(API)"
+    const parsed = routeArgument(uiContent, ui)
+    const imported = source(ids, "export const API = 'acme.app/old'")
+    const routeInventory = plugin([source(ui, uiContent), imported])
+    const files = [ui, ids]
+    expect(resolveTarget(routeInventory, files, parsed.source, parsed.expression)).toBe('acme.app/old')
+
+    imported.content = "export const API = 'acme.app/new'"
+    expect(resolveTarget(routeInventory, files, parsed.source, parsed.expression)).toBe('acme.app/new')
+  })
+})
+
+function expectResolved(value: ResolvedRef | Evidence): asserts value is ResolvedRef {
+  if (evidence(value)) throw new Error(`Expected a resolved reference, received ${value.code}`)
+}
