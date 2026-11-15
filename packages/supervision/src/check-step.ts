@@ -50,7 +50,7 @@ export function createCheckStep(context: SupervisionContext, isDisposed: () => b
       throw new SupervisionError('duplicate-check', `check ${input.checkId} is already active`)
     }
 
-    const operation: CheckOperation = { checkId: input.checkId, cancelRequested: false, signal }
+    const operation: CheckOperation = { checkId: input.checkId, signal }
     active.set(input.checkId, operation)
     if (signal) {
       operation.onAbort = () => { void requestCancellation(operation) }

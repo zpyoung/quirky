@@ -48,6 +48,7 @@ const productionClock: SupervisionClock = {
   }
 }
 
+/** Shares agent lifecycles without owning supervisor policy or persistence. */
 export function createSupervision(
   context: SupervisionContext,
   options?: { clock?: SupervisionClock }

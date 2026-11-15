@@ -102,7 +102,7 @@ test('terminal waits request bounded slices and return pending at the total time
 
 test('zero-timeout terminal waits inspect exactly once with a zero RPC timeout', async () => {
   const calls: Record<string, unknown>[] = []
-  const reply = { status: 'pending', state: 'unknown', at: 9 }
+  const reply: TerminalWaitResult = { status: 'pending', state: 'unknown', at: 9 }
   const engine = engineFor(async (_method, params) => { calls.push(params ?? {}); return reply })
 
   expect(await engine.waitTerminal({ session: 's1', until: [], timeoutMs: 0 })).toEqual(reply)
