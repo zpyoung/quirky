@@ -4,7 +4,7 @@ import { groupOf } from '../../packages/cli/src/generated'
 import { cliGroupWord, effectiveCliWords } from '../../packages/daemon/src/plugins/kinds'
 import type { ActionEntry, Candidate, CheckResult, CoverageFile, Evidence, Inventory, PluginInventory, Ref, Render, StateKind } from './contracts'
 import { discoverCandidates, discoverUiFiles } from './audit-discovery'
-import { parseCoverage, resolveRef, resolveTarget, resolveVia, selectCandidate, type ResolvedRef } from './audit-evidence'
+import { createEvidenceResolver, parseCoverage, resolveVia, selectCandidate, type ResolvedRef } from './audit-evidence'
 
 const IDS = ['loading', 'empty', 'error', 'commands'] as const
 const STATE_IDS: readonly StateKind[] = ['loading', 'empty', 'error']
@@ -327,6 +327,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
   })
   try {
     const graph = discoverUiFiles(plugin)
+    const resolver = createEvidenceResolver(plugin, graph.files)
     for (const failure of graph.failures) add(IDS, { ...failure, basis: 'source-audit' })
     const candidates = discoverCandidates(plugin, graph.files)
     const sources = new Map(graph.files.map((file) => {
@@ -347,7 +348,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       owners.set(candidate, previous)
     }
     const resolve = (reference: Ref, ids: readonly AuditId[]) => {
-      const resolved = resolveRef(plugin, graph.files, reference)
+      const resolved = resolver.resolveRef(reference)
       if ('code' in resolved) { add(ids, resolved); return undefined }
       return resolved
     }
@@ -385,7 +386,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       const accepted = entry.state === 'loading' ? ['EmptyState', 'NoticeLine'] : entry.state === 'empty' ? ['EmptyState'] : ['InlineError', 'FormRow', 'toast']
       if (!accepted.includes(value.component)) add(ids, issue('render-not-accepted', `${value.component} is not accepted for ${entry.state}`))
       const renderRef = value.component === 'toast' ? value.call : value.element
-      const resolvedRender = resolveRef(plugin, graph.files, renderRef)
+      const resolvedRender = resolver.resolveRef(renderRef)
       if ('code' in resolvedRender) add(ids, resolvedRender)
       const reference = 'code' in resolvedRender ? undefined : resolvedRender
       const importRef = value.component === 'toast' ? undefined : resolve(value.import, ids)
@@ -455,10 +456,10 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
         let target: string | undefined
         if (ts.isCallExpression(expression)) {
           operation = lastName(expression.expression)
-          target = operation === 'closeView' ? 'ui.view.close' : expression.arguments[0] && resolveTarget(plugin, graph.files, invoke.source, expression.arguments[0])
+          target = operation === 'closeView' ? 'ui.view.close' : expression.arguments[0] && resolver.resolveTarget(invoke.source, expression.arguments[0])
         } else if (ts.isPropertyAssignment(expression)) {
           operation = 'command'
-          target = resolveTarget(plugin, graph.files, invoke.source, expression.initializer)
+          target = resolver.resolveTarget(invoke.source, expression.initializer)
         }
         if (!['call', 'executeCommand', 'openView', 'closeView', 'togglePanel', 'command'].includes(operation ?? '')) { add(ids, issue('route-no-cli', 'This operation has no public CLI route', invoke)); return }
         if (target === undefined) { add(ids, issue('route-target-unresolved', 'The route target is not a literal or one-hop constant', invoke)); return }

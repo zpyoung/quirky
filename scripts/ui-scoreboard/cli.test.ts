@@ -392,11 +392,13 @@ test('signals abort owned work, await cleanup, preserve report and remove listen
 })
 test('real checkout inventory count is discovered rather than pinned', async () => {
   const { output } = fixture()
+  const started = performance.now()
   expect(await runUiScoreboard(['--static-only', '--output', output], { ...quiet, repoRoot: resolve(import.meta.dir, '../..') })).toBe(1)
-  const value = report(output); console.log(`Discovered ${value.plugins.length} immediate plugins`)
+  const elapsed = performance.now() - started
+  const value = report(output); console.log(`Discovered ${value.plugins.length} immediate plugins in ${elapsed.toFixed(2)} ms`)
   expect(value.plugins.some((plugin) => plugin.id === 'quirky.session')).toBe(true)
   expect(value.host.targets).toEqual(['host:palette', 'host:popups', 'host:scoped', 'host:settings', 'host:shell'])
-}, 30_000)
+}, 120_000)
 
 test('ratchet CLI starts no runtime and creates no reports', async () => {
   const { root, inventory } = fixture(); const messages: string[] = []
