@@ -6,6 +6,8 @@ import { initialAgent, isUsable, useAgents, type Agents } from './agents'
 import { DEFAULT_TEMPLATE, type FixAction, type LaunchParams, type Recipe } from './types'
 import type { RecipeLaunchOptions } from '../daemon/recipe-options'
 import { LaunchOptionsEditor } from './LaunchOptionsEditor'
+import type { GitUiControl } from '../ui-control'
+import { aiControlGeneration, requestAiControl, useAiControl } from './ai-control'
 
 const TITLES: Readonly<Record<FixAction, string>> = {
   fixCommitFailure: 'Fix Commit Failure With AI',
@@ -75,7 +77,7 @@ function hasLaunchChoices(value: RecipeLaunchOptions | null): boolean {
 
 type FormProps = Props & { preview: Preview; agents: Agents }
 
-function LaunchForm({ context, action, preview, agents, onClose, start }: FormProps) {
+function LaunchForm({ context, worktree, action, preview, agents, onClose, start }: FormProps) {
   const { recipe } = preview
   const usable = agents.list === null ? [] : agents.list.agents.filter(isUsable)
   const fallback = agents.list === null ? '' : initialAgent(agents.list, usable)
@@ -87,11 +89,19 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
   )
   const launchOptions = launchChoices.has(agent) ? launchChoices.get(agent)! : agent === initial ? recipe.launchOptions ?? {} : null
   const [text, setText] = useState(preview.prompt)
+  const textRef = useRef(text)
+  textRef.current = text
   const [args, setArgs] = useState(recipe.args)
   const [saveRecipe, setSaveRecipe] = useState(true)
   const [scope, setScope] = useState<'repo' | 'global'>('repo')
   const [starting, setStarting] = useState(false)
   const [failure, setFailure] = useState<string | null>(null)
+  const startReserved = useRef(false)
+  const active = useRef(true)
+  const pendingControls = useRef(new Set<string>())
+  const sessionGeneration = useRef<string | null>(null)
+  if (sessionGeneration.current === null) sessionGeneration.current = aiControlGeneration()
+  const target = `ai-launch:${worktree}:${action}`
   const agentId = useId()
   const templateId = useId()
   const saveRecipeId = useId()
@@ -108,20 +118,88 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
   const saving = changed && saveRecipe
   const known = usable.some((entry) => entry.id === agent)
 
-  const go = async () => {
+  useEffect(() => {
+    active.current = true
+    startReserved.current = false
+    return () => {
+      active.current = false
+      startReserved.current = true
+      pendingControls.current.clear()
+    }
+  }, [])
+
+  function hasNoData(data: Record<string, unknown> | undefined): boolean {
+    return data === undefined || Object.keys(data).length === 0
+  }
+
+  function sendAiControl(control: { target: string; generation: string; action: string }): void {
+    const key = JSON.stringify([control.target, control.generation, control.action])
+    if (pendingControls.current.has(key)) return
+    pendingControls.current.add(key)
+    void requestAiControl(context, control).finally(() => pendingControls.current.delete(key))
+  }
+
+  function requestLaunchAction(controlAction: string): void {
+    const generation = sessionGeneration.current
+    if (!active.current || generation === null) return
+    sendAiControl({ target, generation, action: controlAction })
+  }
+
+  async function go(): Promise<void> {
     setStarting(true)
     setFailure(null)
-    const includeChoices = saving || optionsChanged || agent !== initial
+    const launchTemplate = templateOf(textRef.current, preview.prompt, recipe.template)
+    const saveLaunch = saveRecipe && (agent !== initial || args !== recipe.args || launchTemplate !== recipe.template || optionsChanged)
+    const includeChoices = saveLaunch || optionsChanged || agent !== initial
     const refusal = await start({
       agent,
       args,
-      template,
+      template: launchTemplate,
       ...(includeChoices ? { launchOptions } : {}),
-      ...(saving ? { save: scope } : {})
+      ...(saveLaunch ? { save: scope } : {})
     })
     setStarting(false)
     if (refusal === null) onClose()
-    else setFailure(refusal)
+    else {
+      startReserved.current = false
+      setFailure(refusal)
+    }
+  }
+
+  function handleLaunchControl(control: GitUiControl): boolean {
+    const generation = sessionGeneration.current
+    if (!active.current || generation === null || control.target !== target || control.generation !== generation ||
+        !hasNoData(control.data)) return false
+    if (control.action === 'start') {
+      if (agent === '' || usable.length === 0 || starting || startReserved.current) return false
+      startReserved.current = true
+      void go()
+      return true
+    }
+    if (control.action === 'reset-template') {
+      if (textRef.current === DEFAULT_TEMPLATE) return false
+      textRef.current = DEFAULT_TEMPLATE
+      setText(DEFAULT_TEMPLATE)
+      return true
+    }
+    return false
+  }
+
+  const actions = [
+    ...(agent !== '' && usable.length > 0 && !starting && !startReserved.current ? ['start'] : []),
+    ...(textRef.current !== DEFAULT_TEMPLATE ? ['reset-template'] : [])
+  ]
+  const controlAddress = actions.length === 0
+    ? null
+    : { target, generation: sessionGeneration.current!, actions }
+  useAiControl(context, controlAddress, handleLaunchControl)
+
+  function requestStart(): void {
+    requestLaunchAction('start')
+  }
+
+  function requestReset(): void {
+    requestLaunchAction('reset-template')
   }
 
   return (
@@ -157,7 +235,7 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
             />
           </FormRow>
           <div className="ui-cluster">
-            <Button type="button" disabled={text === DEFAULT_TEMPLATE} onClick={() => setText(DEFAULT_TEMPLATE)}>
+            <Button type="button" disabled={text === DEFAULT_TEMPLATE} onClick={requestReset}>
               Reset
             </Button>
           </div>
@@ -198,7 +276,7 @@ function LaunchForm({ context, action, preview, agents, onClose, start }: FormPr
       {failure !== null && <InlineError message={failure} />}
       <div className="ui-cluster">
         <Button type="button" onClick={onClose}>Cancel</Button>
-        <Button type="button" variant="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={() => void go()}>
+        <Button type="button" variant="primary" disabled={agent === '' || usable.length === 0 || starting} onClick={requestStart}>
           {saving ? 'Save & start agent' : 'Start agent'}
         </Button>
       </div>
