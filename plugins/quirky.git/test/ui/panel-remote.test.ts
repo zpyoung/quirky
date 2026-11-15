@@ -47,23 +47,47 @@ async function menu(element: HTMLElement, label: string) {
 }
 
 describe('the ship button runs its step, then refreshes status and compare', () => {
-  const cases: Array<[string, Parameters<typeof statusOf>[1], string]> = [
-    ['Push 2 commits', { upstreamStatus: up(2, 0) }, 'quirky.git/push'],
-    ['Pull 1 commit', { upstreamStatus: up(0, 1) }, 'quirky.git/pull'],
-    ['Sync', { upstreamStatus: up(2, 1) }, 'quirky.git/sync'],
-    ['Publish branch', { upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'quirky.git/push']
+  const cases: Array<[string, Parameters<typeof statusOf>[1], string, string]> = [
+    ['Push 2 commits', { upstreamStatus: up(2, 0) }, 'quirky.git/push', 'push'],
+    ['Pull 1 commit', { upstreamStatus: up(0, 1) }, 'quirky.git/pull', 'pull'],
+    ['Sync', { upstreamStatus: up(2, 1) }, 'quirky.git/sync', 'sync'],
+    ['Publish branch', { upstreamStatus: { hasUpstream: false, name: null, sha: null, ahead: 0, behind: 0, behindPatchEquivalent: null } }, 'quirky.git/push', 'publish']
   ]
-  for (const [label, overrides, method] of cases) {
+  for (const [label, overrides, method, kind] of cases) {
     test(`${label} calls ${method}`, async () => {
       const { fake, element, unmount } = await open((f) => {
         f.status = statusOf([], overrides)
         f.compare = compareOf({ entries: [{ path: 'a.ts', status: 'modified', added: 1, removed: 0, binary: false }], added: 1, ahead: 1 })
       })
       expect(primary(element).textContent).toBe(label)
+      const shipControl = fake.reports.at(-1)?.uiControls?.find((control: {
+        surface: string; target: string; generation: string; actions: string[]
+      }) => control.surface === 'panel:quirky.git/source-control' &&
+        control.target === 'worktree:feat' && control.actions.includes('ship-step'))
+      expect(shipControl).toBeDefined()
       const before = fake.calls.length
       await click(primary(element))
-      expect(fake.calls.slice(before).map((c) => c.method)).toEqual([method, 'quirky.git/status', 'quirky.git/compare'])
-      expect(fake.calls[before]!.params).toEqual({ worktree: 'feat' })
+      const calls = fake.calls.slice(before)
+      expect(calls.filter(({ method: called }) => called === 'ui.window.self' || called === 'ui.window.command.run')).toEqual([
+        { method: 'ui.window.self', params: {} },
+        { method: 'ui.window.command.run', params: {
+          connId: fake.connId,
+          id: 'command:quirky.git/ui-control',
+          args: {
+            surface: shipControl!.surface,
+            target: shipControl!.target,
+            generation: shipControl!.generation,
+            action: 'ship-step',
+            data: { kind }
+          }
+        } }
+      ])
+      expect(calls.filter(({ method: called }) => called !== 'ui.window.self' && called !== 'ui.window.command.run')).toEqual([
+        { method, params: { worktree: 'feat' } },
+        { method: 'quirky.git/status', params: { worktree: 'feat' } },
+        { method: 'quirky.git/compare', params: { worktree: 'feat' } },
+        { method: 'quirky.git/review', params: { worktree: 'feat' } }
+      ])
       unmount()
     })
   }
@@ -222,12 +246,19 @@ describe('force push', () => {
     const { fake, element, unmount } = await open((f) => {
       lease(f)
       f.status = statusOf([entry('math.ts', 'staged')], { upstreamStatus: up(2, 2, true) })
+      const committedHead = 'd'.repeat(40)
+      f.on('quirky.git/commit', () => {
+        f.status = statusOf([], { head: committedHead, upstreamStatus: up(3, 2, true) })
+        return { sha: committedHead }
+      })
     })
     const box = byLabel(element, 'Commit message') as HTMLTextAreaElement
     await s.type(box, 'msg')
     await menu(element, 'Commit & push')
     await click(buttonText(dialog()!, 'Force Push'))
     expect(fake.calls.map((c) => c.method).filter((m) => m === 'quirky.git/commit' || m === 'quirky.git/forcePush')).toEqual(['quirky.git/commit', 'quirky.git/forcePush'])
+    expect(fake.called('quirky.git/commit').at(-1)?.params).toEqual({ worktree: 'feat', message: 'msg' })
+    expect(fake.called('quirky.git/forcePush').at(-1)?.params).toEqual({ worktree: 'feat', yes: true, expected: 'b'.repeat(40) })
     unmount()
   })
 })
