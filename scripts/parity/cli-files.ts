@@ -13,6 +13,16 @@ import type { BrowserContext } from 'playwright'
 
 type JsonObject = Record<string, unknown>
 type MaybePromise<T> = T | Promise<T>
+async function settleReads<T extends readonly unknown[] | []>(
+  reads: T
+): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
+  try {
+    return await Promise.all(reads)
+  } catch (error) {
+    await Promise.allSettled(reads)
+    throw error
+  }
+}
 
 export type CliFilesArguments = { json: boolean; help: boolean }
 export type CliFileSnapshot = {
@@ -3093,8 +3103,10 @@ export class CliFilesRunner {
     const layout = record(state.layout, `${phase} window layout`)
     const worktree = string(layout.worktree, `${phase} window worktree`)
     if (state.connId !== entry.connId) throw new CliFilesFailure('connection-mismatch', `${phase} returned the wrong window connection`)
-    const workspace = await this.api(`${stateId}-workspace`, 'quirky.terminal/workspace', { workspace: worktree })
-    const editor = await this.editor(`${stateId}-editor`, ['state', '--worktree', worktree])
+    const [workspace, editor] = await settleReads([
+      this.api(`${stateId}-workspace`, 'quirky.terminal/workspace', { workspace: worktree }),
+      this.editor(`${stateId}-editor`, ['state', '--worktree', worktree])
+    ] as const)
     return {
       connId: entry.connId,
       receiptIds: { window: initialLayout?.receiptId ?? `${stateId}-state`, workspace: `${stateId}-workspace`, editor: `${stateId}-editor` },
@@ -3103,31 +3115,40 @@ export class CliFilesRunner {
       editor: record(editor, `${phase} public editor state`)
     }
   }
+  private async captureDomWindow(index: number): Promise<CliFileDomWindow> {
+    const entry = this.windows[index]!
+    const captured = await this.readRenderer(() => entry.page.evaluate(capturePageDom))
+    captured.connId = entry.connId
+    return captured
+  }
 
   async captureSample(phase: string): Promise<CapturedSample> {
-    const publicWindows: CliFilePublicWindow[] = []
-    const domWindows: CliFileDomWindow[] = []
-    for (let index = 0; index < 2; index += 1) {
-      publicWindows.push(await this.readPublicWindow(index, phase))
-      const captured = await this.readRenderer(() => this.windows[index]!.page.evaluate(capturePageDom))
-      captured.connId = this.windows[index]!.connId
-      domWindows.push(captured)
+    const captureWindow = async (index: number) => {
+      const publicWindow = await this.readPublicWindow(index, phase)
+      const domWindow = await this.captureDomWindow(index)
+      return { public: publicWindow, dom: domWindow }
     }
-    const snapshots = publicWindows.map((window, index) => snapshotFrom(window, domWindows[index]!))
-    return { public: publicWindows, dom: domWindows, snapshots }
+    const [first, other] = await settleReads([captureWindow(0), captureWindow(1)] as const)
+    return {
+      public: [first.public, other.public],
+      dom: [first.dom, other.dom],
+      snapshots: [snapshotFrom(first.public, first.dom), snapshotFrom(other.public, other.dom)]
+    }
   }
   async captureSampleAfterFirstWindowRead(phase: string, firstWindow: CliFilePublicWindow, otherWindow: CliFilePublicWindow): Promise<CapturedSample> {
     if (firstWindow.connId !== this.windows[0]!.connId) {
       throw new CliFilesFailure('connection-mismatch', `${phase} first layout read is not from page A`)
     }
     const publicWindows = [firstWindow, otherWindow]
-    const domWindows: CliFileDomWindow[] = []
-    for (let index = 0; index < 2; index += 1) {
-      const captured = await this.readRenderer(() => this.windows[index]!.page.evaluate(capturePageDom))
-      captured.connId = this.windows[index]!.connId
-      domWindows.push(captured)
-    }
-    const snapshots = publicWindows.map((window, index) => snapshotFrom(window, domWindows[index]!))
+    const [firstDom, otherDom] = await settleReads([
+      this.captureDomWindow(0),
+      this.captureDomWindow(1)
+    ] as const)
+    const domWindows = [firstDom, otherDom]
+    const snapshots = [
+      snapshotFrom(firstWindow, firstDom),
+      snapshotFrom(otherWindow, otherDom)
+    ]
     return { public: publicWindows, dom: domWindows, snapshots }
   }
 
@@ -3577,13 +3598,11 @@ export class CliFilesRunner {
   }
 
   async captureHistories(id: string, sample: CapturedSample): Promise<CliFilesHistories> {
-    const reads: CliFileHistoryRead[] = []
-    for (const [index, window] of sample.public.entries()) {
-      reads.push(await this.captureNavigationHistory(
-        `${id}-${index}`, window.connId, shownWorktree(window)
-      ))
-    }
-    return { target: reads[0]!, other: reads[1]! }
+    const reads = sample.public.map((window, index) =>
+      this.captureNavigationHistory(`${id}-${index}`, window.connId, shownWorktree(window))
+    )
+    const histories = await settleReads(reads)
+    return { target: histories[0]!, other: histories[1]! }
   }
 
   async transition(
@@ -3603,18 +3622,18 @@ export class CliFilesRunner {
       }
     }
     const result = await mutate()
-    const layouts: Array<{ receiptId: string; state: JsonObject }> = []
-    const histories: CliFileHistoryRead[] = []
-    for (const [index, window] of this.windows.entries()) {
+    const layoutReads = await settleReads(this.windows.map(async (window, index) => {
       const receiptId = `${id}-immediate-window-${index}`
       const state = record(await this.api(receiptId, 'ui.window.state', { connId: window.connId }), `${id} immediate layout`)
-      layouts.push({ receiptId, state })
-      histories.push(await this.captureNavigationHistory(`${id}-history-after-${index}`, window.connId,
-        string(record(state.layout, `${id} immediate layout`).worktree, `${id} immediate worktree`)))
-    }
-    const historyAfter = { target: histories[0]!, other: histories[1]! }
-    const first = await this.readPublicWindow(0, `${id}-first-read`, layouts[0]!)
-    const other = await this.readPublicWindow(1, `${id}-other-read`, layouts[1]!)
+      const shown = string(record(state.layout, `${id} immediate layout`).worktree, `${id} immediate worktree`)
+      const history = await this.captureNavigationHistory(`${id}-history-after-${index}`, window.connId, shown)
+      return { layout: { receiptId, state }, history }
+    }))
+    const historyAfter = { target: layoutReads[0]!.history, other: layoutReads[1]!.history }
+    const [first, other] = await settleReads([
+      this.readPublicWindow(0, `${id}-first-read`, layoutReads[0]!.layout),
+      this.readPublicWindow(1, `${id}-other-read`, layoutReads[1]!.layout)
+    ] as const)
     progress.result = result
     progress.firstPublicRead = first
     progress.historyAfter = historyAfter
@@ -3877,10 +3896,11 @@ export class CliFilesRunner {
     const window = this.windows[1]!
     const receiptId = `${id}-window`
     const windowState = record(await this.api(receiptId, 'ui.window.state', { connId: window.connId }), `${id} other layout`)
-    const dom = await this.readRenderer(() => window.page.evaluate(capturePageDom))
-    dom.connId = window.connId
-    const history = await this.captureNavigationHistory(`${id}-history`, window.connId,
-      string(record(windowState.layout, `${id} other layout`).worktree, `${id} other worktree`))
+    const worktree = string(record(windowState.layout, `${id} other layout`).worktree, `${id} other worktree`)
+    const [dom, history] = await settleReads([
+      this.captureDomWindow(1),
+      this.captureNavigationHistory(`${id}-history`, window.connId, worktree)
+    ] as const)
     return { connId: window.connId, receiptId, windowState, dom, history }
   }
 

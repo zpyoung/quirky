@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import * as cliWorldModule from './cli-world'
-import { runCliFilesParity } from './cli-files'
+import { CliFilesRunner, runCliFilesParity } from './cli-files'
 
 type ProcessIdentity = {
   pid: number
@@ -1041,5 +1041,357 @@ test('CLI-files never certifies a late returned browser PID whose start identity
   } finally {
     late.resolve(fixture.windows)
     fixture.dispose()
+  }
+})
+test('CLI-files captures coherent window evidence within the remaining-work deadline', async () => {
+  const realDateNow = Date.now
+  let controlledNow = realDateNow()
+  Date.now = () => controlledNow
+  const home = '/owned-cli-files'
+  const cliEntry = `${home}/packages/cli/src/main.ts`
+  const assignedWorktrees = new Map([[41, 'assigned-a'], [42, 'assigned-b']])
+  const shownWorktrees = new Map([[41, 'shown-a'], [42, 'shown-b']])
+  type ReadMarker = {
+    phase: string
+    kind: 'cli' | 'dom'
+    operation: string
+    connId?: number
+    worktree?: string
+    startedOrder?: number
+    completedOrder?: number
+    done: boolean
+  }
+  const markers: ReadMarker[] = []
+  const barriers: Array<{ name: string; order: number }> = []
+  let ioOrder = 0
+  let phase = 'sample'
+  let flushQueued = false
+  let pending: Array<{ marker: ReadMarker; resolve(): void }> = []
+  const boundedRead = (marker: ReadMarker): Promise<void> => {
+    markers.push(marker)
+    marker.startedOrder = ioOrder++
+    const { promise, resolve } = Promise.withResolvers<void>()
+    pending.push({ marker, resolve })
+    if (!flushQueued) {
+      flushQueued = true
+      queueMicrotask(() => {
+        flushQueued = false
+        controlledNow += 3_000
+        const batch = pending
+        pending = []
+        for (const entry of batch) {
+          entry.marker.done = true
+          entry.marker.completedOrder = ioOrder++
+          entry.resolve()
+        }
+      })
+    }
+    return promise
+  }
+  const domFor = (connId: number) => ({
+    connId: 0,
+    workspaceId: shownWorktrees.get(connId)!,
+    groupId: `group-${connId}`,
+    selectedTabId: null,
+    renderedTabId: null,
+    path: null,
+    documentHasFocus: true,
+    activeElement: { tag: 'BODY', role: null, inDocument: true },
+    activeElementHostedTabId: null,
+    activeElementIsSource: false,
+    reviewTabMounted: false,
+    reviewScopeChip: null,
+    reviewWidth: 0,
+    reviewScrollTop: 0,
+    caret: null,
+    lines: [],
+    reviewCards: []
+  })
+  const argument = (argv: string[], flag: string) => {
+    const index = argv.indexOf(flag)
+    return index < 0 ? undefined : argv[index + 1]
+  }
+  const workspaceFor = (worktree: string) => {
+    const groupId = worktree === 'shown-a' ? 'group-41' : 'group-42'
+    return { id: worktree, activeGroup: groupId, root: { kind: 'group', id: groupId, tabs: [], activeTab: null } }
+  }
+  const windows = ([41, 42] as const).map(connId => ({
+    connId,
+    worktree: { id: assignedWorktrees.get(connId)! },
+    record: { index: connId === 41 ? 0 : 1, connId, worktree: assignedWorktrees.get(connId)!, open: true, shown: true },
+    page: {
+      isClosed: () => false,
+      evaluate: async () => {
+        await boundedRead({ phase, kind: 'dom', operation: `dom-${connId}`, connId, done: false })
+        return domFor(connId)
+      }
+    }
+  }))
+  const recordingWorld = {
+    home,
+    cliEntry,
+    execute: async (argv: string[], options?: { timeoutMs?: number }) => {
+      const startedAt = controlledNow
+      let result: Record<string, unknown>
+      let operation: string
+      let connId: number | undefined
+      let worktree: string | undefined
+      if (argv[2] === 'api' && argv[3] === 'call') {
+        operation = argv[4]!
+        if (operation === 'ui.window.state') {
+          connId = Number(argument(argv, '--conn-id'))
+          worktree = shownWorktrees.get(connId)
+          result = { connId, layout: { worktree, view: null } }
+        } else if (operation === 'quirky.terminal/workspace') {
+          worktree = argument(argv, '--workspace')
+          result = workspaceFor(worktree!)
+        } else if (operation === 'quirky.worktree/navigationState') {
+          connId = Number(argument(argv, '--window'))
+          worktree = shownWorktrees.get(connId)
+          result = { worktrees: [worktree], index: 0 }
+        } else {
+          throw new Error(`unexpected recording API call: ${operation}`)
+        }
+      } else if (argv[2] === 'editor' && argv[3] === 'state') {
+        operation = 'editor.state'
+        worktree = argument(argv, '--worktree')
+        result = { buffers: [] }
+      } else {
+        throw new Error(`unexpected recording CLI command: ${argv[2]}`)
+      }
+      const marker: ReadMarker = { phase, kind: 'cli', operation, ...(connId ? { connId } : {}), ...(worktree ? { worktree } : {}), done: false }
+      await boundedRead(marker)
+      if (options?.timeoutMs !== undefined && controlledNow - startedAt > options.timeoutMs) {
+        throw new Error(`recorded child exceeded its supplied ${options.timeoutMs}ms timeout`)
+      }
+      const stdout = JSON.stringify(result)
+      return { stdout, stderr: '', exitCode: 0, stdoutBytes: Buffer.byteLength(stdout), elapsedMs: 0 }
+    }
+  } as unknown as NonNullable<CliFilesRunner['world']>
+  const runners: CliFilesRunner[] = []
+  const createRunner = () => {
+    const runner = new CliFilesRunner({})
+    runners.push(runner)
+    runner.home = home
+    runner.windows = windows as unknown as typeof runner.windows
+    runner.world = recordingWorld
+    return runner
+  }
+
+  try {
+    const sampleRunner = createRunner()
+    controlledNow = sampleRunner.workDeadline - 10_000
+    const sample = await sampleRunner.captureSample('deadline-sample')
+    expect(controlledNow).toBeLessThan(sampleRunner.workDeadline)
+    expect(sample.public.map(window => window.connId)).toEqual([41, 42])
+    expect(sample.public.map(window => window.windowState)).toMatchObject([
+      { layout: { worktree: 'shown-a' } },
+      { layout: { worktree: 'shown-b' } }
+    ])
+    expect(sample.snapshots.map(snapshot => snapshot.windowWorktree)).toEqual(['shown-a', 'shown-b'])
+    expect(sample.dom.map(window => window.workspaceId)).toEqual(['shown-a', 'shown-b'])
+    expect(sample.snapshots.map(snapshot => snapshot.windowWorktree === assignedWorktrees.get(snapshot.connId))).toEqual([false, false])
+    const sampleReads = markers.filter(marker => marker.phase === 'sample')
+    for (const [connId, worktree] of [[41, 'shown-a'], [42, 'shown-b']] as const) {
+      const state = sampleReads.find(marker => marker.operation === 'ui.window.state' && marker.connId === connId)
+      const workspace = sampleReads.find(marker => marker.operation === 'quirky.terminal/workspace' && marker.worktree === worktree)
+      const editor = sampleReads.find(marker => marker.operation === 'editor.state' && marker.worktree === worktree)
+      const dom = sampleReads.find(marker => marker.kind === 'dom' && marker.connId === connId)
+      expect(state?.done).toBe(true)
+      expect(workspace?.worktree).toBe(worktree)
+      expect(editor?.worktree).toBe(worktree)
+      expect(state?.completedOrder).toBeLessThan(workspace?.startedOrder ?? Number.POSITIVE_INFINITY)
+      expect(state?.completedOrder).toBeLessThan(editor?.startedOrder ?? Number.POSITIVE_INFINITY)
+      expect(dom?.startedOrder).toBeGreaterThan(Math.max(
+        workspace?.completedOrder ?? Number.POSITIVE_INFINITY,
+        editor?.completedOrder ?? Number.POSITIVE_INFINITY
+      ))
+    }
+
+    const transitionRunner = createRunner()
+    controlledNow = transitionRunner.workDeadline - 27_000
+    phase = 'transition-before'
+    const transition = await transitionRunner.transition('deadline-transition', async () => {
+      const beforeReads = markers.filter(marker => marker.phase === 'transition-before')
+      expect(beforeReads.every(marker => marker.done)).toBe(true)
+      expect(beforeReads.some(marker => marker.operation === 'quirky.worktree/navigationState')).toBe(true)
+      barriers.push({ name: 'mutate', order: ioOrder++ })
+      phase = 'transition-after'
+      return { changed: true }
+    }, async () => {
+      barriers.push({ name: 'waitForRender', order: ioOrder++ })
+      const afterReads = markers.filter(marker => marker.phase === 'transition-after')
+      const histories = afterReads.filter(marker => marker.operation === 'quirky.worktree/navigationState')
+      const publicReads = afterReads.filter(marker =>
+        marker.operation === 'quirky.terminal/workspace' || marker.operation === 'editor.state')
+      expect(histories.every(marker => marker.done)).toBe(true)
+      expect(publicReads.every(marker => marker.done)).toBe(true)
+      expect(Math.max(...histories.map(marker => marker.completedOrder ?? Number.NEGATIVE_INFINITY)))
+        .toBeLessThan(Math.min(...publicReads.map(marker => marker.startedOrder ?? Number.POSITIVE_INFINITY)))
+      for (const [connId, worktree] of [[41, 'shown-a'], [42, 'shown-b']] as const) {
+        const layout = afterReads.find(marker => marker.operation === 'ui.window.state' && marker.connId === connId)
+        const history = histories.find(marker => marker.connId === connId)
+        const workspace = publicReads.find(marker => marker.operation === 'quirky.terminal/workspace' && marker.worktree === worktree)
+        const editor = publicReads.find(marker => marker.operation === 'editor.state' && marker.worktree === worktree)
+        expect(layout?.done).toBe(true)
+        expect(history?.done).toBe(true)
+        expect(layout?.completedOrder).toBeLessThan(history?.startedOrder ?? Number.POSITIVE_INFINITY)
+        expect(workspace?.done).toBe(true)
+        expect(editor?.done).toBe(true)
+      }
+      expect(afterReads.some(marker => marker.kind === 'dom')).toBe(false)
+    })
+    expect(controlledNow).toBeLessThan(transitionRunner.workDeadline)
+    expect(barriers.map(barrier => barrier.name)).toEqual(['mutate', 'waitForRender'])
+    expect(transition.before.snapshots.map(snapshot => snapshot.windowWorktree)).toEqual(['shown-a', 'shown-b'])
+    expect(transition.after.snapshots.map(snapshot => snapshot.windowWorktree)).toEqual(['shown-a', 'shown-b'])
+    expect([transition.historyBefore.target.connId, transition.historyBefore.other.connId]).toEqual([41, 42])
+    expect([transition.historyBefore.target.shownWorktree, transition.historyBefore.other.shownWorktree]).toEqual(['shown-a', 'shown-b'])
+    expect([transition.historyAfter.target.connId, transition.historyAfter.other.connId]).toEqual([41, 42])
+    expect([transition.historyAfter.target.shownWorktree, transition.historyAfter.other.shownWorktree]).toEqual(['shown-a', 'shown-b'])
+    const renderBarrier = barriers.find(barrier => barrier.name === 'waitForRender')
+    const firstAfterDom = markers.find(marker => marker.phase === 'transition-after' && marker.kind === 'dom')
+    expect(firstAfterDom?.startedOrder).toBeGreaterThan(renderBarrier?.order ?? Number.POSITIVE_INFINITY)
+
+    const otherRunner = createRunner()
+    controlledNow = otherRunner.workDeadline - 8_000
+    phase = 'other-window'
+    const other = await otherRunner.captureOtherWindow('deadline-other-window')
+    expect(controlledNow).toBeLessThan(otherRunner.workDeadline)
+    expect(other.connId).toBe(42)
+    expect(other.windowState).toMatchObject({ layout: { worktree: 'shown-b' } })
+    expect(other.history.shownWorktree).toBe('shown-b')
+    const otherReads = markers.filter(marker => marker.phase === 'other-window')
+    const otherState = otherReads.find(marker => marker.operation === 'ui.window.state')
+    const otherHistory = otherReads.find(marker => marker.operation === 'quirky.worktree/navigationState')
+    const otherDom = otherReads.find(marker => marker.kind === 'dom')
+    expect(otherState?.done).toBe(true)
+    expect(otherHistory?.worktree).toBe('shown-b')
+    expect(other.dom.workspaceId).toBe('shown-b')
+    expect(otherState?.completedOrder).toBeLessThan(otherHistory?.startedOrder ?? Number.POSITIVE_INFINITY)
+    expect(otherState?.completedOrder).toBeLessThan(otherDom?.startedOrder ?? Number.POSITIVE_INFINITY)
+  } finally {
+    for (const runner of runners) {
+      clearTimeout(runner.workTimer)
+      clearTimeout(runner.cleanupTimer)
+      runner.workController.abort()
+    }
+    Date.now = realDateNow
+  }
+})
+
+test('CLI-files drains started snapshot reads before preserving the primary failure', async () => {
+  const runner = new CliFilesRunner({})
+  const home = '/owned-cli-files-drain'
+  const cliEntry = `${home}/packages/cli/src/main.ts`
+  const primaryError = new Error('primary public read failed')
+  const heldRead = Promise.withResolvers<void>()
+  const failedRead = Promise.withResolvers<void>()
+  const shownWorktrees = new Map([[41, 'shown-a'], [42, 'shown-b']])
+  let siblingStarted = false
+  let pendingReads = 0
+  let mutationCount = 0
+  let renderWaitCount = 0
+  const domFor = (connId: number) => ({
+    connId: 0,
+    workspaceId: shownWorktrees.get(connId)!,
+    groupId: `group-${connId}`,
+    selectedTabId: null,
+    renderedTabId: null,
+    path: null,
+    documentHasFocus: true,
+    activeElement: { tag: 'BODY', role: null, inDocument: true },
+    activeElementHostedTabId: null,
+    activeElementIsSource: false,
+    reviewTabMounted: false,
+    reviewScopeChip: null,
+    reviewWidth: 0,
+    reviewScrollTop: 0,
+    caret: null,
+    lines: [],
+    reviewCards: []
+  })
+  const argument = (argv: string[], flag: string) => {
+    const index = argv.indexOf(flag)
+    return index < 0 ? undefined : argv[index + 1]
+  }
+  const windows = ([41, 42] as const).map(connId => ({
+    connId,
+    worktree: { id: `assigned-${connId}` },
+    record: { index: connId === 41 ? 0 : 1, connId, worktree: `assigned-${connId}`, open: true, shown: true },
+    page: { isClosed: () => false, evaluate: async () => domFor(connId) }
+  }))
+  runner.home = home
+  runner.windows = windows as unknown as typeof runner.windows
+  runner.world = {
+    home,
+    cliEntry,
+    execute: async (argv: string[]) => {
+      pendingReads += 1
+      try {
+        let result: Record<string, unknown>
+        if (argv[2] === 'api' && argv[3] === 'call' && argv[4] === 'ui.window.state') {
+          const connId = Number(argument(argv, '--conn-id'))
+          if (connId === 41) {
+            failedRead.resolve()
+            throw primaryError
+          }
+          if (connId === 42) {
+            siblingStarted = true
+            await heldRead.promise
+          }
+          result = { connId, layout: { worktree: shownWorktrees.get(connId), view: null } }
+        } else if (argv[2] === 'api' && argv[3] === 'call' && argv[4] === 'quirky.terminal/workspace') {
+          const worktree = argument(argv, '--workspace')!
+          const connId = worktree === 'shown-a' ? 41 : 42
+          const groupId = `group-${connId}`
+          result = { id: worktree, activeGroup: groupId, root: { kind: 'group', id: groupId, tabs: [], activeTab: null } }
+        } else if (argv[2] === 'editor' && argv[3] === 'state') {
+          result = { buffers: [] }
+        } else {
+          throw new Error(`unexpected recording CLI command: ${argv[2]}`)
+        }
+        const stdout = JSON.stringify(result)
+        return { stdout, stderr: '', exitCode: 0, stdoutBytes: Buffer.byteLength(stdout), elapsedMs: 0 }
+      } finally {
+        pendingReads -= 1
+      }
+    }
+  } as unknown as NonNullable<typeof runner.world>
+
+  let settledBeforeRelease = false
+  let completion: Promise<{ ok: true } | { ok: false; error: unknown }> | undefined
+  try {
+    completion = runner.transition('drain-transition', async () => {
+      mutationCount += 1
+      return { changed: true }
+    }, async () => {
+      renderWaitCount += 1
+    }).then(
+      () => ({ ok: true as const }),
+      error => ({ ok: false as const, error })
+    )
+    void completion.then(() => { settledBeforeRelease = true })
+    await failedRead.promise
+    const eventLoopTurn = Promise.withResolvers<void>()
+    setImmediate(eventLoopTurn.resolve)
+    await eventLoopTurn.promise
+    if (siblingStarted) {
+      expect(settledBeforeRelease).toBe(false)
+      expect(pendingReads).toBe(1)
+    }
+    heldRead.resolve()
+    const result = await completion
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toBe(primaryError)
+    expect(pendingReads).toBe(0)
+    expect(mutationCount).toBe(0)
+    expect(renderWaitCount).toBe(0)
+  } finally {
+    heldRead.resolve()
+    if (completion) await completion
+    clearTimeout(runner.workTimer)
+    clearTimeout(runner.cleanupTimer)
+    runner.workController.abort()
   }
 })
