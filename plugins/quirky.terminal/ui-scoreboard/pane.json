@@ -1,0 +1,512 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {},
+  "states": [
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Invalid custom terminal palette', appearance.warning)" },
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Invalid custom terminal palette', appearance.warning)" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast(title, messageOf(error))" },
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast(title, messageOf(error))" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "loading",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "connection.session !== sessionId || connection.status !== 'ready' ?" },
+      "anchor": "connection.session !== sessionId || connection.status !== 'ready' ?",
+      "render": {
+        "component": "NoticeLine",
+        "element": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "<NoticeLine>Connecting terminal…</NoticeLine>" },
+        "import": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "import { InlineError, NoticeLine } from '@quirky/ui'" }
+      }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "connection.session === sessionId && connection.status === 'error' ?" },
+      "anchor": "connection.session === sessionId && connection.status === 'error' ?",
+      "render": {
+        "component": "InlineError",
+        "element": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "<InlineError message={connection.message!} />" },
+        "import": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "import { InlineError, NoticeLine } from '@quirky/ui'" }
+      }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not copy link', messageOf(error), { kind: 'error' })" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not copy link', messageOf(error), { kind: 'error' })" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": ".call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })\n        .catch((error: unknown) => context.toast('Could not open link', messageOf(error)))" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": ".call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })\n        .catch((error: unknown) => context.toast('Could not open link', messageOf(error)))" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "void context.call('quirky.terminal/openExternal', { target })\n            .catch((fallbackError: unknown) => context.toast('Could not open link', messageOf(fallbackError)))" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "void context.call('quirky.terminal/openExternal', { target })\n            .catch((fallbackError: unknown) => context.toast('Could not open link', messageOf(fallbackError)))" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "        }\n        context.toast('Could not open link', messageOf(error))\n      })" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "        }\n        context.toast('Could not open link', messageOf(error))\n      })" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not resolve the worktree for this file link', messageOf(error))" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not resolve the worktree for this file link', messageOf(error))" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not open file in editor', messageOf(error))" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not open file in editor', messageOf(error))" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Input blocked', messageOf(error))" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Input blocked', messageOf(error))" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Paste timed out', 'Only part of the text was pasted.')" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Paste timed out', 'Only part of the text was pasted.')" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Paste failed', 'The terminal stopped accepting input.')" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Paste failed', 'The terminal stopped accepting input.')" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not use dropped files', 'The editor row drag payload is invalid.')" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not use dropped files', 'The editor row drag payload is invalid.')" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not use dropped files', 'The dragged files belong to a different worktree.')" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not use dropped files', 'The dragged files belong to a different worktree.')" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not use dropped files', 'The dragged path escapes its worktree.')" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not use dropped files', 'The dragged path escapes its worktree.')" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not use dropped files', messageOf(error))" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.toast('Could not use dropped files', messageOf(error))" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.toast('Could not take back terminal', messageOf(error), { kind: 'error' })" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.toast('Could not take back terminal', messageOf(error), { kind: 'error' })" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.toast('Could not restore terminal size', messageOf(error), { kind: 'error' })" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.toast('Could not restore terminal size', messageOf(error), { kind: 'error' })" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "readError ? <InlineError message={readError} action={{ label: 'Retry', onAction: () => void refresh() }} /> : null" },
+      "anchor": "readError ?",
+      "render": {
+        "component": "InlineError",
+        "element": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "<InlineError message={readError} action={{ label: 'Retry', onAction: () => void refresh() }} />" },
+        "import": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "import { Button, InlineError } from '@quirky/ui'" }
+      }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "props.context.toast('Could not run terminal action', error instanceof Error ? error.message : String(error), { kind: 'error' })" },
+      "anchor": "props.context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "props.context.toast('Could not run terminal action', error instanceof Error ? error.message : String(error), { kind: 'error' })" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/task-links.ts", "quote": "context.toast('Could not open task terminal', error instanceof Error ? error.message : String(error))" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/pane/task-links.ts", "quote": "context.toast('Could not open task terminal', error instanceof Error ? error.message : String(error))" } }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "loading",
+      "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "!viewMounted && !mountError ? <div role=\"status\"><NoticeLine>Opening agent composer…</NoticeLine></div> : null" },
+      "anchor": "!viewMounted && !mountError ?",
+      "render": {
+        "component": "NoticeLine",
+        "element": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "<NoticeLine>Opening agent composer…</NoticeLine>" },
+        "import": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "import { InlineError, NoticeLine } from '@quirky/ui'" }
+      }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "hostError ? <div className=\"qtd-error\"><InlineError message={`Agent composer unavailable: ${hostError}`} /></div> : null" },
+      "anchor": "hostError ?",
+      "render": {
+        "component": "InlineError",
+        "element": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "<InlineError message={`Agent composer unavailable: ${hostError}`} />" },
+        "import": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "import { InlineError, NoticeLine } from '@quirky/ui'" }
+      }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "mountError && requested && geometryMounted ? <div className=\"qtd-error\"><InlineError message={`Agent composer unavailable: ${mountError}`} /></div> : null" },
+      "anchor": "mountError && requested && geometryMounted ?",
+      "render": {
+        "component": "InlineError",
+        "element": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "<InlineError message={`Agent composer unavailable: ${mountError}`} />" },
+        "import": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "import { InlineError, NoticeLine } from '@quirky/ui'" }
+      }
+    },
+    {
+      "surface": "overlay:quirky.terminal/floating",
+      "state": "error",
+      "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "context.toast('Could not resize the agent composer', messageOf(error))" },
+      "anchor": "context.toast(",
+      "render": { "component": "toast", "call": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "context.toast('Could not resize the agent composer', messageOf(error))" } }
+    }
+  ],
+  "notState": [
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "role=\"status\"" }, "reason": "This live-region wrapper labels the connecting NoticeLine; it is not a second application state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "search ? (\n        <SearchBox" }, "reason": "The find box is an optional pane control, not an empty or loading terminal screen." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "hint ? (\n        <div data-pane-link-hint" }, "reason": "A hovered link hint is transient navigation assistance, not application state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "popover ? <LinkPopover" }, "reason": "The link action popover is an optional transient control, not an empty or loading state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "if (!state && !readError)" }, "reason": "An optional phone overlay is absent when no mobile controls or read error exist; terminal output remains usable." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "state ? (" }, "reason": "Phone controls render only when mobile state exists; absence is not a fabricated empty state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "phoneFit ? (\n              <Button aria-label=\"Restore this terminal\" onClick={() => void restoreFit({ session: sessionId })}>Restore" }, "anchor": "phoneFit ?", "reason": "The driver-versus-phone-fit branch selects the existing single-terminal action, not an application state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "phoneFit ? (\n                <Button onClick={() => void restoreFit({})}>Restore all" }, "anchor": "phoneFit ?", "reason": "The driver-versus-phone-fit branch selects the existing all-terminal action, not an application state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphics.ts", "quote": "if (disposed || !enabled || !images.has(id))" }, "reason": "The renderer lifecycle guard skips stale or disabled Kitty images; it is not an application error or empty state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphics.ts", "quote": "if (!canvas)" }, "reason": "This branch lazily creates a canvas for a renderer decoration, not an application loading or empty state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphicsDecoder.ts", "quote": "if (this.mode === 'escape')" }, "reason": "The byte parser either recognizes an APC prefix or forwards the escape byte as ordinary process output." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphicsDecoder.ts", "quote": "if (this.mode === 'prefix')" }, "reason": "The byte parser recognizes a Kitty frame prefix or restores ordinary output; this is protocol flow, not UI state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphicsDecoder.ts", "quote": "if (this.mode === 'end')" }, "reason": "The byte parser completes or continues an APC frame terminator; it does not render an application error." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphicsDecoder.ts", "quote": "if (byte === 92)" }, "reason": "This branch terminates and forwards a decoded Kitty frame, a process-output protocol decision." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphicsDecoder.ts", "quote": "if (byte === 24 || byte === 26)" }, "reason": "CAN and SUB discard a partial APC frame; they are parser control bytes, not application errors." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphicsDecoder.ts", "quote": "if (byte === 27)" }, "reason": "This branch enters possible string termination while decoding output bytes, not a visible loading state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "renderComposer ?" }, "reason": "This selects whether dock geometry contributes a composer host; its child NoticeLine separately covers a requested pending mount." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "role=\"status\"" }, "reason": "The status wrapper labels the composer NoticeLine; it is not a second loading state." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "<div className=\"qtd-error\"><InlineError message={`Agent composer unavailable: ${hostError}`} /></div>" }, "anchor": "\"qtd-error\"", "reason": "The retained qtd-error class is a styling hook around InlineError, not independently visible error text." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "<div className=\"qtd-error\"><InlineError message={`Agent composer unavailable: ${mountError}`} /></div>" }, "anchor": "\"qtd-error\"", "reason": "The retained qtd-error class is a styling hook around InlineError, not independently visible error text." }
+  ],
+  "actions": [
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "onAction: () => void refresh()" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.call('quirky.terminal/mobileState', { session: sessionId })" },
+        "target": "quirky.terminal/mobileState",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "const refresh = async () => {\n    if (!mounted.current || target.current.context !== context || target.current.sessionId !== sessionId) return\n    const epoch = generation.current\n    const sequence = ++readSequence.current\n    try {\n      const result = (await context.call('quirky.terminal/mobileState', { session: sessionId })) as { terminals: MobileTerminalState[] }\n      if (!mounted.current || epoch !== generation.current || sequence !== readSequence.current) return\n      setState(result.terminals.find((terminal) => terminal.session === sessionId) ?? null)\n      setReadError(null)\n    } catch (error) {\n      if (!mounted.current || epoch !== generation.current || sequence !== readSequence.current) return\n      setReadError(`Could not read mobile terminal state: ${messageOf(error)}`)\n    }\n  }" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "onClick={() => void restoreFit({ session: sessionId })}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.call('quirky.terminal/restoreFit', params)" },
+        "target": "quirky.terminal/restoreFit",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "const restoreFit = async (params: { session?: string }) => {\n    try {\n      await context.call('quirky.terminal/restoreFit', params)\n    } catch (error) {\n      context.toast('Could not restore terminal size', messageOf(error), { kind: 'error' })\n    } finally {\n      await refresh()\n    }\n  }" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "onClick={() => void takeBack({ session: sessionId })}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.call('quirky.terminal/takeBack', params)" },
+        "target": "quirky.terminal/takeBack",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "const takeBack = async (params: { session?: string }) => {\n    try {\n      await context.call('quirky.terminal/takeBack', params)\n    } catch (error) {\n      context.toast('Could not take back terminal', messageOf(error), { kind: 'error' })\n    } finally {\n      await refresh()\n    }\n  }" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "onClick={() => void restoreFit({})}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.call('quirky.terminal/restoreFit', params)" },
+        "target": "quirky.terminal/restoreFit",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "const restoreFit = async (params: { session?: string }) => {\n    try {\n      await context.call('quirky.terminal/restoreFit', params)\n    } catch (error) {\n      context.toast('Could not restore terminal size', messageOf(error), { kind: 'error' })\n    } finally {\n      await refresh()\n    }\n  }" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "onClick={() => void takeBack({})}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "context.call('quirky.terminal/takeBack', params)" },
+        "target": "quirky.terminal/takeBack",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/MobileDriverOverlay.tsx", "quote": "const takeBack = async (params: { session?: string }) => {\n    try {\n      await context.call('quirky.terminal/takeBack', params)\n    } catch (error) {\n      context.toast('Could not take back terminal', messageOf(error), { kind: 'error' })\n    } finally {\n      await refresh()\n    }\n  }" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "onKeyDown={onKeyDown}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-next'" },
+        "target": "command:quirky.terminal/search-next",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {\n    event.stopPropagation()\n    if (event.nativeEvent.isComposing || event.keyCode === 229) return\n    if (event.key === 'Escape') {\n      event.preventDefault()\n      close()\n    } else if (event.key === 'Enter') {\n      event.preventDefault()\n      if (event.shiftKey) previous()\n      else next()\n    } else if (event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === 'g') {\n      event.preventDefault()\n      if (event.shiftKey) previous()\n      else next()\n    }\n  }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "const next = () => dispatch(searchNextCommand(props.paneId))" },
+
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function searchNextCommand(pane: string): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal/search-next', args: { pane } }\n}" }
+        ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "onChange={(event) => props.onQueryChange(event.target.value)}" },
+      "notAction": "forwarded",
+      "reason": "SearchBox forwards query edits as local drafts to its pane owner; it does not dispatch per-keystroke commands."
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "onClick={toggleCaseSensitive}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search'" },
+        "target": "command:quirky.terminal/search",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "const toggleCaseSensitive = () => dispatch(searchCommand(props.paneId, { caseSensitive: !props.caseSensitive }))" },
+
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function searchCommand(pane: string, options: { query?: string; regex?: boolean; caseSensitive?: boolean }): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal/search', args: { pane, ...options } }\n}" }
+        ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "onClick={toggleRegex}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search'" },
+        "target": "command:quirky.terminal/search",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "const toggleRegex = () => dispatch(searchCommand(props.paneId, { regex: !props.regex }))" },
+
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function searchCommand(pane: string, options: { query?: string; regex?: boolean; caseSensitive?: boolean }): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal/search', args: { pane, ...options } }\n}" }
+        ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "onClick={previous}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-previous'" },
+        "target": "command:quirky.terminal/search-previous",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "const previous = () => dispatch(searchPreviousCommand(props.paneId))" },
+
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function searchPreviousCommand(pane: string): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal/search-previous', args: { pane } }\n}" }
+        ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "onClick={next}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-next'" },
+        "target": "command:quirky.terminal/search-next",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "const next = () => dispatch(searchNextCommand(props.paneId))" },
+
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function searchNextCommand(pane: string): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal/search-next', args: { pane } }\n}" }
+        ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "onClick={close}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-close'" },
+        "target": "command:quirky.terminal/search-close",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/SearchBox.tsx", "quote": "const close = () => dispatch(searchCloseCommand(props.paneId))" },
+
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function searchCloseCommand(pane: string): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal/search-close', args: { pane } }\n}" }
+        ]
+      }
+    },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/LinkPopover.tsx", "quote": "document.addEventListener('mousedown', outside, true)" }, "notAction": "subscription", "reason": "This document listener dismisses the popover on outside pointer interaction and is removed with the component." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/LinkPopover.tsx", "quote": "document.addEventListener('keydown', escape, true)" }, "notAction": "subscription", "reason": "This document listener dismisses the popover on Escape and is removed with the component." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/LinkPopover.tsx", "quote": "onClick={item.onSelect}" }, "notAction": "forwarded", "reason": "LinkPopover forwards the button activation directly to the caller-owned onSelect callback." },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "onSelect: (event) => { setPopover(null); openUrlTarget(target, event) }" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.call('quirky.browser/openLink', params)" },
+        "target": "quirky.browser/openLink",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const openUrlTarget = (target: string, event?: Pick<MouseEvent, 'metaKey' | 'ctrlKey' | 'shiftKey'>) => {\n      if (!/^https?:/i.test(target)) {\n        openTarget(target, false)\n        return\n      }\n      const workspaceId = latest.current.workspaceId\n      const ownerId = workspaceId?.replace(/^id:/, '')\n      if (!ownerId || ownerId === 'floating') {\n        openTarget(target, false)\n        return\n      }\n      const params = {\n        url: target,\n        worktree: `id:${ownerId}`,\n        ...(event && hasCommandModifier(event) ? { modifier: true } : {}),\n        ...(event?.shiftKey ? { shift: true } : {})\n      }\n      void context.call('quirky.browser/openLink', params).catch((error: unknown) => {\n        if (typeof error === 'object' && error !== null && 'code' in error && error.code === RpcErrorCode.MethodNotFound) {\n          void context.call('quirky.terminal/openExternal', { target })\n            .catch((fallbackError: unknown) => context.toast('Could not open link', messageOf(fallbackError)))\n          return\n        }\n        context.toast('Could not open link', messageOf(error))\n      })\n    }" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "{ label: 'Copy Link', onSelect: () => { setPopover(null); copyLinkText(target) } }" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/copy'" },
+        "target": "command:quirky.terminal/copy",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const copyLinkText = (text: string) => {\n      void requestWindowCommand(context, copyTextCommand(text)).catch((error: unknown) => {\n        context.toast('Could not copy link', messageOf(error), { kind: 'error' })\n      })\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function copyTextCommand(text: string): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal/copy', args: { text } }\n}" }
+        ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "onSelect: () => { setPopover(null); openTarget(target, false) }" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context\n        .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })" },
+        "target": "quirky.terminal/openExternal",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const openTarget = (target: string, reveal: boolean) => {\n      void context\n        .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })\n        .catch((error: unknown) => context.toast('Could not open link', messageOf(error)))\n    }" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "onSelect: () => { setPopover(null); openTarget(target, true) }" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context\n        .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })" },
+        "target": "quirky.terminal/openExternal",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const openTarget = (target: string, reveal: boolean) => {\n      void context\n        .call('quirky.terminal/openExternal', reveal ? { target, reveal: true } : { target })\n        .catch((error: unknown) => context.toast('Could not open link', messageOf(error)))\n    }" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "{ label: 'Copy Path', onSelect: () => { setPopover(null); copyLinkText(target) } }" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/copy'" },
+        "target": "command:quirky.terminal/copy",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const copyLinkText = (text: string) => {\n      void requestWindowCommand(context, copyTextCommand(text)).catch((error: unknown) => {\n        context.toast('Could not copy link', messageOf(error), { kind: 'error' })\n      })\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function copyTextCommand(text: string): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal/copy', args: { text } }\n}" }
+        ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "onSelect: () => { setPopover(null); void openTaskTerminal(context, taskId) }" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/task-links.ts", "quote": "context.openView(SESSION_WORKTREE_VIEW, { worktree: worktreeId, session: sessionId })" },
+        "target": "view:quirky.session/worktree",
+        "via": [ { "file": "plugins/quirky.terminal/src/window/pane/task-links.ts", "quote": "export async function openTaskTerminal(context: TaskTerminalContext, taskId: string): Promise<void> {\n  try {\n    const target = recordOf(await context.call('quirky.orchestration/taskTerminal', { taskId }))\n    const resolvedTaskId = target ? textOf(target, 'taskId') : null\n    const dispatchId = target ? textOf(target, 'dispatchId') : null\n    if (target?.kind === 'remote_output') {\n      const input = recordOf(target.input)\n      if (resolvedTaskId !== taskId || !dispatchId ||\n        target.viewId !== 'view:quirky.orchestration/remote-worker-output' || input?.dispatchId !== dispatchId) {\n        throw new Error('The orchestration service did not prove an exact remote output target.')\n      }\n      context.openView('view:quirky.orchestration/remote-worker-output', { dispatchId })\n      return\n    }\n    const sessionId = target ? textOf(target, 'sessionId') : null\n    const worktreeId = target ? textOf(target, 'worktreeId') : null\n    if (!target || resolvedTaskId !== taskId || !dispatchId || !sessionId || !worktreeId) {\n      throw new Error('The orchestration service did not prove an exact terminal for this task.')\n    }\n\n    const session = recordOf(await context.call('quirky.session/get', { session: sessionId }))\n    if (session?.id !== sessionId || session.kind !== 'terminal' || session.worktreeId !== worktreeId) {\n      throw new Error('The task terminal session no longer matches its current workspace.')\n    }\n    context.openView(SESSION_WORKTREE_VIEW, { worktree: worktreeId, session: sessionId })\n  } catch (error) {\n    context.toast('Could not open task terminal', error instanceof Error ? error.message : String(error))\n  }\n}" } ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "onQueryChange={(query) => {\n            if (query.length <= MAX_SEARCH_QUERY) applySearch({ ...search, query })\n          }}" },
+      "transient": "draft",
+      "reason": "Search text changes the bounded local draft and remains independent of the pane's window-routed search commands."
+    },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "onClose={() => setPopover(null)}" }, "transient": "draft", "reason": "The owner closes the transient link menu on outside or Escape dismissal; it does not invoke a public action." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "element.addEventListener('paste', onPaste, true)" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.call('quirky.terminal/write', { session: sessionId, data })" },
+        "target": "quirky.terminal/write",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const onPaste = (event: ClipboardEvent) => {\n      event.preventDefault()\n      event.stopImmediatePropagation()\n      if (term.textarea) term.textarea.value = ''\n      void paste(event.clipboardData?.getData('text/plain') ?? '')\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const paste = (text: string) => {\n      const epoch = inputEpoch\n      pasteQueue = pasteQueue.then(() => pasteNow(text, epoch), () => pasteNow(text, epoch))\n      return pasteQueue\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const pasteNow = async (text: string, epoch: number) => {\n      if (epoch !== inputEpoch || !canSend() || !gate.allows()) return\n      const pasteAttachment = attachment\n      const plan = planPaste(text, term.modes.bracketedPasteMode)\n      if (plan.kind === 'refused') {\n        context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')\n        return\n      }\n      if (plan.chunks.length === 0) return\n      let first = true\n      let blocked = false\n      let cancelled = false\n      let bracketOpen = false\n      const outcome = await runPaste(plan.chunks, async (data) => {\n        const cleanupCloser = blocked && bracketOpen && data === plan.closer\n        if ((blocked && !cleanupCloser) || cancelled) throw new Error('Paste input was cancelled.')\n        const wanted = () => !cancelled && attachment === pasteAttachment && (cleanupCloser || inputEpoch === epoch)\n        const openingBracket = first && plan.closer !== null\n        const accepted = await sendInput(data, first, wanted, cleanupCloser)\n        first = false\n        if (!accepted) {\n          blocked = true\n          throw new Error('Paste input was blocked.')\n        }\n        if (openingBracket) bracketOpen = true\n      }, { closer: plan.closer })\n      cancelled = true\n      if (blocked) return\n      if (outcome === 'timeout') context.toast('Paste timed out', 'Only part of the text was pasted.')\n      else if (outcome === 'failed') context.toast('Paste failed', 'The terminal stopped accepting input.')\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const sendInput = (data: string, human = false, wanted = () => true, ignoreReplayGate = false): Promise<boolean> => {\n      if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted()) return Promise.resolve(false)\n      const epoch = inputEpoch\n      const write = () => {\n        if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted() || epoch !== inputEpoch || inputBlocked) return Promise.resolve(false)\n        return context.call('quirky.terminal/write', { session: sessionId, data }).then(() => true)\n      }\n      if (inputClaim) return inputClaim.then((accepted) => accepted ? write() : false)\n      if (!human) return inputBlocked ? Promise.resolve(false) : write()\n      inputBlocked = false\n      if (inputClaimAt !== null && Date.now() - inputClaimAt < 30_000) return write()\n      const guardedWrite = () => {\n        if (!canSend() || !gate.allows() || !wanted() || epoch !== inputEpoch) return Promise.resolve(false)\n        if (!attachedIncarnation) throw new Error('Terminal process is no longer attached.')\n        return context.call('quirky.terminal/write', { session: sessionId, data, expectedIncarnation: attachedIncarnation }).then(() => {\n          if (disposed || epoch !== inputEpoch) return false\n          inputClaimAt = Date.now()\n          return true\n        })\n      }\n      const claim = (attachedIncarnation ? guardedWrite() : identityReady\n        ? identityReady.then(guardedWrite)\n        : Promise.reject(new Error('Terminal process is not attached.'))).catch((error: unknown) => {\n        if (!disposed && epoch === inputEpoch) {\n          inputBlocked = true\n          inputEpoch += 1\n          context.toast('Input blocked', messageOf(error))\n        }\n        return false\n      })\n      inputClaim = claim\n      void claim.then(() => { if (inputClaim === claim) inputClaim = null })\n      return claim\n    }" }
+        ]
+      }
+    },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "element.addEventListener('copy', onCopy, true)" }, "notAction": "subscription", "reason": "Native copy writes ClipboardEvent data synchronously; the existing copy command is its public equivalent, not a reason to add window RPC." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('mousedown', onMouseDown, true)" }, "notAction": "subscription", "reason": "This native xterm listener tracks selection and focus; it does not invoke an application command." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('mouseup', onMouseUp)" }, "notAction": "subscription", "reason": "Copy-on-select uses the existing synchronous selection clipboard path rather than an asynchronous command route." },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('contextmenu', onContextMenu)" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.call('quirky.terminal/write', { session: sessionId, data })" },
+        "target": "quirky.terminal/write",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const onContextMenu = (event: MouseEvent) => {\n      if (!latest.current.settings['right-click-paste'] || event.ctrlKey) return\n      event.preventDefault()\n      event.stopPropagation()\n      void context.readClipboardText()\n        .then((text) => paste(text))\n        .catch(() => {})\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const paste = (text: string) => {\n      const epoch = inputEpoch\n      pasteQueue = pasteQueue.then(() => pasteNow(text, epoch), () => pasteNow(text, epoch))\n      return pasteQueue\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const pasteNow = async (text: string, epoch: number) => {\n      if (epoch !== inputEpoch || !canSend() || !gate.allows()) return\n      const pasteAttachment = attachment\n      const plan = planPaste(text, term.modes.bracketedPasteMode)\n      if (plan.kind === 'refused') {\n        context.toast('Paste is larger than 16 MiB', 'Nothing was pasted.')\n        return\n      }\n      if (plan.chunks.length === 0) return\n      let first = true\n      let blocked = false\n      let cancelled = false\n      let bracketOpen = false\n      const outcome = await runPaste(plan.chunks, async (data) => {\n        const cleanupCloser = blocked && bracketOpen && data === plan.closer\n        if ((blocked && !cleanupCloser) || cancelled) throw new Error('Paste input was cancelled.')\n        const wanted = () => !cancelled && attachment === pasteAttachment && (cleanupCloser || inputEpoch === epoch)\n        const openingBracket = first && plan.closer !== null\n        const accepted = await sendInput(data, first, wanted, cleanupCloser)\n        first = false\n        if (!accepted) {\n          blocked = true\n          throw new Error('Paste input was blocked.')\n        }\n        if (openingBracket) bracketOpen = true\n      }, { closer: plan.closer })\n      cancelled = true\n      if (blocked) return\n      if (outcome === 'timeout') context.toast('Paste timed out', 'Only part of the text was pasted.')\n      else if (outcome === 'failed') context.toast('Paste failed', 'The terminal stopped accepting input.')\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const sendInput = (data: string, human = false, wanted = () => true, ignoreReplayGate = false): Promise<boolean> => {\n      if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted()) return Promise.resolve(false)\n      const epoch = inputEpoch\n      const write = () => {\n        if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted() || epoch !== inputEpoch || inputBlocked) return Promise.resolve(false)\n        return context.call('quirky.terminal/write', { session: sessionId, data }).then(() => true)\n      }\n      if (inputClaim) return inputClaim.then((accepted) => accepted ? write() : false)\n      if (!human) return inputBlocked ? Promise.resolve(false) : write()\n      inputBlocked = false\n      if (inputClaimAt !== null && Date.now() - inputClaimAt < 30_000) return write()\n      const guardedWrite = () => {\n        if (!canSend() || !gate.allows() || !wanted() || epoch !== inputEpoch) return Promise.resolve(false)\n        if (!attachedIncarnation) throw new Error('Terminal process is no longer attached.')\n        return context.call('quirky.terminal/write', { session: sessionId, data, expectedIncarnation: attachedIncarnation }).then(() => {\n          if (disposed || epoch !== inputEpoch) return false\n          inputClaimAt = Date.now()\n          return true\n        })\n      }\n      const claim = (attachedIncarnation ? guardedWrite() : identityReady\n        ? identityReady.then(guardedWrite)\n        : Promise.reject(new Error('Terminal process is not attached.'))).catch((error: unknown) => {\n        if (!disposed && epoch === inputEpoch) {\n          inputBlocked = true\n          inputEpoch += 1\n          context.toast('Input blocked', messageOf(error))\n        }\n        return false\n      })\n      inputClaim = claim\n      void claim.then(() => { if (inputClaim === claim) inputClaim = null })\n      return claim\n    }" }
+        ]
+      }
+    },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('mouseenter', onMouseEnter)" }, "notAction": "subscription", "reason": "Focus-follows-mouse is a native focus subscription, not a public terminal command." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('dragover', onDragOver)" }, "transient": "hover", "reason": "Dragover only previews supported file-transfer types and does not mutate terminal input." },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('drop', onDrop)" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "context.call('quirky.terminal/write', { session: sessionId, data })" },
+        "target": "quirky.terminal/write",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const onDrop = (event: DragEvent) => {\n      const epoch = inputEpoch\n      const transfer = event.dataTransfer\n      if (!transfer) return\n      const worktreeDrop = readWorktreePathsDrop(transfer)\n      if (worktreeDrop.kind !== 'absent') {\n        event.preventDefault()\n        event.stopPropagation()\n        if (worktreeDrop.kind === 'invalid') {\n          context.toast('Could not use dropped files', 'The editor row drag payload is invalid.')\n          return\n        }\n        const workspaceId = latest.current.workspaceId?.replace(/^id:/, '')\n        if (!workspaceId || workspaceId === 'floating' || worktreeDrop.worktreeId !== workspaceId) {\n          context.toast('Could not use dropped files', 'The dragged files belong to a different worktree.')\n          return\n        }\n        void (async () => {\n          try {\n            const resolved = (await context.call('quirky.worktree/resolve', { selector: `id:${workspaceId}` })) as { path?: unknown }\n            if (typeof resolved.path !== 'string') throw new Error('the worktree did not return a root path')\n            const paths = resolveWorktreeDropPaths(resolved.path, worktreeDrop.paths)\n            if (!paths) {\n              context.toast('Could not use dropped files', 'The dragged path escapes its worktree.')\n              return\n            }\n            if (epoch === inputEpoch) sendHuman(shellEscapePaths(paths))\n          } catch (error) {\n            context.toast('Could not use dropped files', messageOf(error))\n          }\n        })()\n        return\n      }\n      const paths = pathsFromDrop(transfer)\n      if (paths.length === 0) return\n      event.preventDefault()\n      event.stopPropagation()\n      sendHuman(shellEscapePaths(paths))\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const sendHuman = (data: string) => { void sendInput(data, true).catch(() => {}) }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "const sendInput = (data: string, human = false, wanted = () => true, ignoreReplayGate = false): Promise<boolean> => {\n      if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted()) return Promise.resolve(false)\n      const epoch = inputEpoch\n      const write = () => {\n        if (!canSend() || (!ignoreReplayGate && !gate.allows()) || !wanted() || epoch !== inputEpoch || inputBlocked) return Promise.resolve(false)\n        return context.call('quirky.terminal/write', { session: sessionId, data }).then(() => true)\n      }\n      if (inputClaim) return inputClaim.then((accepted) => accepted ? write() : false)\n      if (!human) return inputBlocked ? Promise.resolve(false) : write()\n      inputBlocked = false\n      if (inputClaimAt !== null && Date.now() - inputClaimAt < 30_000) return write()\n      const guardedWrite = () => {\n        if (!canSend() || !gate.allows() || !wanted() || epoch !== inputEpoch) return Promise.resolve(false)\n        if (!attachedIncarnation) throw new Error('Terminal process is no longer attached.')\n        return context.call('quirky.terminal/write', { session: sessionId, data, expectedIncarnation: attachedIncarnation }).then(() => {\n          if (disposed || epoch !== inputEpoch) return false\n          inputClaimAt = Date.now()\n          return true\n        })\n      }\n      const claim = (attachedIncarnation ? guardedWrite() : identityReady\n        ? identityReady.then(guardedWrite)\n        : Promise.reject(new Error('Terminal process is not attached.'))).catch((error: unknown) => {\n        if (!disposed && epoch === inputEpoch) {\n          inputBlocked = true\n          inputEpoch += 1\n          context.toast('Input blocked', messageOf(error))\n        }\n        return false\n      })\n      inputClaim = claim\n      void claim.then(() => { if (inputClaim === claim) inputClaim = null })\n      return claim\n    }" }
+        ]
+      }
+    },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "textarea?.addEventListener('focus', onTextareaFocus)" }, "notAction": "subscription", "reason": "Focus context follows the owning xterm textarea; this DOM lifecycle listener is not a public command." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('compositionstart', onCompositionStart, true)" }, "notAction": "subscription", "reason": "Composition start marks guarded native IME input intent; it is not a standalone application action." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('compositionend', onCompositionEnd, true)" }, "notAction": "subscription", "reason": "Composition end completes guarded native IME input intent; it is not a standalone application action." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "host.addEventListener('input', onDomInputIntent, true)" }, "notAction": "subscription", "reason": "The DOM input listener distinguishes human text from parser replies before xterm's guarded write path." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "textarea?.addEventListener('blur', releaseFocusContext)" }, "notAction": "subscription", "reason": "Blur releases the owning pane's terminal-focus context as a lifecycle subscription." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "onLagged: () => handleLag(id)" }, "notAction": "subscription", "reason": "The stream lag callback belongs to the attach/resync protocol and is not a user action." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/TerminalPaneView.tsx", "quote": "systemTheme?.addEventListener('change'" }, "notAction": "subscription", "reason": "System theme changes refresh pane appearance without invoking a public command." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search'" }, "route": { "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search'" }, "target": "command:quirky.terminal/search" } },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-next'" }, "route": { "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-next'" }, "target": "command:quirky.terminal/search-next" } },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-previous'" }, "route": { "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-previous'" }, "target": "command:quirky.terminal/search-previous" } },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-close'" }, "route": { "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/search-close'" }, "target": "command:quirky.terminal/search-close" } },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/copy'" }, "route": { "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal/copy'" }, "target": "command:quirky.terminal/copy" } },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal-dock/focus'" }, "route": { "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal-dock/focus'" }, "target": "command:quirky.terminal-dock/focus" } },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphics.ts", "quote": "const abort = () => { void reader.cancel().catch(() => {}) }\n  signal.throwIfAborted()\n  signal.addEventListener('abort', abort, { once: true })" }, "notAction": "subscription", "reason": "The abort listener cancels a pending stream read when Kitty image decoding is retired." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/pane/kittyGraphics.ts", "quote": "const abort = () => { expired = true; reject(new Error('ECANCELED: graphics renderer was retired')) }\n  signal.addEventListener('abort', abort, { once: true })" }, "notAction": "subscription", "reason": "The abort listener rejects only an obsolete image decode operation; it is renderer lifecycle, not a user action." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "onState: (next) => {" }, "notAction": "subscription", "reason": "DockLoader state notifications update the host's transport and dock snapshot." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "onFailure: (error) => {" }, "notAction": "subscription", "reason": "DockLoader failure notifications update the host's existing optional-dock error policy." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "hostElement.addEventListener('focusin', onHostFocus, true)" }, "notAction": "subscription", "reason": "Host focus observation maintains dock focus state without invoking a command." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "hostElement.addEventListener('focusout', onHostBlur, true)" }, "notAction": "subscription", "reason": "Host focus observation maintains dock focus state without invoking a command." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "composerElement?.addEventListener('focusin', onComposerFocus, true)" }, "notAction": "subscription", "reason": "Composer focus observation tracks contributed-view focus; it is not a public action." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "composerElement?.addEventListener('focusout', onComposerBlur, true)" }, "notAction": "subscription", "reason": "Composer focus observation tracks contributed-view focus; it is not a public action." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "target.addEventListener('mousemove', onMove)" }, "notAction": "subscription", "reason": "The temporary mousemove listener updates a divider drag preview until its paired mouseup." },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "target.addEventListener('mouseup', onUp)" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "context.call('quirky.terminal-dock/set', { pane: paneId, gutterRows: nextRows })" },
+        "target": "quirky.terminal-dock/set",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "const onUp = () => {\n      const current = resizeRef.current\n      resizeRef.current = null\n      setResize(null)\n      if (!current || current.previewRows === current.startRows) return\n      setRows(current.previewRows)\n      void persistRows(current.previewRows)\n    }" },
+          { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "const persistRows = async (nextRows: number) => {\n    const current = dockRef.current\n    if (!current?.enabled || !current.supported || !current.docked || current.gutterRows === nextRows) return\n    try {\n      const result = await context.call('quirky.terminal-dock/set', { pane: paneId, gutterRows: nextRows })\n      if (!isDockState(result)) throw new Error('The dock state response was invalid.')\n      acceptDock(result)\n    } catch (error) {\n      setRows(dockRef.current?.gutterRows ?? DEFAULT_GUTTER_ROWS)\n      context.toast('Could not resize the agent composer', messageOf(error))\n    }\n  }" }
+        ]
+      }
+    },
+    {
+      "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "onMouseUp={onTerminalMouseUp}" },
+      "route": {
+        "invoke": { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "command: 'command:quirky.terminal-dock/focus'" },
+        "target": "command:quirky.terminal-dock/focus",
+        "via": [
+          { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "const onTerminalMouseUp = (event: ReactMouseEvent<HTMLDivElement>) => {\n    const target = event.target\n    if (!(target instanceof Element) || !target.closest(`[data-terminal-pane=\"${sessionId}\"]`)) return\n    const current = dockRef.current\n    if (active && mounted && current?.enabled && current.supported && current.docked && !current.passthrough) requestComposerFocus()\n  }" },
+          { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "const requestComposerFocus = () => {\n    if (!controller.canFocusDock(paneId) || focusRequestPending.current) return\n    focusRequestPending.current = true\n    void requestWindowCommand(context, dockFocusCommand(paneId)).then(\n      () => {\n        focusRequestPending.current = false\n      },\n      (error) => {\n        focusRequestPending.current = false\n        setMountError(messageOf(error))\n      }\n    )\n  }" },
+          { "file": "plugins/quirky.terminal/src/window/pane/commands.ts", "quote": "export function dockFocusCommand(pane: string): WindowCommandDescriptor {\n  return { command: 'command:quirky.terminal-dock/focus', args: { pane } }\n}" }
+        ]
+      }
+    },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "{...terminalProps}" }, "notAction": "forwarded", "reason": "The remaining TerminalPaneProps are transparently forwarded through DockHost." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "onState={terminalProps.onState}" }, "notAction": "forwarded", "reason": "DockHost forwards the pane report callback directly to TerminalPaneView." },
+    { "site": { "file": "plugins/quirky.terminal/src/window/dock/DockHost.tsx", "quote": "onMouseDown={beginResize}" }, "transient": "caret", "reason": "Mouse-down begins an in-memory divider drag preview; persistence occurs on the paired mouseup." }
+  ]
+}
