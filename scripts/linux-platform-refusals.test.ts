@@ -50,15 +50,12 @@ const TRACKED_FS_OPERATIONS: Record<string, true> = {
   writeSync: true
 }
 
-const trackedFs = new Proxy({ ...fs }, {
-  get(target, property, receiver) {
-    const value = Reflect.get(target, property, receiver)
-    if (typeof property !== 'string' || TRACKED_FS_OPERATIONS[property] !== true || typeof value !== 'function') return value
-    return (...args: unknown[]) => guardedWorldOperation(
-      'filesystem', property, () => Reflect.apply(value, fs, args)
-    )
-  }
-})
+const trackedFs = Object.fromEntries(Object.entries(fs).map(([property, value]) => [
+  property,
+  TRACKED_FS_OPERATIONS[property] === true && typeof value === 'function'
+    ? (...args: unknown[]) => guardedWorldOperation('filesystem', property, () => Reflect.apply(value, fs, args))
+    : value
+]))
 
 const savedFiles = { ...fs }
 const savedChildProcess = { ...childProcess }
@@ -74,12 +71,13 @@ const testModules = await (async () => {
         'process', 'spawnSync', () => savedChildProcess.spawnSync(...args)
       )
     }))
-    const [artifacts, emulator, plist] = await Promise.all([
+    const [artifacts, emulator, plist, filesystem] = await Promise.all([
       import('../plugins/quirky.terminal/src/artifacts'),
       import('../plugins/quirky.terminal/src/emulator'),
-      import('../apps/desktop/scripts/allow-label-hosts')
+      import('../apps/desktop/scripts/allow-label-hosts'),
+      import('node:fs')
     ])
-    return { artifacts, emulator, plist }
+    return { artifacts, emulator, plist, filesystem }
   } catch (error) {
     mock.module('node:fs', () => savedFiles)
     mock.module('node:child_process', () => savedChildProcess)
@@ -196,6 +194,15 @@ test('valid terminal artifact requests, simulator preview, and plist access are 
   } as unknown as PluginContext)
 
   try {
+    recordingWorldOperations = true
+    try {
+      expect(() => testModules.filesystem.readdirSync(buildDirectory)).toThrow('unexpected filesystem operation: readdirSync')
+      expect(() => testModules.filesystem.readFileSync(artifactPath)).toThrow('unexpected filesystem operation: readFileSync')
+      expect(fileAuthorityCalls.splice(0)).toEqual(['readdirSync', 'readFileSync'])
+    } finally {
+      recordingWorldOperations = false
+    }
+
     await withLinuxPlatform(async () => {
       recordingWorldOperations = true
       try {
