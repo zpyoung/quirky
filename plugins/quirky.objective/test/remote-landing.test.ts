@@ -1071,13 +1071,22 @@ test('remote bars enroll without weakening local or workspace validation', async
     issueSourceFellBack: false
   })
   let repository: unknown = repositoryDto(githubOrigin)
+  let authentication: unknown = {
+    requiredHost: githubOrigin.host,
+    requiredHostAuthenticated: true
+  }
   let workspaceKind: 'git' | 'folder' = 'git'
   const calls: string[] = []
+  const diagnoseAuthCalls: Array<Record<string, unknown>> = []
   const context = {
     dataDir: home,
     process: { async run() { throw new Error('authorization must not run Git') } },
-    async call(method: string) {
+    async call(method: string, params: Record<string, unknown> = {}) {
       calls.push(method)
+      if (method === 'quirky.hosting/diagnoseAuth') {
+        diagnoseAuthCalls.push(params)
+        return authentication
+      }
       if (method === 'quirky.worktree/resolve') {
         return { id: 'remote-worktree', repoId: 'remote-repo', path: workspace, kind: workspaceKind }
       }
@@ -1111,6 +1120,10 @@ test('remote bars enroll without weakening local or workspace validation', async
     await hooks.authorize({ input: { kindPayload: value } } as never)
   }
   expect(calls.filter(method => method === 'quirky.hosting/repository')).toHaveLength(2)
+  expect(diagnoseAuthCalls).toEqual([
+    { worktree: 'remote-worktree', force: true },
+    { worktree: 'remote-worktree', force: true }
+  ])
   const pushedRef = enrollment('pushed-ref')
   expect(contractProblems({ ...pushedRef, objectiveText: '' }).some(problem => problem.startsWith('objective-text-invalid:'))).toBe(true)
 
@@ -1125,6 +1138,25 @@ test('remote bars enroll without weakening local or workspace validation', async
       .rejects.toThrow('landing-bar-requires-github')
     await expect(hooks.authorize({ input: { kindPayload: enrollment('merged') } } as never))
       .rejects.toThrow('landing-bar-requires-github')
+  }
+  repository = repositoryDto(githubOrigin)
+  for (const invalidAuthentication of [
+    { requiredHost: githubOrigin.host, requiredHostAuthenticated: false },
+    { requiredHost: githubOrigin.host },
+    { requiredHost: 'example.test', requiredHostAuthenticated: true }
+  ]) {
+    authentication = invalidAuthentication
+    for (const landingBar of ['hosted-review', 'merged'] as const) {
+      await expect(hooks.authorize({ input: { kindPayload: enrollment(landingBar) } } as never))
+        .rejects.toThrow('landing-bar-requires-github')
+    }
+  }
+  await hooks.authorize({ input: { kindPayload: enrollment('files-on-disk') } } as never)
+  await hooks.authorize({ input: { kindPayload: enrollment('committed-local-branch') } } as never)
+  await hooks.authorize({ input: { kindPayload: pushedRef } } as never)
+  authentication = {
+    requiredHost: githubOrigin.host,
+    requiredHostAuthenticated: true
   }
 
   workspaceKind = 'folder'
@@ -1172,7 +1204,7 @@ test('pushed-ref reaches the exact bare ref and stops without a review', async (
   const pushCalls = rig.processCalls.filter(call => call.argv[1] === 'push')
   expect(pushCalls).toHaveLength(1)
   expect(pushCalls[0]!.argv).toEqual([
-    'git', 'push', '--', rig.bare, `${action.authority.headSha}:${action.authority.remoteRef}`
+    'git', 'push', '--porcelain', '--', rig.bare, `${action.authority.headSha}:${action.authority.remoteRef}`
   ])
   expect(pushCalls[0]!.argv.some(argument => argument.includes('force'))).toBe(false)
   const exactReads = rig.processCalls.filter(call =>
@@ -1819,6 +1851,120 @@ test('remote uncertainty survives restart and resolves from the original ref wit
     opened.close()
   }
 })
+test('lost push replies remain unresolved when the ref is absent or restored to its old value', async () => {
+  const cases = [
+    { name: 'absent', restoreOldRef: false },
+    { name: 'restored old ref', restoreOldRef: true }
+  ] as const
+  for (const scenario of cases) {
+    const rig = remoteRig({ landingBar: 'pushed-ref', tier: 'express' })
+    const contentIdentity = await rig.prepare()
+    const oldRef = scenario.restoreOldRef
+      ? execGit(rig.root, ['rev-parse', 'HEAD^'], rig.dataDir).trim()
+      : null
+    if (oldRef) {
+      execGit(rig.root, ['push', '--', rig.bare, `${oldRef}:refs/heads/feature`], rig.dataDir)
+    }
+    const action = await rig.action()
+    expect(action.expectedState.before, scenario.name).toBe(oldRef)
+
+    const home = mkdtempSync(join(tmpdir(), 'objective-lost-push-store-'))
+    remoteCleanup.push(() => rmSync(home, { recursive: true, force: true }))
+    let opened = persistentStore(home, rig.dataDir)
+    persistRevision(opened.store, 'objective-remote', rig.plan)
+    opened.store.recordLanding({
+      watcherId: 'objective-remote',
+      rung: 'files-on-disk',
+      contentIdentity,
+      attemptId: 'initial-files',
+      payload: { revision: 1 },
+      recordedAtMs: 1
+    })
+    opened.store.recordLanding({
+      watcherId: 'objective-remote',
+      rung: 'committed-local-branch',
+      contentIdentity,
+      attemptId: 'initial-commit',
+      payload: { revision: 1, headSha: action.authority.headSha },
+      recordedAtMs: 2
+    })
+    rig.runtime.store = opened.store
+
+    let productPushCount = 0
+    let publishedBeforeDisconnect = false
+    rig.setProcessInterceptor((argv, _options, run) => {
+      if (argv[1] !== 'push') return run()
+      productPushCount++
+      const result = run()
+      publishedBeforeDisconnect = exactBareRef(rig.bare, action.authority.remoteRef) === action.authority.headSha
+      if (oldRef) {
+        execGit(rig.root, ['--git-dir', rig.bare, 'update-ref', action.authority.remoteRef, oldRef], rig.dataDir)
+      } else {
+        execGit(rig.root, ['--git-dir', rig.bare, 'update-ref', '-d', action.authority.remoteRef], rig.dataDir)
+      }
+      return { ...result, exitCode: 128, stderr: 'fatal: connection reset by peer' }
+    })
+
+    try {
+      expect(await executeFixtureAction(rig, action, `lost-push-${scenario.name}`), scenario.name).toEqual({
+        effect: 'indeterminate',
+        reason: 'landing-outcome-indeterminate'
+      })
+      expect(publishedBeforeDisconnect, scenario.name).toBe(true)
+      expect(exactBareRef(rig.bare, action.authority.remoteRef), scenario.name).toBe(oldRef)
+      expect(opened.store.landings('objective-remote').some(row => row.rung === 'pushed-ref'), scenario.name).toBe(false)
+      expect(productPushCount, scenario.name).toBe(1)
+
+      rig.journal.push({
+        seq: rig.journal.length + 1,
+        kind: 'attempt',
+        attemptId: `lost-push-${scenario.name}`,
+        action,
+        state: 'running',
+        effect: 'indeterminate'
+      })
+      expect(await resolveRemoteLandingOutcome(rig.runtime, action, `lost-push-${scenario.name}`, 'remote-worktree'), scenario.name)
+        .toBeNull()
+      const absentOrOld = await rig.observe()
+      expect(nextStep(rig.world(absentOrOld), rig.journal), scenario.name).toMatchObject({
+        action: null,
+        reason: 'landing-outcome-indeterminate'
+      })
+
+      opened.close()
+      opened = persistentStore(home, rig.dataDir)
+      rig.runtime.store = opened.store
+      const afterRestart = await rig.observe()
+      expect(nextStep(rig.world(afterRestart), rig.journal), scenario.name).toMatchObject({
+        action: null,
+        reason: 'landing-outcome-indeterminate'
+      })
+      expect(await resolveRemoteLandingOutcome(rig.runtime, action, `lost-push-${scenario.name}`, 'remote-worktree'), scenario.name)
+        .toBeNull()
+
+      execGit(rig.root, ['--git-dir', rig.bare, 'update-ref', action.authority.remoteRef, action.authority.headSha], rig.dataDir)
+      const callsBeforeResolution = rig.processCalls.length
+      expect(await resolveRemoteLandingOutcome(rig.runtime, action, `lost-push-${scenario.name}`, 'remote-worktree'), scenario.name)
+        .toEqual({ effect: 'landed' })
+      expect(opened.store.landings('objective-remote')).toContainEqual(expect.objectContaining({
+        rung: 'pushed-ref',
+        contentIdentity,
+        payload: expect.objectContaining({
+          remoteRef: action.authority.remoteRef,
+          remoteHeadSha: action.authority.headSha
+        })
+      }))
+      const recoveryCalls = rig.processCalls.slice(callsBeforeResolution)
+      expect(recoveryCalls.some(call => call.argv[1] === 'push'), scenario.name).toBe(false)
+      expect(recoveryCalls.some(call =>
+        call.argv[1] === 'ls-remote' && call.argv.at(-1) === action.authority.remoteRef
+      ), scenario.name).toBe(true)
+      expect(productPushCount, scenario.name).toBe(1)
+    } finally {
+      opened.close()
+    }
+  }
+}, 30_000)
 
 // Pre/post-push eligibility cases each execute real Git against their own bare remote.
 test('creation blockers prevent an unremediable pre-push and rechecked post-push review', async () => {

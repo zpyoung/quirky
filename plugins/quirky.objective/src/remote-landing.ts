@@ -685,6 +685,31 @@ async function remoteRefMatchesAuthority(
   return 'value' in ref && ref.value === authority.headSha.toLowerCase()
 }
 
+function isRefSpecificPushRejection(result: GitResult, headSha: string, remoteRef: string): boolean {
+  if (result.exitCode === null || result.exitCode === 0 || result.signal !== null ||
+    result.stopped !== undefined || result.groupSurvived === true ||
+    result.truncated?.stdout === true || result.truncated?.stderr === true) return false
+  const expectedRefspec = `${headSha.toLowerCase()}:${remoteRef}`
+  let start = 0
+  while (start < result.stdoutText.length) {
+    const newline = result.stdoutText.indexOf('\n', start)
+    const end = newline === -1 ? result.stdoutText.length : newline
+    const line = result.stdoutText.slice(start, end)
+    const statusLine = line.endsWith('\r') ? line.slice(0, -1) : line
+    if (statusLine.startsWith('!\t')) {
+      const refspecEnd = statusLine.indexOf('\t', 2)
+      if (refspecEnd !== -1 && statusLine.slice(2, refspecEnd) === expectedRefspec) {
+        const summary = statusLine.slice(refspecEnd + 1)
+        return summary === '[rejected]' || summary.startsWith('[rejected] ') ||
+          summary === '[remote rejected]' || summary.startsWith('[remote rejected] ')
+      }
+    }
+    if (newline === -1) break
+    start = newline + 1
+  }
+  return false
+}
+
 async function executePush(
   runtime: ObjectiveRuntime,
   action: Extract<RemoteAction, { kind: 'push-ref' }>,
@@ -721,7 +746,7 @@ async function executePush(
   let push: GitResult
   try {
     push = await git(runtime.context, runtime.enrollment.workspacePath,
-      ['push', '--', resolved.value.pushUrl, `${action.authority.headSha}:${action.authority.remoteRef}`], NETWORK_WRITE_OPTIONS)
+      ['push', '--porcelain', '--', resolved.value.pushUrl, `${action.authority.headSha}:${action.authority.remoteRef}`], NETWORK_WRITE_OPTIONS)
   } catch {
     const afterThrown = await readRemoteRef(runtime.context, runtime.enrollment.workspacePath, resolved.value.pushUrl, action.authority.remoteRef)
     if ('value' in afterThrown && afterThrown.value === action.authority.headSha.toLowerCase()) {
@@ -749,7 +774,8 @@ async function executePush(
   if (push.stopped !== undefined || push.signal !== null || 'problem' in after) {
     return { effect: 'indeterminate', reason: 'landing-outcome-indeterminate' }
   }
-  if (push.exitCode !== null && push.exitCode !== 0 && after.value === before.value) {
+  if (push.exitCode !== null && push.exitCode !== 0 && after.value === before.value &&
+    isRefSpecificPushRejection(push, action.authority.headSha, action.authority.remoteRef)) {
     return { effect: 'not-landed', reason: 'push-rejected' }
   }
   return { effect: 'indeterminate', reason: 'landing-outcome-indeterminate' }
