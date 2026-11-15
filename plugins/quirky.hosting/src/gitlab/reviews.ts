@@ -629,6 +629,9 @@ async function createMergeRequest(
   params: Record<string, unknown>,
   client: GitLabClient
 ): Promise<Record<string, unknown>> {
+  if (Object.hasOwn(params, 'expected')) {
+    throw env.invalid('unsupported_provider', 'GitLab hosting does not support pinned merge-request creation.')
+  }
   const title = requestedCreateTitle(env, params)
   const branch = currentBranch(env, scope)
   requestedCreateBranch(env, params, branch)

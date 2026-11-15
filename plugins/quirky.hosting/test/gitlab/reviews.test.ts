@@ -357,6 +357,43 @@ test('create validates title and head before making any GitLab request', async (
   expect(world.server.requests).toEqual([])
 })
 
+function creationExpectation(world: GitLabWorld) {
+  return {
+    branch: 'feature',
+    headSha: localHead(world),
+    baseRefName: 'main',
+    repository: { ...world.identity },
+    headRepository: { ...world.identity }
+  }
+}
+
+for (const field of ['branch', 'headSha', 'baseRefName', 'repository', 'headRepository', 'matching'] as const) {
+  test(`create refuses ${field} expected guards before GitLab authentication or requests`, async () => {
+    const world = await boot({ token: null, glabOutput: 'dummy-gitlab-token' })
+    const expected = creationExpectation(world)
+    if (field === 'branch') expected.branch = 'another-branch'
+    if (field === 'headSha') expected.headSha = `${expected.headSha[0] === '0' ? '1' : '0'}${expected.headSha.slice(1)}`
+    if (field === 'baseRefName') expected.baseRefName = 'another-base'
+    if (field === 'repository' || field === 'headRepository') expected[field] = { ...world.identity, repo: 'another-project' }
+    await expect(world.call('create', { title: 'Pinned creation', expected })).rejects.toMatchObject({
+      message: 'GitLab hosting does not support pinned merge-request creation.',
+      data: { reason: 'unsupported_provider' }
+    })
+    expect(world.server.requests).toEqual([])
+    expect(world.glabInvocations()).toEqual([])
+  })
+}
+
+test('create refuses expected guards before returning an existing GitLab review', async () => {
+  const world = await boot()
+  world.server.mergeRequests = [mergeRequest()]
+  await expect(world.call('create', { title: 'Pinned creation', expected: creationExpectation(world) })).rejects.toMatchObject({
+    data: { reason: 'unsupported_provider' }
+  })
+  expect(world.server.requests).toEqual([])
+  expect(world.glabInvocations()).toEqual([])
+})
+
 test('create returns an existing same-branch merge request without posting', async () => {
   const world = await boot()
   world.server.mergeRequests = [mergeRequest()]
