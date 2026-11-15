@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import * as cliWorldModule from './cli-world'
+import { getProcessInspectionMetadata } from './cli-world'
 import { CliFilesRunner, runCliFilesParity } from './cli-files'
 
 type ProcessIdentity = {
@@ -24,6 +25,18 @@ type StartupObservation = {
   pageErrors?: string[]
   failedRequests?: Array<{ path: string; message: string }>
 }
+type ProcessInspectionMetadata = {
+  spawnErrorCode: string | null
+  spawnErrorName: string | null
+  exitStatus: number | null
+  signal: string | null
+  stdoutWasString: boolean
+  stdoutBytes: number | null
+  timeoutHit: boolean
+  maxBufferHit: boolean
+  timeoutMs: number
+  maxBufferBytes: number
+}
 type StartupDiagnostics = {
   phase: string
   elapsedMs: number
@@ -32,6 +45,7 @@ type StartupDiagnostics = {
   assets?: { uiDir: string; pluginsDir: string }
   renderer: StartupObservation[]
   logs: { buildTail?: string; daemonTail?: string; rendererTail?: string }
+  processInspection?: ProcessInspectionMetadata
 }
 type StartupEvidence = {
   diagnostics: StartupDiagnostics
@@ -50,6 +64,7 @@ type StartupEvidence = {
       }>
       identities: Array<{ kind: string; pid: number; gone: boolean }>
       processIdentitiesGone: boolean
+      processInspection?: ProcessInspectionMetadata
       homeRemoved: boolean
       started: { daemon: boolean; browser: boolean }
       unresolvedAcquisition: boolean
@@ -58,7 +73,12 @@ type StartupEvidence = {
     }
   }
 }
-type CliFilesStartupError = Error & { kind: string; cleanupError?: string; startupEvidence: StartupEvidence }
+type CliFilesStartupError = Error & {
+  kind: string
+  cleanupError?: string
+  startupEvidence: StartupEvidence
+  processInspection?: ProcessInspectionMetadata
+}
 type StartupErrorConstructor = new (kind: string, message: string, evidence: StartupEvidence, stderrTail?: string) => CliFilesStartupError
 type FakeChild = { pid: number; exited: Promise<number> }
 type FakeScope = {
@@ -77,7 +97,6 @@ type Factory = (options?: { signal?: AbortSignal; deadline?: number }, dependenc
   cleanup(): Promise<void>
   cleanupEvidence: StartupEvidence['cleanup']['evidence']
 }>
-
 const cliWorldNamespace = cliWorldModule as unknown as {
   createCliFilesWorld?: Factory
   CliFilesStartupError?: StartupErrorConstructor
@@ -89,10 +108,16 @@ function requireFactory(): Factory {
 }
 
 
-function captureFailure<T>(promise: Promise<T>): Promise<Error & { kind?: string; startupEvidence?: StartupEvidence }> {
+function captureFailure<T>(promise: Promise<T>): Promise<Error & {
+  kind?: string
+  startupEvidence?: StartupEvidence
+  processInspection?: ProcessInspectionMetadata
+}> {
   return promise.then(
     () => { throw new Error('expected startup construction to reject') },
-    (error: unknown) => error instanceof Error ? error as Error & { kind?: string; startupEvidence?: StartupEvidence } : new Error(String(error))
+    (error: unknown) => error instanceof Error
+      ? error as Error & { kind?: string; startupEvidence?: StartupEvidence; processInspection?: ProcessInspectionMetadata }
+      : new Error(String(error))
   )
 }
 function daemonIdentity() {
@@ -764,6 +789,217 @@ test('CLI-files keeps process-table uncertainty and a surviving root failed with
     survivor.dispose()
   }
 })
+test('CLI-files process snapshots expose bounded spawn metadata without leaking process-table output', async () => {
+  const getMetadata = getProcessInspectionMetadata
+  const limit = 16 * 1024 * 1024
+  const secretStdout = 'private-process-table-stdout-Ω'
+  const overLimitStdout = 'x'.repeat(limit + 1)
+  const longCode = 'PROCESS-CODE-'.repeat(20)
+  const longName = `SpawnFailure${'λ'.repeat(100)}`
+  const longSignal = `SIGTERM${'λ'.repeat(100)}`
+  const scenarios: Array<{
+    label: string
+    code?: string
+    name?: string
+    status: number | null
+    signal: string | null
+    stdout: string | null
+    timeoutHit: boolean
+    maxBufferHit: boolean
+  }> = [
+    {
+      label: 'ETIMEDOUT',
+      code: 'ETIMEDOUT',
+      name: longName,
+      status: null,
+      signal: longSignal,
+      stdout: secretStdout,
+      timeoutHit: true,
+      maxBufferHit: false
+    },
+    {
+      label: 'TimeoutError',
+      code: longCode,
+      name: 'TimeoutError',
+      status: null,
+      signal: null,
+      stdout: secretStdout,
+      timeoutHit: true,
+      maxBufferHit: false
+    },
+    {
+      label: 'ENOBUFS',
+      code: 'ENOBUFS',
+      name: longName,
+      status: null,
+      signal: null,
+      stdout: secretStdout,
+      timeoutHit: false,
+      maxBufferHit: true
+    },
+    {
+      label: 'captured stdout over the process-table cap',
+      status: 0,
+      signal: longSignal,
+      stdout: overLimitStdout,
+      timeoutHit: false,
+      maxBufferHit: true
+    },
+    {
+      label: 'non-string stdout',
+      status: 0,
+      signal: null,
+      stdout: null,
+      timeoutHit: false,
+      maxBufferHit: false
+    },
+    {
+      label: 'nonzero exit status',
+      status: 23,
+      signal: null,
+      stdout: secretStdout,
+      timeoutHit: false,
+      maxBufferHit: false
+    }
+  ]
+
+  for (const scenario of scenarios) {
+    const fixture = makeFactoryFixture()
+    let spawnCalls = 0
+    const spawnError = scenario.code === undefined
+      ? undefined
+      : Object.assign(new Error(`secret spawn message ${secretStdout}`), { code: scenario.code, name: scenario.name })
+    const spawnProcessSnapshot = (command: string, args: readonly string[], options: Record<string, unknown>) => {
+      spawnCalls += 1
+      expect(command).toBe('/bin/ps')
+      expect(args).toEqual(['-A', '-o', 'pid=,ppid=,pgid=,lstart=,stat=,command='])
+      expect(options).toEqual({
+        cwd: fixture.home,
+        env: {
+          HOME: fixture.home,
+          QUIRKY_HOME: fixture.home,
+          PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+          TMPDIR: join(fixture.home, 'tmp'),
+          LANG: 'C',
+          TZ: 'UTC'
+        },
+        encoding: 'utf8',
+        timeout: 2_000,
+        maxBuffer: limit,
+        stdio: ['ignore', 'pipe', 'ignore']
+      })
+      return { error: spawnError, status: scenario.status, signal: scenario.signal, stdout: scenario.stdout }
+    }
+
+    try {
+      const outcome = await requireFactory()({}, {
+        ...fixture.dependencies,
+        spawnProcessSnapshot
+      }).then(
+        world => ({ world }),
+        error => ({ error })
+      )
+      if ('world' in outcome) {
+        await outcome.world.cleanup()
+        throw new Error('expected injected process snapshot failure')
+      }
+      const failure = outcome.error as Error & {
+        kind?: string
+        processInspection?: ProcessInspectionMetadata
+        startupEvidence?: StartupEvidence
+      }
+      expect(spawnCalls, scenario.label).toBeGreaterThan(0)
+      expect(failure).toBeInstanceOf(Error)
+      expect(failure.name).toBe('CliFilesStartupError')
+      expect(failure.kind).toBe('startup-failed')
+      expect(failure.message).toBe('could not inspect owned process identities')
+      const metadata = getMetadata(failure)
+      const expected = {
+        spawnErrorCode: scenario.code === undefined ? null : scenario.code.slice(0, 128),
+        spawnErrorName: scenario.name === longName ? `SpawnFailure${'λ'.repeat(58)}` : scenario.name ?? null,
+        exitStatus: scenario.status,
+        signal: scenario.signal === longSignal ? `SIGTERM${'λ'.repeat(60)}` : scenario.signal,
+        stdoutWasString: scenario.stdout !== null,
+        stdoutBytes: scenario.stdout === null ? null : Buffer.byteLength(scenario.stdout, 'utf8'),
+        timeoutHit: scenario.timeoutHit,
+        maxBufferHit: scenario.maxBufferHit,
+        timeoutMs: 2_000,
+        maxBufferBytes: limit
+      }
+      for (const value of [metadata?.spawnErrorCode, metadata?.spawnErrorName, metadata?.signal]) {
+        if (typeof value !== 'string') continue
+        expect(Buffer.byteLength(value, 'utf8'), scenario.label).toBeLessThanOrEqual(128)
+        expect(value, scenario.label).not.toContain('\uFFFD')
+      }
+      expect(metadata, scenario.label).toEqual(expected)
+      expect(failure.processInspection, scenario.label).toEqual(expected)
+      expect(failure.startupEvidence?.diagnostics.processInspection, scenario.label).toEqual(expected)
+      expect(Object.isFrozen(metadata)).toBe(true)
+      expect(Object.isFrozen(failure.startupEvidence?.diagnostics)).toBe(true)
+      expect(Object.keys(metadata!).sort()).toEqual([
+        'exitStatus', 'maxBufferBytes', 'maxBufferHit', 'signal', 'spawnErrorCode',
+        'spawnErrorName', 'stdoutBytes', 'stdoutWasString', 'timeoutHit', 'timeoutMs'
+      ])
+      expect(metadata).not.toHaveProperty('stdout')
+      expect(metadata).not.toHaveProperty('message')
+      const untrustedCopy = getMetadata(Object.assign(new Error('wrapper'), {
+        processInspection: { ...metadata, stdout: secretStdout, extra: 'must-not-survive' }
+      }))
+      expect(untrustedCopy).toEqual(expected)
+      const serialized = JSON.stringify({ failure: failure.processInspection, diagnostics: failure.startupEvidence?.diagnostics })
+      expect(serialized).not.toContain(secretStdout)
+      expect(serialized).not.toContain('secret spawn message')
+      expect(serialized).not.toContain('must-not-survive')
+    } finally {
+      fixture.dispose()
+    }
+  }
+})
+
+test('CLI-files retains process inspection metadata from a cleanup process-table failure', async () => {
+  const getMetadata = getProcessInspectionMetadata
+  const fixture = makeFactoryFixture({ chromeMissing: true })
+  const secretStdout = 'cleanup-process-table-private-output'
+  let cleanupInspectionStarted = false
+  const spawnProcessSnapshot = (_command: string, _args: readonly string[], _options: Record<string, unknown>) => {
+    if (fixture.events.includes('world.stop')) {
+      cleanupInspectionStarted = true
+      const error = Object.assign(new Error(`cleanup spawn details ${secretStdout}`), { code: 'ENOBUFS' })
+      return { error, status: null, signal: null, stdout: secretStdout }
+    }
+    const rows = [...fixture.state.livePids].map(pid => {
+      const pgid = pid === 702 ? 702 : process.pid
+      const command = pid === 701 ? `${process.execPath} packages/daemon/src/main.ts`
+        : pid === 702 ? `${process.execPath} packages/ui/build.ts`
+          : '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+      return `${pid} ${process.pid} ${pgid} owned-start-${pid} fixture date process time S ${command}`
+    }).join('\n')
+    return { error: undefined, status: 0, signal: null, stdout: rows }
+  }
+  try {
+    const failure = await captureFailure(requireFactory()({}, {
+      ...fixture.dependencies,
+      spawnProcessSnapshot
+    }))
+    expect(cleanupInspectionStarted).toBe(true)
+    expect(failure.message).toBe('an installed macOS Chrome or Chromium executable was not found')
+    expect(failure.startupEvidence?.diagnostics.processInspection).toMatchObject({
+      spawnErrorCode: 'ENOBUFS',
+      spawnErrorName: 'Error',
+      timeoutHit: false,
+      maxBufferHit: true,
+      timeoutMs: 2_000,
+      maxBufferBytes: 16 * 1024 * 1024
+    })
+    expect(getMetadata(failure)).toEqual(failure.startupEvidence?.diagnostics.processInspection)
+    expect(failure.startupEvidence?.cleanup.evidence.processInspection).toEqual(failure.startupEvidence?.diagnostics.processInspection)
+    expect(JSON.stringify(failure.startupEvidence)).not.toContain(secretStdout)
+    expect(JSON.stringify(failure.startupEvidence)).not.toContain('cleanup spawn details')
+  } finally {
+    fixture.dispose()
+  }
+})
+
 
 test('CLI-files compares full captured identities across PID reuse and preserves stop fallback order', async () => {
   const reused = makeFactoryFixture({ chromeMissing: true, reuseDaemonPid: true })
@@ -986,6 +1222,76 @@ test('CLI-files runner preserves process proof separately when startup-home remo
   expect(report.cleanup.evidence).toMatchObject({ processIdentitiesGone: true, homeRemoved: false })
   expect(report.error).toMatchObject({ kind: 'missing-chrome', message: 'browser missing' })
 })
+test('CLI-files observation retains bounded process inspection metadata from its thrown error', async () => {
+  const runner = new CliFilesRunner({})
+  const metadata: ProcessInspectionMetadata = {
+    spawnErrorCode: 'ENOBUFS',
+    spawnErrorName: 'Error',
+    exitStatus: null,
+    signal: null,
+    stdoutWasString: true,
+    stdoutBytes: 32,
+    timeoutHit: false,
+    maxBufferHit: true,
+    timeoutMs: 2_000,
+    maxBufferBytes: 16 * 1024 * 1024
+  }
+  const failure = Object.assign(new Error('process table could not be inspected'), { processInspection: metadata })
+  try {
+    await runner.observation('process-inspection', async () => { throw failure })
+    const observation = runner.observations.get('process-inspection') as unknown as {
+      error?: { kind: string; message: string; processInspection?: ProcessInspectionMetadata }
+    }
+    expect(observation.error).toMatchObject({
+      kind: 'observation-failed',
+      message: 'process table could not be inspected',
+      processInspection: metadata
+    })
+    expect((runner.primaryFailure as unknown as { processInspection?: ProcessInspectionMetadata }).processInspection).toEqual(metadata)
+  } finally {
+    clearTimeout(runner.workTimer)
+    clearTimeout(runner.cleanupTimer)
+    runner.workController.abort()
+    runner.cleanupController.abort()
+  }
+})
+
+test('CLI-files final report carries process inspection metadata from a rejected startup', async () => {
+  const metadata: ProcessInspectionMetadata = {
+    spawnErrorCode: 'ENOBUFS',
+    spawnErrorName: 'Error',
+    exitStatus: null,
+    signal: null,
+    stdoutWasString: true,
+    stdoutBytes: 32,
+    timeoutHit: false,
+    maxBufferHit: true,
+    timeoutMs: 2_000,
+    maxBufferBytes: 16 * 1024 * 1024
+  }
+  const evidence = validStartupEvidence({ daemon: false, browser: false })
+  evidence.diagnostics.processInspection = metadata
+  evidence.cleanup.evidence.processInspection = metadata
+  const failure = Object.assign(
+    typedStartupError(evidence, 'startup-failed', 'could not inspect owned process identities'),
+    { processInspection: metadata }
+  )
+  const report = await runCliFilesParity({ createWorld: async () => { throw failure } })
+  const propagated = report as unknown as {
+    startup?: StartupDiagnostics
+    error?: { kind: string; message: string; processInspection?: ProcessInspectionMetadata }
+    cleanup?: { evidence?: { processInspection?: ProcessInspectionMetadata } }
+  }
+  expect(propagated.startup?.processInspection).toEqual(metadata)
+  expect(propagated.cleanup?.evidence?.processInspection).toEqual(metadata)
+  expect(propagated.error).toMatchObject({
+    kind: 'startup-failed',
+    message: 'could not inspect owned process identities',
+    processInspection: metadata
+  })
+  expect(JSON.stringify(report)).toContain('"processInspection"')
+})
+
 
 test('CLI-files runner retains and re-sanitizes actual factory startup evidence in JSON', async () => {
   const fixture = makeFactoryFixture({ rendererFailure: true })

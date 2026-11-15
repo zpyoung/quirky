@@ -8,7 +8,7 @@ import { parseCliRefusal, type CliReceipt } from './cli-run'
 import { checkIds } from './cli-checks'
 import * as table from './cli-table'
 import { CLI_FILE_OBSERVATION_BINDINGS } from './cli-table'
-import { createCliFilesWorld, CliFilesStartupError, type CliFilesWorld, type CliFilesStartupDiagnostics } from './cli-world'
+import { createCliFilesWorld, CliFilesStartupError, getProcessInspectionMetadata, type CliFilesWorld, type CliFilesStartupDiagnostics, type CliProcessInspectionMetadata } from './cli-world'
 import type { BrowserContext } from 'playwright'
 
 type JsonObject = Record<string, unknown>
@@ -89,6 +89,12 @@ export type CliFileObservationEvidence = {
   elapsedMs?: number
   [key: string]: unknown
 }
+type CliFilesFailureInfo = {
+  kind: string
+  message: string
+  processInspection?: CliProcessInspectionMetadata
+}
+
 export type CliFileObservation = {
   id: string
   status: 'observed' | 'failed' | 'not-run'
@@ -96,7 +102,7 @@ export type CliFileObservation = {
   before: CliFileSnapshot[]
   after: CliFileSnapshot[]
   evidence: CliFileObservationEvidence
-  error?: { kind: string; message: string }
+  error?: CliFilesFailureInfo
 }
 export type CliFilesReport = {
   schemaVersion: 1
@@ -119,7 +125,7 @@ export type CliFilesReport = {
   startup?: CliFilesStartupDiagnostics
   guards?: { denied: string[]; egress: string[]; injected: boolean }
   fixtures?: JsonObject
-  error?: { stage: string; kind: string; message: string }
+  error?: CliFilesFailureInfo & { stage: string }
 }
 export type CliFileNavigationHistory = { worktrees: string[]; index: number }
 
@@ -316,6 +322,12 @@ function sanitizeText(text: string, home: string, tokens: readonly string[]): st
 }
 function sanitizeValue(value: unknown, home: string, tokens: readonly string[], key = ''): unknown {
   if (/^(?:token|hookToken|runtimeToken|sessionToken|authorization|secret|password)$/i.test(key)) return '<redacted>'
+  if (key === 'processInspection') {
+    const metadata = getProcessInspectionMetadata({ processInspection: value })
+    return metadata
+      ? getProcessInspectionMetadata({ processInspection: sanitizeValue(metadata, home, tokens) })
+      : undefined
+  }
   if (typeof value === 'string') return sanitizeText(value, home, tokens)
   if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, home, tokens))
   if (!isObject(value)) return value
@@ -349,6 +361,7 @@ function startupDiagnostics(value: unknown): CliFilesStartupDiagnostics | undefi
       !isObject(request) || typeof request.path !== 'string' || typeof request.message !== 'string'))) return
   }
   for (const key of ['buildTail', 'daemonTail', 'rendererTail']) if (value.logs[key] !== undefined && typeof value.logs[key] !== 'string') return
+  if (value.processInspection !== undefined && !getProcessInspectionMetadata(value)) return
   const safe = sanitizeValue(value, '', [])
   if (!isObject(safe)) return
   const logs: CliFilesStartupDiagnostics['logs'] = {}
@@ -411,12 +424,13 @@ function startupProcessesVerified(value: unknown, diagnostics: CliFilesStartupDi
   return isDeepStrictEqual(evidence.identities, summaries)
 }
 
-function safeError(error: unknown): { kind: string; message: string; stderrTail?: string } {
+function safeError(error: unknown): CliFilesFailureInfo & { stderrTail?: string } {
   const value = error && typeof error === 'object' ? error as Record<string, unknown> : {}
   const kind = typeof value.kind === 'string' ? value.kind : typeof value.code === 'string' ? value.code : 'observation-failed'
   const message = error instanceof Error ? error.message : String(error)
   const stderrTail = typeof value.stderrTail === 'string' ? value.stderrTail.slice(-MAX_DIAGNOSTIC_BYTES) : undefined
-  return { kind, message, ...(stderrTail ? { stderrTail } : {}) }
+  const processInspection = getProcessInspectionMetadata(error)
+  return { kind, message, ...(stderrTail ? { stderrTail } : {}), ...(processInspection ? { processInspection } : {}) }
 }
 function parseErrorEnvelope(value: unknown): { code: string; message: string; data?: unknown } {
   const outer = record(value, 'CLI refusal envelope')
@@ -2731,7 +2745,7 @@ export class CliFilesRunner {
   buildElapsedMs = 0
   startup: CliFilesStartupDiagnostics | undefined
   failedStartupCleanup: unknown
-  primaryFailure: { stage: string; kind: string; message: string } | undefined
+  primaryFailure: CliFilesReport['error']
   cleanupFailure: string | undefined
   cleanupEvidence: JsonObject = {}
   guardEvidence: { denied: string[]; egress: string[]; injected: boolean } | undefined
@@ -3277,10 +3291,14 @@ export class CliFilesRunner {
         before: builder.before,
         after: builder.after,
         evidence: { ...builder.evidence, elapsedMs: Math.max(1, Date.now() - builder.startedAt) },
-        error: { kind: failure.kind, message: sanitizeText(failure.message, this.home, this.tokenValues) }
+        error: {
+          kind: failure.kind,
+          message: sanitizeText(failure.message, this.home, this.tokenValues),
+          ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
+        }
       }
       this.observations.set(id, observation)
-      this.primaryFailure ??= { stage: id, kind: failure.kind, message: sanitizeText(failure.message, this.home, this.tokenValues) }
+      this.primaryFailure ??= { stage: id, ...observation.error! }
       this.workController.abort(error)
       this.progress(`${id} failed: ${failure.message}`)
     } finally {
@@ -4316,7 +4334,12 @@ export class CliFilesRunner {
       await this.assertLive(true)
     } catch (error) {
       const failure = safeError(error)
-      this.primaryFailure ??= { stage: 'cleanup-liveness', kind: failure.kind, message: sanitizeText(failure.message, this.home, this.tokenValues) }
+      this.primaryFailure ??= {
+        stage: 'cleanup-liveness',
+        kind: failure.kind,
+        message: sanitizeText(failure.message, this.home, this.tokenValues),
+        ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
+      }
       return
     }
     try {
@@ -4515,7 +4538,8 @@ export class CliFilesRunner {
       this.primaryFailure ??= {
         stage: this.currentStage,
         kind: failure.kind,
-        message: sanitizeText(failure.message, this.home, this.tokenValues)
+        message: sanitizeText(failure.message, this.home, this.tokenValues),
+        ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
       }
       if (error && typeof error === 'object' && 'cleanupError' in error && typeof (error as Record<string, unknown>).cleanupError === 'string') {
         this.cleanupFailure = [(error as Record<string, unknown>).cleanupError as string, this.cleanupFailure].filter(Boolean).join('; ')

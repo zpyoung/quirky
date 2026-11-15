@@ -54,6 +54,18 @@ export type CliWorld = {
 }
 
 export type CliFilesWorldOptions = { signal?: AbortSignal; deadline?: number }
+export type CliProcessInspectionMetadata = {
+  spawnErrorCode: string | null
+  spawnErrorName: string | null
+  exitStatus: number | null
+  signal: string | null
+  stdoutWasString: boolean
+  stdoutBytes: number | null
+  timeoutHit: boolean
+  maxBufferHit: boolean
+  timeoutMs: number
+  maxBufferBytes: number
+}
 export type CliFilesTrackedIdentity = {
   kind: string
   pid: number
@@ -68,6 +80,7 @@ export type CliFilesCleanupEvidence = {
   identities: readonly { kind: string; pid: number; gone: boolean }[]
   processIdentitiesGone: boolean
   homeRemoved: boolean
+  processInspection?: CliProcessInspectionMetadata
 }
 export type CliFilesStartupDiagnostics = {
   phase: 'environment' | 'fixtures' | 'build' | 'daemon' | 'renderer' | 'ready'
@@ -77,6 +90,7 @@ export type CliFilesStartupDiagnostics = {
   assets?: { uiDir: string; pluginsDir: string }
   renderer: WindowStartupObservation[]
   logs: { buildTail?: string; daemonTail?: string; rendererTail?: string }
+  processInspection?: CliProcessInspectionMetadata
 }
 export type CliFilesStartupEvidence = {
   diagnostics: CliFilesStartupDiagnostics
@@ -135,6 +149,7 @@ type CliFilesWorldDependencies = {
   readRuntime?: typeof readRuntime
   isDaemonAlive?: typeof isDaemonAlive
   processSnapshot?: typeof processSnapshot
+  spawnProcessSnapshot?: typeof spawnSync
   now?: () => number
   sleep?: (milliseconds: number) => Promise<void>
   verifyEgressGuard?: (options: {
@@ -486,8 +501,47 @@ function parseProcessTable(text: string): Map<number, ProcessIdentity> {
   return rows
 }
 
-function processSnapshot(home: string): Map<number, ProcessIdentity> {
-  const result = spawnSync('/bin/ps', ['-A', '-o', 'pid=,ppid=,pgid=,lstart=,stat=,command='], {
+function boundedProcessInspectionString(value: string): string {
+  if (Buffer.byteLength(value, 'utf8') <= 128) return value
+  const bytes = Buffer.from(value, 'utf8')
+  let end = 128
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end -= 1
+  return bytes.subarray(0, end).toString('utf8')
+}
+
+export function getProcessInspectionMetadata(error: unknown): CliProcessInspectionMetadata | undefined {
+  if (!error || typeof error !== 'object' || !('processInspection' in error)) return undefined
+  const candidate = error.processInspection
+  if (!candidate || typeof candidate !== 'object') return undefined
+  const value = candidate as Record<string, unknown>
+  const nullableString = (field: unknown): field is string | null => field === null || typeof field === 'string'
+  const nullableSafeInteger = (field: unknown): field is number | null =>
+    field === null || (typeof field === 'number' && Number.isSafeInteger(field))
+  if (!nullableString(value.spawnErrorCode) || !nullableString(value.spawnErrorName)
+    || !nullableSafeInteger(value.exitStatus) || !nullableString(value.signal)
+    || typeof value.stdoutWasString !== 'boolean' || !nullableSafeInteger(value.stdoutBytes)
+    || (value.stdoutBytes !== null && value.stdoutBytes < 0)
+    || typeof value.timeoutHit !== 'boolean' || typeof value.maxBufferHit !== 'boolean'
+    || typeof value.timeoutMs !== 'number' || !Number.isSafeInteger(value.timeoutMs) || value.timeoutMs < 0
+    || typeof value.maxBufferBytes !== 'number' || !Number.isSafeInteger(value.maxBufferBytes) || value.maxBufferBytes < 0) {
+    return undefined
+  }
+  return Object.freeze({
+    spawnErrorCode: value.spawnErrorCode === null ? null : boundedProcessInspectionString(value.spawnErrorCode),
+    spawnErrorName: value.spawnErrorName === null ? null : boundedProcessInspectionString(value.spawnErrorName),
+    exitStatus: value.exitStatus,
+    signal: value.signal === null ? null : boundedProcessInspectionString(value.signal),
+    stdoutWasString: value.stdoutWasString,
+    stdoutBytes: value.stdoutBytes,
+    timeoutHit: value.timeoutHit,
+    maxBufferHit: value.maxBufferHit,
+    timeoutMs: value.timeoutMs,
+    maxBufferBytes: value.maxBufferBytes
+  })
+}
+
+function processSnapshot(home: string, spawn: typeof spawnSync = spawnSync): Map<number, ProcessIdentity> {
+  const result = spawn('/bin/ps', ['-A', '-o', 'pid=,ppid=,pgid=,lstart=,stat=,command='], {
     cwd: home,
     env: { HOME: home, QUIRKY_HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', TMPDIR: join(home, 'tmp'), LANG: 'C', TZ: 'UTC' },
     encoding: 'utf8',
@@ -495,8 +549,32 @@ function processSnapshot(home: string): Map<number, ProcessIdentity> {
     maxBuffer: PROCESS_TABLE_LIMIT_BYTES,
     stdio: ['ignore', 'pipe', 'ignore']
   })
-  if (result.error || result.status !== 0 || typeof result.stdout !== 'string') throw new Error('could not inspect owned process identities')
-  return parseProcessTable(result.stdout)
+  const spawnError = result.error as (Error & { code?: unknown }) | null
+  const spawnErrorCode = typeof spawnError?.code === 'string' ? spawnError.code : null
+  const spawnErrorName = typeof spawnError?.name === 'string' ? spawnError.name : null
+  const stdoutWasString = typeof result.stdout === 'string'
+  const stdoutBytes = stdoutWasString
+    ? Buffer.byteLength(result.stdout as string, 'utf8')
+    : Buffer.isBuffer(result.stdout) ? result.stdout.byteLength : null
+  const metadata: CliProcessInspectionMetadata = Object.freeze({
+    spawnErrorCode: spawnErrorCode === null ? null : boundedProcessInspectionString(spawnErrorCode),
+    spawnErrorName: spawnErrorName === null ? null : boundedProcessInspectionString(spawnErrorName),
+    exitStatus: result.status,
+    signal: result.signal === null ? null : boundedProcessInspectionString(result.signal),
+    stdoutWasString,
+    stdoutBytes,
+    timeoutHit: spawnErrorCode === 'ETIMEDOUT' || spawnErrorName === 'TimeoutError',
+    maxBufferHit: spawnErrorCode === 'ENOBUFS' || spawnErrorCode === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+      || (stdoutBytes !== null && stdoutBytes > PROCESS_TABLE_LIMIT_BYTES),
+    timeoutMs: PROCESS_TABLE_TIMEOUT_MS,
+    maxBufferBytes: PROCESS_TABLE_LIMIT_BYTES
+  })
+  if (result.error || result.status !== 0 || !stdoutWasString || metadata.maxBufferHit) {
+    const error = new Error('could not inspect owned process identities')
+    Object.defineProperty(error, 'processInspection', { value: metadata, enumerable: true })
+    throw error
+  }
+  return parseProcessTable(result.stdout as string)
 }
 
 function processTree(snapshot: Map<number, ProcessIdentity>, rootPid: number): ProcessIdentity[] {
@@ -1413,6 +1491,11 @@ export async function createCliFilesWorld(
     processIdentitiesGone: false,
     homeRemoved: false
   }
+  let lastProcessInspection: CliProcessInspectionMetadata | undefined
+  const recordProcessInspection = (error: unknown) => {
+    const metadata = getProcessInspectionMetadata(error)
+    if (metadata) lastProcessInspection = metadata
+  }
   const acquisitionSettled = () => scopeAcquisitionSettled && startWorldSettled && rendererAcquisitionSettled && buildPendingCount === 0
   const startupDiagnostics = (): CliFilesStartupDiagnostics => freezeCliFilesValue({
     phase,
@@ -1432,6 +1515,7 @@ export async function createCliFilesWorld(
       ...(observation.pageErrors ? { pageErrors: [...observation.pageErrors] } : {}),
       ...(observation.failedRequests ? { failedRequests: observation.failedRequests.map((request) => ({ ...request })) } : {})
     })),
+    ...(lastProcessInspection ? { processInspection: lastProcessInspection } : {}),
     logs: { ...startupLogs }
   })
 
@@ -1444,11 +1528,23 @@ export async function createCliFilesWorld(
         .filter((identity) => identity.kind === 'daemon' || identity.kind === 'browser' || identity.kind === 'pty')
         .map(({ kind, pid, gone: hasGone }) => ({ kind, pid, gone: hasGone })),
       processIdentitiesGone: false,
-      homeRemoved: !existsSync(home)
+      homeRemoved: !existsSync(home),
+      ...(lastProcessInspection ? { processInspection: lastProcessInspection } : {})
     }
   }
 
-  const processTable = dependencies.processSnapshot ?? processSnapshot
+  const injectedProcessSnapshotSpawn = dependencies.spawnProcessSnapshot
+  const processTableBackend = injectedProcessSnapshotSpawn
+    ? (ownedHome: string) => processSnapshot(ownedHome, injectedProcessSnapshotSpawn)
+    : dependencies.processSnapshot ?? processSnapshot
+  const processTable = (ownedHome: string) => {
+    try {
+      return processTableBackend(ownedHome)
+    } catch (error) {
+      recordProcessInspection(error)
+      throw error
+    }
+  }
   const captureBuildProcessIdentities = (snapshot: Map<number, ProcessIdentity>) => {
     for (const root of buildRoots.values()) {
       const currentRoot = snapshot.get(root.pid)
@@ -1684,6 +1780,7 @@ export async function createCliFilesWorld(
     cleanupPromise = (async () => {
       const cleanupErrors: string[] = [...lateCleanupErrors]
       const recordCleanupError = (error: unknown) => {
+        recordProcessInspection(error)
         cleanupErrors.push(home ? sanitizeCliFilesDiagnostic(errorText(error), home, tokens) : errorText(error))
       }
 
@@ -1794,7 +1891,8 @@ export async function createCliFilesWorld(
             .map(({ kind, pid, gone: hasGone }) => ({ kind, pid, gone: hasGone }))
           : [],
         processIdentitiesGone,
-        homeRemoved: !home
+        homeRemoved: !home,
+        ...(lastProcessInspection ? { processInspection: lastProcessInspection } : {})
       }
       if (lingering.length > 0) {
         const detail = lingering.map((identity) => `${identity.pid} ${identity.command}`).join(', ')
@@ -2245,6 +2343,7 @@ export async function createCliFilesWorld(
     clearTimeout(deadlineTimer)
     return world
   } catch (error) {
+    const primaryProcessInspection = getProcessInspectionMetadata(error)
     let cleanupError: string | undefined
     try {
       await cleanup()
@@ -2297,6 +2396,10 @@ export async function createCliFilesWorld(
       original.exitCode
     )
     if (safeCleanupError) failure.cleanupError = safeCleanupError
+    const processInspection = primaryProcessInspection ?? lastProcessInspection
+    if (processInspection) {
+      Object.defineProperty(failure, 'processInspection', { value: processInspection, enumerable: true })
+    }
     throw failure
   }
 }
