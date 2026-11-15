@@ -55,7 +55,8 @@ function validRelativePath(value: unknown): value is string {
 }
 
 function isExcludedPath(path: string): boolean {
-  return path.split('/').includes('.git') || path === '.quirky/objective' || path.startsWith('.quirky/objective/')
+  return path.split('/').includes('.git') || path === '.quirky/objective' || path.startsWith('.quirky/objective/') ||
+    path === '.orca/heimdall/lease' || path.startsWith('.orca/heimdall/lease/')
 }
 
 function comparePathBytes(left: string, right: string): number {
@@ -193,15 +194,13 @@ async function readRegularFile(path: string, expected: BigIntStats): Promise<str
     }
     return hash.digest('hex')
   } catch (error) {
-    filesystemFailure(error, true)
+    return filesystemFailure(error, true)
   } finally {
     stream?.destroy()
     if (handle) {
       try {
         await handle.close()
-      } catch {
-        // A completed read already has its stability checks; close errors do not change its content.
-      }
+      } catch {}
     }
   }
 }
@@ -252,9 +251,8 @@ async function scanManifest(rootPath: string): Promise<FolderEntry[]> {
 
     for (const rawName of names) {
       const name = decodeName(rawName)
-      if (name === '.git') continue
       const relativePath = directory.relativePath ? `${directory.relativePath}/${name}` : name
-      if (relativePath === '.quirky/objective' || relativePath.startsWith('.quirky/objective/')) continue
+      if (isExcludedPath(relativePath)) continue
       if (!validRelativePath(relativePath)) fail('folder-tree-unsupported-path', 'filesystem path is not representable safely')
 
       const absolutePath = join(directory.path, name)

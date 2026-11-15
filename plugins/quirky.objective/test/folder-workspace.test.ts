@@ -170,6 +170,40 @@ test('folder observations are deterministic and exclude only private reports and
   })
 })
 
+test('root lease acquisition renewal and release preserve identity without hiding near misses', async () => {
+  await withWorkspace(async root => {
+    const observedPaths = [
+      '.orca/config.json',
+      '.orca/heimdall/lease-other/file',
+      'src/.orca/heimdall/lease/file'
+    ]
+    for (const path of observedPaths) writeWorkspaceFile(root, path, 'user bytes')
+    const before = await captureFolderObservation(root)
+    expect(before.entries.map(entry => entry.path)).toEqual(observedPaths)
+
+    const holder = '.orca/heimdall/lease/epoch-1/holder.json'
+    writeWorkspaceFile(root, holder, '{"state":"acquired"}')
+    expect(await captureFolderObservation(root)).toEqual(before)
+    const temporary = '.orca/heimdall/lease/epoch-1/.holder-renew.tmp'
+    writeWorkspaceFile(root, temporary, '{"state":"renewed"}')
+    expect(await captureFolderObservation(root)).toEqual(before)
+    renameSync(join(root, temporary), join(root, holder))
+    expect(await captureFolderObservation(root)).toEqual(before)
+    writeWorkspaceFile(root, holder, '{"state":"released"}')
+    expect(await captureFolderObservation(root)).toEqual(before)
+    writeWorkspaceFile(root, '.orca/heimdall/lease/epoch-2/holder.json', '{"state":"acquired"}')
+    expect(await captureFolderObservation(root)).toEqual(before)
+    rmSync(join(root, '.orca/heimdall/lease'), { recursive: true })
+    expect(await captureFolderObservation(root)).toEqual(before)
+
+    for (const path of observedPaths) {
+      const prior = await captureFolderObservation(root)
+      writeWorkspaceFile(root, path, 'changed user bytes')
+      expect((await captureFolderObservation(root)).contentIdentity).not.toBe(prior.contentIdentity)
+    }
+  })
+})
+
 test('folder observations hash symlink targets without following file or directory links', async () => {
   await withWorkspace(async root => withWorkspace(async outside => {
     const targetFile = join(outside, 'target.txt')
