@@ -1,0 +1,271 @@
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { ControlIcon, EmptyState, IconButton, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'
+import type { UiPluginContext } from '@quirky/protocol'
+import type { EditorUiControl, EditorUiControlAddress, EditorUiControlResult } from './uiControl'
+import { EDITOR_UI_CONTROL_COMMAND, useEditorUiControl, useEditorUiControlReport } from './uiControl'
+import type { NavigationPosition, SourceLocationsPanel as PanelState, SourceSymbolsController, SourceSymbolsKind, SourceSymbolsReport } from './sourceNavigation'
+import { isRecord, SOURCE_WINDOW_UNKNOWN_MESSAGE } from './sourceNavigation'
+
+const SOURCE_CONTROL_SURFACE = 'view:quirky.editor/document'
+type SourceControlRunner = (action: string, data?: Record<string, unknown>) => Promise<EditorUiControlResult>
+type Props = {
+  context: UiPluginContext
+  bufferId: string
+  tabId: string | null
+  sourceGeneration: string | null
+  enabled: boolean
+  controller: SourceSymbolsController
+  isValidPosition(position: NavigationPosition): boolean
+  focusEditor(): void
+  onSourceControlRunner(runner: SourceControlRunner | null): void
+}
+
+function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Reflect.ownKeys(value).every((key) => typeof key === 'string' && allowed.includes(key))
+}
+function positionFromData(data: Record<string, unknown>, isValid: (position: NavigationPosition) => boolean): NavigationPosition | null | false {
+  const hasLine = Object.hasOwn(data, 'line')
+  const hasColumn = Object.hasOwn(data, 'column')
+  if (!hasLine && !hasColumn) return null
+  if (!hasLine || !hasColumn || !Number.isSafeInteger(data.line) || (data.line as number) < 1 ||
+      !Number.isSafeInteger(data.column) || (data.column as number) < 1) return false
+  const position = { line: data.line as number, column: data.column as number }
+  return isValid(position) ? position : false
+}
+function bridgeIntent(method: string, params: unknown, isValid: (position: NavigationPosition) => boolean): string | undefined {
+  if (method !== 'ui.window.command.run' || !isRecord(params) ||
+      params.id !== EDITOR_UI_CONTROL_COMMAND || !isRecord(params.args)) return undefined
+  const args = params.args
+  const hasData = Object.hasOwn(args, 'data')
+  const data = hasData ? args.data : {}
+  if (args.action !== 'definition' && args.action !== 'references') {
+    return isRecord(data) && Object.hasOwn(data, '_lookupIntent') ? '' : undefined
+  }
+  if (!isRecord(data) || !onlyKeys(data, ['line', 'column', '_lookupIntent']) ||
+      positionFromData(data, isValid) === false) return ''
+  if (!Object.hasOwn(data, '_lookupIntent')) return undefined
+  return typeof data._lookupIntent === 'string' && data._lookupIntent.trim() !== '' ? data._lookupIntent : ''
+}
+function titleOf(panel: PanelState): string {
+  const relation = panel.kind === 'definition' ? ' of ' : ' to '
+  const subject = panel.label ? `${relation}${panel.label}` : ''
+  return panel.kind === 'definition' ? `Definitions${subject}` : `References${subject}`
+}
+function resultCount(panel: PanelState): number | null {
+  return panel.status === 'list' || panel.status === 'empty' ? panel.locations.length : null
+}
+function listButtons(root: HTMLElement | null): HTMLButtonElement[] {
+  return root ? Array.from(root.querySelectorAll<HTMLButtonElement>('.qe-source-locations__rows .ui-list-row__main:not(:disabled)')) : []
+}
+
+export function SourceLocations({
+  context,
+  bufferId,
+  tabId,
+  sourceGeneration,
+  enabled,
+  controller,
+  isValidPosition,
+  focusEditor,
+  onSourceControlRunner
+}: Props) {
+  const report = useEditorUiControlReport()
+  const identity = JSON.stringify([bufferId, tabId])
+  const sourceAddress: EditorUiControlAddress | null = enabled && sourceGeneration !== null
+    ? {
+        surface: SOURCE_CONTROL_SURFACE,
+        target: `source-symbols:${identity}`,
+        generation: sourceGeneration,
+        actions: ['definition', 'references']
+      }
+    : null
+  const panel = controller.panel
+  const openable = panel?.locations.some((location) => location.relativePath !== null) ?? false
+  const locationActions = panel === null
+    ? []
+    : [
+        'close',
+        ...(openable ? ['open'] : []),
+        ...(panel.status === 'error' && panel.retryable ? ['retry'] : [])
+      ]
+  const locationsAddress: EditorUiControlAddress | null = panel === null
+    ? null
+    : {
+        surface: SOURCE_CONTROL_SURFACE,
+        target: `source-locations:${identity}`,
+        generation: panel.generation,
+        actions: locationActions
+      }
+  const sourceIntentForBridge = useRef<string | null>(null)
+
+  const sourceHandler = async (control: EditorUiControl): Promise<EditorUiControlResult> => {
+    if (!enabled || sourceGeneration === null || control.generation !== sourceGeneration) return { delivered: false }
+    const data = control.data ?? {}
+    if (!onlyKeys(data, ['line', 'column', '_lookupIntent'])) return { delivered: false }
+    const hasIntent = Object.hasOwn(data, '_lookupIntent')
+    if (hasIntent && (typeof data._lookupIntent !== 'string' || data._lookupIntent.trim() === '')) return { delivered: false }
+    const position = positionFromData(data, isValidPosition)
+    if (position === false) return { delivered: false }
+    const kind = control.action as SourceSymbolsKind
+    if (kind !== 'definition' && kind !== 'references') return { delivered: false }
+    const options = hasIntent ? { intent: data._lookupIntent as string } : undefined
+    return { delivered: controller.control(kind, position ?? undefined, options) }
+  }
+  const locationHandler = async (control: EditorUiControl): Promise<EditorUiControlResult> => {
+    if (!panel || control.generation !== panel.generation) return { delivered: false }
+    const data = control.data ?? {}
+    if (control.action === 'close') {
+      if (!onlyKeys(data, [])) return { delivered: false }
+      return { delivered: controller.close(panel.generation) }
+    }
+    if (control.action === 'open') {
+      if (!onlyKeys(data, ['index']) || !Number.isSafeInteger(data.index) || (data.index as number) < 0) return { delivered: false }
+      return { delivered: controller.open(data.index as number, panel.generation) }
+    }
+    if (control.action === 'retry') {
+      if (!onlyKeys(data, [])) return { delivered: false }
+      return { delivered: controller.retry(panel.generation) }
+    }
+    return { delivered: false }
+  }
+  const bridgeContext = useMemo<UiPluginContext>(() => {
+    const fail = controller.bridgeFailure()
+    return {
+      ...context,
+      async call(method, params = {}) {
+        const intent = bridgeIntent(method, params, isValidPosition)
+        const callFailure = method === 'ui.window.self' && sourceIntentForBridge.current !== null
+          ? controller.bridgeFailure(sourceIntentForBridge.current)
+          : method === 'ui.window.command.run' && intent !== undefined
+            ? controller.bridgeFailure(intent)
+            : fail
+        try {
+          const result = await context.call(method, params)
+          if (method === 'ui.window.self' &&
+              (typeof result !== 'object' || result === null || !('connId' in result) ||
+                typeof result.connId !== 'number' || !Number.isSafeInteger(result.connId) || result.connId <= 0)) {
+            throw new Error(SOURCE_WINDOW_UNKNOWN_MESSAGE)
+          }
+          return result
+        } catch (reason) {
+          const message = method === 'ui.window.self' ? SOURCE_WINDOW_UNKNOWN_MESSAGE
+            : reason instanceof Error ? reason.message : String(reason)
+          callFailure(message, intent)
+          throw new Error(message)
+        }
+      }
+    }
+  }, [context, controller, isValidPosition])
+  const sourceControls = useEditorUiControl({ context: bridgeContext, address: sourceAddress, handler: sourceHandler })
+  const locationControls = useEditorUiControl({ context: bridgeContext, address: locationsAddress, handler: locationHandler })
+
+  const sourceRunner = useCallback((action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> => {
+    if (action !== 'definition' && action !== 'references') return Promise.resolve({ delivered: false })
+    const payload = data ?? {}
+    if (!onlyKeys(payload, ['line', 'column'])) return Promise.resolve({ delivered: false })
+    const position = positionFromData(payload, isValidPosition)
+    if (position === false) return Promise.resolve({ delivered: false })
+    const kind = action as SourceSymbolsKind
+    const intent = controller.reserveIntent(kind, position ?? undefined)
+    if (intent === null) return Promise.resolve({ delivered: false })
+    sourceIntentForBridge.current = intent
+    const pending = sourceControls.run(action, { ...payload, _lookupIntent: intent })
+    sourceIntentForBridge.current = null
+    return pending
+  }, [controller, isValidPosition, sourceControls.run])
+  useEffect(() => {
+    onSourceControlRunner(sourceRunner)
+    return () => onSourceControlRunner(null)
+  }, [onSourceControlRunner, sourceRunner])
+
+  const summary: SourceSymbolsReport = controller.report
+  useEffect(() => {
+    report({ sourceSymbols: summary })
+  }, [report, summary.status, summary.kind, summary.count, summary.truncated, summary.error])
+  useEffect(() => () => {
+    report({ sourceSymbols: { status: 'idle', kind: null, count: null, truncated: null, error: null } })
+  }, [report])
+
+  const panelRoot = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!panel || panel.status !== 'list' || !panel.focusResults) return
+    listButtons(panelRoot.current)[0]?.focus()
+  }, [panel?.generation, panel?.status, panel?.focusResults])
+
+  if (!panel) return null
+  const count = resultCount(panel)
+  const close = () => { void locationControls.run('close') }
+  const onEscape = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    event.stopPropagation()
+    void locationControls.run('close').then((result) => { if (result.delivered) focusEditor() })
+  }
+  const onRowsKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const keys: Record<string, number> = { ArrowDown: 1, ArrowUp: -1, Home: -2, End: 2 }
+    const direction = keys[event.key]
+    if (direction === undefined) return
+    const buttons = listButtons(panelRoot.current)
+    if (buttons.length === 0) return
+    event.preventDefault()
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    const next = direction === -2 ? 0
+      : direction === 2 ? buttons.length - 1
+        : index < 0 ? 0
+          : Math.max(0, Math.min(buttons.length - 1, index + direction))
+    buttons[next]?.focus()
+  }
+
+  return (
+    <section className="qe-source-locations" aria-label={titleOf(panel)} ref={panelRoot} onKeyDown={onEscape}>
+      <SectionHeader
+        title={titleOf(panel)}
+        actions={<>
+          {count !== null && <span className="qe-source-locations__count">{count} results</span>}
+          <IconButton label="Close results" onClick={close}><ControlIcon name="x" /></IconButton>
+        </>}
+      />
+      {panel.status === 'pending' && (
+        <div className="qe-source-locations__message" role="status" aria-live="polite">
+          <NoticeLine>{panel.kind === 'definition' ? 'Finding definitions…' : 'Finding references…'}</NoticeLine>
+        </div>
+      )}
+      {panel.status === 'empty' && (
+        <EmptyState message={`No ${panel.kind === 'definition' ? 'definition' : 'references'} found at line ${panel.position?.line ?? 1}, column ${panel.position?.column ?? 1}.`} />
+      )}
+      {panel.status === 'error' && panel.error && (
+        <div className="qe-source-locations__message">
+          <InlineError
+            message={panel.error}
+            action={panel.retryable ? { label: 'Retry', onAction: () => { void locationControls.run('retry') } } : undefined}
+          />
+        </div>
+      )}
+      {panel.status === 'list' && (
+        <div className="qe-source-locations__rows" aria-label={`${count ?? 0} source locations`} onKeyDown={onRowsKeyDown}>
+          {panel.locations.map((location, index) => {
+            const title = `${location.relativePath ?? location.path}:${location.line}:${location.column}`
+            const description = location.relativePath === null
+              ? `${location.preview} · Outside this worktree`
+              : location.preview
+            return (
+              <ListRow
+                key={`${location.path}:${location.line}:${location.column}:${index}`}
+                title={title}
+                description={description}
+                disabled={location.relativePath === null}
+                onClick={location.relativePath === null ? undefined : () => { void locationControls.run('open', { index }) }}
+              />
+            )
+          })}
+          {panel.truncated && (
+            <div className="qe-source-locations__message">
+              <NoticeLine>Showing the first 1,000 results. Navigation found more.</NoticeLine>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
