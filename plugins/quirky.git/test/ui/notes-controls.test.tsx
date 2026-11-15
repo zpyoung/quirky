@@ -138,7 +138,7 @@ describe('saved note mounted controls', () => {
     expect(await run(control(duplicateGeneration, 'edit', 'same'))).toEqual({ delivered: false })
     expect(cards(duplicate.element).every((card) => textareaIn(card) === null)).toBe(true)
 
-    mounted?.unmount()
+    duplicate.unmount()
     mounted = null
     await settle()
     const { promise: pending, resolve: finishEdit } = Promise.withResolvers<void>()
