@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { accessSync, constants, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, closeSync, constants, existsSync, fstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { daemonEntryHash, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
@@ -7,7 +7,7 @@ import { createProcessScope, type ProcessScope, type ProcessScopeSpawnOptions } 
 import { createIsolatedRuntimeEnvironment, prepareCaptureFixtureHome, type FixtureWorktree } from '../ui-review/fixtures'
 import type { Page } from 'playwright'
 import type { StartWorldDependencies, SoakWorld } from '../soak/world'
-import type { SoakWindows } from '../soak/windows'
+import type { SoakWindows, WindowStartupObservation } from '../soak/windows'
 import type { WindowRecord } from '../soak/contracts'
 import { createCliFixtures, installCliFixtureTools, type CliFixturePaths, type CliFixtureTools, type FixtureCommandResult } from './cli-fixtures'
 import { buildCliActorCommand } from './cli-actor'
@@ -69,6 +69,28 @@ export type CliFilesCleanupEvidence = {
   processIdentitiesGone: boolean
   homeRemoved: boolean
 }
+export type CliFilesStartupDiagnostics = {
+  phase: 'environment' | 'fixtures' | 'build' | 'daemon' | 'renderer' | 'ready'
+  elapsedMs: number
+  buildElapsedMs: number
+  rendererElapsedMs: number
+  assets?: { uiDir: string; pluginsDir: string }
+  renderer: WindowStartupObservation[]
+  logs: { buildTail?: string; daemonTail?: string; rendererTail?: string }
+}
+export type CliFilesStartupEvidence = {
+  diagnostics: CliFilesStartupDiagnostics
+  cleanup: {
+    ok: boolean
+    error?: string
+    evidence: CliFilesCleanupEvidence & {
+      started: { daemon: boolean; browser: boolean }
+      unresolvedAcquisition: boolean
+      scopeCleanupComplete: boolean
+      acquisitionSettled: boolean
+    }
+  }
+}
 export type CliFilesWorld = {
   home: string
   env: Record<string, string>
@@ -79,6 +101,7 @@ export type CliFilesWorld = {
   worktrees: readonly FixtureWorktree[]
   tools: CliFixtureTools
   buildElapsedMs: number
+  readonly startupDiagnostics?: CliFilesStartupDiagnostics
   assertLive(options?: CliWorldExecuteOptions): Promise<void>
   execute(argv: string[], options?: CliWorldExecuteOptions): Promise<CliWorldResult>
   prepare(argv: string[], cwd: string, options?: CliWorldExecuteOptions): Promise<CliWorldResult>
@@ -106,6 +129,7 @@ type CliFilesWorldDependencies = {
     executable: string
     out: string
     signal: AbortSignal
+    onStartup?: (observation: WindowStartupObservation) => void
   }) => Promise<SoakWindows>
   findChrome?: () => string | undefined
   readRuntime?: typeof readRuntime
@@ -122,6 +146,13 @@ type CliFilesWorldDependencies = {
   runPreparation?: (argv: string[], options: CliWorldExecuteOptions & { cwd: string; timeoutMs: number }) => Promise<CliWorldResult>
 }
 
+function freezeCliFilesValue<T>(value: T): T {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value
+  const entries = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>)
+  for (const entry of entries) freezeCliFilesValue(entry)
+  return Object.freeze(value)
+}
+
 export class CliWorldError extends Error {
   cleanupError?: string
   constructor(
@@ -134,6 +165,22 @@ export class CliWorldError extends Error {
   ) {
     super(message)
     this.name = 'CliWorldError'
+  }
+}
+export class CliFilesStartupError extends CliWorldError {
+  readonly startupEvidence: CliFilesStartupEvidence
+  constructor(
+    kind: string,
+    message: string,
+    startupEvidence: CliFilesStartupEvidence,
+    stderrTail?: string,
+    stdoutBytes?: number,
+    elapsedMs?: number,
+    exitCode?: number
+  ) {
+    super(kind, message, stderrTail, stdoutBytes, elapsedMs, exitCode)
+    this.name = 'CliFilesStartupError'
+    this.startupEvidence = freezeCliFilesValue(startupEvidence)
   }
 }
 
@@ -1009,17 +1056,132 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
 const CLI_FILES_WORK_TIMEOUT_MS = 330_000
 const CLI_FILES_RENDERER_TIMEOUT_MS = 5_000
 
+function canonicalCliFilesPath(path: string): string | undefined {
+  if (!isAbsolute(path)) return undefined
+  const candidate = resolve(path)
+  let existing = candidate
+  try {
+    while (!existsSync(existing)) {
+      const parent = dirname(existing)
+      if (parent === existing) return undefined
+      existing = parent
+    }
+    return resolve(realpathSync(existing), relative(existing, candidate))
+  } catch {
+    return undefined
+  }
+}
+
 function replaceCliFilesEnvironment(
   target: Record<string, string>,
   home: string,
   repoRoot: string,
   tools: CliFixtureTools,
-  uiDir: string,
+  requestedUiDir: string,
   createEnvironment: typeof createCliEnvironment
 ): Record<string, string> {
+  const uiDir = join(home, 'ui-dist')
+  const pluginsDir = join(home, 'builtin-plugins')
+  if (canonicalCliFilesPath(requestedUiDir) !== uiDir) {
+    throw new CliWorldError('ui-build', 'soak helper did not target the owned ui-dist directory')
+  }
+  if (canonicalCliFilesPath(pluginsDir) !== pluginsDir) {
+    throw new CliWorldError('fixture-home', 'generated plugin root escapes the owned builtin-plugins directory')
+  }
+  const replacement = createEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload)
   for (const key of Object.keys(target)) delete target[key]
-  Object.assign(target, createEnvironment(home, repoRoot, tools.fixtureBin, tools.fetchPreload), { QUIRKY_UI_DIR: uiDir })
+  Object.assign(target, replacement, {
+    QUIRKY_UI_DIR: uiDir,
+    QUIRKY_UI_OUT: uiDir,
+    QUIRKY_PLUGINS_DIR: pluginsDir,
+    QUIRKY_BUILTIN_PLUGINS_DIR: pluginsDir
+  })
   return target
+}
+
+function tailUtf8(text: string, limit: number): string {
+  const bytes = Buffer.from(text)
+  if (bytes.byteLength <= limit) return text
+  let start = bytes.byteLength - limit
+  while (start < bytes.byteLength && (bytes[start]! & 0xc0) === 0x80) start += 1
+  return bytes.subarray(start).toString('utf8')
+}
+
+function stripCliFilesUrlSecrets(text: string): string {
+  return text.replace(/https?:\/\/[^\s"'<>]+/g, (raw) => {
+    const trailing = raw.match(/[),.;!?]+$/)?.[0] ?? ''
+    try {
+      const url = new URL(raw.slice(0, raw.length - trailing.length))
+      return `${url.origin}${url.pathname}${trailing}`
+    } catch {
+      return raw
+    }
+  })
+}
+
+function sanitizeCliFilesDiagnostic(text: string, home: string, tokens: readonly string[], limit = MAX_STDERR_BYTES): string {
+  let safe = stripCliFilesUrlSecrets(text)
+  if (home) safe = safe.split(home).join('<cli-home>')
+  for (const token of tokens) if (token) safe = safe.split(token).join('<redacted>')
+  return tailUtf8(safe, limit)
+}
+
+function readOwnedCliFilesLog(home: string, path: string, tokens: readonly string[]): string | undefined {
+  let fd: number | undefined
+  try {
+    const canonicalPath = realpathSync(path)
+    const fromHome = relative(home, canonicalPath)
+    if (fromHome === '' || fromHome === '..' || fromHome.startsWith(`..${sep}`) || isAbsolute(fromHome)
+      || !statSync(canonicalPath).isFile()) return undefined
+    fd = openSync(canonicalPath, 'r')
+    const size = fstatSync(fd).size
+    const offset = Math.max(0, size - MAX_STDERR_BYTES - 4)
+    const buffer = Buffer.alloc(Math.min(size, MAX_STDERR_BYTES + 4))
+    const bytesRead = readSync(fd, buffer, 0, buffer.byteLength, offset)
+    return sanitizeCliFilesDiagnostic(buffer.subarray(0, bytesRead).toString('utf8'), home, tokens)
+  } catch {
+    return undefined
+  } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd) } catch {}
+    }
+  }
+}
+function sanitizeCliFilesRequestPath(path: string, home: string, tokens: readonly string[]): string {
+  let pathOnly = path
+  try {
+    pathOnly = new URL(path).pathname
+  } catch {
+    pathOnly = stripCliFilesUrlSecrets(path)
+  }
+  return sanitizeCliFilesDiagnostic(pathOnly, home, tokens, 1_024)
+}
+
+function snapshotWindowStartupObservation(
+  observation: WindowStartupObservation,
+  home: string,
+  tokens: readonly string[]
+): WindowStartupObservation {
+  const snapshot: WindowStartupObservation = {
+    stage: observation.stage,
+    elapsedMs: Number.isFinite(observation.elapsedMs) ? Math.max(0, Math.round(observation.elapsedMs)) : 0
+  }
+  if (Number.isSafeInteger(observation.index)) snapshot.index = observation.index
+  if (typeof observation.worktree === 'string') snapshot.worktree = sanitizeCliFilesDiagnostic(observation.worktree, home, tokens, 512)
+  if (Number.isSafeInteger(observation.connId)) snapshot.connId = observation.connId
+  if (Number.isSafeInteger(observation.browserPid)) snapshot.browserPid = observation.browserPid
+  if (typeof observation.message === 'string') snapshot.message = sanitizeCliFilesDiagnostic(observation.message, home, tokens)
+  if (Array.isArray(observation.pageErrors)) {
+    snapshot.pageErrors = observation.pageErrors.slice(-5)
+      .map((message) => sanitizeCliFilesDiagnostic(message, home, tokens, 1_024))
+  }
+  if (Array.isArray(observation.failedRequests)) {
+    snapshot.failedRequests = observation.failedRequests.slice(-5).map((request) => ({
+      path: sanitizeCliFilesRequestPath(request.path, home, tokens),
+      message: sanitizeCliFilesDiagnostic(request.message, home, tokens, 1_024)
+    }))
+  }
+  return snapshot
 }
 
 function findInstalledMacChrome(): string | undefined {
@@ -1189,8 +1351,22 @@ export async function createCliFilesWorld(
 
   const observed = new Map<string, { identity: ProcessIdentity; kind: string }>()
   const lateCleanupErrors: string[] = []
-  let lateResourceUnresolved = false
+  const rendererObservations: WindowStartupObservation[] = []
   const tokens: string[] = []
+  const startupStartedAt = performance.now()
+  let phase: CliFilesStartupDiagnostics['phase'] = 'environment'
+  let lastFailedObservation: WindowStartupObservation | undefined
+  let startupLogs: CliFilesStartupDiagnostics['logs'] = {}
+  let lateResourceUnresolved = false
+  let startWorldSettled = true
+  let rendererAcquisitionSettled = true
+  let rendererStartedAt: number | undefined
+  let rendererElapsedMs = 0
+  let daemonStarted = false
+  let browserStarted = false
+  let daemonIdentityCaptureFailed = false
+  let browserIdentityCaptureFailed = false
+  let scopeCleanupComplete = true
   let home: string | undefined
   let env: Record<string, string> = {}
   let tools: CliFixtureTools | undefined
@@ -1205,6 +1381,7 @@ export async function createCliFilesWorld(
   let startupRecords: WindowRecord[] = []
   let selectedWorktrees: FixtureWorktree[] = []
   let buildElapsedMs = 0
+  let buildPendingCount = 0
   let cleanupPromise: Promise<void> | undefined
   let closed = false
   let cleanupEvidence: CliFilesCleanupEvidence = {
@@ -1213,6 +1390,27 @@ export async function createCliFilesWorld(
     processIdentitiesGone: false,
     homeRemoved: false
   }
+  const acquisitionSettled = () => startWorldSettled && rendererAcquisitionSettled && buildPendingCount === 0
+  const startupDiagnostics = (): CliFilesStartupDiagnostics => freezeCliFilesValue({
+    phase,
+    elapsedMs: Math.max(0, Math.round(performance.now() - startupStartedAt)),
+    buildElapsedMs,
+    rendererElapsedMs: rendererStartedAt === undefined
+      ? rendererElapsedMs
+      : Math.max(rendererElapsedMs, Math.round(performance.now() - rendererStartedAt)),
+    ...(home ? {
+      assets: {
+        uiDir: sanitizeCliFilesDiagnostic(join(home, 'ui-dist'), home, tokens),
+        pluginsDir: sanitizeCliFilesDiagnostic(join(home, 'builtin-plugins'), home, tokens)
+      }
+    } : {}),
+    renderer: rendererObservations.map((observation) => ({
+      ...observation,
+      ...(observation.pageErrors ? { pageErrors: [...observation.pageErrors] } : {}),
+      ...(observation.failedRequests ? { failedRequests: observation.failedRequests.map((request) => ({ ...request })) } : {})
+    })),
+    logs: { ...startupLogs }
+  })
 
   const updateCleanupEvidence = (gone: ReadonlySet<string> = new Set()) => {
     if (!home) return
@@ -1238,12 +1436,20 @@ export async function createCliFilesWorld(
       }
     }
     const selectedDaemonPid = daemonPid ?? soakWorld?.daemonPid ?? runtime?.pid
-    const snapshot = processTable(home)
+    let snapshot: Map<number, ProcessIdentity>
+    try {
+      snapshot = processTable(home)
+    } catch (error) {
+      if (daemonStarted && !daemonIdentity) daemonIdentityCaptureFailed = true
+      if (browserStarted && !browserIdentity) browserIdentityCaptureFailed = true
+      throw error
+    }
     if (selectedDaemonPid && Number.isSafeInteger(selectedDaemonPid) && selectedDaemonPid > 0) {
       const currentDaemon = snapshot.get(selectedDaemonPid)
       if (currentDaemon) {
+        daemonStarted = true
         if (!daemonIdentity) daemonIdentity = currentDaemon
-        if (requireLive && !sameProcess(daemonIdentity, currentDaemon)) {
+        if (requireLive && (!daemonIdentity || !sameProcess(daemonIdentity, currentDaemon))) {
           throw new CliWorldError('daemon-identity', 'owned daemon process identity changed')
         }
         const daemonAndPty = collectProcessIdentities(snapshot, selectedDaemonPid, home, daemonIdentity)
@@ -1253,16 +1459,11 @@ export async function createCliFilesWorld(
           const kind = identity.pid === selectedDaemonPid ? 'daemon' : identity.pid === ptyPid ? 'pty' : ptyTree.has(identity.pid) ? 'pty-child' : 'daemon-child'
           addObservedIdentity(observed, identity, kind)
         }
+      } else if (daemonStarted && !daemonIdentity) {
+        daemonIdentityCaptureFailed = true
+        if (requireLive) throw new CliWorldError('daemon-identity', 'owned daemon process is not present in the process table')
       } else if (requireLive) {
         throw new CliWorldError('daemon-identity', 'owned daemon process is not present in the process table')
-      } else if (!daemonIdentity && runtime) {
-        const discovered = snapshot.get(runtime.pid)
-        if (discovered?.command.includes('daemon/src/main.ts')) {
-          daemonIdentity = discovered
-          for (const identity of processTree(snapshot, runtime.pid)) {
-            addObservedIdentity(observed, identity, identity.pid === runtime.pid ? 'daemon' : 'daemon-child')
-          }
-        }
       }
     } else if (requireLive) {
       throw new CliWorldError('daemon-identity', 'owned daemon PID is unavailable')
@@ -1270,8 +1471,10 @@ export async function createCliFilesWorld(
 
     const selectedBrowserPid = browserPid ?? readBrowserPid(home)
     if (selectedBrowserPid) {
+      if (!browserPid) browserPid = selectedBrowserPid
       const currentBrowser = snapshot.get(selectedBrowserPid)
       if (currentBrowser) {
+        browserStarted = true
         const sameBrowserIdentity = !browserIdentity || sameProcess(browserIdentity, currentBrowser)
         if (!sameBrowserIdentity && requireLive) {
           throw new CliWorldError('renderer-disconnected', 'owned browser process identity changed')
@@ -1282,19 +1485,77 @@ export async function createCliFilesWorld(
             addObservedIdentity(observed, identity, identity.pid === selectedBrowserPid ? 'browser' : 'browser-child')
           }
         }
+      } else if (browserStarted && !browserIdentity) {
+        browserIdentityCaptureFailed = true
+        if (requireLive) throw new CliWorldError('renderer-disconnected', 'owned browser process is not present in the process table')
       } else if (requireLive) {
         throw new CliWorldError('renderer-disconnected', 'owned browser process is not present in the process table')
       }
+    } else if (browserStarted && !browserIdentity) {
+      browserIdentityCaptureFailed = true
+      if (requireLive) throw new CliWorldError('renderer-disconnected', 'owned browser PID is unavailable')
     } else if (requireLive) {
       throw new CliWorldError('renderer-disconnected', 'owned browser PID is unavailable')
     }
 
+    if (requireLive && (daemonIdentityCaptureFailed || browserIdentityCaptureFailed)) {
+      throw new CliWorldError('process-identity', 'a started process identity could not be captured at acquisition')
+    }
     if (requireLive && (!daemonIdentity || !browserIdentity)) {
       throw new CliWorldError('process-identity', 'owned daemon and browser identities were not both captured')
     }
     updateCleanupEvidence()
     return snapshot
   }
+  const captureStartedBrowserIdentity = (pid: number) => {
+    browserStarted = true
+    if (!Number.isSafeInteger(pid) || pid <= 0) {
+      browserIdentityCaptureFailed = true
+      return
+    }
+    if (browserPid !== undefined && browserPid !== pid) {
+      browserIdentityCaptureFailed = true
+      return
+    }
+    browserPid = pid
+    if (browserIdentity || browserIdentityCaptureFailed) return
+    try {
+      const snapshot = captureOwnedProcessIdentities(false)
+      if (!snapshot.has(pid) || browserIdentity?.pid !== pid) browserIdentityCaptureFailed = true
+    } catch {
+      browserIdentityCaptureFailed = true
+    }
+  }
+
+  const recordRendererObservation = (observation: WindowStartupObservation) => {
+    if (observation.browserPid !== undefined) captureStartedBrowserIdentity(observation.browserPid)
+    const safeObservation = snapshotWindowStartupObservation(observation, home!, tokens)
+    if (safeObservation.stage === 'failed') lastFailedObservation = safeObservation
+    rendererObservations.push(safeObservation)
+    if (rendererObservations.length > 64) {
+      const removeAt = lastFailedObservation === undefined
+        ? 0
+        : Math.max(0, rendererObservations.findIndex((entry) => entry !== lastFailedObservation))
+      rendererObservations.splice(removeAt, 1)
+    }
+  }
+
+  const captureStartupLogs = () => {
+    if (!home) return
+    const buildTail = readOwnedCliFilesLog(home, join(home, 'out', 'ui-build.log'), tokens)
+    const daemonTail = readOwnedCliFilesLog(home, join(home, 'out', 'daemon.log'), tokens)
+    const rendererTail = sanitizeCliFilesDiagnostic(rendererObservations.slice(-5).flatMap((observation) => [
+      ...(observation.message ? [observation.message] : []),
+      ...(observation.pageErrors ?? []),
+      ...(observation.failedRequests ?? []).flatMap((request) => [request.path, request.message])
+    ]).join('\\n'), home, tokens)
+    startupLogs = {
+      ...(buildTail !== undefined ? { buildTail } : {}),
+      ...(daemonTail !== undefined ? { daemonTail } : {}),
+      ...(rendererTail ? { rendererTail } : {})
+    }
+  }
+
 
   const verifyRuntime = async (activeSignal: AbortSignal = signal, activeDeadline = deadline) => {
     if (!home || !soakWorld || !daemonPid || !expectedRuntime) {
@@ -1371,10 +1632,10 @@ export async function createCliFilesWorld(
     cleanupPromise = (async () => {
       const cleanupErrors: string[] = [...lateCleanupErrors]
       const recordCleanupError = (error: unknown) => {
-        cleanupErrors.push(home ? redactDiagnostic(errorText(error), home, tokens) : errorText(error))
+        cleanupErrors.push(home ? sanitizeCliFilesDiagnostic(errorText(error), home, tokens) : errorText(error))
       }
 
-      let processCaptureVerified = true
+      let processCaptureVerified = !daemonIdentityCaptureFailed && !browserIdentityCaptureFailed
       if (home) {
         try {
           captureOwnedProcessIdentities(false)
@@ -1393,7 +1654,9 @@ export async function createCliFilesWorld(
       if (soakWorld) {
         try {
           await soakWorld.stop()
+          scopeCleanupComplete = true
         } catch (error) {
+          scopeCleanupComplete = false
           recordCleanupError(error)
           try {
             scope?.killNow()
@@ -1406,12 +1669,16 @@ export async function createCliFilesWorld(
             recordCleanupError(scopeError)
           }
         }
-      } else {
+      } else if (scope) {
         try {
-          await scope?.cleanup()
+          await scope.cleanup()
+          scopeCleanupComplete = true
         } catch (error) {
+          scopeCleanupComplete = false
           recordCleanupError(error)
         }
+      } else {
+        scopeCleanupComplete = true
       }
 
       let processTableVerified = !home
@@ -1438,6 +1705,7 @@ export async function createCliFilesWorld(
           try {
             await scope?.cleanup()
           } catch (error) {
+            scopeCleanupComplete = false
             recordCleanupError(error)
           }
           try {
@@ -1450,11 +1718,18 @@ export async function createCliFilesWorld(
           }
         }
       }
+      captureStartupLogs()
       const lingeringKeys = new Set(lingering.map(processIdentityKey))
       const gone = new Set([...observed.keys()].filter((key) => !lingeringKeys.has(key)))
       if (!processTableVerified || !processCaptureVerified) gone.clear()
+      const daemonRootObserved = !daemonStarted || [...observed.values()].some(({ identity, kind }) =>
+        kind === 'daemon' && (daemonPid === undefined || identity.pid === daemonPid))
+      const browserRootObserved = !browserStarted || [...observed.values()].some(({ identity, kind }) =>
+        kind === 'browser' && (browserPid === undefined || identity.pid === browserPid))
+      const acquisitionsSettled = acquisitionSettled()
+      const unresolvedAcquisition = lateResourceUnresolved || !acquisitionsSettled
       const processIdentitiesGone = processTableVerified && processCaptureVerified
-        && !lateResourceUnresolved && gone.size === observed.size
+        && !unresolvedAcquisition && daemonRootObserved && browserRootObserved && gone.size === observed.size
       cleanupEvidence = {
         trackedIdentities: home ? identityEvidence(observed, gone, home, tokens) : [],
         identities: home
@@ -1467,11 +1742,13 @@ export async function createCliFilesWorld(
       }
       if (lingering.length > 0) {
         const detail = lingering.map((identity) => `${identity.pid} ${identity.command}`).join(', ')
-        cleanupErrors.push(home ? redactDiagnostic(`owned processes remain: ${detail}`, home, tokens) : `owned processes remain: ${detail}`)
+        cleanupErrors.push(home ? sanitizeCliFilesDiagnostic(`owned processes remain: ${detail}`, home, tokens) : `owned processes remain: ${detail}`)
       }
-      if (!processIdentitiesGone) {
-        cleanupErrors.push('owned process identities could not be verified gone')
-      } else if (home) {
+      if (!daemonRootObserved || !browserRootObserved) cleanupErrors.push('started process root identity could not be verified')
+      if (!processIdentitiesGone) cleanupErrors.push('owned process identities could not be verified gone')
+      if (!scopeCleanupComplete) cleanupErrors.push('owned process scope cleanup did not complete')
+      if (!acquisitionsSettled) cleanupErrors.push('owned startup acquisition did not settle')
+      if (processIdentitiesGone && home) {
         try {
           rmSync(home, { recursive: true, force: true })
           cleanupEvidence = { ...cleanupEvidence, homeRemoved: !existsSync(home) }
@@ -1514,17 +1791,30 @@ export async function createCliFilesWorld(
     const observeSpawn = (command: string[], child: { pid: number; exited: Promise<number> }, spawnedAt: number) => {
       if (command[0] !== process.execPath) return
       if (command[1] === 'packages/ui/build.ts') {
-        void child.exited.then(() => {
+        phase = 'build'
+        buildPendingCount += 1
+        const finishBuild = () => {
           buildElapsedMs = Math.max(0, Math.round(performance.now() - spawnedAt))
-        }, () => {
-          buildElapsedMs = Math.max(0, Math.round(performance.now() - spawnedAt))
-        })
+          buildPendingCount = Math.max(0, buildPendingCount - 1)
+        }
+        void child.exited.then(finishBuild, finishBuild)
       }
       if (command[1] === 'packages/daemon/src/main.ts') {
-        const identity = processTable(home!)
-          .get(child.pid)
-        if (!identity) throw new CliWorldError('daemon-identity', 'spawned daemon process identity could not be captured')
+        phase = 'daemon'
+        daemonStarted = true
+        let identity: ProcessIdentity | undefined
+        try {
+          identity = processTable(home!).get(child.pid)
+        } catch (error) {
+          daemonIdentityCaptureFailed = true
+          throw error
+        }
+        if (!identity) {
+          daemonIdentityCaptureFailed = true
+          throw new CliWorldError('daemon-identity', 'spawned daemon process identity could not be captured')
+        }
         if (daemonIdentity && !sameProcess(daemonIdentity, identity)) {
+          daemonIdentityCaptureFailed = true
           throw new CliWorldError('daemon-identity', 'spawned daemon PID does not match its original process identity')
         }
         daemonIdentity = identity
@@ -1534,6 +1824,7 @@ export async function createCliFilesWorld(
     scope = injectedScope
       ? safeProcessScope(injectedScope, env, observeSpawn)
       : createWorldScope(home, env, observeSpawn)
+    scopeCleanupComplete = false
     if (scope.home !== home) throw new CliWorldError('startup-failed', 'owned process scope home does not match the allocated home')
     if (!isAbsolute(process.execPath)) throw new CliWorldError('startup-failed', 'Bun executable path is not absolute')
     if (!existsSync(cliEntry) || !existsSync(daemonEntry)) {
@@ -1574,11 +1865,14 @@ export async function createCliFilesWorld(
     const startDependencies: StartWorldDependencies = {
       createScope: () => scope!,
       prepareCaptureFixtureHome: async (fixtureHome, preparation) => {
-        if (fixtureHome !== home) throw new CliWorldError('fixture-home', 'soak fixture preparation escaped the owned home')
+        phase = 'fixtures'
+        if (canonicalCliFilesPath(fixtureHome) !== home) {
+          throw new CliWorldError('fixture-home', 'soak fixture preparation escaped the owned home')
+        }
         const mutableEnv = preparation.env
         if (!mutableEnv) throw new CliWorldError('environment', 'soak fixture preparation omitted its mutable environment')
         const uiDir = mutableEnv.QUIRKY_UI_DIR
-        if (!uiDir || resolve(uiDir) !== join(home!, 'ui-dist')) {
+        if (!uiDir || canonicalCliFilesPath(uiDir) !== join(home!, 'ui-dist')) {
           throw new CliWorldError('ui-build', 'soak helper did not target the owned ui-dist directory')
         }
         env = replaceCliFilesEnvironment(mutableEnv, home!, repoRoot, tools!, uiDir, createEnvironment)
@@ -1595,22 +1889,32 @@ export async function createCliFilesWorld(
         : {})
     }
     const startWorld = dependencies.startWorld ?? (await import('../soak/world')).startWorld
-    soakWorld = await startWorld({
-      out: join(home, 'out'),
-      repoRoot,
-      signal,
-      windows: 2,
-      workers: false
-    }, startDependencies)
+    startWorldSettled = false
+    try {
+      soakWorld = await startWorld({
+        out: join(home, 'out'),
+        repoRoot,
+        signal,
+        windows: 2,
+        workers: false
+      }, startDependencies)
+    } finally {
+      startWorldSettled = true
+    }
+    phase = 'daemon'
+    daemonStarted = true
     ensureCliFilesWork(signal, deadline)
     if (soakWorld.home !== home || soakWorld.workers.length !== 0 || soakWorld.env.QUIRKY_HOME !== home
-      || soakWorld.env.QUIRKY_PORT !== '0' || soakWorld.env.QUIRKY_UI_DIR !== join(home, 'ui-dist')) {
+      || soakWorld.env.QUIRKY_PORT !== '0' || soakWorld.env.QUIRKY_UI_DIR !== join(home, 'ui-dist')
+      || soakWorld.env.QUIRKY_PLUGINS_DIR !== join(home, 'builtin-plugins')
+      || soakWorld.env.QUIRKY_BUILTIN_PLUGINS_DIR !== join(home, 'builtin-plugins')) {
       throw new CliWorldError('daemon-identity', 'soak world is not the owned, worker-free UI runtime')
     }
     if (!existsSync(join(home, 'ui-dist')) || !statSync(join(home, 'ui-dist')).isDirectory()) {
       throw new CliWorldError('ui-build', 'owned UI build did not produce its ui-dist directory')
     }
     daemonPid = soakWorld.daemonPid
+    daemonStarted = true
     const daemonIdentityAtSpawn = daemonIdentity
     if (daemonIdentity && daemonIdentity.pid !== daemonPid) {
       throw new CliWorldError('daemon-identity', 'runtime PID does not match the spawned daemon identity')
@@ -1660,6 +1964,8 @@ export async function createCliFilesWorld(
     daemonIdentity = daemonIdentityAtSpawn ?? currentDaemonIdentity
     addObservedIdentity(observed, daemonIdentity, 'daemon')
 
+    phase = 'renderer'
+    rendererStartedAt = performance.now()
     const chrome = (dependencies.findChrome ?? findInstalledMacChrome)()
     if (!chrome || !isAbsolute(chrome)) throw new CliWorldError('missing-chrome', 'an installed macOS Chrome or Chromium executable was not found')
     const openWindows = dependencies.openWindows ?? (await import('../soak/windows')).openWindows
@@ -1671,21 +1977,36 @@ export async function createCliFilesWorld(
     const stopLateWindow = (opened: SoakWindows): Promise<void> => {
       if (!lateWindowStop) {
         lateWindowStop = Promise.resolve().then(() => opened.stop()).catch((error: unknown) => {
-          lateCleanupErrors.push(redactDiagnostic(errorText(error), home!, tokens))
+          lateCleanupErrors.push(sanitizeCliFilesDiagnostic(errorText(error), home!, tokens))
         })
       }
       return lateWindowStop
     }
+    rendererAcquisitionSettled = false
     const pendingWindows = Promise.resolve().then(() => openWindows({
       world: soakWorld!,
       count: 2,
       executable: chrome,
       out: join(home!, 'out'),
-      signal: rendererSignal
+      signal: rendererSignal,
+      onStartup: recordRendererObservation
     })).then(async (opened) => {
       openingWindows = opened
-      if (abandoningWindowOpen) await stopLateWindow(opened)
-      else windowSet = opened
+      if (abandoningWindowOpen || rendererSignal.aborted) {
+        try {
+          if (!browserStarted) {
+            browserPid = opened.browserPid
+            captureOwnedProcessIdentities(false)
+          }
+        } catch (error) {
+          browserIdentityCaptureFailed = true
+          lateCleanupErrors.push(sanitizeCliFilesDiagnostic(errorText(error), home!, tokens))
+        }
+        await stopLateWindow(opened)
+      } else {
+        if (!browserStarted) captureStartedBrowserIdentity(opened.browserPid)
+        windowSet = opened
+      }
       return opened
     })
     let openedWindows: SoakWindows | undefined
@@ -1697,8 +2018,11 @@ export async function createCliFilesWorld(
         Math.min(30_000, cliFilesRemaining(signal, deadline)),
         'renderer startup'
       )
+      rendererAcquisitionSettled = true
+      rendererElapsedMs = Math.max(0, Math.round(performance.now() - rendererStartedAt))
       windowSet = openedWindows
     } catch (error) {
+      rendererElapsedMs = Math.max(0, Math.round(performance.now() - rendererStartedAt))
       rendererController.abort(error)
       abandoningWindowOpen = true
       if (openingWindows) await stopLateWindow(openingWindows)
@@ -1710,9 +2034,11 @@ export async function createCliFilesWorld(
       )
       try {
         await Promise.race([settled, lateDeadline.promise])
+        rendererAcquisitionSettled = true
       } catch (lateError) {
         lateResourceUnresolved = true
-        lateCleanupErrors.push(redactDiagnostic(errorText(lateError), home, tokens))
+        rendererAcquisitionSettled = false
+        lateCleanupErrors.push(sanitizeCliFilesDiagnostic(errorText(lateError), home, tokens))
       } finally {
         clearTimeout(lateTimer)
       }
@@ -1720,6 +2046,7 @@ export async function createCliFilesWorld(
       throw error
     }
     if (!openedWindows) throw new CliWorldError('renderer-disconnected', 'owned browser startup returned no window handle')
+    captureStartedBrowserIdentity(openedWindows.browserPid)
     if (openedWindows.browserPid <= 0 || !Number.isSafeInteger(openedWindows.browserPid)) {
       throw new CliWorldError('renderer-disconnected', 'owned browser did not report a valid process ID')
     }
@@ -1772,6 +2099,10 @@ export async function createCliFilesWorld(
       if (pages[index]!.isClosed()) throw new CliWorldError('renderer-disconnected', `renderer page ${index} closed during startup`)
     }
     captureOwnedProcessIdentities(true)
+    if (!acquisitionSettled()) throw new CliWorldError('late-resource-cleanup', 'owned startup acquisition did not settle before readiness')
+    phase = 'ready'
+    captureStartupLogs()
+    const readyStartupDiagnostics = startupDiagnostics()
 
     const assertLive = async (liveOptions: CliWorldExecuteOptions = {}) => {
       if (closed) throw new CliWorldError('world-closed', 'CLI files world has already been cleaned up')
@@ -1795,9 +2126,10 @@ export async function createCliFilesWorld(
       get buildElapsedMs() {
         return buildElapsedMs
       },
+      startupDiagnostics: readyStartupDiagnostics,
       assertLive,
       async execute(argv, executeOptions = {}) {
-        if (closed) throw new CliWorldError('world-closed', 'CLI files world has already been cleaned up')
+        if (closed) throw new CliWorldError('world-closed', 'CLI world has already been cleaned up')
         const executeSignal = executeOptions.signal ?? signal
         const executeDeadline = executeOptions.signal ? Number.POSITIVE_INFINITY : deadline
         ensureCliFilesWork(executeSignal, executeDeadline)
@@ -1815,7 +2147,7 @@ export async function createCliFilesWorld(
         return result
       },
       async prepare(argv, cwdInput, prepareOptions = {}) {
-        if (closed) throw new CliWorldError('world-closed', 'CLI files world has already been cleaned up')
+        if (closed) throw new CliWorldError('world-closed', 'CLI world has already been cleaned up')
         const prepareSignal = prepareOptions.signal ? AbortSignal.any([signal, prepareOptions.signal]) : signal
         ensureCliFilesWork(prepareSignal, deadline)
         validateFixtureGitArgv(argv)
@@ -1843,17 +2175,52 @@ export async function createCliFilesWorld(
     } catch (failure) {
       cleanupError = errorText(failure)
     }
-    const kind = error && typeof error === 'object' && 'kind' in error && typeof error.kind === 'string'
-      ? error.kind
-      : 'startup-failed'
     const original = error instanceof CliWorldError
       ? error
-      : new CliWorldError(kind, home ? redactDiagnostic(errorText(error), home, tokens) : errorText(error))
-    if (cleanupError) {
-      const safeCleanupError = home ? redactDiagnostic(cleanupError, home, tokens) : cleanupError
-      original.cleanupError = safeCleanupError
-      original.message = `${original.message}; cleanup failed: ${safeCleanupError}`
+      : new CliWorldError(
+        error && typeof error === 'object' && 'kind' in error && typeof error.kind === 'string' ? error.kind : 'startup-failed',
+        errorText(error)
+      )
+    const kind = original.kind
+    const message = home ? sanitizeCliFilesDiagnostic(original.message, home, tokens) : sanitizeCliFilesDiagnostic(original.message, '', tokens)
+    const originalCleanupError = original.cleanupError
+      ? (home ? sanitizeCliFilesDiagnostic(original.cleanupError, home, tokens) : sanitizeCliFilesDiagnostic(original.cleanupError, '', tokens))
+      : undefined
+    const safeCleanupError = [originalCleanupError, cleanupError]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => home ? sanitizeCliFilesDiagnostic(value, home, tokens) : sanitizeCliFilesDiagnostic(value, '', tokens))
+      .join('; ')
+    const acquisitionsAreSettled = acquisitionSettled()
+    const unresolvedAcquisition = lateResourceUnresolved || !acquisitionsAreSettled
+    const cleanupOk = !safeCleanupError && cleanupEvidence.processIdentitiesGone && cleanupEvidence.homeRemoved
+      && scopeCleanupComplete && acquisitionsAreSettled && !unresolvedAcquisition
+    const stderrTail = original.stderrTail
+      ? home ? sanitizeCliFilesDiagnostic(original.stderrTail, home, tokens) : sanitizeCliFilesDiagnostic(original.stderrTail, '', tokens)
+      : undefined
+    const startupEvidence: CliFilesStartupEvidence = {
+      diagnostics: startupDiagnostics(),
+      cleanup: {
+        ok: cleanupOk,
+        ...(safeCleanupError ? { error: safeCleanupError } : {}),
+        evidence: {
+          ...cleanupEvidence,
+          started: { daemon: daemonStarted, browser: browserStarted },
+          unresolvedAcquisition,
+          scopeCleanupComplete,
+          acquisitionSettled: acquisitionsAreSettled
+        }
+      }
     }
-    throw original
+    const failure = new CliFilesStartupError(
+      kind,
+      message,
+      startupEvidence,
+      stderrTail,
+      original.stdoutBytes,
+      original.elapsedMs,
+      original.exitCode
+    )
+    if (safeCleanupError) failure.cleanupError = safeCleanupError
+    throw failure
   }
 }
