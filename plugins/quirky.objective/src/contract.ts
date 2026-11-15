@@ -1,6 +1,98 @@
+import { createHash } from 'node:crypto'
 import type { Schema } from '@quirky/protocol'
 import type { PlanTask, Assumption, RepairPlannerReport } from './plan'
 import type { CheckRecord, DraftRejection, LandingRecord, OverrunRecord, VerdictRecord } from './store'
+
+export type RepoIdentity = { host: string; owner: string; repo: string }
+export type ExpectedReview = {
+  number: number
+  url: string
+  repository: RepoIdentity
+  headRepository: RepoIdentity
+  headRefName: string
+  baseRefName: string
+  headSha: string
+}
+export interface RemoteLandingAuthority {
+  branch: string
+  headSha: string
+  remote: string
+  remoteRef: string
+  pushUrlFingerprint: string
+  repository?: RepoIdentity
+  headRepository?: RepoIdentity
+  baseRefName?: string
+}
+export type ObjectiveExpectedState = { target: string; before: string | null | ExpectedReview }
+
+export function remoteExpectedStateTarget(
+  kind: 'push-ref' | 'open-hosted-review',
+  authority: RemoteLandingAuthority
+): string {
+  if (kind === 'push-ref') {
+    return `git-push:${authority.remote}:${authority.remoteRef}:${authority.pushUrlFingerprint}`
+  }
+  const repository = authority.repository
+  const headRepository = authority.headRepository
+  return `github-review:${repository?.host ?? ''}/${repository?.owner ?? ''}/${repository?.repo ?? ''}:` +
+    `${headRepository?.host ?? ''}/${headRepository?.owner ?? ''}/${headRepository?.repo ?? ''}:` +
+    `${authority.branch}:${authority.baseRefName ?? ''}`
+}
+export type RemoteObservation = {
+  authority: RemoteLandingAuthority | null
+  remoteHeadSha: string | null
+  review: ExpectedReview | null
+  problem: string | null
+}
+export type HostedReviewLandingPayload = RemoteLandingAuthority & {
+  revision: number
+  review: ExpectedReview
+}
+export function remoteAuthorityKey(authority: RemoteLandingAuthority): string {
+  return createHash('sha256').update(JSON.stringify([
+    authority.branch,
+    authority.headSha.toLowerCase(),
+    authority.remote,
+    authority.remoteRef,
+    authority.pushUrlFingerprint.toLowerCase(),
+    authority.repository ? [authority.repository.host, authority.repository.owner, authority.repository.repo] : null,
+    authority.headRepository ? [authority.headRepository.host, authority.headRepository.owner, authority.headRepository.repo] : null,
+    authority.baseRefName ?? null
+  ]) ?? '').digest('hex')
+}
+
+export function sameRemoteAuthority(left: RemoteLandingAuthority, right: RemoteLandingAuthority): boolean {
+  return remoteAuthorityKey(left) === remoteAuthorityKey(right)
+}
+
+export function remoteActionEvidenceKey(
+  kind: 'push-ref' | 'open-hosted-review',
+  authority: RemoteLandingAuthority,
+  retryGeneration: number,
+  ordinal: number,
+  review: ExpectedReview | undefined,
+  expectedState: ObjectiveExpectedState
+): string {
+  const tuple = JSON.stringify([
+    kind,
+    remoteAuthorityKey(authority),
+    review ?? null,
+    expectedState,
+    retryGeneration,
+    ordinal
+  ]) ?? ''
+  return `remote:${kind}:${createHash('sha256').update(tuple).digest('hex')}:g${retryGeneration}:o${ordinal}`
+}
+
+export type HandoffLink = { watcherId: string; kind: string }
+export type ObjectiveCompletion = {
+  requestedBar: ObjectivePayload['landingBar']
+  reachedBar: ObjectivePayload['landingBar'] | null
+  state: 'working' | 'waiting' | 'landed' | 'blocked' | 'unavailable'
+  reason: string
+  handoff: HandoffLink | null
+  mergedEvidence: null | { review: ExpectedReview; watcherId: string; observedAtMs: number }
+}
 
 export interface ObjectivePayload {
   objectiveText: string
@@ -27,6 +119,7 @@ export interface ObjectiveDetail {
   gates: CheckRecord[]
   verdicts: VerdictRecord[]
   landings: LandingRecord[]
+  completion: ObjectiveCompletion
   next: { actionKind: string | null; evidenceKey: string | null; reason: string | null }
   draft: null | {
     plannerAttemptId: string
@@ -218,9 +311,6 @@ export function contractProblems(payload: ObjectivePayload, owner?: unknown): st
     }
   }
 
-  if (value.landingBar === 'pushed-ref' || value.landingBar === 'hosted-review' || value.landingBar === 'merged') {
-    problems.push(contractProblem('landing-bar-unsupported', `landing bar '${value.landingBar}' is not supported`))
-  }
   if (owner !== undefined && owner !== null) problems.push(contractProblem('owner-unsupported', 'objective watchers cannot have an owning agent'))
   return problems
 }

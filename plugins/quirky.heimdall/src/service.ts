@@ -176,7 +176,12 @@ export function createKernelService(context: PluginContext, now: () => number = 
       existing.schedule(0)
       return existing
     }
-    const runnerOptions: RunnerOptions = { ...options, enrollment }
+    const runnerOptions: RunnerOptions = {
+      ...options,
+      enrollment,
+      handoff: enrollmentService.handoff,
+      onHandoffCommitted: startRunner
+    }
     const runner = createRunner(runnerOptions)
     runners.set(enrollment.watcherId, runner)
     if (suspended) runner.suspend()

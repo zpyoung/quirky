@@ -157,12 +157,24 @@ const restPull = (item) => {
   return response
 }
 const command = args[0]
+
 if (command === 'auth' && args[1] === 'status') {
-  if (state.authenticated === false) fail('You are not logged into any GitHub hosts. Run gh auth login.')
-  if (state.logoutAfterAuthStatus === true) {
-    state.authenticated = false
-    state.logoutAfterAuthStatus = false
+  state.authStatusCalls = (typeof state.authStatusCalls === 'number' ? state.authStatusCalls : 0) + 1
+  saveState(state)
+  if (state.pauseAuthStatusAt === state.authStatusCalls) {
+    state.authStatusStarted = true
     saveState(state)
+    const watcher = watch(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', { persistent: false })
+    for await (const _ of watcher) {
+      if (readState().releaseAuthStatus === true) break
+    }
+  }
+  const current = readState()
+  if (current.authenticated === false) fail('You are not logged into any GitHub hosts. Run gh auth login.')
+  if (current.logoutAfterAuthStatus === true) {
+    current.authenticated = false
+    current.logoutAfterAuthStatus = false
+    saveState(current)
   }
   out('Logged in to github.com account test-user (keyring)\n')
 } else if (command === 'auth' && args[1] === 'token') {
@@ -396,7 +408,16 @@ if (command === 'auth' && args[1] === 'status') {
     }
   }
 } else if (command === 'repo' && args[1] === 'view') {
-  out({ nameWithOwner: repo.owner + '/' + repo.repo, isFork: false, parent: null, defaultBranchRef: { name: state.defaultBranch ?? 'main' } })
+  if (state.pauseFinalRepoView === true && typeof state.authStatusCalls === 'number' && state.authStatusCalls >= 2) {
+    const watcher = watch(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', { persistent: false })
+    state.repoViewStarted = true
+    saveState(state)
+    for await (const _ of watcher) {
+      if (readState().releaseRepoView === true) break
+    }
+  }
+  const current = readState()
+  out({ nameWithOwner: repo.owner + '/' + repo.repo, isFork: false, parent: null, defaultBranchRef: { name: current.defaultBranch ?? 'main' } })
 } else if (command === 'pr' && args[1] === 'list') {
   const head = option('--head', '')
   if (head.includes(':')) fail('gh pr list --head does not support owner:branch')
@@ -553,6 +574,88 @@ function pushFeature(testHost: HostingTest): void {
   git(testHost, ['update-ref', 'refs/remotes/origin/feature', 'HEAD'])
 }
 
+
+function expectedTarget(testHost: HostingTest, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const repository = { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+  return {
+    branch: gitOutput(testHost, ['branch', '--show-current']),
+    headSha: gitOutput(testHost, ['rev-parse', 'HEAD']),
+    baseRefName: 'main',
+    repository,
+    headRepository: repository,
+    ...overrides
+  }
+}
+
+async function createDuringFinalAuthentication(
+  testHost: HostingTest,
+  params: Record<string, unknown>,
+  changeTarget: () => void | Promise<void>
+): Promise<{ pending: Promise<unknown> }> {
+  const state = recordOf(testHost.readState())
+  testHost.writeState({ ...state, pauseAuthStatusAt: 2 })
+  const abort = new AbortController()
+  const authStarted = waitForState(testHost, 'authStatusStarted', abort.signal)
+  const creating = testHost.call('create', params)
+  try {
+    const reachedAuth = await Promise.race([
+      authStarted.then(() => true),
+      creating.then(() => false, () => false)
+    ])
+    if (reachedAuth) await changeTarget()
+  } finally {
+    abort.abort()
+    const current = testHost.readState()
+    if (isRecord(current)) testHost.writeState({ ...current, releaseAuthStatus: true })
+  }
+  return { pending: creating }
+}
+
+async function createDuringFinalBaseLookup(
+  testHost: HostingTest,
+  params: Record<string, unknown>,
+  changeTarget: () => void | Promise<void>
+): Promise<{ pending: Promise<unknown>; pausedState: unknown }> {
+  const state = recordOf(testHost.readState())
+  testHost.writeState({ ...state, pauseFinalRepoView: true })
+  const abort = new AbortController()
+  const repoViewStarted = waitForState(testHost, 'repoViewStarted', abort.signal)
+  const creating = testHost.call('create', params)
+  let pausedState: unknown
+  try {
+    const outcome = await Promise.race([
+      repoViewStarted.then(() => ({ kind: 'paused' as const })),
+      creating.then(
+        (result) => ({ kind: 'settled' as const, status: 'fulfilled' as const, result }),
+        (error) => ({ kind: 'settled' as const, status: 'rejected' as const, error })
+      )
+    ])
+    if (outcome.kind === 'paused') {
+      pausedState = testHost.readState()
+      await changeTarget()
+    } else {
+      const settlement = outcome.status === 'fulfilled'
+        ? { result: outcome.result }
+        : { error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error) }
+      const invocations = testHost.invocations().map(({ args }) => args)
+      throw new Error(`Final base repo view did not pause: ${JSON.stringify({ settlement, state: testHost.readState(), invocations })}`)
+    }
+  } finally {
+    abort.abort()
+    const current = testHost.readState()
+    if (isRecord(current)) testHost.writeState({ ...current, releaseRepoView: true })
+  }
+  return { pending: creating, pausedState }
+}
+
+
+
+function prCreationMutations(testHost: HostingTest) {
+  return invocationsFor(testHost, (args) =>
+    (args[0] === 'pr' && args[1] === 'create') ||
+    (args[0] === 'api' && args.includes('POST') && args.some((argument) => /\/pulls$/u.test(argument))))
+}
+
 function advanceTrackingBranch(testHost: HostingTest): void {
   const tree = gitOutput(testHost, ['rev-parse', 'HEAD^{tree}'])
   const remoteCommit = gitOutput(testHost, ['-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.invalid', 'commit-tree', tree, '-p', 'HEAD', '-m', 'remote advance'])
@@ -588,22 +691,38 @@ function mergeQueueQueries(testHost: HostingTest) {
     .filter((entry) => graphqlQuery(entry).includes('HostingPRMergeQueueEntry'))
 }
 
-async function waitForState(testHost: HostingTest, key: string): Promise<void> {
+async function waitForState(testHost: HostingTest, key: string, signal?: AbortSignal): Promise<void> {
   const ready = (): boolean => {
     const value = testHost.readState()
     return isRecord(value) && value[key] === true
   }
   if (ready()) return
   const watcher = watch(testHost.root, { persistent: false })
+  const iterator = watcher[Symbol.asyncIterator]()
   try {
     if (ready()) return
-    for await (const _ of watcher) {
-      if (ready()) return
+    if (!signal) {
+      while (true) {
+        const result = await iterator.next()
+        if (result.done || ready()) return
+      }
+    }
+    const { promise: aborted, resolve: abort } = Promise.withResolvers<true>()
+    signal.addEventListener('abort', () => abort(true), { once: true })
+    while (!signal.aborted) {
+      const event = await Promise.race([
+        iterator.next().then((result) => result.done ? 'closed' as const : 'changed' as const),
+        aborted
+      ])
+      if (event !== 'changed' || ready()) return
     }
   } finally {
+    await iterator.return?.()
     await watcher.return?.()
   }
 }
+
+
 
 function installLocalGitTransport(testHost: HostingTest, pushBare: string, log: string, fetchBare?: string): void {
   const realGit = Bun.which('git')
@@ -1307,6 +1426,168 @@ describe('quirky.hosting PR creation', () => {
     git(testHost, ['config', 'branch.explicit-precedence.remote', 'origin'])
     git(testHost, ['config', 'branch.explicit-precedence.merge', 'refs/heads/explicit-precedence'])
     await createForBase('Explicit base', 'explicit-base', 'origin/explicit-base')
+  }, 20_000)
+
+  test('GH17 guards matching same-repository and fork creation while preserving unguarded callers', async () => {
+    const sameRepositoryHost = await host(fixtureState())
+    const sameRepositoryResult = recordOf(await sameRepositoryHost.call('create', {
+      title: 'Pinned same-repository review',
+      expected: expectedTarget(sameRepositoryHost)
+    }))
+    expect(sameRepositoryResult.number).toBe(1)
+    const sameRepositoryArgs = prCreationMutations(sameRepositoryHost)[0]?.args
+    expect(sameRepositoryArgs).toBeDefined()
+    expect(sameRepositoryArgs?.[sameRepositoryArgs.indexOf('--head') + 1]).toBe('feature')
+    expect(sameRepositoryArgs?.[sameRepositoryArgs.indexOf('--base') + 1]).toBe('main')
+
+    const forkHost = await host(fixtureState({ organizationOwners: ['acme'] }), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    const forkResult = recordOf(await forkHost.call('create', {
+      title: 'Pinned fork review',
+      expected: expectedTarget(forkHost, {
+        repository: { host: 'github.com', owner: 'acme', repo: 'base-project' },
+        headRepository: { host: 'github.com', owner: 'acme', repo: 'feature-fork' }
+      })
+    }))
+    expect(forkResult.number).toBe(1)
+    const forkRequest = requestBody(prCreationMutations(forkHost)[0]!)
+    expect(forkRequest).toMatchObject({ head: 'acme:feature', head_repo: 'feature-fork', base: 'main' })
+
+    const legacyHost = await host(fixtureState())
+    await legacyHost.call('create', { title: 'Unpinned legacy review' })
+    expect(prCreationMutations(legacyHost)).toHaveLength(1)
+  }, 30_000)
+
+  test('GH17 validates expected creation as a complete shape before creating', async () => {
+    const testHost = await host(fixtureState())
+    const valid = expectedTarget(testHost)
+    const handlerMalformed = [
+      { ...valid, headSha: 'a'.repeat(39) },
+      { ...valid, baseRefName: 'bad ref' },
+      { ...valid, repository: { host: 'github.com', owner: 'bad/owner', repo: 'test-repo' } }
+    ]
+    const schemaMalformed = [
+      { ...valid, headRepository: null },
+      { branch: 'feature' }
+    ]
+
+    for (const malformedExpected of handlerMalformed) {
+      const error = await rejection(testHost.call('create', { title: 'Malformed expected target', expected: malformedExpected }))
+      expect(error.code).toBe(-32602)
+      expect(reasonOf(error)).toBe('validation_error')
+    }
+    for (const malformedExpected of schemaMalformed) {
+      const error = await rejection(testHost.call('create', { title: 'Malformed expected target', expected: malformedExpected }))
+      expect(error.code).toBe(-32602)
+      expect(error.data).toBeUndefined()
+    }
+    const sha256Shape = await rejection(testHost.call('create', {
+      title: 'Full SHA-256 expected target',
+      expected: { ...valid, headSha: 'a'.repeat(64) }
+    }))
+    expect(reasonOf(sha256Shape)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
+  test('GH17 rejects a changed branch after final authentication without creating', async () => {
+    const testHost = await host(fixtureState())
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved branch',
+      expected: expectedTarget(testHost)
+    }, () => git(testHost, ['checkout', '-b', 'moved-branch']))
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
+  test('GH17 rejects a changed HEAD after final authentication without creating', async () => {
+    const testHost = await host(fixtureState())
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved HEAD',
+      expected: expectedTarget(testHost)
+    }, () => commitFeature(testHost))
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+  test('GH17 rejects a changed HEAD and branch during final base lookup for same-repository and fork creation', async () => {
+    const assertMovedTargetRejected = async (testHost: HostingTest, expected: Record<string, unknown>) => {
+      const { pending, pausedState } = await createDuringFinalBaseLookup(testHost, {
+        title: 'Moved target during base lookup',
+        expected
+      }, () => {
+        git(testHost, ['checkout', '-b', 'moved-target'])
+        commitFeature(testHost)
+      })
+      expect(pausedState).toMatchObject({ authStatusCalls: 2, authenticated: true, repoViewStarted: true })
+      expect(gitOutput(testHost, ['branch', '--show-current'])).toBe('moved-target')
+      expect(gitOutput(testHost, ['rev-parse', 'HEAD'])).not.toBe(expected.headSha)
+      const error = await rejection(pending)
+      expect(reasonOf(error)).toBe('stale-target')
+      expect(prCreationMutations(testHost)).toHaveLength(0)
+    }
+
+    const sameRepositoryHost = await host(fixtureState())
+    await assertMovedTargetRejected(sameRepositoryHost, expectedTarget(sameRepositoryHost))
+
+    const forkHost = await host(fixtureState(), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    await assertMovedTargetRejected(forkHost, expectedTarget(forkHost, {
+      repository: { host: 'github.com', owner: 'acme', repo: 'base-project' },
+      headRepository: { host: 'github.com', owner: 'acme', repo: 'feature-fork' }
+    }))
+  }, 30_000)
+
+
+  test('GH17 rejects a changed base ref after final authentication without creating', async () => {
+    const testHost = await host(fixtureState())
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved base',
+      expected: expectedTarget(testHost)
+    }, async () => {
+      await testHost.client.callAny('quirky.worktree/set', { worktree: testHost.worktree, baseRef: 'release' })
+    })
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
+  test('GH17 rejects a changed base repository after final authentication without creating', async () => {
+    const testHost = await host(fixtureState(), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved base repository',
+      expected: expectedTarget(testHost, {
+        repository: { host: 'github.com', owner: 'acme', repo: 'base-project' },
+        headRepository: { host: 'github.com', owner: 'acme', repo: 'feature-fork' }
+      })
+    }, () => git(testHost, ['remote', 'set-url', 'upstream', 'https://github.com/acme/other-base.git']))
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
+  test('GH17 rejects a changed head repository after final authentication without creating', async () => {
+    const testHost = await host(fixtureState(), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved head repository',
+      expected: expectedTarget(testHost, {
+        repository: { host: 'github.com', owner: 'acme', repo: 'base-project' },
+        headRepository: { host: 'github.com', owner: 'acme', repo: 'feature-fork' }
+      })
+    }, () => git(testHost, ['remote', 'set-url', 'origin', 'https://github.com/acme/other-fork.git']))
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
   }, 20_000)
 
   test('GH15 probes malformed create output once and accepts exactly one matching review', async () => {
