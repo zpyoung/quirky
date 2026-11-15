@@ -11,8 +11,9 @@ import type {
   Worktree,
   WorktreeCreateResult
 } from '@quirky/protocol'
-import { DEFAULT_WORKTREE_STATUSES } from '../src/daemon/statuses'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import { DEFAULT_STOCK_OPTIONS, type WorktreeControl } from '../src/control-types'
+import { DEFAULT_WORKTREE_STATUSES } from '../src/daemon/statuses'
 import type { act as ReactAct, createElement as ReactCreateElement } from 'react'
 import type { createRoot as ReactCreateRoot } from 'react-dom/client'
 import type { CreateDialog as CreateDialogComponent } from '../src/CreateDialog'
@@ -117,12 +118,17 @@ function makeApp(options: AppOptions = {}) {
   const details = options.details
   const effectiveHooks = options.hooks ?? details?.hooks ?? noHooks
   const projectSettings = options.settings ?? details?.settings ?? settings
-  const context = {
+  let context!: UiPluginContext
+  const rawContext = {
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       const custom = options.onCall?.(method, params)
       if (custom !== undefined) return await custom
       if (method === 'ui.window.self') return { connId: 1 }
+      if (method === 'ui.window.command.run') {
+        if (params.connId !== 1 || params.id !== UI_CONTROL_COMMAND) throw new Error('Unexpected window command descriptor')
+        return { result: dispatchUiControl(context, params.args) }
+      }
       if (method === 'quirky.repo/show') {
         const selected = repos.find((entry) => entry.id === params.repo) ?? repo(String(params.repo))
         return details ?? { repo: selected, settings: projectSettings, hooks: effectiveHooks }
@@ -161,6 +167,9 @@ function makeApp(options: AppOptions = {}) {
       if (method === 'plugin.list') return []
       throw new Error(`unexpected UI call ${method}`)
     },
+    executeCommand() {
+      throw new Error('executeCommand must not be used')
+    },
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }),
     mountView() { return () => {} },
     openView(id: string, input?: unknown) {
@@ -173,7 +182,8 @@ function makeApp(options: AppOptions = {}) {
     subscribe: () => () => {},
     onConnection: () => () => {},
     getSetting: () => undefined
-  } as unknown as UiPluginContext
+  }
+  context = rawContext as unknown as UiPluginContext
   return { context, calls, opened, toasts }
 }
 
@@ -229,7 +239,7 @@ async function waitFor<T>(read: () => T | null | undefined): Promise<T> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     await flush()
     const value = read()
-    if (value !== null && value !== undefined) return value
+    if (value !== null && value !== undefined && value !== false) return value
   }
   throw new Error('UI did not reach the expected state')
 }
@@ -523,18 +533,95 @@ test('GitHub search exposes loading, empty, partial and error states', async () 
   await h.ready
   const dialog = h.element.querySelector('[role="dialog"]')!
   await click(button(dialog, 'GitHub')!)
-  expect(dialog.querySelector('[role="status"]')?.textContent?.toLowerCase()).toContain('loading')
+  expect(dialog.querySelector('[role="status"] .ui-notice-line')?.textContent?.toLowerCase()).toContain('loading')
   await act(async () => initial.resolve({ items: [], partial: false }))
-  await waitFor(() => dialog.textContent?.includes('No GitHub issues or pull requests found.'))
+  await waitFor(() => dialog.querySelector('.ui-empty-state'))
+  expect(dialog.querySelector('.ui-empty-state')?.textContent).toBe('No GitHub issues or pull requests found.')
 
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'denied')
   await act(async () => denied.reject(new Error('GitHub access denied')))
-  await waitFor(() => dialog.querySelector('[role="alert"]'))
-  expect(dialog.textContent).toContain('GitHub access denied')
+  await waitFor(() => dialog.querySelector('.ui-inline-error'))
+  expect(dialog.querySelector('.ui-inline-error')?.textContent).toBe('Could not search GitHub work items: GitHub access denied')
 
   await setText(labelField<HTMLInputElement>(dialog, 'Search GitHub')!, 'partial')
   await waitFor(() => buttonContaining(dialog, 'Partial issue'))
-  expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('Pull request search is rate-limited.')
+  expect(dialog.querySelector('[role="alert"]')).toBeNull()
+  expect([...dialog.querySelectorAll('.ui-text-muted')].some((line) => line.textContent?.includes('Pull request search is rate-limited.'))).toBe(true)
+})
+
+test('Create source, branch and agent reads use shared loading and errors', async () => {
+  const source = deferred<unknown>()
+  const initialBranches = deferred<unknown>()
+  const failedBranches = deferred<unknown>()
+  const options = deferred<unknown>()
+  const h = mountCreate({
+    onCall: (method, params) => {
+      if (method === 'quirky.hosting/worktreeSource') return source.promise
+      if (method === 'quirky.git/branches') return params.query === undefined ? initialBranches.promise : failedBranches.promise
+      if (method === 'quirky.agents/options') return options.promise
+      return undefined
+    }
+  })
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  await setText(labelField<HTMLInputElement>(dialog, 'Name')!, PR_URL)
+  await waitFor(() => dialog.querySelector('.ui-notice-line')?.textContent?.includes('Loading GitHub work item…'))
+  await act(async () => source.reject(new Error('No item')))
+  await waitFor(() => [...dialog.querySelectorAll('.ui-inline-error')].some((error) =>
+    error.textContent === 'Could not resolve GitHub work item: No item'
+  ))
+
+  await click(button(dialog, 'Branch')!)
+  await waitFor(() => dialog.querySelector('.ui-notice-line')?.textContent?.includes('Loading branches…'))
+  await act(async () => initialBranches.resolve({ refs: [], current: 'main' }))
+  await waitFor(() => [...dialog.querySelectorAll('.ui-empty-state')].some((state) => state.textContent === 'No matching branches.'))
+  await setText(labelField<HTMLInputElement>(dialog, 'Existing branch')!, 'denied')
+  await waitFor(() => h.calls.some((call) => call.method === 'quirky.git/branches' && call.params.query === 'denied'))
+  await waitFor(() => [...dialog.querySelectorAll('.ui-notice-line')].some((line) => line.textContent?.includes('Loading branches…')))
+  await act(async () => failedBranches.reject(new Error('Git unavailable')))
+  await waitFor(() => [...dialog.querySelectorAll('.ui-inline-error')].some((error) =>
+    error.textContent === 'Could not search branches: Git unavailable'
+  ))
+
+  await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
+  await waitFor(() => [...dialog.querySelectorAll('.ui-notice-line')].some((line) =>
+    line.textContent === 'Loading claude model options…'
+  ))
+  await act(async () => options.reject(new Error('Catalog offline')))
+  await waitFor(() => [...dialog.querySelectorAll('.ui-inline-error')].some((error) =>
+    error.textContent === 'Could not load claude model options: Catalog offline'
+  ))
+})
+
+test('clearing a launch choice removes only that option and preserves own-key selections', async () => {
+  const h = mountCreate({
+    onCall: (method) => method === 'quirky.agents/options' ? {
+      supported: true,
+      models: [],
+      unlisted: 'accept',
+      unlistedOptions: [
+        { id: 'effort', label: 'Effort', type: 'select', choices: [{ value: 'high', label: 'High' }] },
+        { id: '__proto__', label: 'Prototype option', type: 'select', choices: [{ value: 'chosen', label: 'Chosen' }] },
+        { id: 'readOnly', label: 'Read only', type: 'boolean', choices: null }
+      ]
+    } : undefined
+  })
+  await h.ready
+  const dialog = h.element.querySelector('[role="dialog"]')!
+  await setText(labelField<HTMLInputElement>(dialog, 'Name')!, 'launch options')
+  await setSelect(labelField<HTMLSelectElement>(dialog, 'Agent')!, 'claude')
+  const effort = await waitFor(() => labelField<HTMLSelectElement>(dialog, 'Effort'))
+  await setSelect(effort, 'high')
+  await setSelect(labelField<HTMLSelectElement>(dialog, 'Prototype option')!, 'chosen')
+  const readOnly = labelField<HTMLInputElement>(dialog, 'Read only')!
+  await click(readOnly)
+  await click(readOnly)
+  await setSelect(effort, '')
+  await click(button(dialog, 'Create')!)
+  const created = await waitFor(() => h.calls.find((call) => call.method === 'quirky.worktree/create'))
+  expect(created.params.options).toEqual({ ['__proto__']: 'chosen', readOnly: false })
+  expect(Object.hasOwn(created.params.options as object, '__proto__')).toBe(true)
+  expect(Object.getPrototypeOf(created.params.options)).toBe(Object.prototype)
 })
 
 test('a folder project rejects explicit GitHub input instead of creating a folder from it', async () => {

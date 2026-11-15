@@ -8,6 +8,7 @@ import { delimiter, join } from 'node:path'
 import * as React from 'react'
 import { createRoot } from 'react-dom/client'
 import { HostingSettings } from '../src/create/HostingSettings'
+import { activate } from '../src/ui'
 import type { UiLayout, UiPluginContext } from '@quirky/protocol'
 import type { ReviewsState } from '../src/contracts'
 import { bootReviews } from './support'
@@ -23,6 +24,31 @@ type ReviewsHost = {
   cleanup(): Promise<void>
 }
 type RecordValue = Record<string, unknown>
+
+async function settleUiRead(completion: Promise<void>, ready: () => boolean = () => true): Promise<void> {
+  let finished = false
+  let rejected = false
+  let failure: unknown
+  void completion.then(
+    () => { finished = true },
+    (error: unknown) => { rejected = true; failure = error; finished = true },
+  )
+  const deadline = Date.now() + 15_000
+  while ((!finished || !ready()) && Date.now() < deadline) {
+    await React.act(async () => {
+      const turn = Promise.withResolvers<void>()
+      setImmediate(turn.resolve)
+      await turn.promise
+    })
+  }
+  await React.act(async () => {
+    const turn = Promise.withResolvers<void>()
+    setImmediate(turn.resolve)
+    await turn.promise
+  })
+  if (!finished || !ready()) throw new Error('The local settings read did not finish.')
+  if (rejected) throw failure
+}
 
 const hosts: ReviewsHost[] = []
 afterEach(async () => {
@@ -386,14 +412,24 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
   const worktreeList = Promise.withResolvers<void>()
   const settingsLoaded = Promise.withResolvers<void>()
   const staleDataVisible = Promise.withResolvers<void>()
+  const provided = new Map<string, unknown>()
   const context = {
-    call(method: string, params: Record<string, unknown> = {}) {
+    provide(id: string, implementation: unknown) { provided.set(id, implementation) },
+    async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return { connId: 42 }
+      if (method === 'ui.window.command.run') {
+        if (params.connId !== 42) throw new Error('Unexpected target window.')
+        const handler = provided.get(String(params.id))
+        if (typeof handler !== 'function') throw new Error(`Missing provided command: ${String(params.id)}`)
+        return { result: await handler(params.args) }
+      }
       const request = host.call(method, params)
       if (method === 'quirky.worktree/list') void request.then(() => worktreeList.resolve(), (error: unknown) => worktreeList.reject(error))
       return request
     },
     getLayout: () => layout
   } as unknown as UiPluginContext
+  activate(context)
   let state = await stateOf(host) as unknown as ReviewsState
   expect(record(state.settings)).toMatchObject({ worktree: null, loading: false })
   const root = createRoot(container)
@@ -409,7 +445,7 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
 
   try {
     await React.act(async () => { render() })
-    await React.act(async () => { await worktreeList.promise })
+    await settleUiRead(worktreeList.promise)
     const selector = container.querySelector<HTMLSelectElement>('#settings-worktree')
     if (!selector || ![...selector.options].some((option) => option.value === host.worktree)) {
       throw new Error('The Settings view did not list registered Git worktrees.')
@@ -421,7 +457,8 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
       selector.value = host.worktree
       selector.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    await React.act(async () => { await settingsLoaded.promise })
+    await settleUiRead(settingsLoaded.promise, () => [...container.querySelectorAll('button')]
+      .some((button) => button.textContent?.includes('Refresh budget') && !button.disabled))
     expect(record(state.settings)).toMatchObject({
       worktree: host.worktree,
       loading: false,
@@ -435,8 +472,8 @@ test('R16 direct Settings view lists real worktrees and loads observations witho
     if (!budgetButton) throw new Error('The Settings view did not render the budget refresh action.')
     await React.act(async () => {
       budgetButton.dispatchEvent(new Event('click', { bubbles: true }))
-      await staleDataVisible.promise
     })
+    await settleUiRead(staleDataVisible.promise)
     expect(record(state.settings)).toMatchObject({
       loading: false,
       error: expect.stringContaining('GitHub API budget'),
@@ -462,9 +499,18 @@ test('R16 Settings view uses the selected workspace when the active view is glob
   } as UiLayout
   const calls: { method: string; params: Record<string, unknown> }[] = []
   const repositoryDefaults = Promise.withResolvers<void>()
+  const provided = new Map<string, unknown>()
   const context = {
-    call(method: string, params: Record<string, unknown> = {}) {
+    provide(id: string, implementation: unknown) { provided.set(id, implementation) },
+    async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 42 }
+      if (method === 'ui.window.command.run') {
+        if (params.connId !== 42) throw new Error('Unexpected target window.')
+        const handler = provided.get(String(params.id))
+        if (typeof handler !== 'function') throw new Error(`Missing provided command: ${String(params.id)}`)
+        return { result: await handler(params.args) }
+      }
       const request = host.call(method, params)
       if (method === 'quirky.reviews/creationDefaults' && params.scope === 'repository') {
         void request.then(() => repositoryDefaults.resolve(), repositoryDefaults.reject)
@@ -473,13 +519,14 @@ test('R16 Settings view uses the selected workspace when the active view is glob
     },
     getLayout: () => layout
   } as unknown as UiPluginContext
+  activate(context)
   const state = await stateOf(host) as unknown as ReviewsState
   const root = createRoot(container)
   try {
     await React.act(async () => {
       root.render(React.createElement(HostingSettings, { context, state, refresh: async () => {} }))
     })
-    await React.act(async () => { await repositoryDefaults.promise })
+    await settleUiRead(repositoryDefaults.promise)
     expect(calls).toContainEqual({
       method: 'quirky.reviews/creationDefaults',
       params: { scope: 'repository', worktree: host.worktree }
