@@ -241,8 +241,8 @@ function sanitizeHtml(value: unknown, base: string): string {
 
 function attributes(value: unknown, base: string): Record<string, string> {
   const source = object(value)
-  const result: Record<string, string> = Object.create(null) as Record<string, string>
-  if (!source) return result
+  const entries: Array<[string, string]> = []
+  if (!source) return Object.create(null) as Record<string, string>
   for (const name in source) {
     if (!Object.hasOwn(source, name)) continue
     const raw = source[name]
@@ -250,13 +250,13 @@ function attributes(value: unknown, base: string): Record<string, string> {
     if (!attributeAllowed(name) || typeof raw !== 'string') continue
     if (Object.hasOwn(URL_ATTRIBUTES, lower)) {
       if (raw === '' || hasSecret(raw)) continue
-      try { result[lower] = sanitizedUrl(raw, base) } catch { continue }
+      try { entries.push([lower, sanitizedUrl(raw, base)]) } catch { continue }
       continue
     }
     const max = lower === 'class' ? LIMIT.classAttribute : 500
-    result[lower] = safeString(raw, max)
+    entries.push([lower, safeString(raw, max)])
   }
-  return result
+  return Object.assign(Object.create(null), Object.fromEntries(entries)) as Record<string, string>
 }
 
 function screenshot(value: unknown): DesignScreenshot | null {
@@ -296,13 +296,14 @@ export function clampPayload(raw: unknown): DesignPayload {
     : []
   const accessibility = object(target.accessibility)
   const styles = object(target.computedStyles)
-  const computedStyles: Record<string, string> = Object.create(null) as Record<string, string>
+  const styleEntries: Array<[string, string]> = []
   if (styles) {
     for (const name of COMPUTED_STYLE_NAMES) {
       const value = styles[name]
-      if (typeof value === 'string') computedStyles[name] = safeString(value, 500)
+      if (typeof value === 'string') styleEntries.push([name, safeString(value, 500)])
     }
   }
+  const computedStyles = Object.assign(Object.create(null), Object.fromEntries(styleEntries)) as Record<string, string>
   const reactComponents = target.reactComponents === null || target.reactComponents === undefined ? null : safeString(target.reactComponents, LIMIT.reactComponents)
   const sourceFile = target.sourceFile === null || target.sourceFile === undefined ? null : safeString(target.sourceFile, LIMIT.sourceFile)
   return {

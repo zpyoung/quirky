@@ -25,7 +25,7 @@ export type Route = { invoke: Ref; target: string; via?: Ref[] }
 export type ActionEntry =
   | { site: Ref; anchor?: string; route: Route }
   | { site: Ref; anchor?: string; transient: 'caret' | 'hover' | 'draft'; reason: string }
-  | { site: Ref; anchor?: string; notAction: 'lifecycle' | 'subscription' | 'forwarded'; reason: string }
+  | { site: Ref; anchor?: string; notAction: 'lifecycle' | 'subscription' | 'forwarded' | 'barrier'; reason: string }
 export type CoverageFile = {
   schemaVersion: 1
   surfaces: Record<string, { loading: Decision; empty: Decision; error: Decision }>
