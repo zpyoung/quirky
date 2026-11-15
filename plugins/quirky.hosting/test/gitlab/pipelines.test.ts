@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { bootGitLab, type GitLabWorld } from './world'
 import { mergeRequest } from './stand-in'
+import type { CheckRecord } from '../../src/check-details'
 
 let active: GitLabWorld | undefined
 async function boot(options: Parameters<typeof bootGitLab>[0] = {}): Promise<GitLabWorld> {
@@ -22,12 +23,10 @@ async function expectInputRejected(request: Promise<unknown>): Promise<void> {
   )
   expect(rejected).toBe(true)
 }
-function errorReasonValue(error: unknown): unknown {
-  if (typeof error !== 'object' || error === null || !('data' in error)) return undefined
-  const data = error.data
-  return typeof data === 'object' && data !== null && !Array.isArray(data) && 'reason' in data
-    ? data.reason
-    : undefined
+function errorReasonValue(error: unknown): string {
+  const value = errorDataValue(error, 'reason')
+  if (typeof value !== 'string') throw new Error('Expected a provider error reason')
+  return value
 }
 function errorDataValue(error: unknown, key: string): unknown {
   if (typeof error !== 'object' || error === null || !('data' in error)) return undefined
@@ -414,7 +413,7 @@ test('partial page failures retain observed jobs and never claim successful comp
   world.server.requests.length = 0
   world.server.failures.clear()
   world.server.failures.set(`GET ${jobsPath}`, { status: 500 })
-  const firstPageFailure = await world.call('checks', { number: 5, noCache: true }) as { checks: unknown[]; rollup: string; partial: boolean; partialFailures: string[] }
+  const firstPageFailure = await world.call('checks', { number: 5, noCache: true }) as { number: number; headSha: string; checks: unknown[]; rollup: string; partial: boolean; partialFailures: string[] }
   expect(firstPageFailure).toEqual({
     number: 5, headSha: head, rollup: 'unknown', checks: [], partial: true, partialFailures: ['jobs_unavailable']
   })
@@ -983,7 +982,7 @@ test('explicit failed-only retry starts one verified job, emits changed, and inv
   }))
 
   const after = await world.call('checks', { number: 5 }) as {
-    checks: Array<{ name: string; checkRunId: number | null; status: string; conclusion: string | null }>
+    checks: CheckRecord[]
   }
   expect(after.checks).toEqual([
     { kind: 'check_run', name: 'build', status: 'queued', conclusion: null, url: `${world.server.url}/group/sub/proj/-/jobs/203`, checkRunId: 203, workflowRunId: 90, suiteId: null, required: null },

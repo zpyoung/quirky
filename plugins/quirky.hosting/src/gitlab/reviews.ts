@@ -1,5 +1,6 @@
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { HostingEnv } from '../env'
 import type { SnapshotRecorder, SnapshotResult } from '../pr-review'
 import { aheadBehind, normalizeBase, projectDefaultBase, remoteBaseExists, upstreamRef } from '../pr-create'
 import { isRecord, nonEmptyString, parseBranch, parsePositiveInteger, parseOid, providerReason } from '../pr-data'

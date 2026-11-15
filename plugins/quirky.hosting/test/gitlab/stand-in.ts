@@ -19,6 +19,7 @@ export type GitLabStandIn = {
   url: string
   host: string
   project: Record<string, any>
+  requests: GitLabRequestRecord[]
   mergeRequests: Record<string, any>[]
   listMergeRequests: Record<string, any>[] | undefined
   discussions: Record<string, any>[]

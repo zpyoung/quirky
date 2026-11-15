@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { validateValue, type PluginCaller, type PluginContext, type Schema, type Worktree } from '@quirky/protocol'
+import { validateValue, type CallerConnection, type PluginCaller, type PluginContext, type Schema, type Worktree } from '@quirky/protocol'
 import { createEnv, type HostingConfiguration, type HostingEnv, type Scope } from '../../src/env'
 import { prMethods } from '../../src/pr'
 import { refreshMethods } from '../../src/refresh'
@@ -121,20 +121,25 @@ type CacheHarness = {
   cleanup(): Promise<void>
 }
 type RefreshTestConnection = { caller: PluginCaller; close(): void }
+let nextRefreshConnectionId = 0
 
-function refreshTestConnection(id: string): RefreshTestConnection {
+function refreshTestConnection(name: string): RefreshTestConnection {
   const callbacks = new Set<() => void>()
   let closed = false
-  const connection = {
-    id,
+  const connection: CallerConnection = {
+    id: ++nextRefreshConnectionId,
+    transport: 'socket',
     onClose(callback: () => void) {
       if (closed) callback()
       else callbacks.add(callback)
-      return () => callbacks.delete(callback)
+      return () => { callbacks.delete(callback) }
+    },
+    openStream() {
+      throw new Error('Socket fixture connections do not support streams')
     }
   }
   return {
-    caller: { role: 'client', connection } as PluginCaller,
+    caller: { role: 'ui', name, connection },
     close() {
       if (closed) return
       closed = true
@@ -301,7 +306,7 @@ function pauseResponse(predicate: (path: string) => boolean): {
   const entered = Promise.withResolvers<void>()
   const released = Promise.withResolvers<void>()
   let paused = false
-  globalThis.fetch = async (input, init) => {
+  globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const response = await originalFetch(input, init)
     const url = input instanceof Request ? new URL(input.url) : new URL(String(input))
     if (!paused && predicate(url.pathname)) {
@@ -310,7 +315,7 @@ function pauseResponse(predicate: (path: string) => boolean): {
       await released.promise
     }
     return response
-  }
+  }, { preconnect: originalFetch.preconnect })
   return {
     entered: entered.promise,
     release: () => released.resolve(),
@@ -425,12 +430,12 @@ function invokeTimerHandler(handler: unknown, args: unknown[]): void {
 
 function installClockAfterResponse(clock: ControlledClock, predicate: (path: string) => boolean): () => void {
   const originalFetch = globalThis.fetch
-  globalThis.fetch = async (input, init) => {
+  globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const response = await originalFetch(input, init)
     const url = input instanceof Request ? new URL(input.url) : new URL(String(input))
     if (predicate(url.pathname)) clock.installTimers()
     return response
-  }
+  }, { preconnect: originalFetch.preconnect })
   return () => { globalThis.fetch = originalFetch }
 }
 

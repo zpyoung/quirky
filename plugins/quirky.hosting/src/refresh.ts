@@ -361,6 +361,7 @@ function safeOutcome(value: unknown, expectedProvider?: 'github' | 'gitlab'): Ho
     }
     review.headRepository = repository
   }
+  if (review.provider === 'gitlab') return { kind: 'found', review, fetchedAt: value.fetchedAt }
   return { kind: 'found', review, fetchedAt: value.fetchedAt }
 }
 
@@ -816,7 +817,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
           }
           const result = await directRefresh(resolved, { role: 'plugin', pluginId: 'quirky.hosting' }, entry.reason)
           if (disposed) continue
-          if (result.stale) {
+          if (result.kind === 'completed' && result.stale) {
             if (entry.provider === 'gitlab') discardGitLabContinuations(entry)
             continue
           }
