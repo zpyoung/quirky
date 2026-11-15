@@ -6,27 +6,58 @@ import type { UiPluginContext } from '@quirky/protocol'
 import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer } from '../src/types'
 import type { ChangesSurfaceProps } from '../src/window/ChangesSurface'
+import {
+  EDITOR_UI_CONTROL_COMMAND,
+  EditorUiControlProvider,
+  createEditorUiControlReportScope,
+  type EditorUiControlAddress
+} from '../src/window/uiControl'
 
 const WORKTREE = 'wt-editor-changes'
 type KeptSubscription = {
   listener: (event: { type: string; data?: unknown; worktreeId?: string }) => void | Promise<void>
   options?: { worktreeId?: string | null }
 }
+type ControlHandler = (args?: unknown) => Promise<{ delivered: boolean }> | { delivered: boolean }
+type ActivatePlugin = (context: UiPluginContext) => void
+type DeactivatePlugin = () => void
+type ControlReport = { bufferId?: string; uiControls?: EditorUiControlAddress[]; [key: string]: unknown }
 type Mounted = {
   element: HTMLElement
   isResourceLive(url: string): boolean
   liveResourceCount(): number
   pendingLeaseIds(): string[]
+  pendingDiffCalls(): number[]
   resolvePending(leaseId: string): void
+  resolveDiff(call: number): void
+  controls(): EditorUiControlAddress[]
+  report(): ControlReport
+  bridgeCalls(): { method: string; params: Record<string, unknown> }[]
+  invoke(address: EditorUiControlAddress, action: string, data?: Record<string, unknown>): Promise<{ delivered: boolean }>
+  dispatch(address: EditorUiControlAddress, action: string, data?: Record<string, unknown>): Promise<{ delivered: boolean }>
   subscriptions: KeptSubscription[]
   diffCallCount(): number
   update(buffer: EditorSurfaceBuffer): Promise<void>
   unmount(): Promise<void>
 }
-type FixtureOptions = { deferFirstRender?: boolean; malformedResponse?: boolean; onDraft?: (content: string) => void }
+type FixtureOptions = {
+  deferFirstRender?: boolean
+  malformedResponse?: boolean
+  onDraft?: (content: string) => void
+  tabId?: string | null
+  deferDiffCalls?: number[]
+  diffErrors?: string[]
+  diffByPath?: Record<string, { original: string; modified: string }>
+  previewMismatch?: 'worktree' | 'path'
+  previewError?: string
+  bridgeError?: string
+}
 
 let createRoot: (container: HTMLElement) => Root
 let ChangesSurface: ComponentType<ChangesSurfaceProps>
+let activatePlugin: ActivatePlugin
+let deactivatePlugin: DeactivatePlugin
+let activatedControlHandler: ControlHandler | undefined
 let mounted: Mounted[]
 
 beforeAll(async () => {
@@ -34,9 +65,28 @@ beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   ;({ createRoot } = await import('react-dom/client'))
+  ;({ activate: activatePlugin, deactivate: deactivatePlugin } = await import('../src/ui'))
   ;({ ChangesSurface } = await import('../src/window/ChangesSurface'))
+  const provided = new Map<string, ControlHandler>()
+  const activationContext = {
+    pluginId: 'quirky.editor',
+    async call() { return {} },
+    provide(id: string, handler: unknown) {
+      if (typeof handler !== 'function') throw new Error(`Missing activated handler for ${id}.`)
+      provided.set(id, handler as ControlHandler)
+    },
+    subscribe() { return () => {} },
+    getSetting() { return 300 },
+    getLayout() { return {} },
+    async executeCommand() {},
+    toast() {}
+  } as unknown as UiPluginContext
+  activatePlugin(activationContext)
+  activatedControlHandler = provided.get(EDITOR_UI_CONTROL_COMMAND)
+  if (!activatedControlHandler) throw new Error('The editor control command was not provided by activate.')
 })
 afterAll(async () => {
+  deactivatePlugin()
   await GlobalRegistrator.unregister()
 })
 beforeEach(() => { mounted = [] })
@@ -84,45 +134,71 @@ async function renderChanges(
   options: FixtureOptions = {}
 ): Promise<Mounted> {
   const subscriptions: KeptSubscription[] = []
+  const bridgeRequests: { method: string; params: Record<string, unknown> }[] = []
+  let report: ControlReport = {}
   let diffCalls = 0
   const activeLeases = new Set<string>()
   const resources = new Map<string, string>()
   const pending = new Map<string, () => void>()
+  const pendingDiffs = new Map<number, () => void>()
   let renders = 0
   function resourceUrl(leaseId: string): string {
     return `https://images.invalid/${leaseId}`
   }
-  function response(leaseId: string, text: string): Record<string, unknown> {
+  function response(leaseId: string, text: string, worktreeId: string, path: string): Record<string, unknown> {
     const heading = text.split(/\r?\n/, 1)[0]?.replace(/^#\s*/, '') ?? ''
     return {
       leaseId: options.malformedResponse ? `${leaseId}-wrong` : leaseId,
-      worktreeId: WORKTREE,
-      path: buffer.relativePath,
+      worktreeId: options.previewMismatch === 'worktree' ? `${worktreeId}-wrong` : worktreeId,
+      path: options.previewMismatch === 'path' ? `${path}.wrong` : path,
       html: `<article><h1>${heading}</h1><img src="${resourceUrl(leaseId)}" alt="Preview image"></article>`
     }
   }
   const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self' || method === 'ui.window.command.run') {
+        bridgeRequests.push({ method, params })
+        if (options.bridgeError && method === 'ui.window.command.run') throw new Error(options.bridgeError)
+        if (method === 'ui.window.self') return { connId: 22 }
+        const handler = activatedControlHandler
+        if (!handler) throw new Error('The activated editor control handler is unavailable.')
+        return { result: await handler(params.args) }
+      }
       if (method === 'quirky.git/diff') {
         diffCalls += 1
-        return {
-          path: buffer.relativePath,
+        const currentPath = typeof params.path === 'string' ? params.path : buffer.relativePath
+        const currentWorktree = typeof params.worktree === 'string' ? params.worktree.replace(/^id:/, '') : buffer.worktreeId
+        const pathDiff = options.diffByPath?.[currentPath] ?? diff
+        const value = {
+          path: currentPath,
           source: 'unstaged',
           staged: false,
-          original: diff?.original ?? 'HEAD version\n',
-          modified: diff?.modified ?? 'Index version\n',
+          original: pathDiff?.original ?? 'HEAD version\n',
+          modified: pathDiff?.modified ?? 'Index version\n',
           binary: false,
           kind: 'text',
           modifiedHash: 'working-hash',
-          modifiedDeleted: false
+          modifiedDeleted: false,
+          worktreeId: currentWorktree
         }
+        const error = options.diffErrors?.[diffCalls - 1]
+        if (error) throw new Error(error)
+        if (options.deferDiffCalls?.includes(diffCalls)) {
+          const deferred = Promise.withResolvers<Record<string, unknown>>()
+          pendingDiffs.set(diffCalls, () => deferred.resolve(value))
+          return deferred.promise
+        }
+        return value
       }
       if (method === 'quirky.editor/markdownPreview') {
         const leaseId = typeof params.leaseId === 'string' ? params.leaseId : ''
         if (params.action === 'render') {
           activeLeases.add(leaseId)
-          const value = response(leaseId, typeof params.text === 'string' ? params.text : '')
+          if (options.previewError) throw new Error(options.previewError)
+          const path = typeof params.path === 'string' ? params.path : buffer.relativePath
+          const worktree = typeof params.worktree === 'string' ? params.worktree.replace(/^id:/, '') : buffer.worktreeId
+          const value = response(leaseId, typeof params.text === 'string' ? params.text : '', worktree, path)
           const finish = () => {
             if (activeLeases.has(leaseId)) resources.set(resourceUrl(leaseId), leaseId)
             return value
@@ -154,7 +230,7 @@ async function renderChanges(
   const props: ChangesSurfaceProps = {
     context,
     buffer,
-    tabId: buffer.tabId,
+    tabId: options.tabId ?? buffer.tabId,
     fontSize: 13,
     fontFamily: 'monospace',
     wrap: true,
@@ -168,10 +244,19 @@ async function renderChanges(
     onError() {},
     registerCommandHandlers: () => () => {}
   }
+  const reportScope = createEditorUiControlReportScope((value) => {
+    report = value as ControlReport
+  }, { surface: 'view:quirky.editor/document' })
+  reportScope.report({ bufferId: buffer.id, fixtureMarker: 'preserved' })
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
-  await act(async () => root.render(<ChangesSurface {...props} />))
+  const render = (nextBuffer: EditorSurfaceBuffer) => (
+    <EditorUiControlProvider scope={reportScope}>
+      <ChangesSurface {...props} buffer={nextBuffer} tabId={options.tabId ?? nextBuffer.tabId} />
+    </EditorUiControlProvider>
+  )
+  await act(async () => root.render(render(buffer)))
   let unmounted = false
   const surface: Mounted = {
     subscriptions,
@@ -180,19 +265,46 @@ async function renderChanges(
     isResourceLive: (url) => resources.has(url),
     liveResourceCount: () => resources.size,
     pendingLeaseIds: () => [...pending.keys()],
+    pendingDiffCalls: () => [...pendingDiffs.keys()],
     resolvePending(leaseId) {
       const resolve = pending.get(leaseId)
       if (!resolve) throw new Error(`No pending preview render for ${leaseId}.`)
       pending.delete(leaseId)
       resolve()
     },
+    resolveDiff(call) {
+      const resolve = pendingDiffs.get(call)
+      if (!resolve) throw new Error(`No pending diff request ${call}.`)
+      pendingDiffs.delete(call)
+      resolve()
+    },
+    controls: () => report.uiControls ?? [],
+    report: () => report,
+    bridgeCalls: () => [...bridgeRequests],
+    async invoke(address, action, data) {
+      const handler = activatedControlHandler
+      if (!handler) throw new Error('The activated editor control handler is unavailable.')
+      return await handler({
+        surface: address.surface,
+        target: address.target,
+        generation: address.generation,
+        action,
+        ...(data === undefined ? {} : { data })
+      })
+    },
+    async dispatch(address, action, data) {
+      let result: { delivered: boolean } = { delivered: false }
+      await act(async () => { result = await surface.invoke(address, action, data) })
+      return result
+    },
     async update(nextBuffer) {
-      await act(async () => root.render(<ChangesSurface {...props} buffer={nextBuffer} />))
+      await act(async () => root.render(render(nextBuffer)))
     },
     async unmount() {
       if (unmounted) return
       unmounted = true
       await act(async () => root.unmount())
+      reportScope.dispose()
     }
   }
   mounted.push(surface)
@@ -226,6 +338,7 @@ test('Changes compares HEAD to the shared draft, not staged content, in the same
   expect(surface.element.querySelector('[aria-label="Modified editor"] .cm-content')?.textContent).not.toContain('Staged index')
   expect(surface.element.querySelector('[aria-pressed="true"][aria-label="Side by side"]')).not.toBeNull()
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
+  await flush()
   expect(surface.element.querySelector('.qe-changes-inline')).not.toBeNull()
   const rows = inlineRows(surface.element)
   expect(rows).toEqual([
@@ -385,6 +498,7 @@ test.each([
     const surface = await renderChanges(makeBuffer('text', modified, null), { original, modified })
     await flush()
     await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
+    await flush()
 
     const actualRows = inlineRows(surface.element)
     expect(actualRows).toEqual(rows)
@@ -397,7 +511,9 @@ test('Changes navigation reveals the changed modified line', async () => {
   const surface = await renderChanges(makeBuffer('text', modified, null), { original, modified })
   await flush()
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
+  await flush()
   await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Next change"]')?.click())
+  await flush()
 
   expect(surface.element.querySelector<HTMLElement>('[aria-label="Modified editor"] .cm-activeLine')?.textContent).toBe('added')
 })
@@ -534,6 +650,7 @@ test('Changes rejects a detached response for another lease and leaves Source av
   await flush()
   const previewError = surface.element.querySelector('[role="alert"]')
   expect(previewError).not.toBeNull()
+  expect(previewError?.classList.contains('ui-inline-error')).toBe(true)
   const sourceButton = surface.element.querySelector<HTMLButtonElement>('[aria-label="Source editor"]')
   expect(sourceButton).not.toBeNull()
   expect(surface.element.querySelector('.qe-changes-markdown-preview')).toBeNull()
@@ -567,4 +684,309 @@ test('Changes scopes git change subscriptions to the buffer worktree and refresh
   })
 
   expect(surface.diffCallCount()).toBe(diffCalls + 1)
+})
+
+test('Changes shows shared loading, error and clean states without hiding the source editor', async () => {
+  const source = 'No changes\n'
+  const loading = await renderChanges(makeBuffer('text', source, null), { original: source, modified: source }, {
+    deferDiffCalls: [1]
+  })
+  expect(loading.element.querySelector('[role="status"] .ui-notice-line')?.textContent).toContain('Loading HEAD comparison…')
+  expect(loading.element.querySelector('.ui-empty-state')).toBeNull()
+  await act(async () => loading.resolveDiff(1))
+  await flush()
+  expect(loading.element.querySelector('.ui-empty-state')?.textContent).toContain('No uncommitted changes.')
+  expect(loading.element.querySelector('[aria-label="Modified editor"] .cm-content')?.textContent).toContain(source.trim())
+  expect(loading.element.querySelector('[aria-label="Previous change"]')?.hasAttribute('disabled')).toBe(true)
+  expect(loading.controls()[0]?.actions).not.toContain('previous-change')
+  expect(loading.controls()[0]?.actions).not.toContain('next-change')
+
+  const failed = await renderChanges(makeBuffer('text', 'Modified\n', null), undefined, {
+    diffErrors: ['fixture diff failed']
+  })
+  await flush()
+  expect(failed.element.querySelector('.ui-inline-error')?.textContent).toContain('Changes unavailable: fixture diff failed')
+  expect(failed.element.querySelector('[role="alert"].ui-inline-error')).not.toBeNull()
+  expect(failed.element.querySelector('button')?.textContent).toContain('Retry Changes')
+  await act(async () => failed.element.querySelector<HTMLButtonElement>('button')?.click())
+  await flush()
+  expect(failed.diffCallCount()).toBe(2)
+  expect(failed.element.querySelector('.ui-inline-error')).toBeNull()
+  expect(failed.bridgeCalls().at(-1)?.params).toMatchObject({
+    connId: 22,
+    id: 'command:quirky.editor/ui-control',
+    args: { action: 'retry', target: `changes:${JSON.stringify(['buffer-changes', 'tab-changes'])}` }
+  })
+})
+
+test('Changes renders modified-Markdown preview loading and failures with shared states', async () => {
+  const pending = await renderChanges(makeBuffer('markdown', '# Working file\n', '# Shared draft\n'), undefined, {
+    deferFirstRender: true
+  })
+  await flush()
+  await act(async () => pending.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')?.click())
+  await flush()
+  expect(pending.element.querySelector('[role="status"] .ui-notice-line')?.textContent).toContain('Rendering modified Markdown…')
+  expect(pending.element.querySelector('[aria-label="Source editor"]')).not.toBeNull()
+
+  const failed = await renderChanges(makeBuffer('markdown', '# Working file\n', '# Shared draft\n'), undefined, {
+    previewError: 'fixture Markdown failed'
+  })
+  await flush()
+  await act(async () => failed.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')?.click())
+  await flush()
+  expect(failed.element.querySelector('.ui-inline-error')?.textContent).toContain('fixture Markdown failed')
+  expect(failed.element.querySelector('[aria-label="Source editor"]')).not.toBeNull()
+  expect(failed.element.querySelector('.qe-changes-markdown-preview')).toBeNull()
+})
+
+test('Changes publishes tab-scoped controls and routes pointer actions through the exact-window bridge', async () => {
+  const buffer = makeBuffer('text', 'Working version\n', null)
+  const surface = await renderChanges(buffer, { original: 'HEAD version\n', modified: 'Index version\n' }, { tabId: 't1' })
+  await flush()
+  const address = surface.controls().find((item) => item.target === `changes:${JSON.stringify([buffer.id, 't1'])}`)
+  expect(address).toBeDefined()
+  expect(address).toMatchObject({
+    surface: 'view:quirky.editor/document',
+    target: `changes:${JSON.stringify([buffer.id, 't1'])}`
+  })
+  expect(address?.actions).toEqual(expect.arrayContaining(['retry', 'layout', 'previous-change', 'next-change']))
+  expect(surface.report()).toMatchObject({ bufferId: buffer.id, fixtureMarker: 'preserved' })
+
+  await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
+  await flush()
+  expect(surface.element.querySelector('[aria-pressed="true"][aria-label="Inline"]')).not.toBeNull()
+  const windowCalls = surface.bridgeCalls()
+  expect(windowCalls.map((call) => call.method)).toEqual(['ui.window.self', 'ui.window.command.run'])
+  expect(windowCalls[1]?.params).toMatchObject({
+    connId: 22,
+    id: 'command:quirky.editor/ui-control',
+    args: {
+      surface: address!.surface,
+      target: address!.target,
+      generation: address!.generation,
+      action: 'layout',
+      data: { value: 'inline' }
+    }
+  })
+
+  const inlineAddress = surface.controls().find((item) => item.target === address!.target)
+  expect(inlineAddress).toBeDefined()
+  expect(inlineAddress?.generation).not.toBe(address?.generation)
+  expect(await surface.dispatch(inlineAddress!, 'layout', { value: 'side-by-side' })).toEqual({ delivered: true })
+  expect(surface.element.querySelector('[aria-pressed="true"][aria-label="Side by side"]')).not.toBeNull()
+  const currentAddress = surface.controls().find((item) => item.target === address!.target)
+  expect(await surface.dispatch(currentAddress!, 'next-change')).toEqual({ delivered: true })
+  expect(surface.element.querySelector('[aria-label="Modified editor"] .cm-activeLine')?.textContent).toBe('Working version')
+  expect(await surface.dispatch(currentAddress!, 'previous-change')).toEqual({ delivered: true })
+})
+
+test('Changes controls distinguish tabs and reject malformed or stale addresses without UI effects', async () => {
+  const buffer = makeBuffer('markdown', '# Working file\n', '# Shared draft\n')
+  const first = await renderChanges(buffer, { original: '# HEAD\n', modified: '# Index\n' }, { tabId: 't1' })
+  const second = await renderChanges(buffer, { original: '# HEAD\n', modified: '# Index\n' }, { tabId: 't2' })
+  await flush()
+  const firstAddress = first.controls().find((item) => item.target === `changes:${JSON.stringify([buffer.id, 't1'])}`)
+  const secondAddress = second.controls().find((item) => item.target === `changes:${JSON.stringify([buffer.id, 't2'])}`)
+  expect(firstAddress).toBeDefined()
+  expect(secondAddress).toBeDefined()
+  expect(firstAddress?.target).not.toBe(secondAddress?.target)
+
+  expect(await first.dispatch(firstAddress!, 'layout', { value: 'inline', ignored: true })).toEqual({ delivered: false })
+  expect(first.bridgeCalls()).toEqual([])
+  expect(first.element.querySelector('[aria-pressed="true"][aria-label="Side by side"]')).not.toBeNull()
+
+  expect(await first.dispatch(firstAddress!, 'display', { value: 'markdown-preview' })).toEqual({ delivered: true })
+  await flush()
+  expect(first.element.querySelector('.qe-changes-markdown-preview')).not.toBeNull()
+  const replacementAddress = first.controls().find((item) => item.target === firstAddress!.target)
+  expect(replacementAddress).toBeDefined()
+  expect(replacementAddress?.generation).not.toBe(firstAddress?.generation)
+  expect(await first.dispatch(firstAddress!, 'display', { value: 'source' })).toEqual({ delivered: false })
+  expect(first.element.querySelector('.qe-changes-markdown-preview')).not.toBeNull()
+
+  expect(await second.dispatch(secondAddress!, 'layout', { value: 'inline' })).toEqual({ delivered: true })
+  expect(second.element.querySelector('[aria-pressed="true"][aria-label="Inline"]')).not.toBeNull()
+  expect(first.element.querySelector('[aria-pressed="true"][aria-label="Inline"]')).toBeNull()
+})
+test('Changes remounts with a fresh generation and refuses the former control session', async () => {
+  const buffer = makeBuffer('text', 'Working\n', null)
+  const first = await renderChanges(buffer, { original: 'HEAD\n', modified: 'Working\n' })
+  await flush()
+  const oldAddress = first.controls()[0]
+  expect(oldAddress).toBeDefined()
+  await first.unmount()
+
+  const second = await renderChanges(buffer, { original: 'HEAD\n', modified: 'Working\n' })
+  await flush()
+  const currentAddress = second.controls()[0]
+  expect(currentAddress?.target).toBe(oldAddress?.target)
+  expect(currentAddress?.generation).not.toBe(oldAddress?.generation)
+  expect(await first.invoke(oldAddress!, 'layout', { value: 'inline' })).toEqual({ delivered: false })
+  expect(second.element.querySelector('[aria-pressed="true"][aria-label="Side by side"]')).not.toBeNull()
+})
+
+
+test('Changes retry is busy-safe and returns to an enabled recovery action after failure', async () => {
+  const surface = await renderChanges(makeBuffer('text', 'Modified\n', null), undefined, {
+    diffErrors: ['fixture diff failed'],
+    deferDiffCalls: [2]
+  })
+  await flush()
+  const address = surface.controls()[0]
+  expect(address?.actions).toContain('retry')
+  expect(surface.element.querySelector('.ui-inline-error')).not.toBeNull()
+
+  let firstRetry: Promise<{ delivered: boolean }> | undefined
+  await act(async () => {
+    firstRetry = surface.invoke(address!, 'retry')
+    await Promise.resolve()
+  })
+  await flush()
+  expect(surface.diffCallCount()).toBe(2)
+  expect(await surface.invoke(address!, 'retry')).toEqual({ delivered: false })
+  expect(surface.diffCallCount()).toBe(2)
+
+  await act(async () => surface.resolveDiff(2))
+  await flush()
+  expect(await firstRetry).toEqual({ delivered: true })
+  expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+})
+test('Changes addressed Retry rejects the actual diff failure and keeps recovery visible', async () => {
+  const surface = await renderChanges(makeBuffer('text', 'Modified\n', null), undefined, {
+    diffErrors: ['initial failure', 'retry failure']
+  })
+  await flush()
+  const address = surface.controls()[0]
+  let failure: unknown
+  await act(async () => {
+    failure = await surface.invoke(address!, 'retry').then(() => null, (reason: unknown) => reason)
+  })
+  await flush()
+
+  expect(failure instanceof Error ? failure.message : String(failure)).toBe('retry failure')
+  expect(surface.element.querySelector('.ui-inline-error')?.textContent).toContain('Changes unavailable: retry failure')
+  expect(surface.element.querySelector('button')?.textContent).toContain('Retry Changes')
+})
+
+
+test('Changes shows bridge failures without locally applying a pointer action', async () => {
+  const surface = await renderChanges(makeBuffer('text', 'Modified\n', null), undefined, {
+    bridgeError: 'fixture bridge failed'
+  })
+  await flush()
+  expect(surface.controls().length).toBeGreaterThan(0)
+  await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Inline"]')?.click())
+  await flush()
+
+  expect(surface.element.querySelector('[aria-pressed="true"][aria-label="Side by side"]')).not.toBeNull()
+  expect(surface.element.querySelector('[aria-pressed="true"][aria-label="Inline"]')).toBeNull()
+  expect(surface.element.querySelector('.ui-inline-error')?.textContent).toContain('fixture bridge failed')
+  expect(surface.bridgeCalls().map((call) => call.method)).toEqual(['ui.window.self', 'ui.window.command.run'])
+})
+
+test('Changes hides a previous ready diff while a replacement path loads', async () => {
+  const originalBuffer = makeBuffer('text', 'Old working\n', null)
+  const surface = await renderChanges(originalBuffer, undefined, {
+    deferDiffCalls: [2],
+    diffByPath: {
+      'src/app.ts': { original: 'Old path HEAD\n', modified: 'Old working\n' },
+      'src/other.ts': { original: 'New path HEAD\n', modified: 'New working\n' }
+    }
+  })
+  await flush()
+  expect(surface.element.querySelector('[aria-label="HEAD version"]')?.textContent).toContain('Old path HEAD')
+  const oldAddress = surface.controls().find((item) => item.target === `changes:${JSON.stringify([originalBuffer.id, originalBuffer.tabId])}`)
+  expect(oldAddress).toBeDefined()
+  const nextBuffer = {
+    ...originalBuffer,
+    path: '/tmp/changes-worktree/src/other.ts',
+    relativePath: 'src/other.ts',
+    name: 'other.ts',
+    content: 'New working\n'
+  }
+  await surface.update(nextBuffer)
+  await flush()
+  expect(surface.element.querySelector('[role="status"] .ui-notice-line')?.textContent).toContain('Loading HEAD comparison…')
+  expect(surface.element.querySelector('[aria-label="HEAD version"]')).toBeNull()
+  expect(await surface.dispatch(oldAddress!, 'retry')).toEqual({ delivered: false })
+  expect(surface.diffCallCount()).toBe(2)
+  await act(async () => surface.resolveDiff(2))
+  await flush()
+  expect(surface.element.querySelector('[aria-label="HEAD version"]')?.textContent).toContain('New path HEAD')
+})
+
+test('Changes ignores a delayed diff from a path that has been replaced', async () => {
+  const originalBuffer = makeBuffer('text', 'Old working\n', null)
+  const surface = await renderChanges(originalBuffer, undefined, {
+    deferDiffCalls: [1],
+    diffByPath: {
+      'src/app.ts': { original: 'Stale path HEAD\n', modified: 'Stale working\n' },
+      'src/other.ts': { original: 'Current path HEAD\n', modified: 'Current working\n' }
+    }
+  })
+  await flush()
+  const nextBuffer = {
+    ...originalBuffer,
+    path: '/tmp/changes-worktree/src/other.ts',
+    relativePath: 'src/other.ts',
+    name: 'other.ts',
+    content: 'Current working\n'
+  }
+  await surface.update(nextBuffer)
+  await flush()
+  expect(surface.element.querySelector('[aria-label="HEAD version"]')?.textContent).toContain('Current path HEAD')
+  await act(async () => surface.resolveDiff(1))
+  await flush()
+  expect(surface.element.querySelector('[aria-label="HEAD version"]')?.textContent).toContain('Current path HEAD')
+  expect(surface.element.textContent).not.toContain('Stale path HEAD')
+})
+
+test.each(['worktree', 'path'] as const)(
+  'Changes rejects a detached preview response with a mismatched %s identity',
+  async (mismatch) => {
+    const surface = await renderChanges(makeBuffer('markdown', '# Working file\n', '# Shared draft\n'), undefined, {
+      previewMismatch: mismatch
+    })
+    await flush()
+    await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')?.click())
+    await flush()
+
+    expect(surface.element.querySelector('.ui-inline-error')).not.toBeNull()
+    expect(surface.element.querySelector('[aria-label="Source editor"]')).not.toBeNull()
+    expect(surface.element.querySelector('.qe-changes-markdown-preview')).toBeNull()
+    expect(surface.liveResourceCount()).toBe(0)
+  }
+)
+test('Changes releases a stale preview lease when Markdown path and worktree change', async () => {
+  const originalBuffer = makeBuffer('markdown', '# Working file\n', '# Old shared draft\n')
+  const surface = await renderChanges(originalBuffer, undefined, { deferFirstRender: true })
+  await flush()
+  await act(async () => surface.element.querySelector<HTMLButtonElement>('[aria-label="Markdown preview"]')?.click())
+  await flush()
+  const staleLeaseId = surface.pendingLeaseIds()[0]
+  expect(staleLeaseId).toBeTruthy()
+
+  const nextBuffer = {
+    ...originalBuffer,
+    worktreeId: 'wt-replacement',
+    root: '/tmp/replacement-worktree',
+    path: '/tmp/replacement-worktree/docs/README.md',
+    relativePath: 'docs/README.md',
+    name: 'README.md',
+    content: '# Replacement source\n',
+    draft: '# Current shared draft\n'
+  }
+  await surface.update(nextBuffer)
+  await flush()
+  const currentUrl = surface.element.querySelector<HTMLImageElement>('.qe-changes-markdown-preview img')?.getAttribute('src')
+  expect(surface.element.querySelector('.qe-changes-markdown-preview')?.textContent).toContain('Current shared draft')
+  expect(currentUrl).toBeTruthy()
+  expect(surface.isResourceLive(currentUrl!)).toBe(true)
+
+  await act(async () => surface.resolvePending(staleLeaseId!))
+  await flush()
+  expect(surface.element.querySelector('.qe-changes-markdown-preview img')?.getAttribute('src')).toBe(currentUrl)
+  expect(surface.liveResourceCount()).toBe(1)
+  expect(surface.isResourceLive(currentUrl!)).toBe(true)
 })
