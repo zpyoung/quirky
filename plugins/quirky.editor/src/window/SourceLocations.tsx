@@ -111,28 +111,28 @@ export function SourceLocations({
     }
     return { delivered: false }
   }
-  const controllerRef = useRef(controller)
-  controllerRef.current = controller
-  const bridgeContext = useMemo<UiPluginContext>(() => ({
-    ...context,
-    async call(method, params = {}) {
-      const fail = controllerRef.current.bridgeFailure()
-      try {
-        const result = await context.call(method, params)
-        if (method === 'ui.window.self' &&
-            (typeof result !== 'object' || result === null || !('connId' in result) ||
-              typeof result.connId !== 'number' || !Number.isSafeInteger(result.connId) || result.connId <= 0)) {
-          throw new Error(SOURCE_WINDOW_UNKNOWN_MESSAGE)
+  const bridgeContext = useMemo<UiPluginContext>(() => {
+    const fail = controller.bridgeFailure()
+    return {
+      ...context,
+      async call(method, params = {}) {
+        try {
+          const result = await context.call(method, params)
+          if (method === 'ui.window.self' &&
+              (typeof result !== 'object' || result === null || !('connId' in result) ||
+                typeof result.connId !== 'number' || !Number.isSafeInteger(result.connId) || result.connId <= 0)) {
+            throw new Error(SOURCE_WINDOW_UNKNOWN_MESSAGE)
+          }
+          return result
+        } catch (reason) {
+          const message = method === 'ui.window.self' ? SOURCE_WINDOW_UNKNOWN_MESSAGE
+            : reason instanceof Error ? reason.message : String(reason)
+          fail(message)
+          throw new Error(message)
         }
-        return result
-      } catch (reason) {
-        const message = method === 'ui.window.self' ? SOURCE_WINDOW_UNKNOWN_MESSAGE
-          : reason instanceof Error ? reason.message : String(reason)
-        fail(message)
-        throw new Error(message)
       }
     }
-  }), [context])
+  }, [context, controller])
   const sourceControls = useEditorUiControl({ context: bridgeContext, address: sourceAddress, handler: sourceHandler })
   const locationControls = useEditorUiControl({ context: bridgeContext, address: locationsAddress, handler: locationHandler })
 

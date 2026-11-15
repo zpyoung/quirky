@@ -108,6 +108,7 @@ type MountOptions = {
   navigation?: NavigationHandler
   secondTab?: boolean
   windowSelf?: () => unknown | Promise<unknown>
+  beforeControl?(): void
 }
 type UiReport = { uiControls?: EditorUiControlAddress[]; sourceSymbols?: Record<string, unknown> } & Record<string, unknown>
 type MountedDocument = {
@@ -281,6 +282,7 @@ async function mountDocument(options: MountOptions = {}): Promise<MountedDocumen
       if (method === 'ui.window.self') return options.windowSelf ? await options.windowSelf() : { connId: 22 }
       if (method === 'ui.window.command.run') {
         if (params.connId !== 22) throw new Error('The UI control must stay in this window.')
+        options.beforeControl?.()
         const handler = handlers.get(String(params.id))
         if (!handler) throw new Error(`No provided handler for ${String(params.id)}.`)
         return { result: await handler(params.args) }
@@ -1520,4 +1522,31 @@ test('an old result-click bridge failure cannot restore a panel after an edit', 
   expect(surface.container.querySelector('.qe-source-locations')).toBeNull()
   expect(surface.report().sourceSymbols?.status).toBe('idle')
   expect(surface.openCalls).toEqual([])
+})
+
+test.each(['edit', 'replace'] as const)('a second-stage bridge failure cannot adopt a newer %s session', async (change) => {
+  const identity = Promise.withResolvers<unknown>()
+  const newer = Promise.withResolvers<NavigationResult>()
+  let lookups = 0
+  const surface = await mountDocument({
+    content: SYMBOL_TEXT, navigation: () => lookups++ === 0 ? symbolAnswer() : newer.promise,
+    windowSelf: () => identity.promise,
+    beforeControl: () => { throw new Error('old dispatch transport failure') }
+  })
+  await symbolCommand(surface, 'find-references')
+  await act(async () => { surface.container.querySelector<HTMLButtonElement>('.ui-list-row__main')!.click() })
+  let outcome: Promise<unknown> | undefined
+  if (change === 'edit') await act(async () => { surface.view().dispatch({ changes: { from: 0, insert: 'x' } }) })
+  else ({ outcome } = await beginSymbolCommand(surface, 'find-references'))
+  await act(async () => { identity.resolve({ connId: 22 }); await identity.promise })
+  await tickUi()
+  expect(surface.openCalls).toEqual([])
+  if (change === 'edit') {
+    expect(surface.container.querySelector('.qe-source-locations')).toBeNull()
+    expect(surface.report().sourceSymbols?.status).toBe('idle')
+  } else {
+    expect(surface.report().sourceSymbols?.status).toBe('pending')
+    await act(async () => { newer.resolve(symbolAnswer([])); await newer.promise })
+    expect(await outcome).toEqual({ kind: 'references', status: 'empty' })
+  }
 })
