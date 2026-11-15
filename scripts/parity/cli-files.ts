@@ -1,13 +1,15 @@
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { createIsolatedRuntimeEnvironment, type FixtureWorktree } from '../ui-review/fixtures'
 import { readRuntime } from '@quirky/protocol/node'
-import type { CliReceipt } from './cli-run'
+import { parseCliRefusal, type CliReceipt } from './cli-run'
 import { checkIds } from './cli-checks'
 import * as table from './cli-table'
 import { CLI_FILE_OBSERVATION_BINDINGS } from './cli-table'
 import { createCliFilesWorld, type CliFilesWorld } from './cli-world'
+import type { BrowserContext } from 'playwright'
 
 type JsonObject = Record<string, unknown>
 type MaybePromise<T> = T | Promise<T>
@@ -33,7 +35,18 @@ export type CliFilePublicWindow = {
   workspace: JsonObject
   editor: JsonObject
 }
-export type CliFileReviewCard = { path: string; expanded: boolean; loaded: boolean; text: string }
+export type CliFileReviewCard = {
+  path: string
+  expanded: boolean
+  loaded: boolean
+  text: string
+  active?: boolean
+  editable?: boolean
+  hasReviewMark?: boolean
+  mergeEditorCount?: number
+  originalLines?: string[]
+  modifiedLines?: string[]
+}
 export type CliFileDomWindow = {
   connId: number
   workspaceId: string
@@ -46,6 +59,9 @@ export type CliFileDomWindow = {
   activeElementHostedTabId: string | null
   activeElementIsSource: boolean
   reviewTabMounted: boolean
+  reviewScopeChip?: string | null
+  reviewWidth?: number
+  reviewScrollTop?: number
   caret: { line: number; column: number } | null
   lines: string[]
   reviewCards: CliFileReviewCard[]
@@ -76,7 +92,7 @@ export type CliFilesReport = {
   schemaVersion: 1
   scope: 'goal-11-cli-files'
   ok: boolean
-  parityComplete: false
+  parityComplete: boolean
   rows: Array<{
     id: string
     disposition: 'covered' | 'gap'
@@ -93,6 +109,27 @@ export type CliFilesReport = {
   guards?: { denied: string[]; egress: string[]; injected: boolean }
   fixtures?: JsonObject
   error?: { stage: string; kind: string; message: string }
+}
+export type CliFileNavigationHistory = { worktrees: string[]; index: number }
+
+export function expectedHistory(
+  before: CliFileNavigationHistory,
+  shownBefore: string,
+  destination: string
+): CliFileNavigationHistory {
+  const worktrees = before.worktrees.slice(0, before.index + 1)
+  if (worktrees.at(-1) !== shownBefore) worktrees.push(shownBefore)
+  if (worktrees.at(-1) !== destination) worktrees.push(destination)
+  return { worktrees, index: worktrees.length - 1 }
+}
+
+export function isCliFilesParityComplete(
+  ok: boolean,
+  cleanupOk: boolean,
+  rows: CliFilesReport['rows']
+): boolean {
+  return ok && cleanupOk && rows.length === 4 &&
+    rows.every((row) => row.disposition === 'covered' && row.status === 'observed')
 }
 export type CliFilesRunOptions = {
   signal?: AbortSignal
@@ -114,6 +151,8 @@ const MAX_STDOUT_BYTES = 16 * 1024 * 1024
 const MAX_DIAGNOSTIC_BYTES = 8 * 1024
 const REQUIRED_ROW_BINDINGS = CLI_FILE_OBSERVATION_BINDINGS
 const EXPECTED_OBSERVATIONS = [...new Set(Object.values(REQUIRED_ROW_BINDINGS).flat())]
+const EXPECTED_OBSERVATION_COUNT = 13
+const EXPECTED_BINDING_COUNT = 21
 const REVIEW_VIEW_ID = 'view:quirky.git/diff'
 const SESSION_VIEW_ID = 'view:quirky.session/worktree'
 const EDITOR_VIEW_ID = 'view:quirky.editor/document'
@@ -129,19 +168,21 @@ const B_SENTINEL_CONTENT = 'review notes B changed\n'
 const REVIEW_PATHS = [A_TARGET, SENTINEL_PATH] as const
 const EXPECTED_DIFFERENCES: Record<string, string[]> = {
   'file-diff': [
-    'Review is one combined tab per worktree, not one diff tab per file.',
-    'open-diff automatically activates Review; it has no explicit background presentation option.',
-    'Review does not provide Orca edit/diff/both or staged/unstaged selection modes.'
+    'Quirky Review is one combined tab per worktree, not one diff tab per file.',
+    'Review focuses by default; Orca opens the diff in the background.',
+    'Exact window routing uses ui.window.command.run --conn-id rather than a command flag.',
+    'Background reveal or scope applies in the target renderer when Review is next shown.',
+    'Review source selects staged or unstaged; omission shows the whole review, not Orca’s unstaged default.'
   ],
-  'file-open': [],
+  'file-open': ['Without --window, --focus selects the tab in its worktree workspace and moves no window.'],
   'file-open-changed': [
-    'open-changed uses one combined Review tab rather than per-file tabs.',
-    'Review is automatically activated rather than optionally presented in the background.',
-    'open-changed does not provide Orca edit/diff/both modes or staged/unstaged selection.'
+    'Quirky Review is one combined tab per worktree rather than one tab per changed file.',
+    'Review focuses by default; Orca opens in the background.',
+    'Edit and both open at most 50 files and refuse capped status; deleted files are skipped.'
   ],
   'file-open-render': [
-    'Focused editor open activates the destination worktree tab but does not navigate the current window to that worktree.',
-    'Headless DOM focus is not a native desktop foreground-window guarantee.'
+    '--window routes focused editor open to the chosen Quirky renderer; without it, focus selects only the workspace tab.',
+    'Headless document focus is not native macOS window raising.'
   ]
 }
 
@@ -198,6 +239,13 @@ function string(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.length === 0) throw new CliFilesFailure('invalid-evidence', `${label} is not a non-empty string`)
   return value
 }
+function renderedLine(value: unknown): string {
+  if (typeof value !== 'string') throw new CliFilesFailure('invalid-evidence', 'rendered line is not a string')
+  return value
+}
+function shownWorktree(window: CliFilePublicWindow): string {
+  return string(record(window.windowState.layout, 'public window layout').worktree, 'shown worktree')
+}
 function nullableString(value: unknown, label: string): string | null {
   if (value === null) return null
   return string(value, label)
@@ -211,7 +259,7 @@ function integer(value: unknown, label: string): number {
   return value as number
 }
 function equal(actual: unknown, expected: unknown, label: string): void {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  if (!isDeepStrictEqual(actual, expected)) {
     throw new CliFilesFailure('observation-mismatch', `${label} differed from its required evidence`)
   }
 }
@@ -504,6 +552,96 @@ function assertSample(
     throw new CliFilesFailure('worktree-mismatch', `${label} does not show distinct worktree workspaces`)
   }
 }
+type CliFileHistoryRead = {
+  connId: number
+  shownWorktree: string
+  receiptId: string
+  result: CliFileNavigationHistory
+}
+
+function readNavigationHistory(
+  value: unknown,
+  byId: Map<string, CliReceipt>,
+  observation: CliFileObservation,
+  label: string
+): CliFileHistoryRead {
+  const history = record(value, label)
+  const connId = integer(history.connId, `${label} connection`)
+  const shownWorktree = string(history.shownWorktree, `${label} shown worktree`)
+  const receiptId = string(history.receiptId, `${label} receipt ID`)
+  assertReceiptLinked(observation, receiptId, label)
+  const receipt = byId.get(receiptId)!
+  if (receipt.command !== 'api call' || receipt.argv[2] !== 'quirky.worktree/navigationState' ||
+      Number(argvFlag(receipt.argv, '--window', label)) !== connId) {
+    throw new CliFilesFailure('invalid-receipt', `${label} is not the targeted public navigationState read`)
+  }
+  const result = successfulReceipt(byId, receiptId)
+  equal(result, history.result, `${label} independent history readback`)
+  const raw = record(history.result, `${label} result`)
+  const worktrees = array(raw.worktrees, `${label} worktrees`).map((entry) => string(entry, `${label} worktree`))
+  const index = integer(raw.index, `${label} index`)
+  if (index < -1 || index >= worktrees.length) throw new CliFilesFailure('invalid-history', `${label} has an invalid cursor`)
+  return { connId, shownWorktree, receiptId, result: { worktrees, index } }
+}
+
+function assertNavigationHistoryTransition(
+  observation: CliFileObservation,
+  byId: Map<string, CliReceipt>,
+  beforeValue: unknown,
+  afterValue: unknown,
+  targetConnId: number,
+  destination: string,
+  label: string
+): { before: CliFileHistoryRead; after: CliFileHistoryRead } {
+  const before = readNavigationHistory(beforeValue, byId, observation, `${label} before`)
+  const after = readNavigationHistory(afterValue, byId, observation, `${label} after`)
+  equal(before.connId, targetConnId, `${label} history target connection`)
+  equal(after.connId, targetConnId, `${label} resulting connection`)
+  equal(after.shownWorktree, destination, `${label} resulting shown worktree`)
+  equal(after.result, expectedHistory(before.result, before.shownWorktree, destination), `${label} expected navigation history`)
+  return { before, after }
+}
+function assertFirstWindowLayoutReceipt(
+  observation: CliFileObservation,
+  byId: Map<string, CliReceipt>,
+  afterCommandId: string,
+  connId: number,
+  publicWindow: CliFilePublicWindow,
+  label: string
+): void {
+  assertReceiptLinked(observation, afterCommandId, `${label} product command`)
+  const allReceipts = [...byId.values()]
+  const commandIndex = allReceipts.findIndex((receipt) => receipt.id === afterCommandId)
+  if (commandIndex < 0) throw new CliFilesFailure('missing-receipt', `${label} command is absent from raw receipts`)
+  let firstLayout: CliReceipt | undefined
+  for (const receipt of allReceipts.slice(commandIndex + 1)) {
+    if (commandOf(receipt.argv) === 'api call' && receipt.argv[2] === 'ui.window.state' &&
+        Number(argvFlag(receipt.argv, '--conn-id', label)) === connId) {
+      firstLayout = receipt
+      break
+    }
+  }
+  if (!firstLayout) throw new CliFilesFailure('missing-receipt', `${label} has no public layout read after its command`)
+  equal(firstLayout.id, publicWindow.receiptIds.window, `${label} first public layout receipt`)
+  equal(Number(argvFlag(firstLayout.argv, '--conn-id', label)), connId, `${label} first public layout connection`)
+  equal(successfulReceipt(byId, firstLayout.id), publicWindow.windowState, `${label} first public layout state`)
+}
+function assertCliRefusal(
+  observation: CliFileObservation,
+  byId: Map<string, CliReceipt>,
+  receiptId: string,
+  expected: { argv: string[]; exitCode: 1 | 2; code: string; message?: string },
+  label: string
+): { code: string; message: string; data?: unknown } {
+  assertReceiptLinked(observation, receiptId, `${label} refusal`)
+  const receipt = byId.get(receiptId)!
+  equal(receipt.argv, [...expected.argv, '--runtime', 'local', '--json'], `${label} exact refusal argv`)
+  equal(receipt.exitCode, expected.exitCode, `${label} refusal exit`)
+  const refusal = parseCliRefusal(JSON.stringify(receipt.evidence.result), receipt.exitCode, expected.exitCode)
+  equal(refusal.code, expected.code, `${label} refusal code`)
+  if (expected.message !== undefined) equal(refusal.message, expected.message, `${label} refusal message`)
+  return refusal
+}
 function hasReceipt(observation: CliFileObservation, receiptId: string): boolean {
   return observation.receiptIds.includes(receiptId)
 }
@@ -784,6 +922,1127 @@ function findBufferRead(observation: CliFileObservation, byId: Map<string, CliRe
   if (matches.length !== 1) throw new CliFilesFailure('missing-receipt', `${observation.id} needs exactly one buffer readback for ${bufferId}`)
   return matches[0]!
 }
+function assertWindowEditorOpen(
+  receipt: CliReceipt,
+  byId: Map<string, CliReceipt>,
+  input: {
+    relativePath: string
+    worktreeId: string
+    absolutePath: string
+    window: number | null
+    focus: boolean
+    line?: number
+    column?: number
+  },
+  label: string
+): JsonObject {
+  if (receipt.command !== 'editor open' || receipt.argv[0] !== 'editor' || receipt.argv[1] !== 'open') {
+    throw new CliFilesFailure('invalid-receipt', `${label} is not an editor open command`)
+  }
+  equal(receipt.argv[2], input.relativePath, `${label} exact relative path`)
+  equal(argvFlag(receipt.argv, '--worktree', label), input.worktreeId, `${label} worktree`)
+  if (input.window !== null || hasArgvFlag(receipt.argv, '--mode')) {
+    equal(argvFlag(receipt.argv, '--mode', label), 'source', `${label} mode`)
+  }
+  equal(hasArgvFlag(receipt.argv, '--focus'), input.focus, `${label} explicit focus`)
+  if (input.window === null) {
+    if (hasArgvFlag(receipt.argv, '--window')) throw new CliFilesFailure('invalid-receipt', `${label} unexpectedly targeted a window`)
+  } else equal(argvFlag(receipt.argv, '--window', label), String(input.window), `${label} exact window`)
+  if (input.line === undefined) {
+    if (hasArgvFlag(receipt.argv, '--line')) throw new CliFilesFailure('navigation-mismatch', `${label} unexpectedly requested a line`)
+  } else equal(argvFlag(receipt.argv, '--line', label), String(input.line), `${label} requested line`)
+  if (input.column === undefined) {
+    if (hasArgvFlag(receipt.argv, '--column')) throw new CliFilesFailure('navigation-mismatch', `${label} unexpectedly requested a column`)
+  } else equal(argvFlag(receipt.argv, '--column', label), String(input.column), `${label} requested column`)
+  const result = successfulReceipt(byId, receipt.id)
+  equal(result.worktreeId, input.worktreeId, `${label} result worktree`)
+  equal(result.path, input.absolutePath, `${label} result absolute path`)
+  const root = string(result.root, `${label} authorized root`)
+  equal(expectedAbsolute(root, input.relativePath), input.absolutePath, `${label} authorized path`)
+  string(result.id, `${label} buffer ID`)
+  string(result.openedTabId, `${label} hosted tab ID`)
+  return result
+}
+
+function assertWindowFocusObservation(observation: CliFileObservation, byId: Map<string, CliReceipt>): void {
+  const request = record(observation.evidence.request, `${observation.id} request`)
+  assertSample(observation.before, observation.evidence.public.before, observation.evidence.dom.before, byId, observation, `${observation.id} top-level before`, false)
+  assertSample(observation.after, observation.evidence.public.after, observation.evidence.dom.after, byId, observation, `${observation.id} top-level after`)
+  const worktreeId = string(request.worktreeId, `${observation.id} target worktree`)
+  const relativePath = string(request.relativePath, `${observation.id} target path`)
+  const absolutePath = string(request.absolutePath, `${observation.id} absolute path`)
+  const content = string(request.content, `${observation.id} source bytes`)
+  const line = integer(request.line, `${observation.id} requested line`)
+  const column = integer(request.column, `${observation.id} requested column`)
+  const targetConnId = integer(request.targetConnectionId, `${observation.id} target connection`)
+  equal(relativePath, B_TARGET, `${observation.id} relative path`)
+  equal(content, B_CONTENT, `${observation.id} bytes`)
+  equal(request.mode, 'source', `${observation.id} mode`)
+  equal(line, 2, `${observation.id} initial line`)
+  equal(column, 3, `${observation.id} initial column`)
+  equal(observation.before.length, 2, `${observation.id} two live windows`)
+  const beforePublic = observation.evidence.public.before
+  const beforeDom = observation.evidence.dom.before
+  assertSample(observation.before, beforePublic, beforeDom, byId, observation, `${observation.id} before`, false)
+  const targetIndex = observation.before.findIndex((sample) => sample.connId === targetConnId)
+  if (targetIndex !== 0) throw new CliFilesFailure('connection-mismatch', `${observation.id} did not route through page A`)
+  const otherIndex = 1
+  const shownBefore = string(
+    record(beforePublic[targetIndex]!.windowState, `${observation.id} before target window`).layout &&
+      record(record(beforePublic[targetIndex]!.windowState, `${observation.id} before target window`).layout, `${observation.id} before target layout`).worktree,
+    `${observation.id} shown-before worktree`
+  )
+  if (shownBefore === worktreeId) throw new CliFilesFailure('worktree-mismatch', `${observation.id} target window did not start on the other worktree`)
+  equal(observation.before[otherIndex]!.windowWorktree, shownBefore, `${observation.id} both windows start on A`)
+
+  const sentinels = record(observation.evidence.sentinels, `${observation.id} sentinels`)
+  const sentinelA = record(sentinels.a, `${observation.id} sentinel A`)
+  const sentinelB = record(sentinels.b, `${observation.id} sentinel B`)
+  checkSentinel(beforePublic[targetIndex]!, beforeDom[targetIndex]!, sentinelA, `${observation.id} cA sentinel`)
+  checkSentinel(beforePublic[otherIndex]!, beforeDom[otherIndex]!, sentinelA, `${observation.id} cB shared sentinel`)
+  equal(sentinelB.worktreeId, worktreeId, `${observation.id} destination sentinel worktree`)
+  const destination = record(observation.evidence.destination, `${observation.id} destination workspace`)
+  const destinationReceiptId = string(destination.beforeReceiptId, `${observation.id} destination baseline receipt`)
+  assertReceiptLinked(observation, destinationReceiptId, `${observation.id} destination baseline`)
+  const destinationReceipt = byId.get(destinationReceiptId)!
+  if (destinationReceipt.command !== 'api call' || destinationReceipt.argv[2] !== 'quirky.terminal/workspace' ||
+      argvFlag(destinationReceipt.argv, '--workspace', `${observation.id} destination baseline`) !== worktreeId) {
+    throw new CliFilesFailure('invalid-receipt', `${observation.id} destination baseline was not a public workspace read`)
+  }
+  const destinationBefore = successfulReceipt(byId, destinationReceiptId)
+  equal(destinationBefore, destination.before, `${observation.id} destination baseline readback`)
+  equal(selectedTabId(destinationBefore), sentinelB.tabId, `${observation.id} destination sentinel is active before open`)
+
+  const windowFocus = record(observation.evidence.windowFocus, `${observation.id} window focus evidence`)
+  const tabId = string(windowFocus.tabId, `${observation.id} opened tab`)
+  const bufferId = string(windowFocus.bufferId, `${observation.id} opened buffer`)
+  const focus = record(windowFocus.focus, `${observation.id} first focus step`)
+  const focusBefore = record(focus.before, `${observation.id} focus before`) as unknown as CapturedSample
+  const focusAfter = record(focus.after, `${observation.id} focus after`) as unknown as CapturedSample
+  assertSample(focusBefore.snapshots, focusBefore.public, focusBefore.dom, byId, observation, `${observation.id} focus before`, false)
+  assertSample(focusAfter.snapshots, focusAfter.public, focusAfter.dom, byId, observation, `${observation.id} focus after`)
+  equal(focusBefore.public[targetIndex]!.connId, targetConnId, `${observation.id} focus target before`)
+  const focusReceiptId = string(focus.receiptId, `${observation.id} focus receipt`)
+  const focusResult = assertWindowEditorOpen(byId.get(focusReceiptId)!, byId, {
+    relativePath, worktreeId, absolutePath, window: targetConnId, focus: false, line, column
+  }, `${observation.id} initial window open`)
+  equal(focusResult.id, bufferId, `${observation.id} initial buffer identity`)
+  equal(focusResult.openedTabId, tabId, `${observation.id} initial tab identity`)
+  const initialEditorTabs = array(focusAfter.public[targetIndex]!.editor.tabs, `${observation.id} initial editor tabs`)
+    .map((entry) => record(entry, `${observation.id} initial editor tab`))
+    .filter((entry) => entry.bufferId === bufferId)
+  equal(initialEditorTabs.map((entry) => entry.tabId), [tabId], `${observation.id} one initial tab for the buffer`)
+  assertFirstWindowLayoutReceipt(observation, byId, focusReceiptId, targetConnId, focusAfter.public[targetIndex]!, `${observation.id} first focus read`)
+  const focusLayout = record(focusAfter.public[targetIndex]!.windowState.layout, `${observation.id} focused layout`)
+  equal(focusLayout.worktree, worktreeId, `${observation.id} cA destination worktree`)
+  const focusView = record(focusLayout.view, `${observation.id} focused session view`)
+  equal(focusView.id, SESSION_VIEW_ID, `${observation.id} session view ID`)
+  equal(record(focusView.input, `${observation.id} focused session input`).worktree, worktreeId, `${observation.id} session input worktree`)
+  equal(focusAfter.public[targetIndex]!.workspace && selectedTabId(focusAfter.public[targetIndex]!.workspace), tabId, `${observation.id} selected destination tab`)
+  equal(focusAfter.dom[targetIndex]!.renderedTabId, tabId, `${observation.id} rendered destination tab`)
+  equal(focusAfter.dom[targetIndex]!.path, absolutePath, `${observation.id} rendered absolute source path`)
+  equal(focusAfter.dom[targetIndex]!.lines, ['first', 'second λ', ''], `${observation.id} rendered source lines`)
+  equal(focusAfter.dom[targetIndex]!.caret, { line, column }, `${observation.id} native caret`)
+  equal(focusAfter.dom[targetIndex]!.activeElementHostedTabId, tabId, `${observation.id} active element tab`)
+  equal(focusAfter.dom[targetIndex]!.activeElementIsSource, true, `${observation.id} active source content`)
+  equal(focusAfter.dom[targetIndex]!.activeElement.inDocument, true, `${observation.id} active element remains in the page`)
+  equal(focusAfter.public[otherIndex]!.windowState.layout, focusBefore.public[otherIndex]!.windowState.layout, `${observation.id} cB layout unchanged`)
+  equal(focusAfter.dom[otherIndex], focusBefore.dom[otherIndex], `${observation.id} cB DOM unchanged`)
+  const focusHistoryBefore = record(focus.historyBefore, `${observation.id} focus history before`)
+  const focusHistoryAfter = record(focus.historyAfter, `${observation.id} focus history after`)
+  const focusTransition = assertNavigationHistoryTransition(
+    observation, byId, focusHistoryBefore.target, focusHistoryAfter.target, targetConnId, worktreeId, `${observation.id} focus`
+  )
+  const otherTransition = {
+    before: readNavigationHistory(focusHistoryBefore.other, byId, observation, `${observation.id} cB history before`),
+    after: readNavigationHistory(focusHistoryAfter.other, byId, observation, `${observation.id} cB history after`)
+  }
+  equal(focusTransition.before.shownWorktree, shownBefore, `${observation.id} focus history/window correlation`)
+  equal(otherTransition.after.result, otherTransition.before.result, `${observation.id} cB history unchanged`)
+
+  const reuse = record(windowFocus.reuse, `${observation.id} reuse step`)
+  const reuseBefore = record(reuse.before, `${observation.id} reuse before`) as unknown as CapturedSample
+  const reuseAfter = record(reuse.after, `${observation.id} reuse after`) as unknown as CapturedSample
+  assertSample(reuseBefore.snapshots, reuseBefore.public, reuseBefore.dom, byId, observation, `${observation.id} reuse before`, false)
+  assertSample(reuseAfter.snapshots, reuseAfter.public, reuseAfter.dom, byId, observation, `${observation.id} reuse after`)
+  const reuseReceiptId = string(reuse.receiptId, `${observation.id} reuse receipt`)
+  const reuseResult = assertWindowEditorOpen(byId.get(reuseReceiptId)!, byId, {
+    relativePath, worktreeId, absolutePath, window: targetConnId, focus: false, line: 1, column: 1
+  }, `${observation.id} reuse open`)
+  equal(reuseResult.id, bufferId, `${observation.id} reused buffer identity`)
+  equal(reuseResult.openedTabId, tabId, `${observation.id} reused tab identity`)
+  assertFirstWindowLayoutReceipt(observation, byId, reuseReceiptId, targetConnId, reuseAfter.public[targetIndex]!, `${observation.id} first reuse read`)
+  equal(shownWorktree(reuseAfter.public[targetIndex]!), worktreeId, `${observation.id} reused destination worktree`)
+  equal(reuseAfter.public[targetIndex]!.workspace && selectedTabId(reuseAfter.public[targetIndex]!.workspace), tabId, `${observation.id} reused selected tab`)
+  const reuseBuffer = bufferById(reuseAfter.public[targetIndex]!.editor, bufferId)
+  if (!reuseBuffer) throw new CliFilesFailure('missing-buffer', `${observation.id} reused editor buffer is missing`)
+  const matchingEditorTabs = array(reuseAfter.public[targetIndex]!.editor.tabs, `${observation.id} editor tabs`)
+    .map((entry) => record(entry, `${observation.id} editor tab`))
+    .filter((entry) => entry.bufferId === bufferId)
+  equal(matchingEditorTabs.length, 1, `${observation.id} one editor tab for reused buffer`)
+  equal(reuseAfter.dom[targetIndex]!.caret, { line: 1, column: 1 }, `${observation.id} reused native caret`)
+  equal(reuseAfter.dom[targetIndex]!.renderedTabId, tabId, `${observation.id} reused rendered tab`)
+  equal(reuseAfter.dom[otherIndex], reuseBefore.dom[otherIndex], `${observation.id} reuse cB DOM unchanged`)
+  const reuseHistoryBefore = record(reuse.historyBefore, `${observation.id} reuse history before`)
+  const reuseHistoryAfter = record(reuse.historyAfter, `${observation.id} reuse history after`)
+  const reuseTransition = assertNavigationHistoryTransition(
+    observation, byId, reuseHistoryBefore.target, reuseHistoryAfter.target, targetConnId, worktreeId, `${observation.id} reuse`
+  )
+  equal(reuseTransition.before.shownWorktree, shownBefore, `${observation.id} reuse history/window correlation`)
+  const reuseOtherBefore = readNavigationHistory(reuseHistoryBefore.other, byId, observation, `${observation.id} reuse cB history before`)
+  const reuseOtherAfter = readNavigationHistory(reuseHistoryAfter.other, byId, observation, `${observation.id} reuse cB history after`)
+  equal(reuseOtherAfter.result, reuseOtherBefore.result, `${observation.id} reuse cB history unchanged`)
+
+  const background = record(windowFocus.background, `${observation.id} background step`)
+  const backgroundBefore = record(background.before, `${observation.id} background before`) as unknown as CapturedSample
+  const backgroundAfter = record(background.after, `${observation.id} background after`) as unknown as CapturedSample
+  assertSample(backgroundBefore.snapshots, backgroundBefore.public, backgroundBefore.dom, byId, observation, `${observation.id} background before`)
+  assertSample(backgroundAfter.snapshots, backgroundAfter.public, backgroundAfter.dom, byId, observation, `${observation.id} background after`)
+  const backgroundReceiptId = string(background.receiptId, `${observation.id} background receipt`)
+  const notesPath = 'docs/review-notes.md'
+  const notesAbsolutePath = expectedAbsolute(
+    string(focusResult.root, `${observation.id} authorized root`), notesPath
+  )
+  const backgroundResult = assertWindowEditorOpen(byId.get(backgroundReceiptId)!, byId, {
+    relativePath: notesPath,
+    worktreeId,
+    absolutePath: notesAbsolutePath,
+    window: null,
+    focus: false
+  }, `${observation.id} background open`)
+  if (backgroundResult.openedTabId === tabId) throw new CliFilesFailure('tab-mismatch', `${observation.id} background open reused the active source tab`)
+  equal(backgroundAfter.public[targetIndex]!.windowState.layout, backgroundBefore.public[targetIndex]!.windowState.layout, `${observation.id} background cA layout unchanged`)
+  equal(backgroundAfter.public[otherIndex]!.windowState.layout, backgroundBefore.public[otherIndex]!.windowState.layout, `${observation.id} background cB layout unchanged`)
+  equal(backgroundAfter.dom[targetIndex], backgroundBefore.dom[targetIndex], `${observation.id} background active source unchanged`)
+  equal(backgroundAfter.dom[otherIndex], backgroundBefore.dom[otherIndex], `${observation.id} background cB DOM unchanged`)
+  equal(selectedTabId(backgroundAfter.public[targetIndex]!.workspace), tabId, `${observation.id} background leaves destination active tab`)
+  const backgroundHistoryBefore = record(background.historyBefore, `${observation.id} background history before`)
+  const backgroundHistoryAfter = record(background.historyAfter, `${observation.id} background history after`)
+  const backgroundTargetBefore = readNavigationHistory(backgroundHistoryBefore.target, byId, observation, `${observation.id} background cA history before`)
+  const backgroundTargetAfter = readNavigationHistory(backgroundHistoryAfter.target, byId, observation, `${observation.id} background cA history after`)
+  const backgroundOtherBefore = readNavigationHistory(backgroundHistoryBefore.other, byId, observation, `${observation.id} background cB history before`)
+  const backgroundOtherAfter = readNavigationHistory(backgroundHistoryAfter.other, byId, observation, `${observation.id} background cB history after`)
+  equal(backgroundTargetAfter.result, backgroundTargetBefore.result, `${observation.id} background cA history unchanged`)
+  equal(backgroundOtherAfter.result, backgroundOtherBefore.result, `${observation.id} background cB history unchanged`)
+}
+function assertWindowRefusalsObservation(observation: CliFileObservation, byId: Map<string, CliReceipt>): void {
+  const request = record(observation.evidence.request, `${observation.id} request`)
+  assertSample(observation.before, observation.evidence.public.before, observation.evidence.dom.before, byId, observation, `${observation.id} top-level before`)
+  assertSample(observation.after, observation.evidence.public.after, observation.evidence.dom.after, byId, observation, `${observation.id} top-level after`)
+  const worktreeB = string(request.worktreeId, `${observation.id} target worktree`)
+  const refusals = record(observation.evidence.refusals, `${observation.id} refusal evidence`)
+  const initial = record(refusals.initial, `${observation.id} initial snapshot`)
+  const initialSample = record(initial.sample, `${observation.id} initial sample`) as unknown as CapturedSample
+  const initialHistory = record(initial.history, `${observation.id} initial histories`)
+  const initialA = readNavigationHistory(initialHistory.a, byId, observation, `${observation.id} cA initial history`)
+  const initialB = readNavigationHistory(initialHistory.b, byId, observation, `${observation.id} cB initial history`)
+  assertSample(initialSample.snapshots, initialSample.public, initialSample.dom, byId, observation, `${observation.id} initial`, true)
+  const connA = initialSample.public[0]!.connId
+  const connB = initialSample.public[1]!.connId
+  if (connA === connB) throw new CliFilesFailure('connection-mismatch', `${observation.id} repeats a live connection`)
+  const worktreeA = shownWorktree(initialSample.public[0]!)
+  equal(worktreeA, initialA.shownWorktree, `${observation.id} cA history baseline`)
+  equal(shownWorktree(initialSample.public[1]!), initialB.shownWorktree, `${observation.id} cB history baseline`)
+  const cBActive = selectedTabId(initialSample.public[1]!.workspace)
+  if (cBActive === null) throw new CliFilesFailure('selection-mismatch', `${observation.id} cB has no active sentinel`)
+  equal(initialSample.dom[1]!.selectedTabId, cBActive, `${observation.id} cB sentinel selection`)
+  equal(initialSample.dom[1]!.renderedTabId, cBActive, `${observation.id} cB sentinel rendering`)
+
+  const stableState = (
+    sample: CapturedSample,
+    history: { a: CliFileHistoryRead; b: CliFileHistoryRead }
+  ): JsonObject[] => sample.public.map((publicWindow, index) => ({
+    connId: publicWindow.connId,
+    layout: publicWindow.windowState.layout,
+    workspace: publicWindow.workspace,
+    editor: publicWindow.editor,
+    dom: sample.dom[index],
+    history: index === 0 ? history.a.result : history.b.result
+  }))
+  const baselineState = stableState(initialSample, { a: initialA, b: initialB })
+  const expectedCases: ReadonlyArray<{
+    caseId: string; argv: string[]; exitCode: 1 | 2; code: string; message?: string
+  }> = [
+    { caseId: 'unknown-editor', argv: ['editor', 'open', 'src/app.ts', '--worktree', worktreeB, '--window', '999'], exitCode: 1, code: 'conflict', message: 'UI window connection 999 is not open' },
+    { caseId: 'zero-window', argv: ['editor', 'open', 'src/app.ts', '--worktree', worktreeB, '--window', '0'], exitCode: 2, code: 'usage' },
+    { caseId: 'focus-window-conflict', argv: ['editor', 'open', 'src/app.ts', '--worktree', worktreeB, '--focus=false', '--window', String(connA)], exitCode: 1, code: 'invalid-params', message: 'window cannot be combined with focus: false' },
+    { caseId: 'unknown-review-window', argv: ['api', 'call', 'ui.window.command.run', '--conn-id', '999', '--id', 'command:quirky.git/open-diff', '--args', JSON.stringify({ worktree: worktreeB, path: 'src/app.ts' })], exitCode: 1, code: 'conflict', message: 'UI window connection 999 is not open' },
+    { caseId: 'disconnected-editor', argv: ['editor', 'open', 'docs/review-notes.md', '--worktree', worktreeB, '--window', String(request.connC)], exitCode: 1, code: 'conflict', message: `UI window connection ${request.connC} is not open` },
+    { caseId: 'disconnected-open-changes', argv: ['api', 'call', 'ui.window.command.run', '--conn-id', String(request.connC), '--id', 'command:quirky.git/open-changes', '--args', JSON.stringify({ worktree: worktreeB })], exitCode: 1, code: 'conflict', message: `UI window connection ${request.connC} is not open` }
+  ]
+  const cases = array(refusals.cases, `${observation.id} exact refusals`)
+  equal(cases.length, expectedCases.length, `${observation.id} refusal count`)
+  for (const [index, expected] of expectedCases.entries()) {
+    const caseEvidence = record(cases[index], `${observation.id} refusal ${expected.caseId}`)
+    equal(caseEvidence.caseId, expected.caseId, `${observation.id} refusal identity`)
+    const receiptId = string(caseEvidence.receiptId, `${observation.id} refusal receipt`)
+    assertCliRefusal(observation, byId, receiptId, {
+      argv: expected.argv,
+      exitCode: expected.exitCode,
+      code: expected.code,
+      ...(expected.message === undefined ? {} : { message: expected.message })
+    }, `${observation.id} ${expected.caseId}`)
+    const after = record(caseEvidence.after, `${observation.id} ${expected.caseId} after`)
+    const afterSample = record(after.sample, `${observation.id} ${expected.caseId} sample`) as unknown as CapturedSample
+    const afterHistories = record(after.history, `${observation.id} ${expected.caseId} histories`)
+    const historyA = readNavigationHistory(afterHistories.a, byId, observation, `${observation.id} ${expected.caseId} cA history`)
+    const historyB = readNavigationHistory(afterHistories.b, byId, observation, `${observation.id} ${expected.caseId} cB history`)
+    assertSample(afterSample.snapshots, afterSample.public, afterSample.dom, byId, observation, `${observation.id} ${expected.caseId} after`, true)
+    equal(stableState(afterSample, { a: historyA, b: historyB }), baselineState,
+      `${observation.id} complete snapshot after ${expected.caseId}`)
+  }
+
+  const disconnected = record(refusals.disconnected, `${observation.id} disconnected page`)
+  const connC = integer(disconnected.connId, `${observation.id} disconnected connection`)
+  if (connC === connA || connC === connB) throw new CliFilesFailure('connection-mismatch', `${observation.id} third connection reused a live window ID`)
+  equal(connC, integer(request.connC, `${observation.id} requested third connection`), `${observation.id} third connection identity`)
+  if (disconnected.contextClosed !== true || disconnected.pageClosed !== true) {
+    throw new CliFilesFailure('renderer-cleanup', `${observation.id} temporary renderer was not closed`)
+  }
+  const uiWindows = (receiptIdValue: unknown, label: string): number[] => {
+    const receiptId = string(receiptIdValue, `${label} receipt ID`)
+    assertReceiptLinked(observation, receiptId, label)
+    const receipt = byId.get(receiptId)!
+    if (receipt.command !== 'ui state' || receipt.argv[0] !== 'ui' || receipt.argv[1] !== 'state') {
+      throw new CliFilesFailure('invalid-receipt', `${label} is not an owned ui state read`)
+    }
+    const result = successfulReceipt(byId, receiptId)
+    return array(result.windows, `${label} windows`).map((entry) => integer(record(entry, label).connId, `${label} connection ID`))
+  }
+  const beforeCloseIds = uiWindows(disconnected.uiBeforeCloseReceiptId, `${observation.id} ui state with third page`)
+  const afterCloseIds = uiWindows(disconnected.uiAfterCloseReceiptId, `${observation.id} ui state after third page close`)
+  equal([...beforeCloseIds].sort((a, b) => a - b), [connA, connB, connC].sort((a, b) => a - b), `${observation.id} live third page enumeration`)
+  equal([...afterCloseIds].sort((a, b) => a - b), [connA, connB].sort((a, b) => a - b), `${observation.id} disconnected page removal`)
+  equal(disconnected.listedBeforeClose, beforeCloseIds.includes(connC), `${observation.id} third page was listed before closing`)
+  equal(disconnected.listedWhenCommandsRan, afterCloseIds.includes(connC), `${observation.id} third page list at refusal time`)
+  if (afterCloseIds.includes(connC)) throw new CliFilesFailure('renderer-disconnected', `${observation.id} third page remained listed when its stale ID was used`)
+}
+function assertReviewFocusWindowObservation(observation: CliFileObservation, byId: Map<string, CliReceipt>): void {
+  const request = record(observation.evidence.request, `${observation.id} request`)
+  const focusWindow = record(observation.evidence.focusWindow, `${observation.id} focus window evidence`)
+  const worktreeId = string(focusWindow.worktreeId, `${observation.id} Review worktree`)
+  const tabId = string(focusWindow.tabId, `${observation.id} Review tab`)
+  const targetConnId = integer(request.targetConnectionId, `${observation.id} target connection`)
+  equal(request.worktreeId, worktreeId, `${observation.id} request worktree`)
+  equal(targetConnId, observation.before[0]!.connId, `${observation.id} command routes through cA`)
+  assertSample(observation.before, observation.evidence.public.before, observation.evidence.dom.before, byId, observation, `${observation.id} before`, false)
+  assertSample(observation.after, observation.evidence.public.after, observation.evidence.dom.after, byId, observation, `${observation.id} after`)
+
+  const baselineReceiptId = string(focusWindow.reviewWorkspaceReceiptId, `${observation.id} pre-existing Review workspace receipt`)
+  assertReceiptLinked(observation, baselineReceiptId, `${observation.id} pre-existing Review tab`)
+  const baselineReceipt = byId.get(baselineReceiptId)!
+  if (baselineReceipt.command !== 'api call' || baselineReceipt.argv[2] !== 'quirky.terminal/workspace' ||
+      argvFlag(baselineReceipt.argv, '--workspace', `${observation.id} Review workspace`) !== worktreeId) {
+    throw new CliFilesFailure('invalid-receipt', `${observation.id} Review baseline is not a public workspace read`)
+  }
+  const baselineWorkspace = successfulReceipt(byId, baselineReceiptId)
+  const key = reviewKey(worktreeId)
+  const baselineReviewTabs = reviewTabFor(baselineWorkspace, key)
+  if (baselineReviewTabs.length !== 1 || baselineReviewTabs[0]!.id !== tabId) {
+    throw new CliFilesFailure('review-tab-mismatch', `${observation.id} Review baseline does not contain exactly tab ${tabId}`)
+  }
+  const sentinelTab = selectedTabId(baselineWorkspace)
+  if (!sentinelTab || sentinelTab === tabId) throw new CliFilesFailure('selection-mismatch', `${observation.id} Review baseline sentinel is not active`)
+
+  const step = (value: unknown, label: string, commandId: string, commandArgs: JsonObject, openChanges: boolean): void => {
+    const evidence = record(value, label)
+    const before = record(evidence.before, `${label} before`) as unknown as CapturedSample
+    const after = record(evidence.after, `${label} after`) as unknown as CapturedSample
+    assertSample(before.snapshots, before.public, before.dom, byId, observation, `${label} before`, false)
+    assertSample(after.snapshots, after.public, after.dom, byId, observation, `${label} after`)
+    const receiptId = string(evidence.receiptId, `${label} command receipt`)
+    equal(receiptId, commandId, `${label} command identity`)
+    const receipt = byId.get(receiptId)!
+    if (receipt.command !== 'api call' || receipt.argv[2] !== 'ui.window.command.run' || receipt.exitCode !== 0) {
+      throw new CliFilesFailure('invalid-receipt', `${label} did not use a successful exact-window command`)
+    }
+    assertReceiptLinked(observation, receiptId, `${label} command`)
+    equal(Number(argvFlag(receipt.argv, '--conn-id', label)), targetConnId, `${label} routed connection`)
+    const expectedCommand = openChanges ? 'command:quirky.git/open-changes' : 'command:quirky.git/open-diff'
+    equal(argvFlag(receipt.argv, '--id', label), expectedCommand, `${label} command ID`)
+    equal(JSON.parse(argvFlag(receipt.argv, '--args', label)), commandArgs, `${label} command args`)
+    assertFirstWindowLayoutReceipt(observation, byId, receiptId, targetConnId, after.public[0]!, `${label} first public read`)
+    const replyEnvelope = successfulReceipt(byId, receiptId)
+    const reply = record(replyEnvelope.result, `${label} structured result`)
+    if (openChanges) {
+      equal(reply.worktree, worktreeId, `${label} worktree`)
+      equal(reply.mode, 'diff', `${label} mode`)
+      equal(reply.source, null, `${label} source`)
+      equal(reply.focused, true, `${label} focused result`)
+      equal(reply.statusComplete, true, `${label} status completeness`)
+      equal(array(reply.opened, `${label} opened files`), [], `${label} opened files`)
+      equal(array(reply.skipped, `${label} skipped files`), [], `${label} skipped files`)
+      const review = record(reply.review, `${label} nested Review result`)
+      equal(review.worktree, worktreeId, `${label} nested worktree`)
+      equal(review.tabId, tabId, `${label} nested Review tab`)
+      equal(review.created, false, `${label} nested Review reuse`)
+      equal(review.focused, true, `${label} nested Review focus`)
+      equal(review.source, null, `${label} nested source`)
+      equal(review.reveal, null, `${label} nested reveal`)
+      equal(review.statusComplete, null, `${label} nested status completeness`)
+    } else {
+      equal(reply.worktree, worktreeId, `${label} worktree`)
+      equal(reply.tabId, tabId, `${label} Review tab`)
+      equal(reply.created, false, `${label} Review reuse`)
+      equal(reply.focused, true, `${label} Review focus`)
+      equal(reply.source, null, `${label} Review source`)
+      equal(reply.reveal, A_TARGET, `${label} Review reveal`)
+      equal(reply.statusComplete, null, `${label} Review status completeness`)
+    }
+    const layout = record(after.public[0]!.windowState.layout, `${label} cA layout`)
+    equal(layout.worktree, worktreeId, `${label} cA worktree`)
+    const review = reviewTabFor(after.public[0]!.workspace, key)
+    if (review.length !== 1 || review[0]!.id !== tabId) {
+      throw new CliFilesFailure('review-tab-mismatch', `${label} cA does not render the pre-existing Review tab`)
+    }
+    equal(after.public[0]!.workspace && selectedTabId(after.public[0]!.workspace), tabId, `${label} active Review tab`)
+    equal(after.dom[0]!.renderedTabId, tabId, `${label} rendered Review tab`)
+    equal(after.dom[0]!.reviewTabMounted, true, `${label} mounted Review`)
+    if (!openChanges) {
+      const card = after.dom[0]!.reviewCards.find((entry) => entry.path === A_TARGET)
+      if (!card) throw new CliFilesFailure('review-reveal-mismatch', `${label} has no ${A_TARGET} card`)
+      equal(card.active, true, `${label} active card`)
+      equal(card.expanded, true, `${label} expanded card`)
+      equal(card.loaded, true, `${label} loaded card`)
+      includesText(card.text, B_CONTENT, `${label} source text`)
+    }
+    equal(after.public[1]!.windowState.layout, before.public[1]!.windowState.layout, `${label} cB layout unchanged`)
+    equal(after.dom[1], before.dom[1], `${label} cB DOM unchanged`)
+    const historyBefore = record(evidence.historyBefore, `${label} histories before`)
+    const historyAfter = record(evidence.historyAfter, `${label} histories after`)
+    const targetHistory = assertNavigationHistoryTransition(
+      observation, byId, historyBefore.target, historyAfter.target, targetConnId, worktreeId, label
+    )
+    const otherBefore = readNavigationHistory(historyBefore.other, byId, observation, `${label} cB history before`)
+    const otherAfter = readNavigationHistory(historyAfter.other, byId, observation, `${label} cB history after`)
+    equal(targetHistory.before.shownWorktree, string(record(before.public[0]!.windowState.layout, `${label} cA before layout`).worktree, `${label} shown before`), `${label} history baseline layout`)
+    equal(otherAfter.result, otherBefore.result, `${label} cB history unchanged`)
+  }
+
+  const diffReceiptId = string(focusWindow.openDiffReceiptId, `${observation.id} open-diff receipt`)
+  step(focusWindow.diff, `${observation.id} open-diff focus`, diffReceiptId, { worktree: worktreeId, path: A_TARGET }, false)
+  const changesReceiptId = string(focusWindow.openChangesReceiptId, `${observation.id} open-changes receipt`)
+  step(focusWindow.changes, `${observation.id} open-changes focus`, changesReceiptId, { worktree: worktreeId }, true)
+}
+function assertReviewBackgroundObservation(observation: CliFileObservation, byId: Map<string, CliReceipt>): void {
+  const evidence = record(observation.evidence.backgroundReview, `${observation.id} background Review evidence`)
+  assertSample(observation.before, observation.evidence.public.before, observation.evidence.dom.before, byId, observation, `${observation.id} top-level before`)
+  assertSample(observation.after, observation.evidence.public.after, observation.evidence.dom.after, byId, observation, `${observation.id} top-level after`)
+  const worktreeId = string(evidence.worktreeId, `${observation.id} Review worktree`)
+  const tabId = string(evidence.tabId, `${observation.id} Review tab`)
+  const sentinelTabId = string(evidence.sentinelTabId, `${observation.id} sentinel tab`)
+  const beforePublic = observation.evidence.public.before
+  const beforeDom = observation.evidence.dom.before
+  assertSample(observation.before, beforePublic, beforeDom, byId, observation, `${observation.id} initial`, true)
+  const connA = beforePublic[0]!.connId
+  const connB = beforePublic[1]!.connId
+  const worktreeA = shownWorktree(beforePublic[0]!)
+  equal(shownWorktree(beforePublic[1]!), worktreeId, `${observation.id} cB shows B`)
+  const key = reviewKey(worktreeId)
+  const historyPair = (value: unknown, label: string) => {
+    const histories = record(value, label)
+    return {
+      a: readNavigationHistory(histories.a, byId, observation, `${label} cA`),
+      b: readNavigationHistory(histories.b, byId, observation, `${label} cB`)
+    }
+  }
+  const assertHistoryStable = (beforeValue: unknown, afterValue: unknown, label: string) => {
+    const before = historyPair(beforeValue, `${label} history before`)
+    const after = historyPair(afterValue, `${label} history after`)
+    equal(after.a.result, before.a.result, `${label} cA history unchanged`)
+    equal(after.b.result, before.b.result, `${label} cB history unchanged`)
+  }
+
+  const cold = record(evidence.cold, `${observation.id} cold Review step`)
+  const coldBefore = record(cold.before, `${observation.id} cold before`) as unknown as CapturedSample
+  const coldAfter = record(cold.after, `${observation.id} cold after`) as unknown as CapturedSample & { activeTab: string }
+  const coldActivated = record(cold.activated, `${observation.id} cold activation`) as unknown as CapturedSample
+  assertSample(coldBefore.snapshots, coldBefore.public, coldBefore.dom, byId, observation, `${observation.id} cold before`)
+  assertSample(coldAfter.snapshots, coldAfter.public, coldAfter.dom, byId, observation, `${observation.id} cold after`)
+  assertSample(coldActivated.snapshots, coldActivated.public, coldActivated.dom, byId, observation, `${observation.id} cold activation`)
+  equal(reviewTabFor(coldBefore.public[1]!.workspace, key), [], `${observation.id} cold baseline has no Review`)
+  const coldReceiptId = string(evidence.coldReceiptId, `${observation.id} cold command receipt`)
+  const coldReceipt = byId.get(coldReceiptId)!
+  assertReceiptLinked(observation, coldReceiptId, `${observation.id} cold open-diff`)
+  if (coldReceipt.command !== 'api call' || coldReceipt.argv[2] !== 'ui.window.command.run' || coldReceipt.exitCode !== 0) {
+    throw new CliFilesFailure('invalid-receipt', `${observation.id} cold Review command is not an exact-window call`)
+  }
+  equal(Number(argvFlag(coldReceipt.argv, '--conn-id', `${observation.id} cold command`)), connA, `${observation.id} cold command window`)
+  equal(argvFlag(coldReceipt.argv, '--id', `${observation.id} cold command`), 'command:quirky.git/open-diff', `${observation.id} cold command ID`)
+  const coldArgs = JSON.parse(argvFlag(coldReceipt.argv, '--args', `${observation.id} cold command`)) as JsonObject
+  equal(coldArgs, { worktree: worktreeId, path: A_TARGET, focus: false }, `${observation.id} cold command args`)
+  const coldEnvelope = successfulReceipt(byId, coldReceiptId)
+  const coldResult = record(coldEnvelope.result, `${observation.id} cold Review result`)
+  equal(coldResult.worktree, worktreeId, `${observation.id} cold worktree`)
+  equal(coldResult.tabId, tabId, `${observation.id} cold tab`)
+  equal(coldResult.created, true, `${observation.id} cold tab creation`)
+  equal(coldResult.focused, false, `${observation.id} cold background focus`)
+  equal(coldResult.source, null, `${observation.id} cold source`)
+  equal(coldResult.reveal, A_TARGET, `${observation.id} cold reveal`)
+  equal(coldResult.statusComplete, null, `${observation.id} cold status completeness`)
+  assertFirstWindowLayoutReceipt(observation, byId, coldReceiptId, connA, coldAfter.public[0]!, `${observation.id} cold first read`)
+  const coldTab = reviewTabFor(coldAfter.public[1]!.workspace, key)
+  if (coldTab.length !== 1 || coldTab[0]!.id !== tabId) {
+    throw new CliFilesFailure('review-tab-mismatch', `${observation.id} cold open did not create exactly one Review tab`)
+  }
+  const coldInput = record(coldTab[0]!.input, `${observation.id} cold Review input`)
+  equal(coldInput.mode, 'review', `${observation.id} cold stored mode`)
+  equal(coldInput.worktree, worktreeId, `${observation.id} cold stored worktree`)
+  equal(coldInput.reveal, A_TARGET, `${observation.id} cold stored reveal`)
+  equal(coldAfter.activeTab, selectedTabId(coldAfter.public[1]!.workspace), `${observation.id} cold B active tab readback`)
+  equal(coldAfter.activeTab, sentinelTabId, `${observation.id} cold leaves sentinel selected`)
+  equal(coldAfter.public[0]!.windowState.layout, coldBefore.public[0]!.windowState.layout, `${observation.id} cold cA layout unchanged`)
+  equal(coldAfter.public[1]!.windowState.layout, coldBefore.public[1]!.windowState.layout, `${observation.id} cold cB layout unchanged`)
+  if (coldAfter.dom.some((dom) => dom.reviewTabMounted)) throw new CliFilesFailure('review-mount-mismatch', `${observation.id} cold background open mounted Review early`)
+  equal(coldAfter.dom, coldBefore.dom, `${observation.id} cold background DOM unchanged`)
+  assertHistoryStable(cold.historyBefore, cold.historyAfter, `${observation.id} cold background`)
+  const coldActivateReceiptId = `${observation.id}-activate-cold`
+  const coldActivateReceipt = byId.get(coldActivateReceiptId)
+  if (!coldActivateReceipt) throw new CliFilesFailure('missing-receipt', `${observation.id} cold Review activation receipt is missing`)
+  assertReceiptLinked(observation, coldActivateReceiptId, `${observation.id} cold activation`)
+  equal(coldActivateReceipt.command, 'terminal tab', `${observation.id} terminal activation command`)
+  equal(coldActivateReceipt.argv.slice(0, 4), ['terminal', 'tab', 'activate', tabId], `${observation.id} cold activation argv`)
+  const coldActiveDom = coldActivated.dom[1]!
+  equal(coldActiveDom.renderedTabId, tabId, `${observation.id} cold Review rendered after activation`)
+  equal(coldActiveDom.reviewTabMounted, true, `${observation.id} cold Review mounted after activation`)
+  const coldCard = coldActiveDom.reviewCards.find((card) => card.path === A_TARGET)
+  if (!coldCard) throw new CliFilesFailure('review-reveal-mismatch', `${observation.id} activated Review has no ${A_TARGET} card`)
+  equal(coldCard.active, true, `${observation.id} activated cold reveal`)
+  equal(coldCard.expanded, true, `${observation.id} activated cold expansion`)
+  equal(coldCard.loaded, true, `${observation.id} activated cold content`)
+  includesText(coldCard.text, 'second λ', `${observation.id} activated cold text`)
+
+  const mounted = record(evidence.mounted, `${observation.id} mounted Review step`)
+  const mountedBefore = record(mounted.before, `${observation.id} mounted before`) as unknown as CapturedSample
+  const mountedAfter = record(mounted.after, `${observation.id} mounted after`) as unknown as CapturedSample
+  const mountedAfterShow = record(mounted.afterShow, `${observation.id} mounted reshow`) as unknown as CapturedSample
+  assertSample(mountedBefore.snapshots, mountedBefore.public, mountedBefore.dom, byId, observation, `${observation.id} mounted before`)
+  assertSample(mountedAfter.snapshots, mountedAfter.public, mountedAfter.dom, byId, observation, `${observation.id} mounted after`)
+  assertSample(mountedAfterShow.snapshots, mountedAfterShow.public, mountedAfterShow.dom, byId, observation, `${observation.id} Review reshow`)
+  const mountedReceiptId = string(evidence.mountedReceiptId, `${observation.id} mounted command receipt`)
+  const mountedReceipt = byId.get(mountedReceiptId)!
+  assertReceiptLinked(observation, mountedReceiptId, `${observation.id} mounted open-diff`)
+  if (mountedReceipt.command !== 'api call' || mountedReceipt.argv[2] !== 'ui.window.command.run' || mountedReceipt.exitCode !== 0) {
+    throw new CliFilesFailure('invalid-receipt', `${observation.id} mounted Review command is not an exact-window call`)
+  }
+  equal(Number(argvFlag(mountedReceipt.argv, '--conn-id', `${observation.id} mounted command`)), connB, `${observation.id} mounted command window`)
+  equal(argvFlag(mountedReceipt.argv, '--id', `${observation.id} mounted command`), 'command:quirky.git/open-diff', `${observation.id} mounted command ID`)
+  equal(JSON.parse(argvFlag(mountedReceipt.argv, '--args', `${observation.id} mounted command`)),
+    { worktree: worktreeId, path: SENTINEL_PATH, focus: false }, `${observation.id} mounted command args`)
+  const mountedResult = record(successfulReceipt(byId, mountedReceiptId).result, `${observation.id} mounted Review result`)
+  equal(mountedResult.worktree, worktreeId, `${observation.id} mounted worktree`)
+  equal(mountedResult.tabId, tabId, `${observation.id} mounted tab`)
+  equal(mountedResult.created, false, `${observation.id} mounted tab reuse`)
+  equal(mountedResult.focused, false, `${observation.id} mounted background focus`)
+  equal(mountedResult.reveal, SENTINEL_PATH, `${observation.id} mounted deferred reveal`)
+  const beforeTab = tabById(mountedBefore.public[1]!.workspace, tabId)
+  const afterTab = tabById(mountedAfter.public[1]!.workspace, tabId)
+  if (!beforeTab || !afterTab) throw new CliFilesFailure('review-tab-mismatch', `${observation.id} mounted Review tab is missing`)
+  const inputBefore = record(mounted.inputBefore, `${observation.id} mounted stored input before`)
+  const inputAfter = record(mounted.inputAfter, `${observation.id} mounted stored input after`)
+  equal(inputBefore, beforeTab.input, `${observation.id} mounted independent stored input`)
+  equal(inputAfter, afterTab.input, `${observation.id} mounted stored input after`)
+  equal(inputAfter, inputBefore, `${observation.id} background request leaves stored input unchanged`)
+  const mountedCard = mountedAfter.dom[1]!.reviewCards.find((card) => card.path === A_TARGET)
+  if (!mountedCard) throw new CliFilesFailure('review-reveal-mismatch', `${observation.id} mounted Review lost its active card`)
+  equal(mountedCard.active, true, `${observation.id} mounted active card`)
+  const deferredCard = mountedAfter.dom[1]!.reviewCards.find((card) => card.path === SENTINEL_PATH)
+  if (!deferredCard) throw new CliFilesFailure('review-reveal-mismatch', `${observation.id} mounted DOM is missing the deferred card`)
+  equal(deferredCard.active, false, `${observation.id} mounted deferred card stays inactive`)
+  const scrollBefore = mountedBefore.dom[1]!.reviewScrollTop
+  const scrollAfter = mountedAfter.dom[1]!.reviewScrollTop
+  if (typeof mounted.scrollTopBefore !== 'number' || typeof mounted.scrollTopAfter !== 'number') {
+    throw new CliFilesFailure('invalid-evidence', `${observation.id} scroll measurements are not numbers`)
+  }
+  const recordedScrollBefore = mounted.scrollTopBefore
+  const recordedScrollAfter = mounted.scrollTopAfter
+  if (typeof scrollBefore !== 'number' || typeof scrollAfter !== 'number') {
+    throw new CliFilesFailure('missing-observation', `${observation.id} did not capture the live Review scroll position`)
+  }
+  equal(scrollBefore, recordedScrollBefore, `${observation.id} live initial scroll readback`)
+  equal(scrollAfter, recordedScrollAfter, `${observation.id} live resulting scroll readback`)
+  equal(scrollBefore, scrollAfter, `${observation.id} background reveal preserves scroll`)
+  equal(mountedBefore.public.map((window) => window.windowState.layout), mountedAfter.public.map((window) => window.windowState.layout), `${observation.id} mounted layouts unchanged`)
+  equal(mountedBefore.dom, mountedAfter.dom, `${observation.id} mounted DOM unchanged`)
+  assertHistoryStable(mounted.historyBefore, mounted.historyAfter, `${observation.id} mounted background`)
+  const hidden = record(mounted.hidden, `${observation.id} hidden Review`) as unknown as CapturedSample
+  assertSample(hidden.snapshots, hidden.public, hidden.dom, byId, observation, `${observation.id} hidden Review`)
+  equal(hidden.dom[1]!.reviewTabMounted, false, `${observation.id} Review detaches before reshow`)
+  equal(hidden.dom[1]!.renderedTabId, sentinelTabId, `${observation.id} sentinel renders before reshow`)
+  for (const [suffix, expectedTab] of [['activate-sentinel', sentinelTabId], ['activate-review', tabId]] as const) {
+    const receiptId = `${observation.id}-${suffix}`
+    assertReceiptLinked(observation, receiptId, `${observation.id} ${suffix}`)
+    const receipt = byId.get(receiptId)!
+    equal(receipt.argv.slice(0, 4), ['terminal', 'tab', 'activate', expectedTab], `${observation.id} ${suffix} argv`)
+    equal(receipt.exitCode, 0, `${observation.id} ${suffix} success`)
+  }
+  const reshownTab = tabById(mountedAfterShow.public[1]!.workspace, tabId)
+  if (!reshownTab) throw new CliFilesFailure('review-tab-mismatch', `${observation.id} reshow lost Review`)
+  equal(reshownTab.input, inputBefore, `${observation.id} reshow preserves stored input`)
+  const afterShowDom = mountedAfterShow.dom[1]!
+  equal(afterShowDom.renderedTabId, tabId, `${observation.id} Review rendered on reshow`)
+  equal(afterShowDom.reviewTabMounted, true, `${observation.id} Review mounted on reshow`)
+  const afterShowCard = afterShowDom.reviewCards.find((card) => card.path === SENTINEL_PATH)
+  if (!afterShowCard) throw new CliFilesFailure('review-reveal-mismatch', `${observation.id} reshow has no deferred card`)
+  equal(afterShowCard.active, true, `${observation.id} deferred card activated on reshow`)
+  equal(afterShowCard.expanded, true, `${observation.id} deferred card expanded`)
+  equal(afterShowCard.loaded, true, `${observation.id} deferred card loaded`)
+  equal(afterShowDom.reviewCards.filter((card) => card.active).map((card) => card.path),
+    [SENTINEL_PATH], `${observation.id} only the deferred card is active`)
+}
+function assertSourceGitRead(value: unknown, root: string, ref: string, expected: string, label: string): void {
+  const read = record(value, label)
+  equal(read.executable, '/usr/bin/git', `${label} executable`)
+  equal(read.argv, ['/usr/bin/git', 'show', ref], `${label} exact argv`)
+  equal(read.cwd, root, `${label} worktree cwd`)
+  equal(read.exitCode, 0, `${label} Git exit`)
+  const stdout = string(read.stdout, `${label} raw stdout`)
+  equal(stdout, expected, `${label} exact bytes`)
+  equal(integer(read.stdoutBytes, `${label} stdout byte count`), Buffer.byteLength(stdout), `${label} byte count`)
+  equal(Number(read.elapsedMs) >= 0, true, `${label} measured duration`)
+}
+
+function assertSourceWorkingRead(value: unknown, absolutePath: string, expected: string, label: string): void {
+  const read = record(value, label)
+  equal(read.path, absolutePath, `${label} absolute path`)
+  const bytesBase64 = string(read.bytesBase64, `${label} bytes`)
+  const bytes = Buffer.from(bytesBase64, 'base64')
+  equal(bytes.toString('base64'), bytesBase64, `${label} canonical base64`)
+  equal(bytes.toString('utf8'), expected, `${label} exact file bytes`)
+  equal(bytes.toString('hex'), Buffer.from(expected, 'utf8').toString('hex'), `${label} byte equality`)
+}
+
+function assertReviewSourceObservation(observation: CliFileObservation, byId: Map<string, CliReceipt>): void {
+  const request = record(observation.evidence.request, `${observation.id} request`)
+  assertSample(observation.before, observation.evidence.public.before, observation.evidence.dom.before, byId, observation, `${observation.id} top-level before`, false)
+  assertSample(observation.after, observation.evidence.public.after, observation.evidence.dom.after, byId, observation, `${observation.id} top-level after`)
+  const source = record(observation.evidence.sourceReview, `${observation.id} source evidence`)
+  const worktreeA = string(observation.before[1]!.windowWorktree, `${observation.id} non-target worktree`)
+  const worktreeId = string(source.worktreeId, `${observation.id} source worktree`)
+  const tabId = string(source.tabId, `${observation.id} source Review tab`)
+  const targetConnId = integer(request.targetConnectionId, `${observation.id} target connection`)
+  equal(request.worktreeId, worktreeId, `${observation.id} requested worktree`)
+  const readme = record(source.readme, `${observation.id} README versions`)
+  const status = record(source.status, `${observation.id} status path sets`)
+  const scopes = record(source.scopes, `${observation.id} source scopes`)
+  const stagedPaths = array(status.stagedPaths, `${observation.id} staged paths`).map((path) => string(path, 'staged path')).sort()
+  const unstagedPaths = array(status.unstagedPaths, `${observation.id} unstaged paths`).map((path) => string(path, 'unstaged path')).sort()
+  const wholePaths = array(status.wholePaths, `${observation.id} whole-review paths`).map((path) => string(path, 'whole-review path')).sort()
+  const expectedStaged = ['README.md', SENTINEL_PATH].sort()
+  const expectedUnstaged = ['README.md', A_TARGET].sort()
+  const expectedWhole = ['README.md', SENTINEL_PATH, A_TARGET].sort()
+  equal(stagedPaths, expectedStaged, `${observation.id} expected staged paths`)
+  equal(unstagedPaths, expectedUnstaged, `${observation.id} expected unstaged paths`)
+  equal(wholePaths, expectedWhole, `${observation.id} expected whole-review paths`)
+  const base = string(readme.base, `${observation.id} README HEAD bytes`)
+  const index = string(readme.index, `${observation.id} README index bytes`)
+  const working = string(readme.working, `${observation.id} README working bytes`)
+  if (new Set([base, index, working]).size !== 3 || readme.distinct !== true) {
+    throw new CliFilesFailure('fixture-bytes', `${observation.id} README fixture versions are not pairwise distinct`)
+  }
+  const written = record(readme.written, `${observation.id} README written bytes`)
+  const readback = record(readme.readback, `${observation.id} README readback bytes`)
+  equal(written, { base, index, working }, `${observation.id} written README versions`)
+  equal(readback, { base, index, working }, `${observation.id} read-back README versions`)
+  const beforeStatusId = string(status.beforeReceiptId, `${observation.id} pre-scope status receipt`)
+  const afterStatusId = string(status.afterReceiptId, `${observation.id} post-scope status receipt`)
+  for (const [phase, receiptId] of [['before', beforeStatusId], ['after', afterStatusId]] as const) {
+    assertReceiptLinked(observation, receiptId, `${observation.id} ${phase} status`)
+    const receipt = byId.get(receiptId)!
+    if (receipt.command !== 'api call' || receipt.argv[2] !== 'quirky.git/status' ||
+        argvFlag(receipt.argv, '--worktree', `${observation.id} ${phase} status`) !== worktreeId) {
+      throw new CliFilesFailure('invalid-receipt', `${observation.id} ${phase} status is not a public worktree status read`)
+    }
+    const result = successfulReceipt(byId, receiptId)
+    const entries = array(record(result, `${observation.id} ${phase} status`).entries, `${observation.id} ${phase} status entries`)
+      .map((entry) => record(entry, `${observation.id} ${phase} status entry`))
+    const staged = entries.filter((entry) => entry.area === 'staged').map((entry) => string(entry.path, 'staged status path')).sort()
+    const unstaged = entries.filter((entry) => entry.area === 'unstaged' || entry.area === 'untracked')
+      .map((entry) => string(entry.path, 'unstaged status path')).sort()
+    equal(staged, stagedPaths, `${observation.id} ${phase} public staged status`)
+    equal(unstaged, unstagedPaths, `${observation.id} ${phase} public unstaged status`)
+    const docsEntries = entries.filter((entry) => entry.path === SENTINEL_PATH)
+    equal(docsEntries.length, 1, `${observation.id} docs status count`)
+    equal(docsEntries[0]!.area, 'staged', `${observation.id} docs staged status`)
+    const readmeEntries = entries.filter((entry) => entry.path === 'README.md')
+    equal(readmeEntries.map((entry) => entry.area).sort(), ['staged', 'unstaged'], `${observation.id} partial README status`)
+    if (!entries.some((entry) => entry.path === A_TARGET && (entry.area === 'unstaged' || entry.area === 'untracked'))) {
+      throw new CliFilesFailure('fixture-status', `${observation.id} app source is not unstaged or untracked`)
+    }
+  }
+
+  const stagedScope = record(scopes.staged, `${observation.id} staged scope`)
+  const stagedAfter = record(stagedScope.after, `${observation.id} staged after`) as unknown as CapturedSample
+  const bBuffers = array(stagedAfter.public[0]!.editor.buffers, `${observation.id} B buffers`).map((entry) => record(entry, `${observation.id} B buffer`))
+  const bBuffer = bBuffers.find((buffer) => buffer.worktreeId === worktreeId)
+  if (!bBuffer) throw new CliFilesFailure('missing-buffer', `${observation.id} B editor root is unavailable`)
+  const root = string(bBuffer.root, `${observation.id} B root`)
+  const readmePath = string(readme.absolutePath, `${observation.id} README absolute path`)
+  equal(readmePath, expectedAbsolute(root, 'README.md'), `${observation.id} exact B README path`)
+  const readmeGitReads = record(readme.gitReads, `${observation.id} README Git reads`)
+  assertSourceGitRead(readmeGitReads.base, root, 'HEAD:README.md', base, `${observation.id} README HEAD`)
+  assertSourceGitRead(readmeGitReads.index, root, ':README.md', index, `${observation.id} README index`)
+  assertSourceWorkingRead(readme.workingRead, readmePath, working, `${observation.id} README working read`)
+  const docs = record(source.docs, `${observation.id} docs versions`)
+  const docsBase = string(docs.base, `${observation.id} docs HEAD bytes`)
+  const docsIndex = string(docs.index, `${observation.id} docs index bytes`)
+  const docsWorking = string(docs.working, `${observation.id} docs working bytes`)
+  if (docsIndex !== docsWorking || docsBase === docsIndex) {
+    throw new CliFilesFailure('fixture-bytes', `${observation.id} staged docs versions are inconsistent`)
+  }
+  const docsPath = string(docs.absolutePath, `${observation.id} docs absolute path`)
+  equal(docsPath, expectedAbsolute(root, SENTINEL_PATH), `${observation.id} exact B docs path`)
+  const docsReads = record(docs.gitReads, `${observation.id} docs Git reads`)
+  assertSourceGitRead(docsReads.base, root, `HEAD:${SENTINEL_PATH}`, docsBase, `${observation.id} docs HEAD`)
+  assertSourceGitRead(docsReads.index, root, `:${SENTINEL_PATH}`, docsIndex, `${observation.id} docs index`)
+  assertSourceWorkingRead(docs.workingRead, docsPath, docsWorking, `${observation.id} docs working read`)
+  const appWorking = record(source.appWorking, `${observation.id} app working bytes`)
+  const appPath = string(appWorking.path, `${observation.id} app absolute path`)
+  equal(appPath, expectedAbsolute(root, A_TARGET), `${observation.id} exact B app path`)
+  assertSourceWorkingRead(appWorking, appPath, B_CONTENT, `${observation.id} app working read`)
+
+  const expectedSource: Record<'staged' | 'unstaged' | 'whole', string | null> = {
+    staged: 'staged', unstaged: 'unstaged', whole: null
+  }
+  const expectedPaths: Record<'staged' | 'unstaged' | 'whole', string[]> = {
+    staged: stagedPaths, unstaged: unstagedPaths, whole: wholePaths
+  }
+  for (const name of ['staged', 'unstaged', 'whole'] as const) {
+    const scope = record(scopes[name], `${observation.id} ${name} scope`)
+    const before = record(scope.before, `${observation.id} ${name} before`) as unknown as CapturedSample
+    const after = record(scope.after, `${observation.id} ${name} after`) as unknown as CapturedSample
+    const beforeDistinct = before.snapshots[0]!.workspaceId !== before.snapshots[1]!.workspaceId
+    assertSample(before.snapshots, before.public, before.dom, byId, observation, `${observation.id} ${name} before`, beforeDistinct)
+    assertSample(after.snapshots, after.public, after.dom, byId, observation, `${observation.id} ${name} after`)
+    const receiptId = string(scope.receiptId, `${observation.id} ${name} command receipt`)
+    const receipt = byId.get(receiptId)!
+    assertReceiptLinked(observation, receiptId, `${observation.id} ${name} scope command`)
+    if (receipt.command !== 'api call' || receipt.argv[2] !== 'ui.window.command.run' || receipt.exitCode !== 0 ||
+        Number(argvFlag(receipt.argv, '--conn-id', `${observation.id} ${name}`)) !== after.public[0]!.connId) {
+      throw new CliFilesFailure('invalid-receipt', `${observation.id} ${name} scope was not opened in exact window cA`)
+    }
+    const commandId = name === 'staged' ? 'command:quirky.git/open-diff' : 'command:quirky.git/open-changes'
+    equal(argvFlag(receipt.argv, '--id', `${observation.id} ${name}`), commandId, `${observation.id} ${name} command ID`)
+    const args = JSON.parse(argvFlag(receipt.argv, '--args', `${observation.id} ${name}`)) as JsonObject
+    if (name === 'staged') {
+      equal(args, { worktree: worktreeId, path: SENTINEL_PATH, source: 'staged' }, `${observation.id} staged command args`)
+    } else if (name === 'unstaged') {
+      equal(args, { worktree: worktreeId, area: 'unstaged' }, `${observation.id} unstaged command args`)
+    } else {
+      equal(args, { worktree: worktreeId }, `${observation.id} whole-review command args`)
+    }
+    const outer = record(successfulReceipt(byId, receiptId).result, `${observation.id} ${name} command result`)
+    if (name === 'staged') {
+      equal(outer.worktree, worktreeId, `${observation.id} staged reply worktree`)
+      equal(outer.tabId, tabId, `${observation.id} staged reply tab`)
+      equal(outer.created, true, `${observation.id} staged reply creates tab`)
+      equal(outer.focused, true, `${observation.id} staged reply focuses`)
+      equal(outer.source, 'staged', `${observation.id} staged reply source`)
+      equal(outer.reveal, SENTINEL_PATH, `${observation.id} staged reply reveal`)
+      equal(outer.statusComplete, true, `${observation.id} staged reply completeness`)
+    } else {
+      equal(outer.worktree, worktreeId, `${observation.id} ${name} reply worktree`)
+      equal(outer.mode, 'diff', `${observation.id} ${name} reply mode`)
+      equal(outer.source, expectedSource[name], `${observation.id} ${name} reply source`)
+      equal(outer.focused, true, `${observation.id} ${name} reply focus`)
+      equal(outer.statusComplete, true, `${observation.id} ${name} status completeness`)
+      equal(array(outer.opened, `${observation.id} ${name} opened`), [], `${observation.id} ${name} editor results`)
+      equal(array(outer.skipped, `${observation.id} ${name} skipped`), [], `${observation.id} ${name} skipped results`)
+      const review = record(outer.review, `${observation.id} ${name} nested Review`)
+      equal(review.worktree, worktreeId, `${observation.id} ${name} nested worktree`)
+      equal(review.tabId, tabId, `${observation.id} ${name} nested tab`)
+      equal(review.created, false, `${observation.id} ${name} nested tab reuse`)
+      equal(review.focused, true, `${observation.id} ${name} nested focus`)
+      equal(review.source, expectedSource[name], `${observation.id} ${name} nested source`)
+      equal(review.reveal, null, `${observation.id} ${name} nested reveal`)
+      equal(review.statusComplete, expectedSource[name] === null ? null : true, `${observation.id} ${name} nested status`)
+    }
+    assertFirstWindowLayoutReceipt(observation, byId, receiptId, after.public[0]!.connId, after.public[0]!, `${observation.id} ${name} first public read`)
+    equal(shownWorktree(after.public[1]!), worktreeA, `${observation.id} ${name} cB worktree remains A`)
+    equal(after.dom[1], before.dom[1], `${observation.id} ${name} cB DOM unchanged`)
+    const historiesBefore = record(scope.historyBefore, `${observation.id} ${name} histories before`)
+    const historiesAfter = record(scope.historyAfter, `${observation.id} ${name} histories after`)
+    const targetHistory = assertNavigationHistoryTransition(
+      observation, byId, historiesBefore, historiesAfter, after.public[0]!.connId, worktreeId, `${observation.id} ${name}`
+    )
+    equal(targetHistory.before.shownWorktree, before.snapshots[0]!.windowWorktree, `${observation.id} ${name} history/window baseline`)
+    const otherBefore = readNavigationHistory(scope.otherHistoryBefore, byId, observation, `${observation.id} ${name} cB history before`)
+    const otherAfter = readNavigationHistory(scope.otherHistoryAfter, byId, observation, `${observation.id} ${name} cB history after`)
+    equal(otherAfter.result, otherBefore.result, `${observation.id} ${name} cB history unchanged`)
+    const baselineOtherLayout = before.public[1]!.windowState.layout
+    const baselineOtherDom = before.dom[1]!
+    const assertOtherWindow = (value: unknown, label: string): void => {
+      const point = record(value, label)
+      const connId = integer(point.connId, `${label} connection`)
+      equal(connId, before.public[1]!.connId, `${label} target window`)
+      const receiptId = string(point.receiptId, `${label} layout receipt`)
+      assertReceiptLinked(observation, receiptId, label)
+      const receipt = byId.get(receiptId)!
+      if (receipt.command !== 'api call' || receipt.argv[2] !== 'ui.window.state' ||
+          Number(argvFlag(receipt.argv, '--conn-id', label)) !== connId) {
+        throw new CliFilesFailure('invalid-receipt', `${label} is not an exact-window state read`)
+      }
+      const state = successfulReceipt(byId, receiptId)
+      equal(state, point.windowState, `${label} independent layout readback`)
+      equal(state.connId, connId, `${label} returned window`)
+      equal(state.layout, baselineOtherLayout, `${label} original layout unchanged`)
+      equal(point.dom, baselineOtherDom, `${label} original DOM unchanged`)
+      const history = readNavigationHistory(point.history, byId, observation, `${label} history`)
+      equal(history.connId, connId, `${label} history window`)
+      equal(history.result, otherBefore.result, `${label} original history unchanged`)
+    }
+
+    const key = reviewKey(worktreeId)
+    const matching = reviewTabFor(after.public[0]!.workspace, key)
+    if (matching.length !== 1 || matching[0]!.id !== tabId) {
+      throw new CliFilesFailure('review-tab-mismatch', `${observation.id} ${name} does not reuse one Review tab`)
+    }
+    const allReviewTabs = tabsInWorkspace(after.public[0]!.workspace).filter((tab) => tab.viewId === REVIEW_VIEW_ID)
+    equal(allReviewTabs.length, 1, `${observation.id} ${name} one combined Review tab`)
+    equal(scope.tabCount, 1, `${observation.id} ${name} reported Review tab count`)
+    const input = record(matching[0]!.input, `${observation.id} ${name} Review input`)
+    equal(input.mode, 'review', `${observation.id} ${name} Review mode`)
+    equal(input.worktree, worktreeId, `${observation.id} ${name} Review worktree`)
+    if (expectedSource[name] === null) {
+      if (input.source !== undefined) throw new CliFilesFailure('source-mismatch', `${observation.id} whole review retained a source scope`)
+    } else equal(input.source, expectedSource[name], `${observation.id} ${name} stored source scope`)
+    equal(scope.cardPaths, expectedPaths[name], `${observation.id} ${name} evidence card paths`)
+    const dom = array(scope.dom, `${observation.id} ${name} final DOM`).map((entry) => record(entry, `${observation.id} ${name} DOM`) as unknown as CliFileDomWindow)
+    if (dom.length !== 2) throw new CliFilesFailure('missing-observation', `${observation.id} ${name} final DOM omits a window`)
+    equal(dom[1], baselineOtherDom, `${observation.id} ${name} final cB DOM unchanged`)
+    assertOtherWindow(scope.finalOther, `${observation.id} ${name} final cB readback`)
+    const targetDom = dom[0]!
+    equal(targetDom.workspaceId, worktreeId, `${observation.id} ${name} final DOM worktree`)
+    equal(targetDom.reviewTabMounted, true, `${observation.id} ${name} Review mounted`)
+    const width = targetDom.reviewWidth
+    if (typeof width !== 'number' || width < 900) throw new CliFilesFailure('review-layout', `${observation.id} ${name} Review is not wide enough to show both diff sides`)
+    equal(scope.chip, targetDom.reviewScopeChip ?? null, `${observation.id} ${name} scope chip readback`)
+    const expectedChip = name === 'staged' ? 'Staged changes' : name === 'unstaged' ? 'Unstaged changes' : null
+    equal(targetDom.reviewScopeChip ?? null, expectedChip, `${observation.id} ${name} scope chip`)
+    const cards = targetDom.reviewCards
+    const cardPaths = cards.map((card) => card.path).sort()
+    equal(cardPaths, expectedPaths[name], `${observation.id} ${name} loaded DOM card set`)
+    for (const card of cards) {
+      equal(card.expanded, true, `${observation.id} ${name} ${card.path} expanded`)
+      equal(card.loaded, true, `${observation.id} ${name} ${card.path} loaded`)
+    }
+    const readmeCardValue = cards.find((card) => card.path === 'README.md')
+    if (!readmeCardValue) throw new CliFilesFailure('review-reveal-mismatch', `${observation.id} ${name} omitted README.md`)
+    const readmeCard = record(readmeCardValue, `${observation.id} ${name} README card`)
+    equal(readmeCard.mergeEditorCount, 2, `${observation.id} ${name} README side-by-side editor count`)
+    const originalLines = array(readmeCard.originalLines, `${observation.id} ${name} README original side`).map(renderedLine)
+    const modifiedLines = array(readmeCard.modifiedLines, `${observation.id} ${name} README modified side`).map(renderedLine)
+    const expectedOriginal = name === 'unstaged' ? index : base
+    const expectedModified = name === 'staged' ? index : working
+    equal(originalLines, expectedOriginal.split('\n'), `${observation.id} ${name} README original bytes`)
+    equal(modifiedLines, expectedModified.split('\n'), `${observation.id} ${name} README modified bytes`)
+    if (name === 'staged') {
+      equal(readmeCard.editable, false, `${observation.id} staged README readonly`)
+      const docsCard = cards.find((card) => card.path === SENTINEL_PATH)
+      if (!docsCard) throw new CliFilesFailure('review-reveal-mismatch', `${observation.id} staged scope omitted docs`)
+      equal(docsCard.editable, false, `${observation.id} staged docs readonly`)
+      equal(docsCard.hasReviewMark, false, `${observation.id} staged docs has no review mark`)
+    }
+    if (name === 'unstaged') {
+      const appCard = cards.find((card) => card.path === A_TARGET)
+      if (!appCard) throw new CliFilesFailure('review-reveal-mismatch', `${observation.id} unstaged scope omitted app source`)
+      const appModified = array(record(appCard, `${observation.id} app card`).modifiedLines, `${observation.id} app modified side`)
+        .map(renderedLine)
+      equal(appModified, B_CONTENT.split('\n'), `${observation.id} app source bytes`)
+      equal(appCard.editable, true, `${observation.id} unstaged app source editable`)
+    }
+    const supporting = array(scope.supporting, `${observation.id} ${name} support receipts`)
+    const supportCommands = new Set<string>()
+    let foundReadmeReveal = false
+    for (const [supportIndex, supportValue] of supporting.entries()) {
+      const support = record(supportValue, `${observation.id} ${name} support ${supportIndex}`)
+      const supportReceiptId = string(support.receiptId, `${observation.id} ${name} support receipt`)
+      assertReceiptLinked(observation, supportReceiptId, `${observation.id} ${name} support`)
+      const supportReceipt = byId.get(supportReceiptId)!
+      if (supportReceipt.exitCode !== 0 || supportReceipt.command !== 'api call' || supportReceipt.argv[2] !== 'ui.window.command.run' ||
+          Number(argvFlag(supportReceipt.argv, '--conn-id', `${observation.id} ${name} support`)) !== after.public[0]!.connId) {
+        throw new CliFilesFailure('invalid-receipt', `${observation.id} ${name} support did not use the exact-window route`)
+      }
+      const supportCommand = argvFlag(supportReceipt.argv, '--id', `${observation.id} ${name} support`)
+      const supportArgs = JSON.parse(argvFlag(supportReceipt.argv, '--args', `${observation.id} ${name} support`)) as JsonObject
+      supportCommands.add(supportCommand)
+      if (supportCommand === 'command:quirky.git/collapse-all') {
+        equal(supportArgs, { collapsed: false }, `${observation.id} ${name} expand support`)
+        assertOtherWindow(support.otherAfter, `${observation.id} ${name} after expand`)
+      } else if (supportCommand === 'command:quirky.git/load-diff') {
+        if (!['README.md', SENTINEL_PATH, A_TARGET].includes(String(supportArgs.path))) {
+          throw new CliFilesFailure('invalid-receipt', `${observation.id} ${name} loaded an unrelated diff path`)
+        }
+        assertOtherWindow(support.otherAfter, `${observation.id} ${name} after load ${String(supportArgs.path)}`)
+      } else if (supportCommand === 'command:quirky.git/open-diff') {
+        equal(supportArgs, {
+          worktree: worktreeId,
+          path: 'README.md',
+          ...(expectedSource[name] === null ? {} : { source: expectedSource[name] })
+        }, `${observation.id} ${name} README reveal args`)
+        const result = record(successfulReceipt(byId, supportReceiptId).result, `${observation.id} ${name} README reveal result`)
+        equal(result.worktree, worktreeId, `${observation.id} ${name} README reveal worktree`)
+        equal(result.tabId, tabId, `${observation.id} ${name} README reveal tab`)
+        equal(result.created, false, `${observation.id} ${name} README reveal reused tab`)
+        equal(result.focused, true, `${observation.id} ${name} README reveal focused`)
+        equal(result.source, expectedSource[name], `${observation.id} ${name} README reveal source`)
+        equal(result.reveal, 'README.md', `${observation.id} ${name} README reveal path`)
+        const before = record(support.before, `${observation.id} ${name} README reveal before`) as unknown as CapturedSample
+        const after = record(support.after, `${observation.id} ${name} README reveal after`) as unknown as CapturedSample
+        assertSample(before.snapshots, before.public, before.dom, byId, observation, `${observation.id} ${name} README reveal before`)
+        assertSample(after.snapshots, after.public, after.dom, byId, observation, `${observation.id} ${name} README reveal after`)
+        assertFirstWindowLayoutReceipt(observation, byId, supportReceiptId, after.public[0]!.connId, after.public[0]!, `${observation.id} ${name} README reveal first read`)
+        const supportHistory = assertNavigationHistoryTransition(
+          observation, byId, support.historyBefore, support.historyAfter, after.public[0]!.connId, worktreeId,
+          `${observation.id} ${name} README reveal`
+        )
+        equal(supportHistory.before.shownWorktree, worktreeId, `${observation.id} ${name} README reveal source window`)
+        equal(after.dom[1], before.dom[1], `${observation.id} ${name} README reveal cB DOM unchanged`)
+        equal(after.public[1]!.windowState.layout, before.public[1]!.windowState.layout, `${observation.id} ${name} README reveal cB layout unchanged`)
+        const otherBefore = readNavigationHistory(support.otherHistoryBefore, byId, observation, `${observation.id} ${name} README cB history before`)
+        const otherAfter = readNavigationHistory(support.otherHistoryAfter, byId, observation, `${observation.id} ${name} README cB history after`)
+        equal(otherAfter.result, otherBefore.result, `${observation.id} ${name} README cB history unchanged`)
+        foundReadmeReveal = true
+      } else {
+        throw new CliFilesFailure('invalid-receipt', `${observation.id} ${name} has an unknown support command`)
+      }
+    }
+    if (!supportCommands.has('command:quirky.git/collapse-all') ||
+        !supportCommands.has('command:quirky.git/load-diff') || !foundReadmeReveal) {
+      throw new CliFilesFailure('missing-receipt', `${observation.id} ${name} lacks exact-window expand/load/reveal support`)
+    }
+    if (name !== 'staged' && !cards.some((card) => card.path === A_TARGET && card.loaded && card.expanded)) {
+      throw new CliFilesFailure('review-reveal-mismatch', `${observation.id} ${name} source card was not loaded`)
+    }
+  }
+
+  const refusal = record(source.refusal, `${observation.id} staged-source refusal`)
+  const refusalReceiptId = string(refusal.receiptId, `${observation.id} refusal receipt`)
+  const refusalMessage = `${A_TARGET} has no staged changes.`
+  assertCliRefusal(observation, byId, refusalReceiptId, {
+    argv: ['api', 'call', 'ui.window.command.run', '--conn-id', String(targetConnId), '--id', 'command:quirky.git/open-diff',
+      '--args', JSON.stringify({ worktree: worktreeId, path: A_TARGET, source: 'staged' })],
+    exitCode: 1,
+    code: 'conflict',
+    message: refusalMessage
+  }, `${observation.id} source refusal`)
+  const refusalBefore = record(refusal.before, `${observation.id} refusal before`) as unknown as CapturedSample
+  const refusalAfter = record(refusal.after, `${observation.id} refusal after`) as unknown as CapturedSample
+  assertSample(refusalBefore.snapshots, refusalBefore.public, refusalBefore.dom, byId, observation, `${observation.id} refusal before`)
+  assertSample(refusalAfter.snapshots, refusalAfter.public, refusalAfter.dom, byId, observation, `${observation.id} refusal after`)
+  const beforeTab = tabById(refusalBefore.public[0]!.workspace, tabId)
+  const afterTab = tabById(refusalAfter.public[0]!.workspace, tabId)
+  if (!beforeTab || !afterTab) throw new CliFilesFailure('review-tab-mismatch', `${observation.id} refusal lost Review tab`)
+  equal(afterTab.input, beforeTab.input, `${observation.id} refused scope preserves T2 input`)
+  equal(refusal.afterInput, afterTab.input, `${observation.id} refusal input evidence`)
+  equal(refusal.beforeInput, beforeTab.input, `${observation.id} refusal prior input evidence`)
+  equal(selectedTabId(refusalAfter.public[0]!.workspace), tabId, `${observation.id} refusal active tab`)
+  equal(refusalAfter.public[0]!.windowState.layout, refusalBefore.public[0]!.windowState.layout, `${observation.id} refusal cA layout unchanged`)
+  equal(refusalAfter.public[1]!.windowState.layout, refusalBefore.public[1]!.windowState.layout, `${observation.id} refusal cB layout unchanged`)
+  equal(refusalAfter.dom[1], refusalBefore.dom[1], `${observation.id} refusal cB DOM unchanged`)
+  const otherHistoryBefore = readNavigationHistory(refusal.otherHistoryBefore, byId, observation, `${observation.id} refusal cB history before`)
+  const otherHistoryAfter = readNavigationHistory(refusal.otherHistoryAfter, byId, observation, `${observation.id} refusal cB history after`)
+  equal(otherHistoryAfter.result, otherHistoryBefore.result, `${observation.id} refusal cB history unchanged`)
+}
+function assertChangedModesObservation(observation: CliFileObservation, byId: Map<string, CliReceipt>): void {
+  const request = record(observation.evidence.request, `${observation.id} request`)
+  assertSample(observation.before, observation.evidence.public.before, observation.evidence.dom.before, byId, observation, `${observation.id} top-level before`)
+  assertSample(observation.after, observation.evidence.public.after, observation.evidence.dom.after, byId, observation, `${observation.id} top-level after`)
+  const modes = record(observation.evidence.changedModes, `${observation.id} changed modes evidence`)
+  const worktreeId = string(modes.worktreeId, `${observation.id} worktree`)
+  const editorTabId = string(modes.editorTabId, `${observation.id} reused editor tab`)
+  const reviewTabId = string(modes.reviewTabId, `${observation.id} Review tab`)
+  const sentinelTabId = string(modes.sentinelTabId, `${observation.id} sentinel tab`)
+  const targetConnId = integer(request.targetConnectionId, `${observation.id} cA connection`)
+  equal(request.worktreeId, worktreeId, `${observation.id} request worktree`)
+  equal(observation.before.length, 2, `${observation.id} two live windows`)
+  const status = record(modes.status, `${observation.id} public changed-file status`)
+  const statusReceiptId = string(status.receiptId, `${observation.id} status receipt`)
+  assertReceiptLinked(observation, statusReceiptId, `${observation.id} changed-file status`)
+  const statusReceipt = byId.get(statusReceiptId)!
+  if (statusReceipt.command !== 'api call' || statusReceipt.argv[2] !== 'quirky.git/status' ||
+      argvFlag(statusReceipt.argv, '--worktree', `${observation.id} Git status`) !== worktreeId) {
+    throw new CliFilesFailure('invalid-receipt', `${observation.id} changed-file status is not a public worktree read`)
+  }
+  const statusResult = successfulReceipt(byId, statusReceiptId)
+  const entries = array(statusResult.entries, `${observation.id} status entries`).map((entry) => record(entry, `${observation.id} status entry`))
+  const byPath = new Map<string, JsonObject[]>()
+  for (const entry of entries) {
+    const path = string(entry.path, `${observation.id} status path`)
+    const values = byPath.get(path) ?? []
+    values.push(entry)
+    byPath.set(path, values)
+  }
+  const hasDeleted = (path: string): boolean => byPath.get(path)?.some((entry) =>
+    (entry.area === 'unstaged' && entry.status === 'deleted') ||
+    (entry.area === 'staged' && entry.status === 'deleted' && !byPath.get(path)!.some((other) =>
+      other.area === 'unstaged' || other.area === 'untracked'))
+  ) ?? false
+  const expectedEditPaths = [...byPath.keys()].filter((path) => !hasDeleted(path)).sort()
+  const expectedUnstagedPaths = [...byPath.entries()]
+    .filter(([path, rows]) => rows.some((entry) => entry.area === 'unstaged' || entry.area === 'untracked') && !hasDeleted(path))
+    .map(([path]) => path).sort()
+  equal(expectedEditPaths, ['docs/review-notes.md', 'src/app.ts'], `${observation.id} edit mode file selection`)
+  equal(expectedUnstagedPaths, ['src/app.ts'], `${observation.id} unstaged edit file selection`)
+  equal(array(modes.expectedEditPaths, `${observation.id} expected edit paths`), expectedEditPaths, `${observation.id} reported edit paths`)
+  equal(array(modes.expectedUnstagedPaths, `${observation.id} expected unstaged paths`), expectedUnstagedPaths, `${observation.id} reported unstaged paths`)
+  if (statusResult.capped === true) throw new CliFilesFailure('fixture-status', `${observation.id} status is capped`)
+
+  const applySample = (value: unknown, label: string): CapturedSample => {
+    const sample = record(value, label) as unknown as CapturedSample
+    const distinct = sample.snapshots[0]!.workspaceId !== sample.snapshots[1]!.workspaceId
+    assertSample(sample.snapshots, sample.public, sample.dom, byId, observation, label, distinct)
+    return sample
+  }
+  const editorTabForPath = (sample: CapturedSample, path: string): { bufferId: string; tabId: string } => {
+    const editor = sample.public.find((entry) => shownWorktree(entry) === worktreeId)?.editor
+    if (!editor) throw new CliFilesFailure('missing-buffer', `${observation.id} has no public editor state for B`)
+    const buffers = array(editor.buffers, `${observation.id} editor buffers`).map((entry) => record(entry, `${observation.id} editor buffer`))
+    const rootBuffer = buffers.find((buffer) => buffer.worktreeId === worktreeId)
+    if (!rootBuffer) throw new CliFilesFailure('missing-buffer', `${observation.id} B root buffer is missing`)
+    const absolutePath = expectedAbsolute(string(rootBuffer.root, `${observation.id} B root`), path)
+    const matchingBuffers = buffers.filter((buffer) => buffer.worktreeId === worktreeId && buffer.path === absolutePath)
+    if (matchingBuffers.length !== 1) throw new CliFilesFailure('missing-buffer', `${observation.id} expected one B buffer for ${path}`)
+    const bufferId = string(matchingBuffers[0]!.id, `${observation.id} ${path} buffer ID`)
+    const tabs = array(editor.tabs, `${observation.id} editor tabs`).map((entry) => record(entry, `${observation.id} editor tab`))
+      .filter((entry) => entry.bufferId === bufferId)
+    if (tabs.length !== 1) throw new CliFilesFailure('duplicate-tab', `${observation.id} expected exactly one editor tab for ${path}`)
+    return { bufferId, tabId: string(tabs[0]!.tabId, `${observation.id} ${path} tab ID`) }
+  }
+  const initialBWindow = observation.evidence.public.before.find((window) => window.connId !== targetConnId)!
+  const bEditor = initialBWindow.editor
+  const appBuffer = array(bEditor.buffers, `${observation.id} initial B buffers`)
+    .map((entry) => record(entry, `${observation.id} initial B buffer`))
+    .find((buffer) => buffer.worktreeId === worktreeId && typeof buffer.path === 'string' && buffer.path.endsWith(`/${A_TARGET}`))
+  if (!appBuffer) throw new CliFilesFailure('missing-buffer', `${observation.id} did not retain the scenario-7 app buffer`)
+  equal(string(appBuffer.tabId, `${observation.id} scenario-7 tab`), editorTabId, `${observation.id} scenario-7 editor tab identity`)
+
+  const expectedOpened = [
+    { path: 'docs/review-notes.md', tabId: sentinelTabId, bufferId: string(
+      array(bEditor.buffers, `${observation.id} baseline editor buffers`)
+        .map((entry) => record(entry, `${observation.id} baseline buffer`))
+        .find((buffer) => buffer.worktreeId === worktreeId && typeof buffer.path === 'string' && buffer.path.endsWith('/docs/review-notes.md'))?.id,
+      `${observation.id} sentinel document buffer`
+    ) },
+    { path: 'src/app.ts', tabId: editorTabId, bufferId: string(appBuffer.id, `${observation.id} app buffer ID`) }
+  ]
+  const expectedSkipped = [{ path: 'README.md', reason: 'deleted' }]
+  const checkOpenedState = (sample: CapturedSample, label: string) => {
+    const state = sample.public.find((window) => shownWorktree(window) === worktreeId)
+    if (!state) throw new CliFilesFailure('worktree-mismatch', `${label} has no B workspace readback`)
+    for (const expected of expectedOpened) {
+      const result = editorTabForPath(sample, expected.path)
+      equal(result.tabId, expected.tabId, `${label} ${expected.path} tab identity`)
+      equal(result.bufferId, expected.bufferId, `${label} ${expected.path} buffer identity`)
+      const viewTabs = tabsInWorkspace(state.workspace).filter((tab) => tab.viewId === EDITOR_VIEW_ID && tab.key === expected.bufferId)
+      equal(viewTabs.length, 1, `${label} exactly one document view for ${expected.path}`)
+      equal(viewTabs[0]!.id, expected.tabId, `${label} document view tab for ${expected.path}`)
+    }
+  }
+  const checkChangesResult = (
+    stepValue: unknown,
+    label: string,
+    mode: 'edit' | 'both',
+    expectFocus: boolean,
+    extraArgs: Record<string, unknown>,
+    receiptId?: string
+  ) => {
+    const step = record(stepValue, label)
+    const before = applySample(step.before, `${label} before`)
+    const after = applySample(step.after, `${label} after`)
+    const id = receiptId ?? string(step.receiptId, `${label} receipt ID`)
+    const receipt = byId.get(id)!
+    assertReceiptLinked(observation, id, `${label} command`)
+    if (receipt.command !== 'api call' || receipt.argv[2] !== 'ui.window.command.run' || receipt.exitCode !== 0 ||
+        Number(argvFlag(receipt.argv, '--conn-id', label)) !== targetConnId) {
+      throw new CliFilesFailure('invalid-receipt', `${label} did not use the exact target window`)
+    }
+    equal(argvFlag(receipt.argv, '--id', label), 'command:quirky.git/open-changes', `${label} command ID`)
+    const args = JSON.parse(argvFlag(receipt.argv, '--args', label)) as JsonObject
+    equal(args, { worktree: worktreeId, mode, ...extraArgs }, `${label} exact args`)
+    const result = record(successfulReceipt(byId, id).result, `${label} structured result`)
+    equal(result.worktree, worktreeId, `${label} worktree`)
+    equal(result.mode, mode, `${label} mode`)
+    equal(result.source, extraArgs.area === 'unstaged' ? 'unstaged' : null, `${label} source`)
+    equal(result.focused, expectFocus, `${label} focus result`)
+    equal(result.statusComplete, true, `${label} status completeness`)
+    equal(array(result.opened, `${label} opened`), extraArgs.area === 'unstaged'
+      ? expectedOpened.filter((entry) => expectedUnstagedPaths.includes(entry.path)) : expectedOpened, `${label} exact opened entries`)
+    equal(array(result.skipped, `${label} skipped`), expectedSkipped, `${label} exact skipped entries`)
+    if (mode === 'edit') {
+      equal(result.review, null, `${label} edit mode has no Review`)
+    } else {
+      const review = record(result.review, `${label} Review result`)
+      equal(review.worktree, worktreeId, `${label} Review worktree`)
+      equal(review.tabId, reviewTabId, `${label} Review tab`)
+      equal(review.created, false, `${label} Review reused tab`)
+      equal(review.focused, true, `${label} Review focused`)
+      equal(review.source, null, `${label} Review source`)
+    }
+    checkOpenedState(after, label)
+    const beforeOther = before.public.find((window) => window.connId !== targetConnId)!
+    const afterOther = after.public.find((window) => window.connId !== targetConnId)!
+    equal(afterOther.windowState.layout, beforeOther.windowState.layout, `${label} cB layout unchanged`)
+    equal(after.dom[1], before.dom[1], `${label} cB DOM unchanged`)
+    const historyBefore = record(step.historyBefore, `${label} history before`)
+    const historyAfter = record(step.historyAfter, `${label} history after`)
+    if (expectFocus) {
+      assertFirstWindowLayoutReceipt(observation, byId, id, targetConnId, after.public[0]!, `${label} first public layout`)
+      const transition = assertNavigationHistoryTransition(
+        observation, byId, historyBefore.target, historyAfter.target, targetConnId, worktreeId, label
+      )
+      equal(transition.before.shownWorktree, shownWorktree(before.public[0]!), `${label} history baseline`)
+    } else {
+      const targetBefore = readNavigationHistory(historyBefore.target, byId, observation, `${label} cA history before`)
+      const targetAfter = readNavigationHistory(historyAfter.target, byId, observation, `${label} cA history after`)
+      equal(targetAfter.result, targetBefore.result, `${label} background cA history unchanged`)
+      equal(after.public[0]!.windowState.layout, before.public[0]!.windowState.layout, `${label} background cA layout unchanged`)
+      equal(after.dom[0], before.dom[0], `${label} background cA DOM unchanged`)
+    }
+    const otherBefore = readNavigationHistory(historyBefore.other, byId, observation, `${label} cB history before`)
+    const otherAfter = readNavigationHistory(historyAfter.other, byId, observation, `${label} cB history after`)
+    equal(otherAfter.result, otherBefore.result, `${label} cB history unchanged`)
+    return { before, after }
+  }
+
+  const edit = checkChangesResult(modes.edit, `${observation.id} edit`, 'edit', false, { focus: false })
+  const editAfterB = edit.after.public.find((window) => shownWorktree(window) === worktreeId)!
+  equal(selectedTabId(editAfterB.workspace), sentinelTabId, `${observation.id} background edit leaves sentinel active`)
+  equal(edit.after.dom.find((dom) => dom.connId === editAfterB.connId)!.path, expectedAbsolute(
+    string(appBuffer.root, `${observation.id} app root`), 'docs/review-notes.md'
+  ), `${observation.id} background edit keeps the sentinel document visible`)
+  const both = checkChangesResult(modes.both, `${observation.id} both`, 'both', true, {})
+  equal(selectedTabId(both.after.public[0]!.workspace), reviewTabId, `${observation.id} both selects Review`)
+  const bothReviewTabs = reviewTabFor(both.after.public[0]!.workspace, reviewKey(worktreeId))
+  equal(bothReviewTabs.map((tab) => tab.id), [reviewTabId], `${observation.id} both reuses the combined Review tab`)
+  const unstaged = record(modes.unstagedEdit, `${observation.id} unstaged edit`)
+  const unstagedStep = checkChangesResult(unstaged, `${observation.id} unstaged edit`, 'edit', true, { area: 'unstaged' })
+  const result = record(
+    successfulReceipt(byId, string(unstaged.receiptId, `${observation.id} unstaged command receipt`)).result,
+    `${observation.id} unstaged structured result`
+  )
+  equal(result.mode, 'edit', `${observation.id} unstaged edit mode`)
+  equal(result.source, 'unstaged', `${observation.id} unstaged scope`)
+  equal(array(result.opened, `${observation.id} unstaged opened`), [
+    { path: A_TARGET, tabId: editorTabId, bufferId: string(appBuffer.id, `${observation.id} app buffer ID`) }
+  ], `${observation.id} unstaged exact opened path`)
+  equal(array(result.skipped, `${observation.id} unstaged skipped`), expectedSkipped, `${observation.id} unstaged deleted path`)
+  const firstAbsolutePath = string(unstaged.firstOpenedAbsolutePath, `${observation.id} first opened absolute path`)
+  equal(firstAbsolutePath, expectedAbsolute(string(appBuffer.root, `${observation.id} app root`), A_TARGET), `${observation.id} authorized focused editor path`)
+  equal(unstagedStep.after.dom[0]!.path, firstAbsolutePath, `${observation.id} focused app path`)
+  equal(unstagedStep.after.dom[0]!.renderedTabId, editorTabId, `${observation.id} focused app tab`)
+  equal(selectedTabId(unstagedStep.after.public[0]!.workspace), editorTabId, `${observation.id} app active tab`)
+  const readmeStatus = entries.filter((entry) => entry.path === 'README.md')
+  equal(readmeStatus.map((entry) => `${entry.area}:${entry.status}`).sort(),
+    ['staged:modified', 'unstaged:deleted'], `${observation.id} partial README deletion`)
+  equal(entries.filter((entry) => entry.path === 'docs/review-notes.md').map((entry) => `${entry.area}:${entry.status}`),
+    ['staged:modified'], `${observation.id} docs edit status`)
+  const appStatus = entries.filter((entry) => entry.path === A_TARGET)
+  if (appStatus.length !== 1 || (appStatus[0]!.area !== 'unstaged' && appStatus[0]!.area !== 'untracked') ||
+      appStatus[0]!.status === 'deleted') {
+    throw new CliFilesFailure('fixture-status', `${observation.id} app source is not openable`)
+  }
+}
 function reviewKey(worktreeId: string): string {
   return `git-diff:${JSON.stringify([worktreeId, 'review'])}`
 }
@@ -931,13 +2190,62 @@ function assertReviewSample(observation: CliFileObservation, byId: Map<string, C
     receipt.exitCode === 0 && receipt.argv.includes('--id') && receipt.argv[receipt.argv.indexOf('--id') + 1] === commandId)
   const expectedCommands = observation.id === 'files-review-changed' ? 2 : 1
   if (exactCommands.length !== expectedCommands) throw new CliFilesFailure('missing-receipt', `${observation.id} has an incorrect number of exact-window command receipts`)
-  for (const exactCommand of exactCommands) {
+  const historySteps = array(review.history, `${observation.id} focused command histories`)
+  if (historySteps.length !== expectedCommands) {
+    throw new CliFilesFailure('missing-receipt', `${observation.id} is missing focused command history evidence`)
+  }
+  for (const [index, exactCommand] of exactCommands.entries()) {
     assertReceiptLinked(observation, exactCommand.id, `${observation.id} exact command`)
     equal(Number(argvFlag(exactCommand.argv, '--conn-id', `${observation.id} exact command`)), targetConnId, `${observation.id} exact target connection`)
     const args = JSON.parse(argvFlag(exactCommand.argv, '--args', `${observation.id} exact command`)) as JsonObject
     equal(args.worktree, worktreeId, `${observation.id} exact command worktree`)
     if (path !== null) equal(args.path, path, `${observation.id} exact command path`)
     else if (args.path !== undefined) throw new CliFilesFailure('invalid-receipt', 'open-changes unexpectedly included a file path')
+
+    const envelope = successfulReceipt(byId, exactCommand.id)
+    const reply = record(envelope.result, `${observation.id} structured command result`)
+    if (commandId === 'command:quirky.git/open-diff') {
+      equal(reply.worktree, worktreeId, `${observation.id} open-diff result worktree`)
+      equal(reply.tabId, tabId, `${observation.id} open-diff result tab`)
+      equal(reply.created, observation.id === 'files-review-diff', `${observation.id} open-diff result creation`)
+      equal(reply.focused, true, `${observation.id} open-diff result focus`)
+      equal(reply.source, null, `${observation.id} open-diff result source`)
+      equal(reply.reveal, path, `${observation.id} open-diff result reveal`)
+      equal(reply.statusComplete, null, `${observation.id} open-diff status completeness`)
+    } else {
+      equal(reply.worktree, worktreeId, `${observation.id} open-changes result worktree`)
+      equal(reply.mode, 'diff', `${observation.id} open-changes result mode`)
+      equal(reply.source, null, `${observation.id} open-changes result source`)
+      equal(reply.focused, true, `${observation.id} open-changes result focus`)
+      equal(reply.statusComplete, true, `${observation.id} open-changes status completeness`)
+      equal(array(reply.opened, `${observation.id} opened files`), [], `${observation.id} open-changes editor results`)
+      equal(array(reply.skipped, `${observation.id} skipped files`), [], `${observation.id} open-changes skipped results`)
+      const result = record(reply.review, `${observation.id} nested Review result`)
+      equal(result.worktree, worktreeId, `${observation.id} nested Review worktree`)
+      equal(result.tabId, tabId, `${observation.id} nested Review tab`)
+      equal(result.created, index === 0, `${observation.id} nested Review creation`)
+      equal(result.focused, true, `${observation.id} nested Review focus`)
+      equal(result.source, null, `${observation.id} nested Review source`)
+      equal(result.reveal, null, `${observation.id} nested Review reveal`)
+      equal(result.statusComplete, null, `${observation.id} nested Review status completeness`)
+    }
+
+    const historyStep = record(historySteps[index], `${observation.id} command history ${index}`)
+    const transition = assertNavigationHistoryTransition(
+      observation,
+      byId,
+      historyStep.before,
+      historyStep.after,
+      targetConnId,
+      worktreeId,
+      `${observation.id} focused command ${index}`
+    )
+    const beforeWindow = index === 0
+      ? beforePublic[targetIndex]!
+      : record(record(review.repeatBefore, `${observation.id} repeat baseline`).public, `${observation.id} repeat public baseline`) as unknown as CliFilePublicWindow
+    const layout = record(record(beforeWindow.windowState, `${observation.id} history before window`).layout, `${observation.id} history before layout`)
+    const shownBefore = string(layout.worktree, `${observation.id} shown-before worktree`)
+    equal(transition.before.shownWorktree, shownBefore, `${observation.id} history and window baseline correlation`)
   }
 
   if (observation.id === 'files-review-changed') {
@@ -1043,7 +2351,13 @@ export function assertCliFileObservation(observation: CliFileObservation, receip
     throw new CliFilesFailure('invalid-observation', `${observation.id} has an invalid measured duration`)
   }
   const byId = assertObservationReceiptSet(observation, receipts)
-  if (observation.id.startsWith('files-editor-')) assertEditorObservation(observation, byId)
+  if (observation.id === 'files-editor-window-focus') assertWindowFocusObservation(observation, byId)
+  else if (observation.id === 'files-window-refusals') assertWindowRefusalsObservation(observation, byId)
+  else if (observation.id === 'files-review-focus-window') assertReviewFocusWindowObservation(observation, byId)
+  else if (observation.id === 'files-review-background') assertReviewBackgroundObservation(observation, byId)
+  else if (observation.id === 'files-review-source') assertReviewSourceObservation(observation, byId)
+  else if (observation.id === 'files-changed-modes') assertChangedModesObservation(observation, byId)
+  else if (observation.id.startsWith('files-editor-')) assertEditorObservation(observation, byId)
   else if (observation.id.startsWith('files-review-')) assertReviewSample(observation, byId)
   else assertRoutingObservation(observation, byId)
 }
@@ -1089,9 +2403,10 @@ export function reduceCliFilesRows(
   }
   const flattened = Object.values(bindings).flat()
   const expected = [...new Set(flattened)]
-  if (expected.length !== EXPECTED_OBSERVATIONS.length ||
+  if (expected.length !== EXPECTED_OBSERVATION_COUNT ||
+      expected.length !== EXPECTED_OBSERVATIONS.length ||
       expected.some((id) => !EXPECTED_OBSERVATIONS.includes(id as (typeof EXPECTED_OBSERVATIONS)[number])) ||
-      flattened.length !== 11) {
+      flattened.length !== EXPECTED_BINDING_COUNT) {
     throw new CliFilesFailure('invalid-table', 'compiled observation registry has an unknown or missing ID')
   }
   const byObservation = new Map<string, CliFileObservation>()
@@ -1165,6 +2480,23 @@ type BrowserPage = CliFilesWorld['pages'][number]
 type WorldWindowRecord = CliFilesWorld['records'][number]
 type CliRawResult = { stdout: string; stderr: string; exitCode: number; stdoutBytes: number; elapsedMs: number }
 type CapturedSample = { public: CliFilePublicWindow[]; dom: CliFileDomWindow[]; snapshots: CliFileSnapshot[] }
+type CliFilesHistories = { target: CliFileHistoryRead; other: CliFileHistoryRead }
+type CliFilesTransition = {
+  receiptId: string
+  result: unknown
+  before: CapturedSample
+  after: CapturedSample
+  historyBefore: CliFilesHistories
+  historyAfter: CliFilesHistories
+}
+type TemporaryRenderer = {
+  context: BrowserContext
+  page: BrowserPage | null
+  connId: number
+  contextClosed: boolean
+  pageClosed: boolean
+  connectionGone: boolean
+}
 type ObservationBuilder = {
   id: string
   startedAt: number
@@ -1213,15 +2545,33 @@ function capturePageDom(): CliFileDomWindow {
       }
     }
   }
-  const reviewTabMounted = hostedVisible && hosted!.querySelector('[data-review-tab]') !== null
-  const reviewCards = hostedVisible ? [...hosted!.querySelectorAll<HTMLElement>('.git-review__card[data-path]')].map((card) => {
+  const review = hostedVisible ? hosted!.querySelector<HTMLElement>('[data-review-tab]') : null
+  const reviewScroll = review?.querySelector<HTMLElement>('[data-review-scroll]') ?? null
+  const reviewTabMounted = review !== null
+  const reviewScopeChip = review?.querySelector<HTMLElement>('.ui-scope-chip__label')?.textContent?.trim() ?? null
+  const reviewWidth = reviewScroll?.getBoundingClientRect().width ?? 0
+  const reviewScrollTop = reviewScroll?.scrollTop ?? 0
+  const reviewCards = review ? [...review.querySelectorAll<HTMLElement>('.git-review__card[data-path]')].map((card) => {
     const body = card.querySelector<HTMLElement>('[data-review-body]')
     const pane = card.querySelector<HTMLElement>('.git-review__pane')
     const text = pane?.innerText ?? ''
+    const mergeEditors = pane ? [...pane.querySelectorAll<HTMLElement>('.cm-mergeViewEditor')] : []
+    const originalLines = mergeEditors[0]
+      ? [...mergeEditors[0].querySelectorAll<HTMLElement>('.cm-line')].map((line) => line.textContent ?? '')
+      : []
+    const modifiedLines = mergeEditors[1]
+      ? [...mergeEditors[1].querySelectorAll<HTMLElement>('.cm-line')].map((line) => line.textContent ?? '')
+      : []
     return {
       path: card.dataset.path ?? '',
+      active: card.hasAttribute('data-active'),
       expanded: body !== null && !body.hidden,
       loaded: pane !== null && !pane.hidden && text.trim().length > 0,
+      editable: card.querySelector('[contenteditable="true"]') !== null,
+      hasReviewMark: card.querySelector('.git-review__review button') !== null,
+      mergeEditorCount: mergeEditors.length,
+      originalLines,
+      modifiedLines,
       text
     }
   }) : []
@@ -1242,6 +2592,9 @@ function capturePageDom(): CliFileDomWindow {
     activeElementHostedTabId: activeHosted?.dataset.hostedView ?? null,
     activeElementIsSource: activeContent !== null,
     reviewTabMounted,
+    reviewScopeChip,
+    reviewWidth,
+    reviewScrollTop,
     caret,
     lines,
     reviewCards
@@ -1259,6 +2612,11 @@ export class CliFilesRunner {
   readonly editorBuffers = new Map<string, string>()
   readonly reviewTabs = new Map<string, { worktreeId: string; tabId: string; connId: number }>()
   readonly observations = new Map<string, CliFileObservation>()
+  readonly temporaryPages: TemporaryRenderer[] = []
+  fileSentinels: { a: SentinelInfo; b: SentinelInfo } | undefined
+  windowEditorTabId = ''
+  windowEditorBufferId = ''
+  sourceReviewTabId = ''
   world: CliFilesWorld | undefined
   windows: Array<{ page: BrowserPage; record: WorldWindowRecord; worktree: FixtureWorktree; connId: number }>= []
   home = ''
@@ -1403,9 +2761,10 @@ export class CliFilesRunner {
     return { result: value }
   }
 
-  async execute(argv: string[], options: { id: string; cwd?: string; mutation?: boolean; cleanup?: boolean } ): Promise<{ result?: unknown; refusal?: { code: string; message: string; data?: unknown }; receipt: CliReceipt }> {
+  async execute(argv: string[], options: { id: string; cwd?: string; mutation?: boolean; cleanup?: boolean; signal?: AbortSignal } ): Promise<{ result?: unknown; refusal?: { code: string; message: string; data?: unknown }; receipt: CliReceipt }> {
     const cleanup = options.cleanup === true
-    const signal = cleanup ? this.cleanupController.signal : this.workController.signal
+    const baseSignal = cleanup ? this.cleanupController.signal : this.workController.signal
+    const signal = options.signal ? AbortSignal.any([baseSignal, options.signal]) : baseSignal
     if (!cleanup) this.failIfStopped()
     const deadline = cleanup ? Math.min(this.startedAt + WORK_LIMIT_MS + TEARDOWN_LIMIT_MS, Date.now() + TEARDOWN_LIMIT_MS) : this.workDeadline
     const remaining = deadline - Date.now()
@@ -1452,25 +2811,37 @@ export class CliFilesRunner {
     return { result: parsed.result, receipt }
   }
 
-  async requireSuccess(id: string, argv: string[], options: { cwd?: string; mutation?: boolean; cleanup?: boolean } = {}): Promise<unknown> {
+  async requireSuccess(id: string, argv: string[], options: { cwd?: string; mutation?: boolean; cleanup?: boolean; signal?: AbortSignal } = {}): Promise<unknown> {
     const executed = await this.execute(argv, { id, ...options })
     if (executed.refusal) throw new CliFilesFailure('cli-exit', `CLI command ${id} exited ${executed.receipt.exitCode}: ${executed.refusal.message}`)
     return executed.result
   }
 
-  async expectRefusal(id: string, argv: string[], expectedMessage?: string): Promise<{ code: string; message: string; data?: unknown }> {
+  async expectRefusal(
+    id: string,
+    argv: string[],
+    expected: { exitCode: 1 | 2; code?: string; message?: string; messageIncludes?: string }
+  ): Promise<{ code: string; message: string; data?: unknown }> {
     const executed = await this.execute(argv, { id, mutation: true })
-    if (!executed.refusal || executed.receipt.exitCode !== 1 ||
-        (expectedMessage !== undefined && !executed.refusal.message.includes(expectedMessage))) {
-      throw new CliFilesFailure('unexpected-success', `CLI command ${id} did not refuse as required`)
+    if (!executed.refusal || executed.receipt.exitCode !== expected.exitCode) {
+      throw new CliFilesFailure('unexpected-success', `CLI command ${id} did not exit ${expected.exitCode} with the expected refusal`)
     }
-    if (executed.refusal.message.length === 0) throw new CliFilesFailure('invalid-refusal', `CLI command ${id} refused without an error message`)
-    return executed.refusal
+    const refusal = parseCliRefusal(
+      JSON.stringify(executed.receipt.evidence.result),
+      executed.receipt.exitCode,
+      expected.exitCode
+    )
+    if ((expected.code !== undefined && refusal.code !== expected.code) ||
+        (expected.message !== undefined && refusal.message !== expected.message) ||
+        (expected.messageIncludes !== undefined && !refusal.message.includes(expected.messageIncludes))) {
+      throw new CliFilesFailure('invalid-refusal', `CLI command ${id} returned a different refusal`)
+    }
+    return refusal
   }
   async reviewChanged(builder: ObservationBuilder): Promise<void> {
     const worktreeA = this.windows[0]!.worktree
     const worktreeB = this.windows[1]!.worktree
-    await this.resetWindowView(0, worktreeA.id, 'files-review-changed-reset-a')
+    await this.navigateWindowToWorktree(0, worktreeA.id, 'files-review-changed-reset-a')
     await this.resetSentinel(0, builder)
     await this.closeReview(worktreeB.id, 'files-review-changed-close-review')
     const beforeStatusReceiptId = 'files-review-changed-status-before'
@@ -1488,7 +2859,19 @@ export class CliFilesRunner {
     }
     builder.evidence.request = request
     const before = await this.addSample(builder, 'before')
+    const historyBefore = await this.captureNavigationHistory(
+      'files-review-changed-history-before',
+      this.windows[0]!.connId,
+      string(record(before.public[0]!.windowState, 'open-changes before layout').layout && record(record(before.public[0]!.windowState, 'open-changes before layout').layout, 'open-changes layout').worktree, 'open-changes shown-before')
+    )
     await this.runWindowCommand('files-review-changed-open-changes', this.windows[0]!.connId, 'command:quirky.git/open-changes', { worktree: worktreeB.id })
+    const firstReadAfterOpen = await this.readPublicWindow(0, 'files-review-changed-first-read')
+    const firstOpenLayout = record(firstReadAfterOpen.windowState.layout, 'open-changes first-read layout')
+    const historyAfter = await this.captureNavigationHistory(
+      'files-review-changed-history-after',
+      this.windows[0]!.connId,
+      string(firstOpenLayout.worktree, 'open-changes first-read worktree')
+    )
     await this.waitForDom(0, (dom) => dom.workspaceId === worktreeB.id && dom.reviewCards.some((card) => card.path === A_TARGET), 'open-changes source card')
     await this.waitForDom(1, (dom) => dom.workspaceId === worktreeB.id && dom.reviewCards.some((card) => card.path === A_TARGET), 'open-changes shared source card')
     let afterOpen = await this.captureSample('files-review-changed-after-open')
@@ -1511,7 +2894,19 @@ export class CliFilesRunner {
     const tabBeforeRepeat = await this.recordReviewTab(worktreeB.id, this.windows[0]!.connId, afterOpen)
     const editorTabsBefore = tabsInWorkspace(afterOpen.public[0]!.workspace).filter((tab) => tab.viewId === EDITOR_VIEW_ID).map((tab) => tab.id).sort()
     const repeatBefore = { public: afterOpen.public[0]!, dom: afterOpen.dom[0]! }
+    const historyBeforeRepeat = await this.captureNavigationHistory(
+      'files-review-changed-history-before-repeat',
+      this.windows[0]!.connId,
+      string(record(repeatBefore.public.windowState, 'repeat before layout').layout && record(record(repeatBefore.public.windowState, 'repeat before layout').layout, 'repeat before layout').worktree, 'repeat shown-before')
+    )
     await this.runWindowCommand('files-review-changed-repeat-open-changes', this.windows[0]!.connId, 'command:quirky.git/open-changes', { worktree: worktreeB.id })
+    const firstReadAfterRepeat = await this.readPublicWindow(0, 'files-review-changed-first-read-repeat')
+    const firstRepeatLayout = record(firstReadAfterRepeat.windowState.layout, 'repeat first-read layout')
+    const historyAfterRepeat = await this.captureNavigationHistory(
+      'files-review-changed-history-after-repeat',
+      this.windows[0]!.connId,
+      string(firstRepeatLayout.worktree, 'repeat first-read worktree')
+    )
     await this.waitForDom(0, (dom) => dom.reviewCards.some((card) => card.path === A_TARGET && card.expanded && card.loaded && card.text.includes('second λ')),
       'reused open-changes Review')
     const after = await this.addSample(builder, 'after')
@@ -1534,7 +2929,13 @@ export class CliFilesRunner {
       changedPaths,
       supportingReceiptIds: supportReceipts,
       editorTabIdsBefore: editorTabsBefore,
-      editorTabIdsAfter: editorTabsAfter
+      editorTabIdsAfter: editorTabsAfter,
+      firstReadAfterOpen,
+      firstReadAfterRepeat,
+      history: [
+        { before: historyBefore, after: historyAfter },
+        { before: historyBeforeRepeat, after: historyAfterRepeat }
+      ]
     }
     builder.evidence.git = {
       before: beforeStatus,
@@ -1585,11 +2986,11 @@ export class CliFilesRunner {
     }
   }
 
-  async readPublicWindow(index: number, phase: string): Promise<CliFilePublicWindow> {
+  async readPublicWindow(index: number, phase: string, initialLayout?: { receiptId: string; state: JsonObject }): Promise<CliFilePublicWindow> {
     const entry = this.windows[index]
     if (!entry) throw new CliFilesFailure('connection-mismatch', `window index ${index} is missing`)
     const stateId = `${this.activeObservation?.id ?? 'run'}-${phase}-window-${index}`
-    const windowState = await this.api(`${stateId}-state`, 'ui.window.state', { connId: entry.connId })
+    const windowState = initialLayout?.state ?? await this.api(`${stateId}-state`, 'ui.window.state', { connId: entry.connId })
     const state = record(windowState, `${phase} window state`)
     const layout = record(state.layout, `${phase} window layout`)
     const worktree = string(layout.worktree, `${phase} window worktree`)
@@ -1598,7 +2999,7 @@ export class CliFilesRunner {
     const editor = await this.editor(`${stateId}-editor`, ['state', '--worktree', worktree])
     return {
       connId: entry.connId,
-      receiptIds: { window: `${stateId}-state`, workspace: `${stateId}-workspace`, editor: `${stateId}-editor` },
+      receiptIds: { window: initialLayout?.receiptId ?? `${stateId}-state`, workspace: `${stateId}-workspace`, editor: `${stateId}-editor` },
       windowState: record(windowState, `${phase} public window state`),
       workspace: record(workspace, `${phase} public terminal workspace`),
       editor: record(editor, `${phase} public editor state`)
@@ -1610,6 +3011,20 @@ export class CliFilesRunner {
     const domWindows: CliFileDomWindow[] = []
     for (let index = 0; index < 2; index += 1) {
       publicWindows.push(await this.readPublicWindow(index, phase))
+      const captured = await this.readRenderer(() => this.windows[index]!.page.evaluate(capturePageDom))
+      captured.connId = this.windows[index]!.connId
+      domWindows.push(captured)
+    }
+    const snapshots = publicWindows.map((window, index) => snapshotFrom(window, domWindows[index]!))
+    return { public: publicWindows, dom: domWindows, snapshots }
+  }
+  async captureSampleAfterFirstWindowRead(phase: string, firstWindow: CliFilePublicWindow, otherWindow: CliFilePublicWindow): Promise<CapturedSample> {
+    if (firstWindow.connId !== this.windows[0]!.connId) {
+      throw new CliFilesFailure('connection-mismatch', `${phase} first layout read is not from page A`)
+    }
+    const publicWindows = [firstWindow, otherWindow]
+    const domWindows: CliFileDomWindow[] = []
+    for (let index = 0; index < 2; index += 1) {
       const captured = await this.readRenderer(() => this.windows[index]!.page.evaluate(capturePageDom))
       captured.connId = this.windows[index]!.connId
       domWindows.push(captured)
@@ -1637,6 +3052,8 @@ export class CliFilesRunner {
   async focusBaseline(index: number, tabId: string): Promise<void> {
     const entry = this.windows[index]
     if (!entry) throw new CliFilesFailure('connection-mismatch', 'baseline renderer is missing')
+    await this.waitForDom(index, dom => dom.renderedTabId === tabId && dom.path !== null && dom.lines.length > 0,
+      `baseline source ${index}:${tabId}`)
     const focused = await this.readRenderer(() => entry.page.evaluate((targetTabId) => {
       const hosted = [...document.querySelectorAll<HTMLElement>('.qt-hosted-view[data-hosted-view]')]
         .find((element) => element.dataset.hostedView === targetTabId)
@@ -1644,7 +3061,7 @@ export class CliFilesRunner {
       content?.focus()
       return content !== undefined && document.activeElement === content
     }, tabId))
-    if (!focused) throw new CliFilesFailure('fixture-focus', `could not focus baseline source tab ${tabId}`)
+    if (!focused) throw new CliFilesFailure('fixture-focus', `could not focus baseline source tab ${index}:${tabId}`)
   }
 
   async openEditor(worktree: FixtureWorktree, path: string, options: { id: string; focus: boolean; line?: number; column?: number }): Promise<JsonObject> {
@@ -1721,6 +3138,19 @@ export class CliFilesRunner {
       this.observations.set(id, observation)
     } catch (error) {
       const failure = safeError(error)
+      if (builder.before.length > 0) {
+        try {
+          const readback = await this.captureSample(`${id}-failure-readback`)
+          builder.evidence.failureReadback = readback
+          if (builder.after.length === 0) {
+            builder.after = readback.snapshots
+            builder.evidence.public.after = readback.public
+            builder.evidence.dom.after = readback.dom
+          }
+        } catch (readbackError) {
+          builder.evidence.failureReadbackError = safeError(readbackError)
+        }
+      }
       const observation: CliFileObservation = {
         id,
         status: 'failed',
@@ -1759,7 +3189,7 @@ export class CliFilesRunner {
     if (!world.prepare) throw new CliFilesFailure('world-contract', 'owned file world does not expose restricted Git preparation')
     const gitArgv = ['/usr/bin/git', ...argv]
     const raw = await world.prepare(gitArgv, cwd) as CliRawResult
-    this.gitEvidence.push({ id: label, executable: '/usr/bin/git', argv: gitArgv, cwd, exitCode: raw.exitCode, stdoutBytes: raw.stdoutBytes, elapsedMs: raw.elapsedMs, stdout: raw.stdout.trim(), stderrTail: raw.stderr.slice(-MAX_DIAGNOSTIC_BYTES) })
+    this.gitEvidence.push({ id: label, executable: '/usr/bin/git', argv: gitArgv, cwd, exitCode: raw.exitCode, stdoutBytes: raw.stdoutBytes, elapsedMs: raw.elapsedMs, stdout: raw.stdout, stderrTail: raw.stderr.slice(-MAX_DIAGNOSTIC_BYTES) })
     if (raw.exitCode !== 0) throw new CliFilesFailure('fixture-git', `Git fixture operation ${label} exited ${raw.exitCode}: ${raw.stderr.slice(-MAX_DIAGNOSTIC_BYTES)}`)
     if (Buffer.byteLength(raw.stdout) > MAX_STDOUT_BYTES) throw new CliFilesFailure('stdout-overflow', `Git fixture operation ${label} exceeded 16 MiB`)
     return raw.stdout
@@ -1891,15 +3321,15 @@ export class CliFilesRunner {
     return sentinel
   }
 
-  async resetWindowView(index: number, worktreeId: string, id: string): Promise<void> {
+  async navigateWindowToWorktree(index: number, worktreeId: string, id: string): Promise<void> {
     const entry = this.windows[index]!
-    await this.api(id, 'ui.window.view.open', {
-      connId: entry.connId,
-      id: SESSION_VIEW_ID,
-      input: { worktree: worktreeId }
+    await this.api(id, 'quirky.worktree/navigate', {
+      worktree: `id:${worktreeId}`,
+      target: 'terminal',
+      window: entry.connId
     }, { mutation: true })
-    const dom = await this.waitForDom(index, (sample) => sample.workspaceId === worktreeId, `reset worktree view ${worktreeId}`)
-    if (dom.workspaceId !== worktreeId) throw new CliFilesFailure('worktree-mismatch', `window ${entry.connId} did not reset to ${worktreeId}`)
+    const dom = await this.waitForDom(index, (sample) => sample.workspaceId === worktreeId, `navigate window to worktree ${worktreeId}`)
+    if (dom.workspaceId !== worktreeId) throw new CliFilesFailure('worktree-mismatch', `window ${entry.connId} did not navigate to worktree ${worktreeId}`)
   }
 
   async runWindowCommand(id: string, connId: number, commandId: string, args: Record<string, unknown>, cleanup = false): Promise<unknown> {
@@ -1907,6 +3337,12 @@ export class CliFilesRunner {
   }
   async gitStatus(id: string, worktreeId: string): Promise<JsonObject> {
     return record(await this.api(id, 'quirky.git/status', { worktree: worktreeId }), `${id} Git status`)
+  }
+  async captureNavigationHistory(id: string, connId: number, shownWorktree: string): Promise<CliFileHistoryRead> {
+    const raw = record(await this.api(id, 'quirky.worktree/navigationState', { window: connId }), `${id} navigation history`)
+    const worktrees = array(raw.worktrees, `${id} history worktrees`).map((entry) => string(entry, `${id} history worktree`))
+    const index = integer(raw.index, `${id} history index`)
+    return { connId, shownWorktree, receiptId: id, result: { worktrees, index } }
   }
 
   async recordReviewTab(worktreeId: string, connId: number, sample: CapturedSample): Promise<string> {
@@ -1922,7 +3358,7 @@ export class CliFilesRunner {
     const targetConnId = this.windows[0]!.connId
     const worktreeB = this.windows[1]!.worktree
     if (id === 'files-review-diff') {
-      await this.resetWindowView(0, this.windows[0]!.worktree.id, `${id}-reset-a-view`)
+      await this.navigateWindowToWorktree(0, this.windows[0]!.worktree.id, `${id}-reset-a-view`)
       await this.resetSentinel(0, builder)
       await this.closeReview(worktreeB.id, `${id}-ensure-review-closed`)
     }
@@ -1937,8 +3373,20 @@ export class CliFilesRunner {
     builder.evidence.request = request
     const before = await this.addSample(builder, 'before')
     const previousReview = reviewTabFor(before.public[1]!.workspace, reviewKey(worktreeB.id))[0]
+    const historyBefore = await this.captureNavigationHistory(
+      `${id}-history-before`,
+      targetConnId,
+      string(record(before.public[0]!.windowState, `${id} before layout`).layout && record(record(before.public[0]!.windowState, `${id} before layout`).layout, `${id} before layout`).worktree, `${id} shown-before`)
+    )
     const commandReceiptId = `${id}-exact-open`
     await this.runWindowCommand(commandReceiptId, targetConnId, 'command:quirky.git/open-diff', { worktree: worktreeB.id, path })
+    const firstReadAfter = await this.readPublicWindow(0, `${id}-first-read`)
+    const firstReadLayout = record(firstReadAfter.windowState.layout, `${id} first-read layout`)
+    const historyAfter = await this.captureNavigationHistory(
+      `${id}-history-after`,
+      targetConnId,
+      string(firstReadLayout.worktree, `${id} first-read worktree`)
+    )
     await this.waitForDom(0, (dom) => dom.workspaceId === worktreeB.id && dom.renderedTabId !== null && dom.reviewCards.some((card) => card.path === path && card.expanded && card.loaded), `${id} targeted Review card`)
     await this.waitForDom(1, dom => dom.workspaceId === worktreeB.id && dom.reviewTabMounted, `${id} shared Review tab`)
     const after = await this.addSample(builder, 'after')
@@ -1953,11 +3401,13 @@ export class CliFilesRunner {
       tabId,
       previousTabId: previousReview?.id ?? null,
       changedPaths: [...REVIEW_PATHS],
-      inputRevealAfter: record(tab.input, `${id} review input`).reveal
+      inputRevealAfter: record(tab.input, `${id} review input`).reveal,
+      firstReadAfter,
+      history: [{ before: historyBefore, after: historyAfter }]
     }
   }
 
-  async closeReview(worktreeId: string, id: string): Promise<void> {
+  async closeReview(worktreeId: string, id: string, via: 'ui' | 'terminal' = 'ui'): Promise<void> {
     const target = this.reviewTabs.get(worktreeId)
     if (!target) {
       const state = await this.api(`${id}-workspace`, 'quirky.terminal/workspace', { workspace: worktreeId })
@@ -1968,7 +3418,8 @@ export class CliFilesRunner {
     }
     const current = this.reviewTabs.get(worktreeId)!
     const ownerConnId = this.windows.find((entry) => entry.worktree.id === worktreeId)?.connId ?? current.connId
-    await this.runWindowCommand(id, ownerConnId, 'command:quirky.git/close-diff', { tabId: current.tabId })
+    if (via === 'terminal') await this.requireSuccess(id, ['terminal', 'tab', 'close', current.tabId], { mutation: true })
+    else await this.runWindowCommand(id, ownerConnId, 'command:quirky.git/close-diff', { tabId: current.tabId })
     const until = Math.min(this.workDeadline, Date.now() + CHILD_LIMIT_MS)
     let attempt = 0
     while (Date.now() < until) {
@@ -1991,11 +3442,16 @@ export class CliFilesRunner {
     builder.evidence.request = { worktreeId: b.id, path: A_TARGET, targetConnectionId: this.windows[0]!.connId }
     const before = await this.addSample(builder, 'before')
     const ambiguousId = 'files-window-routing-ambiguous'
-    await this.expectRefusal(ambiguousId, ['ui', 'run', 'command:quirky.git/open-diff', '--args', argsJson], 'multiple Quirky windows are open; specify connId')
+    await this.expectRefusal(ambiguousId, ['ui', 'run', 'command:quirky.git/open-diff', '--args', argsJson], {
+      exitCode: 1,
+      messageIncludes: 'multiple Quirky windows are open; specify connId'
+    })
     const staleConnId = Math.max(...this.windows.map((entry) => entry.connId)) + 100_000
     const staleId = 'files-window-routing-stale'
     const staleArgs = JSON.stringify({ worktree: b.id, path: A_TARGET })
-    await this.expectRefusal(staleId, ['api', 'call', 'ui.window.command.run', '--conn-id', String(staleConnId), '--id', 'command:quirky.git/open-diff', '--args', staleArgs])
+    await this.expectRefusal(staleId, ['api', 'call', 'ui.window.command.run', '--conn-id', String(staleConnId), '--id', 'command:quirky.git/open-diff', '--args', staleArgs], {
+      exitCode: 1
+    })
     const after = await this.addSample(builder, 'after')
     builder.evidence.routing = { ambiguousReceiptId: ambiguousId, staleReceiptId: staleId, staleConnId, targetWorktree: b.id }
     equal(before.snapshots.length, 2, 'routing before two windows')
@@ -2013,6 +3469,553 @@ export class CliFilesRunner {
     })
     if (this.observations.get('files-review-reuse')?.status !== 'observed') return
     await this.observation('files-review-changed', (builder) => this.reviewChanged(builder))
+  }
+
+  setObservationSamples(builder: ObservationBuilder, before: CapturedSample, after: CapturedSample): void {
+    builder.before = before.snapshots
+    builder.after = after.snapshots
+    builder.evidence.public = { before: before.public, after: after.public }
+    builder.evidence.dom = { before: before.dom, after: after.dom }
+  }
+
+  async captureHistories(id: string, sample: CapturedSample): Promise<CliFilesHistories> {
+    const reads: CliFileHistoryRead[] = []
+    for (const [index, window] of sample.public.entries()) {
+      reads.push(await this.captureNavigationHistory(
+        `${id}-${index}`, window.connId, shownWorktree(window)
+      ))
+    }
+    return { target: reads[0]!, other: reads[1]! }
+  }
+
+  async transition(
+    id: string,
+    mutate: () => Promise<unknown>,
+    waitForRender?: (result: unknown) => Promise<unknown>
+  ): Promise<CliFilesTransition> {
+    const before = await this.captureSample(`${id}-before`)
+    const historyBefore = await this.captureHistories(`${id}-history-before`, before)
+    const progress: JsonObject = { receiptId: id, before, historyBefore }
+    if (this.activeObservation) {
+      this.activeObservation.evidence.inFlight = progress
+      if (this.activeObservation.before.length === 0) {
+        this.activeObservation.before = before.snapshots
+        this.activeObservation.evidence.public.before = before.public
+        this.activeObservation.evidence.dom.before = before.dom
+      }
+    }
+    const result = await mutate()
+    const layouts: Array<{ receiptId: string; state: JsonObject }> = []
+    const histories: CliFileHistoryRead[] = []
+    for (const [index, window] of this.windows.entries()) {
+      const receiptId = `${id}-immediate-window-${index}`
+      const state = record(await this.api(receiptId, 'ui.window.state', { connId: window.connId }), `${id} immediate layout`)
+      layouts.push({ receiptId, state })
+      histories.push(await this.captureNavigationHistory(`${id}-history-after-${index}`, window.connId,
+        string(record(state.layout, `${id} immediate layout`).worktree, `${id} immediate worktree`)))
+    }
+    const historyAfter = { target: histories[0]!, other: histories[1]! }
+    const first = await this.readPublicWindow(0, `${id}-first-read`, layouts[0]!)
+    const other = await this.readPublicWindow(1, `${id}-other-read`, layouts[1]!)
+    progress.result = result
+    progress.firstPublicRead = first
+    progress.historyAfter = historyAfter
+    if (waitForRender) await waitForRender(result)
+    const after = await this.captureSampleAfterFirstWindowRead(`${id}-after`, first, other)
+    if (this.activeObservation) {
+      this.activeObservation.after = after.snapshots
+      this.activeObservation.evidence.public.after = after.public
+      this.activeObservation.evidence.dom.after = after.dom
+      Reflect.deleteProperty(this.activeObservation.evidence, 'inFlight')
+    }
+    return { receiptId: id, result, before, after, historyBefore, historyAfter }
+  }
+
+  async activateTab(id: string, tabId: string): Promise<void> {
+    await this.requireSuccess(id, ['terminal', 'tab', 'activate', tabId], { mutation: true })
+  }
+
+  async editorWindowFocus(builder: ObservationBuilder): Promise<void> {
+    const a = this.windows[0]!.worktree
+    const b = this.windows[1]!.worktree
+    await this.navigateWindowToWorktree(0, a.id, `${builder.id}-setup-a`)
+    await this.navigateWindowToWorktree(1, b.id, `${builder.id}-setup-b`)
+    const sentinels = await this.sentinelPair(builder)
+    this.fileSentinels = sentinels
+    const destinationId = `${builder.id}-destination-before`
+    const destinationBefore = await this.api(destinationId, 'quirky.terminal/workspace', { workspace: b.id })
+    await this.navigateWindowToWorktree(1, a.id, `${builder.id}-other-on-a`)
+    await this.focusBaseline(0, sentinels.a.tabId)
+    await this.focusBaseline(1, sentinels.a.tabId)
+    builder.evidence.request = {
+      worktreeId: b.id, relativePath: B_TARGET, absolutePath: join(b.path, B_TARGET), content: B_CONTENT,
+      mode: 'source', line: 2, column: 3, targetConnectionId: this.windows[0]!.connId
+    }
+    const open = async (id: string, line: number, column: number) => {
+      const result = record(await this.editor(id, [
+        'open', B_TARGET, '--worktree', b.id, '--window', String(this.windows[0]!.connId),
+        '--mode', 'source', '--line', String(line), '--column', String(column)
+      ], { mutation: true }), id)
+      this.editorBuffers.set(string(result.id, `${id} buffer`), b.id)
+      return result
+    }
+    const focused = (line: number, column: number) => this.waitForDom(0, dom =>
+      dom.workspaceId === b.id && dom.path === join(b.path, B_TARGET) &&
+      dom.caret?.line === line && dom.caret.column === column && dom.activeElementIsSource,
+    `${builder.id} source caret ${line}:${column}`)
+    const focusId = `${builder.id}-open`
+    const focus = await this.transition(focusId, () => open(focusId, 2, 3), () => focused(2, 3))
+    const opened = record(focus.result, `${builder.id} opened document`)
+    this.windowEditorTabId = string(opened.openedTabId, 'window editor tab')
+    this.windowEditorBufferId = string(opened.id, 'window editor buffer')
+    await this.navigateWindowToWorktree(0, a.id, `${builder.id}-reuse-show-a`)
+    await this.focusBaseline(0, sentinels.a.tabId)
+    const reuseId = `${builder.id}-reuse`
+    const reuse = await this.transition(reuseId, () => open(reuseId, 1, 1), () => focused(1, 1))
+    const backgroundId = `${builder.id}-background`
+    const background = await this.transition(backgroundId, () =>
+      this.editor(backgroundId, ['open', SENTINEL_PATH, '--worktree', b.id], { mutation: true }))
+    this.setObservationSamples(builder, focus.before, background.after)
+    builder.evidence.destination = {
+      beforeReceiptId: destinationId, before: destinationBefore, after: background.after.public[0]!.workspace
+    }
+    builder.evidence.windowFocus = {
+      tabId: this.windowEditorTabId, bufferId: this.windowEditorBufferId, focus, reuse, background
+    }
+  }
+
+  async windowRefusals(builder: ObservationBuilder): Promise<void> {
+    const a = this.windows[0]!.worktree
+    const b = this.windows[1]!.worktree
+    const connA = this.windows[0]!.connId
+    const connB = this.windows[1]!.connId
+    await this.navigateWindowToWorktree(0, a.id, `${builder.id}-setup-a`)
+    await this.navigateWindowToWorktree(1, b.id, `${builder.id}-setup-b`)
+    await this.sentinelPair(builder)
+    const snapshot = async (id: string) => {
+      const sample = await this.captureSample(id)
+      const history = await this.captureHistories(`${id}-history`, sample)
+      return { sample, history: { a: history.target, b: history.other } }
+    }
+    const initial = await snapshot(`${builder.id}-initial`)
+    this.setObservationSamples(builder, initial.sample, initial.sample)
+    const cases: Array<{
+      caseId: string; receiptId: string
+      after: { sample: CapturedSample; history: { a: CliFileHistoryRead; b: CliFileHistoryRead } }
+    }> = []
+    const refused = async (caseId: string, argv: string[], exitCode: 1 | 2, code: string, message?: string) => {
+      const receiptId = `${builder.id}-${caseId}`
+      await this.expectRefusal(receiptId, argv, { exitCode, code, ...(message ? { message } : {}) })
+      cases.push({ caseId, receiptId, after: await snapshot(`${receiptId}-after`) })
+    }
+    await refused('unknown-editor', ['editor', 'open', B_TARGET, '--worktree', b.id, '--window', '999'],
+      1, 'conflict', 'UI window connection 999 is not open')
+    await refused('zero-window', ['editor', 'open', B_TARGET, '--worktree', b.id, '--window', '0'], 2, 'usage')
+    await refused('focus-window-conflict', [
+      'editor', 'open', B_TARGET, '--worktree', b.id, '--focus=false', '--window', String(connA)
+    ], 1, 'invalid-params', 'window cannot be combined with focus: false')
+    await refused('unknown-review-window', [
+      'api', 'call', 'ui.window.command.run', '--conn-id', '999', '--id', 'command:quirky.git/open-diff',
+      '--args', JSON.stringify({ worktree: b.id, path: B_TARGET })
+    ], 1, 'conflict', 'UI window connection 999 is not open')
+    const browser = this.windows[0]!.page.context().browser()
+    if (!browser) throw new CliFilesFailure('world-contract', 'owned browser is unavailable for the temporary page')
+    const context = await this.readRenderer(() => browser.newContext({ viewport: { width: 1400, height: 1000 } }))
+    const temporary: TemporaryRenderer = {
+      context, page: null, connId: 0, contextClosed: false, pageClosed: false, connectionGone: false
+    }
+    this.temporaryPages.push(temporary)
+    let uiBeforeClose: unknown
+    let uiBeforeCloseReceiptId = ''
+    try {
+      temporary.page = await this.readRenderer(() => context.newPage())
+      const page = temporary.page
+      await this.readRenderer(() => page.goto(this.windows[0]!.page.url(), { waitUntil: 'domcontentloaded' }))
+      const until = Math.min(this.workDeadline, Date.now() + 10_000)
+      const discoverySignal = AbortSignal.timeout(Math.max(1, until - Date.now()))
+      for (let attempt = 0; Date.now() < until; attempt++) {
+        uiBeforeCloseReceiptId = `${builder.id}-third-open-${attempt}`
+        uiBeforeClose = await this.requireSuccess(uiBeforeCloseReceiptId, ['ui', 'state'], { signal: discoverySignal })
+        const ids = array(record(uiBeforeClose, 'third page UI state').windows, 'UI windows')
+          .map(window => integer(record(window, 'UI window').connId, 'UI connection'))
+          .filter(id => id !== connA && id !== connB)
+        if (ids.length === 1) { temporary.connId = ids[0]!; break }
+        if (ids.length > 1) throw new CliFilesFailure('connection-mismatch', 'temporary page discovered several new connections')
+        await Bun.sleep(50)
+      }
+      if (!temporary.connId) throw new CliFilesFailure('renderer-disconnected', 'temporary UI page did not connect within ten seconds')
+    } finally {
+      await this.readRenderer(() => context.close())
+      temporary.contextClosed = true
+      temporary.pageClosed = temporary.page?.isClosed() ?? true
+    }
+    let uiAfterClose: unknown
+    let uiAfterCloseReceiptId = ''
+    const until = Math.min(this.workDeadline, Date.now() + 10_000)
+    const closureSignal = AbortSignal.timeout(Math.max(1, until - Date.now()))
+    for (let attempt = 0; Date.now() < until; attempt++) {
+      uiAfterCloseReceiptId = `${builder.id}-third-closed-${attempt}`
+      uiAfterClose = await this.requireSuccess(uiAfterCloseReceiptId, ['ui', 'state'], { signal: closureSignal })
+      const listed = array(record(uiAfterClose, 'closed UI state').windows, 'closed UI windows')
+        .some(window => record(window, 'closed UI window').connId === temporary.connId)
+      if (!listed) { temporary.connectionGone = true; break }
+      await Bun.sleep(50)
+    }
+    if (!temporary.connectionGone) throw new CliFilesFailure('renderer-disconnected', 'temporary UI connection survived its closed context')
+    const disconnectedBaseline = await snapshot(`${builder.id}-disconnected-baseline`)
+    await refused('disconnected-editor', [
+      'editor', 'open', SENTINEL_PATH, '--worktree', b.id, '--window', String(temporary.connId)
+    ], 1, 'conflict', `UI window connection ${temporary.connId} is not open`)
+    await refused('disconnected-open-changes', [
+      'api', 'call', 'ui.window.command.run', '--conn-id', String(temporary.connId),
+      '--id', 'command:quirky.git/open-changes', '--args', JSON.stringify({ worktree: b.id })
+    ], 1, 'conflict', `UI window connection ${temporary.connId} is not open`)
+    const after = cases.at(-1)!.after.sample
+    this.setObservationSamples(builder, initial.sample, after)
+    builder.evidence.request = { worktreeId: b.id, connA, connB, connC: temporary.connId }
+    builder.evidence.refusals = {
+      initial, cases, disconnectedBaseline, uiBeforeClose, uiAfterClose,
+      disconnected: {
+        connId: temporary.connId, uiBeforeCloseReceiptId, uiAfterCloseReceiptId,
+        listedBeforeClose: true, listedWhenCommandsRan: false, contextClosed: temporary.contextClosed, pageClosed: temporary.pageClosed
+      }
+    }
+  }
+
+  async reviewFocusWindow(builder: ObservationBuilder): Promise<void> {
+    const a = this.windows[0]!.worktree
+    const b = this.windows[1]!.worktree
+    const sentinels = this.fileSentinels
+    if (!sentinels) throw new CliFilesFailure('missing-observation', 'window editor sentinel evidence is missing')
+    await this.navigateWindowToWorktree(0, a.id, `${builder.id}-setup-a`)
+    await this.navigateWindowToWorktree(1, a.id, `${builder.id}-setup-other-a`)
+    await this.activateTab(`${builder.id}-sentinel-b`, sentinels.b.tabId)
+    await this.focusBaseline(0, sentinels.a.tabId)
+    await this.focusBaseline(1, sentinels.a.tabId)
+    const reviewWorkspaceReceiptId = `${builder.id}-review-baseline`
+    const workspace = await this.api(reviewWorkspaceReceiptId, 'quirky.terminal/workspace', { workspace: b.id })
+    const tabs = reviewTabFor(workspace, reviewKey(b.id))
+    equal(tabs.length, 1, `${builder.id} existing Review`)
+    const tabId = string(tabs[0]!.id, 'existing Review tab')
+    builder.evidence.request = { worktreeId: b.id, path: B_TARGET, targetConnectionId: this.windows[0]!.connId }
+    const openDiffReceiptId = `${builder.id}-open-diff`
+    const diff = await this.transition(openDiffReceiptId, () => this.runWindowCommand(
+      openDiffReceiptId, this.windows[0]!.connId, 'command:quirky.git/open-diff', { worktree: b.id, path: B_TARGET }
+    ), () => this.waitForDom(0, dom => dom.renderedTabId === tabId && dom.reviewCards.some(card =>
+      card.path === B_TARGET && card.active && card.loaded && card.expanded), `${builder.id} focused file`))
+    await this.navigateWindowToWorktree(0, a.id, `${builder.id}-reset-a`)
+    await this.activateTab(`${builder.id}-reset-sentinel-b`, sentinels.b.tabId)
+    await this.focusBaseline(0, sentinels.a.tabId)
+    const openChangesReceiptId = `${builder.id}-open-changes`
+    const changes = await this.transition(openChangesReceiptId, () => this.runWindowCommand(
+      openChangesReceiptId, this.windows[0]!.connId, 'command:quirky.git/open-changes', { worktree: b.id }
+    ), () => this.waitForDom(0, dom => dom.renderedTabId === tabId && dom.reviewTabMounted, `${builder.id} focused changes`))
+    this.setObservationSamples(builder, diff.before, changes.after)
+    builder.evidence.focusWindow = { worktreeId: b.id, tabId, reviewWorkspaceReceiptId, openDiffReceiptId, openChangesReceiptId, diff, changes }
+  }
+
+  async reviewBackground(builder: ObservationBuilder): Promise<void> {
+    const a = this.windows[0]!.worktree
+    const b = this.windows[1]!.worktree
+    const sentinels = this.fileSentinels
+    if (!sentinels) throw new CliFilesFailure('missing-observation', 'window editor sentinel evidence is missing')
+    await this.navigateWindowToWorktree(0, a.id, `${builder.id}-setup-a`)
+    await this.navigateWindowToWorktree(1, b.id, `${builder.id}-setup-b`)
+    await this.activateTab(`${builder.id}-select-sentinel-b`, sentinels.b.tabId)
+    await this.closeReview(b.id, `${builder.id}-close-existing`, 'terminal')
+    await this.waitForDom(1, dom => dom.renderedTabId === sentinels.b.tabId && !dom.reviewTabMounted, `${builder.id} sentinel`)
+    await this.focusBaseline(0, sentinels.a.tabId)
+    await this.focusBaseline(1, sentinels.b.tabId)
+    const coldReceiptId = `${builder.id}-cold-open`
+    const coldStep = await this.transition(coldReceiptId, () => this.runWindowCommand(
+      coldReceiptId, this.windows[0]!.connId, 'command:quirky.git/open-diff', { worktree: b.id, path: B_TARGET, focus: false }
+    ))
+    const reply = record(record(coldStep.result, 'cold envelope').result, 'cold Review reply')
+    const tabId = string(reply.tabId, 'cold Review tab')
+    this.reviewTabs.set(b.id, { worktreeId: b.id, tabId, connId: this.windows[1]!.connId })
+    await this.activateTab(`${builder.id}-activate-cold`, tabId)
+    await this.waitForDom(1, dom => dom.renderedTabId === tabId && dom.reviewCards.length === 2 &&
+      dom.reviewCards.every(card => card.expanded && card.loaded) &&
+      dom.reviewCards.some(card => card.path === B_TARGET && card.active), `${builder.id} cold activation`)
+    const activated = await this.captureSample(`${builder.id}-cold-activated`)
+    const mountedBefore = await this.captureSample(`${builder.id}-mounted-before`)
+    const mountedHistoryBefore = await this.captureHistories(`${builder.id}-mounted-before-history`, mountedBefore)
+    const inputBefore = record(tabById(mountedBefore.public[1]!.workspace, tabId)!.input, 'mounted input before')
+    const mountedReceiptId = `${builder.id}-mounted-open`
+    await this.runWindowCommand(mountedReceiptId, this.windows[1]!.connId, 'command:quirky.git/open-diff', {
+      worktree: b.id, path: SENTINEL_PATH, focus: false
+    })
+    await Bun.sleep(500)
+    const mountedAfter = await this.captureSample(`${builder.id}-mounted-after`)
+    const mountedHistoryAfter = await this.captureHistories(`${builder.id}-mounted-after-history`, mountedAfter)
+    const inputAfter = record(tabById(mountedAfter.public[1]!.workspace, tabId)!.input, 'mounted input after')
+    await this.activateTab(`${builder.id}-activate-sentinel`, sentinels.b.tabId)
+    await this.waitForDom(1, dom => !dom.reviewTabMounted && dom.renderedTabId === sentinels.b.tabId, `${builder.id} hidden Review`)
+    const hidden = await this.captureSample(`${builder.id}-hidden`)
+    await this.activateTab(`${builder.id}-activate-review`, tabId)
+    await this.waitForDom(1, dom => dom.renderedTabId === tabId && dom.reviewCards.some(card =>
+      card.path === SENTINEL_PATH && card.active && card.loaded && card.expanded), `${builder.id} deferred reveal`)
+    const afterShow = await this.captureSample(`${builder.id}-reshown`)
+    this.setObservationSamples(builder, coldStep.before, afterShow)
+    builder.evidence.request = { worktreeId: b.id, targetConnectionId: this.windows[0]!.connId }
+    builder.evidence.backgroundReview = {
+      worktreeId: b.id, tabId, sentinelTabId: sentinels.b.tabId, coldReceiptId, mountedReceiptId,
+      cold: {
+        before: coldStep.before, after: { ...coldStep.after, activeTab: selectedTabId(coldStep.after.public[1]!.workspace) },
+        activated,
+        historyBefore: { a: coldStep.historyBefore.target, b: coldStep.historyBefore.other },
+        historyAfter: { a: coldStep.historyAfter.target, b: coldStep.historyAfter.other }
+      },
+      mounted: {
+        before: mountedBefore, after: mountedAfter, hidden, afterShow, inputBefore, inputAfter,
+        scrollTopBefore: mountedBefore.dom[1]!.reviewScrollTop, scrollTopAfter: mountedAfter.dom[1]!.reviewScrollTop,
+        historyBefore: { a: mountedHistoryBefore.target, b: mountedHistoryBefore.other },
+        historyAfter: { a: mountedHistoryAfter.target, b: mountedHistoryAfter.other }
+      }
+    }
+  }
+
+  async captureOtherWindow(id: string) {
+    const window = this.windows[1]!
+    const receiptId = `${id}-window`
+    const windowState = record(await this.api(receiptId, 'ui.window.state', { connId: window.connId }), `${id} other layout`)
+    const dom = await this.readRenderer(() => window.page.evaluate(capturePageDom))
+    dom.connId = window.connId
+    const history = await this.captureNavigationHistory(`${id}-history`, window.connId,
+      string(record(windowState.layout, `${id} other layout`).worktree, `${id} other worktree`))
+    return { connId: window.connId, receiptId, windowState, dom, history }
+  }
+
+  async waitForStatus(id: string, worktree: string, ready: (status: JsonObject) => boolean): Promise<{ receiptId: string; result: JsonObject }> {
+    const until = Math.min(this.workDeadline, Date.now() + CHILD_LIMIT_MS)
+    for (let attempt = 0; Date.now() < until; attempt++) {
+      const receiptId = `${id}-${attempt}`
+      const result = await this.gitStatus(receiptId, worktree)
+      if (ready(result)) return { receiptId, result }
+      await Bun.sleep(50)
+    }
+    throw new CliFilesFailure('fixture-status', `${id} did not reach the required public Git status`)
+  }
+
+  async reviewSource(builder: ObservationBuilder): Promise<void> {
+    const a = this.windows[0]!.worktree
+    const b = this.windows[1]!.worktree
+    const id = builder.id
+    await this.prepareGit(['add', '--', SENTINEL_PATH], b.path, `${id}-stage-docs`)
+    const baseWritten = await this.prepareGit(['show', 'HEAD:README.md'], b.path, `${id}-read-initial-head`)
+    const indexWritten = `${baseWritten}scope index λ\n`
+    const workingWritten = `${indexWritten}scope working λ\n`
+    this.writeFixture(b, 'README.md', indexWritten)
+    await this.prepareGit(['add', '--', 'README.md'], b.path, `${id}-stage-readme`)
+    this.writeFixture(b, 'README.md', workingWritten)
+    const gitRead = async (label: string, ref: string) => {
+      const bytes = await this.prepareGit(['show', ref], b.path, `${id}-${label}`)
+      return { bytes, read: this.gitEvidence.at(-1)! }
+    }
+    const workingRead = (path: string) => {
+      const absolutePath = join(b.path, path)
+      const bytes = readFileSync(absolutePath)
+      return { bytes: bytes.toString('utf8'), read: { path: absolutePath, bytesBase64: bytes.toString('base64') } }
+    }
+    const head = await gitRead('readme-head', 'HEAD:README.md')
+    const index = await gitRead('readme-index', ':README.md')
+    const working = workingRead('README.md')
+    const docsHead = await gitRead('docs-head', `HEAD:${SENTINEL_PATH}`)
+    const docsIndex = await gitRead('docs-index', `:${SENTINEL_PATH}`)
+    const docsWorking = workingRead(SENTINEL_PATH)
+    const appWorking = workingRead(B_TARGET)
+    const written = { base: baseWritten, index: indexWritten, working: workingWritten }
+    const readback = { base: head.bytes, index: index.bytes, working: working.bytes }
+    equal(readback, written, `${id} independent README readbacks`)
+    if (new Set(Object.values(readback)).size !== 3) throw new CliFilesFailure('fixture-bytes', 'README versions are not distinct')
+    if (docsIndex.bytes !== docsWorking.bytes || docsHead.bytes === docsWorking.bytes) {
+      throw new CliFilesFailure('fixture-bytes', 'docs fixture is not completely staged')
+    }
+    equal(appWorking.bytes, B_CONTENT, `${id} independent app working bytes`)
+    assertSourceWorkingRead(working.read, join(b.path, 'README.md'), workingWritten, `${id} setup README`)
+    assertSourceWorkingRead(docsWorking.read, join(b.path, SENTINEL_PATH), docsIndex.bytes, `${id} setup docs`)
+    assertSourceWorkingRead(appWorking.read, join(b.path, B_TARGET), B_CONTENT, `${id} setup app`)
+    const readme = {
+      ...readback, absolutePath: join(b.path, 'README.md'), distinct: true, written, readback,
+      gitReads: { base: head.read, index: index.read }, workingRead: working.read
+    }
+    const docs = {
+      base: docsHead.bytes, index: docsIndex.bytes, working: docsWorking.bytes,
+      absolutePath: join(b.path, SENTINEL_PATH), gitReads: { base: docsHead.read, index: docsIndex.read },
+      workingRead: docsWorking.read
+    }
+    const entries = (status: JsonObject) => array(status.entries, `${id} entries`).map(entry => record(entry, 'Git status entry'))
+    const paths = (status: JsonObject, areas: string[]) => [...new Set(entries(status)
+      .filter(entry => areas.includes(String(entry.area))).map(entry => string(entry.path, 'status path')))].sort()
+    const statusBefore = await this.waitForStatus(`${id}-status-before`, b.id, status =>
+      status.capped === false &&
+      JSON.stringify(paths(status, ['staged'])) === JSON.stringify(['README.md', SENTINEL_PATH]) &&
+      JSON.stringify(paths(status, ['unstaged', 'untracked'])) === JSON.stringify(['README.md', B_TARGET]))
+    const stagedPaths = paths(statusBefore.result, ['staged'])
+    const unstagedPaths = paths(statusBefore.result, ['unstaged', 'untracked'])
+    const wholePaths = [...new Set([...stagedPaths, ...unstagedPaths])].sort()
+    await this.readRenderer(() => this.windows[0]!.page.setViewportSize({ width: 2400, height: 1400 }))
+    await this.closeReview(b.id, `${id}-close-review`, 'terminal')
+    await this.navigateWindowToWorktree(0, a.id, `${id}-setup-a`)
+    await this.navigateWindowToWorktree(1, a.id, `${id}-setup-other-a`)
+    if (!this.fileSentinels) throw new CliFilesFailure('missing-observation', 'source sentinel identity is missing')
+    await this.focusBaseline(0, this.fileSentinels.a.tabId)
+    await this.focusBaseline(1, this.fileSentinels.a.tabId)
+    const scopes: Record<string, JsonObject> = {}
+    let firstBefore: CapturedSample | undefined
+    for (const name of ['staged', 'unstaged', 'whole'] as const) {
+      const expectedPaths = name === 'staged' ? stagedPaths : name === 'unstaged' ? unstagedPaths : wholePaths
+      const chip = name === 'staged' ? 'Staged changes' : name === 'unstaged' ? 'Unstaged changes' : null
+      const commandId = name === 'staged' ? 'command:quirky.git/open-diff' : 'command:quirky.git/open-changes'
+      const args = name === 'staged' ? { worktree: b.id, path: SENTINEL_PATH, source: 'staged' }
+        : name === 'unstaged' ? { worktree: b.id, area: 'unstaged' } : { worktree: b.id }
+      const receiptId = `${id}-${name}`
+      const step = await this.transition(receiptId, async () => {
+        const result = await this.runWindowCommand(receiptId, this.windows[0]!.connId, commandId, args)
+        if (name === 'staged') {
+          this.sourceReviewTabId = string(record(record(result, 'staged envelope').result, 'staged result').tabId, 'staged Review tab')
+          this.reviewTabs.set(b.id, { worktreeId: b.id, tabId: this.sourceReviewTabId, connId: this.windows[0]!.connId })
+        }
+        return result
+      }, () => this.waitForDom(0, dom => dom.reviewTabMounted && dom.reviewScopeChip === chip &&
+        JSON.stringify(dom.reviewCards.map(card => card.path).sort()) === JSON.stringify(expectedPaths), `${id} ${name} card set`))
+      firstBefore ??= step.before
+      const supporting: JsonObject[] = []
+      const support = async (label: string, command: string, input: JsonObject) => {
+        const supportId = `${id}-${name}-${label}`
+        await this.runWindowCommand(supportId, this.windows[0]!.connId, `command:quirky.git/${command}`, input)
+        supporting.push({ receiptId: supportId, otherAfter: await this.captureOtherWindow(supportId) })
+      }
+      await support('expand', 'collapse-all', { collapsed: false })
+      if (name !== 'unstaged') await support('load-docs', 'load-diff', { path: SENTINEL_PATH })
+      const revealId = `${id}-${name}-reveal-readme`
+      const reveal = await this.transition(revealId, () => this.runWindowCommand(
+        revealId, this.windows[0]!.connId, 'command:quirky.git/open-diff',
+        { worktree: b.id, path: 'README.md', ...(name === 'whole' ? {} : { source: name }) }
+      ), () => this.waitForDom(0, dom => dom.reviewCards.some(card => card.path === 'README.md' && card.active), `${id} ${name} README reveal`))
+      supporting.push({
+        receiptId: revealId, before: reveal.before, after: reveal.after,
+        historyBefore: reveal.historyBefore.target, historyAfter: reveal.historyAfter.target,
+        otherHistoryBefore: reveal.historyBefore.other, otherHistoryAfter: reveal.historyAfter.other
+      })
+      await support('load-readme', 'load-diff', { path: 'README.md' })
+      if (name !== 'staged') await support('load-app', 'load-diff', { path: B_TARGET })
+      await this.waitForDom(0, dom => dom.reviewScopeChip === chip && dom.reviewCards.length === expectedPaths.length &&
+        dom.reviewCards.every(card => card.expanded && card.loaded) &&
+        dom.reviewCards.some(card => card.path === 'README.md' && card.mergeEditorCount === 2), `${id} ${name} loaded sides`)
+      const final = await this.captureSample(`${id}-${name}-loaded`)
+      scopes[name] = {
+        receiptId, before: step.before, after: step.after,
+        historyBefore: step.historyBefore.target, historyAfter: step.historyAfter.target,
+        otherHistoryBefore: step.historyBefore.other, otherHistoryAfter: step.historyAfter.other,
+        cardPaths: final.dom[0]!.reviewCards.map(card => card.path).sort(), chip: final.dom[0]!.reviewScopeChip,
+        dom: final.dom, tabCount: tabsInWorkspace(final.public[0]!.workspace).filter(tab => tab.viewId === REVIEW_VIEW_ID).length,
+        finalOther: {
+          connId: final.public[1]!.connId, receiptId: final.public[1]!.receiptIds.window,
+          windowState: final.public[1]!.windowState, dom: final.dom[1]!,
+          history: await this.captureNavigationHistory(`${id}-${name}-final-other-history`, final.public[1]!.connId, shownWorktree(final.public[1]!))
+        },
+        supporting
+      }
+    }
+    const statusAfterId = `${id}-status-after`
+    await this.gitStatus(statusAfterId, b.id)
+    const before = await this.captureSample(`${id}-refusal-before`)
+    const historiesBefore = await this.captureHistories(`${id}-refusal-before-history`, before)
+    const refusalId = `${id}-refused-staged`
+    const refusal = await this.expectRefusal(refusalId, [
+      'api', 'call', 'ui.window.command.run', '--conn-id', String(this.windows[0]!.connId),
+      '--id', 'command:quirky.git/open-diff', '--args', JSON.stringify({ worktree: b.id, path: B_TARGET, source: 'staged' })
+    ], { exitCode: 1, code: 'conflict', message: `${B_TARGET} has no staged changes.` })
+    const after = await this.captureSample(`${id}-refusal-after`)
+    const historiesAfter = await this.captureHistories(`${id}-refusal-after-history`, after)
+    this.setObservationSamples(builder, firstBefore!, after)
+    builder.evidence.request = { worktreeId: b.id, absolutePath: join(b.path, 'README.md'), targetConnectionId: this.windows[0]!.connId }
+    builder.evidence.sourceReview = {
+      worktreeId: b.id, tabId: this.sourceReviewTabId, readme, docs, appWorking: appWorking.read,
+      status: { stagedPaths, unstagedPaths, wholePaths, beforeReceiptId: statusBefore.receiptId, afterReceiptId: statusAfterId },
+      scopes,
+      refusal: {
+        receiptId: refusalId, ...refusal, before, after,
+        beforeInput: tabById(before.public[0]!.workspace, this.sourceReviewTabId)!.input,
+        afterInput: tabById(after.public[0]!.workspace, this.sourceReviewTabId)!.input,
+        otherHistoryBefore: historiesBefore.other, otherHistoryAfter: historiesAfter.other
+      }
+    }
+  }
+
+  async changedModes(builder: ObservationBuilder): Promise<void> {
+    const a = this.windows[0]!.worktree
+    const b = this.windows[1]!.worktree
+    const id = builder.id
+    const sentinels = this.fileSentinels
+    if (!sentinels || !this.sourceReviewTabId || !this.windowEditorTabId) {
+      throw new CliFilesFailure('missing-observation', 'changed modes lack earlier editor/Review identities')
+    }
+    rmSync(join(b.path, 'README.md'))
+    const status = await this.waitForStatus(`${id}-status`, b.id, result => {
+      const entries = array(result.entries, `${id} status entries`).map(entry => record(entry, 'mode status entry'))
+      return result.capped === false && JSON.stringify(entries.filter(entry => entry.path === 'README.md')
+        .map(entry => `${entry.area}:${entry.status}`).sort()) === JSON.stringify(['staged:modified', 'unstaged:deleted'])
+    })
+    const entries = array(status.result.entries, `${id} entries`).map(entry => record(entry, 'changed-file status'))
+    const paths = [...new Set(entries.map(entry => string(entry.path, 'changed path')))]
+    const deleted = new Set(paths.filter(path => {
+      const rows = entries.filter(entry => entry.path === path)
+      return rows.some(entry => entry.area === 'unstaged' && entry.status === 'deleted') ||
+        (rows.some(entry => entry.area === 'staged' && entry.status === 'deleted') &&
+          !rows.some(entry => entry.area === 'unstaged' || entry.area === 'untracked'))
+    }))
+    const expectedEditPaths = paths.filter(path => !deleted.has(path)).sort()
+    const expectedUnstagedPaths = paths.filter(path => !deleted.has(path) &&
+      entries.some(entry => entry.path === path && (entry.area === 'unstaged' || entry.area === 'untracked'))).sort()
+    await this.navigateWindowToWorktree(0, a.id, `${id}-setup-a`)
+    await this.navigateWindowToWorktree(1, b.id, `${id}-setup-b`)
+    await this.activateTab(`${id}-sentinel-b`, sentinels.b.tabId)
+    await this.focusBaseline(0, sentinels.a.tabId)
+    await this.focusBaseline(1, sentinels.b.tabId)
+    const editId = `${id}-edit`
+    const edit = await this.transition(editId, () => this.runWindowCommand(
+      editId, this.windows[0]!.connId, 'command:quirky.git/open-changes', { worktree: b.id, mode: 'edit', focus: false }
+    ))
+    await this.navigateWindowToWorktree(1, a.id, `${id}-other-on-a`)
+    await this.focusBaseline(1, sentinels.a.tabId)
+    const bothId = `${id}-both`
+    const both = await this.transition(bothId, () => this.runWindowCommand(
+      bothId, this.windows[0]!.connId, 'command:quirky.git/open-changes', { worktree: b.id, mode: 'both' }
+    ), () => this.waitForDom(0, dom => dom.renderedTabId === this.sourceReviewTabId && dom.reviewTabMounted, `${id} both Review`))
+    await this.navigateWindowToWorktree(0, a.id, `${id}-edit-reset-a`)
+    await this.focusBaseline(0, sentinels.a.tabId)
+    const unstagedId = `${id}-edit-unstaged`
+    const unstagedEdit = await this.transition(unstagedId, () => this.runWindowCommand(
+      unstagedId, this.windows[0]!.connId, 'command:quirky.git/open-changes', { worktree: b.id, mode: 'edit', area: 'unstaged' }
+    ), () => this.waitForDom(0, dom => dom.renderedTabId === this.windowEditorTabId && dom.path === join(b.path, B_TARGET), `${id} focused editor`))
+    const result = record(record(unstagedEdit.result, 'unstaged envelope').result, 'unstaged edit result')
+    const first = record(array(result.opened, 'unstaged opened')[0], 'first opened file')
+    this.setObservationSamples(builder, edit.before, unstagedEdit.after)
+    builder.evidence.request = { worktreeId: b.id, targetConnectionId: this.windows[0]!.connId }
+    builder.evidence.changedModes = {
+      worktreeId: b.id, editorTabId: this.windowEditorTabId, reviewTabId: this.sourceReviewTabId,
+      sentinelTabId: sentinels.b.tabId, expectedEditPaths, expectedUnstagedPaths,
+      status: { entries, receiptId: status.receiptId }, edit, both,
+      unstagedEdit: { ...unstagedEdit, firstOpenedAbsolutePath: join(b.path, string(first.path, 'first opened path')) }
+    }
+  }
+
+  async fileWindowScenarios(): Promise<void> {
+    const recipes: Array<[string, (builder: ObservationBuilder) => Promise<void>]> = [
+      ['files-editor-window-focus', builder => this.editorWindowFocus(builder)],
+      ['files-window-refusals', builder => this.windowRefusals(builder)],
+      ['files-review-focus-window', builder => this.reviewFocusWindow(builder)],
+      ['files-review-background', builder => this.reviewBackground(builder)],
+      ['files-review-source', builder => this.reviewSource(builder)],
+      ['files-changed-modes', builder => this.changedModes(builder)]
+    ]
+    for (const [id, recipe] of recipes) {
+      if (this.primaryFailure) break
+      this.progress(id)
+      await this.observation(id, recipe)
+    }
   }
 
   async ensureWorld(): Promise<void> {
@@ -2076,9 +4079,9 @@ export class CliFilesRunner {
       }
     }
     const all = Object.values(mappings).flat()
-    if (new Set(all).size !== EXPECTED_OBSERVATIONS.length ||
-        EXPECTED_OBSERVATIONS.some((id) => !all.includes(id)) || all.length !== 11) {
-      throw new CliFilesFailure('invalid-table', 'file observation registry does not contain exactly the seven linked observations')
+    if (new Set(all).size !== EXPECTED_OBSERVATION_COUNT ||
+        EXPECTED_OBSERVATIONS.some((id) => !all.includes(id)) || all.length !== EXPECTED_BINDING_COUNT) {
+      throw new CliFilesFailure('invalid-table', 'file observation registry does not contain exactly thirteen observations')
     }
     const methods = array(catalog.methods, 'catalog methods').map((entry) => record(entry, 'catalog method'))
     const requireMethod = (name: string, required: Record<string, string>, optional: Record<string, string> = {}) => {
@@ -2150,11 +4153,45 @@ export class CliFilesRunner {
     if (injectionPresent) throw new CliFilesFailure('literal-path-execution', 'literal path created cli-injected')
   }
 
+  beginCleanup(): number {
+    const deadline = Math.min(this.startedAt + WORK_LIMIT_MS + TEARDOWN_LIMIT_MS, Date.now() + TEARDOWN_LIMIT_MS)
+    this.cleanupTimer ??= setTimeout(() => this.cleanupController.abort(
+      new CliFilesFailure('cleanup-deadline', 'CLI file teardown exceeded its 30-second cleanup reserve')
+    ), Math.max(1, deadline - Date.now()))
+    return deadline
+  }
+
+  async cleanupTemporaryPages(): Promise<void> {
+    for (const temporary of this.temporaryPages) {
+      try {
+        if (!temporary.contextClosed) {
+          await this.readRenderer(() => temporary.context.close(), true)
+          temporary.contextClosed = true
+          temporary.pageClosed = temporary.page?.isClosed() ?? true
+        }
+        if (temporary.connId && !temporary.connectionGone) {
+          const until = Math.min(this.startedAt + WORK_LIMIT_MS + TEARDOWN_LIMIT_MS, Date.now() + 10_000)
+          for (let attempt = 0; Date.now() < until; attempt++) {
+            const state = record(await this.requireSuccess(`cleanup-temporary-${temporary.connId}-${attempt}`,
+              ['ui', 'state'], { cleanup: true }), 'temporary cleanup state')
+            if (!array(state.windows, 'temporary cleanup windows').some(window =>
+              record(window, 'temporary cleanup window').connId === temporary.connId)) {
+              temporary.connectionGone = true
+              break
+            }
+            await Bun.sleep(50)
+          }
+          if (!temporary.connectionGone) throw new CliFilesFailure('renderer-cleanup', 'temporary UI connection disappearance was not verified')
+        }
+      } catch (error) {
+        this.cleanupFailure = [this.cleanupFailure, safeError(error).message].filter(Boolean).join('; ')
+      }
+    }
+  }
+
   async cleanupOwnedTabs(): Promise<void> {
     if (!this.world || this.windows.length !== 2) return
-    const cleanupDeadline = Math.min(this.startedAt + WORK_LIMIT_MS + TEARDOWN_LIMIT_MS, Date.now() + TEARDOWN_LIMIT_MS)
-    this.cleanupTimer = setTimeout(() => this.cleanupController.abort(new CliFilesFailure('cleanup-deadline', 'CLI file teardown exceeded its 30-second cleanup reserve')),
-      Math.max(1, cleanupDeadline - Date.now()))
+    const cleanupDeadline = this.beginCleanup()
     try {
       await this.world.assertLive({ signal: this.cleanupController.signal, timeoutMs: Math.min(CHILD_LIMIT_MS, cleanupDeadline - Date.now()) })
       await this.assertLive(true)
@@ -2300,7 +4337,10 @@ export class CliFilesRunner {
       trackedIdentities,
       daemonIdentityFound: daemonFound,
       browserIdentityFound: browserFound,
-      sentinelAlive: this.sentinelAliveAfterWorld
+      sentinelAlive: this.sentinelAliveAfterWorld,
+      temporaryPageIdentities: this.temporaryPages.map(page => ({
+        connId: page.connId, contextClosed: page.contextClosed, pageClosed: page.pageClosed, connectionGone: page.connectionGone
+      }))
     }
     clearTimeout(this.cleanupTimer)
   }
@@ -2323,6 +4363,7 @@ export class CliFilesRunner {
       this.progress('running renderer observations')
       await this.editorScenarios()
       if (!this.primaryFailure) await this.prepareRoutingAndReview()
+      if (!this.primaryFailure) await this.fileWindowScenarios()
       if (!this.primaryFailure) await this.captureGuards()
     } catch (error) {
       const failure = safeError(error)
@@ -2337,6 +4378,8 @@ export class CliFilesRunner {
     } finally {
       clearTimeout(this.workTimer)
       if (this.options.signal && this.signalListener) this.options.signal.removeEventListener('abort', this.signalListener)
+      this.beginCleanup()
+      await this.cleanupTemporaryPages()
       await this.cleanupOwnedTabs()
       try { if (!this.guardEvidence) await this.captureGuards() }
       catch (error) { this.cleanupFailure = [this.cleanupFailure, safeError(error).message].filter(Boolean).join('; ') }
@@ -2363,17 +4406,18 @@ export class CliFilesRunner {
     }
     const observedAll = [...this.observations.values()].length === EXPECTED_OBSERVATIONS.length &&
       EXPECTED_OBSERVATIONS.every((id) => this.observations.get(id)?.status === 'observed')
+    const cleanupOk = !this.cleanupFailure && cleanup && this.cleanupEvidence.processIdentitiesGone === true && this.cleanupEvidence.sentinelAlive === true
     const ok = !this.primaryFailure && !this.cleanupFailure && cleanup && observedAll && this.guardEvidence?.injected === false
     const report: CliFilesReport = {
       schemaVersion: 1,
       scope: 'goal-11-cli-files',
       ok,
-      parityComplete: false,
+      parityComplete: isCliFilesParityComplete(ok, cleanupOk, reportRows),
       rows: reportRows,
       observations: EXPECTED_OBSERVATIONS.map((id) => this.observations.get(id) ?? placeholder(id)),
       receipts: this.receipts,
       cleanup: {
-        ok: !this.cleanupFailure && cleanup && this.cleanupEvidence.processIdentitiesGone === true && this.cleanupEvidence.sentinelAlive === true,
+        ok: cleanupOk,
         ...(this.cleanupFailure ? { error: this.cleanupFailure } : {}),
         evidence: this.cleanupEvidence
       },

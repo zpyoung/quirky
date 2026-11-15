@@ -46,10 +46,10 @@ export type CliTableRow = {
 }
 
 export const CLI_FILE_OBSERVATION_BINDINGS: Readonly<Record<string, readonly string[]>> = {
-  'file-open': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path'],
-  'file-open-render': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path'],
-  'file-diff': ['files-review-diff', 'files-review-reuse', 'files-window-routing'],
-  'file-open-changed': ['files-review-changed', 'files-window-routing']
+  'file-open': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path', 'files-editor-window-focus'],
+  'file-open-render': ['files-editor-local', 'files-editor-other-worktree', 'files-editor-literal-path', 'files-editor-window-focus', 'files-window-refusals'],
+  'file-diff': ['files-review-diff', 'files-review-reuse', 'files-window-routing', 'files-window-refusals', 'files-review-focus-window', 'files-review-background', 'files-review-source'],
+  'file-open-changed': ['files-review-changed', 'files-window-routing', 'files-window-refusals', 'files-review-focus-window', 'files-changed-modes']
 }
 
 export type CliSchemaRequirement = {
