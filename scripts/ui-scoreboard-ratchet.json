@@ -1,5 +1,6 @@
 {
   "host": ["compatibility-tokens"],
+  "quirky.tasks": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.accounts": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.browser": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.feedback": ["commands", "compatibility-tokens", "empty", "error", "loading"],
