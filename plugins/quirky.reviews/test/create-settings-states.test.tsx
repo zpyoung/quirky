@@ -1752,3 +1752,61 @@ test('session retirement reconciles its already-fetched numeric replacement snap
   expect(ui.element.querySelector<HTMLInputElement>('#review-title')?.value).toBe('Accepted replacement title')
   expect(ui.refreshes).toBe(refreshes)
 })
+
+for (const outcome of ['resolve', 'reject'] as const) {
+  test(`same-head renewal retains queued body and base drafts after an old title write ${outcome}s`, async () => {
+    let snapshot = nextDraftTick()
+    const initial = stateFor({ creation: {
+      eligibility: { eligible: true, confirmedAt: Date.now(), headOid: 'a'.repeat(40) }
+    } })
+    const ui = mount((props) => <CreateReview {...props} snapshot={snapshot} />, initial)
+    await settle()
+    const held = ui.holdNext('quirky.reviews/createDraft')
+    changeValue(ui.element.querySelector<HTMLInputElement>('#review-title')!, 'Unsaved title')
+    changeValue(ui.element.querySelector<HTMLTextAreaElement>('#review-body')!, 'Unsaved body')
+    await requestRegisteredControl(ui, CREATE_VIEW, 'creation', 'base-set', { base: 'release' })
+    await settle()
+    snapshot = nextDraftTick()
+    const replacement = { ...initial, creation: { ...initial.creation, generation: 2 } }
+    ui.render(replacement)
+    await settle()
+    await act(async () => {
+      if (outcome === 'reject') held.reject(new Error('obsolete generation'))
+      else held.resolve({ updated: true })
+      await held.promise.catch(() => {})
+    })
+    await settle()
+    snapshot = nextDraftTick()
+    ui.render(replacement)
+    await settle()
+    expect(ui.calls.filter((call) => call.method === 'quirky.reviews/createDraft' && call.params.body === 'Unsaved body')).toHaveLength(0)
+    expect(ui.calls.filter((call) => call.method === 'quirky.reviews/createBase')).toHaveLength(0)
+    expect(ui.element.querySelector<HTMLTextAreaElement>('#review-body')?.value).toBe('Unsaved body')
+    expect(ui.element.querySelector<HTMLInputElement>('#review-base')?.value).toBe('release')
+    if (outcome === 'reject') expect(ui.element.querySelector<HTMLInputElement>('#review-title')?.value).toBe('Unsaved title')
+    expect(ui.element.textContent).not.toContain('obsolete generation')
+  })
+}
+
+test('confirmation shared loading content has a polite live status ancestor', async () => {
+  const held = deferred<unknown>()
+  const ui = create(stateFor({ creation: { worktree: null } }), WORKTREE_A, (controls) => {
+    controls.setMethod('quirky.reviews/createOpen', () => held.promise)
+  })
+  await settle()
+  const notice = ui.element.querySelector('.ui-notice-line')!
+  expect(notice.textContent).toContain('Confirming this worktree')
+  const status = notice.closest('[role="status"]')
+  expect(status).not.toBeNull()
+  expect(status?.getAttribute('aria-live')).toBe('polite')
+})
+
+test('empty remote bases shared content has a polite live status ancestor', async () => {
+  const ui = create(stateFor({ creation: { bases: [] } }))
+  await settle()
+  const empty = ui.element.querySelector('.ui-empty-state')!
+  expect(empty.textContent).toContain('No remote base branches')
+  const status = empty.closest('[role="status"]')
+  expect(status).not.toBeNull()
+  expect(status?.getAttribute('aria-live')).toBe('polite')
+})

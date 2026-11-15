@@ -183,42 +183,40 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const setLocalError = (message: string | null) => {
     setErrorState(message === null ? null : { epoch, message })
   }
-  const enqueue = (operation: () => Promise<unknown>, isCurrent: () => boolean): Promise<void> => {
+  const enqueue = (operation: () => Promise<unknown>, isCurrent: () => boolean): Promise<boolean> => {
     const request = draftWrites.current.then(async () => {
-      if (!mounted.current || !isCurrent()) return
-      await operation()
+      if (!mounted.current || !isCurrent()) return false
+      try {
+        await operation()
+      } catch (error) {
+        if (!mounted.current || !isCurrent()) return false
+        throw error
+      }
+      return mounted.current && isCurrent()
     })
-    draftWrites.current = request.catch(() => undefined)
+    draftWrites.current = request.then(() => undefined, () => undefined)
     return request
   }
   const sendDraft = async (fields: Record<string, unknown>) => {
     if (!worktree || !currentTarget) return false
     const isCurrent = targetGuard()
-    try {
-      await enqueue(
-        () => props.context.call('quirky.reviews/createDraft', { worktree, ...fields, generation: creation.generation }),
-        isCurrent,
-      )
-    } catch (error) {
-      if (isCurrent()) throw error
-    }
+    return enqueue(
+      () => props.context.call('quirky.reviews/createDraft', { worktree, ...fields, generation: creation.generation }),
+      isCurrent,
+    )
   }
   const sendBase = async (base: string, stack?: boolean) => {
     if (!worktree || !currentTarget) return false
     const isCurrent = targetGuard()
-    try {
-      await enqueue(
-        () => props.context.call('quirky.reviews/createBase', {
-          worktree,
-          base,
-          ...(stack === undefined ? {} : { stack }),
-          generation: creation.generation,
-        }),
-        isCurrent,
-      )
-    } catch (error) {
-      if (isCurrent()) throw error
-    }
+    return enqueue(
+      () => props.context.call('quirky.reviews/createBase', {
+        worktree,
+        base,
+        ...(stack === undefined ? {} : { stack }),
+        generation: creation.generation,
+      }),
+      isCurrent,
+    )
   }
   const refreshDraftFields = () => {
     if (suppressGenerationRetirementRefresh.current) return Promise.resolve()
@@ -746,7 +744,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
       <SectionHeader title="Create pull request" />
       {confirmationError
         ? <InlineError message={confirmationError} action={!currentTarget ? { label: 'Retry confirmation', onAction: () => requestCreationControl('refresh-eligibility') } : undefined} />
-        : <NoticeLine>Confirming this worktree and its current branch…</NoticeLine>}
+        : <div role="status" aria-live="polite"><NoticeLine>Confirming this worktree and its current branch…</NoticeLine></div>}
     </section>
   }
 
@@ -784,7 +782,7 @@ export function CreateReview(props: ReviewsSurfaceProps) {
         </datalist>
       </div>
       {creation.bases.length === 0 && !creation.loading && !creation.error &&
-        <EmptyState message="No remote base branches are available." />}
+        <div role="status" aria-live="polite"><EmptyState message="No remote base branches are available." /></div>}
 
       <TextField
         id="review-title"

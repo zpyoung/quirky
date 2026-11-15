@@ -111,6 +111,8 @@ function makeContext(connId = 41, worktree: string | null = WORKTREE) {
         return { result: await handler(params.args) }
       }
       if (method === 'quirky.reviews/state') return reviewsState()
+      if (method === 'quirky.worktree/list') return []
+      if (method === 'quirky.reviews/creationDefaults') return { defaults: DEFAULTS }
       return undefined
     },
     subscribe(listener: (event: QuirkyEvent) => void | Promise<void>) {
