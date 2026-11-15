@@ -111,7 +111,7 @@ async function waitForHostLoss(h: E2eHarness, ids: string[]): Promise<void> {
 }
 
 scenario('SC-1: a new shell session is ready at its first prompt', async () => {
-  const h = await start()
+  const h = await start({ zshrc: "PROMPT='%1~ %# '\nRPROMPT=''\n" })
   const session = await h.newSession()
   expect(session).toMatchObject({ agent: 'shell', kind: 'terminal', status: 'running' })
 
@@ -128,7 +128,7 @@ scenario('SC-1: a new shell session is ready at its first prompt', async () => {
     const text = await h.ok(['terminal', 'snapshot', session.id])
     return text.includes(`${basename(h.repo)} %`) || text.includes(`${basename(h.repo)} #`) ? text : undefined
   })
-  expect(plain(prompt)).toContain(basename(h.repo))
+  expect(plain(prompt)).toMatch(new RegExp(`${basename(h.repo)} [%#]`))
   const snapshot = await h.json<{ cwd: string; shellState: string }>(['terminal', 'snapshot', session.id])
   expect(snapshot).toMatchObject({ cwd: h.repo, shellState: 'ready' })
 })
