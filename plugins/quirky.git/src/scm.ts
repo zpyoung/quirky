@@ -1,5 +1,6 @@
 import type { GitBusyOp, GitOperation, UiLayout } from '@quirky/protocol'
 import type { SectionId } from './panel/sections'
+import type { GitUiControlAddress } from './ui-control'
 
 /** The worktree selected for the current window, or null when none is selected. */
 export function worktreeOf(layout: UiLayout): string | null {
@@ -22,6 +23,7 @@ export type ScmReport = {
   filter: string
   viewMode: 'list' | 'tree'
   historyOpen: boolean
+  uiControls?: GitUiControlAddress[]
 }
 
 /** The report of a panel with no worktree to show. */
