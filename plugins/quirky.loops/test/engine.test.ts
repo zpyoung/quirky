@@ -6,7 +6,8 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { RpcErrorCode, type PluginContext, type PluginStore, type QuirkyEvent, type RunOptions, type RunResult, type Session, type StructuredMessage, type Worktree } from '@quirky/protocol'
 import * as supervision from '@quirky/supervision'
-import type { SupervisionEngine } from '@quirky/supervision'
+import type { StructuredSample, StructuredWatch, SupervisionEngine } from '@quirky/supervision'
+
 import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import type { LoopCreateInput } from '../src/types'
 import { normalizeLoopConfig } from '../src/config'
@@ -381,17 +382,27 @@ type SupervisionCall = { method: string; args: unknown[] }
 function wrapSupervisionMethod(
   engine: SupervisionEngine,
   method: Extract<keyof SupervisionEngine, string>,
-  calls: SupervisionCall[]
+  calls: SupervisionCall[],
+  observeSample?: (sample: StructuredSample) => void
 ): void {
   const target = engine as unknown as Record<string, (...args: unknown[]) => unknown>
   const original = target[method]!.bind(engine)
   spyOn(target, method).mockImplementation((...args) => {
     calls.push({ method, args })
-    return original(...args)
+    if (method !== 'watchStructured' || !observeSample) return original(...args)
+    const input = args[0] as StructuredWatch<unknown>
+    return original({
+      ...input,
+      onSample: async (sample, signal) => {
+        const decision = await input.onSample(sample, signal)
+        observeSample(sample)
+        return decision
+      }
+    })
   })
 }
 
-function spyOnSupervisionEngine() {
+function spyOnSupervisionEngine(observeSample?: (sample: StructuredSample) => void) {
   const calls: SupervisionCall[] = []
   const create = supervision.createSupervision
   const factory = spyOn(supervision, 'createSupervision')
@@ -401,7 +412,7 @@ function spyOnSupervisionEngine() {
       'create', 'resume', 'send', 'readMessages', 'watchStructured', 'wake',
       'runCheck', 'cancelCheck', 'stop', 'stopOwned', 'dispose'
     ] as const) {
-      wrapSupervisionMethod(engine, method, calls)
+      wrapSupervisionMethod(engine, method, calls, observeSample)
     }
     return engine
   })
@@ -415,12 +426,82 @@ function service(runtime: Runtime, now: () => number = Date.now): LoopService {
   return loops
 }
 
+
+async function assertApprovalHoldAccounting(emitSessionEvent: boolean, sampleBeforeApproval: boolean): Promise<void> {
+  const runtime = rig()
+  const clock = new ManualClock()
+  runtime.turns.push('hold')
+  const workingSample = Promise.withResolvers<void>()
+  const heldSample = Promise.withResolvers<void>()
+  let heldSampleStatus: Session['status'] | null = null
+  spyOnSupervisionEngine((sample) => {
+    if (!sample.session.ok) return
+    const status = sample.session.value.status
+    if (status === 'working') workingSample.resolve()
+    if (heldSampleStatus === status) {
+      heldSampleStatus = null
+      heldSample.resolve()
+    }
+  })
+  const loops = service(runtime, clock.now)
+  await loops.start()
+  const created = await loops.create(input({
+    ...input().config,
+    caps: { maxActiveMinutes: 1 },
+    askBeforeNext: true
+  }))
+  await runtime.until(() => runtime.sends.length === 1 ? true : null)
+  await workingSample.promise
+
+  const sessionId = runtime.sends[0]!.session
+  const ask = { id: 'ask-clock', sessionId, envelope: { status: 'pending' as const } }
+  const journal = Promise.withResolvers<unknown>()
+
+  if (sampleBeforeApproval) {
+    runtime.failedJournalResponsesAfterSend.push(journal.promise)
+    runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+    await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
+    await flushFakeRpcs()
+  }
+
+  clock.advance(1000)
+  runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'waiting' })
+  runtime.pendingAsks = [ask]
+  if (!sampleBeforeApproval) runtime.failedJournalResponsesAfterSend.push(journal.promise)
+  heldSampleStatus = sampleBeforeApproval ? 'working' : 'waiting'
+  if (emitSessionEvent || sampleBeforeApproval) {
+    runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+  }
+  await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
+  await flushFakeRpcs()
+
+  const held = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'needs-you')
+  expect(held.activeMs).toBe(1000)
+  clock.advance(5000)
+  journal.resolve([])
+  await heldSample.promise
+
+  runtime.pendingAsks = []
+  runtime.emit('quirky.ask/resolved', { askId: ask.id })
+  runtime.respond(sessionId, 'finished after approval')
+  const paused = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
+  expect(paused.pauseReason).toBe('ask-before-next')
+  expect(paused.activeMs).toBe(1000)
+}
+
+
 function loopUntil(runtime: Runtime, loops: LoopService, id: string, match: (snapshot: ReturnType<LoopService['get']>) => boolean) {
   return runtime.until(() => {
     const snapshot = loops.get(id)
     return match(snapshot) ? snapshot : null
   })
 }
+function flushFakeRpcs(): Promise<void> {
+  const flushed = Promise.withResolvers<void>()
+  setImmediate(flushed.resolve)
+  return flushed.promise
+}
+
 
 describe('LoopService background engine', () => {
   test('rejects unsupported agents, presets, blank prompts and invalid numeric config before provider launch', async () => {
@@ -876,32 +957,16 @@ describe('LoopService background engine', () => {
     expect(restarted.iterations(created.id).map(({ n, attempt }) => [n, attempt])).toEqual([[1, 1], [1, 2]])
   })
 
-  test('excludes approval holds from active time while charging the working turn', async () => {
-    const runtime = rig()
-    const clock = new ManualClock()
-    runtime.turns.push('hold')
-    const loops = service(runtime, clock.now)
-    await loops.start()
-    const created = await loops.create(input({
-      ...input().config,
-      caps: { maxActiveMinutes: 1 },
-      askBeforeNext: true
-    }))
-    await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.phase === 'working')
-    clock.advance(1000)
-    const sessionId = runtime.sends[0]!.session
-    const ask = { id: 'ask-clock', sessionId, envelope: { status: 'pending' as const } }
-    runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'waiting' })
-    runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
-    const held = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'needs-you')
-    expect(held.activeMs).toBe(1000)
-    runtime.pendingAsks = [ask]
-    clock.advance(5000)
-    runtime.pendingAsks = []
-    runtime.emit('quirky.ask/resolved', { askId: ask.id })
-    runtime.respond(sessionId, 'finished after approval')
-    const paused = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
-    expect(paused.activeMs).toBe(1000)
+  test('excludes approval holds from active time when a session event wakes the watcher', async () => {
+    await assertApprovalHoldAccounting(true, false)
+  })
+
+  test('excludes approval holds from active time when fallback polling wakes the watcher', async () => {
+    await assertApprovalHoldAccounting(false, false)
+  })
+
+  test('charges working time before an approval event interrupts a held working sample', async () => {
+    await assertApprovalHoldAccounting(true, true)
   })
 
   test('pauses a configured cost cap when provider usage is unavailable instead of treating it as zero', async () => {

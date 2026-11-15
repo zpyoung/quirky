@@ -159,6 +159,8 @@ export class LoopDriver {
   private lastHumanAt: number | null = null
   private lastRateLimit: StructuredMessage | null = null
   private watchingSessionId: string | null = null
+  private watchPolicyRefresh: (() => void) | null = null
+
 
   constructor(options: LoopDriverOptions) {
     this.context = options.context
@@ -196,8 +198,12 @@ export class LoopDriver {
   wake(): void {
     for (const resolve of this.wakeWaiters) resolve()
     this.wakeWaiters.clear()
-    if (this.watchingSessionId !== null) this.supervision.wake(this.watchingSessionId)
+    if (this.watchingSessionId !== null) {
+      this.watchPolicyRefresh?.()
+      this.supervision.wake(this.watchingSessionId)
+    }
   }
+
 
   observeMessage(message: StructuredMessage): void {
     const loop = this.store.getLoop(this.loopId)
@@ -843,16 +849,81 @@ export class LoopDriver {
     const sentAt = this.turnSentAt ?? this.now()
     let lastTick = sentAt
     let observedSeq = sentSeq
+    let holdRevision = 0
+    let sampleHoldRevision = 0
+    let knownHeld = false
+    let refreshing = false
+    let refreshAgain = false
+    const controller = this.currentController
     const loop = this.requireLoop()
+    if (controller === null) throw new DriverCancelled()
+    const watchIsCurrent = (): boolean =>
+      this.currentController === controller &&
+      this.watchingSessionId === sessionId &&
+      !controller.signal.aborted &&
+      !signal.aborted &&
+      !this.shuttingDown &&
+      !this.stopNowRequested
+    const markHeld = (): void => {
+      const current = this.current()
+      if (!current) return
+      const wasNeedsYou = current.state === 'needs-you'
+      const wasEligible = this.activeSince !== null
+      if (wasNeedsYou) this.setEligible(false)
+      else this.setNeedsYou()
+      knownHeld = true
+      if (!wasNeedsYou || wasEligible) {
+        holdRevision++
+        this.supervision.wake(sessionId)
+      }
+    }
+    const refreshPolicy = (): void => {
+      if (!watchIsCurrent() || knownHeld) return
+      if (refreshing) {
+        refreshAgain = true
+        return
+      }
+      refreshing = true
+      const refresh = async (): Promise<void> => {
+        do {
+          refreshAgain = false
+          const revision = holdRevision
+          const current = await this.session(sessionId, controller.signal)
+          if (!watchIsCurrent() || revision !== holdRevision) return
+          const asks = await this.approvalPending(sessionId, controller.signal)
+          if (!watchIsCurrent() || revision !== holdRevision) return
+          if (asks === true || current?.status === 'waiting') markHeld()
+          else if (asks === false && current) knownHeld = false
+        } while (refreshAgain && !knownHeld && watchIsCurrent())
+      }
+      void refresh().catch(() => undefined).finally(() => {
+        refreshing = false
+        if (refreshAgain && !knownHeld && watchIsCurrent()) {
+          refreshAgain = false
+          refreshPolicy()
+        } else {
+          refreshAgain = false
+        }
+      })
+    }
     this.watchingSessionId = sessionId
+    this.watchPolicyRefresh = refreshPolicy
     try {
       return await this.supervision.watchStructured<Observation>({
         target: { sessionId, worktreeId: loop.worktreeId, agent: loop.agent },
         pollMs: this.pollMs,
         signal,
-        journal: () => ({ afterSeq: observedSeq, limit: MESSAGE_LIMIT, tail: true }),
+        journal: () => {
+          sampleHoldRevision = holdRevision
+          refreshPolicy()
+          return { afterSeq: observedSeq, limit: MESSAGE_LIMIT, tail: true }
+        },
         onSample: async (sample, watchSignal) => {
           this.assertActive(watchSignal)
+          if (sampleHoldRevision !== holdRevision) {
+            this.supervision.wake(sessionId)
+            return { kind: 'continue' }
+          }
           const current = sample.session.ok ? sample.session.value : null
           if (current?.status === 'exited') {
             return { kind: 'done', value: { kind: 'crashed', detail: `structured session ${sessionId} exited` } }
@@ -860,8 +931,15 @@ export class LoopDriver {
 
           const asks = await this.approvalPending(sessionId, watchSignal)
           this.assertActive(watchSignal)
-          if (asks === true || current?.status === 'waiting') this.setNeedsYou()
-          else if (asks === false && current) this.setRunningFromNeedsYou()
+          if (sampleHoldRevision !== holdRevision) {
+            this.supervision.wake(sessionId)
+            return { kind: 'continue' }
+          }
+          if (asks === true || current?.status === 'waiting') markHeld()
+          else if (asks === false && current) {
+            knownHeld = false
+            this.setRunningFromNeedsYou()
+          }
           let messages: StructuredMessage[] = []
           const journalKnown = sample.journal.ok
           if (sample.journal.ok) {
@@ -907,6 +985,7 @@ export class LoopDriver {
       if (isAbortError(error)) this.assertActive(signal)
       throw error
     } finally {
+      if (this.watchPolicyRefresh === refreshPolicy) this.watchPolicyRefresh = null
       this.watchingSessionId = null
     }
   }
