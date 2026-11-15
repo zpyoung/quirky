@@ -91,7 +91,8 @@ describe('pane attach and image addon ordering', () => {
       await detachedPane.unmount()
 
       const rejectedTextBeforeAddon = terminalText(rejectedPane.term())
-      expect(rejectedTextBeforeAddon).toContain('Could not attach: gone')
+      expect(rejectedPane.element.querySelector('[data-terminal-connection-state] .ui-inline-error')?.textContent).toBe('Could not attach: gone')
+      expect(rejectedTextBeforeAddon).not.toContain('Could not attach: gone')
 
       releaseImageModule()
       await settle()
@@ -107,6 +108,7 @@ describe('pane attach and image addon ordering', () => {
       expect(detachedFake.streams.has(7)).toBe(false)
       expect(terminalText(detachedTerminal)).not.toContain('unmounted-replay')
       expect(terminalText(rejectedPane.term())).toBe(rejectedTextBeforeAddon)
+      expect(rejectedPane.element.querySelector('[data-terminal-connection-state] .ui-inline-error')?.textContent).toBe('Could not attach: gone')
     } finally {
       releaseImageModule()
       await settle()
