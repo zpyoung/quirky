@@ -1019,3 +1019,20 @@ test('ChecksList does not load a check removed while expansion is pending', asyn
   await settle()
   expect(callCount(ui, 'quirky.reviews/detailLoadCheckDetails')).toBe(0)
 })
+
+for (const label of ['Comment at 3', 'Set range start 3']) {
+  test(`FilesChanged fences stale main-slot ${label} failures after inline reopen`, async () => {
+    const ui = mountFiles(reviewState({ files: filesEnvelope([file()]) }))
+    await invoke(ui, 'files-changed', 'inline-comment-open', { path: 'src/a.ts', line: 2 })
+    const main = control(ui, 'files-changed')
+    const held = ui.holdNext('ui.window.command.run')
+    await click(button(ui.element, label))
+    await click(button(ui.element, 'Cancel'))
+    await click(button(ui.element, 'Comment at 2'))
+    expect(control(ui, 'files-changed').generation).toBe(main.generation)
+    await act(async () => { held.reject(new Error('obsolete inline retarget')); await held.promise.catch(() => {}) })
+    await settle()
+    expect(ui.element.querySelector('form')?.textContent).toContain('Comment on src/a.ts:2')
+    expect(errorTexts(ui.element).join(' ')).not.toContain('obsolete inline retarget')
+  })
+}

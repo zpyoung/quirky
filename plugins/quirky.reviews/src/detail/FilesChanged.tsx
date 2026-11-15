@@ -231,9 +231,10 @@ export function FilesChanged(props: ReviewsSurfaceProps) {
     const lease = inline ? inlineRegistration.current : registration.current
     if (lease === null) return
     const origin = { ownerKey, generation: lease.generation, session: inlineSessionRef.current }
+    const sessionBound = inline || action === 'inline-comment-open' || action === 'range-start-set'
     const isCurrent = () => lease.active && (inline ? inlineRegistration.current : registration.current) === lease
       && lease.generation === origin.generation && current.current?.ownerKey === origin.ownerKey
-      && (!inline || inlineSessionRef.current === origin.session)
+      && (!sessionBound || inlineSessionRef.current === origin.session)
     try {
       const result = await requestReviewsUiControl(props.context, {
         target: lease.target, generation: origin.generation, action, ...(value === undefined ? {} : { value }),
