@@ -637,6 +637,66 @@ test('reports a missing Lima executable without falling back to another backend'
   expect(readFileSync(logPath, 'utf8')).toBe('')
 })
 
+test.skipIf(process.platform !== 'linux')('refuses VM create and lifecycle while preserving the durable failed record', async () => {
+  const doctor = await method('vmDoctor')({}) as {
+    platform: string
+    supported: boolean
+    backend: { name: string; executable: string | null; available: boolean; error: string | null }
+  }
+  expect(doctor).toMatchObject({
+    platform: 'linux',
+    supported: false,
+    backend: {
+      name: 'lima',
+      executable: limaPath,
+      available: true,
+      error: expect.stringContaining('Lima VM environments are supported only on macOS')
+    }
+  })
+  expect(readFileSync(logPath, 'utf8').trim().split('\n')).toEqual(['--version', 'list --all-fields --json'])
+
+  await expect(method('vmCreate')({
+    repo: 'repo_local',
+    recipe: envRecipe.id,
+    trustHash: environmentRecipeHash(envRecipe)
+  })).rejects.toThrow('Lima VM environments are supported only on macOS (current platform: linux)')
+  expect(calls.map((call) => call.method)).toEqual(['quirky.repo/show'])
+
+
+  const listed = method('vmList')({}) as { environments: VmEnvironment[] }
+  expect(listed.environments).toHaveLength(1)
+  const failed = listed.environments[0]!
+  expect(failed).toMatchObject({
+    state: 'failed',
+    backendState: 'unknown',
+    recipe: {
+      id: envRecipe.id,
+      hash: environmentRecipeHash(envRecipe),
+      checkoutMode: 'provisioned-root'
+    }
+  })
+  expect(failed.id).toEqual(expect.any(String))
+  expect(failed.instanceId).toEqual(expect.any(String))
+  const saved = method('vmShow')({ vm: failed.id }) as VmEnvironment
+  expect(saved).toEqual(failed)
+
+  const durableRecord = store.get('SELECT * FROM vm_environments WHERE id = ?', failed.id)
+  expect(durableRecord).toBeTruthy()
+  const recordBeforeLifecycle = method('vmShow')({ vm: failed.id }) as VmEnvironment
+  const ownerCallsBeforeLifecycle = JSON.stringify(calls)
+  const processLogBeforeLifecycle = readFileSync(logPath, 'utf8')
+  expect(processLogBeforeLifecycle.trim().split('\n')).toEqual(['--version', 'list --all-fields --json'])
+
+  for (const operation of ['vmSuspend', 'vmResume', 'vmDestroy'] as const) {
+    await expect(method(operation)({ vm: failed.id, instanceId: failed.instanceId }))
+      .rejects.toThrow('Lima VM environments are supported only on macOS (current platform: linux)')
+    expect(method('vmShow')({ vm: failed.id })).toEqual(recordBeforeLifecycle)
+    expect(store.get('SELECT * FROM vm_environments WHERE id = ?', failed.id)).toEqual(durableRecord)
+    expect(JSON.stringify(calls)).toBe(ownerCallsBeforeLifecycle)
+    expect(readFileSync(logPath, 'utf8')).toBe(processLogBeforeLifecycle)
+  }
+})
+
 test.skipIf(process.platform !== 'darwin')('reattaches the exact guest workspace after generation rotation and recovers an interrupted attach without replaying create', async () => {
   const created = vmFromResult(await method('vmCreate')({ repo: 'repo_local', recipe: envRecipe.id, trustHash: environmentRecipeHash(envRecipe) }))
   expect(created.state).toBe('running')

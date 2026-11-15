@@ -12,7 +12,7 @@ let trashVolume: TrashVolume | undefined
 let previousProcessHome: string | undefined
 let processHomeOverridden = false
 
-type DeleteResult = { deleted: boolean; trashed: number; alreadyMissing: boolean }
+type DeleteResult = { deleted: boolean; trashed: number; alreadyMissing: boolean; reason?: string }
 
 afterEach(async () => {
   try {
@@ -135,6 +135,32 @@ describe('vault session actions', () => {
     expect(readFileSync(filePath)).toEqual(originalBytes)
     expect(existsSync(vault.sourceHome)).toBe(true)
   })
+
+  test.skipIf(process.platform !== 'linux')(
+    'refuses confirmed Claude deletion without changing source bytes or listing membership',
+    async () => {
+      const vault = await start()
+      const session = await claudeSession(vault)
+      const filePath = session.source.filePath
+      if (!filePath) throw new Error('Claude source fixture path was redacted')
+      const originalBytes = readFileSync(filePath)
+      const before = await vault.call<PublicListResult>('list', { agents: ['claude'], unlimited: true })
+      expect(before.sessions.some((entry) => entry.id === session.id)).toBe(true)
+
+      const result = await vault.call<DeleteResult>('deleteSession', { id: session.id, yes: true })
+      expect(result).toEqual({
+        deleted: false,
+        trashed: 0,
+        alreadyMissing: false,
+        reason: 'OS Trash is supported only on macOS'
+      })
+      expect(existsSync(filePath)).toBe(true)
+      expect(readFileSync(filePath)).toEqual(originalBytes)
+      const after = await vault.call<PublicListResult>('list', { agents: ['claude'], unlimited: true })
+      expect(after.sessions.some((entry) => entry.id === session.id)).toBe(true)
+    }
+  )
+
 
   test.skipIf(process.platform !== 'darwin')(
     'APFS Trash rejects symlink swaps and invalidates concurrent scans/indexes while preserving unrelated originals',
