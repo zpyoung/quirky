@@ -17,6 +17,7 @@ export type FaultPlan =
   | { kind: 'storm'; seconds: number }
   | { kind: 'block'; ms: number }
   | { kind: 'slow-git'; ms: number }
+  | { kind: 'feedback'; refreshes: number }
 type PluginReport = { leaked: number[]; holders: number[]; refreshes: number; blockedMs: number | null }
 
 /** Returns bounded parameters that trip the chosen check on a run of this length. */
@@ -28,6 +29,7 @@ export function faultPlan(kind: FaultKind, runSeconds: number): FaultPlan {
     case 'storm': return { kind, seconds: 10 }
     case 'block': return { kind, ms: 3000 }
     case 'slow-git': return { kind, ms: SLOW_GIT_FAULT_MS }
+    case 'feedback': return { kind, refreshes: 17 }
   }
 }
 
@@ -37,6 +39,31 @@ export function installFaultPlugin(home: string, repoRoot: string): void {
   mkdirSync(destination, { recursive: true })
   for (const file of ['quirky-plugin.json', 'main.ts']) {
     copyFileSync(join(repoRoot, 'scripts', 'soak', 'faults', file), join(destination, file))
+  }
+}
+
+/** Builds the passive fixture panel into the disposable plugin tree. */
+export async function buildFaultUi(home: string, repoRoot: string): Promise<void> {
+  const plugin = join(home, 'plugins', FAULT_PLUGIN_ID)
+  const source = join(repoRoot, 'scripts', 'soak', 'faults', 'ui.tsx')
+  const sourceCopy = join(plugin, 'src', 'ui.tsx')
+  const output = join(plugin, 'dist')
+  mkdirSync(join(plugin, 'src'), { recursive: true })
+  copyFileSync(source, sourceCopy)
+  const result = await Bun.build({
+    entrypoints: [source],
+    target: 'browser',
+    minify: true,
+    splitting: true,
+    outdir: output,
+    define: { 'process.env.NODE_ENV': '"production"' },
+    throw: false,
+    naming: { entry: 'ui.[ext]', chunk: 'chunk-[hash].[ext]', asset: 'asset-[hash].[ext]' },
+    external: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime']
+  })
+  if (!result.success) {
+    const diagnostics = result.logs.map((log) => log.message).join('\n')
+    throw new Error(`feedback fixture UI build failed${diagnostics ? `: ${diagnostics}` : ''}`)
   }
 }
 
@@ -97,14 +124,24 @@ export type RunningFault = {
 /** Injects one real-daemon fault after a clean probe interval, without owning daemon cleanup. */
 export function startFault(options: {
   kind: FaultKind; home: string; control: QuirkyClient; projects: string[]; out: string
-  runSeconds: number; startedAt: number; signal: AbortSignal
+  runSeconds: number; startedAt: number; signal: AbortSignal; feedbackWorktrees?: [string, string]
 }): RunningFault {
+  const isWorktreePair = (value: unknown): value is [string, string] =>
+    Array.isArray(value) && value.length === 2 && value.every((worktree) => typeof worktree === 'string' && worktree.trim() !== '')
+  const sameWorktrees = (value: unknown, expected: [string, string]) =>
+    isWorktreePair(value) && value[0] === expected[0] && value[1] === expected[1]
+  const messageOf = (error: unknown) => error instanceof Error ? error.message : String(error)
+  if (options.kind === 'feedback' && (!isWorktreePair(options.feedbackWorktrees) || options.feedbackWorktrees[0] === options.feedbackWorktrees[1])) {
+    throw new Error('feedback fault requires two distinct nonempty worktrees')
+  }
+  const feedbackWorktrees = options.feedbackWorktrees ? [...options.feedbackWorktrees] as [string, string] : undefined
   const plan = faultPlan(options.kind, options.runSeconds)
   let stopped = false
   let driversStopped = false
   let at: number | undefined
   let failure: unknown
   let failed = false
+  let finalization: Promise<FaultRecord> | undefined
   const drivers: QuirkyClient[] = []
   const unsubscribes: (() => void)[] = []
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -152,11 +189,101 @@ export function startFault(options: {
     if (!failed) { failed = true; failure = error }
     closeDrivers()
   }
+
+  const injectFeedback = async (worktrees: [string, string]) => {
+    const connecting = connectDaemon({
+      home: options.home,
+      role: 'cli',
+      name: 'soak-feedback-monitor',
+      subscribe: true,
+      autostart: false
+    }).then((client) => {
+      if (stopped) {
+        client.close()
+        ensureRunning()
+      }
+      return client
+    })
+    let monitor: QuirkyClient
+    try {
+      monitor = await untilStopped(connecting)
+    } catch (error) {
+      ensureRunning()
+      throw new Error(`feedback event monitor failed to connect: ${messageOf(error)}`, { cause: error })
+    }
+    drivers.push(monitor)
+
+    const completion = Promise.withResolvers<void>()
+    let completionFailure: Error | undefined
+    let startedEvents = 0
+    let changedEvents = 0
+    let firstChangedAt: number | undefined
+    const fail = (message: string) => {
+      if (completionFailure) return
+      completionFailure = new Error(message)
+      completion.resolve()
+    }
+    unsubscribes.push(monitor.onEvent((event) => {
+      if (stopped || driversStopped) return
+      if (event.type === `${FAULT_PLUGIN_ID}/feedbackStarted`) {
+        const data = event.data as { worktrees?: unknown; first?: unknown } | undefined
+        startedEvents += 1
+        if (startedEvents !== 1 || !sameWorktrees(data?.worktrees, worktrees) || data?.first !== worktrees[0]) {
+          fail('feedbackStarted event did not arm the requested worktree pair exactly once')
+        }
+        return
+      }
+      if (event.type !== `${FAULT_PLUGIN_ID}/feedbackChanged`) return
+      const data = event.data as { worktrees?: unknown; owner?: unknown; sequence?: unknown } | undefined
+      const expectedSequence = changedEvents + 1
+      const expectedOwner = expectedSequence % 2 === 1 ? worktrees[0] : worktrees[1]
+      if (startedEvents !== 1 || !sameWorktrees(data?.worktrees, worktrees)
+        || data?.sequence !== expectedSequence || data?.owner !== expectedOwner) {
+        fail(`feedbackChanged event ${expectedSequence} did not match the armed owner sequence`)
+        return
+      }
+      const now = performance.now()
+      firstChangedAt ??= now
+      if (now - firstChangedAt > 5000) {
+        fail('feedbackChanged events exceeded the five-second injection window')
+        return
+      }
+      changedEvents = expectedSequence
+      if (changedEvents === 17) completion.resolve()
+    }))
+    const deadline = setTimeout(() => fail('feedback fixture did not complete all 17 feedbackChanged events'), 10_000)
+    try {
+      at = (performance.now() - options.startedAt) / 1000
+      let started: unknown
+      try {
+        started = await untilStopped(call(options.control, 'feedbackStart', { worktrees }))
+      } catch (error) {
+        ensureRunning()
+        throw new Error(`feedbackStart RPC failed: ${messageOf(error)}`, { cause: error })
+      }
+      ensureRunning()
+      if (typeof started !== 'object' || started === null || !('started' in started) || started.started !== true) {
+        throw new Error('feedbackStart RPC did not confirm that the fixture started')
+      }
+      await untilStopped(completion.promise)
+      ensureRunning()
+      if (completionFailure) throw completionFailure
+      if (startedEvents !== 1 || changedEvents !== 17) {
+        throw new Error(`feedback fixture completed ${changedEvents} of 17 feedbackChanged events`)
+      }
+    } finally {
+      clearTimeout(deadline)
+      closeDrivers()
+    }
+  }
+
   const inject = async () => {
     const deadline = options.startedAt + FAULT_DELAY_SECONDS * 1000
     while (!stopped && performance.now() < deadline) await pause(deadline - performance.now())
     ensureRunning()
-    if (plan.kind === 'slow-git') {
+    if (plan.kind === 'feedback') {
+      await injectFeedback(feedbackWorktrees!)
+    } else if (plan.kind === 'slow-git') {
       setGitDelay(options.home, plan.ms)
       const now = new Date()
       for (const project of options.projects) utimesSync(join(project, '.git', 'config'), now, now)
@@ -187,32 +314,58 @@ export function startFault(options: {
   }
   const injected = inject().catch(recordFailure)
 
-  return {
-    stop,
-    async finish() {
-      if (failed) throw failure
-      if (at === undefined) throw new Error('soak fault was not injected before the run ended')
-      await untilStopped(injected)
+  const finalize = async (): Promise<FaultRecord> => {
+    if (failed) throw failure
+    if (at === undefined) throw new Error('soak fault was not injected before the run ended')
+    await untilStopped(injected)
+    ensureRunning()
+    if (failed) throw failure
+    if (options.kind === 'feedback') {
+      let raw: unknown
+      try {
+        raw = await untilStopped(call(options.control, 'feedbackReport', {}))
+      } catch (error) {
+        ensureRunning()
+        throw new Error(`feedbackReport RPC failed: ${messageOf(error)}`, { cause: error })
+      }
       ensureRunning()
-      if (failed) throw failure
-      const report = await untilStopped(call(options.control, 'report', {})) as PluginReport
-      ensureRunning()
+      const report = raw as { worktrees?: unknown; refreshes?: unknown; active?: unknown } | null
+      if (!report || !sameWorktrees(report.worktrees, feedbackWorktrees!)
+        || report.refreshes !== 17 || report.active !== false) {
+        throw new Error(`feedbackReport confirmed ${String(report?.refreshes)} refreshes; expected 17 completed refreshes and an inactive fixture`)
+      }
       return {
         kind: options.kind,
         check: FAULT_CHECK[options.kind],
         at: Number(at.toFixed(3)),
-        detail: {
-          pids: options.kind === 'leak'
-            ? report.leaked
-            : options.kind === 'zombies'
-              ? report.holders
-              : options.kind === 'slow-git'
-                ? readSlowGitPids(options.out)
-                : [],
-          refreshes: report.refreshes,
-          blockedMs: report.blockedMs
-        }
+        detail: { pids: [], refreshes: report.refreshes, blockedMs: null, worktrees: feedbackWorktrees }
       }
+    }
+    const report = await untilStopped(call(options.control, 'report', {})) as PluginReport
+    ensureRunning()
+    return {
+      kind: options.kind,
+      check: FAULT_CHECK[options.kind],
+      at: Number(at.toFixed(3)),
+      detail: {
+        pids: options.kind === 'leak'
+          ? report.leaked
+          : options.kind === 'zombies'
+            ? report.holders
+            : options.kind === 'slow-git'
+              ? readSlowGitPids(options.out)
+              : [],
+        refreshes: report.refreshes,
+        blockedMs: report.blockedMs
+      }
+    }
+  }
+
+  return {
+    stop,
+    finish() {
+      finalization ??= finalize()
+      return finalization
     }
   }
 }

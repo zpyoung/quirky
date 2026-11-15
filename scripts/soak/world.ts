@@ -1,5 +1,5 @@
-import { closeSync, mkdirSync, openSync, writeFileSync } from 'node:fs'
-import { delimiter, join, resolve } from 'node:path'
+import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { basename, delimiter, extname, join, resolve } from 'node:path'
 import type { QuirkyClient } from '@quirky/protocol'
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { createProcessScope } from '../test-support/process-scope'
@@ -52,6 +52,75 @@ export type StartWorldDependencies = {
   connectDaemon?: typeof connectDaemon
   waitForDaemon?: (home: string, process: DaemonProcess, signal?: AbortSignal) => Promise<RuntimeInfo>
   waitForShutdown?: (process: DaemonProcess, signal?: AbortSignal) => Promise<void>
+}
+
+const SOURCE_MODULE_EXTENSIONS: Record<string, true> = {
+  '.cjs': true,
+  '.cts': true,
+  '.js': true,
+  '.jsx': true,
+  '.mjs': true,
+  '.mts': true,
+  '.ts': true,
+  '.tsx': true
+}
+
+/** Stages manifest/assets locally while linking only source modules and dependencies. */
+export function stageBuiltinPlugins(repoRoot: string, home: string): string {
+  const sourceRoot = join(resolve(repoRoot), 'plugins')
+  const stagedRoot = join(resolve(home), 'builtin-plugins')
+  rmSync(stagedRoot, { recursive: true, force: true })
+  mkdirSync(stagedRoot, { recursive: true })
+
+  const stageEntry = (source: string, destination: string): void => {
+    const entry = lstatSync(source)
+    if (entry.isSymbolicLink()) {
+      const target = statSync(source)
+      if (target.isDirectory()) {
+        if (basename(source) === 'node_modules') {
+          symlinkSync(realpathSync(source), destination, 'dir')
+          return
+        }
+        mkdirSync(destination, { recursive: true })
+        for (const name of readdirSync(source).sort()) {
+          stageEntry(join(source, name), join(destination, name))
+        }
+        return
+      }
+      if (target.isFile()) {
+        if (SOURCE_MODULE_EXTENSIONS[extname(source)]) symlinkSync(realpathSync(source), destination)
+        else copyFileSync(source, destination)
+      }
+      return
+    }
+    if (entry.isDirectory()) {
+      if (basename(source) === 'node_modules') {
+        symlinkSync(realpathSync(source), destination, 'dir')
+        return
+      }
+      mkdirSync(destination, { recursive: true })
+      for (const name of readdirSync(source).sort()) {
+        stageEntry(join(source, name), join(destination, name))
+      }
+      return
+    }
+    if (entry.isFile()) {
+      if (SOURCE_MODULE_EXTENSIONS[extname(source)]) symlinkSync(realpathSync(source), destination)
+      else copyFileSync(source, destination)
+    }
+  }
+
+  for (const entry of readdirSync(sourceRoot, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const source = join(sourceRoot, entry.name)
+    if (!statSync(source).isDirectory() || !existsSync(join(source, 'quirky-plugin.json'))) continue
+    const staged = join(stagedRoot, entry.name)
+    mkdirSync(staged)
+    for (const name of readdirSync(source).sort()) {
+      if (name === 'dist') continue
+      stageEntry(join(source, name), join(staged, name))
+    }
+  }
+  return stagedRoot
 }
 
 function aborted(): Error {
@@ -239,7 +308,12 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
     const repoRoot = resolve(options.repoRoot)
     mkdirSync(out, { recursive: true })
     const uiDir = options.windows ? join(home, 'ui-dist') : undefined
+    const builtinPluginsDir = uiDir ? stageBuiltinPlugins(repoRoot, home) : undefined
     const env = createIsolatedRuntimeEnvironment(home, { repoRoot, uiDir })
+    if (builtinPluginsDir) {
+      env.QUIRKY_PLUGINS_DIR = builtinPluginsDir
+      env.QUIRKY_BUILTIN_PLUGINS_DIR = builtinPluginsDir
+    }
     const prepared = await (dependencies.prepareCaptureFixtureHome ?? prepareCaptureFixtureHome)(
       home,
       { timeoutMs: 30_000, signal: options.signal, env }
@@ -253,6 +327,22 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
     delete env[FAULT_ENV]
     if (options.fault) {
       installFaultPlugin(home, repoRoot)
+      if (uiDir) {
+        const log = openSync(join(out, 'fault-ui-build.log'), 'w')
+        const build = (() => {
+          try {
+            return scope.spawn([
+              process.execPath, '-e',
+              'import { buildFaultUi } from "./scripts/soak/faults.ts"; await buildFaultUi(process.env.QUIRKY_HOME!, process.cwd())'
+            ], { cwd: repoRoot, env, stdin: 'ignore', stdout: log, stderr: log })
+          } finally {
+            closeSync(log)
+          }
+        })()
+        const code = await waitWithAbort(build.exited, options.signal, 180_000)
+        if (code !== 0) throw new Error(`feedback fixture UI build exited with code ${code}; see ${join(out, 'fault-ui-build.log')}`)
+      }
+      throwIfAborted(options.signal)
       env[FAULT_ENV] = '1'
     }
 
