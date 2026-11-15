@@ -188,7 +188,11 @@ scenario('SC-3: the ready marker never shows', async () => {
   expect(shells).toContain('/bin/zsh')
 
   for (const shell of shells) {
-    const h = await start({ shell })
+    const h = await start({
+      shell,
+      zshrc: "PROMPT='%1~ %# '\nRPROMPT=''\n",
+      bashrc: "PS1='\\W \\$ '\n"
+    })
     const session = await h.newSession()
     await waitFor(`${shell} ready`, async () => (await h.hostRow(session.id))?.shellState === 'ready')
     const name = basename(h.repo)
