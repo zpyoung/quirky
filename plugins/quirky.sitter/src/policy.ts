@@ -78,6 +78,17 @@ export type StopResult =
 export type BranchUpdateMode = 'merge-base-update' | 'rebase'
 export type MergeCheckScope = 'all' | 'required'
 
+export type RepositoryIdentity = { host: string; owner: string; repo: string }
+export type ExpectedReview = {
+  number: number
+  url: string
+  repository: RepositoryIdentity
+  headRepository: RepositoryIdentity
+  headRefName: string
+  baseRefName: string
+  headSha: string
+}
+
 export type SitterPayload = {
   worktreeId: string
   branch: string
@@ -85,11 +96,12 @@ export type SitterPayload = {
   provider: 'github'
   reviewNumber: number
   reviewUrl: string
-  repository: { host: string; owner: string; repo: string }
+  repository: RepositoryIdentity
   branchUpdateMode?: BranchUpdateMode
   mergeMethod: 'merge' | 'squash' | 'rebase' | null
   mergeCheckScope?: MergeCheckScope
   agent?: string
+  expectedReview?: ExpectedReview
 }
 export type CheckState = 'passed' | 'pending' | 'failed' | 'unknown'
 export type SitterCheck = {
@@ -122,6 +134,8 @@ export type SitterWorld = {
   headSha: string
   baseSha: string
   baseRefName: string
+  repository?: RepositoryIdentity | null
+  headRepository?: RepositoryIdentity | null
   headRefName: string
   mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN'
   mergeStateStatus: string
@@ -166,6 +180,101 @@ type PublishConflictAction = KernelAction & { kind: 'publish-conflict-resolution
 export type SitterAction =
   | RerunCheckAction | UpdateBranchAction | MergeAction | EnqueueAction
   | PrepareFixAction | PublishFixAction | PrepareConflictAction | PublishConflictAction
+export function isExpectedReview(value: unknown): value is ExpectedReview {
+  if (!isRecord(value)) return false
+  const keys = Object.keys(value).sort()
+  if (keys.length !== 7 || keys.join(',') !== 'baseRefName,headRefName,headRepository,headSha,number,repository,url') return false
+  const repository = value.repository
+  const headRepository = value.headRepository
+  const identityIsValid = (identity: unknown): identity is RepositoryIdentity =>
+    isRecord(identity) &&
+    Object.keys(identity).sort().join(',') === 'host,owner,repo' &&
+    [identity.host, identity.owner, identity.repo].every((part) => typeof part === 'string' && part.trim().length > 0)
+  return Number.isInteger(value.number) && (value.number as number) > 0 &&
+    typeof value.url === 'string' && value.url.trim().length > 0 &&
+    identityIsValid(repository) && identityIsValid(headRepository) &&
+    typeof value.headRefName === 'string' && value.headRefName.trim().length > 0 &&
+    typeof value.baseRefName === 'string' && value.baseRefName.trim().length > 0 &&
+    typeof value.headSha === 'string' && /^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/.test(value.headSha)
+}
+
+function fullSha(value: unknown): value is string {
+  return typeof value === 'string' && /^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$/.test(value)
+}
+
+function sameSha(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase()
+}
+
+function isRepositoryIdentity(value: unknown): value is RepositoryIdentity {
+  return isRecord(value) &&
+    typeof value.host === 'string' && value.host.trim().length > 0 &&
+    typeof value.owner === 'string' && value.owner.trim().length > 0 &&
+    typeof value.repo === 'string' && value.repo.trim().length > 0
+}
+
+function sameRepository(left: unknown, right: unknown): boolean {
+  if (!isRepositoryIdentity(left) || !isRepositoryIdentity(right)) return false
+  return left.host.toLowerCase() === right.host.toLowerCase() &&
+    left.owner.toLowerCase() === right.owner.toLowerCase() &&
+    left.repo.toLowerCase() === right.repo.toLowerCase()
+}
+
+export function pinnedReviewProblem(
+  snapshot: Pick<Snapshot<SitterWorld>, 'freshness' | 'world'>,
+  payload: SitterPayload
+): 'objective-head-moved' | 'objective-review-mismatch' | null {
+  const pin = payload.expectedReview
+  if (pin === undefined) return null
+  if (!isExpectedReview(pin) || !isRecord(snapshot) ||
+    snapshot.freshness !== 'live' || !isRecord(snapshot.world)) return 'objective-review-mismatch'
+  if (!sameRepository(pin.repository, payload.repository) ||
+    pin.number !== payload.reviewNumber ||
+    pin.url !== payload.reviewUrl ||
+    pin.headRefName !== payload.headRefName) return 'objective-review-mismatch'
+  const world = snapshot.world as unknown as SitterWorld
+  if (!fullSha(world.headSha) || !sameSha(world.headSha, pin.headSha)) return 'objective-head-moved'
+  if (world.reviewNumber !== pin.number ||
+    world.reviewUrl !== pin.url ||
+    !sameRepository(world.repository, pin.repository) ||
+    !sameRepository(world.headRepository, pin.headRepository) ||
+    world.headRefName !== pin.headRefName ||
+    world.baseRefName !== pin.baseRefName) return 'objective-review-mismatch'
+  return null
+}
+
+export function pinnedActionProblem(
+  action: SitterAction,
+  payload: SitterPayload
+): 'objective-head-moved' | 'objective-review-mismatch' | null {
+  const pin = payload.expectedReview
+  if (pin === undefined) return null
+  if (!isExpectedReview(pin) ||
+    !sameRepository(pin.repository, payload.repository) ||
+    pin.number !== payload.reviewNumber ||
+    pin.url !== payload.reviewUrl ||
+    pin.headRefName !== payload.headRefName) return 'objective-review-mismatch'
+  const rawAction = isRecord(action) ? action : {}
+  let head: unknown
+  switch (rawAction.kind) {
+    case 'rerun-check':
+    case 'update-branch':
+    case 'merge':
+    case 'enqueue':
+      head = rawAction.head
+      break
+    case 'prepare-fix':
+    case 'publish-fix':
+    case 'prepare-conflict-resolution':
+    case 'publish-conflict-resolution':
+      head = rawAction.expectedHeadSha
+      break
+    default:
+      return 'objective-review-mismatch'
+  }
+  if (!fullSha(head)) return 'objective-review-mismatch'
+  return sameSha(head, pin.headSha) ? null : 'objective-head-moved'
+}
 export type SitterEnrollment = { capabilities: Record<string, CapabilityMode>; kindPayload: SitterPayload }
 
 const CHECK_RUN_FAILURES: Record<string, true> = {
@@ -244,11 +353,34 @@ function mapCheck(value: unknown): SitterCheck | null {
   }
 }
 
+function repositoryFromHosting(value: unknown): RepositoryIdentity | null {
+  if (!isRecord(value)) return null
+  const identity = { host: asString(value.host), owner: asString(value.owner), repo: asString(value.repo) }
+  return isRepositoryIdentity(identity) ? identity : null
+}
+
+function headRepositoryFromHosting(
+  review: RecordValue,
+  repository: RepositoryIdentity | null
+): RepositoryIdentity | null {
+  const head = isRecord(review.headRepository) ? review.headRepository : {}
+  const nestedOwner = isRecord(head.owner) ? head.owner : {}
+  const separateOwner = isRecord(review.headRepositoryOwner) ? review.headRepositoryOwner : {}
+  const identity = {
+    host: asString(head.host, repository?.host ?? ''),
+    owner: typeof head.owner === 'string' ? head.owner : asString(nestedOwner.login, asString(separateOwner.login)),
+    repo: asString(head.repo, asString(head.name))
+  }
+  return isRepositoryIdentity(identity) ? identity : null
+}
+
 export function worldFromHosting(review: unknown, checks: unknown | null, payload: SitterPayload): SitterWorld {
   const rawReview = isRecord(review) ? review : {}
   const state = asString(rawReview.state)
   const lifecycle = state === 'merged' ? 'merged' : state === 'closed' ? 'closed' : state === 'open' || state === 'draft' ? 'open' : 'closed'
   const headRefOid = asString(rawReview.headRefOid)
+  const pinned = payload.expectedReview !== undefined
+  const repository = repositoryFromHosting(rawReview.repository)
   const mergeMethods = isRecord(rawReview.mergeMethods) ? rawReview.mergeMethods : {}
   const allowedRaw = Array.isArray(mergeMethods.allowed) ? mergeMethods.allowed : []
   const allowedMergeMethods = allowedRaw.filter(isMergeMethod)
@@ -283,14 +415,16 @@ export function worldFromHosting(review: unknown, checks: unknown | null, payloa
     position: nullableNumber(rawMergeQueueEntry.position)
   }
   return {
-    reviewNumber: asNumber(rawReview.number, payload.reviewNumber),
-    reviewUrl: asString(rawReview.url, payload.reviewUrl),
+    repository,
+    headRepository: headRepositoryFromHosting(rawReview, repository),
+    reviewNumber: asNumber(rawReview.number, pinned ? -1 : payload.reviewNumber),
+    reviewUrl: asString(rawReview.url, pinned ? '' : payload.reviewUrl),
     lifecycle,
     draft: state === 'draft' || rawReview.draft === true || rawReview.isDraft === true,
     headSha: headRefOid,
     baseSha: asString(rawReview.baseRefOid),
     baseRefName: asString(rawReview.baseRefName),
-    headRefName: asString(rawReview.headRefName, payload.headRefName),
+    headRefName: asString(rawReview.headRefName, pinned ? '' : payload.headRefName),
     mergeable,
     mergeStateStatus: asString(rawReview.mergeStateStatus, 'UNKNOWN'),
     reviewDecision: asString(rawReview.reviewDecision, 'UNKNOWN'),
@@ -924,6 +1058,8 @@ function plan(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollme
 }
 
 export function decide(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollment: SitterEnrollment): Decision<SitterAction> {
+  const pinProblem = pinnedReviewProblem(snapshot, enrollment.kindPayload)
+  if (pinProblem !== null) return noAction(pinProblem, ['objective-review'], 'the live review does not match the objective pin')
   const planned = plan(snapshot, journal, enrollment)
   if (planned.action === null || !['rerun-check', 'update-branch', 'merge', 'enqueue'].includes(planned.action.kind)) return planned
   const retry = retryState(planned.action, journal)
@@ -940,6 +1076,21 @@ export function decide(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[],
 }
 
 export function stop(snapshot: Snapshot<SitterWorld>, journal: JournalEntry[], enrollment: SitterEnrollment): StopResult {
+  const pinProblem = pinnedReviewProblem(snapshot, enrollment.kindPayload)
+  if (pinProblem !== null) {
+    const pin = enrollment.kindPayload.expectedReview
+    const naturalKey = pinProblem === 'objective-head-moved'
+      ? `${pinProblem}:${pin?.headSha ?? 'unknown'}`
+      : `${pinProblem}:${pin?.number ?? enrollment.kindPayload.reviewNumber}:${pin?.headSha ?? 'unknown'}`
+    return park(
+      pinProblem === 'objective-head-moved'
+        ? 'the observed review head does not match the objective SHA'
+        : 'the observed review identity is missing or does not match the objective pin',
+      pinProblem,
+      'landing-failed',
+      naturalKey
+    )
+  }
   const world = snapshot.world
   if (world.lifecycle !== 'open') {
     return {
