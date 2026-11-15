@@ -137,7 +137,49 @@
       {
         "id": "create",
         "description": "Create one GitHub pull request or GitLab merge request after revalidating creation blockers.",
-        "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "base": {"type": "string"}, "head": {"type": "string"}, "title": {"type": "string"}, "body": {"type": "string"}, "draft": {"type": "boolean"}, "useTemplate": {"type": "boolean"}}, "required": ["title"]},
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {"type": "string"},
+            "base": {"type": "string"},
+            "head": {"type": "string"},
+            "title": {"type": "string"},
+            "body": {"type": "string"},
+            "draft": {"type": "boolean"},
+            "useTemplate": {"type": "boolean"},
+            "expected": {
+              "type": "object",
+              "properties": {
+                "branch": {"type": "string"},
+                "headSha": {"type": "string", "description": "Must be a full 40- or 64-character hexadecimal commit SHA; validated by the handler."},
+                "baseRefName": {"type": "string"},
+                "repository": {
+                  "type": "object",
+                  "properties": {
+                    "host": {"type": "string"},
+                    "owner": {"type": "string"},
+                    "repo": {"type": "string"}
+                  },
+                  "required": ["host", "owner", "repo"],
+                  "additionalProperties": false
+                },
+                "headRepository": {
+                  "type": "object",
+                  "properties": {
+                    "host": {"type": "string"},
+                    "owner": {"type": "string"},
+                    "repo": {"type": "string"}
+                  },
+                  "required": ["host", "owner", "repo"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["branch", "headSha", "baseRefName", "repository", "headRepository"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["title"]
+        },
         "result": {"type": "object", "properties": {"number": {"type": "integer"}, "url": {"type": "string"}, "existing": {"type": "boolean"}}}
       },
       {

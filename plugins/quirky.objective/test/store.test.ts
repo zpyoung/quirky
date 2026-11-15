@@ -179,10 +179,10 @@ test('migrates v1 store rows cleanly to v2 schema and persists checks, verdicts,
     const checkDb = new Database(storeFile)
     try {
       checkDb.exec('PRAGMA foreign_keys = ON')
-      expect(checkDb.query('PRAGMA user_version').get()).toEqual({ user_version: 2 })
+      expect(checkDb.query('PRAGMA user_version').get()).toEqual({ user_version: 3 })
       expect(checkDb.query('PRAGMA foreign_key_check').all()).toEqual([])
       expect(checkDb.query("PRAGMA foreign_key_list('report')").all()).toContainEqual(expect.objectContaining({ table: 'issued' }))
-      checkDb.exec('PRAGMA user_version = 3')
+      checkDb.exec('PRAGMA user_version = 4')
     } finally {
       checkDb.close()
     }

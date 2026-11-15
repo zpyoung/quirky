@@ -5,14 +5,40 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
+import {
+  EDITOR_UI_CONTROL_COMMAND,
+  EditorUiControlProvider,
+  createEditorUiControlReportScope,
+  type EditorUiControlReportScope
+} from '../src/window/uiControl'
+let activate: (context: UiPluginContext) => void
+let deactivate: () => void
 
-type Mounted = { element: HTMLElement; commands(): CommandHandlers | undefined; rerender(buffer: EditorSurfaceBuffer): Promise<void>; unmount(): Promise<void> }
+type Handler = (args?: unknown) => unknown
+type WindowBridge = { handlers: Map<string, Handler> }
+type ContextFixture = {
+  context: UiPluginContext
+  provided: Map<string, Handler>
+  windows: Map<number, WindowBridge>
+  calls: { method: string; params?: Record<string, unknown> }[]
+  commandRoutes: number[]
+  executeCalls: string[]
+}
+
+type Mounted = {
+  element: HTMLElement
+  commands(): CommandHandlers | undefined
+  rerender(buffer: EditorSurfaceBuffer): Promise<void>
+  unmount(): Promise<void>
+  scope: EditorUiControlReportScope
+}
 type CommandHandlers = Parameters<SurfaceProps['registerCommandHandlers']>[0]
 
 let createRoot: (container: HTMLElement) => Root
 let NotebookSurface: ComponentType<SurfaceProps>
 let ViewerSurface: ComponentType<SurfaceProps>
 let mounted: Mounted[]
+let controlFixture: ContextFixture | null
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -21,14 +47,20 @@ beforeAll(async () => {
   ;({ createRoot } = await import('react-dom/client'))
   ;({ NotebookSurface } = await import('../src/notebook/NotebookSurface'))
   ;({ ViewerSurface } = await import('../src/viewers/ViewerSurface'))
+  ;({ activate, deactivate } = await import('../src/ui'))
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
 })
-beforeEach(() => { mounted = [] })
+beforeEach(() => {
+  mounted = []
+  controlFixture = null
+})
 afterEach(async () => {
   for (const surface of mounted) await surface.unmount()
   mounted = []
+  deactivate()
+  controlFixture = null
   document.body.innerHTML = ''
 })
 
@@ -64,18 +96,74 @@ function makeBuffer(kind: EditorSurfaceBuffer['kind'], content = ''): EditorSurf
   }
 }
 
+function makeControlFixture(): ContextFixture {
+  const provided = new Map<string, Handler>()
+  const calls: { method: string; params?: Record<string, unknown> }[] = []
+  const commandRoutes: number[] = []
+  const executeCalls: string[] = []
+  const subscribers = new Set<(event: { type: string }) => void>()
+  const ownerHandlers = new Map<string, Handler>([[EDITOR_UI_CONTROL_COMMAND, async () => {
+    throw new Error('the owner window must not receive this click')
+  }]])
+  const windows = new Map<number, WindowBridge>([
+    [11, { handlers: ownerHandlers }],
+    [22, { handlers: provided }]
+  ])
+  const context = {
+    pluginId: 'quirky.editor',
+    call: async (method: string, params?: Record<string, unknown>) => {
+      calls.push({ method, params })
+      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.command.run') {
+        const connId = params?.connId as number
+        commandRoutes.push(connId)
+        const command = params?.id
+        if (typeof command !== 'string') throw new Error('Missing command ID')
+        const handler = windows.get(connId)?.handlers.get(command)
+        if (!handler) throw new Error(`Missing command handler: ${command}`)
+        return { result: await handler(params?.args) }
+      }
+      return {}
+    },
+    provide: (id: string, handler: unknown) => {
+      if (typeof handler !== 'function') throw new Error(`Expected handler for ${id}`)
+      provided.set(id, handler as Handler)
+    },
+    subscribe: (handler: (event: { type: string }) => void) => {
+      subscribers.add(handler)
+      return () => subscribers.delete(handler)
+    },
+    getSetting: () => 300,
+    getLayout: () => ({}),
+    executeCommand: async (id: string) => { executeCalls.push(id) },
+    toast: () => {}
+  } as unknown as UiPluginContext
+  activate(context)
+  const activatedHandler = provided.get(EDITOR_UI_CONTROL_COMMAND)
+  if (!activatedHandler) throw new Error('activate did not provide the editor UI control command')
+  windows.get(22)!.handlers.set(EDITOR_UI_CONTROL_COMMAND, activatedHandler)
+  return { context, provided, windows, calls, commandRoutes, executeCalls }
+}
+
+function getControlFixture(): ContextFixture {
+  if (controlFixture === null) controlFixture = makeControlFixture()
+  return controlFixture
+}
+
 async function renderSurface(
   Component: ComponentType<SurfaceProps>,
   buffer: EditorSurfaceBuffer,
   onAction: SurfaceProps['onAction'],
   onDraft: SurfaceProps['onDraft'] = () => {},
 ): Promise<Mounted> {
+  const fixture = getControlFixture()
+  const scope = createEditorUiControlReportScope(() => {}, {
+    surface: 'view:quirky.editor/document',
+    context: fixture.context
+  })
   let commands: CommandHandlers | undefined
   let props: SurfaceProps = {
-    context: {
-      pluginId: 'quirky.editor',
-      subscribe: () => () => {}
-    } as unknown as UiPluginContext,
+    context: fixture.context,
     buffer,
     fontSize: 13,
     onDraft,
@@ -89,19 +177,25 @@ async function renderSurface(
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
-  await act(async () => root.render(<Component {...props} />))
+  await act(async () => {
+    root.render(<EditorUiControlProvider scope={scope}><Component {...props} /></EditorUiControlProvider>)
+  })
   let unmounted = false
   const surface: Mounted = {
     element,
     commands: () => commands,
+    scope,
     async rerender(buffer) {
       props = { ...props, buffer }
-      await act(async () => root.render(<Component {...props} />))
+      await act(async () => {
+        root.render(<EditorUiControlProvider scope={scope}><Component {...props} /></EditorUiControlProvider>)
+      })
     },
     async unmount() {
       if (unmounted) return
       unmounted = true
       await act(async () => root.unmount())
+      scope.dispose()
     }
   }
   mounted.push(surface)

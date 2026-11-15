@@ -47,9 +47,10 @@ function mount(
   node: MountNode,
   report: MountProps['report'],
   state: unknown,
-  surface: string
+  surface: string,
+  context: UiPluginContext
 ): () => void {
-  const scope = createEditorUiControlReportScope(report, { surface })
+  const scope = createEditorUiControlReportScope(report, { surface, context })
   scope.report(state)
   const root = createRoot(element)
   root.render(<EditorUiControlProvider scope={scope}>{node(scope.report)}</EditorUiControlProvider>)
@@ -415,17 +416,17 @@ export function activate(context: UiPluginContext): void {
   clearEditorUiControls()
 
   context.provide(DOCUMENT_VIEW, (element: HTMLElement, props: MountProps) =>
-    mount(element, (_report) => <DocumentSurface context={uiContext} input={props.input} />, props.report, viewReport(props.input), DOCUMENT_VIEW)
+    mount(element, (_report) => <DocumentSurface context={uiContext} input={props.input} />, props.report, viewReport(props.input), DOCUMENT_VIEW, uiContext)
   )
   const mountExplorer = (surface: string) => (element: HTMLElement, props: MountProps) =>
     mount(element, (report) => <ExplorerPanel context={context} report={report} />, props.report, {
       mounted: true,
       worktreeId: worktreeFor(context, {}) ?? null
-    }, surface)
+    }, surface, context)
   context.provide(EXPLORER_SECTION, mountExplorer(EXPLORER_SECTION))
   context.provide(EXPLORER_PANEL, mountExplorer(EXPLORER_PANEL))
   context.provide(QUICK_OPEN_OVERLAY, (element: HTMLElement, props: MountProps) =>
-    mount(element, (report) => <QuickOpenOverlay context={context} report={report} />, props.report, { open: false, requestId: null }, QUICK_OPEN_OVERLAY)
+    mount(element, (report) => <QuickOpenOverlay context={context} report={report} />, props.report, { open: false, requestId: null }, QUICK_OPEN_OVERLAY, context)
   )
   context.provide(CLOSE_OVERLAY, (element: HTMLElement, props: MountProps) =>
     mount(element, (report) => <><CloseOverlay context={uiContext} report={report} /><SaveAsOverlay context={context} /></>, props.report, {
@@ -434,7 +435,7 @@ export function activate(context: UiPluginContext): void {
       targetCount: 0,
       dirtyCount: 0,
       error: null
-    }, CLOSE_OVERLAY)
+    }, CLOSE_OVERLAY, uiContext)
   )
   context.provide(EDITOR_UI_CONTROL_COMMAND, runEditorUiControl)
 
