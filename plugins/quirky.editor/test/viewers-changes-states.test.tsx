@@ -1001,6 +1001,7 @@ test('PDF addressed page, zoom and Find preserve active-command results and reje
     expect(calls).toContainEqual({ method: 'quirky.editor/viewer', params: { bufferId: 'b1', action: 'page', page: 2 } })
     expect(await routed(fixture, 'zoom', { scale: 100 }, 'pdf:')).toEqual({ delivered: true })
     expect(calls).toContainEqual({ method: 'quirky.editor/viewer', params: { bufferId: 'b1', action: 'zoom', scale: 5 } })
+    expect(surface.report().uiControls!.find(({ target }) => target.startsWith('pdf:'))?.actions).not.toContain('zoom-in')
     expect(await routed(fixture, 'reset-zoom', undefined, 'pdf:')).toEqual({ delivered: true })
     expect(calls).toContainEqual({ method: 'quirky.editor/view', params: { bufferId: 'b1', action: 'update', patch: { viewer: { zoom: 'page-width' } } } })
     await act(async () => { expect(await surface.commands()!.find!({ query: '' })).toEqual({ opened: true }) })
@@ -1075,5 +1076,30 @@ test('an unmounted CSV copy cannot write late daemon text to the clipboard', asy
     await Promise.allSettled([operation])
     if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard)
     else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+test('pending CSV metadata does not advertise or deliver unavailable mutations', async () => {
+  const metadata = deferred<unknown>()
+  const calls: Record<string, unknown>[] = []
+  const fixture = makeFixture(async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'metadata') return metadata.promise
+    if (params.action === 'page') return { rows: CSV_ROWS, nextPage: null }
+    return {}
+  })
+  try {
+    const surface = await mountViewer(fixture, makeBuffer('csv'))
+    await flush()
+    const address = surface.report().uiControls!.find(({ target }) => target.startsWith('csv:'))!
+    expect(address).toBeDefined()
+    expect(address.actions).not.toContain('save')
+    const handler = fixture.provided.get('command:quirky.editor/ui-control')!
+    const before = calls.length
+    expect(await handler({ surface: address.surface, target: address.target, generation: address.generation, action: 'save' })).toEqual({ delivered: false })
+    expect(calls).toHaveLength(before)
+    expect(calls.filter(({ action }) => action === 'metadata')).toHaveLength(1)
+  } finally {
+    await act(async () => metadata.resolve({ paged: false, rows: 2, columns: 2 }))
   }
 })

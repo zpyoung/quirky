@@ -515,7 +515,7 @@ function CsvSurface({
     ...(!sourceMode && (changed || buffer.external === 'changed') ? ['reload'] : []),
     ...(!sourceMode && page > 0 ? ['previous-page'] : []),
     ...(!sourceMode && nextPage !== null && nextPage > page ? ['next-page'] : []),
-    ...(!sourceMode && !readOnly ? CSV_EDITABLE_ACTIONS : [])
+    ...(!sourceMode && !readOnly && metadata !== null ? CSV_EDITABLE_ACTIONS : [])
   ]
   const handleControl = async (control: EditorUiControl) => {
     if (!isSessionCurrent()) return { delivered: false }
@@ -523,7 +523,7 @@ function CsvSurface({
     if (!allowed) return { delivered: false }
     const data = controlData(control, allowed, CSV_REQUIRED_FIELDS[control.action] ?? [])
     if (!data) return { delivered: false }
-    if (sourceMode || readOnly && CSV_READ_ONLY_BLOCKED_ACTIONS[control.action] === true) return { delivered: false }
+    if (sourceMode || (readOnly || metadata === null) && CSV_READ_ONLY_BLOCKED_ACTIONS[control.action] === true) return { delivered: false }
     if (control.action === 'reload' && !changed && buffer.external !== 'changed') return { delivered: false }
     if (control.action === 'previous-page' && pageRef.current <= 0) return { delivered: false }
     if (control.action === 'next-page' && (nextPage === null || nextPage <= pageRef.current)) return { delivered: false }
@@ -1157,8 +1157,8 @@ function PdfViewer({
     ...(page < pdf.numPages ? ['next-page'] : []),
     'page',
     'zoom',
-    'zoom-in',
-    'zoom-out',
+    ...(scale === 'page-width' || scale < 5 ? ['zoom-in'] : []),
+    ...(scale === 'page-width' || scale > 0.25 ? ['zoom-out'] : []),
     'reset-zoom',
     'find'
   ] : []
