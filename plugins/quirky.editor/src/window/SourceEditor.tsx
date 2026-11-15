@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { createContext, forwardRef, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Button, InlineError, TextField } from '@quirky/ui'
 import { editorTheme } from '@quirky/ui/editor-theme'
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, redo, undo } from '@codemirror/commands'
@@ -17,9 +17,52 @@ import { Compartment, EditorSelection, EditorState, Transaction, type EditorStat
 import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import type { EditorSurfaceBuffer } from '../types'
+import type { UiPluginContext } from '@quirky/protocol'
+import { requestEditorUiControl, useEditorUiControl, type EditorUiControl, type EditorUiControlAddress, type EditorUiControlResult } from './uiControl'
 import { registerEditorFocus } from './editorFocus'
 
 const PASTE_LIMIT = 16 * 1024 * 1024
+const SOURCE_CONTROL_SURFACE = 'view:quirky.editor/document'
+const SOURCE_CONTROL_UNAVAILABLE = 'The editor control is no longer available.'
+const SourceEditorBridgeContext = createContext<UiPluginContext | null>(null)
+type SourceControlRegistrationProps = {
+  context: UiPluginContext
+  sourceAddress: EditorUiControlAddress | null
+  menuAddress: EditorUiControlAddress | null
+  onSourceControl(control: EditorUiControl): Promise<EditorUiControlResult>
+  onMenuControl(control: EditorUiControl): Promise<EditorUiControlResult>
+}
+
+function SourceControlRegistration({
+  context,
+  sourceAddress,
+  menuAddress,
+  onSourceControl,
+  onMenuControl
+}: SourceControlRegistrationProps): null {
+  useEditorUiControl({ context, address: sourceAddress, handler: onSourceControl })
+  useEditorUiControl({ context, address: menuAddress, handler: onMenuControl })
+  return null
+}
+
+let nextSourceControlGeneration = 0
+function newSourceControlGeneration(): string {
+  return `source-${++nextSourceControlGeneration}`
+}
+
+function onlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Reflect.ownKeys(value).every((key) => typeof key === 'string' && allowed.includes(key))
+}
+
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason)
+}
+
+/** Supplies this window's command bridge without owning document state or registration. */
+export function SourceEditorControlScope({ context, children }: { context: UiPluginContext; children: ReactNode }): ReactNode {
+  return <SourceEditorBridgeContext.Provider value={context}>{children}</SourceEditorBridgeContext.Provider>
+}
+
 // The host routes these managed chords; CodeMirror must not also run a search action.
 const HOST_MANAGED_EDITOR_CHORDS: Record<string, true> = {
   'Mod-p': true,
@@ -51,7 +94,28 @@ const editorHistoryKeymap = withoutManagedEditorChords(historyKeymap)
 const editorDefaultKeymap = withoutManagedEditorChords(defaultKeymap)
 
 type SelectionSummary = { fromLine: number; toLine: number }
-type SourceMenu = { kind: 'editor' | 'gutter'; x: number; y: number; query?: string; line?: number }
+type SourceMenu = {
+  kind: 'editor' | 'gutter'
+  x: number
+  y: number
+  generation: string
+  sourceGeneration: string
+  path: string
+  relativePath: string
+  query?: string
+  line?: number
+}
+type SourceIdentitySession = {
+  bufferId: string
+  tabId: string | null
+  worktreeId: string
+  root: string
+  path: string
+  relativePath: string
+  context: UiPluginContext | null
+  generation: string
+}
+type SourceControlSession = { generation: string; view: EditorView }
 
 export type SourceEditorHandle = {
   flush(): Promise<void>
@@ -239,9 +303,41 @@ function initialSelection(buffer: EditorSurfaceBuffer, tabId: string | null): Ed
 
 /** A source editor whose only document mutation path is the acknowledged daemon draft queue. */
 export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function SourceEditor(props, forwardedRef) {
+  const bridgeContext = useContext(SourceEditorBridgeContext)
+  const bridgeContextRef = useRef(bridgeContext)
+  bridgeContextRef.current = bridgeContext
+  const sourceIdentityRef = useRef<SourceIdentitySession | null>(null)
+  let sourceIdentity = sourceIdentityRef.current
+  if (sourceIdentity === null || sourceIdentity.bufferId !== props.buffer.id ||
+      sourceIdentity.tabId !== props.tabId || sourceIdentity.worktreeId !== props.buffer.worktreeId ||
+      sourceIdentity.root !== props.buffer.root || sourceIdentity.path !== props.buffer.path ||
+      sourceIdentity.relativePath !== props.buffer.relativePath || sourceIdentity.context !== bridgeContext) {
+    sourceIdentity = {
+      bufferId: props.buffer.id,
+      tabId: props.tabId,
+      worktreeId: props.buffer.worktreeId,
+      root: props.buffer.root,
+      path: props.buffer.path,
+      relativePath: props.buffer.relativePath,
+      context: bridgeContext,
+      generation: newSourceControlGeneration()
+    }
+    sourceIdentityRef.current = sourceIdentity
+  }
+  const engineKey = JSON.stringify([props.buffer.id, props.tabId, props.comparisonOriginal !== undefined])
+  const [engineSession, setEngineSession] = useState<{ key: string; generation: string } | null>(null)
+  const engineGeneration = engineSession?.key === engineKey ? engineSession.generation : null
+  const sourceGeneration = engineGeneration === null ? null : JSON.stringify([sourceIdentity.generation, engineGeneration])
+  const sourceSessionRef = useRef<SourceControlSession | null>(null)
+  const menuSessionRef = useRef<SourceMenu | null>(null)
+  const menuGenerationRef = useRef('')
+
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const viewRef = useRef<EditorView | null>(null)
+  sourceSessionRef.current = sourceGeneration === null || viewRef.current === null
+    ? null
+    : { generation: sourceGeneration, view: viewRef.current }
   const appliedNavigation = useRef<string | null>(null)
   const mergeRef = useRef<MergeView | null>(null)
   const mergeOriginal = useRef<string | null>(null)
@@ -255,6 +351,12 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   minimapEnabled.current = props.minimap
   const compartments = useMemo(() => ({ wrap: new Compartment(), zoom: new Compartment(), language: new Compartment() }), [])
   const [pasteError, setPasteError] = useState<string | null>(null)
+  const [controlError, setControlError] = useState<string | null>(null)
+  const previousErrorProp = useRef(props.error)
+  useEffect(() => {
+    if (previousErrorProp.current !== props.error && (props.error === null || props.error === undefined)) setControlError(null)
+    previousErrorProp.current = props.error
+  }, [props.error])
   const [selection, setSelection] = useState<SelectionSummary | null>(null)
   const [contextMenu, setContextMenu] = useState<SourceMenu | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -262,6 +364,8 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   const [searchQuery, setSearchQueryText] = useState('')
   const [replaceText, setReplaceText] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
+  const searchQueryRef = useRef(searchQuery)
+  searchQueryRef.current = searchQuery
   const content = props.buffer.draft ?? props.buffer.content
   const pendingNavigation = pendingNavigationForTab(props.buffer, props.tabId)
   const comparisonOriginalRef = useRef(props.comparisonOriginal)
@@ -281,38 +385,40 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     if (value !== '' && !findNext(view)) throw new Error(`No match for “${value}”.`)
     return { opened: true as const, ...(value === '' ? {} : { query: value }) }
   }
-  const runFind = () => {
+  const runFind = (query = searchQuery) => {
     const view = viewRef.current
     if (!view) throw new Error('The source editor is not mounted.')
-    if (searchQuery === '') throw new Error('Enter text to find in the source editor.')
-    applySearchQuery(view, searchQuery, replaceText)
-    if (!findNext(view)) throw new Error(`No match for “${searchQuery}”.`)
+    if (query === '') throw new Error('Enter text to find in the source editor.')
+    if (query !== searchQuery) setSearchQueryText(query)
+    applySearchQuery(view, query, replaceText)
+    if (!findNext(view)) throw new Error(`No match for “${query}”.`)
   }
-  const runReplace = (all: boolean) => {
+  const runReplace = (all: boolean, query = searchQuery, replacement = replaceText) => {
     const view = viewRef.current
     if (!view) throw new Error('The source editor is not mounted.')
-    if (searchQuery === '') throw new Error('Enter text to replace in the source editor.')
-    applySearchQuery(view, searchQuery, replaceText)
+    if (query === '') throw new Error('Enter text to replace in the source editor.')
+    if (query !== searchQuery) setSearchQueryText(query)
+    if (replacement !== replaceText) setReplaceText(replacement)
+    applySearchQuery(view, query, replacement)
     const replaced = all ? replaceAll(view) : replaceNext(view)
-    if (!replaced) throw new Error(`No match for “${searchQuery}”.`)
+    if (!replaced) throw new Error(`No match for “${query}”.`)
     return { replaced: true, all }
   }
   const copySelectionContext = async () => {
     const view = viewRef.current
     if (!view) throw new Error('The source editor is not mounted.')
+    const session = sourceSessionRef.current
+    const relativePath = props.buffer.relativePath
     const range = view.state.selection.main
     if (range.empty) throw new Error('Select text before copying editor context.')
     if (!navigator.clipboard) throw new Error('Clipboard access is unavailable.')
     const start = view.state.doc.lineAt(range.from)
     const end = view.state.doc.lineAt(range.to)
     const lines = start.number === end.number ? `${start.number}` : `${start.number}-${end.number}`
-    const text = `${props.buffer.relativePath}:${lines}\n${view.state.doc.sliceString(range.from, range.to)}`
+    const text = `${relativePath}:${lines}\n${view.state.doc.sliceString(range.from, range.to)}`
     await navigator.clipboard.writeText(text)
-    callbacks.current.onError(null)
-    return { copied: true as const, path: props.buffer.relativePath, lines }
-  }
-  const reportCopyError = (reason: unknown) => {
-    callbacks.current.onError(`Unable to copy selection context: ${reason instanceof Error ? reason.message : String(reason)}`)
+    if (session && isCurrentSourceSession(session)) reportSourceError(null)
+    return { copied: true as const, path: relativePath, lines }
   }
  
   const callbacks = useRef({
@@ -331,6 +437,390 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     onSearchInFiles: props.onSearchInFiles,
     onError: props.onError
   }
+  function reportSourceError(message: string | null): void {
+    setControlError(message)
+    callbacks.current.onError(message)
+  }
+  function isCurrentSourceSession(session: SourceControlSession): boolean {
+    const current = sourceSessionRef.current
+    return current !== null && current.generation === session.generation &&
+      current.view === session.view && viewRef.current === session.view
+  }
+
+  function isCurrentMenuSession(session: SourceMenu): boolean {
+    const currentMenu = menuSessionRef.current
+    const source = sourceSessionRef.current
+    return currentMenu !== null && currentMenu.generation === session.generation &&
+      currentMenu.sourceGeneration === session.sourceGeneration && source !== null &&
+      source.generation === session.sourceGeneration && isCurrentSourceSession(source)
+  }
+
+  function rotateMenuGeneration(): string {
+    let generation: string
+    do {
+      generation = newSourceControlGeneration()
+    } while (generation === menuGenerationRef.current)
+    menuGenerationRef.current = generation
+    return generation
+  }
+
+  function closeSourceMenu(expectedGeneration?: string): boolean {
+    const session = menuSessionRef.current
+    if (!session || (expectedGeneration !== undefined && session.generation !== expectedGeneration)) return false
+    rotateMenuGeneration()
+    menuSessionRef.current = null
+    setContextMenu(null)
+    return true
+  }
+
+  function openSourceMenu(
+    source: SourceControlSession,
+    kind: 'editor' | 'gutter',
+    line: number,
+    column: number,
+    x: number,
+    y: number
+  ): SourceMenu {
+    const view = source.view
+    const docLine = view.state.doc.line(line)
+    const selectionRange = view.state.selection.main
+    const query = kind === 'editor'
+      ? (selectionRange.empty
+        ? wordAt(view, docLine.from + column - 1)
+        : view.state.doc.sliceString(selectionRange.from, selectionRange.to)).slice(0, 8192)
+      : undefined
+    const session: SourceMenu = {
+      kind,
+      x,
+      y,
+      generation: rotateMenuGeneration(),
+      sourceGeneration: source.generation,
+      path: props.buffer.path,
+      relativePath: props.buffer.relativePath,
+      ...(kind === 'gutter' ? { line } : {}),
+      ...(query === undefined ? {} : { query })
+    }
+    menuSessionRef.current = session
+    setContextMenu(session)
+    return session
+  }
+  async function onSourceControl(control: EditorUiControl): Promise<EditorUiControlResult> {
+    const source = sourceSessionRef.current
+    if (!source || control.generation !== source.generation || !isCurrentSourceSession(source)) return { delivered: false }
+    const data = control.data ?? {}
+    try {
+      switch (control.action) {
+        case 'find':
+        case 'replace': {
+          if (!onlyKeys(data, ['query']) || (Object.hasOwn(data, 'query') && typeof data.query !== 'string')) return { delivered: false }
+          const query = Object.hasOwn(data, 'query') ? data.query as string : searchQuery
+          if (query === '') throw new Error(control.action === 'find'
+            ? 'Enter text to find in the source editor.'
+            : 'Enter text to replace in the source editor.')
+          showSearch(control.action === 'replace', query)
+          return { delivered: true }
+        }
+        case 'find-next': {
+          if (!onlyKeys(data, ['query']) || (Object.hasOwn(data, 'query') && typeof data.query !== 'string')) return { delivered: false }
+          runFind(Object.hasOwn(data, 'query') ? data.query as string : searchQuery)
+          return { delivered: true }
+        }
+        case 'replace-next':
+        case 'replace-all': {
+          if (!onlyKeys(data, ['query', 'replacement']) ||
+              (Object.hasOwn(data, 'query') && typeof data.query !== 'string') ||
+              (Object.hasOwn(data, 'replacement') && typeof data.replacement !== 'string')) return { delivered: false }
+          runReplace(
+            control.action === 'replace-all',
+            Object.hasOwn(data, 'query') ? data.query as string : searchQuery,
+            Object.hasOwn(data, 'replacement') ? data.replacement as string : replaceText
+          )
+          return { delivered: true }
+        }
+        case 'close-find':
+          if (!onlyKeys(data, [])) return { delivered: false }
+          setSearchOpen(false)
+          return { delivered: true }
+        case 'copy-context':
+          if (!onlyKeys(data, []) || source.view.state.selection.main.empty) return { delivered: false }
+          try {
+            await copySelectionContext()
+          } catch (reason) {
+            throw new Error(`Unable to copy selection context: ${errorMessage(reason)}`)
+          }
+          if (!isCurrentSourceSession(source)) return { delivered: false }
+          return { delivered: true }
+        case 'menu-open': {
+          if (!onlyKeys(data, ['kind', 'line', 'column', 'x', 'y']) ||
+              (data.kind !== 'editor' && data.kind !== 'gutter') ||
+              !Number.isSafeInteger(data.line) || (data.line as number) < 1 ||
+              (Object.hasOwn(data, 'column') && !Number.isSafeInteger(data.column)) ||
+              (Object.hasOwn(data, 'x') && (typeof data.x !== 'number' || !Number.isFinite(data.x) || data.x < 0)) ||
+              (Object.hasOwn(data, 'y') && (typeof data.y !== 'number' || !Number.isFinite(data.y) || data.y < 0))) return { delivered: false }
+          const line = data.line as number
+          if (line > source.view.state.doc.lines) return { delivered: false }
+          const column = Object.hasOwn(data, 'column') ? data.column as number : 1
+          const docLine = source.view.state.doc.line(line)
+          if (column < 1 || column > docLine.length + 1) return { delivered: false }
+          if (!isCurrentSourceSession(source)) return { delivered: false }
+          openSourceMenu(
+            source,
+            data.kind,
+            line,
+            column,
+            Object.hasOwn(data, 'x') ? data.x as number : 0,
+            Object.hasOwn(data, 'y') ? data.y as number : 0
+          )
+          return { delivered: true }
+        }
+        case 'minimap': {
+          if (!props.minimap || !onlyKeys(data, ['position']) ||
+              typeof data.position !== 'number' || !Number.isFinite(data.position) ||
+              data.position < 0 || data.position > 1) return { delivered: false }
+          if (!isCurrentSourceSession(source)) return { delivered: false }
+          const scrollRange = Math.max(0, source.view.scrollDOM.scrollHeight - source.view.scrollDOM.clientHeight)
+          source.view.scrollDOM.scrollTop = scrollRange * data.position
+          return { delivered: true }
+        }
+        default:
+          return { delivered: false }
+      }
+    } catch (reason) {
+      const error = reason instanceof Error ? reason : new Error(errorMessage(reason))
+      if (isCurrentSourceSession(source)) reportSourceError(error.message)
+      throw error
+    }
+  }
+
+  async function onMenuControl(control: EditorUiControl): Promise<EditorUiControlResult> {
+    const menu = menuSessionRef.current
+    if (!bridgeContext || !menu || control.generation !== menu.generation || !isCurrentMenuSession(menu)) {
+      return { delivered: false }
+    }
+    const data = control.data ?? {}
+    if (control.action === 'close') {
+      if (!onlyKeys(data, [])) return { delivered: false }
+      return { delivered: closeSourceMenu(menu.generation) }
+    }
+    if (control.action === 'copy-line') {
+      if (menu.kind !== 'gutter' || menu.line === undefined || !onlyKeys(data, ['relative']) ||
+          (Object.hasOwn(data, 'relative') && typeof data.relative !== 'boolean')) return { delivered: false }
+      const relative = Object.hasOwn(data, 'relative') ? data.relative as boolean : false
+      const path = relative ? menu.relativePath : menu.path
+      try {
+        if (!navigator.clipboard) throw new Error('Clipboard access is unavailable.')
+        await navigator.clipboard.writeText(`${path}:${menu.line}`)
+      } catch (reason) {
+        const error = new Error(`Unable to copy line path: ${errorMessage(reason)}`)
+        if (isCurrentMenuSession(menu)) reportSourceError(error.message)
+        throw error
+      }
+      if (!isCurrentMenuSession(menu)) return { delivered: false }
+      reportSourceError(null)
+      if (!isCurrentMenuSession(menu)) return { delivered: false }
+      return { delivered: closeSourceMenu(menu.generation) }
+    }
+    if (control.action === 'search-in-files') {
+      if (menu.kind !== 'editor' || !onlyKeys(data, [])) return { delivered: false }
+      const query = (menu.query ?? '').trim().slice(0, 8192)
+      if (!query || !isCurrentMenuSession(menu)) return { delivered: false }
+      try {
+        callbacks.current.onSearchInFiles(query)
+      } catch (reason) {
+        const error = reason instanceof Error ? reason : new Error(errorMessage(reason))
+        if (isCurrentMenuSession(menu)) reportSourceError(error.message)
+        throw error
+      }
+      if (!isCurrentMenuSession(menu)) return { delivered: false }
+      return { delivered: closeSourceMenu(menu.generation) }
+    }
+    return { delivered: false }
+  }
+
+
+  const sourceActions = [
+    'find', 'replace', 'find-next', 'replace-next', 'replace-all', 'close-find', 'menu-open',
+    ...(viewRef.current && !viewRef.current.state.selection.main.empty ? ['copy-context'] : []),
+    ...(props.minimap ? ['minimap'] : [])
+  ]
+  const sourceTarget = `source:${JSON.stringify([props.buffer.id, props.tabId])}`
+  const sourceAddress: EditorUiControlAddress | null = bridgeContext && sourceGeneration !== null &&
+    sourceSessionRef.current?.generation === sourceGeneration
+    ? { surface: SOURCE_CONTROL_SURFACE, target: sourceTarget, generation: sourceGeneration, actions: sourceActions }
+    : null
+  const currentMenu = contextMenu && contextMenu.sourceGeneration === sourceGeneration &&
+    menuSessionRef.current?.generation === contextMenu.generation
+    ? contextMenu
+    : null
+  const menuActions = currentMenu === null
+    ? []
+    : currentMenu.kind === 'gutter'
+      ? ['close', 'copy-line']
+      : ['close', ...(currentMenu.query?.trim() ? ['search-in-files'] : [])]
+  const menuAddress: EditorUiControlAddress | null = bridgeContext && sourceGeneration !== null &&
+    sourceSessionRef.current?.generation === sourceGeneration && currentMenu !== null
+    ? {
+        surface: SOURCE_CONTROL_SURFACE,
+        target: `source-menu:${JSON.stringify([props.buffer.id, props.tabId])}`,
+        generation: currentMenu.generation,
+        actions: menuActions
+      }
+    : null
+  const sourceAddressRef = useRef(sourceAddress)
+  sourceAddressRef.current = sourceAddress
+  const menuAddressRef = useRef(menuAddress)
+  menuAddressRef.current = menuAddress
+
+  async function dispatchSourceControl(action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> {
+    const origin = sourceSessionRef.current
+    const address = sourceAddressRef.current
+    const context = bridgeContextRef.current
+    if (!context || !origin || !address || address.generation !== origin.generation) {
+      if (!origin || isCurrentSourceSession(origin)) reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
+      return { delivered: false }
+    }
+    const control: EditorUiControl = {
+      surface: address.surface,
+      target: address.target,
+      generation: address.generation,
+      action,
+      ...(data === undefined ? {} : { data })
+    }
+    try {
+      const result = await requestEditorUiControl(context, control)
+      if (!isCurrentSourceSession(origin)) return { delivered: false }
+      if (!result.delivered) reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
+      return result
+    } catch (reason) {
+      if (isCurrentSourceSession(origin)) reportSourceError(errorMessage(reason))
+      return { delivered: false }
+    }
+  }
+
+  async function dispatchMenuControl(action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> {
+    const origin = menuSessionRef.current
+    const address = menuAddressRef.current
+    const source = sourceSessionRef.current
+    const context = bridgeContextRef.current
+    if (!context || !origin || !source || !address || address.generation !== origin.generation ||
+        source.generation !== origin.sourceGeneration) {
+      if (origin && isCurrentMenuSession(origin)) reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
+      return { delivered: false }
+    }
+    const control: EditorUiControl = {
+      surface: address.surface,
+      target: address.target,
+      generation: address.generation,
+      action,
+      ...(data === undefined ? {} : { data })
+    }
+    try {
+      const result = await requestEditorUiControl(context, control)
+      if (!isCurrentMenuSession(origin)) return { delivered: false }
+      if (!result.delivered) reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
+      return result
+    } catch (reason) {
+      if (isCurrentMenuSession(origin)) reportSourceError(errorMessage(reason))
+      return { delivered: false }
+    }
+  }
+  function findNextFromKeyboard(): boolean {
+    void dispatchSourceControl('find-next', { query: searchInput.current?.value ?? searchQueryRef.current })
+    return true
+  }
+  function handleEditorContextMenu(event: MouseEvent, view: EditorView): boolean {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return false
+    const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+    if (position === null) return false
+    const line = view.state.doc.lineAt(position)
+    const kind = target.closest('.cm-lineNumbers') ? 'gutter' : target.closest('.cm-content') ? 'editor' : null
+    if (kind === null) return false
+    event.preventDefault()
+    const data = {
+      kind,
+      line: line.number,
+      ...(kind === 'editor' ? { column: position - line.from + 1 } : {}),
+      x: Number.isFinite(event.clientX) ? Math.max(0, event.clientX) : 0,
+      y: Number.isFinite(event.clientY) ? Math.max(0, event.clientY) : 0
+    }
+    void dispatchSourceControl('menu-open', data)
+    return true
+  }
+
+  function requestCopyContext(): void {
+    void dispatchSourceControl('copy-context')
+  }
+
+  function commitFindNext(query = searchQuery): void {
+    void dispatchSourceControl('find-next', { query })
+  }
+  function commitFindNextFromButton(): void {
+    commitFindNext(searchQuery)
+  }
+
+  function commitReplaceNext(): void {
+    void dispatchSourceControl('replace-next', { query: searchQuery, replacement: replaceText })
+  }
+
+  function commitReplaceAll(): void {
+    void dispatchSourceControl('replace-all', { query: searchQuery, replacement: replaceText })
+  }
+
+
+  function closeFind(): void {
+    void dispatchSourceControl('close-find')
+  }
+
+  function requestCloseSourceMenu(): void {
+    void dispatchMenuControl('close')
+  }
+
+  function copySourceMenuLine(relative: boolean): void {
+    void dispatchMenuControl('copy-line', { relative })
+  }
+  function copyAbsoluteSourceLine(): void {
+    copySourceMenuLine(false)
+  }
+
+  function copyRelativeSourceLine(): void {
+    copySourceMenuLine(true)
+  }
+
+
+  function searchFromSourceMenu(): void {
+    void dispatchMenuControl('search-in-files')
+  }
+
+  function dismissMenuContextMenu(event: ReactMouseEvent<HTMLDivElement>): void {
+    event.preventDefault()
+    void dispatchMenuControl('close')
+  }
+
+  function keepMenuContextMenu(event: ReactMouseEvent<HTMLDivElement>): void {
+    event.preventDefault()
+    event.stopPropagation()
+  }
+  function handleSourceMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    void dispatchMenuControl('close')
+  }
+
+  function scrollFromMinimap(event: ReactMouseEvent<HTMLCanvasElement>): void {
+    const target = canvas.current
+    if (!target) return
+    if (!viewRef.current) {
+      reportSourceError(SOURCE_CONTROL_UNAVAILABLE)
+      return
+    }
+    const bounds = target.getBoundingClientRect()
+    const position = bounds.height === 0
+      ? 0
+      : Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))
+    void dispatchSourceControl('minimap', { position })
+  }
+
 
   useImperativeHandle(forwardedRef, () => ({
     flush: async () => callbacks.current.flushDraft(),
@@ -391,7 +881,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
         compartments.wrap.of(props.wrap ? EditorView.lineWrapping : []),
         compartments.zoom.of(zoomTheme),
         keymap.of([
-          { key: 'Mod-g', run: findNext },
+          { key: 'Mod-g', run: findNextFromKeyboard },
           ...editorSearchKeymap,
           ...editorHistoryKeymap,
           ...editorDefaultKeymap,
@@ -423,7 +913,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
               return true
             }
             setPasteError(null)
-            callbacks.current.onError(null)
+            reportSourceError(null)
             const range = view.state.selection.main
             view.dispatch({
               changes: { from: range.from, to: range.to, insert: text },
@@ -431,26 +921,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
             })
             return true
           },
-          contextmenu: (event, view) => {
-            const target = event.target
-            if (!(target instanceof HTMLElement)) return false
-            const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
-            if (position === null) return false
-            const line = view.state.doc.lineAt(position).number
-            if (target.closest('.cm-lineNumbers')) {
-              event.preventDefault()
-              setContextMenu({ kind: 'gutter', x: event.clientX, y: event.clientY, line })
-              return true
-            }
-            if (target.closest('.cm-content')) {
-              const range = view.state.selection.main
-              const query = (range.empty ? wordAt(view, position) : view.state.doc.sliceString(range.from, range.to)).slice(0, 8192)
-              event.preventDefault()
-              setContextMenu({ kind: 'editor', x: event.clientX, y: event.clientY, query })
-              return true
-            }
-            return false
-          }
+          contextmenu: handleEditorContextMenu
         })
       ]
     }
@@ -497,6 +968,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       destroyEditor = () => editor.destroy()
     }
     viewRef.current = editor
+    setEngineSession({ key: engineKey, generation: newSourceControlGeneration() })
     const tabId = props.tabId
     const unregisterFocus = tabId === null ? undefined : registerEditorFocus(tabId, () => {
       const group = parent.closest<HTMLElement>('.qt-group')
@@ -569,7 +1041,11 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       mergeRef.current = null
       mergeOriginal.current = null
     }
-  }, [props.buffer.id, props.tabId, props.comparisonOriginal !== undefined])
+  }, [props.buffer.id, props.tabId, props.comparisonOriginal !== undefined, engineKey])
+  useEffect(() => {
+    const menu = menuSessionRef.current
+    if (menu && menu.sourceGeneration !== sourceGeneration) closeSourceMenu(menu.generation)
+  }, [sourceGeneration])
 
   useEffect(() => {
     const merge = mergeRef.current
@@ -670,37 +1146,20 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     props.reveal?.column
   ])
 
-  const copyGutterLine = async (relative: boolean) => {
-    if (!contextMenu || contextMenu.kind !== 'gutter' || contextMenu.line === undefined) return
-    const path = relative ? props.buffer.relativePath : props.buffer.path
-    try {
-      await navigator.clipboard.writeText(`${path}:${contextMenu.line}`)
-      callbacks.current.onError(null)
-    } catch (reason) {
-      callbacks.current.onError(`Unable to copy line path: ${reason instanceof Error ? reason.message : String(reason)}`)
-    }
-    setContextMenu(null)
-  }
-  const searchFromContextMenu = () => {
-    const query = contextMenu?.kind === 'editor' ? contextMenu.query?.trim() : ''
-    if (query) callbacks.current.onSearchInFiles(query)
-    setContextMenu(null)
-  }
-  const scrollFromMinimap = (event: ReactMouseEvent<HTMLCanvasElement>) => {
-    const target = canvas.current
-    const editor = viewRef.current
-    if (!target || !editor) return
-    const bounds = target.getBoundingClientRect()
-    const position = bounds.height === 0 ? 0 : Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height))
-    editor.scrollDOM.scrollTop = Math.max(0, editor.scrollDOM.scrollHeight - editor.scrollDOM.clientHeight) * position
-  }
 
   return (
     <div className={`qe-source-editor${props.minimap ? ' has-minimap' : ''}`}>
+      {bridgeContext && <SourceControlRegistration
+        context={bridgeContext}
+        sourceAddress={sourceAddress}
+        menuAddress={menuAddress}
+        onSourceControl={onSourceControl}
+        onMenuControl={onMenuControl}
+      />}
       {selection && (
         <div className="qe-selection-copy-hint">
           <span>{selection.fromLine === selection.toLine ? `Line ${selection.fromLine} selected` : `Lines ${selection.fromLine}–${selection.toLine} selected`}</span>
-          <Button onClick={() => { void copySelectionContext().catch(reportCopyError) }}>Copy context ⌘⌥C</Button>
+          <Button onClick={requestCopyContext}>Copy context ⌘⌥C</Button>
         </div>
       )}
       {searchOpen && <div className="qe-source-search" role="search" aria-label="Find in source">
@@ -713,42 +1172,44 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault()
-              try { runFind() } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) }
+              commitFindNext(event.currentTarget.value)
             } else if (event.key === 'Escape') {
               event.preventDefault()
-              setSearchOpen(false)
+              closeFind()
             }
           }}
         />
         {replaceOpen && <TextField className="qe-source-search__field" label="Replace with" value={replaceText} onChange={(event) => setReplaceText(event.currentTarget.value)} />}
-        <Button onClick={() => { try { runFind() } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Find next</Button>
+        <Button onClick={commitFindNextFromButton}>Find next</Button>
         {replaceOpen && <>
-          <Button onClick={() => { try { runReplace(false) } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Replace</Button>
-          <Button onClick={() => { try { runReplace(true) } catch (reason) { callbacks.current.onError(reason instanceof Error ? reason.message : String(reason)) } }}>Replace all</Button>
+          <Button onClick={commitReplaceNext}>Replace</Button>
+          <Button onClick={commitReplaceAll}>Replace all</Button>
         </>}
-        <Button aria-label="Close find" onClick={() => setSearchOpen(false)}>Close</Button>
+        <Button aria-label="Close find" onClick={closeFind}>Close</Button>
       </div>}
       <div className="qe-source-editor-main">
         <div className="qe-codemirror-host" ref={host} />
         {props.minimap && <canvas ref={canvas} className="qe-editor-minimap" aria-label="Code minimap" title="Click to jump to a section of the file" onClick={scrollFromMinimap} />}
       </div>
-      {(pasteError || props.error) && <div className="qe-editor-error"><InlineError message={pasteError ?? props.error!} /></div>}
+      {(pasteError || props.error || controlError) && <div className="qe-editor-error"><InlineError message={pasteError ?? props.error ?? controlError!} /></div>}
       {contextMenu && (
-        <div className="qe-source-menu-layer" onClick={() => setContextMenu(null)} onContextMenu={(event) => { event.preventDefault(); setContextMenu(null) }}>
+        <div className="qe-source-menu-layer" onClick={requestCloseSourceMenu} onContextMenu={dismissMenuContextMenu}>
           <div
             className="qe-source-context-menu"
             role="menu"
             aria-label={contextMenu.kind === 'gutter' ? 'Line actions' : 'Editor actions'}
             style={{ left: contextMenu.x, top: contextMenu.y }}
             onClick={(event) => event.stopPropagation()}
+            onContextMenu={keepMenuContextMenu}
+            onKeyDown={handleSourceMenuKeyDown}
           >
             {contextMenu.kind === 'gutter' ? (
               <>
-                <Button role="menuitem" onClick={() => void copyGutterLine(false)}>Copy Path to Line</Button>
-                <Button role="menuitem" onClick={() => void copyGutterLine(true)}>Copy Rel. Path to Line</Button>
+                <Button role="menuitem" onClick={copyAbsoluteSourceLine}>Copy Path to Line</Button>
+                <Button role="menuitem" onClick={copyRelativeSourceLine}>Copy Rel. Path to Line</Button>
               </>
             ) : (
-              <Button role="menuitem" disabled={!contextMenu.query} onClick={searchFromContextMenu}>Search in Files</Button>
+              <Button role="menuitem" disabled={!contextMenu.query?.trim()} onClick={searchFromSourceMenu}>Search in Files</Button>
             )}
           </div>
         </div>

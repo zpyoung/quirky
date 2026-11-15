@@ -8,14 +8,41 @@ import { openExplorerSearch } from './explorerIntent'
 import { requestSingleClose } from './overlayState'
 import { setEditorSetting, useEditorSettings } from './settings'
 import { beginEditorFocusHandoff, cancelEditorFocus } from './editorFocus'
-import { SourceEditor, type SourceEditorHandle } from './SourceEditor'
+import { SourceEditor, SourceEditorControlScope, type SourceEditorHandle } from './SourceEditor'
 import { ChangesSurface } from './ChangesSurface'
 import { hydrateBuffer, hydrateDiskContent, importFileTransfer, writeDraft } from './transfers'
-const MarkdownSurface = lazy(() => import('../markdown/MarkdownSurface').then((module) => ({ default: module.MarkdownSurface })))
-const NotebookSurface = lazy(() => import('../notebook/NotebookSurface').then((module) => ({ default: module.NotebookSurface })))
-const ViewerSurface = lazy(() => import('../viewers/ViewerSurface').then((module) => ({ default: module.ViewerSurface })))
+import { requestEditorUiControl, useEditorUiControl, type EditorUiControl, type EditorUiControlAddress, type EditorUiControlResult } from './uiControl'
 
 const EXPLORER_PANEL = 'panel:quirky.editor/explorer'
+const DOCUMENT_SURFACE = 'view:quirky.editor/document'
+type ControlSession = { document: object; generation: string; kind?: 'disk' | 'local' }
+let nextDocumentControlGeneration = 0
+
+function newDocumentControlGeneration(): string {
+  return `document-${++nextDocumentControlGeneration}`
+}
+
+function validControlData(control: EditorUiControl): boolean {
+  const data = control.data ?? {}
+  const keys = Reflect.ownKeys(data)
+  const only = (...names: string[]) => keys.every((key) => typeof key === 'string' && names.includes(key))
+  switch (control.action) {
+    case 'copy-path': return only('relative') && (!Object.hasOwn(data, 'relative') || typeof data.relative === 'boolean')
+    case 'save': return only('trigger') && (!Object.hasOwn(data, 'trigger') || data.trigger === 'user' || data.trigger === 'overwrite')
+    case 'zoom': return only('direction') && ['in', 'out', 'reset'].includes(data.direction as string)
+    case 'mode': return only('value') && ['source', 'rich', 'preview'].includes(data.value as string)
+    case 'changes': return only('open') && typeof data.open === 'boolean'
+    case 'submit': return only('path') && (!Object.hasOwn(data, 'path') || typeof data.path === 'string' && data.path.trim() !== '')
+    case 'setting': {
+      if (!only('name', 'value') || typeof data.name !== 'string') return false
+      if (['editorWordWrap', 'editorMinimapEnabled', 'editorAutoSave', 'editorPreviewTabsEnabled'].includes(data.name)) return typeof data.value === 'boolean'
+      if (typeof data.value !== 'number' || !Number.isFinite(data.value)) return false
+      return data.name === 'editorAutoSaveDelayMs' ? data.value >= 250 && data.value <= 10000
+        : data.name === 'editorFontZoomLevel' && data.value >= -6 && data.value <= 18
+    }
+    default: return keys.length === 0
+  }
+}
 const MAX_UPLOADS = 256
 const MAX_UPLOAD_FILE_BYTES = 50 * 1024 * 1024
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -54,7 +81,7 @@ type ImportResult = { path?: string; paths?: string[] }
 type InternalPaths = { worktreeId: string; paths: string[] }
 type ReadBufferResult = { buffer?: EditorBufferInfo }
 type Props = { context: UiPluginContext; input?: unknown }
-type BoundaryProps = { children: ReactNode; onRetry(): void }
+type BoundaryProps = { children: ReactNode; onRetry(): void; onFailure(): void }
 type BoundaryState = { error: string | null }
 type ActiveActions = {
   flush(): Promise<void>
@@ -72,15 +99,14 @@ class SurfaceErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 
   componentDidCatch(error: Error): void {
-    this.setState({ error: error.message })
+    this.props.onFailure()
   }
 
   render(): ReactNode {
     if (this.state.error) {
       return (
-        <div className="qe-surface-failure" role="alert">
-          <p>The document surface could not be loaded: {this.state.error}</p>
-          <Button onClick={() => { this.setState({ error: null }); this.props.onRetry() }}>Retry</Button>
+        <div className="qe-surface-failure">
+          <InlineError message={`The document surface could not be loaded: ${this.state.error}`} action={{ label: 'Retry', onAction: this.props.onRetry }} />
         </div>
       )
     }
@@ -262,21 +288,50 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const [buffer, setBuffer] = useState<EditorSurfaceBuffer | null>(null)
   const bufferRef = useRef<EditorSurfaceBuffer | null>(null)
   bufferRef.current = buffer
+  const actualTabId = input.tabId ?? info?.tabId ?? buffer?.tabId ?? null
+  const identity = JSON.stringify([input.bufferId, actualTabId])
+  const documentSession = useMemo(() => ({ generation: newDocumentControlGeneration() }), [context, identity, info?.path, info?.worktreeId])
+  const currentSession = useRef(documentSession)
+  currentSession.current = documentSession
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
+  const isCurrent = (origin = documentSession) => mounted.current && currentSession.current === origin
+  const requireCurrent = (origin: object) => {
+    if (!mounted.current || currentSession.current !== origin) throw new Error('The editor control is no longer available.')
+  }
+  const busyControls = useRef(new Set<string>())
   const [hydrateError, setHydrateError] = useState<string | null>(null)
   const [hydrationAttempt, setHydrationAttempt] = useState(0)
   const lastHydrationAttempt = useRef(0)
   const retryDocument = () => { setHydrationAttempt((attempt) => attempt + 1); refresh() }
   const { settings, error: settingsError } = useEditorSettings(context)
   const [uiError, setUiError] = useState<string | null>(null)
-  const [sourceError, setSourceError] = useState<string | null>(null)
+  const [sourceError, onSourceError] = useState<string | null>(null)
   const [draftConflict, setDraftConflict] = useState<string | null>(null)
   const [localText, setLocalText] = useState<string | null>(null)
   const localTextRef = useRef<string | null>(null)
   const [editorGeneration, setEditorGeneration] = useState(0)
-  const [compareOpen, setCompareOpen] = useState(false)
+  const [surfaceAttempt, setSurfaceAttempt] = useState(0)
+  const [surfaceFailure, setSurfaceFailure] = useState<{ document: object; mode: SurfaceMode; kind: string } | null>(null)
+  const MarkdownSurface = useMemo(() => lazy(() => import('../markdown/MarkdownSurface').then((module) => ({ default: module.MarkdownSurface }))), [surfaceAttempt])
+  const NotebookSurface = useMemo(() => lazy(() => import('../notebook/NotebookSurface').then((module) => ({ default: module.NotebookSurface }))), [surfaceAttempt])
+  const ViewerSurface = useMemo(() => lazy(() => import('../viewers/ViewerSurface').then((module) => ({ default: module.ViewerSurface }))), [surfaceAttempt])
+  const [comparisonSession, setComparisonSession] = useState<ControlSession | null>(null)
+  const comparisonIntent = useRef<string | null>(null)
+  const compareOpen = comparisonSession?.document === documentSession
+  const setCompareOpen = (open: boolean) => {
+    const generation = newDocumentControlGeneration()
+    comparisonIntent.current = generation
+    setComparisonSession(open ? { document: documentSession, generation, kind: 'local' } : null)
+  }
   const compareId = useId()
   const [undoReloadUntil, setUndoReloadUntil] = useState(0)
   const [renamePath, setRenamePath] = useState<string | null>(null)
+  const [renameSession, setRenameSession] = useState<ControlSession | null>(null)
+  const currentRename = useRef(renameSession)
+  currentRename.current = renameSession
+  const currentComparison = useRef(comparisonSession)
+  currentComparison.current = comparisonSession
   const [changesOpen, setChangesOpen] = useState(false)
   const sourceRef = useRef<SourceEditorHandle>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -314,7 +369,6 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
 
   useEffect(() => {
     const retrying = lastHydrationAttempt.current !== hydrationAttempt
-    lastHydrationAttempt.current = hydrationAttempt
     if (!info) {
       if (state) setBuffer(null)
       return
@@ -322,7 +376,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     const current = bufferRef.current
     if (!retrying && current && current.id === info.id && current.contentRevision === info.contentRevision) {
       const merged = { ...current, ...info, content: current.content, draft: current.draft }
-      if (current.revision !== info.revision || current.external !== info.external || current.diskContent !== info.diskContent) setBuffer(merged)
+      if (current.revision !== info.revision || current.path !== info.path || current.worktreeId !== info.worktreeId || current.external !== info.external || current.diskContent !== info.diskContent) setBuffer(merged)
       return
     }
     let cancelled = false
@@ -330,10 +384,14 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       if (cancelled) return
       const latest = bufferRef.current
       if (latest && latest.id === hydrated.id && latest.contentRevision > hydrated.contentRevision) return
+      lastHydrationAttempt.current = hydrationAttempt
       setHydrateError(null)
       setBuffer(hydrated)
     }).catch((reason: unknown) => {
-      if (!cancelled) setHydrateError(messageOf(reason))
+      if (!cancelled) {
+        lastHydrationAttempt.current = hydrationAttempt
+        setHydrateError(messageOf(reason))
+      }
     })
     return () => { cancelled = true }
   }, [context, hydrationAttempt, info, state])
@@ -389,7 +447,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }, [])
 
   useEffect(() => {
-    const dismissOutside = (event: Event) => {
+    const onFileActionsOutside = (event: Event) => {
       const details = fileActionsRef.current
       if (!details?.open || !(event.target instanceof Node) || details.contains(event.target)) return
       details.open = false
@@ -402,14 +460,14 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       details.open = false
       details.querySelector('summary')?.focus()
     }
-    document.addEventListener('pointerdown', dismissOutside)
-    document.addEventListener('click', dismissOutside, true)
-    document.addEventListener('focusin', dismissOutside)
+    document.addEventListener('pointerdown', onFileActionsOutside)
+    document.addEventListener('click', onFileActionsOutside, true)
+    document.addEventListener('focusin', onFileActionsOutside)
     document.addEventListener('keydown', dismissEscape, true)
     return () => {
-      document.removeEventListener('pointerdown', dismissOutside)
-      document.removeEventListener('click', dismissOutside, true)
-      document.removeEventListener('focusin', dismissOutside)
+      document.removeEventListener('pointerdown', onFileActionsOutside)
+      document.removeEventListener('click', onFileActionsOutside, true)
+      document.removeEventListener('focusin', onFileActionsOutside)
       document.removeEventListener('keydown', dismissEscape, true)
     }
   }, [])
@@ -422,7 +480,8 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     await flushDrafts()
   }, [flushDrafts, flushSurfaceEditors])
 
-  const submitDraft = useCallback((content: string) => {
+  const onDocumentDraft = useCallback((content: string) => {
+    const origin = currentSession.current
     localTextRef.current = content
     setLocalText(content)
     const writeId = ++draftWriteId.current
@@ -452,26 +511,36 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           draft: acceptedDraft
         })
         acknowledgedBuffer.current = { content: acceptedContent, draft: acceptedDraft }
+        const live = mounted.current && currentSession.current === origin
         if (localTextRef.current === content) {
           blockedDraft.current = false
-          setDraftConflict(null)
+          if (live) setDraftConflict(null)
         }
-        const latest = bufferRef.current
-        if (latest) setBuffer(mergeSurfaceBuffer(latest, updated, { content: latest.content, draft: acceptedDraft }))
-        refresh()
+        if (live) {
+          const latest = bufferRef.current
+          if (latest) setBuffer(mergeSurfaceBuffer(latest, updated, { content: latest.content, draft: acceptedDraft }))
+          refresh()
+        }
       } catch (reason) {
         pendingDrafts.current.clear()
         blockedDraft.current = true
-        setDraftConflict(messageOf(reason))
-        refresh()
+        if (mounted.current && currentSession.current === origin) {
+          setDraftConflict(messageOf(reason))
+          refresh()
+        }
       }
     })
   }, [context, input.bufferId, refresh])
 
-  const writeLocalDraftAtLatest = useCallback(async (content: string) => {
+  const writeLocalDraftAtLatest = useCallback(async (content: string, check?: () => void) => {
+    const origin = currentSession.current
     const result = await context.call('quirky.editor/read', { bufferId: input.bufferId, action: 'buffer' }) as ReadBufferResult
+    requireCurrent(origin)
+    check?.()
     if (!result.buffer) throw new Error('The latest shared buffer could not be read.')
     const updated = await writeDraft(context, input.bufferId, content, result.buffer.contentRevision)
+    requireCurrent(origin)
+    check?.()
     const latestAcknowledged = {
       content: typeof result.buffer.content === 'string'
         ? result.buffer.content
@@ -501,14 +570,18 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }, [context, input.bufferId])
 
   const save = useCallback(async (trigger: 'user' | 'overwrite' = 'user'): Promise<EditorBufferInfo> => {
+    const origin = currentSession.current
     await flushSurfaceEditors()
+    requireCurrent(origin)
     if (trigger === 'overwrite') {
       await draftQueue.current
+      requireCurrent(origin)
       const currentText = localTextRef.current
       if (currentText !== null && blockedDraft.current) await writeLocalDraftAtLatest(currentText)
     } else {
       await flushDrafts()
     }
+    requireCurrent(origin)
     const snapshot = localTextRef.current
     const current = bufferRef.current
     const acknowledgedBefore = acknowledgedBuffer.current ?? {
@@ -522,9 +595,10 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     try {
       saved = await context.call('quirky.editor/save', { bufferId: input.bufferId, trigger }) as EditorBufferInfo
     } catch (reason) {
-      pendingSaveAcknowledgement.current = null
+      if (mounted.current && currentSession.current === origin) pendingSaveAcknowledgement.current = null
       throw reason
     }
+    requireCurrent(origin)
     const savedContent = typeof saved.content === 'string' ? saved.content : snapshot ?? acknowledgedBefore.content
     const savedDraft = saved.draftLength === null
       ? null
@@ -553,24 +627,36 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     refresh()
     return saved
   }, [context, flushDrafts, flushSurfaceEditors, input.bufferId, refresh, writeLocalDraftAtLatest])
-  const runViewAction = useCallback(async (action: 'reload' | 'keep' | 'undoReload' | 'compare' | 'promote' | 'pin' | 'reveal', patch?: Record<string, unknown>) => {
+  const runViewAction = useCallback(async (action: 'reload' | 'keep' | 'undoReload' | 'compare' | 'promote' | 'pin' | 'reveal', patch?: Record<string, unknown>, session?: ControlSession) => {
+    const origin = currentSession.current
+    const comparison = action === 'compare' ? newDocumentControlGeneration() : null
+    if (comparison) comparisonIntent.current = comparison
+    const check = () => {
+      requireCurrent(origin)
+      if (session && currentComparison.current !== session || comparison && comparisonIntent.current !== comparison) throw new Error('The editor control is no longer available.')
+    }
     if (action === 'keep') {
       await draftQueue.current
+      check()
       const keepContent = localTextRef.current ?? bufferRef.current?.draft ?? bufferRef.current?.content
-      if (keepContent !== undefined && blockedDraft.current) await writeLocalDraftAtLatest(keepContent)
+      if (keepContent !== undefined && blockedDraft.current) await writeLocalDraftAtLatest(keepContent, check)
     } else if (action === 'reload' || action === 'undoReload') {
       await draftQueue.current
     }
+    check()
     const updated = await context.call('quirky.editor/view', {
       bufferId: input.bufferId,
       action,
-      ...(input.tabId ? { tabId: input.tabId } : {}),
+      ...(actualTabId === null ? {} : { tabId: actualTabId }),
       ...(patch ? { patch } : {})
     }) as EditorBufferInfo
-    const comparedDiskContent = action === 'compare' && updated.external ? await hydrateDiskContent(context, updated) : undefined
+    check()
+    if (comparison && updated.external !== 'changed') throw new Error('The file is no longer changed on disk.')
+    const comparedDiskContent = comparison ? await hydrateDiskContent(context, updated) : undefined
+    check()
     if (action === 'reload') {
       if (undoReloadTimer.current !== undefined) window.clearTimeout(undoReloadTimer.current)
-      if (bufferRef.current && bufferRef.current.draft !== null) {
+      if (localTextRef.current !== null || bufferRef.current && bufferRef.current.draft !== null) {
         setUndoReloadUntil(Date.now() + 8000)
         undoReloadTimer.current = window.setTimeout(() => {
           undoReloadTimer.current = undefined
@@ -617,34 +703,24 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
         }))
       }
     }
-    if (action === 'compare') setCompareOpen(true)
+    if (comparison) setComparisonSession({ document: origin, generation: comparison, kind: 'disk' })
     setUiError(null)
     refresh()
     return updated
-  }, [context, input.bufferId, input.tabId, refresh, writeLocalDraftAtLatest])
+  }, [actualTabId, context, input.bufferId, refresh, writeLocalDraftAtLatest])
 
-  const updateView = useCallback((patch: Record<string, unknown>) => {
+  const onDocumentView = useCallback((patch: Record<string, unknown>) => {
+    const origin = currentSession.current
     const tabId = input.tabId ?? bufferRef.current?.tabId
-    void context.call('quirky.editor/view', { bufferId: input.bufferId, action: 'update', ...(tabId ? { tabId } : {}), patch }).catch((reason: unknown) => setUiError(messageOf(reason)))
+    void context.call('quirky.editor/view', { bufferId: input.bufferId, action: 'update', ...(tabId ? { tabId } : {}), patch }).catch((reason: unknown) => {
+      if (mounted.current && currentSession.current === origin) setUiError(messageOf(reason))
+    })
   }, [context, input.bufferId, input.tabId])
-  const actualTabId = input.tabId ?? buffer?.tabId ?? null
   const actualMode = input.mode ?? buffer?.mode ?? 'source'
   const canOfferChanges = buffer !== null &&
     (buffer.kind === 'text' || buffer.kind === 'markdown') &&
     !buffer.readOnly && !buffer.untitled && buffer.baseline !== null &&
     buffer.error === null && buffer.external !== 'deleted' && actualMode !== 'preview'
-  const openChanges = useCallback(async () => {
-    if (!canOfferChanges) return
-    try {
-      await flushActiveDocument()
-      setUiError(null)
-      setChangesOpen(true)
-    } catch (reason) {
-      const message = messageOf(reason)
-      setUiError(message)
-      context.toast('Changes could not be opened', message)
-    }
-  }, [canOfferChanges, context, flushActiveDocument])
   useEffect(() => {
     if (!canOfferChanges) setChangesOpen(false)
   }, [canOfferChanges])
@@ -719,12 +795,12 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       context,
       buffer: surfaceBuffer,
       fontSize: Math.max(8, Math.min(32, 13 + settings.fontZoomLevel)),
-      onDraft: submitDraft,
+      onDraft: onDocumentDraft,
       onAction,
-      onView: updateView,
+      onView: onDocumentView,
       registerCommandHandlers
     }
-  }, [actualMode, actualTabId, buffer, context, onAction, registerCommandHandlers, settings.fontZoomLevel, submitDraft, updateView])
+  }, [actualMode, actualTabId, buffer, context, onAction, registerCommandHandlers, settings.fontZoomLevel, onDocumentDraft, onDocumentView])
 
   const reveal = input.line === undefined ? undefined : { line: input.line, column: input.column }
   const fontSize = Math.max(8, Math.min(32, 13 + settings.fontZoomLevel))
@@ -857,7 +933,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }, [actualMode, actualTabId, buffer?.id, buffer?.kind, buffer?.path, buffer?.worktreeId])
 
   const activateSurface = () => activeRegistration.current?.focus()
-  const focusEditor = () => {
+  const onEditorFocus = () => {
     activeRegistration.current?.focus()
     editorHasFocus.current = true
     context.setContext('editorFocus', true)
@@ -872,6 +948,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   }
 
   const handleError = (reason: unknown) => {
+    if (!isCurrent()) return
     const message = messageOf(reason)
     setUiError(message)
     context.toast('Editor action failed', message)
@@ -879,131 +956,104 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
 
   const copyPath = async (relative: boolean) => {
     if (!buffer) return
-    try {
-      await navigator.clipboard.writeText(relative ? buffer.relativePath : buffer.path)
-      context.toast('Path copied', relative ? buffer.relativePath : buffer.path)
-    } catch (reason) {
-      handleError(reason)
-    }
+    const origin = documentSession
+    const path = relative ? buffer.relativePath : buffer.path
+    await navigator.clipboard.writeText(path)
+    requireCurrent(origin)
+    context.toast('Path copied', path)
   }
 
   const openMode = async (mode: SurfaceMode) => {
     const selectedBuffer = bufferRef.current
     if (!selectedBuffer) return
+    const origin = documentSession
+    await flushActiveDocument()
+    requireCurrent(origin)
+    if (mode === 'preview' && selectedBuffer.kind === 'markdown') {
+      await context.call('quirky.editor/open', { worktree: selectedBuffer.worktreeId, path: selectedBuffer.relativePath, mode: 'preview', preview: false, focus: true })
+      requireCurrent(origin)
+    } else {
+      const updated = await context.call('quirky.editor/view', {
+        bufferId: selectedBuffer.id, ...(actualTabId === null ? {} : { tabId: actualTabId }),
+        action: actualMode === 'preview' && selectedBuffer.kind === 'markdown' ? 'returnToEdit' : 'update', patch: { mode }
+      }) as EditorBufferInfo
+      requireCurrent(origin)
+      const current = bufferRef.current
+      if (current) setBuffer(mergeSurfaceBuffer(current, updated, { content: current.content, draft: current.draft }))
+      refresh()
+    }
     setChangesOpen(false)
-    try {
-      if (mode === 'preview' && selectedBuffer.kind === 'markdown') {
-        await context.call('quirky.editor/open', {
-          worktree: selectedBuffer.worktreeId,
-          path: selectedBuffer.relativePath,
-          mode: 'preview',
-          preview: false,
-          focus: true
-        })
-      } else if (actualMode === 'preview' && selectedBuffer.kind === 'markdown') {
-        await flushActiveDocument()
-        const updated = await context.call('quirky.editor/view', {
-          bufferId: selectedBuffer.id,
-          ...(actualTabId === null ? {} : { tabId: actualTabId }),
-          action: 'returnToEdit',
-          patch: { mode }
-        }) as EditorBufferInfo
-        const current = bufferRef.current
-        if (current) setBuffer(mergeSurfaceBuffer(current, updated, { content: current.content, draft: current.draft }))
-        refresh()
-      } else {
-        const updated = await context.call('quirky.editor/view', {
-          bufferId: selectedBuffer.id,
-          action: 'update',
-          patch: { mode }
-        }) as EditorBufferInfo
-        const current = bufferRef.current
-        if (current) setBuffer(mergeSurfaceBuffer(current, updated, { content: current.content, draft: current.draft }))
-      }
-      setUiError(null)
-    } catch (reason) {
-      handleError(reason)
-    }
-  }
-
-  const pin = async () => {
-    try {
-      await runViewAction('pin')
-    } catch (reason) {
-      handleError(reason)
-    }
   }
 
   const revealInExplorer = async () => {
     if (!buffer) return
-    try {
-      await context.call('quirky.editor/explorer', { worktree: buffer.worktreeId, action: 'reveal', path: buffer.relativePath })
-      context.togglePanel(EXPLORER_PANEL, true)
-    } catch (reason) {
-      handleError(reason)
-    }
+    const origin = documentSession
+    await context.call('quirky.editor/explorer', { worktree: buffer.worktreeId, action: 'reveal', path: buffer.relativePath })
+    requireCurrent(origin)
+    context.togglePanel(EXPLORER_PANEL, true)
   }
 
-  const searchInFiles = async (query: string) => {
-    if (!buffer) return
+  const onSearchInFiles = async (query: string) => {
+    if (!buffer || !isCurrent()) return
     openExplorerSearch(buffer.worktreeId, query)
     context.togglePanel(EXPLORER_PANEL, true)
   }
 
   const saveSetting = async (name: string, value: boolean | number | string) => {
-    try {
-      await setEditorSetting(context, name, value)
-      setUiError(null)
-    } catch (reason) {
-      handleError(reason)
-    }
+    const origin = documentSession
+    await setEditorSetting(context, name, value)
+    requireCurrent(origin)
   }
 
-  const renameFile = async () => {
-    if (!buffer || !renamePath?.trim()) return
-    try {
-      await context.call('quirky.editor/mutate', {
-        worktree: buffer.worktreeId,
-        action: 'rename',
-        path: buffer.relativePath,
-        newPath: renamePath.trim()
-      })
-      setRenamePath(null)
-      refresh()
-    } catch (reason) {
-      handleError(reason)
-    }
+  const renameFile = async (path: string, session: ControlSession) => {
+    if (!buffer) return
+    await context.call('quirky.editor/mutate', { worktree: buffer.worktreeId, action: 'rename', path: buffer.relativePath, newPath: path })
+    requireCurrent(session.document)
+    if (currentRename.current !== session) return
+    setRenameSession(null)
+    setRenamePath(null)
+    refresh()
   }
 
   const duplicateFile = async () => {
     if (!buffer) return
-    try {
-      const result = await context.call('quirky.editor/mutate', { worktree: buffer.worktreeId, action: 'duplicate', path: buffer.relativePath }) as { path: string }
-      await context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: result.path, focus: true, preview: false })
-      refresh()
-    } catch (reason) {
-      handleError(reason)
-    }
+    const origin = documentSession
+    const result = await context.call('quirky.editor/mutate', { worktree: buffer.worktreeId, action: 'duplicate', path: buffer.relativePath }) as { path: string }
+    requireCurrent(origin)
+    await context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: result.path, focus: true, preview: false })
+    requireCurrent(origin)
+    refresh()
   }
 
   const deleteFile = async () => {
     if (!buffer) return
+    const origin = documentSession
     const confirmed = await context.confirm({ title: `Delete ${buffer.name}?`, body: 'The file will be moved to Trash when supported by this workspace.' })
+    requireCurrent(origin)
     if (!confirmed) return
-    try {
-      await context.call('quirky.editor/mutate', { worktree: buffer.worktreeId, action: 'delete', path: buffer.relativePath, yes: true })
-      refresh()
-    } catch (reason) {
-      handleError(reason)
-    }
+    await context.call('quirky.editor/mutate', { worktree: buffer.worktreeId, action: 'delete', path: buffer.relativePath, yes: true })
+    requireCurrent(origin)
+    refresh()
   }
 
-  const sourceControl = async () => {
-    try {
-      await context.executeCommand('command:quirky.editor/source-control')
-    } catch (reason) {
-      handleError(reason)
+  /** Keeps the shared close flow bound to the document that requested it. */
+  const closeDocument = async () => {
+    const origin = documentSession
+    await flushActiveDocument()
+    requireCurrent(origin)
+    const closeContext = Object.create(context) as UiPluginContext
+    closeContext.call = async (method, params) => {
+      requireCurrent(origin)
+      const result = await context.call(method, params)
+      if (method !== 'quirky.editor/close') requireCurrent(origin)
+      return result
     }
+    closeContext.toast = (title, message) => {
+      if (!isCurrent(origin)) return
+      if (title === 'Unable to close file') throw new Error(message ?? title)
+      context.toast(title, message)
+    }
+    return requestSingleClose(closeContext, input.bufferId, actualTabId ?? undefined)
   }
 
   const handleDrop = async (event: ReactDragEvent<HTMLDivElement>) => {
@@ -1039,10 +1089,150 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     }
   }
 
+  const operationErrors = useRef(new WeakSet<Error>())
+  const onControlError = (reason: Error) => {
+    if (!operationErrors.current.has(reason)) handleError(reason)
+  }
+
+  /** Keeps bridge errors bound to a live session when its available actions change. */
+  function bindControls(address: EditorUiControlAddress | null, live: () => boolean) {
+    async function run(action: string, data?: Record<string, unknown>): Promise<EditorUiControlResult> {
+      if (!address || !live() || !address.actions.includes(action)) return { delivered: false }
+      try {
+        const result = await requestEditorUiControl(context, {
+          surface: address.surface, target: address.target, generation: address.generation, action,
+          ...(data === undefined ? {} : { data })
+        })
+        if (!result.delivered && live()) onControlError(new Error('The editor control is no longer available.'))
+        return result
+      } catch (reason) {
+        if (live()) onControlError(reason instanceof Error ? reason : new Error(messageOf(reason)))
+        return { delivered: false }
+      }
+    }
+    return { run }
+  }
+
+  const available = ['retry']
+  const onSurfaceFailure = () => {
+    if (isCurrent() && buffer) setSurfaceFailure({ document: documentSession, mode: actualMode, kind: buffer.kind })
+  }
+  if (surfaceFailure?.document === documentSession && surfaceFailure.mode === actualMode && surfaceFailure.kind === buffer?.kind) available.push('retry-surface')
+  const usable = buffer && info?.path === buffer.path && info.worktreeId === buffer.worktreeId
+  if (usable) {
+    available.push('copy-path', 'pin', 'explorer', 'source-control', 'close', 'zoom', 'setting', 'rename-start', 'duplicate', 'delete')
+    if (buffer.error) available.push('retry-open')
+    if (['markdown', 'notebook', 'csv', 'mermaid'].includes(buffer.kind)) available.push('mode')
+    if (canOfferChanges || changesOpen) available.push('changes')
+    if (!buffer.readOnly && (buffer.untitled || buffer.dirty || buffer.external || localText !== null && localText !== buffer.content)) available.push('save')
+    if (buffer.external === 'changed') available.push('compare-disk', 'reload', 'keep')
+    if (draftConflict) available.push('compare-local')
+    if (undoReloadUntil > Date.now()) available.push('undo-reload')
+  }
+  const executeControl = async (key: string, live: () => boolean, operation: () => unknown | Promise<unknown>) => {
+    if (!live() || busyControls.current.has(key)) return { delivered: false }
+    busyControls.current.add(key)
+    try {
+      await operation()
+      if (live()) setUiError(null)
+      return { delivered: true }
+    } catch (reason) {
+      const error = reason instanceof Error ? reason : new Error(messageOf(reason))
+      operationErrors.current.add(error)
+      if (live()) handleError(error)
+      throw error
+    } finally {
+      busyControls.current.delete(key)
+    }
+  }
+  const handleDocumentControl = async (control: EditorUiControl) => {
+    if (!validControlData(control) || !available.includes(control.action) || !isCurrent()) return { delivered: false }
+    const data = control.data ?? {}
+    if (control.action === 'mode' && buffer?.kind !== 'markdown' && data.value === 'preview') return { delivered: false }
+    if (control.action === 'changes' && data.open && !canOfferChanges) return { delivered: false }
+    if (control.action === 'save' && data.trigger === 'overwrite' && (!buffer?.dirty || !buffer.external)) return { delivered: false }
+    if (control.action === 'undo-reload' && undoReloadUntil <= Date.now()) return { delivered: false }
+    let diskComparison: string | null = null
+    return executeControl(`${documentSession.generation}:${control.action}`, () => isCurrent() && (diskComparison === null || comparisonIntent.current === diskComparison), async () => {
+      switch (control.action) {
+        case 'retry': retryDocument(); break
+        case 'retry-surface': setSurfaceFailure(null); setSurfaceAttempt((attempt) => attempt + 1); break
+        case 'retry-open':
+          await context.call('quirky.editor/open', { worktree: buffer!.worktreeId, path: buffer!.relativePath, mode: actualMode, focus: true })
+          requireCurrent(documentSession)
+          refresh()
+          break
+        case 'copy-path': await copyPath(data.relative === true); break
+        case 'pin': await runViewAction('pin'); break
+        case 'explorer': await revealInExplorer(); break
+        case 'source-control': context.togglePanel('panel:quirky.git/source-control', true); break
+        case 'close': await closeDocument(); break
+        case 'zoom':
+          await saveSetting('editorFontZoomLevel', data.direction === 'in' ? Math.min(18, settings.fontZoomLevel + 1) : data.direction === 'out' ? Math.max(-6, settings.fontZoomLevel - 1) : 0)
+          break
+        case 'setting': await saveSetting(data.name as string, data.value as boolean | number); break
+        case 'mode': await openMode(data.value as SurfaceMode); break
+        case 'changes':
+          if (data.open) { await flushActiveDocument(); requireCurrent(documentSession) }
+          setChangesOpen(data.open as boolean)
+          break
+        case 'save': await save(data.trigger === 'overwrite' ? 'overwrite' : 'user'); break
+        case 'rename-start':
+          setRenameSession({ document: documentSession, generation: newDocumentControlGeneration() })
+          setRenamePath(buffer!.relativePath)
+          break
+        case 'duplicate': await duplicateFile(); break
+        case 'delete': await deleteFile(); break
+        case 'compare-disk': {
+          const pending = runViewAction('compare')
+          diskComparison = comparisonIntent.current
+          await pending
+          break
+        }
+        case 'compare-local': setCompareOpen(true); break
+        case 'reload': await runViewAction('reload'); break
+        case 'keep': await runViewAction('keep'); break
+        case 'undo-reload': await runViewAction('undoReload'); break
+      }
+    })
+  }
+  const documentAddress: EditorUiControlAddress = { surface: DOCUMENT_SURFACE, target: `document:${identity}`, generation: documentSession.generation, actions: available }
+  useEditorUiControl({ context, address: documentAddress, handler: handleDocumentControl })
+  const controls = bindControls(documentAddress, () => isCurrent())
+  const renameLive = () => isCurrent() && renameSession !== null && renameSession.document === documentSession && currentRename.current === renameSession
+  const renameAddress: EditorUiControlAddress | null = renameLive() ? { surface: DOCUMENT_SURFACE, target: `document-rename:${identity}`, generation: renameSession!.generation, actions: ['submit', 'cancel'] } : null
+  useEditorUiControl({
+    context, address: renameAddress,
+    handler: async (control) => {
+      if (!validControlData(control) || !renameLive()) return { delivered: false }
+      const path = (control.data?.path as string | undefined ?? renamePath)?.trim()
+      if (control.action === 'submit' && !path) return { delivered: false }
+      return executeControl(`${renameSession!.generation}:${control.action}`, renameLive, async () => {
+        if (control.action === 'cancel') { setRenameSession(null); setRenamePath(null) }
+        else if (control.action === 'submit') await renameFile(path!, renameSession!)
+      })
+    }
+  })
+  const renameControls = bindControls(renameAddress, renameLive)
+  const comparisonLive = () => isCurrent() && comparisonSession !== null && comparisonSession.document === documentSession && currentComparison.current === comparisonSession
+  const comparisonAddress: EditorUiControlAddress | null = comparisonLive() ? { surface: DOCUMENT_SURFACE, target: `document-compare:${identity}`, generation: comparisonSession!.generation, actions: buffer?.external === 'changed' ? ['close', 'reload', 'keep'] : ['close'] } : null
+  useEditorUiControl({
+    context, address: comparisonAddress,
+    handler: async (control) => {
+      if (!validControlData(control) || !comparisonLive()) return { delivered: false }
+      if (control.action !== 'close' && buffer?.external !== 'changed') return { delivered: false }
+      return executeControl(`${comparisonSession!.generation}:${control.action}`, comparisonLive, async () => {
+        if (control.action === 'reload' || control.action === 'keep') await runViewAction(control.action, undefined, comparisonSession!)
+        if (comparisonLive()) setCompareOpen(false)
+      })
+    }
+  })
+  const comparisonControls = bindControls(comparisonAddress, comparisonLive)
+
   if (!buffer) {
     const error = stateError ?? hydrateError
-    if (error) return <div className="qe-document-message"><InlineError message={error} action={{ label: 'Retry', onAction: retryDocument }} /></div>
-    if (state && !info) return <div className="qe-document-message"><EmptyState message="This document is no longer open." action={{ label: 'Retry', onAction: retryDocument }} /></div>
+    if (error) return <div className="qe-document-message"><InlineError message={error} action={{ label: 'Retry', onAction: () => { void controls.run('retry') } }} /></div>
+    if (state && !info) return <div className="qe-document-message"><EmptyState message="This document is no longer open." action={{ label: 'Retry', onAction: () => { void controls.run('retry') } }} /></div>
     return <div className="qe-document-message" role="status" aria-live="polite"><NoticeLine>Loading document…</NoticeLine></div>
   }
 
@@ -1057,12 +1247,14 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
   const showViewer = !changesOpen && viewerKind
   const showChanges = changesOpen && canOfferChanges
   const surfaceProps = featureProps
+  const comparingDisk = comparisonSession?.kind === 'disk'
   const saveButton = () => {
     const handoff = actualTabId === null ? null : beginEditorFocusHandoff()
     if (actualTabId !== null) handoff?.setTarget(actualTabId)
-    void save('user').then(() => handoff?.request()).catch((reason) => {
-      handoff?.cancel()
-      handleError(reason)
+    const origin = documentSession
+    void controls.run('save').then((result) => {
+      if (result.delivered && isCurrent(origin)) handoff?.request()
+      else handoff?.cancel()
     })
   }
   const closeButton = () => {
@@ -1071,9 +1263,9 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       details.open = false
       details.querySelector('summary')?.focus()
     }
-    void requestSingleClose(context, buffer.id, actualTabId ?? undefined)
+    void controls.run('close')
   }
-  const changeWrap = (value: boolean) => void saveSetting('editorWordWrap', value)
+  const changeWrap = (value: boolean) => void controls.run('setting', { name: 'editorWordWrap', value })
   const pathTitle = buffer.relativePath || buffer.name
   const editingBuffer = localText === null
     ? buffer
@@ -1085,7 +1277,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       tabIndex={-1}
       className="qe-document-surface"
       onPointerDownCapture={activateSurface}
-      onFocusCapture={focusEditor}
+      onFocusCapture={onEditorFocus}
       onBlurCapture={blurEditor}
       onDragOver={(event) => {
         const types = event.dataTransfer.types
@@ -1095,72 +1287,72 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     >
       <header className="qe-document-header">
         <div className="qe-document-path-group">
-          <Button className="qe-document-path" title={buffer.path} onClick={() => void copyPath(false)}>{pathTitle}</Button>
+          <Button className="qe-document-path" title={buffer.path} onClick={() => void controls.run('copy-path')}>{pathTitle}</Button>
           {buffer.dirty && <Badge tone="needs-you" label="Unsaved changes">●</Badge>}
           {buffer.external && <Badge tone="needs-you">{buffer.external === 'deleted' ? 'Deleted on disk' : 'Changed on disk'}</Badge>}
           <details ref={fileActionsRef} className="qe-file-actions">
             <summary className="qe-disclosure-trigger">File actions</summary>
             <div className="qe-file-actions-menu">
-              <Button aria-pressed={buffer.pinned} title={buffer.pinned ? 'Unpin tab' : 'Pin tab'} onClick={() => void pin()}>{buffer.pinned ? 'Unpin' : 'Pin'}</Button>
-              <Button onClick={() => context.togglePanel(EXPLORER_PANEL, true)}>Explorer</Button>
-              <Button onClick={() => void sourceControl()}>Source Control</Button>
+              <Button aria-pressed={buffer.pinned} title={buffer.pinned ? 'Unpin tab' : 'Pin tab'} onClick={() => void controls.run('pin')}>{buffer.pinned ? 'Unpin' : 'Pin'}</Button>
+              <Button onClick={() => void controls.run('explorer')}>Explorer</Button>
+              <Button onClick={() => void controls.run('source-control')}>Source Control</Button>
               <Button variant="destructive" onClick={closeButton}>Close tab</Button>
               <div className="qe-zoom-controls" aria-label="Editor font size">
-                <IconButton label="Zoom out" onClick={() => void saveSetting('editorFontZoomLevel', Math.max(-6, settings.fontZoomLevel - 1))}>−</IconButton>
+                <IconButton label="Zoom out" onClick={() => void controls.run('zoom', { direction: 'out' })}>−</IconButton>
                 <span>{fontSize} px</span>
-                <IconButton label="Zoom in" onClick={() => void saveSetting('editorFontZoomLevel', Math.min(18, settings.fontZoomLevel + 1))}>+</IconButton>
-                <Button aria-label="Reset zoom" onClick={() => void saveSetting('editorFontZoomLevel', 0)}>Reset</Button>
+                <IconButton label="Zoom in" onClick={() => void controls.run('zoom', { direction: 'in' })}>+</IconButton>
+                <Button aria-label="Reset zoom" onClick={() => void controls.run('zoom', { direction: 'reset' })}>Reset</Button>
               </div>
-              <Button onClick={() => void copyPath(false)}>Copy Path</Button>
-              <Button onClick={() => void copyPath(true)}>Copy Relative Path</Button>
-              <Button onClick={() => void revealInExplorer()}>Reveal in Explorer</Button>
-              <Button onClick={() => setRenamePath(buffer.relativePath)}>Rename…</Button>
-              <Button onClick={() => void duplicateFile()}>Duplicate</Button>
-              <Button variant="destructive" onClick={() => void deleteFile()}>Delete</Button>
-              {buffer.kind === 'markdown' && <Button onClick={() => void openMode('preview')}>Open Markdown Preview</Button>}
+              <Button onClick={() => void controls.run('copy-path')}>Copy Path</Button>
+              <Button onClick={() => void controls.run('copy-path', { relative: true })}>Copy Relative Path</Button>
+              <Button onClick={() => void controls.run('explorer')}>Reveal in Explorer</Button>
+              <Button onClick={() => void controls.run('rename-start')}>Rename…</Button>
+              <Button onClick={() => void controls.run('duplicate')}>Duplicate</Button>
+              <Button variant="destructive" onClick={() => void controls.run('delete')}>Delete</Button>
+              {buffer.kind === 'markdown' && <Button onClick={() => void controls.run('mode', { value: 'preview' })}>Open Markdown Preview</Button>}
               <label><input type="checkbox" checked={settings.wordWrap} onChange={(event) => changeWrap(event.currentTarget.checked)} />Word Wrap</label>
-              <label><input type="checkbox" checked={settings.minimap} onChange={(event) => void saveSetting('editorMinimapEnabled', event.currentTarget.checked)} />Show Minimap</label>
-              <label><input type="checkbox" checked={settings.autoSave} onChange={(event) => void saveSetting('editorAutoSave', event.currentTarget.checked)} />Auto Save Files</label>
+              <label><input type="checkbox" checked={settings.minimap} onChange={(event) => void controls.run('setting', { name: 'editorMinimapEnabled', value: event.currentTarget.checked })} />Show Minimap</label>
+              <label><input type="checkbox" checked={settings.autoSave} onChange={(event) => void controls.run('setting', { name: 'editorAutoSave', value: event.currentTarget.checked })} />Auto Save Files</label>
               <label className="qe-range-setting">Auto Save Delay
-                <input type="range" min="250" max="10000" step="250" value={settings.autoSaveDelay} onChange={(event) => void saveSetting('editorAutoSaveDelayMs', Number(event.currentTarget.value))} />
+                <input type="range" min="250" max="10000" step="250" value={settings.autoSaveDelay} onChange={(event) => void controls.run('setting', { name: 'editorAutoSaveDelayMs', value: Number(event.currentTarget.value) })} />
                 <span>{settings.autoSaveDelay} ms</span>
               </label>
-              <label><input type="checkbox" checked={settings.previewTabs} onChange={(event) => void saveSetting('editorPreviewTabsEnabled', event.currentTarget.checked)} />Reuse preview tab</label>
+              <label><input type="checkbox" checked={settings.previewTabs} onChange={(event) => void controls.run('setting', { name: 'editorPreviewTabsEnabled', value: event.currentTarget.checked })} />Reuse preview tab</label>
             </div>
           </details>
         </div>
         <div className="qe-document-action-strip">
           {buffer.kind === 'markdown' && (
             <div className="qe-mode-switch" aria-label="Markdown view mode">
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'rich'} onClick={() => void openMode('rich')}>Rich Editor</Button>
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'preview'} onClick={() => void openMode('preview')}>Preview</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void controls.run('mode', { value: 'source' })}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'rich'} onClick={() => void controls.run('mode', { value: 'rich' })}>Rich Editor</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'preview'} onClick={() => void controls.run('mode', { value: 'preview' })}>Preview</Button>
             </div>
           )}
           {isNotebook && (
             <div className="qe-mode-switch" aria-label="Notebook view mode">
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Notebook</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void controls.run('mode', { value: 'source' })}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void controls.run('mode', { value: 'rich' })}>Notebook</Button>
             </div>
           )}
           {buffer.kind === 'csv' && (
             <div className="qe-mode-switch" aria-label="Table view mode">
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Table</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void controls.run('mode', { value: 'source' })}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void controls.run('mode', { value: 'rich' })}>Table</Button>
             </div>
           )}
           {buffer.kind === 'mermaid' && (
             <div className="qe-mode-switch" aria-label="Diagram view mode">
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void openMode('source')}>Source</Button>
-              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void openMode('rich')}>Preview</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode === 'source'} onClick={() => void controls.run('mode', { value: 'source' })}>Source</Button>
+              <Button className="qe-mode-switch__option" aria-pressed={actualMode !== 'source'} onClick={() => void controls.run('mode', { value: 'rich' })}>Preview</Button>
             </div>
           )}
           {canOfferChanges && <Button
             aria-label={changesOpen ? 'Close Changes' : 'Changes'}
             aria-pressed={changesOpen}
-            onClick={() => changesOpen ? setChangesOpen(false) : void openChanges()}
+            onClick={() => void controls.run('changes', { open: !changesOpen })}
           >{changesOpen ? 'Close Changes' : 'Changes'}</Button>}
-          {!buffer.readOnly && <Button variant="primary" onClick={saveButton} disabled={!buffer.untitled && !buffer.dirty && !buffer.external}>{buffer.untitled ? 'Save As…' : 'Save'}</Button>}
+          {!buffer.readOnly && <Button variant="primary" onClick={saveButton} disabled={!available.includes('save')}>{buffer.untitled ? 'Save As…' : 'Save'}</Button>}
         </div>
       </header>
       {!buffer.readOnly && buffer.diskWritable === false && buffer.external !== 'deleted' && (
@@ -1168,7 +1360,7 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           This file is not writable with the current OS permissions. Editing and review notes remain available; Save keeps the draft until write access is restored.
         </section>
       )}
-      {renamePath !== null && (
+      {renameLive() && renamePath !== null && (
         <div className="qe-inline-rename">
           <TextField
             className="qe-inline-rename__field"
@@ -1177,33 +1369,34 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
             value={renamePath}
             onChange={(event) => setRenamePath(event.currentTarget.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') { event.preventDefault(); void renameFile() }
-              if (event.key === 'Escape') setRenamePath(null)
+              if (event.key === 'Enter') { event.preventDefault(); void renameControls.run('submit') }
+              if (event.key === 'Escape') { event.preventDefault(); void renameControls.run('cancel') }
             }}
           />
-          <Button variant="primary" onClick={() => void renameFile()}>Apply</Button>
-          <Button onClick={() => setRenamePath(null)}>Cancel</Button>
+          <Button variant="primary" onClick={() => void renameControls.run('submit')}>Apply</Button>
+          <Button onClick={() => void renameControls.run('cancel')}>Cancel</Button>
         </div>
       )}
       {external && (
         <section className="qe-external-change-banner" role="status">
           <span>{external === 'deleted' ? 'This file was deleted on disk. An explicit save can recreate it.' : 'This file changed on disk while you have unsaved edits. Overwrite replaces the newer disk content.'}</span>
-          {external === 'changed' && <Button onClick={() => void runViewAction('compare').catch(handleError)}>Compare</Button>}
-          {external === 'changed' && <Button onClick={() => void runViewAction('reload').catch(handleError)}>Reload from Disk</Button>}
-          {buffer.dirty && <Button variant="primary" onClick={() => void save('overwrite').catch(handleError)}>Overwrite</Button>}
-          {external === 'changed' && <Button title="Keeps your version. Your next save replaces the version on disk." onClick={() => void runViewAction('keep').catch(handleError)}>Keep My Edits</Button>}
+          {external === 'changed' && <Button onClick={() => void controls.run('compare-disk')}>Compare</Button>}
+          {external === 'changed' && <Button onClick={() => void controls.run('reload')}>Reload from Disk</Button>}
+          {buffer.dirty && <Button variant="primary" onClick={() => void controls.run('save', { trigger: 'overwrite' })}>Overwrite</Button>}
+          {external === 'changed' && <Button title="Keeps your version. Your next save replaces the version on disk." onClick={() => void controls.run('keep')}>Keep My Edits</Button>}
         </section>
       )}
-      {undoReloadUntil > Date.now() && <Button className="qe-undo-reload" onClick={() => void runViewAction('undoReload').catch(handleError)}>Undo reload</Button>}
+      {undoReloadUntil > Date.now() && <Button className="qe-undo-reload" onClick={() => void controls.run('undo-reload')}>Undo reload</Button>}
       <div className="qe-document-error">
         {uiError && <InlineError message={uiError} />}
         {settingsError && <InlineError message={settingsError} />}
-        {stateError && <InlineError message={stateError} action={{ label: 'Retry', onAction: retryDocument }} />}
-        {hydrateError && <InlineError message={hydrateError} action={{ label: 'Retry', onAction: retryDocument }} />}
-        {buffer.error && <InlineError message={buffer.error} action={{ label: 'Retry', onAction: () => { void context.call('quirky.editor/open', { worktree: buffer.worktreeId, path: buffer.relativePath, mode: actualMode, focus: true }).then(() => refresh()).catch(handleError) } }} />}
-        {draftConflict && <InlineError message={draftConflict} action={{ label: 'Compare local text', onAction: () => setCompareOpen(true) }} />}
+        {stateError && <InlineError message={stateError} action={{ label: 'Retry', onAction: () => { void controls.run('retry') } }} />}
+        {hydrateError && <InlineError message={hydrateError} action={{ label: 'Retry', onAction: () => { void controls.run('retry') } }} />}
+        {buffer.error && <InlineError message={buffer.error} action={{ label: 'Retry', onAction: () => { void controls.run('retry-open') } }} />}
+        {draftConflict && <InlineError message={draftConflict} action={{ label: 'Compare local text', onAction: () => { void controls.run('compare-local') } }} />}
       </div>
       <div className="qe-document-content">
+        <SourceEditorControlScope context={context}>
         {showChanges && <ChangesSurface
           context={context}
           buffer={editingBuffer}
@@ -1212,13 +1405,13 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
           fontFamily={settings.fontFamily}
           wrap={settings.wordWrap}
           minimap={settings.minimap}
-          onDraft={submitDraft}
+          onDraft={onDocumentDraft}
           flushDraft={flushDrafts}
-          onView={updateView}
-          onEditorFocus={focusEditor}
-          onSearchInFiles={searchInFiles}
+          onView={onDocumentView}
+          onEditorFocus={onEditorFocus}
+          onSearchInFiles={onSearchInFiles}
           error={sourceError}
-          onError={setSourceError}
+          onError={onSourceError}
           registerCommandHandlers={registerCommandHandlers}
         />}
         {showSource && (
@@ -1231,62 +1424,63 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
             minimap={settings.minimap}
             fontSize={fontSize}
             fontFamily={settings.fontFamily}
-            onDraft={submitDraft}
+            onDraft={onDocumentDraft}
             flushDraft={flushDrafts}
-            onView={updateView}
-            onEditorFocus={focusEditor}
-            onSearchInFiles={searchInFiles}
+            onView={onDocumentView}
+            onEditorFocus={onEditorFocus}
+            onSearchInFiles={onSearchInFiles}
             reveal={reveal}
             error={sourceError}
-            onError={setSourceError}
+            onError={onSourceError}
           />
         )}
         {surfaceProps && showMarkdown && (
-          <SurfaceErrorBoundary onRetry={() => setEditorGeneration((value) => value + 1)}>
-            <Suspense fallback={<div className="qe-surface-loading" role="status">Loading Markdown surface…</div>}>
+          <SurfaceErrorBoundary key={surfaceAttempt} onFailure={onSurfaceFailure} onRetry={() => void controls.run('retry-surface')}>
+            <Suspense fallback={<div className="qe-surface-loading" role="status" aria-live="polite"><NoticeLine>Loading Markdown surface…</NoticeLine></div>}>
               <MarkdownSurface {...surfaceProps} />
             </Suspense>
           </SurfaceErrorBoundary>
         )}
         {surfaceProps && showNotebook && (
-          <SurfaceErrorBoundary onRetry={() => setEditorGeneration((value) => value + 1)}>
-            <Suspense fallback={<div className="qe-surface-loading" role="status">Loading notebook surface…</div>}>
+          <SurfaceErrorBoundary key={surfaceAttempt} onFailure={onSurfaceFailure} onRetry={() => void controls.run('retry-surface')}>
+            <Suspense fallback={<div className="qe-surface-loading" role="status" aria-live="polite"><NoticeLine>Loading notebook surface…</NoticeLine></div>}>
               <NotebookSurface {...surfaceProps} />
             </Suspense>
           </SurfaceErrorBoundary>
         )}
         {surfaceProps && showViewer && (
-          <SurfaceErrorBoundary onRetry={() => setEditorGeneration((value) => value + 1)}>
-            <Suspense fallback={<div className="qe-surface-loading" role="status">Loading viewer…</div>}>
+          <SurfaceErrorBoundary key={surfaceAttempt} onFailure={onSurfaceFailure} onRetry={() => void controls.run('retry-surface')}>
+            <Suspense fallback={<div className="qe-surface-loading" role="status" aria-live="polite"><NoticeLine>Loading viewer…</NoticeLine></div>}>
               <ViewerSurface {...surfaceProps} />
             </Suspense>
           </SurfaceErrorBoundary>
         )}
+        </SourceEditorControlScope>
       </div>
       <Dialog
         open={compareOpen}
         title="File changed on disk"
-        onClose={() => setCompareOpen(false)}
+        onClose={() => void comparisonControls.run('close')}
         actions={
           <>
-            {external && <Button onClick={() => { setCompareOpen(false); void runViewAction('reload').catch(handleError) }}>Reload</Button>}
-            {external && <Button onClick={() => { setCompareOpen(false); void runViewAction('keep').catch(handleError) }}>Keep My Edits</Button>}
-            <Button onClick={() => setCompareOpen(false)}>Close</Button>
+            {external === 'changed' && <Button onClick={() => void comparisonControls.run('reload')}>Reload</Button>}
+            {external === 'changed' && <Button onClick={() => void comparisonControls.run('keep')}>Keep My Edits</Button>}
+            <Button onClick={() => void comparisonControls.run('close')}>Close</Button>
           </>
         }
       >
         <div className="qe-compare-dialog">
-          <p>Disk version on the left, your unsaved edits on the right.</p>
+          <p>{comparingDisk ? 'Disk version on the left, your unsaved edits on the right.' : 'Shared draft on the left, your preserved local edits on the right.'}</p>
           <div className="qe-compare-columns">
-            <FormRow label={external ? 'Disk version' : 'Shared draft'} htmlFor={`${compareId}-disk`}>
+            <FormRow label={comparingDisk ? 'Disk version' : 'Shared draft'} htmlFor={`${compareId}-disk`}>
               <textarea
                 id={`${compareId}-disk`}
                 className="ui-text-field__input qe-compare-textarea"
                 readOnly
-                value={external ? (buffer.diskContent === undefined ? 'Disk content is not loaded. Retry Compare.' : buffer.diskContent ?? 'File deleted on disk.') : buffer.draft ?? buffer.content}
+                value={comparingDisk ? buffer.diskContent ?? '' : buffer.draft ?? buffer.content}
               />
             </FormRow>
-            <FormRow label={external ? 'Your edits' : 'Local edits'} htmlFor={`${compareId}-local`}>
+            <FormRow label={comparingDisk ? 'Your edits' : 'Local edits'} htmlFor={`${compareId}-local`}>
               <textarea id={`${compareId}-local`} className="ui-text-field__input qe-compare-textarea" readOnly value={localText ?? buffer.draft ?? buffer.content} />
             </FormRow>
           </div>
