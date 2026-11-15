@@ -165,7 +165,7 @@ function parseAction(value: unknown, label: string): CoverageFile['actions'][num
   }
   exactKeys(entry, label, ['site', 'notAction', 'reason'], ['anchor'])
   const notAction = stringValue(entry.notAction, `${label}.notAction`)
-  if (notAction !== 'lifecycle' && notAction !== 'subscription' && notAction !== 'forwarded') invalidCoverage(`${label}.notAction is unsupported`)
+  if (notAction !== 'lifecycle' && notAction !== 'subscription' && notAction !== 'forwarded' && notAction !== 'barrier') invalidCoverage(`${label}.notAction is unsupported`)
   return {
     site: parseRef(entry.site, `${label}.site`),
     ...(Object.hasOwn(entry, 'anchor') ? { anchor: stringValue(entry.anchor, `${label}.anchor`) } : {}),
