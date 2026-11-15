@@ -2,18 +2,18 @@ import { afterEach, expect, test } from 'bun:test'
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { formatDiagnostic, runSpawnLint, scanSourceContent } from './spawn-lint'
+import { formatDiagnostic, runSpawnLint, scanSourceContent, type SpawnLintDiagnostic } from './spawn-lint'
 
 const file = 'plugins/example/a.ts'
 const hit = 'process/no-direct-spawn: Use the shared process runner.'
-const spawnDiagnostic = (column: number, line = 1) => ({
+const spawnDiagnostic = (column: number, line = 1): SpawnLintDiagnostic => ({
   file, line, column, rule: 'process/no-direct-spawn', message: 'Use the shared process runner.',
 })
-const escapedGlobalDiagnostic = (column: number, line = 1) => ({
+const escapedGlobalDiagnostic = (column: number, line = 1): SpawnLintDiagnostic => ({
   file, line, column, rule: 'process/no-escaped-global',
   message: 'Read Bun, Atomics, process, module and the global object only through a static, allowed member.',
 })
-const dynamicCodeDiagnostic = (column: number, line = 1) => ({
+const dynamicCodeDiagnostic = (column: number, line = 1): SpawnLintDiagnostic => ({
   file, line, column, rule: 'process/no-dynamic-code',
   message: 'Load modules by literal specifier and run no generated code.',
 })
@@ -146,7 +146,7 @@ const blockingCases = [
   ['(await import("bun")).default.sleepSync(1)', 1],
 ] as const
 test.each(blockingCases)('reports blocking primitives and padded columns: %s', (source, column) => {
-  const expected = { file, line: 1, column, rule: 'process/no-blocking', message: 'Do not block the event loop.' }
+  const expected: SpawnLintDiagnostic = { file, line: 1, column, rule: 'process/no-blocking', message: 'Do not block the event loop.' }
   expect(scanSourceContent(file, source)).toEqual([expected])
   const padding = 1_048_577
   expect(scanSourceContent(file, ' '.repeat(padding) + source)).toEqual([{ ...expected, column: padding + column }])
