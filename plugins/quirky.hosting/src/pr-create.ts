@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Handler, HostingEnv, Scope } from './env'
-import { isRecord, nonEmptyString, parseBranch, parseIdentity, parsePositiveInteger, sameIdentity, providerReason, type IdentityValue } from './pr-data'
+import { isRecord, nonEmptyString, parseBranch, parseIdentity, parseOid, parsePositiveInteger, sameIdentity, providerReason, type IdentityValue } from './pr-data'
 import { isPRStackSummary, type PRLookup, type PRStackSummary } from './pr-review'
 
 type Blocker = { reason: string; nextAction: string; message: string }
@@ -383,11 +383,109 @@ function requestedHead(env: HostingEnv, params: Record<string, unknown>, scope: 
   return parsed
 }
 
+type ExpectedCreation = {
+  branch: string
+  headSha: string
+  baseRefName: string
+  repository: IdentityValue
+  headRepository: IdentityValue
+}
+
+type CreationTarget = {
+  scope: Scope
+  branch: string
+  headSha: string
+  base: string
+  head: string
+  repository: IdentityValue
+  headRepository: IdentityValue
+}
+
+function expectedRef(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.length === 0 || value.trim() !== value || value.startsWith('-')) return undefined
+  if (
+    value === '@' || value.startsWith('refs/heads/') || value.includes('..') || value.includes('@{') ||
+    value.startsWith('/') || value.endsWith('/') || value.includes('//') || value.endsWith('.') ||
+    /[\u0000-\u0020\u007f]/u.test(value) || /[~^:?*]/u.test(value) ||
+    value.includes('[') || value.includes(']') || value.includes('\\')
+  ) return undefined
+  if (value.split('/').some((part) => part.startsWith('.') || part.endsWith('.') || part.endsWith('.lock'))) return undefined
+  return value
+}
+
+function expectedIdentity(value: unknown): IdentityValue | undefined {
+  const identity = parseIdentity(value)
+  if (!identity) return undefined
+  if (
+    identity.host.length > 255 || /[\s/@?#\\]/u.test(identity.host) ||
+    !/^(?:[a-z0-9.-]+)(?::\d{1,5})?$/iu.test(identity.host) ||
+    identity.host === '.' || identity.host === '..' ||
+    !/^[A-Za-z0-9_.-]{1,100}$/u.test(identity.owner) || identity.owner === '.' || identity.owner === '..' ||
+    !/^[A-Za-z0-9_.-]{1,100}$/u.test(identity.repo) || identity.repo === '.' || identity.repo === '..'
+  ) return undefined
+  return identity
+}
+
+function parseExpectedCreation(env: HostingEnv, value: unknown): ExpectedCreation | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) {
+    throw env.invalid('validation_error', 'expected must contain a valid branch, commit, base, and repository pair.')
+  }
+  const branch = expectedRef(value.branch)
+  const headSha = parseOid(value.headSha)
+  const baseRefName = expectedRef(value.baseRefName)
+  const repository = expectedIdentity(value.repository)
+  const headRepository = expectedIdentity(value.headRepository)
+  if (!branch || !headSha || !baseRefName || !repository || !headRepository) {
+    throw env.invalid('validation_error', 'expected must contain a valid branch, commit, base, and repository pair.')
+  }
+  return { branch, headSha, baseRefName, repository, headRepository }
+}
+
+async function currentCreationTarget(
+  env: HostingEnv,
+  params: Record<string, unknown>,
+  caller: Parameters<Handler>[1],
+  expected: ExpectedCreation
+): Promise<CreationTarget> {
+  const stale = () => env.invalid('stale-target', 'The pull request target changed before creation.')
+  let target: CreationTarget
+  try {
+    const scope = await env.resolve(params, caller)
+    const base = (await selectedBase(env, scope, params)).base
+    const branch = parseBranch(await env.git(scope, ['symbolic-ref', '--quiet', '--short', 'HEAD']))
+    const headSha = parseOid((await env.git(scope, ['rev-parse', '--verify', 'HEAD^{commit}'])).trim())
+    if (!branch || !headSha || !base) throw stale()
+    const head = requestedHead(env, params, scope, branch)
+    target = {
+      scope,
+      branch,
+      headSha,
+      base,
+      head,
+      repository: creationRepository(scope),
+      headRepository: scope.origin
+    }
+  } catch {
+    throw stale()
+  }
+  if (
+    target.branch !== expected.branch || target.head !== expected.branch ||
+    target.headSha !== expected.headSha || target.base !== expected.baseRefName ||
+    target.base.toLowerCase() === target.head.toLowerCase() ||
+    !sameIdentity(target.repository, expected.repository) ||
+    !sameIdentity(target.headRepository, expected.headRepository)
+  ) throw stale()
+  return target
+}
+
+
 export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Record<string, Handler> {
   const eligibility: Handler = async (params, caller) => creationEligibility(env, lookup, params, caller)
 
   const create: Handler = async (params, caller) => {
     const title = readParamString(env, params, 'title', true)!
+    const expected = parseExpectedCreation(env, params.expected)
     const eligibilityResult = await creationEligibility(env, lookup, { ...params, title }, caller)
     const blocking = firstBlock(eligibilityResult)
     if (blocking) throw env.invalid(blocking.reason, blocking.message)
@@ -395,7 +493,7 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
     const branch = branchOf(scope)
     if (!branch) throw env.invalid('detached_head', 'Check out a branch before creating a pull request.')
     const repository = creationRepository(scope)
-    const mutationScope: Scope = { ...scope, repository }
+    const authenticationScope: Scope = { ...scope, repository }
     const baseSelection = await selectedBase(env, scope, params)
     const base = baseSelection.base
     if (!base) throw env.invalid('missing_remote_base', 'Could not determine a base branch for this repository.')
@@ -403,31 +501,47 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
     if (base.toLowerCase() === head.toLowerCase()) throw env.invalid('validation_error', 'The pull request head and base branches must differ.')
     const suppliedBody = readParamString(env, params, 'body')
     const body = await bodyForCreate(scope, suppliedBody, params.useTemplate === true)
-    const sameRepository = sameIdentity(repository, scope.origin)
-    const temporaryDirectory = sameRepository ? await mkdtemp(join(tmpdir(), 'quirky-pr-body-')) : undefined
+    const bodyFileNeeded = expected === undefined
+      ? sameIdentity(repository, scope.origin)
+      : sameIdentity(expected.repository, expected.headRepository)
+    const temporaryDirectory = bodyFileNeeded ? await mkdtemp(join(tmpdir(), 'quirky-pr-body-')) : undefined
     const bodyFile = temporaryDirectory ? join(temporaryDirectory, 'body.md') : undefined
+    let createScope = scope
+    let createRepository = repository
+    let createBase = base
+    let createHead = head
+    let mutationScope: Scope = authenticationScope
     let output: unknown
     let mutationError: unknown
     try {
       if (bodyFile) await writeFile(bodyFile, body, 'utf8')
-      if (!(await authenticated(env, mutationScope))) {
+      if (!(await authenticated(env, authenticationScope))) {
         throw env.invalid('authentication_required', 'GitHub authentication is unavailable. Check your gh login.')
       }
+      if (expected !== undefined) {
+        const target = await currentCreationTarget(env, params, caller, expected)
+        createScope = target.scope
+        createRepository = target.repository
+        createBase = target.base
+        createHead = target.head
+      }
+      mutationScope = { ...createScope, repository: createRepository }
+      const sameRepository = sameIdentity(createRepository, createScope.origin)
       try {
         if (sameRepository) {
           const args = [
-            'pr', 'create', '--repo', repoArg(repository), '--base', base, '--head', head,
+            'pr', 'create', '--repo', repoArg(createRepository), '--base', createBase, '--head', createHead,
             '--title', title, '--body-file', bodyFile!
           ]
           if (params.draft === true) args.push('--draft')
           output = await env.run(mutationScope, args, { idempotent: false, timeoutMs: 60_000 })
         } else {
-          output = await env.rest(mutationScope, `repos/${repository.owner}/${repository.repo}/pulls`, 'POST', {
+          output = await env.rest(mutationScope, `repos/${createRepository.owner}/${createRepository.repo}/pulls`, 'POST', {
             title,
             body,
-            head: `${scope.origin.owner}:${head}`,
-            head_repo: scope.origin.repo,
-            base,
+            head: `${createScope.origin.owner}:${createHead}`,
+            head_repo: createScope.origin.repo,
+            base: createBase,
             ...(params.draft === true ? { draft: true } : {})
           }, { idempotent: false, timeoutMs: 60_000 })
         }
@@ -438,7 +552,7 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
       if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true })
     }
 
-    const confirmed = parseCreatedReview(output, repository)
+    const confirmed = parseCreatedReview(output, createRepository)
     if (confirmed) {
       lookup.invalidate(mutationScope, { type: 'pr', number: confirmed.number, url: confirmed.url })
       return confirmed
@@ -461,7 +575,7 @@ export function createPRCreationMethods(env: HostingEnv, lookup: PRLookup): Reco
 
     let matches: CreateResult[] = []
     try {
-      matches = await probeCreate(env, scope, repository, scope.origin.owner, scope.origin.repo, head, base)
+      matches = await probeCreate(env, createScope, createRepository, createScope.origin.owner, createScope.origin.repo, createHead, createBase)
     } catch {
       lookup.invalidate(mutationScope, { type: 'pr', unknownCompletion: true, confirmed: false })
       throw unknownCompletion(env)

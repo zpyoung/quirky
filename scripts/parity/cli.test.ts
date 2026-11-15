@@ -27,6 +27,7 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     const rows = new Map<string, CliParityRow>(report.rows.map(row => [row.id, row]))
     for (const id of [
       'worktree-create', 'worktree-rm', 'agent-launch', 'terminal-send', 'terminal-wait', 'loop-edit', 'loop-resume',
+      'repo-set', 'repo-set-base-ref',
       'ask', 'ask-cancel', 'ask-wait', 'automations-run', 'orchestration-task-update', 'orchestration-gate-resolve',
       'orchestration-inbox', 'file-open', 'account-list', 'skills-update', 'status', 'agent-context', 'serve',
       'account-add', 'account-rm', 'agent-hooks-on', 'agent-hooks-off', 'agent-hooks-status',
@@ -41,6 +42,7 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     ]) {
       expect(rows.get(id), id).toMatchObject({ status: 'passed', executed: true })
     }
+    expect(rows.get('repo-set')!.catalogRefs).toContain('command:worktree project-set')
     const excludedIds = ['serve-restore-resume', 'serve-service-install', 'serve-service-status', 'serve-service-uninstall']
     for (const id of excludedIds) {
       expect(rows.get(id), id).toMatchObject({ status: 'excluded', executed: false, checks: [], catalogRefs: [] })
@@ -81,6 +83,20 @@ test('CLI parity rehearses owned command groups and preserves unproved mappings'
     }
     expect(receipt('catalog')).toMatchObject({ schemaVersion: 2 })
     expect(receipt('repo-add')).toMatchObject({ kind: 'git' })
+    expect(receipt('repo-set-base-ref')).toMatchObject({
+      id: expect.any(String), defaultBase: 'main', externalVisibility: 'inherit', effectiveExternalVisibility: 'hide'
+    })
+    expect(receipt('repo-set')).toEqual({
+      repoId: expect.any(String), externalWorktreeId: expect.any(String), selector: 'path',
+      steps: [
+        { step: 'baseline', global: 'hide', project: 'inherit', effective: 'hide', externalVisible: false, inboxHidden: true },
+        { step: 'show', global: 'hide', project: 'show', effective: 'show', externalVisible: true, inboxHidden: false },
+        { step: 'hide', global: 'show', project: 'hide', effective: 'hide', externalVisible: false, inboxHidden: true },
+        { step: 'inherit', global: 'show', project: 'inherit', effective: 'show', externalVisible: true, inboxHidden: false },
+        { step: 'restored', global: 'hide', project: 'inherit', effective: 'hide', externalVisible: false, inboxHidden: true }
+      ],
+      invalidValue: { code: 'usage' }, removed: true
+    })
     expect(receipt('folder-add')).toMatchObject({ kind: 'folder' })
     expect(receipt('worktree-create')).toMatchObject({ parentId: null })
     expect(receipt('loop-show')).toMatchObject({ iterationsCompleted: 1, state: 'paused', pauseReason: 'cap-iterations', nextIterationAt: null })

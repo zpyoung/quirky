@@ -3,11 +3,15 @@ import { RpcError, RpcErrorCode, type PluginCaller, type PluginContext, type Sch
 import {
   checkKey,
   contentIdentity,
+  isExpectedReview,
+  pinnedActionProblem,
+  pinnedReviewProblem,
   worldFromHosting,
   type BranchUpdateMode,
   type MergeCheckScope,
   type CapabilityMode,
   type ExecuteResult,
+  type ExpectedReview,
   type JournalEntry,
   type SitterAction,
   type SitterPayload,
@@ -85,6 +89,38 @@ export const SITTER_PAYLOAD_SCHEMA: Schema = {
         repo: { type: 'string' }
       }
     },
+    expectedReview: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['number', 'url', 'repository', 'headRepository', 'headRefName', 'baseRefName', 'headSha'],
+      properties: {
+        number: { type: 'integer', minimum: 1 },
+        url: { type: 'string' },
+        repository: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['host', 'owner', 'repo'],
+          properties: {
+            host: { type: 'string' },
+            owner: { type: 'string' },
+            repo: { type: 'string' }
+          }
+        },
+        headRepository: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['host', 'owner', 'repo'],
+          properties: {
+            host: { type: 'string' },
+            owner: { type: 'string' },
+            repo: { type: 'string' }
+          }
+        },
+        headRefName: { type: 'string' },
+        baseRefName: { type: 'string' },
+        headSha: { type: 'string' }
+      }
+    },
     branchUpdateMode: { type: 'string', enum: ['merge-base-update', 'rebase'] },
     agent: { type: 'string' },
     mergeMethod: {},
@@ -115,6 +151,7 @@ function validateInput(input: EnrollmentInput): {
   mergeMethod: 'merge' | 'squash' | 'rebase' | null
   mergeCheckScope: MergeCheckScope
   agent?: string
+  expectedReview?: ExpectedReview
 } {
   const capabilities = input.capabilities
   const capabilityKeys = capabilities === undefined ? [] : Object.keys(capabilities).sort()
@@ -139,6 +176,10 @@ function validateInput(input: EnrollmentInput): {
     throw new Error('mergeMethod must be null, merge, squash or rebase.')
   }
   const agent = kindPayload.agent
+  const expectedReview = kindPayload.expectedReview
+  if (expectedReview !== undefined && !isExpectedReview(expectedReview)) {
+    throw new Error('kindPayload.expectedReview must be a complete, canonical review identity.')
+  }
   if (agent !== undefined && (typeof agent !== 'string' || agent.trim().length === 0)) {
     throw new Error('kindPayload.agent must be a non-empty string.')
   }
@@ -152,7 +193,8 @@ function validateInput(input: EnrollmentInput): {
     branchUpdateMode,
     mergeMethod: mergeMethod as 'merge' | 'squash' | 'rebase' | null,
     mergeCheckScope,
-    ...(typeof agent === 'string' ? { agent } : {})
+    ...(typeof agent === 'string' ? { agent } : {}),
+    ...(expectedReview === undefined ? {} : { expectedReview })
   }
 }
 
@@ -231,6 +273,26 @@ export async function authorize(call: Call, input: EnrollmentInput): Promise<Aut
   const workspacePath = realpathSync(worktree.path as string)
   const repoId = typeof worktree.repoId === 'string' || worktree.repoId === null ? worktree.repoId : undefined
 
+  const canonicalPayload: SitterPayload = {
+    worktreeId,
+    branch: worktree.branch,
+    headRefName: review.headRefName as string,
+    provider: 'github',
+    reviewNumber: number as number,
+    reviewUrl: review.url as string,
+    repository: canonicalRepository,
+    branchUpdateMode: options.branchUpdateMode,
+    mergeMethod: options.mergeMethod,
+    mergeCheckScope: options.mergeCheckScope,
+    ...(options.agent === undefined ? {} : { agent: options.agent }),
+    ...(options.expectedReview === undefined ? {} : { expectedReview: options.expectedReview })
+  }
+  if (options.expectedReview !== undefined) {
+    const observed = worldFromHosting(review, null, canonicalPayload)
+    const problem = pinnedReviewProblem({ freshness: 'live', world: observed }, canonicalPayload)
+    if (problem !== null) throw new Error(`${problem}: selected pull request does not match the expected objective review.`)
+  }
+
   return {
     workspaceKey: `local::${workspacePath}`,
     workspacePath,
@@ -238,19 +300,7 @@ export async function authorize(call: Call, input: EnrollmentInput): Promise<Aut
     schedulerOwner: 'daemon',
     ...(repoId !== undefined ? { repoId } : {}),
     worktreeId,
-    kindPayload: {
-      worktreeId,
-      branch: worktree.branch,
-      headRefName: review.headRefName as string,
-      provider: 'github',
-      reviewNumber: number as number,
-      reviewUrl: review.url as string,
-      repository: canonicalRepository,
-      branchUpdateMode: options.branchUpdateMode,
-      mergeMethod: options.mergeMethod,
-      mergeCheckScope: options.mergeCheckScope,
-      ...(options.agent === undefined ? {} : { agent: options.agent })
-    }
+    kindPayload: canonicalPayload
   }
 }
 
@@ -390,11 +440,17 @@ export async function read(
     number: payload.reviewNumber,
     prRepo: payload.repository
   }), payload)
-  if (identityChanged(review, payload)) {
+  const identityMismatch = identityChanged(review, payload)
+  if (identityMismatch && payload.expectedReview === undefined) {
     throw new Error(`Pull request identity changed: expected ${payload.repository.owner}/${payload.repository.repo}#${payload.reviewNumber} on ${payload.headRefName}.`)
   }
 
-  const checks = review.state === 'merged'
+  let pinProblem: 'objective-head-moved' | 'objective-review-mismatch' | null = null
+  if (payload.expectedReview !== undefined) {
+    const observedReviewWorld = worldFromHosting(review, null, payload)
+    pinProblem = pinnedReviewProblem({ freshness: 'live', world: observedReviewWorld }, payload)
+  }
+  const checks = pinProblem !== null || review.state === 'merged'
     ? null
     : await call('quirky.hosting/checks', {
       worktree: payload.worktreeId,
@@ -404,10 +460,12 @@ export async function read(
     })
   const world = worldFromHosting(review, checks, payload)
   if (checks !== null) await enrichFailures(call, checks, world, payload)
-  const worktreePath = await resolveWorktreePath(call, payload.worktreeId)
-  const localState = await inspectWorktree(processRun, worktreePath)
-  if (localState.localHeadSha === null) throw new Error('Git HEAD could not be read for the enrolled worktree.')
-  Object.assign(world, localState)
+  if (pinProblem === null) {
+    const worktreePath = await resolveWorktreePath(call, payload.worktreeId)
+    const localState = await inspectWorktree(processRun, worktreePath)
+    if (localState.localHeadSha === null) throw new Error('Git HEAD could not be read for the enrolled worktree.')
+    Object.assign(world, localState)
+  }
   return {
     freshness: 'live',
     contentIdentity: contentIdentity(world),
@@ -421,7 +479,7 @@ function apiParams(payload: SitterPayload): Record<string, unknown> {
 }
 type PreflightParams = {
   action: SitterAction
-  snapshot: { world: SitterWorld }
+  snapshot: Snapshot<SitterWorld>
   journal: JournalEntry[]
   enrollment: SitterEnrollment
 }
@@ -445,6 +503,9 @@ export async function preflight(
   params: PreflightParams,
   processRun: PluginContext['process']['run']
 ) {
+  const pinProblem = pinnedReviewProblem(params.snapshot, params.enrollment.kindPayload) ??
+    pinnedActionProblem(params.action, params.enrollment.kindPayload)
+  if (pinProblem !== null) return { verdict: 'hold' as const, reason: pinProblem, detail: 'the action or observed review does not match the objective pin' }
   const worktreeId = params.enrollment.worktreeId ?? params.enrollment.kindPayload.worktreeId ?? null
   return preflightContention(call, processRun, {
     ...params,
@@ -563,7 +624,24 @@ export async function execute(
   options: ExecuteOptions = {}
 ): Promise<ExecuteResult | { effect: 'not-landed'; reason: string; detail: string } | { worker: WorkerRequest }> {
   const payload = enrollment.kindPayload
+  const actionPinProblem = pinnedActionProblem(action, payload)
+  if (actionPinProblem !== null) return { effect: 'not-landed', reason: actionPinProblem }
   try {
+    if (payload.expectedReview !== undefined) {
+      const lookup = asRecord(await call('quirky.hosting/review', apiParams(payload)))
+      if (lookup.kind !== 'found') {
+        const reason = lookup.kind === 'no-review'
+          ? 'no-review'
+          : typeof lookup.reason === 'string' ? lookup.reason : 'lookup-unavailable'
+        return { effect: 'not-landed', reason: `${reason}: ${lookupErrorMessage(lookup, payload)}` }
+      }
+      const review = asRecord(lookup.review)
+      const livePinProblem = pinnedReviewProblem({
+        freshness: 'live',
+        world: worldFromHosting(review, null, payload)
+      }, payload)
+      if (livePinProblem !== null) return { effect: 'not-landed', reason: livePinProblem }
+    }
     switch (action.kind) {
       case 'enqueue': {
         const result = asRecord(await call('quirky.hosting/merge', {
