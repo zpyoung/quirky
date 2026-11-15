@@ -12,6 +12,7 @@ import { SourceEditor, SourceEditorControlScope, type SourceEditorHandle } from 
 import { ChangesSurface } from './ChangesSurface'
 import { hydrateBuffer, hydrateDiskContent, importFileTransfer, writeDraft } from './transfers'
 import { requestEditorUiControl, useEditorUiControl, type EditorUiControl, type EditorUiControlAddress, type EditorUiControlResult } from './uiControl'
+import { SOURCE_EDITOR_ONLY_MESSAGE, sourceSymbolRefusal } from './sourceNavigation'
 
 const EXPLORER_PANEL = 'panel:quirky.editor/explorer'
 const DOCUMENT_SURFACE = 'view:quirky.editor/document'
@@ -837,6 +838,22 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
       }
       if (handler) return await handler(args)
     }
+    if (command === 'go-to-definition' || command === 'find-references') {
+      const source = sourceRef.current
+      if (!source) throw new Error(SOURCE_EDITOR_ONLY_MESSAGE)
+      const input = args ?? {}
+      const hasLine = Object.hasOwn(input, 'line')
+      const hasColumn = Object.hasOwn(input, 'column')
+      if (Reflect.ownKeys(input).some((key) => typeof key !== 'string' || !['line', 'column'].includes(key)) ||
+          hasLine !== hasColumn || hasLine && (!Number.isSafeInteger(input.line) || (input.line as number) < 1 ||
+            !Number.isSafeInteger(input.column) || (input.column as number) < 1)) {
+        throw new Error('Line and column must be supplied together as positive integers.')
+      }
+      const position = hasLine && hasColumn
+        ? { line: input.line as number, column: input.column as number }
+        : undefined
+      return command === 'go-to-definition' ? source.definition(position) : source.references(position)
+    }
     if (sourceRef.current) {
       if (command === 'find') return sourceRef.current.find(typeof args?.query === 'string' ? args.query : undefined)
       if (command === 'replace') return sourceRef.current.replace(typeof args?.query === 'string' ? args.query : undefined)
@@ -1432,6 +1449,16 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
             reveal={reveal}
             error={sourceError}
             onError={onSourceError}
+            symbols={{
+              context,
+              refusal: () => sourceSymbolRefusal({
+                buffer: bufferRef.current ?? buffer,
+                localText: localTextRef.current,
+                pendingDraft: pendingDrafts.current.size > 0 ||
+                  pendingSaveAcknowledgement.current !== null || pendingActionAcknowledgements.current > 0,
+                blockedDraft: blockedDraft.current
+              })
+            }}
           />
         )}
         {surfaceProps && showMarkdown && (

@@ -1,4 +1,4 @@
-import { createContext, forwardRef, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
+import { createContext, forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react'
 import { Button, InlineError, TextField } from '@quirky/ui'
 import { editorTheme } from '@quirky/ui/editor-theme'
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, redo, undo } from '@codemirror/commands'
@@ -18,6 +18,16 @@ import { EditorView, drawSelection, highlightActiveLine, highlightActiveLineGutt
 import { tags } from '@lezer/highlight'
 import type { EditorSurfaceBuffer } from '../types'
 import type { UiPluginContext } from '@quirky/protocol'
+import { CHORD_PLATFORM } from '@quirky/protocol'
+import { SourceLocations } from './SourceLocations'
+import {
+  SOURCE_EDITOR_ONLY_MESSAGE,
+  navigationLanguage,
+  useSourceSymbols,
+  type NavigationPosition,
+  type SourceSymbolsHost,
+  type SourceSymbolsResult
+} from './sourceNavigation'
 import { requestEditorUiControl, useEditorUiControl, type EditorUiControl, type EditorUiControlAddress, type EditorUiControlResult } from './uiControl'
 import { registerEditorFocus } from './editorFocus'
 
@@ -104,6 +114,7 @@ type SourceMenu = {
   relativePath: string
   query?: string
   line?: number
+  column?: number
 }
 type SourceIdentitySession = {
   bufferId: string
@@ -126,6 +137,8 @@ export type SourceEditorHandle = {
   find(query?: string): Promise<{ opened: true; query?: string }>
   replace(query?: string): Promise<{ opened: true; query?: string }>
   copyContext(): Promise<{ copied: true; path: string; lines: string }>
+  definition(position?: NavigationPosition): Promise<SourceSymbolsResult>
+  references(position?: NavigationPosition): Promise<SourceSymbolsResult>
 }
 
 type Props = {
@@ -141,6 +154,7 @@ type Props = {
   onEditorFocus(): void
   onSearchInFiles(query: string): void
   comparisonOriginal?: string
+  symbols?: SourceSymbolsHost
   reveal?: { line: number; column?: number }
   error?: string | null
   onError(message: string | null): void
@@ -349,6 +363,29 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   const drawMinimapRef = useRef<() => void>(() => {})
   const minimapEnabled = useRef(props.minimap)
   minimapEnabled.current = props.minimap
+  const textRevision = useRef(0)
+  const symbolControlRunner = useRef<((action: string, data?: Record<string, unknown>) => Promise<EditorUiControlResult>) | null>(null)
+  const onSourceControlRunner = useCallback((runner: ((action: string, data?: Record<string, unknown>) => Promise<EditorUiControlResult>) | null) => {
+    symbolControlRunner.current = runner
+  }, [])
+  const symbolLanguage = navigationLanguage(props.buffer.relativePath)
+  const symbolsEnabled = props.symbols !== undefined && symbolLanguage !== null
+  const sourceSymbols = useSourceSymbols({
+    context: props.symbols?.context ?? bridgeContext,
+    buffer: props.buffer,
+    tabId: props.tabId,
+    language: symbolLanguage ?? 'typescript',
+    engineGeneration,
+    enabled: symbolsEnabled,
+    refusal: () => props.symbols?.refusal() ?? null,
+    revision: textRevision,
+    getView: () => viewRef.current,
+    symbolAt: (offset) => {
+      const view = viewRef.current
+      return view ? wordAt(view, offset) : ''
+    },
+    reveal: revealSourceSpan
+  })
   const compartments = useMemo(() => ({ wrap: new Compartment(), zoom: new Compartment(), language: new Compartment() }), [])
   const [pasteError, setPasteError] = useState<string | null>(null)
   const [controlError, setControlError] = useState<string | null>(null)
@@ -372,6 +409,29 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   comparisonOriginalRef.current = props.comparisonOriginal
   const applySearchQuery = (view: EditorView, query: string, replacement: string) => {
     view.dispatch({ effects: setSearchQuery.of(new SearchQuery({ search: query, replace: replacement })) })
+  }
+  function revealSourceSpan(from: number, to: number): void {
+    const view = viewRef.current
+    if (!view) throw new Error('The source editor is not mounted.')
+    view.dispatch({
+      selection: { anchor: from, head: to },
+      effects: EditorView.scrollIntoView(from, { y: 'center' })
+    })
+    view.focus()
+    scheduleView.current()
+  }
+  function isValidSymbolPosition(position: NavigationPosition): boolean {
+    const view = viewRef.current
+    if (!view || !Number.isSafeInteger(position.line) || position.line < 1 ||
+        !Number.isSafeInteger(position.column) || position.column < 1 || position.line > view.state.doc.lines) return false
+    return position.column <= view.state.doc.line(position.line).length + 1
+  }
+  function dispatchSymbolControl(action: 'definition' | 'references', position: number, view: EditorView): boolean {
+    const run = symbolControlRunner.current
+    if (!symbolsEnabled || !run) return false
+    const line = view.state.doc.lineAt(position)
+    void run(action, { line: line.number, column: position - line.from + 1 })
+    return true
   }
   const showSearch = (replace: boolean, query?: string) => {
     const view = viewRef.current
@@ -497,7 +557,8 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       sourceGeneration: source.generation,
       path: props.buffer.path,
       relativePath: props.buffer.relativePath,
-      ...(kind === 'gutter' ? { line } : {}),
+      line,
+      ...(kind === 'editor' ? { column } : {}),
       ...(query === undefined ? {} : { query })
     }
     menuSessionRef.current = session
@@ -634,6 +695,19 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
       if (!isCurrentMenuSession(menu)) return { delivered: false }
       return { delivered: closeSourceMenu(menu.generation) }
     }
+    if (control.action === 'definition' || control.action === 'references') {
+      if (menu.kind !== 'editor' || menu.line === undefined || menu.column === undefined ||
+          !symbolsEnabled || !onlyKeys(data, [])) return { delivered: false }
+      const source = sourceSessionRef.current
+      if (!source || !isCurrentSourceSession(source)) return { delivered: false }
+      source.view.focus()
+      const position = { line: menu.line, column: menu.column }
+      const lookup = control.action === 'definition'
+        ? sourceSymbols.definition(position)
+        : sourceSymbols.references(position)
+      void lookup.catch(() => {})
+      return { delivered: closeSourceMenu(menu.generation) }
+    }
     return { delivered: false }
   }
 
@@ -656,7 +730,11 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     ? []
     : currentMenu.kind === 'gutter'
       ? ['close', 'copy-line']
-      : ['close', ...(currentMenu.query?.trim() ? ['search-in-files'] : [])]
+      : [
+          'close',
+          ...(symbolsEnabled ? ['definition', 'references'] : []),
+          ...(currentMenu.query?.trim() ? ['search-in-files'] : [])
+        ]
   const menuAddress: EditorUiControlAddress | null = bridgeContext && sourceGeneration !== null &&
     sourceSessionRef.current?.generation === sourceGeneration && currentMenu !== null
     ? {
@@ -726,6 +804,18 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   }
   function findNextFromKeyboard(): boolean {
     void dispatchSourceControl('find-next', { query: searchInput.current?.value ?? searchQueryRef.current })
+    return true
+  }
+  function handleSymbolMouseDown(event: MouseEvent, view: EditorView): boolean {
+    const modifier = CHORD_PLATFORM === 'darwin'
+      ? event.metaKey && !event.ctrlKey
+      : event.ctrlKey && !event.metaKey
+    if (event.button !== 0 || !modifier || event.shiftKey || event.altKey || !symbolsEnabled) return false
+    const target = event.target
+    if (!(target instanceof HTMLElement) || !target.closest('.cm-content')) return false
+    const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+    if (position === null || !dispatchSymbolControl('definition', position, view)) return false
+    event.preventDefault()
     return true
   }
   function handleEditorContextMenu(event: MouseEvent, view: EditorView): boolean {
@@ -839,8 +929,14 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     redo: () => { const view = viewRef.current; if (!view) throw new Error('The source editor is not mounted.'); redo(view) },
     find: async (query) => showSearch(false, query),
     replace: async (query) => showSearch(true, query),
-    copyContext: copySelectionContext
-  }), [copySelectionContext, showSearch])
+    copyContext: copySelectionContext,
+    definition: (position) => props.symbols
+      ? sourceSymbols.definition(position)
+      : Promise.reject(new Error(SOURCE_EDITOR_ONLY_MESSAGE)),
+    references: (position) => props.symbols
+      ? sourceSymbols.references(position)
+      : Promise.reject(new Error(SOURCE_EDITOR_ONLY_MESSAGE))
+  }), [copySelectionContext, props.symbols, showSearch, sourceSymbols.definition, sourceSymbols.references])
 
   useEffect(() => {
     const view = viewRef.current
@@ -888,7 +984,11 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
           indentWithTab
         ]),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged && !suppressDraft.current) callbacks.current.onDraft(update.state.doc.toString())
+          if (update.docChanged) {
+            textRevision.current++
+            sourceSymbols.documentChanged()
+            if (!suppressDraft.current) callbacks.current.onDraft(update.state.doc.toString())
+          }
           if (update.selectionSet || update.docChanged) {
             const range = update.state.selection.main
             if (range.empty) setSelection(null)
@@ -921,6 +1021,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
             })
             return true
           },
+          mousedown: handleSymbolMouseDown,
           contextmenu: handleEditorContextMenu
         })
       ]
@@ -1191,6 +1292,17 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
         <div className="qe-codemirror-host" ref={host} />
         {props.minimap && <canvas ref={canvas} className="qe-editor-minimap" aria-label="Code minimap" title="Click to jump to a section of the file" onClick={scrollFromMinimap} />}
       </div>
+      {symbolsEnabled && props.symbols && <SourceLocations
+        context={props.symbols.context}
+        bufferId={props.buffer.id}
+        tabId={props.tabId}
+        sourceGeneration={sourceGeneration}
+        enabled={symbolsEnabled}
+        controller={sourceSymbols}
+        isValidPosition={isValidSymbolPosition}
+        focusEditor={() => { viewRef.current?.focus() }}
+        onSourceControlRunner={onSourceControlRunner}
+      />}
       {(pasteError || props.error || controlError) && <div className="qe-editor-error"><InlineError message={pasteError ?? props.error ?? controlError!} /></div>}
       {contextMenu && (
         <div className="qe-source-menu-layer" onClick={requestCloseSourceMenu} onContextMenu={dismissMenuContextMenu}>
@@ -1209,7 +1321,13 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
                 <Button role="menuitem" onClick={copyRelativeSourceLine}>Copy Rel. Path to Line</Button>
               </>
             ) : (
-              <Button role="menuitem" disabled={!contextMenu.query?.trim()} onClick={searchFromSourceMenu}>Search in Files</Button>
+              <>
+                {symbolsEnabled && <>
+                  <Button role="menuitem" onClick={() => { void dispatchMenuControl('definition') }}>Go to Definition</Button>
+                  <Button role="menuitem" onClick={() => { void dispatchMenuControl('references') }}>Find References</Button>
+                </>}
+                <Button role="menuitem" disabled={!contextMenu.query?.trim()} onClick={searchFromSourceMenu}>Search in Files</Button>
+              </>
             )}
           </div>
         </div>
