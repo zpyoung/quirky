@@ -34,7 +34,7 @@ export function isSafeRegex(pattern: string, caseSensitive = true): boolean {
   const top = () => stack[stack.length - 1]!
   const note = (signature: string) => {
     const frame = top()
-    if (frame.firsts[frame.firsts.length - 1] === null) frame.firsts[frame.firsts.length - 1] = signature
+    if (frame.firsts[frame.firsts.length - 1] === null) frame.firsts.splice(frame.firsts.length - 1, 1, signature)
   }
   const atom = (signature: string) => {
     note(signature)

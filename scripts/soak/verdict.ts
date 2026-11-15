@@ -1,11 +1,13 @@
 import {
   DEFAULT_LIMITS,
+  MAX_PANEL_REFRESHES_PER5S,
   QUALIFYING_MINUTES,
   QUALIFYING_WINDOWS,
   WINDOW_SILENCE_SECONDS,
 } from './contracts'
 import type {
   EventRecord,
+  PanelRefreshRecord,
   ProbeRecord,
   ProcessRow,
   Sample,
@@ -25,12 +27,21 @@ export type SoakEvidence = {
   windowBeats: WindowBeat[]
   samples: Sample[]
   events: EventRecord[]
+  panelRefreshes: PanelRefreshRecord[]
   probes: ProbeRecord[]
   workers: WorkerBeat[]
   daemonExited: boolean
   daemonLog?: string
 }
 
+/** Returns whether a renderer RPC attempt belongs to the panel-refresh budget. */
+export function isPanelRefreshRequest(method: string, params: unknown): boolean {
+  if (method === 'quirky.git/status' || method === 'soak.faults/feedbackRefresh') return true
+  if (method !== 'quirky.reviews/checksRefresh' || params === null || typeof params !== 'object' || Array.isArray(params)) {
+    return false
+  }
+  return (params as Record<string, unknown>).force === true
+}
 
 /** Counts caller and dispatcher timeouts across plugin namespaces for the soak's calls check. */
 export function countDaemonLog(text: string): {
@@ -270,6 +281,77 @@ function judgeEvents(evidence: SoakEvidence, config: SoakConfig): SoakReport['ch
   }
 }
 
+type PanelRefreshPeak = { count: number; at: number | null; index: number; worktree: string }
+
+function panelRefreshPeak(records: PanelRefreshRecord[], index: number, worktree: string): PanelRefreshPeak {
+  let first = 0
+  let best: PanelRefreshPeak = { count: 0, at: null, index, worktree }
+  for (let last = 0; last < records.length; last++) {
+    const lastAtMs = Math.round(records[last]!.at * 1000)
+    while (lastAtMs - Math.round(records[first]!.at * 1000) > 5000) first++
+    const count = last - first + 1
+    const at = records[first]!.at
+    if (count > best.count
+      || (count === best.count && count > 0 && best.at !== null
+        && Math.round(at * 1000) < Math.round(best.at * 1000))) {
+      best = { count, at, index, worktree }
+    }
+  }
+  return best
+}
+
+function judgeRefreshes(evidence: SoakEvidence): SoakReport['checks']['refreshes'] {
+  const chronologicalRecords = [...(evidence.panelRefreshes ?? [])].sort((left, right) =>
+    left.at - right.at || left.index - right.index)
+  const recordsByWindow = new Map<number, PanelRefreshRecord[]>()
+  const coveredWindows = new Set<number>()
+  for (const record of chronologicalRecords) {
+    const beat = evidence.windowBeats[record.index]
+    if (!beat) continue
+    const records = recordsByWindow.get(record.index)
+    if (records) records.push(record)
+    else recordsByWindow.set(record.index, [record])
+    if (beat.worktree === record.worktree) coveredWindows.add(record.index)
+  }
+
+  const byWindow = evidence.windowBeats.map((beat, index) => {
+    const records = recordsByWindow.get(index) ?? []
+    return {
+      index,
+      worktree: beat.worktree,
+      total: records.length,
+      peakPer5s: panelRefreshPeak(records, index, beat.worktree).count,
+    }
+  })
+  const missingWindows = evidence.windowBeats
+    .flatMap((beat, index) => windowAlive(beat) && !coveredWindows.has(index) ? [beat.worktree] : [])
+    .sort(compareText)
+
+  let best: PanelRefreshPeak = { count: 0, at: null, index: 0, worktree: '' }
+  for (const beat of byWindow) {
+    const peak = panelRefreshPeak(recordsByWindow.get(beat.index) ?? [], beat.index, beat.worktree)
+    if (peak.count > best.count
+      || (peak.count === best.count && peak.count > 0 && peak.at !== null && best.at !== null
+        && (Math.round(peak.at * 1000) < Math.round(best.at * 1000)
+          || (Math.round(peak.at * 1000) === Math.round(best.at * 1000) && peak.index < best.index)))) {
+      best = peak
+    }
+  }
+  const total = (evidence.panelRefreshes ?? []).length
+
+  return {
+    ok: best.count <= MAX_PANEL_REFRESHES_PER5S && missingWindows.length === 0,
+    total,
+    limitPer5s: MAX_PANEL_REFRESHES_PER5S,
+    peakPer5s: best.count,
+    peakAt: best.at,
+    peakWindow: best.count === 0 ? null : best.index,
+    peakWorktree: best.count === 0 ? null : best.worktree,
+    missingWindows,
+    byWindow,
+  }
+}
+
 function percentile(sortedValues: number[], fraction: number): number {
   if (sortedValues.length === 0) return 0
   return sortedValues[Math.ceil(sortedValues.length * fraction) - 1]
@@ -389,6 +471,7 @@ export function judge(
     children: judgeChildren(evidence, config),
     zombies: judgeZombies(evidence, config),
     events: judgeEvents(evidence, config),
+    refreshes: judgeRefreshes(evidence),
     stalls: judgeStalls(evidence, config),
     calls: judgeCalls(evidence, config),
     workers: judgeWorkers(evidence.workers),

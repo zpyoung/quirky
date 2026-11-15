@@ -25,7 +25,7 @@ export class KittyFlags {
     const current = this.flags
     const next = mode === 2 ? current | flags : mode === 3 ? current & ~flags : flags
     if (this.stack.length === 0) this.stack.push(next)
-    else this.stack[this.stack.length - 1] = next
+    else this.stack.splice(this.stack.length - 1, 1, next)
   }
 }
 
