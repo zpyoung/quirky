@@ -5,6 +5,19 @@ import type { FixtureWorktree } from '../ui-review/fixtures.ts'
 import type { WindowRecord, WindowRequestObservation } from './contracts.ts'
 import type { SoakWorld } from './world.ts'
 
+export type WindowStartupObservation = {
+  stage: 'launch' | 'connect' | 'context' | 'page' | 'navigation'
+    | 'connection' | 'shell' | 'worktree' | 'layout' | 'changes' | 'ready' | 'failed'
+  elapsedMs: number
+  index?: number
+  worktree?: string
+  connId?: number
+  browserPid?: number
+  message?: string
+  pageErrors?: string[]
+  failedRequests?: Array<{ path: string; message: string }>
+}
+
 type WindowMetrics = {
   closed: boolean
   crashed: boolean
@@ -13,6 +26,7 @@ type WindowMetrics = {
   lastRequestAt: number | null
   pageErrors: number
   pageErrorExamples: string[]
+  failedRequests?: Array<{ path: string; message: string }>
 }
 
 type OpenWindow = {
@@ -21,6 +35,7 @@ type OpenWindow = {
   connId: number
   page: Page
   metrics: WindowMetrics
+  statusRequests: Map<string, number>
 }
 
 export type SoakWindows = {
@@ -32,6 +47,36 @@ export type SoakWindows = {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+function sanitizeDiagnostic(value: string, home: string, limit: number): string {
+  const redacted = value.replaceAll(home, '<soak-home>').replace(/https?:\/\/[^\s"'<>]+/g, (raw) => {
+    const trailing = raw.match(/[),.;!?]+$/)?.[0] ?? ''
+    try {
+      const url = new URL(raw.slice(0, raw.length - trailing.length))
+      return `${url.origin}${url.pathname}${trailing}`
+    } catch {
+      return raw
+    }
+  })
+  return redacted.slice(0, limit)
+}
+
+function localRequestFailure(
+  urlValue: string,
+  message: string,
+  port: number,
+  home: string
+): { path: string; message: string } | null {
+  try {
+    const url = new URL(urlValue)
+    if (url.origin !== `http://127.0.0.1:${port}`) return null
+    return {
+      path: url.pathname.slice(0, 300),
+      message: sanitizeDiagnostic(message, home, 300)
+    }
+  } catch {
+    return null
+  }
 }
 
 function interrupted(): Error {
@@ -199,7 +244,7 @@ export function attachMetrics(
   page.on('pageerror', (error) => {
     metrics.pageErrors++
     if (metrics.pageErrorExamples.length < 5) {
-      metrics.pageErrorExamples.push(error.message.replaceAll(home, '<soak-home>').slice(0, 300))
+      metrics.pageErrorExamples.push(sanitizeDiagnostic(error.message, home, 300))
     }
   })
   page.on('crash', () => { metrics.crashed = true })
@@ -289,8 +334,10 @@ export async function openWindows(options: {
   signal: AbortSignal
   browserArgs?: readonly string[]
   onRequest?: (request: WindowRequestObservation) => void
+  onStartup?: (observation: WindowStartupObservation) => void
 }): Promise<SoakWindows> {
 
+  const startupStartedAt = performance.now()
   const { world, count, executable, out, signal } = options
   const worktrees = assignWorktrees(world.fixtures.worktrees, count)
   const sessions: OpenWindow[] = []
@@ -299,7 +346,33 @@ export async function openWindows(options: {
   let server: BrowserServer | undefined
   let browser: Browser | undefined
   let launch: Promise<BrowserServer> | undefined
+  let browserPid: number | null = null
   let stopPromise: Promise<void> | undefined
+  let currentIndex: number | undefined
+  let currentWorktree: string | undefined
+  let currentConnId: number | undefined
+  let currentMetrics: WindowMetrics | undefined
+  let lastStage: WindowStartupObservation['stage'] = 'launch'
+
+  const report = (stage: WindowStartupObservation['stage'], message?: string): void => {
+    lastStage = stage
+    const observation: WindowStartupObservation = {
+      stage,
+      elapsedMs: Math.max(0, performance.now() - startupStartedAt),
+      ...(currentIndex === undefined ? {} : { index: currentIndex }),
+      ...(currentWorktree === undefined ? {} : { worktree: currentWorktree }),
+      ...(currentConnId === undefined ? {} : { connId: currentConnId }),
+      ...(browserPid === null ? {} : { browserPid }),
+      ...(currentMetrics === undefined ? {} : {
+        pageErrors: currentMetrics.pageErrorExamples.slice(0, 5),
+        ...(currentMetrics.failedRequests === undefined ? {} : {
+          failedRequests: currentMetrics.failedRequests.slice(0, 5).map((failure) => ({ ...failure }))
+        })
+      })
+    }
+    if (message !== undefined) observation.message = sanitizeDiagnostic(message, world.home, 1_000)
+    options.onStartup?.(observation)
+  }
 
   const recordServer = (launched: BrowserServer): number | null => {
     const pid = launched.process().pid
@@ -323,6 +396,7 @@ export async function openWindows(options: {
     throwIfAborted(signal)
     if (worktrees.length !== count) throw new Error(`requested ${count} windows but only ${worktrees.length} worktrees are available`)
     const args = chromiumArgs(process.platform, options.browserArgs ?? [])
+    report('launch')
     launch = chromium.launchServer({
       executablePath: executable,
       headless: true,
@@ -334,10 +408,12 @@ export async function openWindows(options: {
       args
     })
     server = await waitWithAbort(launch, 30_000, signal, 'Chromium launch')
-    const browserPid = recordServer(server)
+    browserPid = recordServer(server)
     if (browserPid === null) throw new Error('Chromium server did not report its process id')
+    report('launch')
     throwIfAborted(signal)
 
+    report('connect')
     const connection = chromium.connect(server.wsEndpoint(), { timeout: 30_000 })
     browser = await waitWithAbort(connection, 30_000, signal, 'Chromium connection', async (lateBrowser) => {
       await closeBounded(() => lateBrowser.close())
@@ -345,7 +421,13 @@ export async function openWindows(options: {
 
     for (let index = 0; index < worktrees.length; index++) {
       failureIndex = index
+      const worktree = worktrees[index]!.id
+      currentIndex = index
+      currentWorktree = worktree
+      currentConnId = undefined
+      currentMetrics = undefined
       throwIfAborted(signal)
+      report('context')
       const before = new Set(connectionIds(await rpc(world, 'ui.state', {}, 5_000, signal)))
       throwIfAborted(signal)
       const context = await waitWithAbort(
@@ -356,6 +438,7 @@ export async function openWindows(options: {
         async (lateContext) => { await closeBounded(() => lateContext.close()) }
       )
       throwIfAborted(signal)
+      report('page')
       const page = await waitWithAbort(
         context.newPage(),
         30_000,
@@ -373,46 +456,87 @@ export async function openWindows(options: {
         sockets: 0,
         lastRequestAt: null,
         pageErrors: 0,
-        pageErrorExamples: []
+        pageErrorExamples: [],
+        failedRequests: []
       }
-      attachMetrics(page, metrics, requests, world.home, options.onRequest === undefined ? undefined : {
+      const statusRequests = new Map<string, number>()
+      currentMetrics = metrics
+      attachMetrics(page, metrics, requests, world.home, {
         index,
-        worktree: worktrees[index]!.id,
-        onRequest: options.onRequest,
+        worktree,
+        onRequest: (request) => {
+          const params = request.params
+          if (request.method === 'quirky.git/status' && params !== null && typeof params === 'object' && !Array.isArray(params)) {
+            const requestedWorktree = (params as Record<string, unknown>).worktree
+            if (typeof requestedWorktree === 'string') {
+              statusRequests.set(requestedWorktree, (statusRequests.get(requestedWorktree) ?? 0) + 1)
+            }
+          }
+          options.onRequest?.(request)
+        }
+      })
+      const recordFailedRequest = (url: string, message: string): void => {
+        const failures = metrics.failedRequests!
+        if (failures.length >= 5) return
+        const failure = localRequestFailure(url, message, world.runtime.port, world.home)
+        if (failure !== null) failures.push(failure)
+      }
+      page.on('requestfailed', (request) => {
+        recordFailedRequest(request.url(), request.failure()?.errorText ?? 'request failed')
+      })
+      page.on('response', (response) => {
+        const status = response.status()
+        if (status >= 400) recordFailedRequest(response.url(), `HTTP ${status}`)
       })
       pages.push(page)
 
       throwIfAborted(signal)
+      report('navigation')
       await waitWithAbort(page.goto(`http://127.0.0.1:${world.runtime.port}/#token=${encodeURIComponent(world.runtime.token)}`, {
         waitUntil: 'domcontentloaded',
         timeout: 30_000
       }), 30_000, signal, 'renderer navigation')
+      report('connection')
       const connId = await waitForNewConnection(world, before, signal)
+      currentConnId = connId
+      report('connection')
       throwIfAborted(signal)
+      report('shell')
       await waitWithAbort(
         page.locator('.shell-workspace').waitFor({ state: 'visible', timeout: 30_000 }),
         30_000,
         signal,
         '.shell-workspace visibility'
       )
-      sessions.push({ index, worktree: worktrees[index]!.id, connId, page, metrics })
+      sessions.push({ index, worktree, connId, page, metrics, statusRequests })
     }
 
     failureIndex = 0
+    currentIndex = undefined
+    currentWorktree = undefined
+    currentConnId = undefined
+    currentMetrics = undefined
+    report('changes')
     await rpc(world, 'quirky.worktree/setOptions', { filterRepoIds: [] }, 5_000, signal)
     await rpc(world, 'ui.tool.open', { id: 'panel:quirky.git/source-control' }, 5_000, signal)
 
     for (const session of sessions) {
       failureIndex = session.index
+      currentIndex = session.index
+      currentWorktree = session.worktree
+      currentConnId = session.connId
+      currentMetrics = session.metrics
       throwIfAborted(signal)
       const worktree = worktrees[session.index]!
+      report('worktree')
+      const statusRequestsBeforeNavigation = session.statusRequests.get(worktree.id) ?? 0
       const result = asRecord(await rpc(world, 'quirky.worktree/navigate', {
         worktree: `id:${worktree.id}`,
         window: session.connId
       }, 5_000, signal), 'quirky.worktree/navigate')
       if (result.worktreeId !== worktree.id) throw new Error(`navigation did not select worktree ${worktree.id}`)
 
-      const statusRequestsBeforeReturn = session.metrics.requests.get('quirky.git/status') ?? 0
+      report('layout')
       const value = await rpc(world, 'ui.window.state', { connId: session.connId }, 5_000, signal)
       throwIfAborted(signal)
       const state = asRecord(value, 'ui.window.state')
@@ -425,19 +549,33 @@ export async function openWindows(options: {
         throw new Error(`window layout did not show worktree ${worktree.id} with terminal and Changes`)
       }
 
+      report('changes')
+      const pageIsOpen = (): boolean => {
+        try {
+          return !session.metrics.closed && !session.metrics.crashed && !session.page.isClosed()
+        } catch {
+          return false
+        }
+      }
       const deadline = Date.now() + 30_000
-      while ((session.metrics.requests.get('quirky.git/status') ?? 0) <= statusRequestsBeforeReturn && Date.now() < deadline) {
+      while ((session.statusRequests.get(worktree.id) ?? 0) <= statusRequestsBeforeNavigation
+        && pageIsOpen() && Date.now() < deadline) {
         throwIfAborted(signal)
         await pauseWithAbort(Math.min(100, Math.max(1, deadline - Date.now())), signal)
       }
-      if ((session.metrics.requests.get('quirky.git/status') ?? 0) <= statusRequestsBeforeReturn) {
+      if (!pageIsOpen()) throw new Error('renderer page closed before Changes readiness')
+      if ((session.statusRequests.get(worktree.id) ?? 0) <= statusRequestsBeforeNavigation) {
         throw new Error('did not send its first quirky.git/status request within 30000ms')
       }
+      report('ready')
     }
+
+    const readyBrowserPid = browserPid
+    if (readyBrowserPid === null) throw new Error('Chromium server did not report its process id')
 
     return {
       pages,
-      browserPid,
+      browserPid: readyBrowserPid,
       async finish() {
         let currentWorktrees = new Set<string>()
         try {
@@ -488,9 +626,13 @@ export async function openWindows(options: {
     if (!server && launch) {
       try {
         server = await launch
-        recordServer(server)
+        browserPid = recordServer(server)
+        if (browserPid !== null) report('launch')
       } catch {}
     }
+    try {
+      report('failed', `${lastStage}: ${errorMessage(error)}`)
+    } catch {}
     await stop()
     if (/^window \d+:/.test(errorMessage(error))) throw error
     throw new Error(`window ${failureIndex}: ${errorMessage(error)}`)
