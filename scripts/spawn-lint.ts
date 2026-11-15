@@ -101,8 +101,9 @@ function acquiredModuleName(node: ts.Node): string | undefined {
   return undefined
 }
 
-function staticMember(node: ts.PropertyAccessExpression | ts.ElementAccessExpression): string | undefined {
-  return ts.isPropertyAccessExpression(node) ? node.name.text : staticString(node.argumentExpression)
+function staticMember(node: ts.PropertyAccessExpression | ts.ElementAccessExpression | ts.QualifiedName): string | undefined {
+  return ts.isQualifiedName(node) ? node.right.text :
+    ts.isPropertyAccessExpression(node) ? node.name.text : staticString(node.argumentExpression)
 }
 
 function inTypePosition(node: ts.Node): boolean {
@@ -326,6 +327,18 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
     rootCache.set(expression, kind)
     return kind
   }
+  const moduleReferencePolicy = (reference: ts.EntityName): RootKind | AccessRule | undefined => {
+    if (ts.isIdentifier(reference)) {
+      const kind = resolveIdentifier(reference)
+      return kind && !allowedPosition(reference, kind) ? escapeRule(kind) : kind
+    }
+    const receiver = moduleReferencePolicy(reference.left)
+    if (!receiver || isAccessRule(receiver)) return receiver
+    const member = staticMember(reference)
+    const policy = member === undefined ? undefined : memberPolicy(receiver, member)
+    if (!policy || isAccessRule(policy)) return policy
+    return allowedPosition(reference, policy) ? policy : escapeRule(policy)
+  }
   const checkPattern = (pattern: ts.ObjectBindingPattern | ts.ObjectLiteralExpression, kind: RootKind): void => {
     const properties = ts.isObjectBindingPattern(pattern) ? pattern.elements : pattern.properties
     for (const property of properties) {
@@ -357,7 +370,7 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
       }
     }
   }
-  const allowedPosition = (node: ts.Expression, kind: RootKind): boolean => {
+  const allowedPosition = (node: ts.Expression | ts.EntityName, kind: RootKind): boolean => {
     let outer: ts.Node = node
     while (transparentExpression(outer.parent) && outer.parent.expression === outer) outer = outer.parent
     const parent = outer.parent
@@ -366,6 +379,7 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
     if (kind === 'createRequire') return ts.isCallExpression(parent) && parent.expression === outer
     if (kind === 'loader') {
       if (ts.isCallExpression(parent) && parent.expression === outer) return true
+      if (ts.isQualifiedName(parent) && parent.left === outer) return staticMember(parent) === 'resolve'
       if ((ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === outer) {
         return staticMember(parent) !== undefined
       }
@@ -373,6 +387,7 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
         ts.isVariableDeclaration(parent) && parent.initializer === outer && ts.isIdentifier(parent.name) && parent.name.text === 'require'
     }
     if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.InKeyword && parent.right === outer) return true
+    if (ts.isQualifiedName(parent) && parent.left === outer) return staticMember(parent) !== undefined
     if ((ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === outer) {
       return staticMember(parent) !== undefined
     }
@@ -399,7 +414,15 @@ export function scanSourceContent(file: string, source: string): SpawnLintDiagno
       }
       return
     }
-    if (inTypePosition(node) || ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node)) return
+    if (ts.isImportEqualsDeclaration(node)) {
+      if (!node.isTypeOnly && !ts.isExternalModuleReference(node.moduleReference)) {
+        const policy = moduleReferencePolicy(node.moduleReference)
+        if (isAccessRule(policy)) add(node.moduleReference, policy)
+        else if (policy && !allowedPosition(node.moduleReference, policy)) add(node.moduleReference, escapeRule(policy))
+      }
+      return
+    }
+    if (inTypePosition(node) || ts.isImportDeclaration(node)) return
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
       const receiver = rootKind(node.expression)
       const member = staticMember(node)

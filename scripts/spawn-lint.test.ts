@@ -143,6 +143,50 @@ test.each(taskOneErrorCases)('reports exact task 1 diagnostic and padded column:
     ...expected, column: expected.column + padding,
   }])
 })
+const internalAliasCases: readonly [string, SpawnLintDiagnostic][] = [
+  ['import B = Bun; B.spawn([])', escapedGlobalDiagnostic(12)],
+  ['import S = Bun.spawn; S([])', spawnDiagnostic(12)],
+  ['import A = globalThis.Atomics; A.wait(i, 0, 0)', escapedGlobalDiagnostic(12)],
+  ['import P = process; P.getBuiltinModule("child_process")', escapedGlobalDiagnostic(12)],
+  ['import S = Bun.sleepSync; S(1)', { file, line: 1, column: 12, rule: 'process/no-blocking', message: 'Do not block the event loop.' }],
+  ['import F = globalThis.Function; F("return 1")', dynamicCodeDiagnostic(12)],
+  ['import R = module.require; R("child_process")', dynamicCodeDiagnostic(12)],
+  ['import S = globalThis.Bun.spawn; S([])', spawnDiagnostic(12)],
+  ['import A = globalThis.Atomics.wait; A(i, 0, 0)', { file, line: 1, column: 12, rule: 'process/no-blocking', message: 'Do not block the event loop.' }],
+  ['import E = globalThis.eval; E("x")', dynamicCodeDiagnostic(12)],
+  ['import G = globalThis.globalThis; f(G)', escapedGlobalDiagnostic(12)],
+  ['import R = require; R("child_process")', dynamicCodeDiagnostic(12)],
+  ['import M = module; M.require("child_process")', escapedGlobalDiagnostic(12)],
+  ['import F = globalThis.Function.prototype; f(F)', dynamicCodeDiagnostic(12)],
+  ['import R = require.cache; f(R)', dynamicCodeDiagnostic(12)],
+  ['import S = process.execve; S("/bin/sh", [])', spawnDiagnostic(12)],
+  ['import * as B from "bun";\nimport S = B.spawn; S([])', spawnDiagnostic(12, 2)],
+  ['import { default as B } from "bun";\nimport X = B; X.spawn([])', escapedGlobalDiagnostic(12, 2)],
+  ['import * as P from "node:process";\nimport G = P.getBuiltinModule; G("child_process")', dynamicCodeDiagnostic(12, 2)],
+  ['import { Module as M } from "node:module";\nimport S = M._load; S("child_process")', dynamicCodeDiagnostic(12, 2)],
+  ['import { createRequire as c } from "node:module";\nimport R = c; R(import.meta.url)("child_process")', dynamicCodeDiagnostic(12, 2)],
+]
+test.each(internalAliasCases)('checks runtime internal import-equals references: %s', (source, expected) => {
+  expect(scanSourceContent(file, source)).toEqual([expected])
+  const padding = 1_048_577
+  const lines = source.split('\n')
+  lines[expected.line - 1] = ' '.repeat(padding) + lines[expected.line - 1]!
+  expect(scanSourceContent(file, lines.join('\n'))).toEqual([{ ...expected, column: expected.column + padding }])
+})
+test.each([
+  'import type B = Bun; type T = typeof B',
+  'import type S = Bun.spawn; type T = typeof S',
+  'import type S = require("bun"); type T = typeof S',
+  'namespace N { export const n = 1 }; import X = N; X.n',
+  'namespace Bun { export const spawn = () => 0 }; import S = Bun.spawn; S()',
+  'namespace process { export const getBuiltinModule = () => 0 }; import G = process.getBuiltinModule; G()',
+  'namespace N { export namespace Bun { export const spawn = () => 0 } }; import S = N.Bun.spawn; S()',
+  'namespace N { export const process = 1 }; import process = N.process; f(process)',
+  'import S = Bun.file; S("x")',
+  'import R = require.resolve; R("x")',
+])('preserves erased, local and safe internal aliases: %s', source => {
+  expect(scanSourceContent(file, source)).toEqual([])
+})
 test('checks evaluated defaults separately from destructuring write targets', () => {
   expect(scanSourceContent(file, '({ Bun = Bun } = globalThis)')).toEqual([
     escapedGlobalDiagnostic(4), escapedGlobalDiagnostic(10),
@@ -358,6 +402,7 @@ test.each([
   'const s = `require("child_process") Bun.spawn([])`', 'type R = ReturnType<typeof Bun.spawn>',
   'ctx.process.run({}); ctx.process.spawn({}); Bun.file("x")', 'import { YAML } from "bun"',
   'import type B from "bun"; type R = typeof B.spawn', 'import { type spawn } from "bun"',
+  'type C = typeof globalThis.Bun.spawn',
 ])('ignores prose, Bun types, and allowed APIs: %s', source => { expect(scanSourceContent(file, source)).toEqual([]) })
 const taskOneAllowedCases = [
   ['scenario 7 entry 1', 'Bun.file("x").text(); Bun.env.HOME; Bun["version"]; const { file, env: { HOME } } = Bun'],
