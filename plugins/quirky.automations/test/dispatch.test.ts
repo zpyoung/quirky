@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import * as supervision from '@quirky/supervision'
+import type { SupervisionEngine } from '@quirky/supervision'
+import type { StructuredWatch } from '@quirky/supervision'
 import type { AutomationDefinition, AutomationRun } from '../types'
-import { createAutomationDispatcher } from '../dispatch'
+import type { DispatchHarness, ScriptedCheckResult, ScriptedMessage, ScriptedSession } from './dispatch-harness'
 import type { AutomationDispatcher } from '../dispatch-contract'
-import type { DispatchHarness, ScriptedCheckResult, ScriptedSession } from './dispatch-harness'
+import { createAutomationDispatcher } from '../dispatch'
 import {
   createDispatchHarness,
   makeCheckResult,
@@ -17,6 +20,77 @@ function fixture() {
   const dispatcher = createAutomationDispatcher(harness.context, harness.hooks)
   fixtures.push({ dispatcher, close: harness.close })
   return Object.assign(harness, { dispatcher })
+}
+
+type EngineSpies = {
+  create: number
+  send: number
+  readMessages: number
+  watchStructured: number
+  runCheck: number
+  stop: number
+  dispose: number
+}
+
+function spyOnEngine(engine: SupervisionEngine): EngineSpies {
+  const calls = { create: 0, send: 0, readMessages: 0, watchStructured: 0, runCheck: 0, stop: 0, dispose: 0 }
+  const create = engine.create.bind(engine)
+  spyOn(engine, 'create').mockImplementation((input) => {
+    calls.create++
+    return create(input)
+  })
+  const send = engine.send.bind(engine)
+  spyOn(engine, 'send').mockImplementation((input) => {
+    calls.send++
+    return send(input)
+  })
+  const readMessages = engine.readMessages.bind(engine)
+  spyOn(engine, 'readMessages').mockImplementation((input) => {
+    calls.readMessages++
+    return readMessages(input)
+  })
+  const watchStructured = engine.watchStructured.bind(engine)
+  spyOn(engine, 'watchStructured').mockImplementation(<T>(input: StructuredWatch<T>) => {
+    calls.watchStructured++
+    return watchStructured(input)
+  })
+  const runCheck = engine.runCheck.bind(engine)
+  spyOn(engine, 'runCheck').mockImplementation((input, options) => {
+    calls.runCheck++
+    return runCheck(input, options)
+  })
+  const stop = engine.stop.bind(engine)
+  spyOn(engine, 'stop').mockImplementation((input) => {
+    calls.stop++
+    return stop(input)
+  })
+  const dispose = engine.dispose.bind(engine)
+  spyOn(engine, 'dispose').mockImplementation(() => {
+    calls.dispose++
+    return dispose()
+  })
+  return calls
+}
+
+function fixtureWithEngineSpies() {
+  const engines: EngineSpies[] = []
+  const createEngine = supervision.createSupervision
+  const factory = spyOn(supervision, 'createSupervision').mockImplementation((context, options) => {
+    const engine = createEngine(context, options)
+    engines.push(spyOnEngine(engine))
+    return engine
+  })
+  try {
+    return Object.assign(fixture(), { engine: engines[0] })
+  } finally {
+    factory.mockRestore()
+  }
+}
+
+function nextTurn(): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  setImmediate(resolve)
+  return promise
 }
 
 afterEach(() => {
@@ -72,6 +146,42 @@ describe('automation run dispatcher', () => {
     expect(harness.store.getRun(run.id)?.precheckResult).toMatchObject({
       command: 'bun test', startedAt: now, completedAt: now, pass: true, stdout: 'ok'
     })
+  })
+  test('dispatcher uses supervision engine for launch, reuse, observation, and scheduled precheck', async () => {
+    const fixtureWithSpies = fixtureWithEngineSpies()
+    const engine = fixtureWithSpies.engine
+    const { definition, run } = newRun(fixtureWithSpies, {
+      reuseSession: true,
+      precheck: { command: 'bun test', timeoutSeconds: 12 }
+    })
+    fixtureWithSpies.onCreate = (session) => successfulClaudeResult(fixtureWithSpies, session.id, 'first turn')
+
+    await fixtureWithSpies.dispatcher.dispatch(run.id)
+    await waitRun(fixtureWithSpies, run.id, 'completed')
+    fixtureWithSpies.onCreate = null
+    fixtureWithSpies.onSend = (session) => successfulClaudeResult(fixtureWithSpies, session.id, 'reused turn')
+    const reused = fixtureWithSpies.store.createRun(definition.id, {
+      trigger: 'manual', scheduledFor: now + 1, now: now + 1
+    })
+
+    await fixtureWithSpies.dispatcher.dispatch(reused.id)
+    await waitRun(fixtureWithSpies, reused.id, 'completed')
+
+    expect(engine).toBeDefined()
+    expect(engine?.create).toBe(1)
+    expect(engine?.send).toBe(1)
+    expect(engine?.readMessages).toBeGreaterThan(0)
+    expect(engine?.watchStructured).toBe(2)
+    expect(engine?.runCheck).toBe(1)
+  })
+  test('daemon dispatcher leaves structured and checks RPCs behind supervision', async () => {
+    const source = await Bun.file(new URL('../dispatch.ts', import.meta.url)).text()
+    for (const method of ['create', 'resume', 'send', 'messages', 'stop', 'stopOwned']) {
+      expect(source).not.toContain(`quirky.structured/${method}`)
+    }
+    for (const method of ['run', 'cancel']) {
+      expect(source).not.toContain(`quirky.checks/${method}`)
+    }
   })
   test('new-per-run dispatch scopes one provenance capability to workspace creation only', async () => {
     const harness = fixture()
@@ -375,6 +485,27 @@ describe('automation run dispatcher', () => {
     expect(failed.error).toMatch(/provider/i)
     expect(failed.outputSnapshot?.content).toContain('provider error')
   })
+  test('a foreign-session provider result cannot complete an automation run', async () => {
+    const harness = fixture()
+    const { run } = newRun(harness)
+    const launched = await harness.dispatcher.dispatch(run.id)
+    const sessionId = launched?.sessionId
+    if (!sessionId) throw new Error('expected the run to have a session')
+    harness.messages.set(sessionId, [{
+      sessionId: 's_foreign',
+      seq: 1,
+      role: 'result',
+      text: 'foreign provider success',
+      at: now,
+      data: { type: 'result', subtype: 'success', is_error: false }
+    }])
+    harness.setStatus(sessionId, 'done')
+
+    const failed = await waitRun(harness, run.id, 'dispatch_failed')
+
+    expect(failed.status).toBe('dispatch_failed')
+    expect(failed.outputSnapshot?.content ?? '').not.toContain('foreign provider success')
+  })
 
   test('reuse uses a fresh post-cursor result and a session claimed by a newer run is not shared', async () => {
     const harness = fixture()
@@ -434,6 +565,26 @@ describe('automation run dispatcher', () => {
     expect(failed?.error).toMatch(/failed ambiguously/i)
     expect(failed?.sessionId).toBe('s_1')
     expect(failed?.dispatchState?.reused).toBe(true)
+    expect(harness.calls.filter((call) => call.method === 'quirky.structured/send')).toHaveLength(1)
+    expect(createCount(harness)).toBe(1)
+  })
+  test('a raw negative reuse receipt fails ambiguously without replaying or creating another session', async () => {
+    const harness = fixture()
+    const { definition, run: firstRun } = newRun(harness, { reuseSession: true })
+    harness.onCreate = (session) => successfulClaudeResult(harness, session.id, 'initial turn')
+    await harness.dispatcher.dispatch(firstRun.id)
+    await waitRun(harness, firstRun.id, 'completed')
+
+    harness.onCreate = null
+    harness.setSendResult({ ok: false, reason: 'operation_unknown' })
+    const secondRun = harness.store.createRun(definition.id, { trigger: 'manual', scheduledFor: now + 1, now: now + 1 })
+
+    const failed = await harness.dispatcher.dispatch(secondRun.id)
+
+    expect(failed?.status).toBe('dispatch_failed')
+    expect(failed?.error).toContain('Structured prompt submission failed ambiguously')
+    expect(failed?.sessionId).toBe('s_1')
+    expect(failed?.dispatchState).toMatchObject({ reused: true, messageCursor: 3 })
     expect(harness.calls.filter((call) => call.method === 'quirky.structured/send')).toHaveLength(1)
     expect(createCount(harness)).toBe(1)
   })
@@ -542,6 +693,22 @@ describe('automation run dispatcher', () => {
 
     expect(createCount(harness)).toBe(1)
   })
+  test('repeated start shares one run watch and dispose is idempotent without stopping dispatched sessions', async () => {
+    const harness = fixtureWithEngineSpies()
+    const { run } = newRun(harness, {}, 'manual')
+    await harness.dispatcher.dispatch(run.id)
+
+    await Promise.all([harness.dispatcher.start(), harness.dispatcher.start()])
+    await harness.dispatcher.start()
+
+    expect(harness.engine?.watchStructured).toBe(1)
+    expect(harness.store.getRun(run.id)?.status).toBe('dispatched')
+    harness.dispatcher.dispose()
+    harness.dispatcher.dispose()
+
+    expect(harness.engine?.dispose).toBe(1)
+    expect(harness.calls.some((call) => call.method === 'quirky.structured/stop')).toBe(false)
+  })
   test('startup reconciles every active row beyond the store default page', async () => {
     const harness = fixture()
     const definition = makeDefinition('many', now)
@@ -570,6 +737,73 @@ describe('automation run dispatcher', () => {
     await dispatch
     expect(harness.checkCancelCount).toBe(1)
     expect(createCount(harness)).toBe(0)
+  })
+  test('disposal suppresses late observation results and errors without run updates', async () => {
+    for (const outcome of ['success', 'error'] as const) {
+      const harness = fixture()
+      const messages = Promise.withResolvers<ScriptedMessage[]>()
+      harness.setMessagesGate(messages.promise)
+      const { run } = newRun(harness, {}, 'manual')
+      const dispatched = await harness.dispatcher.dispatch(run.id)
+      const sessionId = dispatched?.sessionId
+      if (!sessionId) throw new Error('expected the dispatched run to have a session')
+      await harness.messagesWasRead
+      const changesBeforeDispose = harness.changedRuns.length
+
+      harness.dispatcher.dispose()
+      if (outcome === 'success') {
+        harness.appendMessage(sessionId, 'assistant', 'late output')
+        harness.appendMessage(sessionId, 'result', 'late completion', {
+          type: 'result', subtype: 'success', is_error: false
+        })
+        harness.setStatus(sessionId, 'done')
+        messages.resolve(harness.messages.get(sessionId)!)
+      } else {
+        messages.reject(new Error('late journal failure'))
+      }
+      await messages.promise.then(() => undefined, () => undefined)
+      await nextTurn()
+
+      expect(harness.store.getRun(run.id)?.status).toBe('dispatched')
+      expect(harness.changedRuns).toHaveLength(changesBeforeDispose)
+    }
+  })
+  test('disposal stops a late-created session once and leaves the run dispatching', async () => {
+    const harness = fixtureWithEngineSpies()
+    const create = Promise.withResolvers<ScriptedSession>()
+    harness.setCreateGate(create.promise)
+    const { run } = newRun(harness)
+    const dispatch = harness.dispatcher.dispatch(run.id)
+    await harness.createWasStarted
+    expect(harness.store.getRun(run.id)?.status).toBe('dispatching')
+    expect(harness.engine).toBeDefined()
+    const changesBeforeDispose = harness.changedRuns.length
+
+    harness.dispatcher.dispose()
+    harness.dispatcher.dispose()
+    create.resolve(harness.sessions.get('s_1')!)
+    await dispatch
+
+    expect(harness.store.getRun(run.id)?.status).toBe('dispatching')
+    expect(harness.changedRuns).toHaveLength(changesBeforeDispose)
+    expect(harness.calls.filter((call) => call.method === 'quirky.structured/stop').map((call) => call.params.session)).toEqual(['s_1'])
+    expect(harness.engine?.stop).toBe(1)
+    expect(harness.engine?.dispose).toBe(1)
+  })
+  test('a deleted run stops its late-created session', async () => {
+    const harness = fixtureWithEngineSpies()
+    const create = Promise.withResolvers<ScriptedSession>()
+    harness.setCreateGate(create.promise)
+    const { definition, run } = newRun(harness)
+    const dispatch = harness.dispatcher.dispatch(run.id)
+    await harness.createWasStarted
+    harness.store.remove(definition.id)
+    create.resolve(harness.sessions.get('s_1')!)
+
+    expect(await dispatch).toBeNull()
+    expect(harness.store.getRun(run.id)).toBeNull()
+    expect(harness.calls.filter((call) => call.method === 'quirky.structured/stop').map((call) => call.params.session)).toEqual(['s_1'])
+    expect(harness.engine?.stop).toBe(1)
   })
   test('a saved provider edit does not change an already dispatched run identity', async () => {
     const harness = fixture()

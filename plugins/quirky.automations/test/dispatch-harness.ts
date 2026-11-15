@@ -77,6 +77,11 @@ export interface DispatchHarness {
   setWorktreeGate(value: Promise<Record<string, unknown>>): void
   setWorktreeResult(value: Record<string, unknown>): void
   setWorktreeError(error: Error | null): void
+  createWasStarted: Promise<void>
+  messagesWasRead: Promise<void>
+  setCreateGate(value: Promise<ScriptedSession>): void
+  setMessagesGate(value: Promise<ScriptedMessage[]>): void
+  setSendResult(value: unknown): void
   onCreate: ((session: ScriptedSession, prompt: string) => void) | null
   onSend: ((session: ScriptedSession, prompt: string) => void) | null
   setNow(value: number): void
@@ -177,6 +182,13 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
   const checkWasStarted = checkStarted.promise
   const worktreeStarted = Promise.withResolvers<void>()
   const worktreeWasStarted = worktreeStarted.promise
+  const createStarted = Promise.withResolvers<void>()
+  const createWasStarted = createStarted.promise
+  const messagesRead = Promise.withResolvers<void>()
+  const messagesWasRead = messagesRead.promise
+  let createGate: Promise<ScriptedSession> | null = null
+  let messagesGate: Promise<ScriptedMessage[]> | null = null
+  let sendResult: unknown = { ok: true }
   let checkCancelCount = 0
   let worktreeResult: Record<string, unknown> | null = null
   let worktreeError: Error | null = null
@@ -293,18 +305,23 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
       if (method === 'quirky.structured/create') {
         const session = makeSession(copied)
         onCreate?.(session, String(params.prompt ?? ''))
-        return session
+        createStarted.resolve()
+        return createGate ?? session
       }
       if (method === 'quirky.structured/send') {
         const session = sessions.get(String(params.session))
         if (!session || session.kind !== 'structured' || session.status === 'exited') throw new Error('session unavailable')
         const prompt = String(params.text ?? '')
-        appendMessage(session.id, 'user', prompt)
-        setStatus(session.id, 'working')
-        onSend?.(session, prompt)
-        return { ok: true }
+        if (typeof sendResult === 'object' && sendResult !== null && 'ok' in sendResult && sendResult.ok === true) {
+          appendMessage(session.id, 'user', prompt)
+          setStatus(session.id, 'working')
+          onSend?.(session, prompt)
+        }
+        return sendResult
       }
       if (method === 'quirky.structured/messages') {
+        messagesRead.resolve()
+        if (messagesGate) return messagesGate
         const sessionId = String(params.session)
         const afterSeq = Number(params.afterSeq ?? 0)
         return (messages.get(sessionId) ?? []).filter((message) => message.seq > afterSeq)
@@ -408,6 +425,11 @@ export function createDispatchHarness(now = 1_800_000_000_000): DispatchHarness 
     worktreeWasStarted,
     get checkCancelCount() { return checkCancelCount },
     setWorktreeResult(value: Record<string, unknown>) { worktreeResult = value },
+    createWasStarted,
+    messagesWasRead,
+    setCreateGate(value: Promise<ScriptedSession>) { createGate = value },
+    setMessagesGate(value: Promise<ScriptedMessage[]>) { messagesGate = value },
+    setSendResult(value: unknown) { sendResult = value },
     get onCreate() { return onCreate },
     set onCreate(value: ((session: ScriptedSession, prompt: string) => void) | null) { onCreate = value },
     get onSend() { return onSend },
