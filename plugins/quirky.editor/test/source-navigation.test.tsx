@@ -427,6 +427,7 @@ test('mounted navigation updates repeat after cursor movement and remount restor
   buffer = applyTabViewPatch(buffer, tabId, { line: 4, column: 3, matchLength: 2, focused: true, navigationId: 'nav-first' })
   await surface.render(editorProps(buffer, applyView))
   expect(view.state.selection.main.from).toBe(position(4, 3))
+  expect(view.state.selection.main.to).toBe(position(4, 3) + 2)
   expect(document.activeElement).toBe(view.contentDOM)
 
   await act(async () => { view.dispatch({ selection: { anchor: position(5, 2) } }) })
