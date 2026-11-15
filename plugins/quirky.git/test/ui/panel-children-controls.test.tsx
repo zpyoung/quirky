@@ -7,10 +7,11 @@ import type { RowHandlers, RowItem } from '../../src/panel/Rows'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, settle, statusOf, type } = s
+const { act, PANEL, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, settle, statusOf, type } = s
 const { createElement } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { Rows } = await import('../../src/panel/Rows')
+const { GIT_UI_CONTROL_COMMAND } = await import('../../src/ui-control')
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -378,5 +379,234 @@ describe('Rows forwarders', () => {
       await act(async () => root.unmount())
       host.remove()
     }
+  })
+})
+
+type ControlAddress = { surface: string; target: string; generation: string; actions: string[] }
+type ControlResult = { delivered: boolean }
+type ControlHandler = (args: unknown) => ControlResult
+
+function addressFromReport(fake: Fake, target: string): ControlAddress {
+  const addresses = (fake.reports.at(-1)?.uiControls ?? []) as ControlAddress[]
+  const matches = addresses.filter((address) => address.target === target)
+  if (matches.length !== 1) throw new Error(`Expected one reported control address for ${target}, found ${matches.length}`)
+  return matches[0]!
+}
+
+function historyAddress(fake: Fake): ControlAddress {
+  return addressFromReport(fake, 'history:feat')
+}
+
+function panelCommand(fake: Fake): ControlHandler {
+  const command = fake.provided.get(GIT_UI_CONTROL_COMMAND)
+  if (typeof command !== 'function') throw new Error('The activated panel did not provide its UI control command')
+  return command as ControlHandler
+}
+
+const controlArgs = (address: ControlAddress, action: string, data?: Record<string, unknown>) => ({
+  surface: address.surface,
+  target: address.target,
+  generation: address.generation,
+  action,
+  ...(data === undefined ? {} : { data })
+})
+
+async function dispatchControl(fake: Fake, args: unknown): Promise<ControlResult> {
+  let result: ControlResult | undefined
+  await act(async () => {
+    result = panelCommand(fake)(args)
+  })
+  await settle()
+  return result!
+}
+
+function mountExistingPanel(fake: Fake) {
+  const mounted = mountPanel(fake)
+  let live = true
+  const unmount = () => {
+    if (!live) return
+    live = false
+    mountedPanels.delete(unmount)
+    mounted.unmount()
+  }
+  mountedPanels.add(unmount)
+  return { ...mounted, unmount }
+}
+
+describe('History dock mounted controls', () => {
+  test('reports one scoped history address and routes pointer and direct commands through it', async () => {
+    const secondCommit = 'b7'.padEnd(40, '0')
+    const { fake, element } = await openPanel((f) => {
+      f.on('quirky.git/history', () => historyOf([commit(), commit(secondCommit)], true))
+      f.on('quirky.git/commitFiles', () => ({ entries: [] }))
+    })
+    fake.on('ui.window.self', () => ({ connId: 22 }))
+    const content = await openHistory(element)
+    const address = historyAddress(fake)
+    expect(address).toEqual({
+      surface: PANEL,
+      target: 'history:feat',
+      generation: expect.any(String),
+      actions: ['toggle-commit', 'load-more']
+    })
+
+    await click(byLabel(element, `Expand commit ${commitA.slice(0, 7)}`))
+    const args = controlArgs(address, 'toggle-commit', { commit: commitA, open: true })
+    expect(fake.called('ui.window.command.run').at(-1)?.params).toEqual({
+      connId: 22,
+      id: GIT_UI_CONTROL_COMMAND,
+      args
+    })
+    expect(fake.called('quirky.git/commitFiles').map(({ params }) => params)).toEqual([
+      { worktree: 'feat', commit: commitA }
+    ])
+
+    expect(await dispatchControl(fake, args)).toEqual({ delivered: true })
+    expect(byLabel(element, `Collapse commit ${commitA.slice(0, 7)}`)?.getAttribute('aria-expanded')).toBe('true')
+    expect(fake.called('quirky.git/commitFiles')).toHaveLength(1)
+
+    await click(buttonText(content, 'Load more'))
+    expect(fake.called('quirky.git/history').map(({ params }) => params)).toEqual([
+      { worktree: 'feat' },
+      { worktree: 'feat', limit: 200 }
+    ])
+    expect(historyAddress(fake).actions).toEqual(['toggle-commit'])
+
+    await click(byLabel(element, 'Collapse Commits'))
+    expect((fake.reports.at(-1)?.uiControls ?? []).filter((address: ControlAddress) => address.target === 'history:feat')).toEqual([])
+  })
+
+  test('refuses missing and malformed commit toggles and an unoffered Load more without effects', async () => {
+    const { fake, element } = await openPanel((f) => f.on('quirky.git/history', () => historyOf([commit()], false)))
+    const content = await openHistory(element)
+    const address = historyAddress(fake)
+    expect(address.actions).toEqual(['toggle-commit'])
+    const handler = panelCommand(fake)
+    const beforeCalls = fake.calls.length
+    const invalid = [
+      controlArgs(address, 'toggle-commit', { commit: 'not-in-history', open: true }),
+      controlArgs(address, 'toggle-commit', { commit: 17, open: true }),
+      controlArgs(address, 'toggle-commit', { commit: commitA, open: 'true' }),
+      controlArgs(address, 'load-more')
+    ]
+    const results: ControlResult[] = []
+    await act(async () => {
+      for (const args of invalid) results.push(handler(args))
+    })
+    await settle()
+
+    expect(results).toEqual([
+      { delivered: false },
+      { delivered: false },
+      { delivered: false },
+      { delivered: false }
+    ])
+    expect(fake.calls).toHaveLength(beforeCalls)
+    expect(fake.called('quirky.git/commitFiles')).toEqual([])
+    expect(byLabel(element, `Expand commit ${commitA.slice(0, 7)}`)?.getAttribute('aria-expanded')).toBe('false')
+    expect(q(content, '.ui-inline-error')).toBeNull()
+    expect(fake.toasts).toEqual([])
+  })
+
+  test('rejects old generations after close/reopen and after remount', async () => {
+    const { fake, element, unmount } = await openPanel((f) => f.on('quirky.git/history', () => historyOf([commit()])))
+    await openHistory(element)
+    const oldAddress = historyAddress(fake)
+    const oldArgs = controlArgs(oldAddress, 'toggle-commit', { commit: commitA, open: true })
+
+    await click(byLabel(element, 'Collapse Commits'))
+    expect((fake.reports.at(-1)?.uiControls ?? []).filter((address: ControlAddress) => address.target === 'history:feat')).toEqual([])
+    await click(byLabel(element, 'Expand Commits'))
+    const reopenedAddress = historyAddress(fake)
+    expect(reopenedAddress.generation).not.toBe(oldAddress.generation)
+    const readsAfterReopen = fake.called('quirky.git/history').length
+    expect(await dispatchControl(fake, oldArgs)).toEqual({ delivered: false })
+    expect(fake.called('quirky.git/history')).toHaveLength(readsAfterReopen)
+    expect(fake.called('quirky.git/commitFiles')).toEqual([])
+    expect(byLabel(element, `Expand commit ${commitA.slice(0, 7)}`)?.getAttribute('aria-expanded')).toBe('false')
+
+    unmount()
+    const remounted = mountExistingPanel(fake)
+    await settle()
+    await openHistory(remounted.element)
+    const remountedAddress = historyAddress(fake)
+    expect(remountedAddress.generation).not.toBe(oldAddress.generation)
+    const readsAfterRemount = fake.called('quirky.git/history').length
+    expect(await dispatchControl(fake, oldArgs)).toEqual({ delivered: false })
+    expect(fake.called('quirky.git/history')).toHaveLength(readsAfterRemount)
+    expect(fake.called('quirky.git/commitFiles')).toEqual([])
+    expect(byLabel(remounted.element, `Expand commit ${commitA.slice(0, 7)}`)?.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  test('reserves Load more in the same turn and removes it after the maximum limit is requested', async () => {
+    const { fake, element } = await openPanel((f) => f.on('quirky.git/history', () => historyOf([commit()], true)))
+    await openHistory(element)
+    const address = historyAddress(fake)
+    const args = controlArgs(address, 'load-more')
+    const handler = panelCommand(fake)
+    let first: ControlResult | undefined
+    let second: ControlResult | undefined
+    await act(async () => {
+      first = handler(args)
+      second = handler(args)
+    })
+    await settle()
+
+    expect(first).toEqual({ delivered: true })
+    expect(second).toEqual({ delivered: false })
+    expect(fake.called('quirky.git/history').map(({ params }) => params)).toEqual([
+      { worktree: 'feat' },
+      { worktree: 'feat', limit: 200 }
+    ])
+    expect(historyAddress(fake).actions).toEqual(['toggle-commit'])
+  })
+
+  for (const mode of ['refused', 'rejected', 'malformed'] as const) {
+    test(`history delivery ${mode} uses the parent refresh toast and leaves the dock unchanged`, async () => {
+      const { fake, element } = await openPanel((f) => {
+        f.on('quirky.git/history', () => historyOf([commit()]))
+        f.on('quirky.git/commitFiles', () => ({ entries: [] }))
+      })
+      fake.on('ui.window.self', () => ({ connId: 22 }))
+      const content = await openHistory(element)
+      await click(byLabel(element, 'More source control actions'))
+      fake.on('ui.window.command.run', () => {
+        if (mode === 'rejected') throw new Error('bridge down')
+        return mode === 'refused' ? { result: { delivered: false } } : { result: {} }
+      })
+      const historyReads = fake.called('quirky.git/history').length
+
+      await click(buttonText(document.body, 'Refresh'))
+      const refreshToast = {
+        toast: fake.toasts.at(-1),
+        options: fake.toastOptions.at(-1)
+      }
+      expect(refreshToast.toast).toBeDefined()
+
+      await click(byLabel(element, `Expand commit ${commitA.slice(0, 7)}`))
+      expect({
+        toast: fake.toasts.at(-1),
+        options: fake.toastOptions.at(-1)
+      }).toEqual(refreshToast)
+      expect(byLabel(element, `Expand commit ${commitA.slice(0, 7)}`)?.getAttribute('aria-expanded')).toBe('false')
+      expect(q(content, '[data-commit-row]')).not.toBeNull()
+      expect(fake.called('quirky.git/history')).toHaveLength(historyReads)
+      expect(fake.called('quirky.git/commitFiles')).toEqual([])
+    })
+  }
+
+  test('does not toast a failed history delivery after the panel unmounts', async () => {
+    const delivery = Promise.withResolvers<unknown>()
+    const { fake, element, unmount } = await openPanel((f) => f.on('quirky.git/history', () => historyOf([commit()])))
+    await openHistory(element)
+    const beforeCommandCalls = fake.called('ui.window.command.run').length
+    fake.on('ui.window.command.run', () => delivery.promise)
+
+    await click(byLabel(element, `Expand commit ${commitA.slice(0, 7)}`))
+    expect(fake.called('ui.window.command.run')).toHaveLength(beforeCommandCalls + 1)
+    unmount()
+    await act(async () => delivery.resolve({ result: { delivered: false } }))
+    await settle()
+    expect(fake.toasts).toEqual([])
   })
 })

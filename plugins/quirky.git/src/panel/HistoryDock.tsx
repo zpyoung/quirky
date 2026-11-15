@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, IconButton, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'
 import type { GitChange, GitCommit, GitHistory, UiPluginContext } from '@quirky/protocol'
 import { messageOf, relativeTime, shortOid } from './format'
 import { letterOf, Rows, type RowHandlers, type RowItem } from './Rows'
+import { newGitUiGeneration, requestGitUiControl, useGitUiControl } from '../ui-control'
+import type { GitUiControl, GitUiControlAddress } from '../ui-control'
 
 const MAX_LIMIT = 200
 const NO_SELECTION: readonly string[] = []
@@ -41,6 +43,7 @@ type Props = {
 }
 
 type Files = { loading: true } | { entries: GitChange[] } | { error: string }
+type HistoryAction = 'toggle-commit' | 'load-more'
 
 /** The collapsed-by-default "Commits" dock: recent commits from HEAD, each expandable to its files. */
 export function HistoryDock({ context, worktree, open, onToggle, head, onOpenCommit, onOpenFile }: Props) {
@@ -48,37 +51,58 @@ export function HistoryDock({ context, worktree, open, onToggle, head, onOpenCom
   const [limit, setLimit] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [retryVersion, setRetryVersion] = useState(0)
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [files, setFiles] = useState<Readonly<Record<string, Files>>>({})
+  const historyRead = useRef(0)
   const pendingFiles = useRef(new Set<string>())
+  const reservations = useRef(new Set<string>())
+  const session = useRef<{ worktree: string; open: boolean; generation: string } | null>(null)
+  if (session.current === null || session.current.worktree !== worktree || session.current.open !== open) {
+    session.current = { worktree, open, generation: newGitUiGeneration() }
+  }
+  const generation = session.current.generation
+  const mounted = useRef(false)
+  const activeGeneration = useRef<string | null>(null)
+  activeGeneration.current = open ? generation : null
 
   useEffect(() => {
-    if (!open) return
-    let cancelled = false
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      activeGeneration.current = null
+      historyRead.current++
+    }
+  }, [])
+
+  const readHistory = useCallback(() => {
+    const request = ++historyRead.current
     setLoading(true)
-    context
+    void context
       .call('quirky.git/history', limit === null ? { worktree } : { worktree, limit })
       .then((result) => {
-        if (cancelled) return
+        if (request !== historyRead.current) return
         setHistory(result as GitHistory)
         setError(null)
         setLoading(false)
       })
       .catch((e: unknown) => {
-        if (cancelled) return
+        if (request !== historyRead.current) return
         setError(messageOf(e))
         setLoading(false)
       })
+  }, [context, worktree, limit])
+
+  useEffect(() => {
+    if (!open) return
+    readHistory()
     return () => {
-      cancelled = true
+      historyRead.current++
     }
-  }, [context, worktree, open, limit, head, retryVersion])
+  }, [open, readHistory, head])
 
   const onRetryHistory = () => {
     setError(null)
-    setLoading(true)
-    setRetryVersion((version) => version + 1)
+    readHistory()
   }
 
   const onLoadFiles = (commit: GitCommit, retry = false) => {
@@ -93,15 +117,75 @@ export function HistoryDock({ context, worktree, open, onToggle, head, onOpenCom
       .finally(() => pendingFiles.current.delete(oid))
   }
 
-  const toggleCommit = (commit: GitCommit) => {
-    const next = new Set(expanded)
-    if (next.has(commit.oid)) next.delete(commit.oid)
-    else {
-      next.add(commit.oid)
-      onLoadFiles(commit)
-    }
-    setExpanded(next)
+  const reserve = (key: string) => {
+    if (reservations.current.has(key)) return false
+    reservations.current.add(key)
+    queueMicrotask(() => reservations.current.delete(key))
+    return true
   }
+
+  const onDispatchHistoryControl = (control: GitUiControl): boolean => {
+    if (!open || control.surface !== 'panel:quirky.git/source-control' ||
+        control.target !== `history:${worktree}` || control.generation !== generation) return false
+    const data = control.data ?? {}
+    if (control.action === 'load-more') {
+      if (Object.keys(data).length > 0 || !history?.hasMore || (limit ?? 0) >= MAX_LIMIT || !reserve('load-more')) return false
+      setLimit(MAX_LIMIT)
+      return true
+    }
+    if (control.action !== 'toggle-commit' || Object.keys(data).some((key) => key !== 'commit' && key !== 'open')) return false
+    const commitId = data.commit
+    const hasOpen = Object.hasOwn(data, 'open')
+    const openValue = data.open
+    if (typeof commitId !== 'string' || (hasOpen && typeof openValue !== 'boolean')) return false
+    const commit = history?.commits.find((current) => current.oid === commitId)
+    if (!commit || !reserve(`toggle-commit:${commit.oid}`)) return false
+    const shouldOpen = hasOpen ? openValue === true : !expanded.has(commit.oid)
+    setExpanded((previous) => {
+      if (previous.has(commit.oid) === shouldOpen) return previous
+      const next = new Set(previous)
+      if (shouldOpen) next.add(commit.oid)
+      else next.delete(commit.oid)
+      return next
+    })
+    if (shouldOpen) onLoadFiles(commit)
+    return true
+  }
+
+  const actions: HistoryAction[] = []
+  if ((history?.commits.length ?? 0) > 0) actions.push('toggle-commit')
+  if (history?.hasMore && (limit ?? 0) < MAX_LIMIT) actions.push('load-more')
+  const address: GitUiControlAddress | null = !open || actions.length === 0 ? null : {
+    surface: 'panel:quirky.git/source-control',
+    target: `history:${worktree}`,
+    generation,
+    actions
+  }
+  useGitUiControl(context, address, onDispatchHistoryControl)
+
+  const onRequestHistoryControl = (action: HistoryAction, data?: Record<string, unknown>) => {
+    const requestGeneration = generation
+    const control: GitUiControl = {
+      surface: 'panel:quirky.git/source-control',
+      target: `history:${worktree}`,
+      generation: requestGeneration,
+      action,
+      ...(data === undefined ? {} : { data })
+    }
+    const delivery = requestGitUiControl(context, control)
+    void delivery.then((result) => {
+      if (!result.delivered) throw new Error('The source control action is no longer available.')
+    }).catch((cause: unknown) => {
+      if (mounted.current && activeGeneration.current === requestGeneration) {
+        context.toast('Could not run Source Control action', messageOf(cause), { kind: 'error' })
+      }
+    })
+  }
+
+  const onToggleCommit = (commit: GitCommit) => {
+    onRequestHistoryControl('toggle-commit', { commit: commit.oid, open: !expanded.has(commit.oid) })
+  }
+  const onLoadMore = () => onRequestHistoryControl('load-more')
 
   return (
     <section className="ui-stack" data-section="history" style={{ gap: 'var(--ui-space-4)' }}>
@@ -125,14 +209,14 @@ export function HistoryDock({ context, worktree, open, onToggle, head, onOpenCom
                 commit={commit}
                 expanded={expanded.has(commit.oid)}
                 files={files[commit.oid]}
-                onToggle={() => toggleCommit(commit)}
+                onToggle={() => onToggleCommit(commit)}
                 onRetryFiles={() => onLoadFiles(commit, true)}
                 onOpen={() => onOpenCommit(commit)}
                 onOpenFile={(change) => onOpenFile(commit, change)}
               />
             ))}
           </ul>
-          {history?.hasMore && (limit ?? 0) < MAX_LIMIT && <Button onClick={() => setLimit(MAX_LIMIT)}>Load more</Button>}
+          {history?.hasMore && (limit ?? 0) < MAX_LIMIT && <Button onClick={onLoadMore}>Load more</Button>}
         </div>
       )}
     </section>
