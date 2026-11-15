@@ -3,7 +3,7 @@ import { extname, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as ts from 'typescript'
 
-export type SpawnLintRule = 'process/no-direct-spawn' | 'process/no-escaped-global' | 'process/no-dynamic-code' | 'process/baseline-exceeded' | 'process/baseline-stale' | 'process/config'
+export type SpawnLintRule = 'process/no-direct-spawn' | 'process/no-escaped-global' | 'process/no-dynamic-code' | 'process/no-blocking' | 'process/baseline-exceeded' | 'process/baseline-stale' | 'process/config'
 
 export type SpawnLintDiagnostic = {
   file: string
@@ -114,10 +114,10 @@ function inTypePosition(node: ts.Node): boolean {
   return ts.isTypeNode(node)
 }
 
-type RootKind = 'bun' | 'global' | 'process' | 'commonjs' | 'module' | 'loader' | 'createRequire' | 'generated'
-type AccessRule = 'process/no-direct-spawn' | 'process/no-escaped-global' | 'process/no-dynamic-code'
+type RootKind = 'bun' | 'atomics' | 'global' | 'process' | 'commonjs' | 'module' | 'loader' | 'createRequire' | 'generated'
+type AccessRule = 'process/no-direct-spawn' | 'process/no-escaped-global' | 'process/no-dynamic-code' | 'process/no-blocking'
 const globalRoots: Partial<Record<string, RootKind>> = {
-  Bun: 'bun', globalThis: 'global', global: 'global', self: 'global', process: 'process', module: 'commonjs',
+  Bun: 'bun', Atomics: 'atomics', globalThis: 'global', global: 'global', self: 'global', process: 'process', module: 'commonjs',
   require: 'loader', eval: 'generated', Function: 'generated',
 }
 const capabilityModules: Partial<Record<string, RootKind>> = {
@@ -136,6 +136,7 @@ const ruleMessages: Record<AccessRule, string> = {
   'process/no-direct-spawn': 'Use the shared process runner.',
   'process/no-escaped-global': 'Read Bun, Atomics, process, module and the global object only through a static, allowed member.',
   'process/no-dynamic-code': 'Load modules by literal specifier and run no generated code.',
+  'process/no-blocking': 'Do not block the event loop.',
 }
 
 function memberPolicy(kind: RootKind, name: string): RootKind | AccessRule | undefined {
@@ -143,7 +144,9 @@ function memberPolicy(kind: RootKind, name: string): RootKind | AccessRule | und
     case 'global': return Object.hasOwn(globalRoots, name) ? globalRoots[name] : undefined
     case 'bun':
       if (forbiddenBunMembers.has(name)) return 'process/no-direct-spawn'
+      if (name === 'sleepSync') return 'process/no-blocking'
       return name === 'default' ? 'bun' : undefined
+    case 'atomics': return name === 'wait' ? 'process/no-blocking' : undefined
     case 'process':
       if (name === 'execve') return 'process/no-direct-spawn'
       if (Object.hasOwn(dynamicProcessMembers, name)) return 'process/no-dynamic-code'
@@ -192,7 +195,7 @@ function valueIdentifier(node: ts.Identifier): boolean {
   return !ts.isLabeledStatement(parent) && !ts.isBreakStatement(parent) && !ts.isContinueStatement(parent)
 }
 
-/** Diagnose capability acquisition and escapes without following arbitrary aliases. */
+/** Guard process acquisition, capability escapes, generated code and blocking waits. */
 export function scanSourceContent(file: string, source: string): SpawnLintDiagnostic[] {
   const extension = extname(file).toLowerCase()
   const scriptKind = extension === '.tsx' ? ts.ScriptKind.TSX : extension === '.jsx' ? ts.ScriptKind.JSX :

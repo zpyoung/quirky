@@ -133,6 +133,38 @@ test.each(taskOneErrorCases)('reports exact task 1 diagnostic and padded column:
     ...expected, column: expected.column + padding,
   }])
 })
+const blockingCases = [
+  ['Bun.sleepSync(10)', 1],
+  ['Bun["sleepSync"](10)', 1],
+  ['import { sleepSync } from "bun"', 10],
+  ['const { sleepSync: nap } = Bun', 9],
+  ['globalThis.Bun.sleepSync(10)', 1],
+  ['Atomics.wait(i, 0, 0, 10)', 1],
+  ['Atomics["wait"](i, 0, 0, 10)', 1],
+  ['const { wait } = Atomics', 9],
+  ['self.Atomics.wait(i, 0, 0)', 1],
+  ['(await import("bun")).default.sleepSync(1)', 1],
+] as const
+test.each(blockingCases)('reports blocking primitives and padded columns: %s', (source, column) => {
+  const expected = { file, line: 1, column, rule: 'process/no-blocking', message: 'Do not block the event loop.' }
+  expect(scanSourceContent(file, source)).toEqual([expected])
+  const padding = 1_048_577
+  expect(scanSourceContent(file, ' '.repeat(padding) + source)).toEqual([{ ...expected, column: padding + column }])
+})
+test('rejects an escaped Atomics root before its alias can wait', () => {
+  const source = 'const A = Atomics; A.wait(i, 0, 0)'
+  expect(scanSourceContent(file, source)).toEqual([escapedGlobalDiagnostic(11)])
+  const padding = 1_048_577
+  expect(scanSourceContent(file, ' '.repeat(padding) + source)).toEqual([escapedGlobalDiagnostic(padding + 11)])
+})
+test.each([
+  'Atomics.waitAsync(i, 0, 0); Atomics.notify(i, 0); Atomics.load(i, 0)',
+  'typeof Atomics; "wait" in Atomics; const { notify } = Atomics',
+  'function f(Atomics) { return Atomics.wait() }',
+  'import Atomics from "./local"; Atomics.wait()',
+])('allows nonblocking Atomics APIs and local shadows: %s', source => {
+  expect(scanSourceContent(file, source)).toEqual([])
+})
 const taskTwoErrorCases = [
   ['scenario 1 process root alias', 'const p = process; p.getBuiltinModule("node:child_process")', escapedGlobalDiagnostic(11)],
   ['scenario 1 CommonJS module root alias', 'const m = module; m.require("node:child_process")', escapedGlobalDiagnostic(11)],
