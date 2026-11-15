@@ -451,6 +451,13 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const writeCard = useCallback((item: ReviewItem, patch: Partial<CardUi>) => {
     setUi((prev) => ({ ...prev, [item.key]: { ...cardFor(prev[item.key], item.mark), ...patch } }))
   }, [])
+  function setCardCollapsed(item: ReviewItem, collapsed: boolean): void {
+    setUi((prev) => {
+      const current = cardFor(prev[item.key], item.mark)
+      if (isCollapsed(current) === collapsed) return prev
+      return { ...prev, [item.key]: { ...current, collapsed } }
+    })
+  }
   function toggle(key: string): void {
     const item = itemsRef.current.find((i) => i.key === key)
     if (item) postControl('collapse', { path: item.path, collapsed: !isCollapsed(viewOfRef(item)) })
@@ -476,13 +483,15 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   }
 
   const allCollapsed = items.length > 0 && items.every((item) => isCollapsed(viewOf(item)))
-  const setAllCollapsed = (collapsed: boolean) => {
-    setUi((prev) =>
-      Object.fromEntries([
+  function setAllCollapsed(collapsed: boolean): void {
+    setUi((prev) => {
+      const currentItems = itemsRef.current
+      if (currentItems.every((item) => isCollapsed(cardFor(prev[item.key], item.mark)) === collapsed)) return prev
+      return Object.fromEntries([
         ...Object.entries(prev),
-        ...itemsRef.current.map((item) => [item.key, { ...cardFor(prev[item.key], item.mark), collapsed }] as const)
+        ...currentItems.map((item) => [item.key, { ...cardFor(prev[item.key], item.mark), collapsed }] as const)
       ])
-    )
+    })
   }
 
   const reveal = useCallback((path: string, noteId?: string) => {
@@ -815,7 +824,6 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     if (control.action === 'collapse-all') {
       if (!hasExactControlData(control, ['collapsed']) || data === undefined || typeof data.collapsed !== 'boolean' || itemsRef.current.length === 0) return false
       const collapsed = data.collapsed
-      if (itemsRef.current.every((item) => isCollapsed(viewOfRef(item)) === collapsed)) return true
       setAllCollapsed(collapsed)
       return true
     }
@@ -828,8 +836,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       if (!hasExactControlData(control, ['path', 'collapsed']) || data === undefined || typeof data.path !== 'string' || typeof data.collapsed !== 'boolean') return false
       const item = itemForPath(data.path)
       if (!item) return false
-      if (isCollapsed(viewOfRef(item)) === data.collapsed) return true
-      writeCard(item, { collapsed: data.collapsed })
+      setCardCollapsed(item, data.collapsed)
       return true
     }
     if (control.action === 'mark') {

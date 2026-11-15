@@ -408,7 +408,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     if (result.content !== null) controls.push('keep-file')
     controls.push('accept-deletion')
   }
-  if (stale && !reloadInFlight.current) controls.push('reload')
+  if (stale) controls.push('reload')
 
   const postControl = (action: string) => {
     void requestViewControl(context, { target: controlTarget, generation: controlGeneration, action })

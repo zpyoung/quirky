@@ -295,6 +295,36 @@ describe('review controls', () => {
     expect(byLabel(mounted.element, 'Switch to inline diff')).not.toBeNull()
     expect(fake.called('ui.window.command.run').at(-1)?.params.args).toEqual(control(address, 'layout', { layout: 'side-by-side' }))
   })
+  test('same-turn collapse values apply in order for all cards and one card', async () => {
+    const fake = makeReviewFake()
+    activate(fake.context)
+    const mounted = mountView(fake, { worktree: 'w1', mode: 'review' })
+    await settle()
+    const address = addressOf(mounted, 'review:w1')
+    let collapseAll: unknown
+    let expandAll: unknown
+    await act(async () => {
+      collapseAll = dispatch(fake, control(address, 'collapse-all', { collapsed: true }))
+      expandAll = dispatch(fake, control(address, 'collapse-all', { collapsed: false }))
+    })
+    expect(collapseAll).toEqual({ delivered: true })
+    expect(expandAll).toEqual({ delivered: true })
+    await settle()
+    expect(button(mounted.element, 'Collapse all')).not.toBeNull()
+    expect([...mounted.element.querySelectorAll('[data-review-body]')].every((body) => !(body as HTMLElement).hidden)).toBe(true)
+
+    let collapseCard: unknown
+    let expandCard: unknown
+    await act(async () => {
+      collapseCard = dispatch(fake, control(address, 'collapse', { path: 'a.ts', collapsed: true }))
+      expandCard = dispatch(fake, control(address, 'collapse', { path: 'a.ts', collapsed: false }))
+    })
+    expect(collapseCard).toEqual({ delivered: true })
+    expect(expandCard).toEqual({ delivered: true })
+    await settle()
+    expect(byLabel(mounted.element, 'Collapse a.ts')?.getAttribute('aria-expanded')).toBe('true')
+    expect(mounted.element.querySelector('[data-path="a.ts"] [data-review-body]')?.hasAttribute('hidden')).toBe(false)
+  })
 
   test('routes a card collapse idempotently and previews only loaded Markdown', async () => {
     const fake = makeReviewFake()
@@ -611,19 +641,27 @@ describe('conflict controls', () => {
     const heldRead = Promise.withResolvers<unknown>()
     fake.on('quirky.git/conflictFile', () => {
       reads++
-      return heldRead.promise
+      return reads === 2 ? heldRead.promise : conflictFile({ kind: 'deleted_by_them' })
     })
     let first: unknown
-    let second: unknown
+    let duplicate: unknown
     await act(async () => {
       first = dispatch(fake, control(stale, 'reload'))
-      second = dispatch(fake, control(stale, 'reload'))
+      duplicate = dispatch(fake, control(stale, 'reload'))
     })
     expect(first).toEqual({ delivered: true })
-    expect(second).toEqual({ delivered: false })
+    expect(duplicate).toEqual({ delivered: false })
     expect(reads).toBe(2)
-    await act(async () => heldRead.resolve(conflictFile({ kind: 'deleted_by_them' })))
+
+    expect(await dispatchInAct(fake, control(stale, 'next-conflict'))).toEqual({ delivered: true })
+    expect(sortedActions(addressOf(mounted, 'conflict-file:w1:math.ts'))).toContain('reload')
+    await act(async () => heldRead.reject(failure('reload failed')))
     await settle()
+    const afterFailure = addressOf(mounted, 'conflict-file:w1:math.ts')
+    expect(sortedActions(afterFailure)).toContain('reload')
+    expect(button(mounted.element, 'Reload from Disk')).not.toBeNull()
+    expect(await dispatchInAct(fake, control(afterFailure, 'reload'))).toEqual({ delivered: true })
+    expect(reads).toBe(3)
     expect(button(mounted.element, 'Reload from Disk')).toBeNull()
   })
 
