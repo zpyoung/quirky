@@ -535,7 +535,7 @@ test('enrollment refuses an unresolvable active worktree and unsupported contrac
     '--worktree', supportedPath, '--landing-bar', 'hosted-review', '--json',
   ])
   expect(landing.code).not.toBe(0)
-  expect(`${landing.stdout}\n${landing.stderr}`).toContain('landing-bar-unsupported')
+  expect(`${landing.stdout}\n${landing.stderr}`).toContain('landing-bar-requires-github')
 
   const territory = await harness.fixture.cli([
     'heimdall', 'create', 'objective', '--objective', 'Add a multiply function',

@@ -1,4 +1,5 @@
-import type { ObjectivePayload } from './contract'
+import type { ExpectedReview, ObjectiveExpectedState, ObjectivePayload, RemoteLandingAuthority, RemoteObservation, RepoIdentity } from './contract'
+import { remoteActionEvidenceKey, remoteExpectedStateTarget, sameRemoteAuthority } from './contract'
 import type { Criterion, PlannerReport } from './plan'
 import type {
   CheckRecord,
@@ -19,7 +20,9 @@ export interface ObjectiveWorld {
   capabilities?: Partial<Record<'plan' | 'implement' | 'review' | 'check' | 'land', ObjectiveCapability>>
   contentIdentity?: string
   observedAtMs?: number
+  worktreeId?: string | null
   git?: { branch: string | null; headSha: string | null }
+  remote?: RemoteObservation
   revision: null | {
     number: number
     digest: string
@@ -80,6 +83,10 @@ export interface ObjectiveJournalAction {
   timeoutSeconds?: number
   branch?: string
   headSha?: string
+  authority?: RemoteLandingAuthority
+  review?: ExpectedReview
+  expectedState?: ObjectiveExpectedState
+  retryGeneration?: number
 }
 
 export interface ObjectiveApprovalScope {
@@ -198,6 +205,31 @@ export type ObjectiveAction =
       branch: string
       headSha: string
     }
+  | {
+      kind: 'push-ref'
+      capability: 'land'
+      visibility: 'external'
+      evidenceKey: string
+      ordinal: number
+      retryGeneration: number
+      revision: number
+      contentIdentity: string
+      authority: RemoteLandingAuthority
+      expectedState: ObjectiveExpectedState
+    }
+  | {
+      kind: 'open-hosted-review'
+      capability: 'land'
+      visibility: 'external'
+      evidenceKey: string
+      ordinal: number
+      retryGeneration: number
+      revision: number
+      contentIdentity: string
+      authority: RemoteLandingAuthority
+      review?: ExpectedReview
+      expectedState: ObjectiveExpectedState
+    }
 
 export interface ObjectiveProgress {
   draft: null | {
@@ -231,10 +263,17 @@ export type ObjectiveOwnerDeviation = {
   detail: string
 }
 
+export type ObjectiveHandoffRequest = {
+  kind: string
+  kindPayload: Record<string, unknown>
+  capabilities: Record<string, ObjectiveCapability>
+}
+
 export type ObjectiveStopResult = {
   kind: 'terminal'
-  state: 'landed'
+  state: 'landed' | 'handed-off'
   reason: string
+  handoff?: ObjectiveHandoffRequest
 } | {
   kind: 'park'
   reason: 'stop-predicate'
@@ -926,10 +965,8 @@ function currentNodeAttempts(
   })
 }
 
-function landingBar(world: ObjectiveWorld): 'files-on-disk' | 'committed-local-branch' {
-  return world.contract?.landingBar === 'committed-local-branch'
-    ? 'committed-local-branch'
-    : 'files-on-disk'
+function landingBar(world: ObjectiveWorld): ObjectivePayload['landingBar'] {
+  return world.contract?.landingBar ?? 'files-on-disk'
 }
 
 function hasLanding(
@@ -997,16 +1034,272 @@ function pendingCommitAction(
 }
 
 
+const MAX_REMOTE_ATTEMPTS = 3
+const REMOTE_RUNGS: Record<string, true> = { 'pushed-ref': true, 'hosted-review': true }
+const FULL_OID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
+
+function repositoryIdentity(value: unknown): value is RepoIdentity {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) &&
+    typeof (value as RepoIdentity).host === 'string' && (value as RepoIdentity).host.length > 0 &&
+    typeof (value as RepoIdentity).owner === 'string' && (value as RepoIdentity).owner.length > 0 &&
+    typeof (value as RepoIdentity).repo === 'string' && (value as RepoIdentity).repo.length > 0
+}
+function isRemoteAuthority(value: unknown): value is RemoteLandingAuthority {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const authority = value as Record<string, unknown>
+  return typeof authority.branch === 'string' && authority.branch.length > 0 &&
+    typeof authority.headSha === 'string' && FULL_OID.test(authority.headSha) &&
+    typeof authority.remote === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/u.test(authority.remote) &&
+    typeof authority.remoteRef === 'string' && authority.remoteRef.startsWith('refs/heads/') &&
+    authority.remoteRef.length > 'refs/heads/'.length && typeof authority.pushUrlFingerprint === 'string' &&
+    /^[0-9a-f]{64}$/iu.test(authority.pushUrlFingerprint) &&
+    (authority.repository === undefined || repositoryIdentity(authority.repository)) &&
+    (authority.headRepository === undefined || repositoryIdentity(authority.headRepository)) &&
+    (authority.baseRefName === undefined || typeof authority.baseRefName === 'string' && authority.baseRefName.length > 0)
+}
+
+function isExpectedReview(value: unknown): value is ExpectedReview {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const review = value as Record<string, unknown>
+  return Number.isSafeInteger(review.number) && (review.number as number) > 0 && typeof review.url === 'string' &&
+    repositoryIdentity(review.repository) && repositoryIdentity(review.headRepository) &&
+    typeof review.headRefName === 'string' && typeof review.baseRefName === 'string' &&
+    typeof review.headSha === 'string' && FULL_OID.test(review.headSha)
+}
+function isObjectiveExpectedState(value: unknown): value is ObjectiveExpectedState {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const state = value as Record<string, unknown>
+  return typeof state.target === 'string' && state.target.length > 0 &&
+    (state.before === null || typeof state.before === 'string' || isExpectedReview(state.before))
+}
+
+function sameExpectedState(left: ObjectiveExpectedState, right: ObjectiveExpectedState): boolean {
+  if (left.target !== right.target) return false
+  if (typeof left.before === 'string' || left.before === null) return left.before === right.before
+  return isExpectedReview(right.before) && sameReview(left.before, right.before)
+}
+
+
+function remoteAuthorityFromRow(row: LandingRecord): RemoteLandingAuthority | null {
+  const value = row.payload.authority && typeof row.payload.authority === 'object' && !Array.isArray(row.payload.authority)
+    ? row.payload.authority as Record<string, unknown>
+    : row.payload
+  if (typeof value.branch !== 'string' || typeof value.headSha !== 'string' || !FULL_OID.test(value.headSha) ||
+    typeof value.remote !== 'string' || typeof value.remoteRef !== 'string' || !value.remoteRef.startsWith('refs/heads/') ||
+    typeof value.pushUrlFingerprint !== 'string' || !/^[0-9a-f]{64}$/iu.test(value.pushUrlFingerprint)) return null
+  const repositoryValue = value.repository
+  const headRepositoryValue = value.headRepository
+  if (repositoryValue !== undefined && !repositoryIdentity(repositoryValue) ||
+    headRepositoryValue !== undefined && !repositoryIdentity(headRepositoryValue)) return null
+  if (value.baseRefName !== undefined && (typeof value.baseRefName !== 'string' || value.baseRefName.length === 0)) return null
+  const repository = repositoryValue as RepoIdentity | undefined
+  const headRepository = headRepositoryValue as RepoIdentity | undefined
+  return {
+    branch: value.branch,
+    headSha: value.headSha.toLowerCase(),
+    remote: value.remote,
+    remoteRef: value.remoteRef,
+    pushUrlFingerprint: value.pushUrlFingerprint.toLowerCase(),
+    ...(repository ? { repository } : {}),
+    ...(headRepository ? { headRepository } : {}),
+    ...(typeof value.baseRefName === 'string' ? { baseRefName: value.baseRefName } : {})
+  }
+}
+
+function reviewFromLanding(row: LandingRecord): ExpectedReview | null {
+  const value = row.payload.review
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const review = value as Record<string, unknown>
+  if (!Number.isSafeInteger(review.number) || (review.number as number) <= 0 || typeof review.url !== 'string' ||
+    !repositoryIdentity(review.repository) || !repositoryIdentity(review.headRepository) ||
+    typeof review.headRefName !== 'string' || typeof review.baseRefName !== 'string' ||
+    typeof review.headSha !== 'string' || !FULL_OID.test(review.headSha)) return null
+  return {
+    number: review.number as number,
+    url: review.url,
+    repository: review.repository,
+    headRepository: review.headRepository,
+    headRefName: review.headRefName,
+    baseRefName: review.baseRefName,
+    headSha: review.headSha.toLowerCase()
+  }
+}
+
+function sameReview(left: ExpectedReview, right: ExpectedReview): boolean {
+  const sameRepository = (a: RepoIdentity, b: RepoIdentity) =>
+    a.host.toLowerCase() === b.host.toLowerCase() && a.owner.toLowerCase() === b.owner.toLowerCase() &&
+    a.repo.toLowerCase() === b.repo.toLowerCase()
+  return left.number === right.number && left.url === right.url && sameRepository(left.repository, right.repository) &&
+    sameRepository(left.headRepository, right.headRepository) && left.headRefName === right.headRefName &&
+    left.baseRefName === right.baseRefName && left.headSha.toLowerCase() === right.headSha.toLowerCase()
+}
+
+function remoteRows(world: ObjectiveWorld): LandingRecord[] {
+  return (world.landings ?? []).filter(row => Object.hasOwn(REMOTE_RUNGS, row.rung))
+}
+
+function remoteHistoryProblem(
+  world: ObjectiveWorld,
+  revision: number,
+  contentIdentity: string
+): string | null {
+  const rows = remoteRows(world)
+  if (rows.length === 0) return null
+  const current = world.remote?.authority
+  if (!current) {
+    const problem = world.remote?.problem
+    return problem === 'landing-evidence-stale' || problem === 'review-identity-mismatch'
+      ? 'landing-target-changed'
+      : problem ?? 'push-target-unavailable'
+  }
+  if (!isRemoteAuthority(current)) return 'landing-target-changed'
+  for (const row of rows) {
+    if (row.payload.revision !== revision || row.contentIdentity !== contentIdentity) return 'landing-target-changed'
+    const saved = remoteAuthorityFromRow(row)
+    if (!saved || !sameRemoteAuthority(saved, current)) return 'landing-target-changed'
+    if (row.rung === 'pushed-ref') {
+      if (row.payload.remoteHeadSha !== saved.headSha || world.remote?.remoteHeadSha !== saved.headSha) {
+        return world.remote?.problem ?? 'landing-target-changed'
+      }
+    } else {
+      const savedReview = reviewFromLanding(row)
+      if (!savedReview || !isExpectedReview(world.remote?.review) || !sameReview(savedReview, world.remote.review)) {
+        return world.remote?.problem === 'review-identity-mismatch'
+          ? 'landing-target-changed'
+          : world.remote?.problem ?? 'landing-target-changed'
+      }
+    }
+  }
+  return null
+}
+
+function remoteRetryGeneration(journal: ObjectiveJournalEntry[]): number {
+  return journal.filter(entry => entry.kind === 'evidence' && entry.evidenceKind === 'operator-resume').length
+}
+
+function createRemoteAction(
+  kind: 'push-ref' | 'open-hosted-review',
+  attempts: ObjectiveJournalEntry[],
+  journal: ObjectiveJournalEntry[],
+  revision: number,
+  contentIdentity: string,
+  authority: RemoteLandingAuthority,
+  review: ExpectedReview | undefined,
+  expectedState: ObjectiveExpectedState
+): ObjectiveStep {
+  const retryGeneration = remoteRetryGeneration(journal)
+  if (attempts.some(entry =>
+    (entry.action?.kind === 'push-ref' || entry.action?.kind === 'open-hosted-review') && unresolved(entry)
+  )) return { action: null, reason: 'landing-outcome-indeterminate' }
+
+  const sameTargetFailures = attempts.filter(entry => {
+    const action = entry.action
+    if (!action || action.kind !== kind || action.revision !== revision ||
+      action.contentIdentity !== contentIdentity || action.retryGeneration !== retryGeneration ||
+      !isRemoteAuthority(action.authority) || !sameRemoteAuthority(action.authority, authority)) return false
+    if (review === undefined ? action.review !== undefined :
+      !isExpectedReview(action.review) || !sameReview(action.review, review)) return false
+    if (!isObjectiveExpectedState(action.expectedState) || !sameExpectedState(action.expectedState, expectedState)) return false
+    return entry.state === 'settled' && entry.effect === 'not-landed'
+  }).length
+  if (sameTargetFailures >= MAX_REMOTE_ATTEMPTS) {
+    return { action: null, reason: `landing-retry-exhausted:${kind}` }
+  }
+  const ordinal = sameTargetFailures + 1
+  const evidenceKey = remoteActionEvidenceKey(kind, authority, retryGeneration, ordinal, review, expectedState)
+  return {
+    action: {
+      kind, capability: 'land', visibility: 'external', evidenceKey, ordinal, retryGeneration,
+      revision, contentIdentity, authority, expectedState,
+      ...(kind === 'open-hosted-review' && review ? { review } : {})
+    }
+  }
+
+}
+function remoteLandingStep(
+  world: ObjectiveWorld,
+  attempts: ObjectiveJournalEntry[],
+  journal: ObjectiveJournalEntry[],
+  bar: ObjectivePayload['landingBar'],
+  revision: number,
+  contentIdentity: string
+): ObjectiveStep {
+  const observation = world.remote
+  if (!isRemoteAuthority(observation?.authority)) return { action: null, reason: observation?.problem ?? 'push-target-unavailable' }
+  const authority = observation.authority
+  if (observation.problem) return { action: null, reason: observation.problem }
+  const historyProblem = remoteHistoryProblem(world, revision, contentIdentity)
+  if (historyProblem) return { action: null, reason: historyProblem }
+  const committed = (world.landings ?? []).find(row =>
+    row.rung === 'committed-local-branch' && row.contentIdentity === contentIdentity && row.payload.revision === revision
+  )
+  if (!committed || typeof committed.payload.headSha !== 'string' ||
+    committed.payload.headSha.toLowerCase() !== authority.headSha.toLowerCase()) {
+    return { action: null, reason: 'remote-tree-not-committed' }
+  }
+
+
+  const pushed = remoteRows(world).find(row =>
+    row.rung === 'pushed-ref' && row.contentIdentity === contentIdentity && row.payload.revision === revision
+  )
+  if (bar === 'pushed-ref' && pushed) return { action: null, reason: 'objective-bar-reached' }
+
+  if (!pushed) {
+    if ((bar === 'hosted-review' || bar === 'merged') &&
+      (!authority.repository || !authority.headRepository || !authority.baseRefName)) {
+      return { action: null, reason: 'landing-bar-requires-github' }
+    }
+    const expectedState = {
+      target: remoteExpectedStateTarget('push-ref', authority),
+      before: observation.remoteHeadSha
+    }
+    return createRemoteAction('push-ref', attempts, journal, revision, contentIdentity,
+      authority, undefined, expectedState)
+  }
+  if (observation.remoteHeadSha !== authority.headSha) return { action: null, reason: 'landing-target-changed' }
+  if (bar === 'pushed-ref') return { action: null, reason: 'objective-bar-reached' }
+
+  const hosted = remoteRows(world).find(row =>
+    row.rung === 'hosted-review' && row.contentIdentity === contentIdentity && row.payload.revision === revision
+  )
+  if (hosted) {
+    const savedReview = reviewFromLanding(hosted)
+    if (!savedReview || !observation.review || !sameReview(savedReview, observation.review)) {
+      return { action: null, reason: 'landing-target-changed' }
+    }
+    return bar === 'hosted-review'
+      ? { action: null, reason: 'objective-bar-reached' }
+      : { action: null, reason: 'awaiting-sitter-merge' }
+  }
+  if (!authority.repository || !authority.headRepository || !authority.baseRefName) {
+    return { action: null, reason: 'landing-bar-requires-github' }
+  }
+  const expectedState = {
+    target: remoteExpectedStateTarget('open-hosted-review', authority),
+    before: observation.review
+  }
+  return createRemoteAction('open-hosted-review', attempts, journal, revision, contentIdentity,
+    authority, observation.review ?? undefined, expectedState)
+}
+
 export function nextStep(world: ObjectiveWorld, journal: ObjectiveJournalEntry[]): ObjectiveStep {
   const attempts = latestAttempts(journal)
   const identity = currentIdentity(world)
-  if (identity && hasLanding(world, landingBar(world), identity)) {
+  const bar = landingBar(world)
+  const revision = world.revision
+  if (identity && revision && (bar === 'pushed-ref' || bar === 'hosted-review' || bar === 'merged')) {
+    const historyProblem = remoteHistoryProblem(world, revision.number, identity)
+    if (historyProblem) return { action: null, reason: historyProblem }
+  }
+  if (identity && (bar === 'files-on-disk' && hasLanding(world, 'files-on-disk', identity) ||
+    bar === 'committed-local-branch' && hasLanding(world, 'committed-local-branch', identity))) {
     return { action: null, reason: 'objective-bar-reached' }
   }
-
-  const revision = world.revision
+  if (identity && revision && (bar === 'pushed-ref' || bar === 'hosted-review' || bar === 'merged')) {
+    const remoteStep = remoteLandingStep(world, attempts, journal, bar, revision.number, identity)
+    if (remoteStep.reason === 'objective-bar-reached' || remoteStep.reason === 'awaiting-sitter-merge') return remoteStep
+  }
   if (revision === null) return initialPlanStep(world, attempts)
-
   const pendingCommit = pendingCommitAction(attempts, revision.number)
   if (pendingCommit) return { action: pendingCommit }
   const progress = deriveProgress(world, journal)
@@ -1063,7 +1356,6 @@ export function nextStep(world: ObjectiveWorld, journal: ObjectiveJournalEntry[]
   }
 
   if (capability(world, 'land') === 'off') return { action: null, reason: 'land-capability-off' }
-  const bar = landingBar(world)
   if (!hasLanding(world, 'files-on-disk', identity)) {
     return {
       action: {
@@ -1079,33 +1371,38 @@ export function nextStep(world: ObjectiveWorld, journal: ObjectiveJournalEntry[]
   }
 
   if (bar === 'files-on-disk') return { action: null, reason: 'objective-bar-reached' }
-  const branch = world.git?.branch ?? null
-  if (branch === null) return { action: null, reason: 'branch-not-attached' }
-  const headSha = world.git?.headSha ?? null
-  if (headSha === null) return { action: null, reason: 'head-unavailable' }
+  if (!hasLanding(world, 'committed-local-branch', identity)) {
+    const branch = world.git?.branch ?? null
+    if (branch === null) return { action: null, reason: 'branch-not-attached' }
+    const headSha = world.git?.headSha ?? null
+    if (headSha === null) return { action: null, reason: 'head-unavailable' }
 
-  const commits = commitAttempts(attempts, revision.number, identity, branch, headSha)
-  if (commits.some(unresolved)) return { action: null, reason: 'landing-in-flight' }
-  const failedCommitCount = commits.filter((entry) =>
-    entry.state === 'settled' && entry.effect === 'not-landed'
-  ).length
-  if (failedCommitCount >= MAX_ATTEMPTS) {
-    return { action: null, reason: 'landing-retry-exhausted' }
-  }
-  const retrySuffix = failedCommitCount === 0 ? '' : `#retry-${failedCommitCount}`
-  return {
-    action: {
-      kind: 'commit-local-branch',
-      capability: 'land',
-      visibility: 'local',
-      recovery: 'replay-safe',
-      evidenceKey: `committed-local-branch:${identity}:${branch}:${headSha}${retrySuffix}`,
-      revision: revision.number,
-      contentIdentity: identity,
-      branch,
-      headSha
+    const commits = commitAttempts(attempts, revision.number, identity, branch, headSha)
+    if (commits.some(unresolved)) return { action: null, reason: 'landing-in-flight' }
+    const failedCommitCount = commits.filter((entry) =>
+      entry.state === 'settled' && entry.effect === 'not-landed'
+    ).length
+    if (failedCommitCount >= MAX_ATTEMPTS) {
+      return { action: null, reason: 'landing-retry-exhausted' }
+    }
+    const retrySuffix = failedCommitCount === 0 ? '' : `#retry-${failedCommitCount}`
+    return {
+      action: {
+        kind: 'commit-local-branch',
+        capability: 'land',
+        visibility: 'local',
+        recovery: 'replay-safe',
+        evidenceKey: `committed-local-branch:${identity}:${branch}:${headSha}${retrySuffix}`,
+        revision: revision.number,
+        contentIdentity: identity,
+        branch,
+        headSha
+      }
     }
   }
+
+  if (bar === 'committed-local-branch') return { action: null, reason: 'objective-bar-reached' }
+  return remoteLandingStep(world, attempts, journal, bar, revision.number, identity)
 }
 
 export function decideObjective(snapshot: ObjectiveSnapshot, journal: ObjectiveJournalEntry[]): ObjectiveDecision {
@@ -1144,6 +1441,36 @@ function reviewRoleNeedingApproval(
     : 'reviewer'
 }
 
+function sitterHandoff(world: ObjectiveWorld): ObjectiveHandoffRequest | null {
+  const revision = world.revision
+  const contentIdentity = currentIdentity(world)
+  if (!revision || !contentIdentity || !world.worktreeId) return null
+  const landing = remoteRows(world).find(row =>
+    row.rung === 'hosted-review' && row.contentIdentity === contentIdentity && row.payload.revision === revision.number
+  )
+  if (!landing) return null
+  const authority = remoteAuthorityFromRow(landing)
+  const review = reviewFromLanding(landing)
+  if (!authority || !review) return null
+  const merged = world.contract?.landingBar === 'merged'
+  return {
+    kind: 'hosted-review',
+    kindPayload: {
+      worktree: `id:${world.worktreeId}`,
+      expectedReview: review,
+      branchUpdateMode: 'merge-base-update',
+      mergeCheckScope: 'all',
+      mergeMethod: null
+    },
+    capabilities: {
+      updateBranch: 'off',
+      resolveConflicts: 'off',
+      fixChecks: 'off',
+      merge: merged ? 'gated' : 'off'
+    }
+  }
+}
+
 export function stopObjective(
   snapshot: ObjectiveSnapshot,
   journal: ObjectiveJournalEntry[]
@@ -1151,10 +1478,31 @@ export function stopObjective(
   const world = contentIdentityFrom(snapshot)
   const step = nextStep(world, journal)
   if (step.reason === 'objective-bar-reached') {
-    const rung = landingBar(world)
-    return { kind: 'terminal', state: 'landed', reason: `${rung} landing bar reached` }
+    const bar = landingBar(world)
+    if (bar === 'merged') {
+      return park('landing-failed', 'merged-review-not-confirmed', 'A hosted review is not proof that the pinned review merged.')
+    }
+    if (bar === 'hosted-review') {
+      const handoff = sitterHandoff(world)
+      if (!handoff) return park('landing-failed', 'handoff-review-unavailable', 'The confirmed hosted review identity is unavailable for sitter handoff.')
+      return { kind: 'terminal', state: 'landed', reason: 'hosted-review landing bar reached', handoff }
+    }
+    return { kind: 'terminal', state: 'landed', reason: `${bar} landing bar reached` }
   }
+  if (step.reason === 'awaiting-sitter-merge') {
+    const handoff = sitterHandoff(world)
+    if (!handoff) return park('landing-failed', 'handoff-review-unavailable', 'The confirmed hosted review identity is unavailable for sitter handoff.')
+    return { kind: 'terminal', state: 'handed-off', reason: 'hosted-review reached; awaiting merged landing bar', handoff }
+  }
+
   if (step.action !== null) return null
+  if (step.reason?.startsWith('landing-retry-exhausted:')) {
+    const actionKind = step.reason.slice('landing-retry-exhausted:'.length)
+    return park('landing-failed', step.reason, `Remote ${actionKind} failed three times in this retry generation.`)
+  }
+  if (step.reason === 'landing-target-changed') {
+    return park('landing-failed', 'landing-target-changed', 'A published remote target or approved content identity changed.')
+  }
 
   switch (step.reason) {
     case 'planner-retry-exhausted': {

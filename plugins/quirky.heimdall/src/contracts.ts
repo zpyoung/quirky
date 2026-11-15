@@ -8,7 +8,7 @@ export interface OwnerConfig { agent: 'claude'; model?: string; effort?: string 
 export interface BudgetPolicy { wallClockActiveMs: number | null; turns: number | null }
 export interface BudgetUsage { activeMs: number; turns: number; exhausted: 'budget-wall-clock' | 'budget-turns' | null }
 export type PacingTier = 'rapid' | 'active' | 'idle' | 'stopped'
-export type ParkReason = 'budget' | 'stop-predicate' | 'worker-question' | 'worker-escalation' | 'coordinator-seat-lost' | 'configuration-error' | 'owner-escalation'
+export type ParkReason = 'budget' | 'stop-predicate' | 'worker-question' | 'worker-escalation' | 'coordinator-seat-lost' | 'configuration-error' | 'owner-escalation' | `handoff-refused:${string}`
 export interface Snapshot<W = Json> { freshness: 'live' | 'cached'; contentIdentity: string; observedAtMs: number; world: W }
 export interface KernelAction {
   kind: string; capability: string; visibility: 'external' | 'local'
@@ -35,7 +35,16 @@ export interface ExecuteContext {
   enrollment: Enrollment; attemptId: string; fingerprint: string; signal: AbortSignal
   dispatchWorker(request: WorkerRequest): Promise<DispatchResult>
 }
-export type StopResult = { kind: 'terminal'; state: string; reason: string } | { kind: 'park'; reason: ParkReason; detail: string; deviation?: OwnerDeviation } | null
+export interface HandoffRequest {
+  kind: string
+  kindPayload: Json
+  capabilities: Record<string, CapabilityMode>
+}
+export interface HandoffLink { watcherId: string; kind: string }
+export type StopResult =
+  | { kind: 'terminal'; state: string; reason: string; handoff?: HandoffRequest }
+  | { kind: 'park'; reason: ParkReason; detail: string; deviation?: OwnerDeviation }
+  | null
 export interface EnrollmentInput {
   kind: string; kindPayload: Json; capabilities?: Record<string, CapabilityMode>; budget?: BudgetPolicy
   owner?: OwnerConfig | null; ownerInterventionCapability?: CapabilityMode
@@ -58,6 +67,7 @@ export type EnrollmentResult =
 export interface JournalEntry {
   seq: number; eventId: string; watcherId: string; atMs: number
   class: 'fact' | 'observation'; origin: 'owner' | 'client'; kind: string; resolved: boolean
+  handoff?: HandoffLink
   [key: string]: unknown
 }
 export type JournalAppend = Omit<JournalEntry, 'seq' | 'eventId' | 'watcherId' | 'atMs'> & {
@@ -140,8 +150,16 @@ export interface KernelStore {
   remove?(id: string): void
   close(): void
 }
+export type HandoffResult =
+  | { kind: 'handed-off'; enrollment: Enrollment; summary: TerminalSummary; link: HandoffLink }
+  | { kind: 'refused'; reason: string; detail: string }
 export interface EnrollmentService {
   enroll(input: EnrollmentInput): Promise<EnrollmentResult>
+  handoff(
+    source: Pick<Enrollment, 'watcherId' | 'commandRevision'>,
+    result: Extract<StopResult, { kind: 'terminal' }>,
+    guard: () => string | null
+  ): Promise<HandoffResult>
 }
 export interface WorkerMessage { id: string; type: 'worker_done' | 'question' | 'escalation' | string; dispatchId?: string; body: string; resolved?: boolean; outcome?: 'succeeded' | 'failed'; raw?: Json }
 export interface KernelWorkerObservation {
@@ -178,7 +196,11 @@ export interface KernelOptions {
   onChanged?: (watcherId: string) => void
   owner?: OwnerKernelPort
 }
-export interface RunnerOptions extends KernelOptions { enrollment: Enrollment }
+export interface RunnerOptions extends KernelOptions {
+  enrollment: Enrollment
+  handoff?: EnrollmentService['handoff']
+  onHandoffCommitted?: (enrollment: Enrollment) => void
+}
 export interface Inspection {
   readOnly: boolean; enrollment: Enrollment; status: RunnerStatus | null
   journal: JournalEntry[]; traces: TickTrace[]; summary: TerminalSummary | null; budget: BudgetUsage
