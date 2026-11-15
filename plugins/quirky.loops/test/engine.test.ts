@@ -559,8 +559,7 @@ async function assertJournalFailureRetainsLoopCursor(response: unknown): Promise
   let settledBeforeWatch = false
   let postSendReadBeforeWatch = false
   let failureArmed = false
-  let recoveryReadGate: HeldJournalRead | null = null
-  let storedCursorBeforeFailure: number | undefined
+  const recovery: { gate?: HeldJournalRead; cursor?: number } = {}
   const engine = spyOnSupervisionEngine(
     (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => {
       if (sample.session.ok && sample.session.value.status === 'done') {
@@ -577,9 +576,9 @@ async function assertJournalFailureRetainsLoopCursor(response: unknown): Promise
         (call, index) => index > sendIndex && call.method === 'quirky.structured/messages'
       )
       busyBeforeSettledEdge = runtime.sessions.get(sessionId)?.status === 'working'
-      storedCursorBeforeFailure = runtime.storedJournalCursor(created.id)
+      recovery.cursor = runtime.storedJournalCursor(created.id)
       runtime.failedJournalResponsesAfterSend.push(response)
-      recoveryReadGate = runtime.holdJournalReadAfterFailure()
+      recovery.gate = runtime.holdJournalReadAfterFailure()
       runtime.respond(sessionId, 'settled after journal recovery')
       settledBeforeWatch = true
     }
@@ -590,8 +589,11 @@ async function assertJournalFailureRetainsLoopCursor(response: unknown): Promise
 
   try {
     const { sample: failedSample, decision: failedDecision } = await failedWatchSample.promise
-    const heldRead = recoveryReadGate
-    if (heldRead === null) throw new Error('the watch did not arm the recovery journal gate')
+    const heldRead = recovery.gate
+    const storedCursorBeforeFailure = recovery.cursor
+    if (heldRead === undefined || storedCursorBeforeFailure === undefined) {
+      throw new Error('the watch did not capture the recovery journal baseline')
+    }
 
     expect(engine.calls.some(({ method }) => method === 'watchStructured')).toBe(true)
     expect(postSendReadBeforeWatch).toBe(true)
@@ -619,7 +621,7 @@ async function assertJournalFailureRetainsLoopCursor(response: unknown): Promise
     await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
     expect(loops.iterations(created.id)).toMatchObject([{ endReason: 'settled' }])
   } finally {
-    recoveryReadGate?.release()
+    recovery.gate?.release()
   }
 }
 
