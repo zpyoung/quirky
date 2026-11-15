@@ -4,7 +4,7 @@ import { groupOf } from '../../packages/cli/src/generated'
 import { cliGroupWord, effectiveCliWords } from '../../packages/daemon/src/plugins/kinds'
 import type { ActionEntry, Candidate, CheckResult, CoverageFile, Evidence, Inventory, PluginInventory, Ref, Render, StateKind } from './contracts'
 import { discoverCandidates, discoverUiFiles } from './audit-discovery'
-import { parseCoverage, resolveRef, resolveTarget, resolveVia, selectCandidate, type ResolvedRef } from './audit-evidence'
+import { createEvidenceResolver, parseCoverage, resolveVia, selectCandidate, type ResolvedRef } from './audit-evidence'
 
 const IDS = ['loading', 'empty', 'error', 'commands'] as const
 const STATE_IDS: readonly StateKind[] = ['loading', 'empty', 'error']
@@ -165,6 +165,124 @@ function forwarded(node: ts.Node | undefined, spread: boolean): boolean {
   return ts.isCallExpression(body) && /^on[A-Z]/.test(lastName(body.expression) ?? '')
 }
 
+const BARRIER_INVALID_MESSAGE = 'A barrier must be a jsx handler that only calls stopPropagation() and preventDefault() on its event parameter'
+type BarrierFunction = ts.ArrowFunction | ts.FunctionExpression | ts.FunctionDeclaration
+
+function namedDeclaration(node: ts.Node): ts.Node | undefined {
+  if (
+    ts.isVariableDeclaration(node) || ts.isParameter(node) || ts.isBindingElement(node) ||
+    ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isClassDeclaration(node) || ts.isClassExpression(node) ||
+    ts.isEnumDeclaration(node) || ts.isModuleDeclaration(node) || ts.isInterfaceDeclaration(node) ||
+    ts.isTypeAliasDeclaration(node) || ts.isTypeParameterDeclaration(node) || ts.isImportClause(node) ||
+    ts.isImportSpecifier(node) || ts.isNamespaceImport(node) || ts.isImportEqualsDeclaration(node)
+  ) return node.name
+  return undefined
+}
+
+function collectBinding(binding: ts.Node, owner: ts.Node, name: string, seen: Set<ts.Identifier>, matches: ts.Node[]) {
+  if (ts.isIdentifier(binding)) {
+    if (binding.text === name && !seen.has(binding)) {
+      seen.add(binding)
+      matches.push(owner)
+    }
+    return
+  }
+  if (!ts.isObjectBindingPattern(binding) && !ts.isArrayBindingPattern(binding)) return
+  for (const element of binding.elements) if (ts.isBindingElement(element)) collectBinding(element.name, owner, name, seen, matches)
+}
+
+function declarationsNamed(source: ts.SourceFile, name: string): ts.Node[] {
+  const matches: ts.Node[] = []
+  const seen = new Set<ts.Identifier>()
+  const visit = (node: ts.Node) => {
+    const binding = namedDeclaration(node)
+    if (binding) collectBinding(binding, node, name, seen, matches)
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return matches
+}
+
+function resolveBarrierFunction(handler: ts.Node | undefined, source: ts.SourceFile): { fn: BarrierFunction; name?: string } | undefined {
+  if (!handler) return undefined
+  const expression = unwrap(handler)
+  if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) return { fn: expression }
+  if (!ts.isIdentifier(expression)) return undefined
+
+  const declarations = declarationsNamed(source, expression.text)
+  if (declarations.length !== 1) return undefined
+  const declaration = declarations[0]!
+  let scope = declaration.parent
+  if (ts.isVariableDeclaration(declaration)) {
+    const statement = declaration.parent.parent
+    if (!ts.isVariableStatement(statement)) return undefined
+    scope = statement.parent
+  }
+  if ((!ts.isSourceFile(scope) && !ts.isBlock(scope) && !ts.isModuleBlock(scope)) || !contains(scope, expression)) return undefined
+  if (ts.isFunctionDeclaration(declaration) && declaration.body) return { fn: declaration, name: expression.text }
+  if (!ts.isVariableDeclaration(declaration) || !ts.isIdentifier(declaration.name) || !declaration.initializer) return undefined
+  if (!ts.isVariableDeclarationList(declaration.parent) || !(declaration.parent.flags & ts.NodeFlags.Const)) return undefined
+  const initializer = unwrap(declaration.initializer)
+  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) return { fn: initializer, name: expression.text }
+  return undefined
+}
+
+function assignmentTargets(node: ts.Node, name: string): boolean {
+  node = unwrap(node)
+  if (ts.isIdentifier(node)) return node.text === name
+  if (ts.isSpreadElement(node)) return assignmentTargets(node.expression, name)
+  if (ts.isArrayLiteralExpression(node)) return node.elements.some((element) => assignmentTargets(element, name))
+  if (!ts.isObjectLiteralExpression(node)) return false
+  return node.properties.some((property) => {
+    if (ts.isShorthandPropertyAssignment(property)) return property.name.text === name
+    if (ts.isPropertyAssignment(property)) return assignmentTargets(property.initializer, name)
+    if (ts.isSpreadAssignment(property)) return assignmentTargets(property.expression, name)
+    return false
+  })
+}
+
+function isReassigned(source: ts.SourceFile, name: string): boolean {
+  let reassigned = false
+  const visit = (node: ts.Node) => {
+    if (reassigned) return
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && node.operatorToken.kind <= ts.SyntaxKind.LastAssignment && assignmentTargets(node.left, name)) reassigned = true
+    else if ((ts.isPrefixUnaryExpression(node) || ts.isPostfixUnaryExpression(node)) &&
+      (node.operator === ts.SyntaxKind.PlusPlusToken || node.operator === ts.SyntaxKind.MinusMinusToken) && assignmentTargets(node.operand, name)) reassigned = true
+    else if ((ts.isForInStatement(node) || ts.isForOfStatement(node)) && assignmentTargets(node.initializer, name)) reassigned = true
+    if (!reassigned) ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return reassigned
+}
+
+function isBarrier(handler: ts.Node | undefined, source: ts.SourceFile): boolean {
+  const resolved = resolveBarrierFunction(handler, source)
+  if (!resolved || (resolved.name !== undefined && isReassigned(source, resolved.name))) return false
+  const fn = resolved.fn
+  if (ts.getModifiers(fn)?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)) return false
+  if ((ts.isFunctionDeclaration(fn) || ts.isFunctionExpression(fn)) && fn.asteriskToken) return false
+  if (!fn.body || fn.parameters.length !== 1) return false
+
+  const parameter = fn.parameters[0]!
+  if (!ts.isIdentifier(parameter.name) || parameter.initializer || parameter.dotDotDotToken || parameter.questionToken) return false
+  const parameterName = parameter.name.text
+
+  let stopsPropagation = false
+  const acceptsCall = (call: ts.CallExpression) => {
+    if (call.arguments.length || call.typeArguments?.length || call.questionDotToken || !ts.isPropertyAccessExpression(call.expression)) return false
+    const property = call.expression
+    if (property.questionDotToken || !ts.isIdentifier(property.expression) || property.expression.text !== parameterName) return false
+    if (property.name.text === 'stopPropagation') { stopsPropagation = true; return true }
+    return property.name.text === 'preventDefault'
+  }
+  if (ts.isBlock(fn.body)) {
+    if (!fn.body.statements.length || !fn.body.statements.every((statement) =>
+      ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression) && acceptsCall(statement.expression))) return false
+  } else if (!ts.isCallExpression(fn.body) || !acceptsCall(fn.body)) return false
+  return stopsPropagation
+}
+
+
 function publicRoute(inventory: Inventory, target: string, operation: string, at: ResolvedRef): RouteResult {
   const cliFor = (api: string, suffix = ''): RouteResult => {
     const command = COMMANDS.find((command) => command.methods.includes(api))
@@ -209,6 +327,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
   })
   try {
     const graph = discoverUiFiles(plugin)
+    const resolver = createEvidenceResolver(plugin, graph.files)
     for (const failure of graph.failures) add(IDS, { ...failure, basis: 'source-audit' })
     const candidates = discoverCandidates(plugin, graph.files)
     const sources = new Map(graph.files.map((file) => {
@@ -229,7 +348,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       owners.set(candidate, previous)
     }
     const resolve = (reference: Ref, ids: readonly AuditId[]) => {
-      const resolved = resolveRef(plugin, graph.files, reference)
+      const resolved = resolver.resolveRef(reference)
       if ('code' in resolved) { add(ids, resolved); return undefined }
       return resolved
     }
@@ -267,7 +386,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
       const accepted = entry.state === 'loading' ? ['EmptyState', 'NoticeLine'] : entry.state === 'empty' ? ['EmptyState'] : ['InlineError', 'FormRow', 'toast']
       if (!accepted.includes(value.component)) add(ids, issue('render-not-accepted', `${value.component} is not accepted for ${entry.state}`))
       const renderRef = value.component === 'toast' ? value.call : value.element
-      const resolvedRender = resolveRef(plugin, graph.files, renderRef)
+      const resolvedRender = resolver.resolveRef(renderRef)
       if ('code' in resolvedRender) add(ids, resolvedRender)
       const reference = 'code' in resolvedRender ? undefined : resolvedRender
       const importRef = value.component === 'toast' ? undefined : resolve(value.import, ids)
@@ -337,10 +456,10 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
         let target: string | undefined
         if (ts.isCallExpression(expression)) {
           operation = lastName(expression.expression)
-          target = operation === 'closeView' ? 'ui.view.close' : expression.arguments[0] && resolveTarget(plugin, graph.files, invoke.source, expression.arguments[0])
+          target = operation === 'closeView' ? 'ui.view.close' : expression.arguments[0] && resolver.resolveTarget(invoke.source, expression.arguments[0])
         } else if (ts.isPropertyAssignment(expression)) {
           operation = 'command'
-          target = resolveTarget(plugin, graph.files, invoke.source, expression.initializer)
+          target = resolver.resolveTarget(invoke.source, expression.initializer)
         }
         if (!['call', 'executeCommand', 'openView', 'closeView', 'togglePanel', 'command'].includes(operation ?? '')) { add(ids, issue('route-no-cli', 'This operation has no public CLI route', invoke)); return }
         if (target === undefined) { add(ids, issue('route-target-unresolved', 'The route target is not a literal or one-hop constant', invoke)); return }
@@ -356,7 +475,10 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
         const event = name.replace(/^on/i, '').toLowerCase()
         const kind = 'transient' in entry ? entry.transient : entry.notAction
         const unresolved = candidate.kind.startsWith('unresolved-')
-        if (kind === 'forwarded') {
+        if (kind === 'barrier') {
+          if (candidate.kind !== 'jsx-handler' || !isBarrier(actionHandler(node), sources.get(candidate.file)!)) add(ids, issue('barrier-invalid', BARRIER_INVALID_MESSAGE, located))
+          else add(ids, issue('action-not-user', entry.reason, located))
+        } else if (kind === 'forwarded') {
           if (!forwarded(actionHandler(node), candidate.kind === 'unresolved-spread')) add(ids, issue('forwarded-invalid', 'Forwarding must be a handler reference, one forwarding call, or a props spread', located))
           else add(ids, issue('action-not-user', entry.reason, located))
         } else if (unresolved || DECISIVE[event] || (kind === 'lifecycle' && !LIFECYCLE[event]) || (kind === 'subscription' && !['handler-property', 'event-listener', 'handler-assignment'].includes(candidate.kind))) {
