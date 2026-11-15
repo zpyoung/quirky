@@ -1103,3 +1103,54 @@ test('pending CSV metadata does not advertise or deliver unavailable mutations',
     await act(async () => metadata.resolve({ paged: false, rows: 2, columns: 2 }))
   }
 })
+
+test('CSV can edit a previously applied value after paste changes the same cell', async () => {
+  let value = '1'
+  const calls: Record<string, unknown>[] = []
+  const fixture = makeFixture(async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'metadata') return { paged: false, rows: 2, columns: 2 }
+    if (params.action === 'page') return { rows: [{ index: 0, cells: ['name', 'value'] }, { index: 1, cells: ['alpha', value] }], nextPage: null }
+    if (params.action === 'edit') value = String(params.value)
+    if (params.action === 'paste') value = String(params.text)
+    return {}
+  })
+  const surface = await mountViewer(fixture, makeBuffer('csv'))
+  await flush()
+  expect(await routed(fixture, 'edit', { row: 1, column: 1, value: '2' })).toEqual({ delivered: true })
+  expect(value).toBe('2')
+  expect(await routed(fixture, 'paste', { row: 1, column: 1, text: '3' })).toEqual({ delivered: true })
+  expect(value).toBe('3')
+  expect(surface.element.querySelector<HTMLInputElement>('[aria-label="Row 2, column 2"]')?.value).toBe('3')
+  expect(await routed(fixture, 'edit', { row: 1, column: 1, value: '2' })).toEqual({ delivered: true })
+  expect(value).toBe('2')
+  expect(surface.element.querySelector<HTMLInputElement>('[aria-label="Row 2, column 2"]')?.value).toBe('2')
+  expect(calls.filter(({ action }) => action === 'edit')).toEqual([
+    { bufferId: 'b1', action: 'edit', row: 1, column: 1, value: '2' },
+    { bufferId: 'b1', action: 'edit', row: 1, column: 1, value: '2' }
+  ])
+})
+
+test('CSV can edit a reindexed row to a value applied at its previous coordinate', async () => {
+  let rows = [{ index: 0, cells: ['name', 'value'] }, { index: 1, cells: ['alpha', '1'] }, { index: 2, cells: ['beta', '3'] }]
+  const calls: Record<string, unknown>[] = []
+  const fixture = makeFixture(async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'metadata') return { paged: false, rows: rows.length, columns: 2 }
+    if (params.action === 'page') return { rows: structuredClone(rows), nextPage: null }
+    if (params.action === 'edit') rows[Number(params.row)]!.cells[Number(params.column)] = String(params.value)
+    if (params.action === 'deleteRow') rows = rows.filter(({ index }) => index !== params.row).map((row, index) => ({ ...row, index }))
+    return {}
+  })
+  const surface = await mountViewer(fixture, makeBuffer('csv'))
+  await flush()
+  expect(await routed(fixture, 'edit', { row: 1, column: 1, value: '2' })).toEqual({ delivered: true })
+  const previous = surface.report().uiControls!.find(({ target }) => target.startsWith('csv:'))!
+  expect(await routed(fixture, 'delete-row', { row: 1 })).toEqual({ delivered: true })
+  expect(surface.report().uiControls!.find(({ target }) => target === previous.target)?.generation).not.toBe(previous.generation)
+  expect(rows[1]!.cells).toEqual(['beta', '3'])
+  expect(await routed(fixture, 'edit', { row: 1, column: 1, value: '2' })).toEqual({ delivered: true })
+  expect(rows[1]!.cells).toEqual(['beta', '2'])
+  expect(surface.element.querySelector<HTMLInputElement>('[aria-label="Row 2, column 2"]')?.value).toBe('2')
+  expect(calls.filter(({ action }) => action === 'edit')).toHaveLength(2)
+})

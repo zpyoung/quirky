@@ -176,14 +176,12 @@ function CsvSurface({
   const filterSequence = useRef(0)
   const draftRef = useRef<Record<string, string>>({})
   const committedCells = useRef(new Map<string, Promise<void>>())
-  const appliedCells = useRef(new Map<string, string>())
   const previousSession = useRef(sessionKey)
   if (previousSession.current !== sessionKey) {
     previousSession.current = sessionKey
     readSequence.current += 1
     filterSequence.current += 1
     committedCells.current.clear()
-    appliedCells.current.clear()
   }
   const [metadata, setMetadata] = useState<ViewerMetadata | null>(null)
   const metadataRef = useRef<ViewerMetadata | null>(null)
@@ -305,18 +303,10 @@ function CsvSurface({
     const pending = committedCells.current.get(key)
     if (pending) return pending
     const currentRow = rows.find((item) => item.index === row)
-    if (appliedCells.current.get(key) === value || !Object.hasOwn(draftRef.current, key) && currentRow?.cells[column] === value) {
-      if (draftRef.current[key] === value) {
-        const next = { ...draftRef.current }
-        delete next[key]
-        updateDrafts(next)
-      }
-      return
-    }
+    if (!Object.hasOwn(draftRef.current, key) && currentRow?.cells[column] === value) return
     const operation = (async () => {
       await call(props, 'edit', { row, column, value })
       if (!isSessionCurrent()) return
-      appliedCells.current.set(key, value)
       if (draftRef.current[key] === value) {
         const next = { ...draftRef.current }
         delete next[key]
