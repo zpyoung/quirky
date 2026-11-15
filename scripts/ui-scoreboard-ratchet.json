@@ -3,6 +3,7 @@
   "quirky.tasks": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.accounts": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.browser": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.editor": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.feedback": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.handoff": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.heimdall": ["commands", "compatibility-tokens", "empty", "error", "loading"],
