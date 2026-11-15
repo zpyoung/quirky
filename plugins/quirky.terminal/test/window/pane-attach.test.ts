@@ -310,10 +310,12 @@ describe('attach, replay and input', () => {
     expect(fake.streams.has(9)).toBe(false)
   })
 
-  test('a failed attach writes the reason into the pane', async () => {
+  test('a failed attach shows a shared error without adding synthetic terminal output', async () => {
     const { pane } = await mount({}, paneHandlers({}, { 'quirky.terminal/attach': () => Promise.reject(new Error('no such session')) }))
     await pane.flush()
-    expect(pane.term().buffer.active.getLine(1)!.translateToString(true)).toContain('Could not attach: no such session')
+    expect(pane.element.querySelector('[data-terminal-connection-state] .ui-inline-error')?.textContent).toBe('Could not attach: no such session')
+    expect(pane.element.querySelector('[data-terminal-connection-state] .ui-notice-line')).toBeNull()
+    expect(terminalText(pane)).not.toContain('Could not attach: no such session')
   })
 
   test('unmounting detaches the stream and stops listening to it', async () => {
@@ -549,7 +551,8 @@ describe('output loss recovery', () => {
     await flushWithClock(pane)
 
     expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
-    expect(terminalText(pane)).toContain('Could not attach: attach unavailable')
+    expect(pane.element.querySelector('[data-terminal-connection-state] .ui-inline-error')?.textContent).toBe('Could not attach: attach unavailable')
+    expect(terminalText(pane)).not.toContain('Could not attach: attach unavailable')
     expect(fake.streams.has(101)).toBe(false)
   })
   test('detaches an ended replacement stream after replaying its final screen', async () => {
@@ -587,7 +590,8 @@ describe('output loss recovery', () => {
     expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toContain(101)
     restoreClock?.()
     await pane.flush()
-    expect(terminalText(pane)).toContain('Could not resync: host busy')
+    expect(pane.element.querySelector('[data-terminal-connection-state] .ui-inline-error')?.textContent).toBe('Could not resync: host busy')
+    expect(terminalText(pane)).not.toContain('Could not resync: host busy')
   })
 
   test('cancels a pending resync timer when the pane is disposed', async () => {
