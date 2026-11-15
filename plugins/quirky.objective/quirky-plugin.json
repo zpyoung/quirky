@@ -43,8 +43,7 @@
       },
       {
         "id": "resolveOutcome",
-        "description": "Heimdall-only recovery of persisted local objective outcomes.",
-        "readOnly": true,
+        "description": "Heimdall-only recovery of local and remote objective outcomes.",
         "params": { "type": "object", "additionalProperties": true },
         "result": {}
       },

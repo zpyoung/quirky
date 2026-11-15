@@ -131,13 +131,26 @@ function isSubmissionVerdict(value: unknown): value is OrchestrationSubmissionVe
     typeof value.reason === 'string' && value.reason.length > 0 &&
     Object.keys(value).every((key) => key === 'kind' || key === 'code' || key === 'reason')
 }
+function isHandoffRequest(value: unknown): boolean {
+  if (!record(value) || !isJsonValue(value) ||
+    Object.keys(value).some((key) => key !== 'kind' && key !== 'kindPayload' && key !== 'capabilities') ||
+    typeof value.kind !== 'string' || value.kind.length === 0 ||
+    !Object.hasOwn(value, 'kindPayload') ||
+    !record(value.capabilities) ||
+    Object.entries(value.capabilities).some(([name, mode]) => name.length === 0 || !isCapabilityMode(mode))) return false
+  return true
+}
 
 function isStopResult(value: unknown): value is StopResult {
   if (value === null) return true
   if (!record(value) || !isJsonValue(value)) return false
-  if (value.kind === 'terminal') return typeof value.state === 'string' && typeof value.reason === 'string'
+  if (value.kind === 'terminal') {
+    return typeof value.state === 'string' && typeof value.reason === 'string' &&
+      (!Object.hasOwn(value, 'handoff') || isHandoffRequest(value.handoff))
+  }
   return value.kind === 'park' && typeof value.reason === 'string' &&
-    ['budget', 'stop-predicate', 'worker-question', 'worker-escalation', 'coordinator-seat-lost', 'configuration-error'].includes(value.reason) &&
+    (['budget', 'stop-predicate', 'worker-question', 'worker-escalation', 'coordinator-seat-lost', 'configuration-error'].includes(value.reason) ||
+      (value.reason.startsWith('handoff-refused:') && value.reason.length > 'handoff-refused:'.length)) &&
     typeof value.detail === 'string' && isDeviation(value.deviation)
 }
 
