@@ -478,7 +478,8 @@ test('B7: composer command and submit share one draft-gated mutation and preserv
   await act(async () => { expect(await invoke(ui, 'comment-composer', 'comment-send')).toEqual({ delivered: false, reason: 'disabled' }) })
   expect(callCount(ui, 'quirky.reviews/detailPostComment')).toBe(1)
   expect(ui.calls.find((call) => call.method === 'quirky.reviews/detailPostComment')?.params).toMatchObject({ surface: 'detail', worktree: WORKTREE, number: 12, body: 'hello', prRepo: REPO })
-  await act(async () => { write.reject(new Error('post fixture failed')); await expect(posting).rejects.toThrow('post fixture failed') })
+  await act(async () => { expect(await posting).toEqual({ delivered: true, result: { accepted: true } }); write.reject(new Error('post fixture failed')) })
+  await settle()
   expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('post fixture failed')
   expect(ui.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add a comment"]')?.value).toBe('hello')
 })
@@ -541,7 +542,8 @@ test('B8: confirmation reserves exclusion and cancel or rejection releases it', 
   expect(callCount(ui, 'quirky.reviews/detailDeleteComment')).toBe(0)
   const rejection = ui.holdConfirmation()
   await act(async () => { deleting = invoke(ui, 'comments', 'comment-delete', { comment: { kind: 'issue_comment', id: 42 } }); await Promise.resolve() })
-  await act(async () => { rejection.reject(new Error('confirm fixture failed')); await expect(deleting).rejects.toThrow('confirm fixture failed') })
+  await act(async () => { expect(await deleting).toEqual({ delivered: true, result: { accepted: true } }); rejection.reject(new Error('confirm fixture failed')) })
+  await settle()
   expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('confirm fixture failed')
   await act(async () => { await invoke(ui, 'comments', 'comment-delete', { comment: { kind: 'issue_comment', id: 42 } }) })
 })
@@ -824,7 +826,9 @@ test('B4: permission is rechecked after awaiting the body draft', async () => {
   await act(async () => { saving = invoke(ui, 'review-body', 'body-save'); await Promise.resolve() })
   const readonly = structuredClone(state); readonly.detail.details = { item: { viewerCanUpdate: false } }
   ui.render(readonly)
-  await act(async () => { draft.resolve({ applied: true }); await expect(saving).rejects.toThrow('no longer edit') })
+  await act(async () => { expect(await saving).toEqual({ delivered: true, result: { accepted: true } }); draft.resolve({ applied: true }) })
+  await settle()
+  expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('no longer edit')
   expect(callCount(ui, 'quirky.reviews/detailUpdateBody')).toBe(0)
   expect(ui.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Pull request description"]')?.value).toBe('held permission draft')
 })
@@ -888,7 +892,214 @@ test('B8: a scripted edit body stages into the current form and survives a faile
   let saving!: Promise<unknown>
   await act(async () => { saving = invoke(ui, 'comment-edit', 'edit-save', { body: 'scripted edit retained' }); await Promise.resolve() })
   expect(callCount(ui, 'quirky.reviews/detailEditComment')).toBe(1)
-  await act(async () => { write.reject(new Error('edit fixture failed')); await expect(saving).rejects.toThrow('edit fixture failed') })
+  await act(async () => { expect(await saving).toEqual({ delivered: true, result: { accepted: true } }); write.reject(new Error('edit fixture failed')) })
+  await settle()
   expect(ui.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit comment #42"]')?.value).toBe('scripted edit retained')
   expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('edit fixture failed')
+})
+
+function deadlineBridge(ui: Mounted) {
+  const original = ui.context.call.bind(ui.context)
+  const deadlines = new Set<Deferred<never>>()
+  ui.context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+    if (method !== 'ui.window.command.run') return original(method, params)
+    ui.calls.push({ method, params })
+    const handler = ui.provided(String(params.id))
+    if (typeof handler !== 'function') throw new Error('Missing actual activated command handler.')
+    const deadline = deferred<never>()
+    deadlines.add(deadline)
+    try {
+      return { result: await Promise.race([Promise.resolve(handler(params.args)), deadline.promise]) }
+    } finally { deadlines.delete(deadline) }
+  }) as UiPluginContext['call']
+  return {
+    pendingReplies: () => deadlines.size,
+    expire() { for (const deadline of deadlines) deadline.reject(new Error('the window did not answer')) },
+  }
+}
+
+for (const outcome of ['cancel', 'confirm', 'reject', 'replacement'] as const) {
+  test(`Rework: held Delete ${outcome} is acknowledged before the window deadline`, async () => {
+    const state = withComments(); state.detail.commentDraft = 'hello'
+    const ui = mountComments('detail', state)
+    const confirmation = ui.holdConfirmation()
+    const bridge = deadlineBridge(ui)
+    await click(button(ui.element, 'Delete'))
+    await settle()
+    const pendingReplies = bridge.pendingReplies()
+    await act(async () => bridge.expire())
+    await settle()
+    expect(pendingReplies).toBe(0)
+    expect(ui.element.textContent).not.toContain('the window did not answer')
+    expect(button(ui.element, 'Delete').disabled).toBe(true)
+    expect(button(ui.element, 'Send comment').disabled).toBe(true)
+    expect(callCount(ui, 'quirky.reviews/detailDeleteComment')).toBe(0)
+    if (outcome === 'replacement') ui.render(changedOwner(state, 'number'))
+    await act(async () => {
+      if (outcome === 'reject') confirmation.reject(new Error('owned confirmation failed'))
+      else confirmation.resolve(outcome !== 'cancel')
+    })
+    await settle()
+    expect(callCount(ui, 'quirky.reviews/detailDeleteComment')).toBe(outcome === 'confirm' ? 1 : 0)
+    expect(ui.element.textContent).not.toContain('the window did not answer')
+    if (outcome === 'reject') expect(ui.element.querySelector('.ui-inline-error')?.textContent).toContain('owned confirmation failed')
+    expect(button(ui.element, 'Delete').disabled).toBe(false)
+  })
+}
+
+const slowControls: Array<{
+  slot: string; action: string; method: string; value?: Record<string, unknown>; success?: unknown
+}> = [
+  { slot: 'comment-composer', action: 'comment-send', method: 'quirky.reviews/detailPostComment' },
+  { slot: 'comment-edit', action: 'edit-save', method: 'quirky.reviews/detailEditComment', value: { body: 'slow edit' } },
+  { slot: 'comments', action: 'queue-set', method: 'quirky.reviews/detailQueueComment', value: { comment: { kind: 'issue_comment', id: 42 }, queued: true } },
+  { slot: 'comments', action: 'comments-retry', method: 'quirky.reviews/detailRefresh' },
+  { slot: 'review-page', action: 'refresh', method: 'quirky.reviews/detailRefresh' },
+  { slot: 'review-page', action: 'tab-set', method: 'quirky.reviews/detailSetTab', value: { tab: 'checks' } },
+  { slot: 'review-page', action: 'workspace-start', method: 'quirky.tasks/workspace', success: { kind: 'composer' } },
+  { slot: 'review-page', action: 'open-link', method: 'quirky.reviews/openLink' },
+  { slot: 'review-body', action: 'body-save', method: 'quirky.reviews/detailUpdateBody' },
+  { slot: 'assignee-form', action: 'assignees-save', method: 'quirky.reviews/detailUpdateAssignees', value: { logins: [] } },
+  { slot: 'reviewer-form', action: 'reviewers-add', method: 'quirky.reviews/detailUpdateReviewers', value: { text: 'alice' } },
+]
+
+for (const scenario of slowControls) for (const outcome of ['success', 'failure'] as const) {
+  test(`Rework: slow ${scenario.action} ${outcome} has prompt delivery and owned completion`, async () => {
+    const state = withComments(); state.detail.commentDraft = 'hello'
+    const ui = scenario.slot.startsWith('comment') ? mountComments('detail', state) : mountPage(state)
+    await settle()
+    if (scenario.slot === 'comment-edit') await act(async () => { await invoke(ui, 'comments', 'edit-open', { comment: { kind: 'issue_comment', id: 42 } }) })
+    if (scenario.slot === 'review-body') await act(async () => { await invoke(ui, 'review-page', 'body-open') })
+    if (scenario.slot === 'assignee-form') await act(async () => { await invoke(ui, 'assignments', 'assignees-open') })
+    if (scenario.slot === 'reviewer-form') await act(async () => { await invoke(ui, 'assignments', 'reviewers-open') })
+    const provider = ui.holdNext(scenario.method)
+    const bridge = deadlineBridge(ui)
+    const descriptor = control(ui, scenario.slot)
+    let delivery!: Promise<ReviewsUiControlResult>
+    await act(async () => {
+      delivery = requestReviewsUiControl(ui.context, {
+        target: descriptor.target, generation: descriptor.generation, action: scenario.action,
+        ...(scenario.value === undefined ? {} : { value: scenario.value }),
+      })
+      void delivery.catch(() => {})
+      await Promise.resolve()
+    })
+    await settle()
+    const pendingReplies = bridge.pendingReplies()
+    await act(async () => bridge.expire())
+    await settle()
+    expect(pendingReplies).toBe(0)
+    expect(await delivery).toEqual({ delivered: true, result: { accepted: true } })
+    expect(callCount(ui, scenario.method)).toBeGreaterThanOrEqual(1)
+    expect(ui.element.textContent).not.toContain('the window did not answer')
+    await act(async () => {
+      if (outcome === 'failure') provider.reject(new Error(`owned ${scenario.action} failed`))
+      else provider.resolve(scenario.success ?? {})
+    })
+    await settle()
+    if (outcome === 'failure') {
+      expect([...ui.element.querySelectorAll('.ui-inline-error')].some((element) => element.textContent?.includes(`owned ${scenario.action} failed`))).toBe(true)
+    } else {
+      expect(ui.element.textContent).not.toContain(`owned ${scenario.action} failed`)
+      if (scenario.action === 'comment-send') expect(ui.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add a comment"]')?.value).toBe('')
+      if (scenario.action === 'edit-save') expect(ui.element.querySelector('textarea[aria-label="Edit comment #42"]')).toBeNull()
+      if (scenario.action === 'body-save') expect(ui.element.querySelector('textarea[aria-label="Pull request description"]')).toBeNull()
+      if (scenario.action === 'assignees-save') expect(listReviewsUiControls(ui.context, 'view:quirky.reviews/review').some((entry) => entry.slot === 'assignee-form')).toBe(false)
+    }
+  })
+}
+
+test('Rework: deadline admission preserves malformed and disabled refusals', async () => {
+  const ui = mountComments('detail', withComments())
+  const bridge = deadlineBridge(ui)
+  await act(async () => { await expect(invoke(ui, 'comments', 'comment-delete', { comment: { kind: 'issue_comment', id: 999 } })).rejects.toThrow() })
+  await act(async () => { expect(await invoke(ui, 'comment-composer', 'comment-send')).toEqual({ delivered: false, reason: 'disabled' }) })
+  expect(bridge.pendingReplies()).toBe(0)
+  expect(callCount(ui, 'quirky.reviews/detailDeleteComment')).toBe(0)
+  expect(callCount(ui, 'quirky.reviews/detailPostComment')).toBe(0)
+})
+
+for (const surface of ['detail', 'checks'] as const) {
+  test(`Rework: ${surface} comment states retain shared rendering and polite announcements`, async () => {
+    const ui = mountComments(surface, stateFor({ detailComments: null, checksComments: null, detailLoading: true, checksLoading: true }))
+    const loading = ui.element.querySelector('.ui-notice-line')
+    expect(loading?.textContent).toContain('Loading comments…')
+    expect(loading?.closest('[role="status"], [aria-live="polite"]')).not.toBeNull()
+    ui.render(stateFor({ detailComments: null, checksComments: null }))
+    const idle = ui.element.querySelector('.ui-empty-state')
+    expect(idle?.textContent).toContain('Comments have not been loaded yet.')
+    expect(idle?.closest('[role="status"], [aria-live="polite"]')).not.toBeNull()
+    for (const audience of ['all', 'humans', 'bots'] as const) for (const grouping of ['grouped', 'timeline'] as const) {
+      ui.render(stateFor({ detailAudience: audience, checksAudience: audience, detailGrouping: grouping, checksGrouping: grouping }))
+      const empty = ui.element.querySelector('.ui-empty-state')
+      expect(empty?.textContent).toBe(audience === 'all' ? 'No comments yet.' : audience === 'humans' ? 'No human comments.' : 'No bot comments.')
+      expect(empty?.closest('[role="status"], [aria-live="polite"]')).not.toBeNull()
+    }
+  })
+}
+
+test('Rework: detail and workspace loading retain shared rendering and announcements', async () => {
+  const detail = mountPage(stateFor({ review: null, detailLoading: true }))
+  const loading = detail.element.querySelector('.ui-notice-line')
+  expect(loading?.textContent).toContain('Loading pull request…')
+  expect(loading?.closest('[role="status"], [aria-live="polite"]')).not.toBeNull()
+  detail.unmount()
+  const workspace = mountPage(stateFor(), ['quirky.tasks/state'])
+  const discovery = workspace.element.querySelector('.ui-notice-line')
+  expect(discovery?.textContent).toContain('Checking linked workspace…')
+  expect(discovery?.closest('[role="status"], [aria-live="polite"]')).not.toBeNull()
+})
+
+for (const lane of ['comment', 'body'] as const) for (const replacement of [false, true]) {
+  test(`Rework: ${lane} draft settlement is owned after prompt acceptance${replacement ? ' across replacement' : ''}`, async () => {
+    const state = withComments()
+    const ui = lane === 'comment' ? mountComments('detail', state) : mountPage(state)
+    await settle()
+    if (lane === 'body') await act(async () => { await invoke(ui, 'review-page', 'body-open') })
+    const write = ui.holdNext(lane === 'comment' ? 'quirky.reviews/detailSetCommentDraft' : 'quirky.reviews/detailSetBodyDraft')
+    const editor = ui.element.querySelector<HTMLTextAreaElement>(lane === 'comment' ? 'textarea[aria-label="Add a comment"]' : 'textarea[aria-label="Pull request description"]')!
+    changeValue(editor, `latest ${lane} draft`)
+    const bridge = deadlineBridge(ui)
+    const descriptor = control(ui, lane === 'comment' ? 'comment-composer' : 'review-body')
+    let delivery!: Promise<ReviewsUiControlResult>
+    await act(async () => {
+      delivery = requestReviewsUiControl(ui.context, {
+        target: descriptor.target, generation: descriptor.generation, action: lane === 'comment' ? 'comment-send' : 'body-save',
+      })
+      void delivery.catch(() => {})
+      await Promise.resolve()
+    })
+    await settle()
+    const pendingReplies = bridge.pendingReplies()
+    await act(async () => bridge.expire())
+    await settle()
+    expect(pendingReplies).toBe(0)
+    expect(await delivery).toEqual({ delivered: true, result: { accepted: true } })
+    const method = lane === 'comment' ? 'quirky.reviews/detailPostComment' : 'quirky.reviews/detailUpdateBody'
+    expect(callCount(ui, method)).toBe(0)
+    if (replacement) ui.render(changedOwner(state, 'generation'))
+    await act(async () => write.resolve({ applied: true }))
+    await settle()
+    expect(callCount(ui, method)).toBe(replacement ? 0 : 1)
+    if (!replacement) expect(ui.calls.find((call) => call.method === method)?.params.body).toBe(`latest ${lane} draft`)
+    expect(ui.element.textContent).not.toContain('the window did not answer')
+  })
+}
+
+test('Rework: an accepted obsolete post cannot publish errors or release the replacement post', async () => {
+  const state = withComments(); state.detail.commentDraft = 'hello'
+  const ui = mountComments('detail', state)
+  const old = ui.holdNext('quirky.reviews/detailPostComment')
+  await act(async () => { expect(await invoke(ui, 'comment-composer', 'comment-send')).toEqual({ delivered: true, result: { accepted: true } }) })
+  ui.render(changedOwner(state, 'number'))
+  const current = ui.holdNext('quirky.reviews/detailPostComment')
+  await act(async () => { await invoke(ui, 'comment-composer', 'comment-send') })
+  await act(async () => old.reject(new Error('obsolete accepted post failed')))
+  await settle()
+  expect(ui.element.textContent).not.toContain('obsolete accepted post failed')
+  expect(button(ui.element, 'Send comment').disabled).toBe(true)
+  await act(async () => current.resolve({}))
+  await settle()
+  expect(ui.element.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add a comment"]')?.value).toBe('')
+  expect(ui.calls.filter((call) => call.method === 'quirky.reviews/detailPostComment').map((call) => call.params.number)).toEqual([12, 13])
 })

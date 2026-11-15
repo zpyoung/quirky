@@ -109,6 +109,8 @@ function controlValue(request: ReviewsUiControlRequest, keys: string[]): Record<
   return value
 }
 
+type CommentControlAccept = (operation: Promise<unknown>) => { accepted: true }
+
 function useCommentControl(options: {
   context: ReviewsSurfaceProps['context']
   surface: string
@@ -118,7 +120,7 @@ function useCommentControl(options: {
   session?: string
   active: boolean
   actions(): Array<{ action: string; enabled: boolean }>
-  run(request: ReviewsUiControlRequest, isCurrent: () => boolean): unknown | Promise<unknown>
+  run(request: ReviewsUiControlRequest, isCurrent: () => boolean, accept: CommentControlAccept): void | { accepted: true }
   onError(message: string): void
 }) {
   const owner = options.owner
@@ -135,8 +137,12 @@ function useCommentControl(options: {
     const lease = registerReviewsUiControl(options.context, {
       surface: options.surface, slot: options.slot, target,
       actions: () => current.current.actions(),
-      run: async (request, isCurrent) => {
-        try { return await current.current.run(request, isCurrent) }
+      run: (request, isCurrent) => {
+        const accept: CommentControlAccept = (operation) => {
+          void operation.catch((error) => { if (isCurrent()) current.current.onError(errorText(error)) })
+          return { accepted: true }
+        }
+        try { return current.current.run(request, isCurrent, accept) }
         catch (error) { if (isCurrent()) current.current.onError(errorText(error)); throw error }
       },
     })
@@ -282,32 +288,39 @@ export function Comments(props: CommentsProps) {
     if (bytes(body) > 65536) throw new Error('Comment body must be no longer than 64 KiB.')
     return body
   }
-  const submit = async (isCurrent: () => boolean) => {
-    if (pendingRef.current || targetParams === null || latest.current.review === null || draftField.value.trim() === '') return
+  const submit = (isCurrent: () => boolean) => {
+    if (pendingRef.current) throw new Error('A comment operation is already pending.')
+    if (targetParams === null || latest.current.review === null) throw new Error('No pull request is selected.')
+    requireBody(draftField.value)
     const here = targetGuard()
     const action: DraftAction<string> = draftField.begin()
     const token = Symbol()
     pendingRef.current = token; setPending(true); setActionError(null)
-    try {
-      await draftField.settled()
-      if (!here() || !isCurrent() || pendingRef.current !== token || latest.current.review === null || action.status() === 'gone') { action.fail(); return }
-      const body = requireBody(action.take())
-      await props.context.call('quirky.reviews/detailPostComment', { ...targetParams, body, ...(replyTo === null ? {} : { replyToId: replyTo }) })
-      if (!here() || !isCurrent() || pendingRef.current !== token || action.status() === 'gone') { action.fail(); return }
-      action.succeed('', { send: true })
-      setReplyTo(null); setComposerSession((value) => value + 1)
-      props.context.toast('Comment posted', 'The comment was confirmed by the hosting provider.')
-    } catch (error) { action.fail(); throw error }
-    finally { if (here() && pendingRef.current === token) { pendingRef.current = null; setPending(false) } }
+    return (async () => {
+      try {
+        await draftField.settled()
+        if (!here() || !isCurrent() || pendingRef.current !== token || latest.current.review === null || action.status() === 'gone') { action.fail(); return }
+        const body = requireBody(action.take())
+        await props.context.call('quirky.reviews/detailPostComment', { ...targetParams, body, ...(replyTo === null ? {} : { replyToId: replyTo }) })
+        if (!here() || !isCurrent() || pendingRef.current !== token || action.status() === 'gone') { action.fail(); return }
+        action.succeed('', { send: true })
+        setReplyTo(null); setComposerSession((value) => value + 1)
+        props.context.toast('Comment posted', 'The comment was confirmed by the hosting provider.')
+      } catch (error) { action.fail(); throw error }
+      finally { if (here() && pendingRef.current === token) { pendingRef.current = null; setPending(false) } }
+    })()
   }
-  const mutate = async (isCurrent: () => boolean, operation: (current: () => boolean) => Promise<void>) => {
-    if (pendingRef.current || targetParams === null) return
+  const mutate = (isCurrent: () => boolean, operation: (current: () => boolean) => Promise<void>) => {
+    if (pendingRef.current) throw new Error('A comment operation is already pending.')
+    if (targetParams === null) throw new Error('No pull request is selected.')
     const here = targetGuard()
     const token = Symbol()
     pendingRef.current = token; setPending(true); setActionError(null)
     const current = () => here() && isCurrent() && pendingRef.current === token
-    try { await operation(current) }
-    finally { if (here() && pendingRef.current === token) { pendingRef.current = null; setPending(false) } }
+    return (async () => {
+      try { await operation(current) }
+      finally { if (here() && pendingRef.current === token) { pendingRef.current = null; setPending(false) } }
+    })()
   }
   const surface = props.surface === 'detail' ? 'view:quirky.reviews/review' : 'panel:quirky.reviews/checks'
   const common = { context: props.context, owner, identity, surface, onError: setActionError }
@@ -316,28 +329,27 @@ export function Comments(props: CommentsProps) {
     actions: () => ['comments-retry', 'audience-set', 'grouping-set', 'reply-open', 'edit-open', 'comment-delete',
       'thread-set', 'queue-set', 'bot-set', 'comment-open', 'queue-send'].map((action) => ({
       action, enabled: action === 'queue-send' ? data.queued.length > 0 : owner !== null
-        && !(pending && ['reply-open', 'edit-open', 'comment-delete'].includes(action)),
+        && !(pendingRef.current !== null && ['reply-open', 'edit-open', 'comment-delete'].includes(action)),
     })),
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent, accept) => {
       const allowed: Record<string, string[]> = { 'comments-retry': [], 'audience-set': ['audience'], 'grouping-set': ['grouping'],
         'reply-open': ['comment'], 'edit-open': ['comment'], 'comment-delete': ['comment'], 'thread-set': ['comment', 'resolved'],
         'queue-set': ['comment', 'queued'], 'bot-set': ['comment', 'bot'], 'comment-open': ['comment'], 'queue-send': [] }
       const value = controlValue(request, allowed[request.action] ?? [])
       if (request.action === 'queue-send') {
         if (owner === null) throw new Error('No pull request is selected.')
-        await props.context.call('quirky.reviews/checksSetAgentDialog', { surface: props.surface,
-          ...(props.surface === 'checks' ? { worktree: owner.worktree } : {}), action: 'comments' })
-        return
+        return accept(props.context.call('quirky.reviews/checksSetAgentDialog', { surface: props.surface,
+          ...(props.surface === 'checks' ? { worktree: owner.worktree } : {}), action: 'comments' }))
       }
       if (targetParams === null) return
-      if (request.action === 'comments-retry') { await props.context.call('quirky.reviews/detailRefresh', targetParams); return }
+      if (request.action === 'comments-retry') return accept(props.context.call('quirky.reviews/detailRefresh', targetParams))
       if (request.action === 'audience-set') {
         if (typeof value.audience !== 'string' || !['all', 'humans', 'bots'].includes(value.audience)) throw new Error('Choose a valid comment audience.')
-        await props.context.call('quirky.reviews/detailSetAudience', { ...targetParams, audience: value.audience }); return
+        return accept(props.context.call('quirky.reviews/detailSetAudience', { ...targetParams, audience: value.audience }))
       }
       if (request.action === 'grouping-set') {
         if (typeof value.grouping !== 'string' || !['grouped', 'timeline'].includes(value.grouping)) throw new Error('Choose a valid comment ordering.')
-        await props.context.call('quirky.reviews/detailSetGrouping', { ...targetParams, grouping: value.grouping }); return
+        return accept(props.context.call('quirky.reviews/detailSetGrouping', { ...targetParams, grouping: value.grouping }))
       }
       const comment = resolveComment(value.comment)
       if (request.action === 'reply-open') {
@@ -352,45 +364,45 @@ export function Comments(props: CommentsProps) {
       }
       if (request.action === 'comment-delete') {
         if (!topLevel(comment)) throw new Error('Only top-level issue comments can be deleted.')
-        await mutate(isCurrent, async (current) => {
+        return accept(mutate(isCurrent, async (current) => {
           const confirmed = await props.context.confirm({ title: 'Delete comment?',
             body: `This will permanently remove comment #${comment.id} from pull request #${owner!.number}.`, confirmLabel: 'Delete comment' })
           if (!confirmed || !current()) return
           const present = latest.current.filtered.find((item) => item.kind === comment.kind && item.id === comment.id)
           if (!present || !topLevel(present)) return
           await props.context.call('quirky.reviews/detailDeleteComment', { ...targetParams, commentId: present.id, yes: true })
-        }); return
+        }))
       }
       if (request.action === 'thread-set') {
         if (typeof value.resolved !== 'boolean' || !comment.threadId) throw new Error('Choose a current comment thread and resolved state.')
-        await props.context.call('quirky.reviews/detailResolveThread', { ...targetParams, threadId: comment.threadId, resolved: value.resolved }); return
+        return accept(props.context.call('quirky.reviews/detailResolveThread', { ...targetParams, threadId: comment.threadId, resolved: value.resolved }))
       }
       if (request.action === 'queue-set') {
         if (typeof value.queued !== 'boolean') throw new Error('Choose whether to queue this comment.')
-        await props.context.call('quirky.reviews/detailQueueComment', { ...targetParams, commentId: comment.threadId ?? String(comment.id), queued: value.queued }); return
+        return accept(props.context.call('quirky.reviews/detailQueueComment', { ...targetParams, commentId: comment.threadId ?? String(comment.id), queued: value.queued }))
       }
       if (request.action === 'bot-set') {
         if (typeof value.bot !== 'boolean' || !comment.author) throw new Error('Choose a comment with an author and bot state.')
-        await props.context.call('quirky.reviews/detailSetBotOverride', { author: comment.author, bot: value.bot }); return
+        return accept(props.context.call('quirky.reviews/detailSetBotOverride', { author: comment.author, bot: value.bot }))
       }
       if (request.action === 'comment-open') {
         const url = safeHttpUrl(comment.url)
         if (url === null) throw new Error('This comment has no safe HTTP or HTTPS link.')
-        await props.context.call('quirky.reviews/openLink', { url, worktree: owner!.worktree })
+        return accept(props.context.call('quirky.reviews/openLink', { url, worktree: owner!.worktree }))
       }
     },
   })
   const composerControl = useCommentControl({
     ...common, slot: 'comment-composer', session: String(composerSession), active: owner !== null,
     actions: () => [
-      { action: 'comment-send', enabled: !pending && data.review !== null && draft.trim() !== '' },
-      { action: 'reply-cancel', enabled: !pending && replyTo !== null },
+      { action: 'comment-send', enabled: pendingRef.current === null && data.review !== null && draft.trim() !== '' },
+      { action: 'reply-cancel', enabled: pendingRef.current === null && replyTo !== null },
       { action: 'mention-select', enabled: mentionPrefix !== null },
       { action: 'image-open', enabled: true },
     ],
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent, accept) => {
       const value = controlValue(request, request.action === 'mention-select' ? ['login'] : [])
-      if (request.action === 'comment-send') return submit(isCurrent)
+      if (request.action === 'comment-send') return accept(submit(isCurrent))
       if (request.action === 'reply-cancel') { if (!pendingRef.current) { setReplyTo(null); setComposerSession((value) => value + 1) }; return }
       if (request.action === 'image-open') { setImageInsertOpen(true); setImageSession((value) => value + 1); return }
       const currentPrefix = /(?:^|\s)@([A-Za-z0-9-]*)$/.exec(draftField.value)?.[1]?.toLowerCase() ?? null
@@ -404,18 +416,18 @@ export function Comments(props: CommentsProps) {
   const editControl = useCommentControl({
     ...common, slot: editingId === null ? 'comment-edit' : `comment-edit:issue_comment:${editingId}`,
     session: String(editSession), active: owner !== null && editingId !== null,
-    actions: () => [{ action: 'edit-save', enabled: !pending }, { action: 'edit-cancel', enabled: !pending }],
-    run: async (request, isCurrent) => {
+    actions: () => [{ action: 'edit-save', enabled: pendingRef.current === null }, { action: 'edit-cancel', enabled: pendingRef.current === null }],
+    run: (request, isCurrent, accept) => {
       const value = controlValue(request, request.action === 'edit-save' ? ['body'] : [])
       if (request.action === 'edit-cancel') { setEditingId(null); setEditDraft(''); setEditSession((value) => value + 1); return }
       const comment = resolveComment({ kind: 'issue_comment', id: editingId })
       if (!topLevel(comment)) throw new Error('Only top-level issue comments can be edited.')
       const body = requireBody(value.body === undefined ? editDraft : value.body)
-      if (Object.hasOwn(value, 'body')) setEditDraft(body)
-      await mutate(isCurrent, async (current) => {
+      return accept(mutate(isCurrent, async (current) => {
+        if (Object.hasOwn(value, 'body')) setEditDraft(body)
         await props.context.call('quirky.reviews/detailEditComment', { ...targetParams, commentId: comment.id, body })
         if (current()) { setEditingId(null); setEditDraft(''); setEditSession((value) => value + 1) }
-      })
+      }))
     },
   })
   const imageControl = useCommentControl({
@@ -493,10 +505,10 @@ export function Comments(props: CommentsProps) {
         ? data.error
           ? <InlineError message={data.error} action={{ label: 'Retry', onAction: retry }} />
           : data.loading
-            ? <NoticeLine>Loading comments…</NoticeLine>
-            : <EmptyState message="Comments have not been loaded yet." action={{ label: 'Load comments', onAction: retry }} />
+            ? <div aria-live="polite"><NoticeLine>Loading comments…</NoticeLine></div>
+            : <div aria-live="polite"><EmptyState message="Comments have not been loaded yet." action={{ label: 'Load comments', onAction: retry }} /></div>
         : filtered.length === 0
-          ? <EmptyState message={emptyText} />
+          ? <div aria-live="polite"><EmptyState message={emptyText} /></div>
           : data.grouping === 'timeline'
             ? <div className="ui-stack">{timeline.map(renderComment)}</div>
             : <div className="ui-stack">

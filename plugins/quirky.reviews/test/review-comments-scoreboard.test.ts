@@ -131,3 +131,24 @@ test('an unclassified raw alert in either source fails owned coverage', () => {
     expect(failures(subject).some((failure) => failure.code === 'coverage-missing' && failure.source?.file === file)).toBe(true)
   }
 })
+
+for (const [file, text] of [
+  [OWNED[0], 'Loading pull request…'],
+  [OWNED[0], 'Checking linked workspace…'],
+  [OWNED[1], 'Loading comments…'],
+  [OWNED[1], 'Comments have not been loaded yet.'],
+  [OWNED[1], 'message={emptyText}'],
+]) {
+  test(`removing the announcement from ${text} invalidates shared render evidence`, () => {
+    const entry = coverage.states.find((state) => state.site.file === file
+      && state.render.component !== 'toast' && state.render.element.quote.includes(text))
+    expect(entry).toBeDefined()
+    if (!entry || entry.render.component === 'toast') throw new Error('Expected shared announcement evidence.')
+    const quote = entry.render.element.quote
+    expect(quote).toContain('aria-live="polite"')
+    const subject = { ...plugin, sources: plugin.sources.map((source) => source.file === file
+      ? { ...source, content: source.content.replace(quote, quote.replace('aria-live="polite"', 'aria-atomic="true"')) }
+      : source) }
+    expect(failures(subject).some((failure) => failure.code === 'evidence-missing' && failure.coverageFile === FRAGMENT)).toBe(true)
+  })
+}

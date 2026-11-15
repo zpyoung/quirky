@@ -108,6 +108,7 @@ function assignableOptions(value: unknown): UserOption[] | null {
   return options
 }
 type ReviewsControlAction = { action: string; enabled: boolean }
+type ReviewsControlAcceptance = { accepted: true }
 type ReviewsControlLease = { target: string; identity: string; generation: number; changed(): void; dispose(): void }
 type ReviewsControlOptions = {
   context: ReviewsSurfaceProps['context']
@@ -117,7 +118,7 @@ type ReviewsControlOptions = {
   session: string
   active: boolean
   actions(): ReviewsControlAction[]
-  run(request: ReviewsUiControlRequest, isCurrent: () => boolean): unknown | Promise<unknown>
+  run(request: ReviewsUiControlRequest, isCurrent: () => boolean, accept: (operation: Promise<unknown>) => ReviewsControlAcceptance): void | ReviewsControlAcceptance
   onError?(message: string): void
 }
 
@@ -188,9 +189,14 @@ function useReviewsControl(options: ReviewsControlOptions) {
       slot: options.slot,
       target,
       actions: () => actionsRef.current(),
-      run: async (request, isCurrent) => {
+      run: (request, isCurrent) => {
         try {
-          return await runRef.current(request, isCurrent)
+          return runRef.current(request, isCurrent, (operation) => {
+            void operation.catch((error) => {
+              if (isCurrent()) errorRef.current?.(errorText(error))
+            })
+            return { accepted: true }
+          })
         } catch (error) {
           if (isCurrent()) errorRef.current?.(errorText(error))
           throw error
@@ -278,7 +284,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
   const pendingRef = useRef<{ id: number; identity: string } | null>(null)
   const writeGeneration = useRef(0)
   const previousIdentity = useRef(identity)
-  const pending = pendingId !== null
+  const pending = pendingId !== null || pendingRef.current !== null
   const target = {
     surface: owner.surface,
     worktree: owner.worktree,
@@ -367,64 +373,69 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
     }
   }, [assigneeOpen, reviewerOpen, query, context, owner.worktree, identity, catalogRetry])
 
-  const writeAssignees = async (logins: string[], stillCurrent: () => boolean) => {
-    if (pendingRef.current !== null) return
+  const writeAssignees = (logins: string[], stillCurrent: () => boolean): Promise<unknown> => {
+    if (pendingRef.current !== null) throw new Error('An assignment change is already in progress.')
     const token = { id: ++writeGeneration.current, identity }
     pendingRef.current = token
     setPendingId(token.id)
     setWriteError(null)
-    try {
-      const result = await context.call('quirky.reviews/detailUpdateAssignees', {
-        ...target,
-        action: 'set',
-        logins,
-      })
-      if (stillCurrent() && pendingRef.current === token) {
-        setAssigneeOpen(false)
-        assigneeSessionRef.current += 1
-        setAssigneeSession(assigneeSessionRef.current)
-        setSelectedAssignees([])
+    return (async () => {
+      try {
+        const result = await context.call('quirky.reviews/detailUpdateAssignees', {
+          ...target,
+          action: 'set',
+          logins,
+        })
+        if (stillCurrent() && pendingRef.current === token) {
+          setAssigneeOpen(false)
+          assigneeSessionRef.current += 1
+          setAssigneeSession(assigneeSessionRef.current)
+          setSelectedAssignees([])
+        }
+        return result
+      } catch (error) {
+        if (stillCurrent() && pendingRef.current === token) setWriteError(errorText(error))
+        throw error
+      } finally {
+        if (pendingRef.current === token) {
+          pendingRef.current = null
+          setPendingId(null)
+        }
       }
-      return result
-    } catch (error) {
-      if (stillCurrent() && pendingRef.current === token) setWriteError(errorText(error))
-      throw error
-    } finally {
-      if (pendingRef.current === token) {
-        pendingRef.current = null
-        setPendingId(null)
-      }
-    }
+    })()
   }
 
-  const writeReviewers = async (action: 'add' | 'remove', logins: string[], stillCurrent: () => boolean) => {
-    if (pendingRef.current !== null || logins.length === 0) return
+  const writeReviewers = (action: 'add' | 'remove', logins: string[], stillCurrent: () => boolean): Promise<unknown> => {
+    if (pendingRef.current !== null) throw new Error('An assignment change is already in progress.')
+    if (logins.length === 0) throw new Error('Enter at least one reviewer.')
     const token = { id: ++writeGeneration.current, identity }
     pendingRef.current = token
     setPendingId(token.id)
     setWriteError(null)
-    try {
-      const result = await context.call('quirky.reviews/detailUpdateReviewers', {
-        ...target,
-        action,
-        logins,
-      })
-      if (stillCurrent() && pendingRef.current === token && action === 'add') {
-        setReviewerText('')
-        setReviewerOpen(false)
-        reviewerSessionRef.current += 1
-        setReviewerSession(reviewerSessionRef.current)
+    return (async () => {
+      try {
+        const result = await context.call('quirky.reviews/detailUpdateReviewers', {
+          ...target,
+          action,
+          logins,
+        })
+        if (stillCurrent() && pendingRef.current === token && action === 'add') {
+          setReviewerText('')
+          setReviewerOpen(false)
+          reviewerSessionRef.current += 1
+          setReviewerSession(reviewerSessionRef.current)
+        }
+        return result
+      } catch (error) {
+        if (stillCurrent() && pendingRef.current === token) setWriteError(errorText(error))
+        throw error
+      } finally {
+        if (pendingRef.current === token) {
+          pendingRef.current = null
+          setPendingId(null)
+        }
       }
-      return result
-    } catch (error) {
-      if (stillCurrent() && pendingRef.current === token) setWriteError(errorText(error))
-      throw error
-    } finally {
-      if (pendingRef.current === token) {
-        pendingRef.current = null
-        setPendingId(null)
-      }
-    }
+    })()
   }
 
   const currentOwner = (isCurrent: () => boolean) => {
@@ -444,7 +455,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
       { action: 'reviewers-open', enabled: !pending && !reviewerOpen },
       { action: 'reviewer-remove', enabled: !pending && (reviewers?.length ?? 0) > 0 },
     ],
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent, accept) => {
       const value = controlValue(request, request.action === 'reviewer-remove' ? ['login'] : [])
       const current = currentOwner(isCurrent)
       if (!current()) return
@@ -473,7 +484,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
         if (typeof login !== 'string' || !reviewers?.includes(login)) {
           throw new Error('That reviewer is no longer requested.')
         }
-        return writeReviewers('remove', [login], current)
+        return accept(writeReviewers('remove', [login], current))
       }
       throw new Error('Unknown assignment control.')
     },
@@ -493,7 +504,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
       { action: 'assignee-select', enabled: !pending },
       { action: 'assignees-save', enabled: !pending && assignees !== null && assignmentError(selectedAssignees) === null },
     ],
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent, accept) => {
       const current = currentOwner(isCurrent)
       const session = assigneeSession
       const sessionIsCurrent = () => current() && assigneeSessionRef.current === session
@@ -538,15 +549,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
         }
         if (!sessionIsCurrent()) return
         if (explicit) setSelectedAssignees(selected)
-        return writeAssignees(selected, sessionIsCurrent)
-      }
-      if (request.action === 'assignees-save') {
-        const value = controlValue(request, ['logins'])
-        const selected = Object.hasOwn(value, 'logins') ? normalizeAssignees(value.logins) : normalizeAssignees(selectedAssignees)
-        if (assignees === null) throw new Error('Assignee data is unavailable.')
-        if (!sessionIsCurrent()) return
-        if (Object.hasOwn(value, 'logins')) setSelectedAssignees(selected)
-        return writeAssignees(selected, sessionIsCurrent)
+        return accept(writeAssignees(selected, sessionIsCurrent))
       }
       throw new Error('Unknown assignee form control.')
     },
@@ -566,7 +569,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
       { action: 'reviewer-select', enabled: !pending && catalog.status === 'ready' && filteredSuggestions.length > 0 },
       { action: 'reviewers-add', enabled: !pending },
     ],
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent, accept) => {
       const current = currentOwner(isCurrent)
       const session = reviewerSession
       const sessionIsCurrent = () => current() && reviewerSessionRef.current === session
@@ -604,7 +607,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
         if (parsed.error !== null) throw new Error(parsed.error)
         if (parsed.logins.length === 0) throw new Error('Enter at least one reviewer.')
         if (!sessionIsCurrent()) return
-        return writeReviewers('add', parsed.logins, sessionIsCurrent)
+        return accept(writeReviewers('add', parsed.logins, sessionIsCurrent))
       }
       throw new Error('Unknown reviewer form control.')
     },
@@ -716,6 +719,28 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   const workspaceGeneration = useRef(0)
   const workspaceBusy = workspaceBusyId !== null && workspaceOperation.current?.identity === identity
   const [pageError, setPageError] = useState<string | null>(null)
+  const [pendingPageActions, setPendingPageActions] = useState<string[]>([])
+  const pendingPageActionsRef = useRef(new Set<string>())
+  const pageActionPending = (action: string) =>
+    pendingPageActions.includes(action) || pendingPageActionsRef.current.has(action)
+  const releasePageAction = (action: string) => {
+    if (pendingPageActionsRef.current.delete(action)) {
+      setPendingPageActions([...pendingPageActionsRef.current])
+    }
+  }
+  const ownPageOperation = (action: string, start: () => Promise<unknown>): Promise<unknown> => {
+    if (pendingPageActionsRef.current.has(action)) throw new Error('This action is already in progress.')
+    pendingPageActionsRef.current.add(action)
+    setPendingPageActions([...pendingPageActionsRef.current])
+    let operation: Promise<unknown>
+    try {
+      operation = start()
+    } catch (error) {
+      releasePageAction(action)
+      throw error
+    }
+    return operation.finally(() => releasePageAction(action))
+  }
   const [bodyEditing, setBodyEditing] = useState(false)
   const [bodySaveError, setBodySaveError] = useState<string | null>(null)
   const [bodySession, setBodySession] = useState(0)
@@ -762,7 +787,8 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     resend: true,
   })
   const canEditBody = itemDetails(detail.details)?.viewerCanUpdate === true
-  const bodyBusyForSession = bodyBusy?.identity === identity && bodyBusy.session === bodySession
+  const bodyBusyForSession = (bodyBusy?.identity === identity && bodyBusy.session === bodySession)
+    || (bodyOperation.current?.identity === identity && bodyOperation.current.session === bodySession)
   const previousIdentity = useRef(identity)
 
   useLayoutEffect(() => {
@@ -798,7 +824,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   }, [props.context, identity])
 
   const loadWorkspaceRef = useRef<(isCurrent?: () => boolean) => Promise<void>>(async () => {})
-  loadWorkspaceRef.current = async (isCurrent = () => true) => {
+  loadWorkspaceRef.current = (isCurrent = () => true) => {
     const currentOwner = ownerRef.current
     const currentUrl = urlRef.current
     const currentIdentity = identityRef.current
@@ -810,21 +836,30 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
         link: null,
         error: currentOwner === null ? null : 'The pull request URL is unavailable.',
       })
-      return
+      return Promise.resolve()
     }
     setWorkspace({ status: 'loading', link: null, error: null })
+    let operation: Promise<unknown>
     try {
-      const value = await props.context.call('quirky.tasks/state')
-      if (!isCurrent() || !ownerIsCurrent() || request !== workspaceRequest.current
-        || identityRef.current !== currentIdentity) return
-      if (!isRecord(value)) throw new Error('Tasks state is unavailable; workspace attachment cannot be verified.')
-      setWorkspace({ status: 'ready', link: workspaceLinkFor(value, currentUrl), error: null })
+      operation = props.context.call('quirky.tasks/state')
     } catch (error) {
       if (isCurrent() && ownerIsCurrent() && request === workspaceRequest.current
         && identityRef.current === currentIdentity) {
         setWorkspace({ status: 'error', link: null, error: errorText(error) })
       }
+      return Promise.resolve()
     }
+    return operation.then((value) => {
+      if (!isCurrent() || !ownerIsCurrent() || request !== workspaceRequest.current
+        || identityRef.current !== currentIdentity) return
+      if (!isRecord(value)) throw new Error('Tasks state is unavailable; workspace attachment cannot be verified.')
+      setWorkspace({ status: 'ready', link: workspaceLinkFor(value, currentUrl), error: null })
+    }).catch((error) => {
+      if (isCurrent() && ownerIsCurrent() && request === workspaceRequest.current
+        && identityRef.current === currentIdentity) {
+        setWorkspace({ status: 'error', link: null, error: errorText(error) })
+      }
+    })
   }
 
   useEffect(() => {
@@ -850,7 +885,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     }
   }
 
-  const openWorkspace = async (action: 'start' | 'resume', newWorkspace: boolean, isCurrent: () => boolean) => {
+  const openWorkspace = (action: 'start' | 'resume', newWorkspace: boolean, isCurrent: () => boolean): Promise<unknown> => {
     const currentOwner = ownerRef.current
     const currentIdentity = identityRef.current
     const currentWorkspace = workspaceRef.current
@@ -862,36 +897,38 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     if (action === 'resume' && currentWorkspace.link === null) throw new Error('There is no linked workspace to resume.')
     if (action === 'start' && newWorkspace && currentWorkspace.link === null) throw new Error('A new workspace is available only when a workspace is linked.')
     if (action === 'start' && !newWorkspace && currentWorkspace.link !== null) throw new Error('A workspace is already linked.')
-    if (workspaceOperation.current?.identity === currentIdentity) return
+    if (workspaceOperation.current?.identity === currentIdentity) throw new Error('A workspace operation is already in progress.')
     const operation = { id: ++workspaceGeneration.current, identity: currentIdentity }
     workspaceOperation.current = operation
     setWorkspaceBusyId(operation.id)
     setPageError(null)
     const stillCurrent = () => isCurrent() && ownerIsCurrent()
       && identityRef.current === currentIdentity && workspaceOperation.current === operation
-    try {
-      const result: unknown = await props.context.call('quirky.tasks/workspace', {
-        action,
-        target: currentTarget,
-        ...(newWorkspace ? { newWorkspace: true } : {}),
-      })
-      if (!stillCurrent()) return
-      if (action === 'start' && (!isRecord(result) || result.kind !== 'composer')) {
-        throw new Error('The Tasks API did not open the hosted-review workspace composer.')
+    return (async () => {
+      try {
+        const result: unknown = await props.context.call('quirky.tasks/workspace', {
+          action,
+          target: currentTarget,
+          ...(newWorkspace ? { newWorkspace: true } : {}),
+        })
+        if (!stillCurrent()) return
+        if (action === 'start' && (!isRecord(result) || result.kind !== 'composer')) {
+          throw new Error('The Tasks API did not open the hosted-review workspace composer.')
+        }
+        if (action === 'resume') {
+          props.context.toast('Workspace resumed', `Activated ${currentWorkspace.link?.name ?? `the workspace for PR #${currentOwner.number}`}.`)
+        }
+        return result
+      } catch (error) {
+        if (stillCurrent()) setPageError(errorText(error))
+        throw error
+      } finally {
+        if (workspaceOperation.current === operation) {
+          workspaceOperation.current = null
+          setWorkspaceBusyId(null)
+        }
       }
-      if (action === 'resume') {
-        props.context.toast('Workspace resumed', `Activated ${currentWorkspace.link?.name ?? `the workspace for PR #${currentOwner.number}`}.`)
-      }
-      return result
-    } catch (error) {
-      if (stillCurrent()) setPageError(errorText(error))
-      throw error
-    } finally {
-      if (workspaceOperation.current === operation) {
-        workspaceOperation.current = null
-        setWorkspaceBusyId(null)
-      }
-    }
+    })()
   }
 
   const pageControl = useReviewsControl({
@@ -902,40 +939,47 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     session: 'page',
     active: true,
     actions: () => [
-      { action: 'back', enabled: owner !== null },
-      { action: 'refresh', enabled: owner !== null && !detail.loading },
-      { action: 'tab-set', enabled: owner !== null },
-      { action: 'copy-link', enabled: url !== null },
-      { action: 'open-link', enabled: owner !== null && url !== null },
-      { action: 'workspace-retry', enabled: owner !== null && url !== null && workspace.status === 'error' },
-      { action: 'workspace-start', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link === null && !workspaceBusy },
-      { action: 'workspace-resume', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link !== null && !workspaceBusy },
-      { action: 'workspace-start-new', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link !== null && !workspaceBusy },
+      { action: 'back', enabled: owner !== null && !pageActionPending('back') },
+      { action: 'refresh', enabled: owner !== null && !detail.loading && !pageActionPending('refresh') },
+      { action: 'tab-set', enabled: owner !== null && !pageActionPending('tab-set') },
+      { action: 'copy-link', enabled: url !== null && !pageActionPending('copy-link') },
+      { action: 'open-link', enabled: owner !== null && url !== null && !pageActionPending('open-link') },
+      { action: 'workspace-retry', enabled: owner !== null && url !== null && workspace.status === 'error' && !pageActionPending('workspace-retry') },
+      { action: 'workspace-start', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link === null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
+      { action: 'workspace-resume', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link !== null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
+      { action: 'workspace-start-new', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link !== null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
       { action: 'body-open', enabled: canEditBody && review !== null && !bodyEditing },
     ],
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent, accept) => {
       const ownerIsCurrent = ownerGuard()
       const current = () => isCurrent() && ownerIsCurrent() && identityRef.current === identity
       if (!current()) return
       if (request.action === 'back') {
         requireNoControlValue(request)
-        const result = await props.context.call('quirky.reviews/close', {})
-        if (current()) setPageError(null)
-        return result
+        if (ownerRef.current === null) throw new Error('No pull request is selected.')
+        return accept(ownPageOperation('back', () =>
+          props.context.call('quirky.reviews/close', {}).then((result) => {
+            if (current()) setPageError(null)
+            return result
+          }),
+        ))
       }
       if (request.action === 'refresh') {
         requireNoControlValue(request)
         const currentOwner = ownerRef.current
         if (currentOwner === null) throw new Error('No pull request is selected.')
         if (detailRef.current.loading) throw new Error('Pull request details are already loading.')
-        const result = await props.context.call('quirky.reviews/detailRefresh', {
-          surface: 'detail',
-          worktree: currentOwner.worktree,
-          number: currentOwner.number,
-          ...(currentOwner.repo === null ? {} : { prRepo: currentOwner.repo }),
-        })
-        if (current()) setPageError(null)
-        return result
+        return accept(ownPageOperation('refresh', () =>
+          props.context.call('quirky.reviews/detailRefresh', {
+            surface: 'detail',
+            worktree: currentOwner.worktree,
+            number: currentOwner.number,
+            ...(currentOwner.repo === null ? {} : { prRepo: currentOwner.repo }),
+          }).then((result) => {
+            if (current()) setPageError(null)
+            return result
+          }),
+        ))
       }
       if (request.action === 'tab-set') {
         const value = controlValue(request, ['tab'])
@@ -944,25 +988,31 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
         }
         const currentOwner = ownerRef.current
         if (currentOwner === null) throw new Error('No pull request is selected.')
-        const result = await props.context.call('quirky.reviews/detailSetTab', {
-          worktree: currentOwner.worktree,
-          number: currentOwner.number,
-          ...(currentOwner.repo === null ? {} : { prRepo: currentOwner.repo }),
-          tab: value.tab,
-        })
-        if (current()) setPageError(null)
-        return result
+        return accept(ownPageOperation('tab-set', () =>
+          props.context.call('quirky.reviews/detailSetTab', {
+            worktree: currentOwner.worktree,
+            number: currentOwner.number,
+            ...(currentOwner.repo === null ? {} : { prRepo: currentOwner.repo }),
+            tab: value.tab,
+          }).then((result) => {
+            if (current()) setPageError(null)
+            return result
+          }),
+        ))
       }
       if (request.action === 'copy-link') {
         requireNoControlValue(request)
         const currentUrl = urlRef.current
         if (currentUrl === null) throw new Error('The pull request link is unavailable.')
-        await copyReviewsText(currentUrl)
-        if (current()) {
-          setPageError(null)
-          props.context.toast('Link copied', currentUrl)
-        }
-        return { copied: true }
+        return accept(ownPageOperation('copy-link', () =>
+          copyReviewsText(currentUrl).then(() => {
+            if (current()) {
+              setPageError(null)
+              props.context.toast('Link copied', currentUrl)
+            }
+            return { copied: true }
+          }),
+        ))
       }
       if (request.action === 'open-link') {
         const value = controlValue(request, ['invert'])
@@ -972,28 +1022,31 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
         const currentOwner = ownerRef.current
         const currentUrl = urlRef.current
         if (currentOwner === null || currentUrl === null) throw new Error('The pull request link is unavailable.')
-        try {
-          const result = await props.context.call('quirky.reviews/openLink', {
+        return accept(ownPageOperation('open-link', () =>
+          props.context.call('quirky.reviews/openLink', {
             url: currentUrl,
             worktree: currentOwner.worktree,
             ...(value.invert === true ? { invert: true } : {}),
-          })
-          if (current()) setPageError(null)
-          return result
-        } catch (error) {
-          if (current()) props.context.toast('Could not open pull request link', errorText(error), { kind: 'error' })
-          throw error
-        }
+          }).then((result) => {
+            if (current()) setPageError(null)
+            return result
+          }).catch((error) => {
+            if (current()) props.context.toast('Could not open pull request link', errorText(error), { kind: 'error' })
+            throw error
+          }),
+        ))
       }
       if (request.action === 'workspace-retry') {
         requireNoControlValue(request)
         if (workspaceRef.current.status !== 'error') throw new Error('Workspace link status is already available.')
+        if (ownerRef.current === null) throw new Error('No pull request is selected.')
+        if (urlRef.current === null) throw new Error('The pull request URL is unavailable.')
         setPageError(null)
-        return loadWorkspaceRef.current(isCurrent)
+        return accept(ownPageOperation('workspace-retry', () => loadWorkspaceRef.current(isCurrent)))
       }
       if (request.action === 'workspace-start' || request.action === 'workspace-resume' || request.action === 'workspace-start-new') {
         requireNoControlValue(request)
-        return openWorkspace(request.action === 'workspace-resume' ? 'resume' : 'start', request.action === 'workspace-start-new', isCurrent)
+        return accept(openWorkspace(request.action === 'workspace-resume' ? 'resume' : 'start', request.action === 'workspace-start-new', isCurrent))
       }
       if (request.action === 'body-open') {
         requireNoControlValue(request)
@@ -1029,63 +1082,76 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     canceled.succeed(null)
   }
 
-  const saveBody = async (isCurrent: () => boolean) => {
+  const saveBody = (isCurrent: () => boolean): Promise<unknown> => {
     const currentOwner = ownerRef.current
     const session = bodySessionRef.current
     if (currentOwner === null || currentOwner.review === null) throw new Error('No pull request is selected.')
     if (itemDetails(detailRef.current.details)?.viewerCanUpdate !== true) {
       throw new Error('You can no longer edit this pull request description.')
     }
-    if (bodyOperation.current?.identity === identity && bodyOperation.current.session === session) return
+    if (bodyOperation.current?.identity === identity && bodyOperation.current.session === session) {
+      throw new Error('The description is already being saved.')
+    }
     const ownerIsCurrent = bodyGuard()
     const operation = { id: ++bodyGeneration.current, identity, session }
     bodyOperation.current = operation
     setBodyBusy(operation)
-    const action = bodyField.begin()
+    let action: DraftAction<string | null>
+    try {
+      action = bodyField.begin()
+    } catch (error) {
+      if (bodyOperation.current === operation) {
+        bodyOperation.current = null
+        setBodyBusy(null)
+      }
+      throw error
+    }
     bodySaveAction.current = action
     setBodySaveError(null)
     const stillCurrent = () => isCurrent() && ownerIsCurrent()
       && identityRef.current === identity && bodySessionRef.current === session
       && bodyOperation.current === operation
-    try {
-      await bodyField.settled()
-      if (!stillCurrent() || action.status() === 'gone') return
-      if (itemDetails(detailRef.current.details)?.viewerCanUpdate !== true) {
-        throw new Error('You can no longer edit this pull request description.')
+    return (async () => {
+      try {
+        await bodyField.settled()
+        if (!stillCurrent() || action.status() === 'gone') return
+        if (itemDetails(detailRef.current.details)?.viewerCanUpdate !== true) {
+          throw new Error('You can no longer edit this pull request description.')
+        }
+        const value = action.take()
+        if (value === null) throw new Error('The description draft is unavailable.')
+        const latestOwner = ownerRef.current
+        if (latestOwner === null || latestOwner.review === null) throw new Error('No pull request is selected.')
+        const result = await props.context.call('quirky.reviews/detailUpdateBody', {
+          surface: 'detail',
+          worktree: latestOwner.worktree,
+          number: latestOwner.number,
+          ...(latestOwner.repo === null ? {} : { prRepo: latestOwner.repo }),
+          body: value,
+        })
+        if (!stillCurrent() || action.status() === 'gone') return result
+        const unchanged = action.status() === 'same'
+        action.succeed(null)
+        if (unchanged) {
+          setBodyEditing(false)
+          bodySessionRef.current += 1
+          setBodySession(bodySessionRef.current)
+        }
+        return result
+      } catch (error) {
+        if (stillCurrent() && action.status() !== 'gone') {
+          action.fail()
+          setBodySaveError(errorText(error))
+        }
+        throw error
+      } finally {
+        if (bodySaveAction.current === action) bodySaveAction.current = null
+        if (bodyOperation.current === operation) {
+          bodyOperation.current = null
+          setBodyBusy(null)
+        }
       }
-      const value = action.take()
-      if (value === null) throw new Error('The description draft is unavailable.')
-      const latestOwner = ownerRef.current
-      if (latestOwner === null || latestOwner.review === null) throw new Error('No pull request is selected.')
-      const result = await props.context.call('quirky.reviews/detailUpdateBody', {
-        surface: 'detail',
-        worktree: latestOwner.worktree,
-        number: latestOwner.number,
-        ...(latestOwner.repo === null ? {} : { prRepo: latestOwner.repo }),
-        body: value,
-      })
-      if (!stillCurrent() || action.status() === 'gone') return result
-      const unchanged = action.status() === 'same'
-      action.succeed(null)
-      if (unchanged) {
-        setBodyEditing(false)
-        bodySessionRef.current += 1
-        setBodySession(bodySessionRef.current)
-      }
-      return result
-    } catch (error) {
-      if (stillCurrent() && action.status() !== 'gone') {
-        action.fail()
-        setBodySaveError(errorText(error))
-      }
-      throw error
-    } finally {
-      if (bodySaveAction.current === action) bodySaveAction.current = null
-      if (bodyOperation.current === operation) {
-        bodyOperation.current = null
-        setBodyBusy(null)
-      }
-    }
+    })()
   }
 
   const bodyControl = useReviewsControl({
@@ -1099,10 +1165,11 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
       { action: 'body-save', enabled: bodyEditing && canEditBody && !bodyBusyForSession },
       { action: 'body-cancel', enabled: bodyEditing },
     ],
-    run: async (request, isCurrent) => {
+    run: (request, isCurrent, accept) => {
       if (request.action === 'body-save') {
         requireNoControlValue(request)
-        return saveBody(isCurrent)
+        if (!isCurrent() || bodySessionRef.current !== bodySession) return
+        return accept(saveBody(isCurrent))
       }
       if (request.action === 'body-cancel') {
         requireNoControlValue(request)
@@ -1159,7 +1226,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
       {review === null ? <div className="ui-stack">
         <SectionHeader title={`Pull request #${owner.number}`} />
         {detail.loading
-          ? <NoticeLine>Loading pull request…</NoticeLine>
+          ? <div aria-live="polite"><NoticeLine>Loading pull request…</NoticeLine></div>
           : <InlineError message={detail.error ?? 'Pull request details are unavailable.'} action={{ label: 'Retry', onAction: () => { void pageControl.request('refresh') } }} />}
       </div> : <>
         <div className="ui-cluster" style={{ justifyContent: 'space-between', alignItems: 'start' }}>
@@ -1180,7 +1247,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
             }]} /> : null}
           </div>
         </div>
-        {workspace.status === 'loading' ? <NoticeLine>Checking linked workspace…</NoticeLine> : null}
+        {workspace.status === 'loading' ? <div aria-live="polite"><NoticeLine>Checking linked workspace…</NoticeLine></div> : null}
         {workspace.status === 'error' ? <InlineError
           message={`Workspace link status unavailable: ${workspace.error ?? 'Workspace attachment could not be checked.'}. Start and Resume are disabled until the link can be checked.`}
           action={{ label: 'Retry', onAction: () => { void pageControl.request('workspace-retry') } }}
