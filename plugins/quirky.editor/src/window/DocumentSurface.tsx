@@ -615,7 +615,9 @@ function DocumentBody({ context, input }: { context: UiPluginContext; input: Doc
     ackRevision.current = Math.max(ackRevision.current, saved.contentRevision)
     if (current) {
       const stableText = localTextRef.current === snapshot
-      setBuffer(mergeSurfaceBuffer(current, saved, { content: savedContent, draft: stableText ? savedDraft : current.draft }))
+      const acknowledged = mergeSurfaceBuffer(current, saved, { content: savedContent, draft: stableText ? savedDraft : current.draft })
+      bufferRef.current = acknowledged
+      setBuffer(acknowledged)
     }
     if (localTextRef.current === snapshot && saved.draftLength === null) {
       localTextRef.current = null

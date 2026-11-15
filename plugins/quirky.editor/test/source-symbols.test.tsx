@@ -1038,6 +1038,48 @@ RS_test('real daemon: dirty TypeScript is refused without navigation or save, th
   RS_expect(view.state.doc.sliceString(target, target + 3)).toBe('who')
 }, 60_000)
 
+RS_test('real daemon: saved source is navigable in the save acknowledgement turn', async () => {
+  const fixture = await RS_startFixture('ts')
+  const window = fixture.windows[0]!
+  await RS_activateWindow(fixture, window)
+  const opened = await RS_openDocument(fixture, window, 'src/use.ts')
+  const source = await RS_mountDocument(fixture, window, opened.id, opened.openedTabId)
+  const view = RS_view(source)
+  const original = RS_readFileSync(RS_join(fixture.root, 'src/use.ts'), 'utf8')
+  await RS_setCaret(source, 4, 33)
+  await RS_act(async () => { view.dispatch({ changes: { from: 0, insert: 'x' } }) })
+  await RS_waitForAsync(async () => {
+    const response = await RS_call<{ buffer?: { draft?: string | null } }>(fixture, 'quirky.editor/read', { bufferId: opened.id, action: 'buffer' })
+    return typeof response.buffer?.draft === 'string' ? response.buffer : undefined
+  }, 10_000)
+  await RS_expect(RS_invokeHandler(window, 'command:quirky.editor/go-to-definition')).rejects.toThrow(SAVED_FIRST)
+  RS_expect(RS_calls(window, 'quirky.editor/save')).toEqual([])
+  RS_expect(RS_calls(window, 'quirky.navigation/definition')).toEqual([])
+  RS_expect(RS_readFileSync(RS_join(fixture.root, 'src/use.ts'), 'utf8')).toBe(original)
+  const save = window.handlers.get('command:quirky.editor/save')
+  const definition = window.handlers.get('command:quirky.editor/go-to-definition')
+  if (!save || !definition) throw new Error('Activation did not provide Save and Go to Definition.')
+  let result: unknown
+  let failure: unknown
+  await RS_act(async () => {
+    try {
+      await save()
+      RS_expect(RS_calls(window, 'quirky.editor/save')).toHaveLength(1)
+      RS_expect(RS_readFileSync(RS_join(fixture.root, 'src/use.ts'), 'utf8')).toBe(`x${original}`)
+      result = await definition()
+    } catch (error) {
+      failure = error
+    }
+  })
+  if (failure !== undefined) throw failure
+  RS_expect(result).toEqual({ kind: 'definition', status: 'opened', path: 'src/use.ts', line: 3, column: 7 })
+  RS_expect(RS_calls(window, 'quirky.navigation/definition').map(({ params }) => params)).toEqual([{
+    worktree: `id:${fixture.worktreeId}`, path: 'src/use.ts', line: 4, column: 33
+  }])
+  RS_expect(RS_calls(window, 'quirky.editor/open')).toEqual([])
+  RS_expect(view.state.doc.sliceString(view.state.selection.main.from, view.state.selection.main.to)).toBe('who')
+}, 60_000)
+
 RS_test('real daemon: one TypeScript worktree open targets c2 and leaves c1 layout and navigation history unchanged', async () => {
   const fixture = await RS_startFixture('ts', 2)
   const [c1, c2] = fixture.windows
