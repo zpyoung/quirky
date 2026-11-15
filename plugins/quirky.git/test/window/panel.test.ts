@@ -127,7 +127,12 @@ test('SC-16: the filter narrows rows, hides the Commits dock and refuses a long 
 
   await type(input, 'x'.repeat(3000))
   await w.win.waitFor(async () => (await w.report()).filter === input.value)
-  await w.win.waitFor(() => q('[data-git-content] section p'))
+  await w.win.waitFor(() =>
+    text(q('[data-git-content] .ui-inline-error__message')) === 'Search text is too large' &&
+    text(q('[data-git-content] .ui-text-muted')) === 'Use a shorter file filter.'
+  )
+  expect(text(q('[data-git-content] .ui-inline-error__message'))).toBe('Search text is too large')
+  expect(text(q('[data-git-content] .ui-text-muted'))).toBe('Use a shorter file filter.')
   expect(rowPaths()).toHaveLength(0)
   await press(input, 'Escape')
   await w.win.waitFor(() => rowPaths().length === 4)

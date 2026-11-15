@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
+import type { Fake } from './panel-support'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -12,7 +13,6 @@ beforeEach(() => {
   document.body.innerHTML = ''
 })
 
-type Fake = ReturnType<typeof fakeContext>
 
 async function open(configure: (fake: Fake) => void = () => {}) {
   const fake = fakeContext(layoutFor('feat'))
@@ -607,7 +607,12 @@ describe('SC-28: the ship button names the next step and the panel reports it', 
       f.compare = compareOf({ entries: [{ path: 'util.ts', status: 'added', added: 1, removed: 0, binary: false }] })
     })
     await click(rowOf(element, 'math.ts'))
-    expect(fake.reports.at(-1)).toEqual({
+    const { uiControls, ...state } = fake.reports.at(-1)
+    expect(uiControls).toEqual(expect.arrayContaining([{
+      surface: 'panel:quirky.git/source-control', target: 'worktree:feat',
+      generation: expect.any(String), actions: expect.arrayContaining(['row-open', 'ship-step', 'refresh'])
+    }]))
+    expect(state).toEqual({
       worktree: 'feat',
       branch: 'zoe/feat',
       base: 'origin/main',
