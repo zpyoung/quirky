@@ -57,7 +57,7 @@ test('fills the CLI defaults and keeps every given field', () => {
   expect(contractProblems(validPayload())).toEqual([])
 })
 
-test('refuses each invalid contract with its code', () => {
+test('remote bars enroll without weakening local or workspace validation', () => {
   const schemaCases: Array<[string, (value: Record<string, unknown>) => void]> = [
     ['objectiveText must be a string', (value) => { value.objectiveText = 1 }],
     ['existingPlan must be a string', (value) => { value.existingPlan = null }],
@@ -146,13 +146,13 @@ test('refuses each invalid contract with its code', () => {
     ['empty gate command', 'gates-invalid', (value) => { value.gates = [{ name: 'lint', command: '', timeoutSeconds: 30 }] }],
     ['overlong gate command', 'gates-invalid', (value) => { value.gates = [{ name: 'lint', command: 'x'.repeat(8_193), timeoutSeconds: 30 }] }],
     ['unknown role agent', 'role-agents-invalid', (value) => { value.roleAgents = { planner: 'claude', unknown: 'claude' } as ObjectivePayload['roleAgents'] }],
-    ['invalid role-agent identifier', 'role-agents-invalid', (value) => { value.roleAgents = { planner: 'Bad Agent' } }],
-    ['unsupported pushed-ref landing bar', 'landing-bar-unsupported', (value) => { value.landingBar = 'pushed-ref' }],
-    ['unsupported hosted-review landing bar', 'landing-bar-unsupported', (value) => { value.landingBar = 'hosted-review' }],
-    ['unsupported merged landing bar', 'landing-bar-unsupported', (value) => { value.landingBar = 'merged' }]
+    ['invalid role-agent identifier', 'role-agents-invalid', (value) => { value.roleAgents = { planner: 'Bad Agent' } }]
   ]
 
-  expect(contractProblems({ ...validPayload(), landingBar: 'committed-local-branch' })).toEqual([])
+  for (const landingBar of ['files-on-disk', 'committed-local-branch', 'pushed-ref', 'hosted-review', 'merged'] as const) {
+    expect(contractProblems({ ...validPayload(), landingBar }), `landing bar ${landingBar}`).toEqual([])
+  }
+
   expect(contractProblems({ ...validPayload(), writeTerritory: ['**'] })).toEqual([])
   expect(territoryProblems(['**', 'src/**'])).toEqual([])
   expect(contractProblems({ ...validPayload(), writeTerritory: ['.gitignore'] })).toEqual([])

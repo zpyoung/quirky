@@ -26,7 +26,7 @@ export type EditorUiControlReportScope = {
   dispose(): void
 }
 
-export type EditorUiControlReportOptions = { surface: string }
+export type EditorUiControlReportOptions = { surface: string; context?: UiPluginContext }
 
 export type UseEditorUiControlOptions = {
   context: UiPluginContext
@@ -49,6 +49,7 @@ type RegistryEntry = {
 }
 
 type ScopeState = {
+  context?: UiPluginContext
   latestReport: unknown
   hasReport: boolean
   active: boolean
@@ -219,6 +220,7 @@ export function createEditorUiControlReportScope(
 ): EditorUiControlReportScope {
   if (!isNonEmptyString(options?.surface)) throw new TypeError('Editor UI control report scope requires a surface.')
   const state: ScopeState = {
+    context: options.context,
     latestReport: undefined,
     hasReport: false,
     active: true,
@@ -279,6 +281,13 @@ export function useEditorUiControlReport(): (state: unknown) => void {
 
 export function useEditorUiControlSurface(): string {
   return useRequiredScope().surface
+}
+
+/** Returns the public context belonging to the nearest mounted Editor surface. */
+export function useEditorUiControlContext(): UiPluginContext {
+  const context = reportScopeState.get(useRequiredScope())?.context
+  if (!context) throw new Error('Editor UI control mount scope has no plugin context.')
+  return context
 }
 
 function errorOf(reason: unknown): Error {
