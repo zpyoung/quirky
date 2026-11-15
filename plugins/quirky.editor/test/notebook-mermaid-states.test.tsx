@@ -1442,6 +1442,336 @@ test('accepted trusted runs expose shared pending state and refuse duplicate sub
   expect(calls.filter(({ action }) => action === 'runAll')).toHaveLength(1)
 })
 
+test('unacknowledged external drafts invalidate notebook and trust controls and discard cell edits', async () => {
+  const cells = [makeCell('first source', { id: 'first' }), makeCell('second source', { id: 'second' })]
+  const content = notebookContent(cells)
+  const externalDraft = notebookContent([cells[1]!, cells[0]!])
+  const calls: Record<string, unknown>[] = []
+  const submitted: string[] = []
+  const surface = await renderNotebook(makeBuffer('b1', content), async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') return runtimeState({ trusted: false })
+    return {}
+  }, makeContext(), () => {}, (draft) => submitted.push(draft))
+  await flush()
+
+  const notebook = addressFor(surface, 'notebook:b1')
+  expect(await runControl(surface, 'notebook:b1', 'edit-cell', { index: 0, editing: true })).toEqual({ delivered: true })
+  const editor = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-cell-editor')!
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('The textarea value setter is unavailable.')
+  await act(async () => {
+    setter.call(editor, 'print("unacknowledged")')
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  expect(await runControl(surface, 'notebook:b1', 'run-cell', { index: 0, mode: 'in-place' })).toEqual({ delivered: true })
+  const trust = addressFor(surface, 'notebook-trust:b1')
+
+  await surface.rerender(makeBuffer('b1', content, { draft: externalDraft, contentRevision: 2 }))
+  await flush()
+  const replacement = addressFor(surface, 'notebook:b1')
+  expect(replacement.generation).not.toBe(notebook.generation)
+  expect(await runAddress(surface, notebook, 'save', {})).toEqual({ delivered: false })
+  expect(await runAddress(surface, trust, 'confirm', {})).toEqual({ delivered: false })
+  expect(calls.some(({ action }) => action === 'trust' || action === 'run')).toBe(false)
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBeNull()
+  expect(surface.element.textContent).toContain('second source')
+  expect(surface.element.textContent).not.toContain('unacknowledged')
+  expect(await runAddress(surface, replacement, 'save', {})).toEqual({ delivered: true })
+  expect(submitted).toEqual([])
+})
+
+test('unacknowledged external drafts invalidate setup confirmation', async () => {
+  const cells = [makeCell('first source', { id: 'first' }), makeCell('second source', { id: 'second' })]
+  const content = notebookContent(cells)
+  const externalDraft = notebookContent([cells[1]!, cells[0]!])
+  const calls: Record<string, unknown>[] = []
+  const surface = await renderNotebook(makeBuffer('b1', content), async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') return runtimeState()
+    if (params.action === 'runAll') return { status: 'missing-ipykernel', externallyManaged: false }
+    return {}
+  })
+  await flush()
+  const notebook = addressFor(surface, 'notebook:b1')
+  expect(await runControl(surface, 'notebook:b1', 'run-all', {})).toEqual({ delivered: true })
+  const setup = addressFor(surface, 'notebook-setup:b1')
+
+  await surface.rerender(makeBuffer('b1', content, { draft: externalDraft, contentRevision: 2 }))
+  await flush()
+  const replacement = addressFor(surface, 'notebook:b1')
+  expect(replacement.generation).not.toBe(notebook.generation)
+  expect(await runAddress(surface, notebook, 'save', {})).toEqual({ delivered: false })
+  expect(await runAddress(surface, setup, 'confirm', {})).toEqual({ delivered: false })
+  expect(calls.some(({ action }) => action === 'install' || action === 'venv')).toBe(false)
+})
+
+test('same-type no-ops are refused without locking index controls; no-ID move acknowledgements recover safely', async () => {
+  const content = notebookContent([makeCell('only cell')])
+  const noOpCalls: Record<string, unknown>[] = []
+  const noOpTypeSurface = await renderNotebook(makeBuffer('noop', content), async (_method, params) => {
+    noOpCalls.push(params)
+    if (params.action === 'state') return runtimeState()
+    return {}
+  })
+  await flush()
+  const beforeNoOp = addressFor(noOpTypeSurface, 'notebook:noop')
+  expect(beforeNoOp.actions).toContain('cell-type')
+  expect(await runControl(noOpTypeSurface, 'notebook:noop', 'cell-type', { index: 0, cellType: 'code' }))
+    .toEqual({ delivered: false })
+  const afterNoOp = addressFor(noOpTypeSurface, 'notebook:noop')
+  expect(afterNoOp.generation).toBe(beforeNoOp.generation)
+  expect(afterNoOp.actions).toContain('cell-type')
+  expect(noOpCalls.filter(({ action }) => action === 'type')).toEqual([])
+
+  const noIdCells = [makeCell('first'), makeCell('second')]
+  const beforeMoveContent = notebookContent(noIdCells)
+  const moveSurface = await renderNotebook(makeBuffer('move', beforeMoveContent), async (_method, params) => {
+    if (params.action === 'state') return runtimeState()
+    return {}
+  })
+  await flush()
+  const beforeMove = addressFor(moveSurface, 'notebook:move')
+  expect(await runControl(moveSurface, 'notebook:move', 'move-cell', { index: 0, direction: 'down' }))
+    .toEqual({ delivered: true })
+  const pendingMove = addressFor(moveSurface, 'notebook:move')
+  expect(pendingMove.actions).not.toContain('move-cell')
+  await moveSurface.rerender(makeBuffer('move', notebookContent([noIdCells[1]!, noIdCells[0]!]), { contentRevision: 2 }))
+  await flush()
+  const acknowledgedMove = addressFor(moveSurface, 'notebook:move')
+  expect(acknowledgedMove.actions).toContain('move-cell')
+  expect(await runAddress(moveSurface, beforeMove, 'move-cell', { index: 0, direction: 'down' }))
+    .toEqual({ delivered: false })
+  expect(await runAddress(moveSurface, pendingMove, 'move-cell', { index: 0, direction: 'down' }))
+    .toEqual({ delivered: false })
+})
+
+test('read-only notebooks can page cells and reveal additional output frames', async () => {
+  const cells = Array.from({ length: 101 }, (_, index) => makeCell(`cell-${index + 1}`, {
+    id: `cell-${index + 1}`,
+    outputs: index === 0
+      ? Array.from({ length: 21 }, (_, frame) => ({ output_type: 'execute_result', data: { 'text/plain': `frame ${frame}` } }))
+      : []
+  }))
+  const calls: Record<string, unknown>[] = []
+  const surface = await renderNotebook(makeBuffer('readonly', notebookContent(cells), { readOnly: true }), async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') return runtimeState()
+    return {}
+  })
+  await flush()
+  const address = addressFor(surface, 'notebook:readonly')
+  expect(address.actions).not.toContain('save')
+  expect(address.actions).not.toContain('run-all')
+  expect(address.actions).not.toContain('clear-all')
+  expect(address.actions).not.toContain('append-cell')
+  expect(address.actions).not.toContain('edit-cell')
+  expect(address.actions).not.toContain('delete-cell')
+  expect(address.actions).not.toContain('cell-type')
+  expect(address.actions).not.toContain('insert-cell')
+  expect(address.actions).not.toContain('move-cell')
+  expect(address.actions).not.toContain('clear-cell')
+  expect(address.actions).not.toContain('run-cell')
+  expect(address.actions).toContain('page')
+  expect(address.actions).toContain('show-outputs')
+  expect(await runAddress(surface, address, 'page', { direction: 'next' })).toEqual({ delivered: true })
+  expect(surface.element.textContent).toContain('Cells 101–101 of 101')
+  expect(await runAddress(surface, addressFor(surface, 'notebook:readonly'), 'page', { direction: 'previous' }))
+    .toEqual({ delivered: true })
+  expect(surface.element.textContent).toContain('Cells 1–100 of 101')
+  expect(surface.element.querySelectorAll('pre[data-output-mime="text/plain"]')).toHaveLength(20)
+  expect(await runAddress(surface, addressFor(surface, 'notebook:readonly'), 'show-outputs', { index: 0 }))
+    .toEqual({ delivered: true })
+  expect(surface.element.querySelectorAll('pre[data-output-mime="text/plain"]')).toHaveLength(21)
+  expect(calls.filter(({ action }) => action !== 'state')).toEqual([])
+})
+
+test('trust confirmation runs once with its fresh runtime despite an earlier deferred change read', async () => {
+  const deferredChange = Promise.withResolvers<unknown>()
+  const context = makeContext()
+  const calls: Record<string, unknown>[] = []
+  let stateReads = 0
+  let trusted = false
+  const surface = await renderNotebook(makeBuffer(), async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') {
+      stateReads += 1
+      if (stateReads === 1) return runtimeState({ trusted: false })
+      if (stateReads === 2) return deferredChange.promise
+      return runtimeState({ trusted })
+    }
+    if (params.action === 'trust') {
+      trusted = true
+      return {}
+    }
+    return {}
+  }, context)
+  await flush()
+  expect(await runControl(surface, 'notebook:b1', 'run-all', {})).toEqual({ delivered: true })
+  const trust = addressFor(surface, 'notebook-trust:b1')
+  await act(async () => {
+    for (const listener of context.subscribers) listener({ type: 'quirky.editor/changed' })
+  })
+  await flush()
+
+  expect(await runAddress(surface, trust, 'confirm', {})).toEqual({ delivered: true })
+  expect(calls.filter(({ action }) => action === 'runAll')).toHaveLength(1)
+  expect(calls.filter(({ action }) => action === 'trust')).toHaveLength(1)
+  await act(async () => { deferredChange.resolve(runtimeState({ trusted: false })) })
+  await flush()
+  expect(await runControl(surface, 'notebook:b1', 'run-all', {})).toEqual({ delivered: true })
+  expect(calls.filter(({ action }) => action === 'runAll')).toHaveLength(2)
+  expect(calls.filter(({ action }) => action === 'trust')).toHaveLength(1)
+})
+
+test('missing-ipykernel setup captures the interpreter selected during kernel preparation', async () => {
+  const context = makeContext()
+  const calls: Record<string, unknown>[] = []
+  let selectedPython: string | null = null
+  const surface = await renderNotebook(makeBuffer(), async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') return runtimeState({
+      selectedPython: selectedPython === null ? null : { path: selectedPython, name: selectedPython }
+    })
+    if (params.action === 'runAll') {
+      selectedPython = '/fixture/python-A'
+      return { status: 'missing-ipykernel', externallyManaged: false }
+    }
+    return {}
+  }, context)
+  await flush()
+  expect(await runControl(surface, 'notebook:b1', 'run-all', {})).toEqual({ delivered: true })
+  const setup = addressFor(surface, 'notebook-setup:b1')
+  expect(surface.element.querySelector('[role="dialog"]')?.textContent).toContain('Install ipykernel?')
+
+  selectedPython = '/fixture/python-B'
+  await act(async () => {
+    for (const listener of context.subscribers) listener({ type: 'quirky.editor/changed' })
+  })
+  await flush()
+  expect(addressFor(surface, 'notebook-setup:b1').generation).toBe(setup.generation)
+  expect(await runAddress(surface, setup, 'confirm', {})).toEqual({ delivered: true })
+  expect(calls.find(({ action }) => action === 'install')).toMatchObject({
+    bufferId: 'b1',
+    action: 'install',
+    python: '/fixture/python-A'
+  })
+  expect(calls.some(({ action, python }) => action === 'install' && python === '/fixture/python-B')).toBe(false)
+  expect(calls.some(({ action }) => action === 'venv')).toBe(false)
+})
+
+test('a cancelled discovery rejection cannot publish into a reopened environment picker', async () => {
+  const delayedDiscovery = Promise.withResolvers<unknown>()
+  const calls: Record<string, unknown>[] = []
+  let environmentReads = 0
+  const surface = await renderNotebook(makeBuffer(), async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') return runtimeState()
+    if (params.action === 'environments') {
+      environmentReads += 1
+      if (environmentReads === 1) return delayedDiscovery.promise
+      return { environments: [{ path: '/fixture/current', name: 'Current Python' }] }
+    }
+    return {}
+  })
+  await flush()
+  await act(async () => { button(surface.element, 'Select Kernel')!.click() })
+  await flush()
+  const oldPicker = addressFor(surface, 'notebook-environments:b1')
+  expect(surface.element.querySelector('.ui-notice-line')?.textContent).toContain('Loading Python environments…')
+  expect(await runAddress(surface, oldPicker, 'cancel', {})).toEqual({ delivered: true })
+  await act(async () => { button(surface.element, 'Select Kernel')!.click() })
+  await flush()
+  const currentPicker = addressFor(surface, 'notebook-environments:b1')
+
+  await act(async () => { delayedDiscovery.reject(new Error('obsolete discovery failed')) })
+  await flush()
+  expect(addressFor(surface, 'notebook-environments:b1').generation).toBe(currentPicker.generation)
+  expect(surface.element.querySelector('[aria-label="Python environments"]')?.textContent).toContain('Current Python')
+  expect(surface.element.querySelector('[aria-label="Python environments"]')).not.toBeNull()
+  expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+  expect(calls.filter(({ action }) => action === 'environments')).toHaveLength(2)
+})
+
+ 
+test('raw notebook draft acknowledgements preserve source editor focus and selection', async () => {
+  const content = notebookContent([makeCell('print(1)')])
+  const draft = content.replace('print(1)', 'print(2)')
+  const submitted: string[] = []
+  let surface!: Mounted
+  let echo!: Promise<void>
+  let revision = 1
+  surface = await renderNotebook(makeBuffer('raw', content, { mode: 'source' }), async (_method, params) => {
+    if (params.action === 'state') return runtimeState()
+    return {}
+  }, makeContext(), () => {}, (value) => {
+    submitted.push(value)
+    echo = surface.rerender(makeBuffer('raw', content, { mode: 'source', draft: value, contentRevision: ++revision }))
+  })
+  await flush()
+  const originalAddress = addressFor(surface, 'notebook:raw')
+  const textarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-source')!
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('The textarea value setter is unavailable.')
+  await act(async () => {
+    textarea.focus()
+    setter.call(textarea, draft)
+    textarea.setSelectionRange(10, 12)
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await echo
+  })
+  await flush()
+  expect(submitted).toEqual([draft])
+  expect(addressFor(surface, 'notebook:raw').generation).toBe(originalAddress.generation)
+  const echoed = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-source')
+  expect(echoed).toBe(textarea)
+  expect(echoed?.value).toBe(draft)
+  expect(document.activeElement).toBe(textarea)
+  expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([10, 12])
+})
+
+test('two outstanding cell draft acknowledgements preserve the current typing session', async () => {
+  const submitted: string[] = []
+  const surface = await renderNotebook(makeBuffer(), async (_method, params) => {
+    if (params.action === 'state') return runtimeState()
+    return {}
+  }, makeContext(), () => {}, (draft) => submitted.push(draft))
+  await flush()
+  const originalAddress = addressFor(surface, 'notebook:b1')
+  expect(await runControl(surface, 'notebook:b1', 'edit-cell', { index: 0, editing: true })).toEqual({ delivered: true })
+  const textarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-cell-editor')!
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('The textarea value setter is unavailable.')
+
+  await act(async () => {
+    setter.call(textarea, 'print("first draft")')
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  expect(await runControl(surface, 'notebook:b1', 'save', {})).toEqual({ delivered: true })
+  await act(async () => {
+    setter.call(textarea, 'print("second draft")')
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  expect(await runControl(surface, 'notebook:b1', 'save', {})).toEqual({ delivered: true })
+  expect(submitted).toHaveLength(2)
+
+  textarea.focus()
+  textarea.setSelectionRange(7, 11)
+  await surface.rerender(makeBuffer('b1', notebookContent(), { draft: submitted[0]!, contentRevision: 2 }))
+  await flush()
+  expect(addressFor(surface, 'notebook:b1').generation).toBe(originalAddress.generation)
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBe(textarea)
+  expect(document.activeElement).toBe(textarea)
+  expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([7, 11])
+
+  await surface.rerender(makeBuffer('b1', notebookContent(), { draft: submitted[1]!, contentRevision: 3 }))
+  await flush()
+  expect(addressFor(surface, 'notebook:b1').generation).toBe(originalAddress.generation)
+  expect(surface.element.querySelector('textarea.notebook-cell-editor')).toBe(textarea)
+  expect(document.activeElement).toBe(textarea)
+  expect([textarea.selectionStart, textarea.selectionEnd]).toEqual([7, 11])
+})
+
 async function runMermaidScenario(code: string): Promise<void> {
   const home = await mkdtemp(join(tmpdir(), 'quirky-mermaid-test-'))
   try {

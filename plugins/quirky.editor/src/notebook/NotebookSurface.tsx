@@ -21,11 +21,13 @@ type RuntimeReadState = { bufferId: string; worktreeId: string; runtime: Noteboo
 type NotebookSession = {
   bufferId: string
   content: string
+  contentRevision: number
   worktreeId: string
   generation: string
   sourceSignature: string
   structureSignature: string
   pendingStructure: boolean
+  pendingStructureAckRevision: number | null
 }
 type EnvironmentPicker = {
   generation: string
@@ -177,11 +179,13 @@ export function NotebookSurface(props: SurfaceProps) {
     sessionRef.current = {
       bufferId,
       content,
+      contentRevision: buffer.contentRevision,
       worktreeId,
       generation: crypto.randomUUID(),
       sourceSignature,
       structureSignature,
-      pendingStructure: false
+      pendingStructure: false,
+      pendingStructureAckRevision: null
     }
   } else {
     const previous = sessionRef.current
@@ -191,21 +195,27 @@ export function NotebookSurface(props: SurfaceProps) {
     const localEcho = contentChanged && submittedNotebooks.current.some(
       (submitted) => submitted.bufferId === bufferId && submitted.content === content
     )
-    const localDraft = buffer.draft !== null
+    const sourceChanged = sourceSignature !== previous.sourceSignature
     const waitingForStructure = !bufferChanged && previous.pendingStructure
-    const expectedStructureChange = waitingForStructure && structureChanged
-    const unexpectedSourceChange = sourceSignature !== previous.sourceSignature && !localEcho && !localDraft
-    const rotate = bufferChanged || !expectedStructureChange && (
-      structureChanged && !waitingForStructure && !localDraft && !localEcho || unexpectedSourceChange
+    const acknowledgedStructureRevision = waitingForStructure &&
+      previous.pendingStructureAckRevision !== null &&
+      buffer.contentRevision >= previous.pendingStructureAckRevision
+    const expectedStructureChange = waitingForStructure && (
+      structureChanged || sourceChanged && !localEcho || acknowledgedStructureRevision
     )
+    const rotate = bufferChanged || structureChanged || sourceChanged && !localEcho || acknowledgedStructureRevision
     sessionRef.current = {
       bufferId,
       content,
+      contentRevision: buffer.contentRevision,
       worktreeId,
       generation: rotate ? crypto.randomUUID() : previous.generation,
       sourceSignature,
       structureSignature,
-      pendingStructure: waitingForStructure && !expectedStructureChange
+      pendingStructure: waitingForStructure && !expectedStructureChange,
+      pendingStructureAckRevision: waitingForStructure && !expectedStructureChange
+        ? previous.pendingStructureAckRevision
+        : null
     }
   }
   const session = sessionRef.current!
@@ -331,7 +341,7 @@ export function NotebookSurface(props: SurfaceProps) {
         submittedNotebooks.current.splice(0, acknowledgedIndex + 1)
         return
       }
-      if (buffer.draft !== null || previous.sourceSignature === sourceSignature) return
+      if (previous.sourceSignature === sourceSignature) return
     }
 
     submittedNotebooks.current = []
@@ -430,7 +440,12 @@ export function NotebookSurface(props: SurfaceProps) {
   const beginStructureMutation = (expected: typeof sessionSnapshot) => {
     if (!isCurrentSession(expected) || sessionRef.current?.pendingStructure) return null
     const generation = crypto.randomUUID()
-    sessionRef.current = { ...sessionRef.current!, generation, pendingStructure: true }
+    sessionRef.current = {
+      ...sessionRef.current!,
+      generation,
+      pendingStructure: true,
+      pendingStructureAckRevision: null
+    }
     setStructureRevision((revision) => revision + 1)
     return { ...expected, generation }
   }
@@ -439,9 +454,14 @@ export function NotebookSurface(props: SurfaceProps) {
     const current = sessionRef.current
     if (!isCurrentSession(expected) || !current?.pendingStructure) return expected
     const generation = crypto.randomUUID()
-    sessionRef.current = { ...current, generation, pendingStructure: false }
+    sessionRef.current = { ...current, generation, pendingStructure: false, pendingStructureAckRevision: null }
     setStructureRevision((revision) => revision + 1)
     return { ...expected, generation }
+  }
+
+  const submitNotebookDraft = (draft: string) => {
+    submittedNotebooks.current.push({ bufferId, content: draft })
+    onDraft(draft)
   }
 
   const flushCellChanges = () => {
@@ -457,8 +477,7 @@ export function NotebookSurface(props: SurfaceProps) {
     }
     pendingCellChanges.current.clear()
     const serialized = serializeNotebook(updated)
-    submittedNotebooks.current.push({ bufferId, content: serialized })
-    onDraft(serialized)
+    submitNotebookDraft(serialized)
   }
 
   const flushCellChangesRef = useRef(flushCellChanges)
@@ -507,7 +526,14 @@ export function NotebookSurface(props: SurfaceProps) {
     showSourceError(null, operationSession)
     showControlError(null, operationSession)
     try {
-      await action(name, fields, operationSession)
+      const result = asRecord(await action(name, fields, operationSession))
+      const revision = result.contentRevision
+      const current = sessionRef.current
+      if (structural && isCurrentSession(operationSession) && current?.pendingStructure &&
+        typeof revision === 'number' && Number.isSafeInteger(revision) &&
+        revision > buffer.contentRevision) {
+        sessionRef.current = { ...current, pendingStructureAckRevision: revision }
+      }
       return isCurrentSession(operationSession)
     } catch (error) {
       const errorSession = structural ? releaseStructureMutation(operationSession) : operationSession
@@ -561,13 +587,12 @@ export function NotebookSurface(props: SurfaceProps) {
       updateEnvironmentPrompt(prompt, expected, { choices: environments, pending: false, error: null, settled: true })
       return true
     } catch (error) {
-      if (isEnvironmentPromptCurrent(prompt, expected)) {
-        updateEnvironmentPrompt(prompt, expected, {
-          pending: false,
-          error: error instanceof Error ? error.message : String(error),
-          settled: true
-        })
-      }
+      if (!isEnvironmentPromptCurrent(prompt, expected)) return true
+      updateEnvironmentPrompt(prompt, expected, {
+        pending: false,
+        error: error instanceof Error ? error.message : String(error),
+        settled: true
+      })
       throw error
     }
   }
@@ -761,9 +786,10 @@ export function NotebookSurface(props: SurfaceProps) {
     expected: typeof sessionSnapshot,
     operation: BusyOperation,
     python: string | null,
+    runtimeForRun: NotebookRuntimeState,
     trustPrompt?: TrustPrompt
   ): Promise<boolean> => {
-    if (!isCurrentSession(expected) || runtimePending || !runtime) return false
+    if (!isCurrentSession(expected) || runtimeForRun.busy) return false
     flushCellChanges()
     showKernelError(null, expected)
     try {
@@ -771,11 +797,16 @@ export function NotebookSurface(props: SurfaceProps) {
         ? asRecord(await action('runAll', {}, expected))
         : asRecord(await action('run', { index: request.index, mode: request.mode }, expected))
       if (!isCurrentSession(expected) || trustPrompt && !isTrustPromptCurrent(trustPrompt, expected)) return false
+      let refreshed: NotebookRuntimeState | null = null
       if (result.status === 'missing-ipykernel') {
+        refreshed = await refreshRuntime(expected)
+        if (!refreshed || !isCurrentSession(expected) || trustPrompt && !isTrustPromptCurrent(trustPrompt, expected)) {
+          return false
+        }
         openSetupPrompt(
           result.externallyManaged === true ? 'venv' : 'install',
           expected,
-          python
+          refreshed.selectedPython?.path ?? python
         )
       } else if (result.status === 'failed' || result.status === 'dead' || result.status === 'error') {
         showKernelError(typeof result.stderr === 'string' ? result.stderr : 'Notebook execution failed.', expected)
@@ -784,7 +815,7 @@ export function NotebookSurface(props: SurfaceProps) {
         result.nextIndex >= 0 && result.nextIndex < cells.length) {
         setEditingCell(result.nextIndex)
       }
-      const refreshed = await refreshRuntime(expected)
+      refreshed ??= await refreshRuntime(expected)
       return refreshed !== null && isCurrentSession(expected) &&
         (!trustPrompt || isTrustPromptCurrent(trustPrompt, expected))
     } catch (error) {
@@ -804,7 +835,7 @@ export function NotebookSurface(props: SurfaceProps) {
     const operation = beginBusy(expected, 'Running notebook…')
     if (!operation) return false
     showControlError(null, expected)
-    return executeRun(request, expected, operation, runtime.selectedPython?.path ?? null)
+    return executeRun(request, expected, operation, runtime.selectedPython?.path ?? null, runtime)
   }
 
   const confirmTrust = async (prompt: TrustPrompt, expected = sessionSnapshot): Promise<boolean> => {
@@ -820,7 +851,7 @@ export function NotebookSurface(props: SurfaceProps) {
       if (!refreshed.trusted || (refreshed.selectedPython?.path ?? null) !== prompt.python) {
         throw new Error('Notebook trust or selected Python changed before execution.')
       }
-      return await executeRun(prompt.request, expected, operation, prompt.python, prompt)
+      return await executeRun(prompt.request, expected, operation, prompt.python, refreshed, prompt)
     } catch (error) {
       showKernelError(error instanceof Error ? error.message : String(error), expected)
       throw error
@@ -935,6 +966,7 @@ export function NotebookSurface(props: SurfaceProps) {
   const pythonNotebook = parsed.valid && parsed.language.startsWith('python') && !sourceMode
   const richNotebook = parsed.valid && !sourceMode
   const indexActionsAvailable = richNotebook && !buffer.readOnly && !session.pendingStructure
+  const viewIndexActionsAvailable = richNotebook && !session.pendingStructure
   const hasMoreOutputs = cells.some((cell, index) =>
     cell.cell_type === 'code' && Array.isArray(cell.outputs) && cell.outputs.length > (outputLimits[index] ?? OUTPUT_PAGE_SIZE)
   )
@@ -946,17 +978,22 @@ export function NotebookSurface(props: SurfaceProps) {
   }
   if (pythonNotebook) {
     notebookActions.push('environments')
-    if (!runtimePending && runtime) notebookActions.push('run-all', 'clear-all')
+    if (!buffer.readOnly && !runtimePending && runtime) {
+      if (!runtime.busy) notebookActions.push('run-all')
+      notebookActions.push('clear-all')
+    }
     if (runtime?.busy) notebookActions.push('interrupt')
     if (runtime?.kernel?.status === 'ready' || runtime?.kernel?.status === 'dead') notebookActions.push('restart')
   }
+  if (viewIndexActionsAvailable) {
+    if (cells.length > CELL_PAGE_SIZE) notebookActions.push('page')
+    if (hasMoreOutputs) notebookActions.push('show-outputs')
+  }
   if (indexActionsAvailable) {
     notebookActions.push('append-cell')
-    if (cells.length > CELL_PAGE_SIZE) notebookActions.push('page')
     if (cells.length > 0) notebookActions.push('edit-cell', 'delete-cell', 'cell-type', 'insert-cell')
     if (cells.length > 1) notebookActions.push('move-cell')
     if (cells.some((cell) => cell.cell_type === 'code')) notebookActions.push('clear-cell')
-    if (hasMoreOutputs) notebookActions.push('show-outputs')
     if (pythonNotebook && !runtimePending && runtime && !runtime.busy && cells.some((cell) => cell.cell_type === 'code')) {
       notebookActions.push('run-cell')
     }
@@ -1060,7 +1097,8 @@ export function NotebookSurface(props: SurfaceProps) {
         return { delivered: true }
       }
       case 'show-outputs': {
-        if (!hasControlData(control.data, ['index'], ['index']) || !indexActionsAvailable) return { delivered: false }
+        if (!hasControlData(control.data, ['index'], ['index']) ||
+          !viewIndexActionsAvailable || sessionRef.current?.pendingStructure) return { delivered: false }
         const index = validIndex(control.data)
         const cell = index === null ? undefined : cells[index]
         const outputCount = cell?.cell_type === 'code' && Array.isArray(cell.outputs) ? cell.outputs.length : 0
@@ -1115,7 +1153,7 @@ export function NotebookSurface(props: SurfaceProps) {
           (control.data.cellType !== 'code' && control.data.cellType !== 'markdown' && control.data.cellType !== 'raw') ||
           !indexActionsAvailable) return { delivered: false }
         const index = validIndex(control.data, false, ['index', 'cellType'])
-        if (index === null) return { delivered: false }
+        if (index === null || cells[index]!.cell_type === control.data.cellType) return { delivered: false }
         return { delivered: await mutateNotebook('type', { index, cellType: control.data.cellType }, sessionSnapshot, true) }
       }
       default:
@@ -1285,7 +1323,6 @@ export function NotebookSurface(props: SurfaceProps) {
           }
         }}
       />
-      <span>{findMatches.length === 10_000 ? '10,000+ matches' : `${findMatches.length} match${findMatches.length === 1 ? '' : 'es'}`}</span>
       <Button type="button" onClick={() => { void notebookControls.run('find-previous') }} disabled={findMatches.length === 0 || actionBusy}>Previous</Button>
       <Button type="button" onClick={() => { void notebookControls.run('find-next') }} disabled={findMatches.length === 0 || actionBusy}>Next</Button>
       <Button type="button" onClick={() => { void notebookControls.run('find-close') }} disabled={actionBusy}>Close</Button>
@@ -1297,7 +1334,7 @@ export function NotebookSurface(props: SurfaceProps) {
       style={{ fontSize: props.fontSize }}
       spellCheck={false}
       value={content}
-      onChange={(event) => onDraft(event.currentTarget.value)}
+      onChange={(event) => submitNotebookDraft(event.currentTarget.value)}
     /> : parsed.valid ? <main className="notebook-cells">
       {cells.length === 0 && <EmptyState message="Empty notebook" />}
       {cells.length > CELL_PAGE_SIZE && <nav aria-label="Notebook cell pages">
@@ -1356,8 +1393,7 @@ export function NotebookSurface(props: SurfaceProps) {
           {visibleOutputs.length > 0 && <div className="notebook-cell-outputs" aria-label={`Outputs for cell ${index + 1}`}>
             {visibleOutputs.map((output, outputIndex) => <CellOutput key={`${output.output_type}-${outputIndex}`} output={output} />)}
             {outputList.length > outputLimit && <>
-              <p role="status">Showing {outputLimit} of {outputList.length} output frames.</p>
-              <Button type="button" onClick={() => { void notebookControls.run('show-outputs', { index }) }} disabled={actionBusy}>Show next output frames</Button>
+              <Button type="button" onClick={() => { void notebookControls.run('show-outputs', { index }) }} disabled={actionBusy || session.pendingStructure}>Show next output frames</Button>
             </>}
           </div>}
         </article>
