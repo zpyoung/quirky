@@ -71,6 +71,8 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
     const receiptById = new Map(report.receipts.map((receipt: { id: string }) => [receipt.id, receipt]))
     for (const observation of report.observations) {
       expect(observation.status, JSON.stringify(observation.error)).toBe('observed')
+      expect(Number.isFinite(observation.evidence.elapsedMs)).toBe(true)
+      expect(observation.evidence.elapsedMs).toBeGreaterThanOrEqual(0)
       expect(observation.receiptIds.length).toBeGreaterThan(0)
       for (const receiptId of observation.receiptIds) expect(receiptById.has(receiptId)).toBe(true)
       expect(observation.before).toHaveLength(2)
