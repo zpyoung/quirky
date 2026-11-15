@@ -48,6 +48,8 @@ export type HostDeps = {
   toast(title: string, body: string, kind: ToastKind, options?: ToastOptions): void
   /** Dismisses the toast keyed `key` and runs its `onDismiss`, for the daemon's `ui.toast.dismiss`; nothing happens when none has it. */
   dismissToast?(key: string): void
+  /** Reserved daemon host operation; never looked up as a contributed plugin command. */
+  browserHostControl?(params: unknown): Promise<unknown>
   log(message: string): void
   readClipboardText?: () => Promise<string>
   /** Source paths of the window's latest native file drop; absent outside the desktop shell. */
@@ -163,8 +165,9 @@ class NoCommand extends Error {
   }
 }
 
-/** The routed request id the daemon uses to dismiss a toast; no plugin command can have it. */
+/** Reserved host request identities bypass contributed plugin command lookup. */
 const TOAST_DISMISS = 'ui.toast.dismiss'
+const BROWSER_HOST_CONTROL = 'ui.browserHost.control'
 
 const DEFAULT_ACTIVATION_TIMEOUT_MS = 10000
 
@@ -1359,7 +1362,15 @@ export class WindowPluginHost {
   private async answerCommand(requestId: string, id: string, args: unknown): Promise<void> {
     let reply: Record<string, unknown>
     try {
-      const result = id === TOAST_DISMISS ? this.dismissToast(args) : await this.runCommandForResult(id, args)
+      let result: unknown
+      if (id === BROWSER_HOST_CONTROL) {
+        if (!this.deps.browserHostControl) throw new Error('browser host controls are unavailable in this window')
+        result = await this.deps.browserHostControl(args)
+      } else if (id === TOAST_DISMISS) {
+        result = this.dismissToast(args)
+      } else {
+        result = await this.runCommandForResult(id, args)
+      }
       JSON.stringify(result)
       reply = { requestId, ...(result !== undefined ? { result } : {}) }
     } catch (error) {
