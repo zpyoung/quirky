@@ -187,8 +187,26 @@ function ambientDeclaration(node: ts.Node): boolean {
   return false
 }
 
+function destructuringWriteTarget(node: ts.Node): boolean {
+  let current = node
+  while (current.parent) {
+    const parent = current.parent
+    if (transparentExpression(parent) && parent.expression === current) current = parent
+    else if (ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.EqualsToken && parent.left === current) {
+      if (ts.isObjectLiteralExpression(current) || ts.isArrayLiteralExpression(current)) return true
+      current = parent
+    } else if ((ts.isShorthandPropertyAssignment(parent) && parent.name === current) ||
+      (ts.isPropertyAssignment(parent) && parent.initializer === current) ||
+      (ts.isSpreadAssignment(parent) && parent.expression === current)) current = parent.parent
+    else if (ts.isArrayLiteralExpression(parent) || ts.isSpreadElement(parent)) current = parent
+    else return false
+  }
+  return false
+}
+
 function valueIdentifier(node: ts.Identifier): boolean {
   const parent = node.parent
+  if (destructuringWriteTarget(node)) return false
   if (ts.isShorthandPropertyAssignment(parent)) return true
   if ('name' in parent && parent.name === node) return false
   if (ts.isBindingElement(parent) && parent.propertyName === node) return false

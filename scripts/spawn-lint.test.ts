@@ -123,6 +123,9 @@ const taskOneErrorCases = [
   ['ambient Bun declaration', 'declare const Bun: any; f(Bun)', escapedGlobalDiagnostic(27)],
   ['ambient self declaration', 'declare global { var self: any }\nf(self)', escapedGlobalDiagnostic(3, 2)],
   ['sibling-scope self shadow', 'let x; { const self = 1 }\nf(self)', escapedGlobalDiagnostic(3, 2)],
+  ['global shorthand assignment target', '({ Bun } = globalThis)', escapedGlobalDiagnostic(4)],
+  ['global renamed assignment target', '({ Bun: Bun } = globalThis)', escapedGlobalDiagnostic(4)],
+  ['global rest assignment target', '({ ...Bun } = globalThis)', escapedGlobalDiagnostic(4)],
 ] as const
 test.each(taskOneErrorCases)('reports exact task 1 diagnostic and padded column: %s', (_name, source, expected) => {
   expect(scanSourceContent(file, source)).toEqual([expected])
@@ -132,6 +135,11 @@ test.each(taskOneErrorCases)('reports exact task 1 diagnostic and padded column:
   expect(scanSourceContent(file, paddedLines.join('\n'))).toEqual([{
     ...expected, column: expected.column + padding,
   }])
+})
+test('checks evaluated defaults separately from destructuring write targets', () => {
+  expect(scanSourceContent(file, '({ Bun = Bun } = globalThis)')).toEqual([
+    escapedGlobalDiagnostic(4), escapedGlobalDiagnostic(10),
+  ])
 })
 const blockingCases = [
   ['Bun.sleepSync(10)', 1],
