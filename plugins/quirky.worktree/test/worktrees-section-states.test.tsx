@@ -248,6 +248,7 @@ function createContextHarness() {
         throw new Error('no live UI window 7')
       }
       if (args.operation === deferOperation) {
+        deferOperation = null
         const deferred = Promise.withResolvers<unknown>()
         pending.push({ args, resolve: deferred.resolve })
         return deferred.promise
@@ -641,6 +642,28 @@ test('ViewTabs replaces a context menu without letting its delayed close close t
   await bridge.releaseNext()
   expect(menuItemNamed('Delete view')).not.toBeNull()
   expect(menuItemNamed('Hide Needs you')).toBeNull()
+})
+
+test('ViewTabs rejects an older delayed context-menu open after a newer one', async () => {
+  const bridge = createContextHarness()
+  await mount(host, tabsElement(tabsProps(bridge.context)))
+  bridge.defer('open-view-menu')
+  const needsYou = host.querySelector<HTMLElement>('[role="tab"][data-view-id="needs-you"]')!
+  await act(async () => needsYou.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 8, clientY: 9 })))
+  await settle()
+  expect(bridge.pending).toHaveLength(1)
+  expect(menuItemNamed('Hide Needs you')).toBeNull()
+
+  const saved = host.querySelector<HTMLElement>('[role="tab"][data-view-id="view_a"]')!
+  await act(async () => saved.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 24 })))
+  await settle()
+  expect(menuItemNamed('Delete view')).not.toBeNull()
+  expect(menuItemNamed('Hide Needs you')).toBeNull()
+
+  await bridge.releaseNext()
+  expect(menuItemNamed('Delete view')).not.toBeNull()
+  expect(menuItemNamed('Hide Needs you')).toBeNull()
+  expect(bridge.logs.at(-1)).toBe('worktree: open-view-menu reached no mounted target')
 })
 
 test('ViewTabs preserves selection and roving keyboard focus while write actions are disabled', async () => {

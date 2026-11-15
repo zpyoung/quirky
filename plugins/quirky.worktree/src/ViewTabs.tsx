@@ -119,9 +119,9 @@ export function ViewTabs({
     setListSession(session)
   }
 
-  const setCurrentViewMenu = (menu: ViewMenu | null) => {
+  const setCurrentViewMenu = (menu: ViewMenu | null, tabRevision = revision.current) => {
     const state = current.current
-    if (state) current.current = { ...state, viewMenu: menu }
+    if (state) current.current = { ...state, viewMenu: menu, tabRevision }
     setViewMenu(menu)
   }
 
@@ -216,7 +216,10 @@ export function ViewTabs({
         const menuX = x ?? bounds.left
         const menuY = y ?? bounds.bottom
         if (!Number.isFinite(menuX) || !Number.isFinite(menuY)) return false
-        setCurrentViewMenu({ session: nextSession(), x: menuX, y: menuY, id, trigger })
+        const nextRevision = revision.current + 1
+        if (!Number.isSafeInteger(nextRevision)) return false
+        revision.current = nextRevision
+        setCurrentViewMenu({ session: nextSession(), x: menuX, y: menuY, id, trigger }, nextRevision)
         return true
       }
       case 'close-view-menu': {
