@@ -4,6 +4,7 @@ import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { DocumentSurface as DocumentSurfaceComponent } from '../src/window/DocumentSurface'
+import type { activate as ActivateEditor } from '../src/ui'
 import { CloseOverlay } from '../src/window/CloseOverlay'
 import type { EditorBuffer, EditorBufferInfo, EditorServices } from '../src/types'
 import { createViewerMethods } from '../src/viewers/service'
@@ -11,7 +12,8 @@ import { activeDocument } from '../src/window/activeDocument'
 import type { EditorView as EditorViewType } from '@codemirror/view'
 import { undo as undoMarkdown } from '@tiptap/pm/history'
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view'
-import { EditorUiControlProvider, createEditorUiControlReportScope, runEditorUiControl } from '../src/window/uiControl'
+import { EditorUiControlProvider, createEditorUiControlReportScope } from '../src/window/uiControl'
+import type { EditorUiControl, EditorUiControlAddress, EditorUiControlResult } from '../src/window/uiControl'
 
 import { parseNotebookRoot, serializeNotebook } from '../src/notebook/document'
 type SettingWrite = { id: string; value: unknown }
@@ -34,6 +36,9 @@ type Mounted = {
   settingWrites: SettingWrite[]
   panelToggles: PanelToggle[]
   saveCalls: Record<string, unknown>[]
+  controlCalls: Array<{ method: string; params: Record<string, unknown> }>
+  controls: EditorUiControlAddress[]
+  runControl(control: EditorUiControl): Promise<EditorUiControlResult>
   saveStarted: Promise<void>
   buffer: EditorBufferInfo
   completeSave(): void
@@ -100,6 +105,7 @@ const SETTINGS = new Map<string, unknown>([
 
 let createRoot: (container: HTMLElement) => Root
 let DocumentSurface: typeof DocumentSurfaceComponent
+let activate: typeof ActivateEditor
 let mounted: Mounted[] = []
 let findEditorView: (node: HTMLElement) => EditorViewType | null
 
@@ -110,6 +116,7 @@ beforeAll(async () => {
   ;({ createRoot } = await import('react-dom/client'))
   await import('../src/viewers/ViewerSurface')
   ;({ DocumentSurface } = await import('../src/window/DocumentSurface'))
+  ;({ activate } = await import('../src/ui'))
   const { EditorView } = await import('@codemirror/view')
   findEditorView = (node) => EditorView.findFromDOM(node)
 })
@@ -238,6 +245,7 @@ async function renderDocument(options: {
   const panelToggles: PanelToggle[] = []
   const settingWrites: SettingWrite[] = []
   const saveCalls: Record<string, unknown>[] = []
+  const controlCalls: Array<{ method: string; params: Record<string, unknown> }> = []
   const { promise: saveStarted, resolve: announceSaveStarted } = Promise.withResolvers<void>()
   let releaseSave: (() => void) | undefined
   const richApplyRequests: RichApplyRequest[] = []
@@ -359,11 +367,14 @@ async function renderDocument(options: {
     state.buffers[0] = info
     return { changed, buffer: { ...info } }
   }
+  const provided = new Map<string, (args?: unknown) => unknown>()
   const context = {
     pluginId: 'quirky.editor',
+    provide(id: string, handler: (args?: unknown) => unknown) { provided.set(id, handler) },
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method.startsWith('ui.window.')) controlCalls.push({ method, params })
       if (method === 'ui.window.self') return { connId: 22 }
-      if (method === 'ui.window.command.run') return { result: await runEditorUiControl(params.args) }
+      if (method === 'ui.window.command.run') return { result: await provided.get(String(params.id))!(params.args) }
       if (method === 'quirky.editor/viewer' && viewerFeature) {
         const projected = projectViewerResponse(await viewerFeature.methods.viewer(params, {} as never))
         if (projected.buffer) viewerMutationResponses.push(projected.buffer)
@@ -558,6 +569,10 @@ async function renderDocument(options: {
     toast() {},
     togglePanel: (panel: string, open: boolean) => { panelToggles.push({ panel, open }) },
   } as unknown as UiPluginContext
+  activate(context)
+  let documentReport: { uiControls?: EditorUiControlAddress[] } = {}
+  const documentScope = createEditorUiControlReportScope((report) => { documentReport = report as typeof documentReport }, { surface: 'view:quirky.editor/document' })
+  documentScope.report({ mounted: true, bufferId: BUFFER_ID, tabId: TAB_ID, mode: options.mode ?? 'source' })
   const controlScope = createEditorUiControlReportScope(undefined, { surface: 'overlay:quirky.editor/close' })
   const group = document.createElement('div')
   group.className = 'qt-group qt-active'
@@ -575,6 +590,13 @@ async function renderDocument(options: {
     settingWrites,
     panelToggles,
     saveCalls,
+    controlCalls,
+    get controls() { return documentReport.uiControls ?? [] },
+    async runControl(control) {
+      let result!: EditorUiControlResult
+      await act(async () => { result = await provided.get('command:quirky.editor/ui-control')!(control) as EditorUiControlResult })
+      return result
+    },
     saveStarted,
     buffer: info,
     completeSave() {
@@ -593,6 +615,7 @@ async function renderDocument(options: {
       if (unmounted) return
       unmounted = true
       await act(async () => root.unmount())
+      documentScope.dispose()
       controlScope.dispose()
       await viewerFeature?.dispose()
     }
@@ -600,12 +623,12 @@ async function renderDocument(options: {
   mounted.push(surface)
   await act(async () => {
     root.render(
-      <EditorUiControlProvider scope={controlScope}>
-        <>
+      <>
+        <EditorUiControlProvider scope={documentScope}>
           <DocumentSurface context={context} input={{ bufferId: BUFFER_ID, tabId: TAB_ID, mode: options.mode }} />
-          {options.withCloseOverlay && <CloseOverlay context={context} />}
-        </>
-      </EditorUiControlProvider>
+        </EditorUiControlProvider>
+        {options.withCloseOverlay && <EditorUiControlProvider scope={controlScope}><CloseOverlay context={context} /></EditorUiControlProvider>}
+      </>
     )
   })
   await flushReact()
@@ -709,6 +732,16 @@ async function expectSaveRestoresFocus(mode: 'source' | 'rich'): Promise<void> {
   await flushReact()
 
   expect(surface.saveCalls).toHaveLength(1)
+  expect(surface.controlCalls).toContainEqual({ method: 'ui.window.self', params: {} })
+  expect(surface.controlCalls).toContainEqual({
+    method: 'ui.window.command.run',
+    params: { connId: 22, id: 'command:quirky.editor/ui-control', args: {
+      surface: 'view:quirky.editor/document',
+      target: `document:${JSON.stringify([BUFFER_ID, TAB_ID])}`,
+      generation: expect.any(String),
+      action: 'save'
+    } }
+  })
   expect(save.disabled).toBe(true)
   expect(document.activeElement === editor).toBe(true)
 }
@@ -733,6 +766,15 @@ for (const external of [null, 'changed'] as const) {
     expect(surface.element.textContent).not.toContain('deleted on disk')
   })
 }
+
+test('a reported source control finds text in its mounted document without requiring active-document focus', async () => {
+  const surface = await renderDocument()
+  const address = surface.controls.find((control) => control.target === `source:${JSON.stringify([BUFFER_ID, TAB_ID])}`)
+  expect(address).toBeDefined()
+  expect(await surface.runControl({ surface: address!.surface, target: address!.target, generation: address!.generation, action: 'find', data: { query: 'File actions' } })).toEqual({ delivered: true })
+  expect(surface.element.querySelector<HTMLInputElement>('input[aria-label="Find in source"]')?.value).toBe('File actions')
+  expect(sourceEditorView(surface.element).state.doc.toString()).toBe(CONTENT)
+})
 
 test('button Save restores focus to the source editor after saving', async () => {
   await expectSaveRestoresFocus('source')

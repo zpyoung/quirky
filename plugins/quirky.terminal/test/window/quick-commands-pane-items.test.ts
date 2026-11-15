@@ -22,8 +22,8 @@ describe('paneQuickCommandItems', () => {
   test('SC-52: picking an item runs the command in that pane', async () => {
     const { fake } = qcFake()
     const items = qc().items.paneQuickCommandItems(fake.context, [hello, draft], 'pane-3')
-    await items[1]!.onSelect()
-    await items[0]!.onSelect()
+    await items[1]!.onSelect?.()
+    await items[0]!.onSelect?.()
     expect(fake.callsTo('quirky.terminal/runQuickCommand').map((call) => call.params)).toEqual([
       { id: 'draft', pane: 'pane-3' },
       { id: 'hello', pane: 'pane-3' }
@@ -37,6 +37,7 @@ describe('paneQuickCommandItems', () => {
       { label: 'No quick commands', enabled: false },
       { label: 'Add Quick Command…', enabled: true }
     ])
+    expect(items[0]!.onSelect).toBeUndefined()
   })
 
   test('with commands, Add Quick Command… follows them after a separator', () => {
@@ -61,7 +62,10 @@ describe('paneQuickCommandItems', () => {
   test('Add Quick Command… opens the Add dialog, with Project preselected when the pane\'s repo is given', async () => {
     const { fake } = qcFake()
     const items = qc().items.paneQuickCommandItems(fake.context, [], 'pane-3', { repo: 'api' })
-    await act(async () => void items[1]!.onSelect())
+    await act(async () => { await items[1]!.onSelect?.() })
+    expect(fake.callsTo('ui.window.command.run').map((call) => call.params)).toEqual([{
+      connId: 41, id: 'command:quirky.terminal/quick-command-dialog', args: { action: 'open', repo: 'api' }
+    }])
     await settle()
     expect($('[role="dialog"]')!.getAttribute('aria-label')).toBe('Add Quick Command')
     expect($<HTMLInputElement>('input[name="scope"][value="repo"]')!.checked).toBe(true)
@@ -72,7 +76,10 @@ describe('paneQuickCommandItems', () => {
   test('without a repo the dialog opens on Global', async () => {
     const { fake } = qcFake()
     const items = qc().items.paneQuickCommandItems(fake.context, [], 'pane-3')
-    await act(async () => void items[1]!.onSelect())
+    await act(async () => { await items[1]!.onSelect?.() })
+    expect(fake.callsTo('ui.window.command.run').map((call) => call.params)).toEqual([{
+      connId: 41, id: 'command:quirky.terminal/quick-command-dialog', args: { action: 'open' }
+    }])
     await settle()
     expect($('input[name="scope"][value="repo"]')).toBeNull()
   })
@@ -83,7 +90,21 @@ describe('paneQuickCommandItems', () => {
       throw new Error('session has exited')
     }
     const items = qc().items.paneQuickCommandItems(fake.context, [hello], 'pane-3')
-    await items[0]!.onSelect()
+    await items[0]!.onSelect?.()
     expect(fake.toasts.at(-1)).toEqual({ title: 'Could not run quick command', body: 'session has exited' })
+  })
+
+  test('a rejected local dialog bridge opens nothing and reports exactly one failure', async () => {
+    const { fake, executed } = qcFake()
+    const call = fake.context.call.bind(fake.context)
+    fake.context.call = async (method, params) => {
+      if (method === 'ui.window.command.run') throw new Error('window offline')
+      return call(method, params)
+    }
+    const items = qc().items.paneQuickCommandItems(fake.context, [], 'pane-3')
+    await act(async () => { await items[1]!.onSelect?.() })
+    expect($('[role="dialog"]')).toBeNull()
+    expect(executed).toEqual([])
+    expect(fake.toasts).toEqual([{ title: 'Could not open quick command dialog', body: 'window offline' }])
   })
 })
