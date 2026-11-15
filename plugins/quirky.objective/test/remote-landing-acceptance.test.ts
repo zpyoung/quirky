@@ -24,7 +24,7 @@ type Detail = {
   completion: { state: string; requestedBar: string; reachedBar: string | null; reason: string; handoff: { watcherId: string; kind: string } | null; mergedEvidence: { watcherId: string; observedAtMs: number; review: { headSha: string } } | null }
   next: { reason: string | null }
 }
-type State = StandInState & { loseCreateReply?: boolean; lookupUnavailable?: boolean }
+type State = StandInState & { loseCreateReply?: boolean; lookupUnavailable?: boolean; authenticated?: boolean }
 type Fixture = { worker: WorkerAcceptance; bare: string; writes: string; read(): State; save(value: State): void }
 let active: Fixture | undefined
 let restarted: (() => Promise<void>) | undefined
@@ -145,6 +145,7 @@ const state = JSON.parse(readFileSync(statePath, 'utf8'))
 const save = () => { const tmp = statePath + '.' + process.pid; writeFileSync(tmp, JSON.stringify(state)); renameSync(tmp, statePath) }
 const option = name => args[args.indexOf(name) + 1]
 const reviewRead = args[0] === 'pr' && args[1] === 'view' || args[0] === 'api' && args.some(arg => arg.includes('/pulls'))
+if (args[0] === 'auth' && args[1] === 'status' && state.authenticated === false) process.exit(0)
 if (state.lookupUnavailable && reviewRead) { console.error('fixture lookup unavailable'); process.exit(1) }
 if (args[0] === 'pr' && args[1] === 'create') {
   if (option('--repo') !== 'github.com/test-owner/test-repo' || option('--base') !== 'main' || option('--head') !== 'feature') throw new Error('Refusing nonfixture review creation: ' + JSON.stringify(args))
@@ -377,3 +378,48 @@ test('remote approval cannot follow changed content branch or destination', asyn
   expect(git(f.worker.fixture.repo, 'ls-remote', f.bare, 'refs/heads/feature')).toBe('')
   expect(mutations(f, 'push')).toHaveLength(1)
 }, 300_000)
+test('hosted enrollment requires fresh GitHub authentication while local landing bars remain available', async () => {
+  const f = await fixture(true)
+  const workspace = await f.worker.fixture.call('quirky.worktree/resolve', { selector: `path:${f.worker.fixture.repo}` }) as { id: string }
+  f.save({ ...f.read(), authenticated: false })
+  const repository = await f.worker.fixture.call('quirky.hosting/repository', { worktree: workspace.id }) as { worktreeId: string; origin: { host: string } }
+  expect(repository).toMatchObject({ worktreeId: workspace.id, origin: { host: 'github.com' } })
+
+  const create = (bar: string) => f.worker.fixture.cli([
+    'heimdall', 'create', 'objective', '--worktree', `path:${f.worker.fixture.repo}`,
+    '--objective', 'Publish the approved feature', '--tier', 'express', '--territory', 'src/**',
+    '--landing-bar', bar, '--cap', 'plan=gated', '--json'
+  ])
+  const refuseHosted = async (bar: string) => {
+    const result = await create(bar)
+    expect(result.code).not.toBe(0)
+    expect(`${result.stdout}\n${result.stderr}`).toContain('landing-bar-requires-github')
+  }
+  await refuseHosted('hosted-review')
+  await refuseHosted('merged')
+  expect(await f.worker.fixture.call('quirky.hosting/diagnoseAuth', { worktree: workspace.id, force: true })).toMatchObject({
+    requiredHost: 'github.com', requiredHostAuthenticated: false
+  })
+
+  const enrollAndDisarm = async (bar: string) => {
+    const result = await create(bar)
+    if (result.code !== 0) throw new Error(`objective enrollment (${bar}): ${result.stderr}\n${result.stdout}`)
+    const created = JSON.parse(result.stdout) as { kind: string; enrollment: { watcherId: string; kindPayload: Record<string, unknown>; capabilities: Record<string, string> } }
+    expect(['enrolled', 're-armed']).toContain(created.kind)
+    expect(created.enrollment.kindPayload).toMatchObject({ landingBar: bar })
+    expect(created.enrollment.capabilities.plan).toBe('gated')
+    expect(await jsonCli(f.worker, ['heimdall', 'disarm', created.enrollment.watcherId])).toMatchObject({ kind: 'applied' })
+  }
+  await enrollAndDisarm('files-on-disk')
+  await enrollAndDisarm('pushed-ref')
+
+  f.save({ ...f.read(), authenticated: true })
+  const accepted = await create('hosted-review')
+  expect(accepted.code).toBe(0)
+  const created = JSON.parse(accepted.stdout) as { kind: string; enrollment: { kindPayload: Record<string, unknown> } }
+  expect(['enrolled', 're-armed']).toContain(created.kind)
+  expect(created.enrollment.kindPayload).toMatchObject({ landingBar: 'hosted-review' })
+  expect(await f.worker.fixture.call('quirky.hosting/diagnoseAuth', { worktree: workspace.id, force: true })).toMatchObject({
+    requiredHost: 'github.com', requiredHostAuthenticated: true
+  })
+}, 120_000)

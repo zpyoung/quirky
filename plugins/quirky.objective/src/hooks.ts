@@ -255,6 +255,10 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
           if (!record(resolved) || resolved.worktreeId !== workspace.id ||
             !repositoryIdentity(resolved.origin) || !Array.isArray(resolved.candidates) ||
             !resolved.candidates.some(repositoryIdentity)) throw new Error('invalid GitHub repository result')
+          const requiredHost = resolved.origin.host
+          const authentication = await context.call('quirky.hosting/diagnoseAuth', { worktree: workspace.id, force: true })
+          if (!record(authentication) || authentication.requiredHost !== requiredHost ||
+            authentication.requiredHostAuthenticated !== true) throw new Error('invalid GitHub authentication result')
         } catch {
           throw new Error('landing-bar-requires-github: an authenticated GitHub repository could not be resolved')
         }
