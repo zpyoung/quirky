@@ -34,7 +34,7 @@ export type CliCheckContext = {
   world: CliWorld
   state: Record<string, unknown>
   call(id: string, argv: string[], format?: 'json' | 'jsonl', options?: { cwd?: string }): Promise<unknown>
-  refuse(id: string, argv: string[], options?: { cwd?: string }): Promise<{ code: string; message: string; data?: unknown }>
+  refuse(id: string, argv: string[], options?: { cwd?: string; expectedExit?: 1 | 2 }): Promise<{ code: string; message: string; data?: unknown }>
   prove(id: string, evidence: Record<string, unknown>): void
   check(id: string): void
   importActor(receipts: unknown): void
