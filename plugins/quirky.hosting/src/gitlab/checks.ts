@@ -296,7 +296,6 @@ async function enumeratePages<T>(
   afterProviderRead?: () => Promise<void>
 ): Promise<Enumerated<T>> {
   const items: T[] = []
-  const seenPages = new Set<number>([1])
   let page = 1
   let truncated = false
   let malformedPagination = false
@@ -321,7 +320,7 @@ async function enumeratePages<T>(
     }
     const nextPage = response.nextPage
     if (nextPage === null) break
-    if (nextPage <= page || seenPages.has(nextPage)) {
+    if (nextPage !== page + 1) {
       truncated = true
       malformedPagination = true
       break
@@ -330,7 +329,6 @@ async function enumeratePages<T>(
       truncated = true
       break
     }
-    seenPages.add(nextPage)
     page = nextPage
   }
   return { items, truncated, unavailable: false, malformedPagination }

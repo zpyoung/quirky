@@ -1528,3 +1528,22 @@ test('retry refuses a removed and recreated worktree instance before its first P
   }
   expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
 }, 20_000)
+
+test('advancing pagination jumps cannot skip jobs or authorize a partial retry', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  const jobs = Array.from({ length: 150 }, (_, index) => job(world, 5000 + index, `job-${index}`, index === 0 ? 'failed' : 'success', head))
+  setCurrentPipeline(world, head, 90, 'failed', jobs)
+  const complete = await world.call('checks', { number: 5, noCache: true }) as { checks: unknown[]; partial: boolean }
+  expect(complete.partial).toBe(false)
+  expect(complete.checks).toHaveLength(150)
+
+  world.server.requests.length = 0
+  world.server.nextPages.set(`GET ${pipelineJobsPath(world, 90)}?page=1`, '3')
+  const incomplete = await world.call('checks', { number: 5, noCache: true }) as { checks: unknown[]; partial: boolean }
+  expect(incomplete.partial).toBe(true)
+  expect(incomplete.checks).toHaveLength(100)
+  expect(world.server.requests.filter((request) => request.path === pipelineJobsPath(world, 90)).map((request) => request.query.page)).toEqual(['1'])
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: true, allowPartial: true })).rejects.toMatchObject(reason('checks_incomplete'))
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+}, 20_000)
