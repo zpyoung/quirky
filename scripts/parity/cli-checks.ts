@@ -7,10 +7,11 @@ import { actorReceiptFiles, readActorReceipts, type CliActorReceipt } from './cl
 import { assertNoOutsideCalls, cleanupLocalChecks, LOCAL_CHECK_IDS, runLocalChecks } from './cli-local'
 import { cleanupWorkerChecks, runWorkerChecks, WORKER_CHECK_IDS } from './cli-workers'
 import { cleanupStartupChecks, runStartupChecks, STARTUP_CHECK_IDS } from './cli-startup'
+import { runRepoVisibilityCheck } from './cli-visibility'
 
 const CHECK_IDS = [
   'catalog',
-  'repo-add', 'repo-list', 'repo-show', 'repo-set', 'folder-add', 'folder-idempotent',
+  'repo-add', 'repo-list', 'repo-show', 'repo-set', 'repo-set-base-ref', 'folder-add', 'folder-idempotent',
   'worktree-create', 'worktree-list', 'worktree-show', 'worktree-set', 'worktree-remove',
   'agent-launch', 'agent-get', 'agent-close',
   'terminal-create', 'terminal-layout', 'terminal-read', 'terminal-send', 'terminal-close', 'terminal-exit',
@@ -34,7 +35,7 @@ export type CliCheckContext = {
   world: CliWorld
   state: Record<string, unknown>
   call(id: string, argv: string[], format?: 'json' | 'jsonl', options?: { cwd?: string }): Promise<unknown>
-  refuse(id: string, argv: string[], options?: { cwd?: string }): Promise<{ code: string; message: string; data?: unknown }>
+  refuse(id: string, argv: string[], options?: { cwd?: string; expectedExit?: 1 | 2 }): Promise<{ code: string; message: string; data?: unknown }>
   prove(id: string, evidence: Record<string, unknown>): void
   check(id: string): void
   importActor(receipts: unknown): void
@@ -359,7 +360,7 @@ async function poll<T>(
   throw new Error(`Timed out waiting for ${label}${last === undefined ? '' : `; last result ${JSON.stringify(last)}`}`)
 }
 
-async function runProjectChecks(context: CliCheckContext): Promise<void> {
+export async function runProjectChecks(context: CliCheckContext): Promise<void> {
   const { world } = context
   const repoRoot = world.paths.repository
   const folderPath = world.paths.folder
@@ -394,12 +395,19 @@ async function runProjectChecks(context: CliCheckContext): Promise<void> {
   ensure(repoList.some((entry) => entry.id === folderId && entry.path === folderRealPath), 'repo list omitted the exact plain-folder path')
   context.prove('repo-list', { gitPath: repositoryRealPath, folderPath: folderRealPath, gitId: repoId, folderId })
 
-  const changed = object(await productCall(context, 'repo-set', ['repo', 'set', repoId, '--default-base', 'main']), 'repo set result')
+  const changed = object(await productCall(context, 'repo-set-base-ref', ['repo', 'set', repoId, '--default-base', 'main']), 'repo set result')
   const changedRepo = object(changed.repo, 'repo set result.repo')
   const changedSettings = object(changed.settings, 'repo set result.settings')
   equal(changedRepo.id, repoId, 'repo set ID')
   equal(changedSettings.defaultBase, 'main', 'repo set default base')
-  context.prove('repo-set', { id: repoId, defaultBase: 'main' })
+  const baseVisibility = object(await productCall(context, 'repo-set-base-ref-visibility', [
+    'worktree', 'project-show', repoId
+  ], 'repo-set-base-ref'), 'base-ref visibility readback')
+  equal(baseVisibility.externalVisibility, 'inherit', 'base-ref external visibility')
+  equal(baseVisibility.effectiveExternalVisibility, 'hide', 'base-ref effective external visibility')
+  context.prove('repo-set-base-ref', {
+    id: repoId, defaultBase: 'main', externalVisibility: 'inherit', effectiveExternalVisibility: 'hide'
+  })
 
   const shown = object(await productCall(context, 'repo-show', ['repo', 'show', repoId]), 'repo show result')
   const shownRepo = object(shown.repo, 'repo show result.repo')
@@ -443,6 +451,7 @@ async function runProjectChecks(context: CliCheckContext): Promise<void> {
   equal(updatedWorktree.id, worktreeId, 'worktree set readback ID')
   equal(updatedWorktree.comment, 'cli-parity-comment', 'worktree set readback comment')
   context.prove('worktree-set', { id: worktreeId, comment: 'cli-parity-comment' })
+  await runRepoVisibilityCheck(context)
 }
 
 /** Proves an owned actor terminal is live and records its cleanup identity. */

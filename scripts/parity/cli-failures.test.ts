@@ -511,6 +511,60 @@ test('refuse records exact failures and a refusal receipt cannot prove success',
   expect(report.receipts.filter((receipt) => ids.includes(receipt.id)).map((receipt) => receipt.exitCode)).toEqual([0, 2, 1, 1, 1, 1])
 }, 90_000)
 
+test('refuse accepts explicitly requested usage exits without weakening the default', async () => {
+  const usage = '{"error":{"code":"usage","message":"bad value"}}'
+  const missing = '{"error":{"code":"not-found","message":"missing"}}'
+  const outcomes = [
+    { exitCode: 2, stdout: usage },
+    { exitCode: 2, stdout: usage },
+    { exitCode: 1, stdout: missing },
+    { exitCode: 2, stdout: missing },
+    { exitCode: 0, stdout: '{"ok":true}' }
+  ]
+  const ids = ['usage-explicit', 'usage-default', 'usage-wrong-exit', 'usage-wrong-code', 'usage-success']
+  const observed: unknown[] = []
+  const report = await runner.runCliParity({
+    createWorld: async (options) => {
+      const world = await createCliWorld(options)
+      const execute = world.execute.bind(world)
+      let index = 0
+      return {
+        ...world,
+        execute: async (argv: string[], executeOptions?: Parameters<typeof world.execute>[1]) => {
+          if (argv[2] === 'api') return execute(argv, executeOptions)
+          const outcome = outcomes[index++]
+          if (!outcome) throw new Error('unexpected fixture command')
+          return { ...outcome, stderr: '', stdoutBytes: Buffer.byteLength(outcome.stdout), elapsedMs: 1 }
+        }
+      }
+    },
+    runChecks: async (context) => {
+      for (let index = 0; index < ids.length; index++) {
+        const id = ids[index]!
+        try {
+          const refusal = await context.refuse(id, ['repo', 'show', 'id:missing'],
+            index === 1 ? undefined : { expectedExit: 2 })
+          observed.push(refusal)
+          try {
+            context.prove(id, {})
+            observed.push('proved')
+          } catch (error) {
+            observed.push(error instanceof runner.CliRunFailure ? error.kind : String(error))
+          }
+        } catch (error) {
+          observed.push(error instanceof runner.CliRunFailure ? error.kind : String(error))
+        }
+      }
+    },
+    cleanupChecks: async () => {}
+  })
+  expect(observed).toEqual([
+    { code: 'usage', message: 'bad value' }, 'missing-receipt',
+    'cli-exit', 'cli-exit', 'malformed-output', 'unexpected-success'
+  ])
+  expect(report.receipts.filter((receipt) => ids.includes(receipt.id)).map((receipt) => receipt.exitCode)).toEqual([2, 2, 1, 2, 0])
+}, 90_000)
+
 test('world cwd is restricted to its real checkout root or owned home', async () => {
   const world = await createCliWorld()
   try {

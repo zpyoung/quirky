@@ -87,14 +87,14 @@ function parseHeimdallSnapshot(value: unknown): HeimdallFleetSnapshot | null {
 }
 
 function statusByWorktree(rows: readonly HeimdallFleetRow[]): Record<string, HeimdallWorktreeStatus> {
-  const statuses: Record<string, HeimdallWorktreeStatus> = {}
+  const statuses = new Map<string, HeimdallWorktreeStatus>()
   for (const row of rows) {
     if (row.target.connectionId != null || row.target.pairingRevision != null) continue
     const worktreeId = row.enrollment.worktreeId
     if (!worktreeId) continue
-    const previous = statuses[worktreeId]
+    const previous = statuses.get(worktreeId)
     if (previous && previous.observedAtMs > row.observedAtMs) continue
-    statuses[worktreeId] = {
+    statuses.set(worktreeId, {
       watcherId: row.target.watcherId,
       watcherName: row.name,
       state: row.status.state,
@@ -103,9 +103,9 @@ function statusByWorktree(rows: readonly HeimdallFleetRow[]): Record<string, Hei
       ...(row.status.reason ? { reason: row.status.reason } : {}),
       ...(row.status.detail ? { detail: row.status.detail } : {}),
       ...(row.status.consecutiveErrors === undefined ? {} : { consecutiveErrors: row.status.consecutiveErrors })
-    }
+    })
   }
-  return statuses
+  return Object.fromEntries(statuses)
 }
 
 export type HeimdallAwareWorktree = WorktreeControl & { heimdallStatus: HeimdallWorktreeStatus | null }

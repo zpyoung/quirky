@@ -239,7 +239,7 @@ function codeBlockLanguage(source: string, selection: MarkdownSelection, languag
   const opener = lines[openLine] ?? ''
   const indentation = /^\s*/.exec(opener)?.[0] ?? ''
   const marker = fence[0].repeat(fence.length)
-  lines[openLine] = `${indentation}${marker}${language}`
+  lines.splice(openLine, 1, `${indentation}${marker}${language}`)
   return lines.join('\n')
 }
 
