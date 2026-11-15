@@ -764,9 +764,9 @@ function CsvSurface({
   </section>
 }
 
-function MediaActions({ openDefault }: { openDefault(): void }) {
+function MediaActions({ onOpenDefault }: { onOpenDefault(): void }) {
   return <div className="viewer-media-actions">
-    <Button type="button" onClick={openDefault}>Open in Default App</Button>
+    <Button type="button" onClick={onOpenDefault}>Open in Default App</Button>
   </div>
 }
 
@@ -776,16 +776,16 @@ function ImageViewer({
   url,
   error,
   generation,
-  retry,
-  openDefault
+  onRetry,
+  onOpenDefault
 }: {
   props: SurfaceProps
   metadata: ViewerMetadata
   url: string | null
   error: string | null
   generation: string
-  retry(): void
-  openDefault(): void
+  onRetry(): void
+  onOpenDefault(): void
 }) {
   const initialZoom = typeof metadata.zoom === 'number' ? metadata.zoom : number(object(props.buffer.view.viewer).zoom) ?? 1
   const [zoom, setZoom] = useState(initialZoom)
@@ -891,7 +891,7 @@ function ImageViewer({
       <span>{metadata.width ?? '—'} × {metadata.height ?? '—'}</span>
       <span>{bytesLabel(metadata.bytes ?? props.buffer.size)}</span>
     </header>
-    {loadError && !error && <><InlineError message={loadError} action={{ label: 'Retry', onAction: retry }} /><MediaActions openDefault={openDefault} /></>}
+    {loadError && !error && <><InlineError message={loadError} action={{ label: 'Retry', onAction: onRetry }} /><MediaActions onOpenDefault={onOpenDefault} /></>}
     {url && !loadError && !error && !imageLoaded && <div role="status"><NoticeLine>Loading image…</NoticeLine></div>}
     {url && !loadError && <img className="viewer-image__preview" src={url} alt={props.buffer.name} style={{ transform: `scale(${zoom})` }}
       onLoad={() => { if (generationRef.current === generation) setImageLoaded(true) }}
@@ -904,15 +904,15 @@ function PdfViewer({
   url,
   error,
   generation,
-  retry,
-  openDefault
+  onRetry,
+  onOpenDefault
 }: {
   props: SurfaceProps
   url: string | null
   error: string | null
   generation: string
-  retry(): void
-  openDefault(): void
+  onRetry(): void
+  onOpenDefault(): void
 }) {
   const restoredView = object(props.buffer.view.viewer)
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null)
@@ -1264,7 +1264,7 @@ function PdfViewer({
       <span>{page}{pdf ? ` / ${pdf.numPages}` : ''}</span>
       <Button type="button" onClick={() => request('next-page')} disabled={!pdf || page >= pdf.numPages || localError !== null}>Next page</Button>
     </header>
-    {localError && !error && <><InlineError message={localError} action={{ label: 'Retry', onAction: retry }} /><MediaActions openDefault={openDefault} /></>}
+    {localError && !error && <><InlineError message={localError} action={{ label: 'Retry', onAction: onRetry }} /><MediaActions onOpenDefault={onOpenDefault} /></>}
     {searchError && <InlineError message={searchError} action={{ label: 'Find', onAction: () => request('find', { query }) }} />}
     {searchMessage === 'No results' && <EmptyState message="No results" />}
     {searchMessage && searchMessage !== 'No results' && <p role="status">{searchMessage}</p>}
@@ -1281,16 +1281,16 @@ function MediaViewer({
   url,
   error,
   generation,
-  retry,
-  openDefault
+  onRetry,
+  onOpenDefault
 }: {
   props: SurfaceProps
   metadata: ViewerMetadata
   url: string | null
   error: string | null
   generation: string
-  retry(): void
-  openDefault(): void
+  onRetry(): void
+  onOpenDefault(): void
 }) {
   const [codecError, setCodecError] = useState<string | null>(null)
   const mediaRef = useRef<HTMLMediaElement | null>(null)
@@ -1416,7 +1416,7 @@ function MediaViewer({
     {url && isVideo && <video ref={setMediaElement} className="viewer-media__video" controls preload="metadata" src={url} onLoadedMetadata={onMediaState} onDurationChange={onMediaState} onProgress={onMediaState} onError={setErrorEvent} />}
     {url && !isVideo && <audio ref={setMediaElement} className="viewer-media__audio" controls preload="metadata" src={url} onLoadedMetadata={onMediaState} onDurationChange={onMediaState} onProgress={onMediaState} onError={setErrorEvent} />}
     <p>{bytesLabel(metadata.size ?? props.buffer.size)}</p>
-    {codecError && !error && <><InlineError message={codecError} action={{ label: 'Retry', onAction: retry }} /><MediaActions openDefault={openDefault} /></>}
+    {codecError && !error && <><InlineError message={codecError} action={{ label: 'Retry', onAction: onRetry }} /><MediaActions onOpenDefault={onOpenDefault} /></>}
   </section>
 }
 
@@ -1721,9 +1721,9 @@ export function ViewerSurface(props: SurfaceProps) {
     {visibleError && <InlineError message={visibleError} action={!isTooLarge ? { label: changed ? 'Reload' : 'Retry', onAction: changed ? requestReload : requestRetry } : undefined} />}
     {commandError && <InlineError message={commandError} action={{ label: 'Retry', onAction: requestRetry }} />}
     {!isTooLarge && buffer.kind === 'csv' && <CsvSurface props={props} sourceMode={sourceMode} retryToken={retryKey} requestMode={requestMode} />}
-    {!isTooLarge && buffer.kind === 'image' && !sourceMode && <ImageViewer key={resourceGeneration} props={props} metadata={metadata} url={url} error={error} generation={resourceGeneration} retry={requestRetry} openDefault={requestOpenDefault} />}
-    {!isTooLarge && buffer.kind === 'pdf' && <PdfViewer key={resourceGeneration} props={props} url={url} error={error} generation={resourceGeneration} retry={requestRetry} openDefault={requestOpenDefault} />}
-    {!isTooLarge && (buffer.kind === 'audio' || buffer.kind === 'video') && <MediaViewer key={resourceGeneration} props={props} metadata={metadata} url={url} error={error} generation={resourceGeneration} retry={requestRetry} openDefault={requestOpenDefault} />}
+    {!isTooLarge && buffer.kind === 'image' && !sourceMode && <ImageViewer key={resourceGeneration} props={props} metadata={metadata} url={url} error={error} generation={resourceGeneration} onRetry={requestRetry} onOpenDefault={requestOpenDefault} />}
+    {!isTooLarge && buffer.kind === 'pdf' && <PdfViewer key={resourceGeneration} props={props} url={url} error={error} generation={resourceGeneration} onRetry={requestRetry} onOpenDefault={requestOpenDefault} />}
+    {!isTooLarge && (buffer.kind === 'audio' || buffer.kind === 'video') && <MediaViewer key={resourceGeneration} props={props} metadata={metadata} url={url} error={error} generation={resourceGeneration} onRetry={requestRetry} onOpenDefault={requestOpenDefault} />}
     {!isTooLarge && buffer.kind === 'mermaid' && <MermaidViewer props={props} sourceMode={sourceMode} retryToken={retryKey} requestMode={requestMode} />}
     {!isTooLarge && buffer.kind === 'binary' && <InlineError message="Binary file — cannot display." />}
     {!isTooLarge && !['csv', 'image', 'pdf', 'audio', 'video', 'mermaid', 'binary'].includes(buffer.kind) && <InlineError message="Unsupported file viewer." />}
