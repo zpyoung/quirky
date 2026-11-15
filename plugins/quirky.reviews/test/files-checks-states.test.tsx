@@ -295,7 +295,7 @@ afterEach(async () => {
   for (const root of [...roots]) act(() => root.unmount())
   roots.length = 0
   document.body.replaceChildren()
-  if (previousClipboard === undefined) delete (navigator as Navigator & { clipboard?: Clipboard }).clipboard
+  if (previousClipboard === undefined) Reflect.deleteProperty(navigator, 'clipboard')
   else Object.defineProperty(navigator, 'clipboard', { configurable: true, value: previousClipboard })
   previousClipboard = undefined
   clipboardWrites = []
