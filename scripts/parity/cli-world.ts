@@ -549,6 +549,7 @@ function processSnapshot(home: string, spawn: typeof spawnSync = spawnSync): Map
     maxBuffer: PROCESS_TABLE_LIMIT_BYTES,
     stdio: ['ignore', 'pipe', 'ignore']
   })
+  if (!result.error && result.status === 0 && typeof result.stdout === 'string') return parseProcessTable(result.stdout)
   const spawnError = result.error as (Error & { code?: unknown }) | null
   const spawnErrorCode = typeof spawnError?.code === 'string' ? spawnError.code : null
   const spawnErrorName = typeof spawnError?.name === 'string' ? spawnError.name : null
@@ -559,8 +560,8 @@ function processSnapshot(home: string, spawn: typeof spawnSync = spawnSync): Map
   const metadata: CliProcessInspectionMetadata = Object.freeze({
     spawnErrorCode: spawnErrorCode === null ? null : boundedProcessInspectionString(spawnErrorCode),
     spawnErrorName: spawnErrorName === null ? null : boundedProcessInspectionString(spawnErrorName),
-    exitStatus: result.status,
-    signal: result.signal === null ? null : boundedProcessInspectionString(result.signal),
+    exitStatus: Number.isSafeInteger(result.status) ? result.status : null,
+    signal: typeof result.signal === 'string' ? boundedProcessInspectionString(result.signal) : null,
     stdoutWasString,
     stdoutBytes,
     timeoutHit: spawnErrorCode === 'ETIMEDOUT' || spawnErrorName === 'TimeoutError',
@@ -569,12 +570,9 @@ function processSnapshot(home: string, spawn: typeof spawnSync = spawnSync): Map
     timeoutMs: PROCESS_TABLE_TIMEOUT_MS,
     maxBufferBytes: PROCESS_TABLE_LIMIT_BYTES
   })
-  if (result.error || result.status !== 0 || !stdoutWasString || metadata.maxBufferHit) {
-    const error = new Error('could not inspect owned process identities')
-    Object.defineProperty(error, 'processInspection', { value: metadata, enumerable: true })
-    throw error
-  }
-  return parseProcessTable(result.stdout as string)
+  const error = new Error('could not inspect owned process identities')
+  Object.defineProperty(error, 'processInspection', { value: metadata, enumerable: true })
+  throw error
 }
 
 function processTree(snapshot: Map<number, ProcessIdentity>, rootPid: number): ProcessIdentity[] {

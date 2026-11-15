@@ -801,8 +801,8 @@ test('CLI-files process snapshots expose bounded spawn metadata without leaking 
     label: string
     code?: string
     name?: string
-    status: number | null
-    signal: string | null
+    status: number | null | undefined
+    signal: string | null | undefined
     stdout: string | null
     timeoutHit: boolean
     maxBufferHit: boolean
@@ -839,7 +839,7 @@ test('CLI-files process snapshots expose bounded spawn metadata without leaking 
     },
     {
       label: 'captured stdout over the process-table cap',
-      status: 0,
+      status: 23,
       signal: longSignal,
       stdout: overLimitStdout,
       timeoutHit: false,
@@ -857,6 +857,24 @@ test('CLI-files process snapshots expose bounded spawn metadata without leaking 
       label: 'nonzero exit status',
       status: 23,
       signal: null,
+      stdout: secretStdout,
+      timeoutHit: false,
+      maxBufferHit: false
+    },
+    {
+      label: 'backend omits exit status',
+      code: 'ETIMEDOUT',
+      name: 'Error',
+      status: undefined,
+      signal: null,
+      stdout: secretStdout,
+      timeoutHit: true,
+      maxBufferHit: false
+    },
+    {
+      label: 'backend omits signal',
+      status: 23,
+      signal: undefined,
       stdout: secretStdout,
       timeoutHit: false,
       maxBufferHit: false
@@ -917,8 +935,8 @@ test('CLI-files process snapshots expose bounded spawn metadata without leaking 
       const expected = {
         spawnErrorCode: scenario.code === undefined ? null : scenario.code.slice(0, 128),
         spawnErrorName: scenario.name === longName ? `SpawnFailure${'λ'.repeat(58)}` : scenario.name ?? null,
-        exitStatus: scenario.status,
-        signal: scenario.signal === longSignal ? `SIGTERM${'λ'.repeat(60)}` : scenario.signal,
+        exitStatus: scenario.status ?? null,
+        signal: scenario.signal === longSignal ? `SIGTERM${'λ'.repeat(60)}` : scenario.signal ?? null,
         stdoutWasString: scenario.stdout !== null,
         stdoutBytes: scenario.stdout === null ? null : Buffer.byteLength(scenario.stdout, 'utf8'),
         timeoutHit: scenario.timeoutHit,
