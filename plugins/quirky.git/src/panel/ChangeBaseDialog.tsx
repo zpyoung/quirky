@@ -1,9 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, Dialog, EmptyState, ListRow, TextField } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, InlineError, ListRow, NoticeLine, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { messageOf } from './format'
 
 type Ref = { name: string; kind: 'local' | 'remote' }
+
+function readBranches(
+  context: UiPluginContext,
+  worktree: string,
+  query: string,
+  requestSequence: { current: number },
+  setLoading: (loading: boolean) => void,
+  setRefs: (refs: Ref[]) => void,
+  setReadError: (error: string | null) => void
+) {
+  const request = ++requestSequence.current
+  setLoading(true)
+  void context
+    .call('quirky.git/branches', query.trim() === '' ? { worktree } : { worktree, query: query.trim() })
+    .then((result) => {
+      if (request !== requestSequence.current) return
+      setRefs((result as { refs: Ref[] }).refs)
+      setReadError(null)
+      setLoading(false)
+    })
+    .catch((e: unknown) => {
+      if (request !== requestSequence.current) return
+      setRefs([])
+      setReadError(messageOf(e))
+      setLoading(false)
+    })
+}
 
 type Props = {
   context: UiPluginContext
@@ -23,9 +50,11 @@ const stripRemote = (ref: string): string => ref.replace(/^(?:refs\/)?remotes\//
 export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClose, onChanged }: Props) {
   const [query, setQuery] = useState('')
   const [refs, setRefs] = useState<Ref[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [readError, setReadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
+  const branchRequest = useRef(0)
   const branches = useRef<HTMLDivElement>(null)
 
   const alive = useRef(true)
@@ -36,43 +65,35 @@ export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClos
     }
   }, [])
 
-  const close = () => {
+  const onDialogClose = () => {
+    if (!alive.current) return
     onClose()
   }
 
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    context
-      .call('quirky.git/branches', query.trim() === '' ? { worktree } : { worktree, query: query.trim() })
-      .then((result) => {
-        if (cancelled) return
-        setRefs((result as { refs: Ref[] }).refs)
-        setError(null)
-        setLoading(false)
-      })
-      .catch((e: unknown) => {
-        if (cancelled) return
-        setRefs([])
-        setError(messageOf(e))
-        setLoading(false)
-      })
+    readBranches(context, worktree, query, branchRequest, setLoading, setRefs, setReadError)
     return () => {
-      cancelled = true
+      branchRequest.current++
     }
   }, [context, worktree, query])
 
-  const save = async (params: { base: string } | { clear: true }) => {
+  const onRetryBranches = () => {
+    setReadError(null)
+    readBranches(context, worktree, query, branchRequest, setLoading, setRefs, setReadError)
+  }
+
+  const onSaveBase = async (params: { base: string } | { clear: true }) => {
     setSaving(true)
+    setSaveError(null)
     try {
       await context.call('quirky.git/setBase', { worktree, ...params })
       await onChanged()
       if (!alive.current) return
       setSaving(false)
-      close()
+      onDialogClose()
     } catch (e) {
       if (!alive.current) return
-      setError(messageOf(e))
+      setSaveError(messageOf(e))
       setSaving(false)
     }
   }
@@ -82,15 +103,15 @@ export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClos
     <Dialog
       open
       title="Change Base Ref"
-      onClose={close}
-      actions={<Button onClick={close}>Close</Button>}
+      onClose={onDialogClose}
+      actions={<Button onClick={onDialogClose}>Close</Button>}
     >
       <div className="ui-stack">
         <p className="ui-text-muted">Pick the branch compare target for this repository.</p>
         {marks > 0 && <p role="status" data-clears-marks>{`This clears ${marks} review ${marks === 1 ? 'mark' : 'marks'}`}</p>}
         <div className="ui-cluster">
           <span className="ui-text-muted">{base === null ? 'No base ref in use' : `Current: ${base}`}</span>
-          <Button disabled={saving} onClick={() => void save({ clear: true })}>
+          <Button disabled={saving} onClick={() => void onSaveBase({ clear: true })}>
             Use Primary
           </Button>
         </div>
@@ -103,6 +124,7 @@ export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClos
           value={query}
           onChange={(event) => {
             setLoading(true)
+            setReadError(null)
             setQuery(event.target.value)
           }}
           onKeyDown={(event) => {
@@ -112,11 +134,12 @@ export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClos
               branches.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
             } else if (event.key === 'Enter' && refs.length === 1) {
               event.preventDefault()
-              void save({ base: refs[0]!.name })
+              void onSaveBase({ base: refs[0]!.name })
             }
           }}
         />
-        {error !== null && <p role="alert" style={{ color: 'var(--ui-failing)' }}>{error}</p>}
+        {readError !== null && <InlineError message={readError} action={{ label: 'Retry', onAction: onRetryBranches }} />}
+        {saveError !== null && <InlineError message={saveError} />}
         <div
           ref={branches}
           className="ui-stack"
@@ -141,10 +164,11 @@ export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClos
               description={<span className="ui-cluster"><span>{ref.kind}</span>{ref.name === base && <Badge tone="accent">Current</Badge>}</span>}
               selected={ref.name === base}
               disabled={saving || loading}
-              onClick={() => void save({ base: ref.name })}
+              onClick={() => void onSaveBase({ base: ref.name })}
             />
           ))}
-          {refs.length === 0 && error === null && <EmptyState message="No matching branches" />}
+          {loading && refs.length === 0 && readError === null && <NoticeLine>Loading branches…</NoticeLine>}
+          {!loading && refs.length === 0 && readError === null && <EmptyState message="No matching branches" />}
         </div>
       </div>
     </Dialog>
