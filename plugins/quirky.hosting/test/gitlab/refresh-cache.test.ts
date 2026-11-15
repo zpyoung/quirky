@@ -1,7 +1,10 @@
 import { afterEach, expect, test } from 'bun:test'
-import type { PluginCaller, PluginContext, Worktree } from '@quirky/protocol'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { validateValue, type PluginCaller, type PluginContext, type Schema, type Worktree } from '@quirky/protocol'
 import { createEnv, type HostingConfiguration, type HostingEnv, type Scope } from '../../src/env'
 import { prMethods } from '../../src/pr'
+import { refreshMethods } from '../../src/refresh'
 import { bootGitLab, type GitLabWorld } from './world'
 import { mergeRequest, startGitLab, type GitLabStandIn } from './stand-in'
 
@@ -23,6 +26,43 @@ const projectPath = (world: GitLabWorld) => `/api/v4/projects/${encodeURICompone
 const listPath = (world: GitLabWorld) => `${projectPath(world)}/merge_requests`
 const reviewPath = (world: GitLabWorld, number: number) => `${listPath(world)}/${number}`
 const reviewUrl = (world: GitLabWorld, number: number) => `${world.server.url}/${world.identity.owner}/${world.identity.repo}/-/merge_requests/${number}`
+const hostingManifest = JSON.parse(readFileSync(resolve(import.meta.dir, '../../quirky-plugin.json'), 'utf8')) as {
+  contributes: {
+    method: { id: string; result: Schema }[]
+    event: { id: string; data: Schema }[]
+  }
+}
+
+function methodResultSchema(id: string): Schema {
+  const schema = hostingManifest.contributes.method.find((method) => method.id === id)?.result
+  if (!schema) throw new Error(`missing ${id} result schema`)
+  return schema
+}
+
+function eventDataSchema(id: string): Schema {
+  const schema = hostingManifest.contributes.event.find((event) => event.id === id)?.data
+  if (!schema) throw new Error(`missing ${id} event schema`)
+  return schema
+}
+
+function propertySchema(schema: Schema, name: string): Schema {
+  const property = schema.properties?.[name]
+  if (!property) throw new Error(`missing ${name} schema property`)
+  return property
+}
+
+function reviewForSchema(review: Record<string, unknown>, schema: Schema): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.keys(schema.properties ?? {})
+      .filter((name) => Object.hasOwn(review, name))
+      .map((name) => [name, review[name]])
+  )
+}
+
+function eventRecord(value: unknown): Record<string, any> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('expected event object')
+  return value as Record<string, any>
+}
 
 function git(world: GitLabWorld, args: string[]): string {
   const result = Bun.spawnSync(['git', ...args], { cwd: world.repoPath, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' })
@@ -42,6 +82,18 @@ async function listenForEvents(world: GitLabWorld): Promise<unknown[]> {
   await world.client.callAny('events.subscribe', {})
   return events
 }
+async function listenForRefreshEvents(world: GitLabWorld): Promise<{ events: unknown[]; firstRefresh: Promise<void> }> {
+  const events: unknown[] = []
+  const firstRefresh = Promise.withResolvers<void>()
+  world.client.onEvent((event) => {
+    events.push(event)
+    const record = eventRecord(event)
+    if (record.type === 'quirky.hosting/refresh' && typeof record.data === 'object' &&
+        record.data !== null && 'outcome' in record.data) firstRefresh.resolve()
+  })
+  await world.client.callAny('events.subscribe', {})
+  return { events, firstRefresh: firstRefresh.promise }
+}
 
 function mrAtHead(head: string, overrides: Record<string, unknown> = {}): Record<string, any> {
   return mergeRequest({
@@ -59,13 +111,37 @@ type CacheHarness = {
   events: { type: string; data: unknown }[]
   worktrees: Worktree[]
   caller: PluginCaller
-  call(method: string, params?: Record<string, unknown>): Promise<unknown>
+  call(method: string, params?: Record<string, unknown>, caller?: PluginCaller): Promise<unknown>
   cached(selectors?: string[]): Promise<{ workspaces: Record<string, any>[] }>
   replaceWorktree(id: string, worktree: Worktree): void
+  removeWorktree(id: string): void
   setRemotes(id: string, remotes: RemoteUrls): void
   setConfiguration(worktree: Worktree, configuration: HostingConfiguration): void
   setGitLabHosts(value: string): void
   cleanup(): Promise<void>
+}
+type RefreshTestConnection = { caller: PluginCaller; close(): void }
+
+function refreshTestConnection(id: string): RefreshTestConnection {
+  const callbacks = new Set<() => void>()
+  let closed = false
+  const connection = {
+    id,
+    onClose(callback: () => void) {
+      if (closed) callback()
+      else callbacks.add(callback)
+      return () => callbacks.delete(callback)
+    }
+  }
+  return {
+    caller: { role: 'client', connection } as PluginCaller,
+    close() {
+      if (closed) return
+      closed = true
+      for (const callback of [...callbacks]) callback()
+      callbacks.clear()
+    }
+  }
 }
 
 function fixtureWorktree(index: number, overrides: Partial<Worktree> = {}): Worktree {
@@ -163,6 +239,8 @@ async function cacheHarness(count = 1): Promise<CacheHarness> {
   const env = createEnv(context)
   env.remoteUrls = async (worktree) => ({ ...(remotes.get(worktree.id) ?? { origin: null, upstream: null }) })
   const methods = prMethods(env)
+  const refresh = refreshMethods(env, methods)
+  const handlers = { ...methods, ...refresh }
   const caller = { role: 'plugin', pluginId: 'quirky.hosting' } as PluginCaller
   let cleaned = false
   const harness: CacheHarness = {
@@ -172,18 +250,22 @@ async function cacheHarness(count = 1): Promise<CacheHarness> {
     events,
     worktrees,
     caller,
-    async call(method, params = {}) {
-      const handler = methods[method]
+    async call(method, params = {}, requestCaller = caller) {
+      const handler = handlers[method]
       if (!handler) throw new Error(`Missing fixture handler: ${method}`)
-      return await handler(params, caller)
+      return await handler(params, requestCaller)
     },
     async cached(selectors = worktrees.map((worktree) => worktree.id)) {
-      return await methods.cachedReviews!({ worktrees: selectors }, caller) as { workspaces: Record<string, any>[] }
+      return await handlers.cachedReviews!({ worktrees: selectors }, caller) as { workspaces: Record<string, any>[] }
     },
     replaceWorktree(id, worktree) {
       const index = worktrees.findIndex((current) => current.id === id)
       if (index < 0) throw new Error(`Unknown fixture worktree: ${id}`)
       worktrees[index] = worktree
+    },
+    removeWorktree(id) {
+      const index = worktrees.findIndex((current) => current.id === id)
+      if (index >= 0) worktrees.splice(index, 1)
     },
     setRemotes(id, value) {
       remotes.set(id, { ...value })
@@ -258,6 +340,7 @@ type ControlledClock = {
   installTimers(): void
   disableTimers(): void
   advanceTo(target: number): Promise<void>
+  waitRealTurn(): Promise<void>
   restore(): void
 }
 
@@ -269,6 +352,7 @@ function controlledClock(startAt: number): ControlledClock {
   let nextId = 0
   let timersInstalled = false
   const timers = new Map<number, ClockTimer>()
+  const fakeTimerIds = new WeakMap<object, number>()
   Date.now = () => now
 
   const installTimers = () => {
@@ -282,11 +366,13 @@ function controlledClock(startAt: number): ControlledClock {
         unref() { return timer }
       }
       timers.set(timer.id, timer)
+      fakeTimerIds.set(timer, timer.id)
       return timer
     }) as unknown as typeof setTimeout
     globalThis.clearTimeout = ((handle: unknown) => {
-      if (typeof handle === 'object' && handle !== null && 'id' in handle && typeof handle.id === 'number') {
-        timers.delete(handle.id)
+      const id = typeof handle === 'object' && handle !== null ? fakeTimerIds.get(handle) : undefined
+      if (id !== undefined) {
+        timers.delete(id)
         return
       }
       originalClearTimeout(handle as Parameters<typeof originalClearTimeout>[0])
@@ -321,6 +407,11 @@ function controlledClock(startAt: number): ControlledClock {
       }
       now = target
     },
+    waitRealTurn() {
+      const turn = Promise.withResolvers<void>()
+      originalSetTimeout(turn.resolve, 0)
+      return turn.promise
+    },
     restore() {
       disableTimers()
       Date.now = originalNow
@@ -341,6 +432,69 @@ function installClockAfterResponse(clock: ControlledClock, predicate: (path: str
     return response
   }
   return () => { globalThis.fetch = originalFetch }
+}
+
+function refreshPayloads(harness: CacheHarness): Record<string, any>[] {
+  return harness.events.filter((event) => event.type === 'refresh').map((event) => eventRecord(event.data))
+}
+
+function refreshOutcomeCount(harness: CacheHarness): number {
+  return refreshPayloads(harness).filter((event) => Object.hasOwn(event, 'outcome')).length
+}
+
+function refreshCandidate(worktree: Worktree, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    worktree: worktree.id,
+    branch: worktree.branch ?? 'feature',
+    headOid: worktree.head,
+    ...overrides
+  }
+}
+
+async function waitForCondition(clock: ControlledClock, predicate: () => boolean, description: string): Promise<void> {
+  for (let turn = 0; turn < 1_000; turn += 1) {
+    if (predicate()) return
+    await clock.waitRealTurn()
+  }
+  throw new Error(`Timed out waiting for ${description}`)
+}
+
+function holdStandInResponse(
+  harness: CacheHarness,
+  method: string,
+  path: string
+): { entered: Promise<void>; release(): void; clear(): void } {
+  const entered = Promise.withResolvers<void>()
+  const gate = Promise.withResolvers<void>()
+  const key = `${method} ${path}`
+  harness.server.responseBarriers.set(key, async () => {
+    entered.resolve()
+    await gate.promise
+  })
+  return {
+    entered: entered.promise,
+    release: () => gate.resolve(),
+    clear: () => harness.server.responseBarriers.delete(key)
+  }
+}
+
+async function withControlledHarness<T>(
+  count: number,
+  run: (harness: CacheHarness, clock: ControlledClock) => Promise<T>
+): Promise<T> {
+  const clock = controlledClock(Date.now())
+  clock.installTimers()
+  let harness: CacheHarness | undefined
+  try {
+    harness = await cacheHarness(count)
+    return await run(harness, clock)
+  } finally {
+    try {
+      await harness?.cleanup()
+    } finally {
+      clock.restore()
+    }
+  }
 }
 
 test('routed branch and exact review lookups publish the same current-head cache snapshot', async () => {
@@ -924,3 +1078,784 @@ test('stale cache-only reads remain credential-free after the environment token 
     await harness.cleanup()
   }
 })
+
+function withoutFetchedAt(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutFetchedAt)
+  if (typeof value !== 'object' || value === null) return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== 'fetchedAt')
+      .map(([key, entry]) => [key, withoutFetchedAt(entry)])
+  )
+}
+
+test('manual GitLab refresh publishes a schema-valid result and lifecycle, and CLI uses candidate JSON', async () => {
+  const world = await boot()
+  const head = git(world, ['rev-parse', 'HEAD'])
+  world.server.mergeRequests = [mrAtHead(head, { detailed_merge_status: 'mergeable' })]
+  const events = await listenForEvents(world)
+  const candidate = { worktree: world.worktree, branch: 'feature', headOid: head }
+  const cliCandidate = { worktree: world.worktree, branch: 'feature' }
+
+  const result = await world.call('refresh', { candidate, reason: 'manual' }) as Record<string, any>
+  expect(result).toMatchObject({
+    kind: 'found',
+    review: {
+      provider: 'gitlab',
+      repository: world.identity,
+      detailedMergeStatus: 'mergeable',
+      number: 5,
+      headRefOid: head
+    }
+  })
+  expect(typeof result.fetchedAt).toBe('number')
+  expect(world.glabInvocations()).toEqual([])
+  expect(world.invocations()).toEqual([])
+
+  const refreshEvents = events.filter((event) => {
+    if (typeof event !== 'object' || event === null || !('type' in event)) return false
+    return event.type === 'quirky.hosting/refresh'
+  }).map((event) => eventRecord(event).data as Record<string, any>)
+  expect(refreshEvents.map((event) => event.status)).toContain('in-flight')
+  const completed = refreshEvents.find((event) => event.outcome?.kind === 'found')
+  if (!completed) throw new Error('expected a completed GitLab refresh event')
+  expect(completed).toMatchObject({
+    reason: 'manual',
+    worktreeId: world.worktree,
+    outcome: { review: { provider: 'gitlab', repository: world.identity, detailedMergeStatus: 'mergeable' } }
+  })
+  expect(typeof completed.sequence).toBe('number')
+  const sequences = refreshEvents.map((event) => event.sequence as number)
+  expect(sequences).toEqual([...sequences].sort((left, right) => left - right))
+
+  const resultSchema = methodResultSchema('refresh')
+  const resultReviewSchema = propertySchema(resultSchema, 'review')
+  expect(validateValue(resultSchema, {
+    ...result,
+    review: reviewForSchema(eventRecord(result.review), resultReviewSchema)
+  }, 'refresh result')).toBeNull()
+
+  const refreshEventSchema = eventDataSchema('refresh')
+  const eventOutcomeSchema = propertySchema(refreshEventSchema, 'outcome')
+  const eventReviewSchema = propertySchema(eventOutcomeSchema, 'review')
+  expect(validateValue(refreshEventSchema, {
+    ...completed,
+    outcome: {
+      ...completed.outcome,
+      review: reviewForSchema(eventRecord(completed.outcome.review), eventReviewSchema)
+    }
+  }, 'refresh event')).toBeNull()
+
+  const cli = await world.cli([
+    '--json', 'hosting', 'refresh',
+    '--candidate', JSON.stringify(cliCandidate),
+    '--reason', 'manual'
+  ])
+  expect(cli.code).toBe(0)
+  expect(withoutFetchedAt(JSON.parse(cli.stdout))).toEqual(withoutFetchedAt(result))
+
+  const requestsBeforeQueue = world.server.requests.length
+  const before = Date.now()
+  const queued = await world.call('refresh', { candidate, reason: 'post-push' }) as Record<string, any>
+  const after = Date.now()
+  expect(queued).toMatchObject({ kind: 'queued' })
+  expect(typeof queued.sequence).toBe('number')
+  expect(typeof queued.dueAt).toBe('number')
+  expect(Number(queued.dueAt)).toBeGreaterThanOrEqual(before + 2_500)
+  expect(Number(queued.dueAt)).toBeLessThanOrEqual(after + 2_500)
+  expect(world.server.requests).toHaveLength(requestsBeforeQueue)
+  expect(validateValue(resultSchema, queued, 'post-push result')).toBeNull()
+  expect(world.glabInvocations()).toEqual([])
+  expect(world.invocations()).toEqual([])
+}, 20_000)
+
+test('GitLab keeps the default GitHub-only methods refused before provider requests', async () => {
+  const world = await boot()
+  const requests: Record<string, Record<string, unknown>> = {
+    merge: { number: 5, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct', yes: true },
+    autoMerge: { number: 5, action: 'enable', method: 'squash' },
+    createStacked: { title: 'x', parentNumber: 5 },
+    reviewers: { number: 5, action: 'add', logins: ['x'] },
+    reviewAssignees: { number: 5, action: 'add', logins: ['x'] },
+    reviewStack: { number: 5 },
+    pushRepository: { remote: 'origin' },
+    reaction: { number: 5, action: 'add', subjectId: 'x', content: '+1' },
+    fileViewed: { number: 5, path: 'x', viewed: true },
+    files: { number: 5 },
+    fileContents: { number: 5, path: 'x', side: 'head' },
+    rateLimit: {},
+    accounts: {},
+    configure: {},
+    configuration: {}
+  }
+  for (const [method, params] of Object.entries(requests)) {
+    await expect(world.call(method, params)).rejects.toMatchObject({
+      message: `GitLab hosting does not answer quirky.hosting/${method} yet.`,
+      data: { reason: 'unsupported_provider' }
+    })
+  }
+  expect(world.server.requests).toEqual([])
+  expect(world.glabInvocations()).toEqual([])
+  expect(world.invocations()).toEqual([])
+})
+
+test('refresh refuses plugin-role callers and malformed or foreign-provider outcomes', async () => {
+  const harness = await cacheHarness()
+  const worktree = harness.worktrees[0]!
+  const candidate = refreshCandidate(worktree)
+  const requestsBefore = harness.server.requests.length
+  await expect(harness.call('refresh', { candidate, reason: 'manual' }, harness.caller))
+    .rejects.toMatchObject({ data: { reason: 'validation_error' } })
+  expect(harness.server.requests).toHaveLength(requestsBefore)
+
+  const invalidOutcomes: unknown[] = [
+    { kind: 'found', fetchedAt: Date.now(), review: { provider: 'github' } },
+    { kind: 'found', fetchedAt: Date.now(), review: { provider: 'gitlab', repository: harness.server.project, number: 5 } }
+  ]
+  for (const lookup of invalidOutcomes) {
+    const methods = refreshMethods(harness.env, {
+      forBranch: async () => lookup
+    })
+    const connection = refreshTestConnection(`malformed-${String(invalidOutcomes.indexOf(lookup))}`)
+    const result = await methods.refresh!({ candidate, reason: 'manual' }, connection.caller) as Record<string, any>
+    expect(result.kind).toBe('unavailable')
+    expect(result.kind).not.toBe('found')
+    connection.close()
+  }
+  expect(harness.server.requests).toHaveLength(requestsBefore)
+})
+test('visible refresh ownership unions worktrees, ignores stale generations, and cleans every owner', async () => {
+  await withControlledHarness(3, async (harness) => {
+    const [shared, firstOnly, secondOnly] = harness.worktrees
+    if (!shared || !firstOnly || !secondOnly) throw new Error('expected three registered worktrees')
+    const first = refreshTestConnection('visible-first')
+    const second = refreshTestConnection('visible-second')
+    const observer = refreshTestConnection('visible-observer')
+    try {
+      expect(await harness.call('visibleRefreshCandidates', {
+        generation: 4,
+        candidates: [refreshCandidate(shared), refreshCandidate(firstOnly)]
+      }, first.caller)).toMatchObject({ accepted: true, generation: 4, candidates: 2 })
+      expect(await harness.call('visibleRefreshCandidates', {
+        generation: 2,
+        candidates: [refreshCandidate(shared), refreshCandidate(secondOnly)]
+      }, second.caller)).toMatchObject({ accepted: true, generation: 2, candidates: 2 })
+      expect(await harness.call('refreshState', {}, first.caller)).toMatchObject({
+        owners: 2, visibleCandidates: 3, queued: 3
+      })
+
+      expect(await harness.call('visibleRefreshCandidates', {
+        generation: 4,
+        candidates: []
+      }, first.caller)).toMatchObject({ accepted: false, generation: 4, candidates: 2 })
+      first.close()
+      expect(await harness.call('refreshState', {}, second.caller)).toMatchObject({
+        owners: 1, visibleCandidates: 2, queued: 2
+      })
+
+      expect(await harness.call('visibleRefreshCandidates', {
+        generation: 3,
+        candidates: [refreshCandidate(secondOnly)]
+      }, second.caller)).toMatchObject({ accepted: true, generation: 3, candidates: 1 })
+      second.close()
+      expect(await harness.call('refreshState', {}, observer.caller)).toMatchObject({
+        owners: 1, visibleCandidates: 0, queued: 0, inFlight: 0
+      })
+      expect(refreshPayloads(harness).some((event) => event.skippedReason === 'disconnected')).toBe(true)
+      await expect(harness.call('refresh', {
+        candidate: refreshCandidate(shared), reason: 'manual'
+      }, harness.caller)).rejects.toMatchObject({ data: { reason: 'validation_error' } })
+      expect(harness.server.requests).toEqual([])
+    } finally {
+      first.close()
+      second.close()
+      observer.close()
+    }
+  })
+})
+
+test('refresh candidate and tracked-work queues both enforce the 1000-entry bound', async () => {
+  await withControlledHarness(1_001, async (harness) => {
+    const first = refreshTestConnection('capacity-first')
+    const second = refreshTestConnection('capacity-second')
+    try {
+      const candidates = harness.worktrees.slice(0, 1_000).map((worktree) => refreshCandidate(worktree))
+      expect(await harness.call('visibleRefreshCandidates', { generation: 1, candidates }, first.caller))
+        .toMatchObject({ accepted: true, candidates: 1_000 })
+      await expect(harness.call('visibleRefreshCandidates', {
+        generation: 2,
+        candidates: Array.from({ length: 1_001 }, () => refreshCandidate(harness.worktrees[1_000]!))
+      }, second.caller)).rejects.toMatchObject({ data: { reason: 'validation_error' } })
+      expect(await harness.call('refreshState', {}, first.caller)).toMatchObject({
+        visibleCandidates: 1_000, queued: 1_000
+      })
+
+      await expect(harness.call('visibleRefreshCandidates', {
+        generation: 1,
+        candidates: [refreshCandidate(harness.worktrees[1_000]!)]
+      }, second.caller)).rejects.toMatchObject({ data: { reason: 'validation_error' } })
+      await expect(harness.call('enqueueRefresh', {
+        candidate: refreshCandidate(harness.worktrees[1_000]!),
+        reason: 'visible'
+      }, second.caller)).resolves.toMatchObject({ kind: 'skipped', skippedReason: 'capacity' })
+      expect(await harness.call('refreshState', {}, first.caller)).toMatchObject({
+        visibleCandidates: 1_000, queued: 1_000
+      })
+      expect(harness.server.requests).toEqual([])
+    } finally {
+      first.close()
+      second.close()
+    }
+  })
+}, 60_000)
+test('GitLab background refresh starts are spaced by 10 seconds and capped at 20 per five minutes', async () => {
+  await withControlledHarness(21, async (harness, clock) => {
+    const connection = refreshTestConnection('background-budget')
+    const candidates = harness.worktrees.map((worktree) => refreshCandidate(worktree))
+    try {
+      expect(await harness.call('visibleRefreshCandidates', { generation: 1, candidates }, connection.caller))
+        .toMatchObject({ accepted: true, candidates: 21 })
+      const startedAt = clock.now
+
+      await clock.advanceTo(startedAt)
+      await waitForCondition(clock, () => refreshOutcomeCount(harness) >= 1, 'the first background refresh')
+      for (let count = 2; count <= 20; count += 1) {
+        await clock.advanceTo(startedAt + (count - 1) * 10_000)
+        await waitForCondition(clock, () => refreshOutcomeCount(harness) >= count, `background refresh ${count}`)
+      }
+
+      const starts = refreshPayloads(harness)
+        .filter((event) => event.reason === 'visible' && event.status === 'in-flight')
+        .map((event) => event.requestStartedAt as number)
+      expect(starts).toHaveLength(20)
+      expect(starts[0]).toBe(startedAt)
+      for (let index = 1; index < starts.length; index += 1) {
+        expect(starts[index]! - starts[index - 1]!).toBeGreaterThanOrEqual(10_000)
+      }
+
+      await clock.advanceTo(startedAt + 299_999)
+      expect(refreshOutcomeCount(harness)).toBe(20)
+      expect(await harness.call('refreshState', {}, connection.caller)).toMatchObject({
+        budgets: { backgroundStarts: 20 }
+      })
+      await clock.advanceTo(startedAt + 300_000)
+      await waitForCondition(clock, () => refreshOutcomeCount(harness) >= 21, 'the first background refresh after the five-minute cap')
+      const allStarts = refreshPayloads(harness)
+        .filter((event) => event.reason === 'visible' && event.status === 'in-flight')
+        .map((event) => event.requestStartedAt as number)
+      expect(allStarts).toHaveLength(21)
+      expect(allStarts[20]).toBe(startedAt + 300_000)
+      expect(harness.server.requests.length).toBeGreaterThan(0)
+    } finally {
+      connection.close()
+    }
+  })
+}, 120_000)
+
+test('GitLab active refreshes queue the fourth start per connection and budget until 30 seconds', async () => {
+  await withControlledHarness(8, async (harness, clock) => {
+    harness.server.mergeRequests = []
+    const first = refreshTestConnection('active-budget-first')
+    const second = refreshTestConnection('active-budget-second')
+    const candidates = harness.worktrees.map((worktree) => refreshCandidate(worktree))
+    try {
+      const startedAt = clock.now
+      for (let index = 0; index < 3; index += 1) {
+        expect(await harness.call('refresh', {
+          candidate: candidates[index], reason: 'active'
+        }, first.caller)).toMatchObject({ kind: 'no-review' })
+      }
+      for (let index = 4; index < 7; index += 1) {
+        expect(await harness.call('refresh', {
+          candidate: candidates[index], reason: 'active'
+        }, second.caller)).toMatchObject({ kind: 'no-review' })
+      }
+      const requestsAfterSix = harness.server.requests.length
+      expect(await harness.call('refresh', {
+        candidate: candidates[3], reason: 'active'
+      }, first.caller)).toMatchObject({ kind: 'queued', dueAt: startedAt + 30_000 })
+      expect(await harness.call('refresh', {
+        candidate: candidates[7], reason: 'active'
+      }, second.caller)).toMatchObject({ kind: 'queued', dueAt: startedAt + 30_000 })
+      expect(harness.server.requests).toHaveLength(requestsAfterSix)
+      expect(await harness.call('refreshState', {}, first.caller)).toMatchObject({
+        queued: 2, budgets: { activeStarts: 3 }
+      })
+      expect(await harness.call('refreshState', {}, second.caller)).toMatchObject({
+        queued: 2, budgets: { activeStarts: 3 }
+      })
+
+      await clock.advanceTo(startedAt + 29_999)
+      expect(harness.server.requests).toHaveLength(requestsAfterSix)
+      await clock.advanceTo(startedAt + 30_000)
+      await waitForCondition(clock, () => refreshOutcomeCount(harness) >= 8, 'both queued active refreshes')
+      const activeStarts = refreshPayloads(harness)
+        .filter((event) => event.reason === 'active' && event.status === 'in-flight')
+        .map((event) => event.requestStartedAt as number)
+      expect(activeStarts.slice(-2)).toEqual([startedAt + 30_000, startedAt + 30_000])
+      expect(harness.server.requests.length).toBeGreaterThan(requestsAfterSix)
+    } finally {
+      first.close()
+      second.close()
+    }
+  })
+}, 60_000)
+test('GitLab Retry-After pauses manual refreshes on the shared host budget until its deadline', async () => {
+  await withControlledHarness(2, async (harness, clock) => {
+    const [firstWorktree, secondWorktree] = harness.worktrees
+    if (!firstWorktree || !secondWorktree) throw new Error('expected two worktrees')
+    const connection = refreshTestConnection('retry-after-budget')
+    harness.server.failures.set(`GET ${harness.projectPath}/merge_requests`, {
+      status: 429,
+      headers: { 'Retry-After': '30' }
+    })
+    try {
+      const startedAt = clock.now
+      const failed = await harness.call('refresh', {
+        candidate: refreshCandidate(firstWorktree), reason: 'manual'
+      }, connection.caller) as Record<string, any>
+      expect(failed).toMatchObject({
+        kind: 'unavailable',
+        reason: 'rate_limited',
+        retryDisabledUntil: startedAt + 30_000
+      })
+      const deadline = failed.retryDisabledUntil as number
+      const requestsAtDeadline = harness.server.requests.length
+
+      const paused = await harness.call('refresh', {
+        candidate: refreshCandidate(secondWorktree), reason: 'manual'
+      }, connection.caller) as Record<string, any>
+      expect(paused).toEqual({ kind: 'paused', skippedReason: 'rate-limit', pausedUntil: deadline })
+      expect(harness.server.requests).toHaveLength(requestsAtDeadline)
+
+      harness.server.failures.clear()
+      await clock.advanceTo(deadline)
+      const resumed = await harness.call('refresh', {
+        candidate: refreshCandidate(secondWorktree), reason: 'manual'
+      }, connection.caller)
+      expect(resumed).toMatchObject({ kind: 'no-review' })
+      expect(harness.server.requests.length).toBeGreaterThan(requestsAtDeadline)
+      const afterSuccess = harness.server.requests.length
+      expect(await harness.call('refresh', {
+        candidate: refreshCandidate(secondWorktree), reason: 'manual'
+      }, connection.caller)).toMatchObject({ kind: 'no-review' })
+      expect(harness.server.requests.length).toBeGreaterThan(afterSuccess)
+
+      harness.server.failures.set(`GET ${harness.projectPath}/merge_requests`, { status: 500 })
+      expect(await harness.call('refresh', {
+        candidate: refreshCandidate(secondWorktree), reason: 'manual'
+      }, connection.caller)).toMatchObject({ kind: 'unavailable', reason: 'server_error' })
+      const afterFailure = harness.server.requests.length
+      harness.server.failures.clear()
+      expect(await harness.call('refresh', {
+        candidate: refreshCandidate(secondWorktree), reason: 'manual'
+      }, connection.caller)).toMatchObject({ kind: 'no-review' })
+      expect(harness.server.requests.length).toBeGreaterThan(afterFailure)
+    } finally {
+      connection.close()
+    }
+  })
+})
+
+test('GitLab background failures double from 60 seconds and stop at the 15-minute cap', async () => {
+  await withControlledHarness(1, async (harness, clock) => {
+    const worktree = harness.worktrees[0]!
+    const connection = refreshTestConnection('failure-backoff')
+    harness.server.failures.set(`GET ${harness.projectPath}/merge_requests`, { status: 500 })
+    try {
+      const startedAt = clock.now
+      expect(await harness.call('visibleRefreshCandidates', {
+        generation: 1,
+        candidates: [refreshCandidate(worktree)]
+      }, connection.caller)).toMatchObject({ accepted: true, candidates: 1 })
+      await clock.advanceTo(startedAt)
+      await waitForCondition(clock, () => refreshOutcomeCount(harness) >= 1, 'the first failed refresh')
+
+      const starts = [startedAt]
+      let outcomes = 1
+      for (const delay of [60_000, 120_000, 240_000, 480_000, 900_000, 900_000]) {
+        const nextStart = starts.at(-1)! + delay
+        await clock.advanceTo(nextStart - 1)
+        expect(refreshOutcomeCount(harness)).toBe(outcomes)
+        await clock.advanceTo(nextStart)
+        outcomes += 1
+        await waitForCondition(clock, () => refreshOutcomeCount(harness) >= outcomes, `failed refresh ${outcomes}`)
+        starts.push(nextStart)
+        expect(refreshPayloads(harness).filter((event) => event.status === 'in-flight')
+          .map((event) => event.requestStartedAt)).toEqual(starts)
+      }
+    } finally {
+      connection.close()
+    }
+  })
+}, 60_000)
+test('queued GitLab refreshes revalidate the host identity before any provider request', async () => {
+  await withControlledHarness(1, async (harness, clock) => {
+    const worktree = harness.worktrees[0]!
+    const connection = refreshTestConnection('queued-host-change')
+    try {
+      expect(await harness.call('enqueueRefresh', {
+        candidate: refreshCandidate(worktree),
+        reason: 'visible'
+      }, connection.caller)).toMatchObject({ kind: 'queued' })
+      harness.setGitLabHosts('gitlab.com')
+      await clock.advanceTo(clock.now)
+      await waitForCondition(clock, () =>
+        refreshPayloads(harness).some((event) => event.skippedReason === 'superseded'),
+      'the stale queued refresh to be discarded')
+      expect(harness.server.requests).toEqual([])
+      expect(await harness.call('refreshState', {}, connection.caller)).toMatchObject({
+        queued: 0, inFlight: 0, visibleCandidates: 0
+      })
+    } finally {
+      connection.close()
+    }
+  })
+})
+
+test('direct GitLab refreshes return superseded after every awaited target-identity change', async () => {
+  const mutations: [string, (harness: CacheHarness, worktree: Worktree) => void | Promise<void>][] = [
+    ['instance replacement', (harness, worktree) => harness.replaceWorktree(worktree.id, {
+      ...worktree, instanceId: 'replacement-instance'
+    })],
+    ['path replacement', (harness, worktree) => harness.replaceWorktree(worktree.id, {
+      ...worktree, path: `${worktree.path}-replacement`
+    })],
+    ['branch change', (harness, worktree) => harness.replaceWorktree(worktree.id, {
+      ...worktree, branch: 'release'
+    })],
+    ['HEAD change', (harness, worktree) => harness.replaceWorktree(worktree.id, {
+      ...worktree, head: 'f'.repeat(40)
+    })],
+    ['detachment', (harness, worktree) => harness.replaceWorktree(worktree.id, {
+      ...worktree, branch: null
+    })],
+    ['repository replacement', (harness, worktree) => harness.replaceWorktree(worktree.id, {
+      ...worktree, repoId: 'repo_deadbeef'
+    })],
+    ['remote change', (harness, worktree) => harness.setRemotes(worktree.id, {
+      origin: `http://${harness.server.host}/group/sub/replaced.git`, upstream: null
+    })],
+    ['saved configuration change', (harness, worktree) => harness.setConfiguration(worktree, {
+      issueSourcePreference: 'origin', account: null
+    })],
+    ['host removal', (harness) => harness.setGitLabHosts('gitlab.com')],
+    ['repository invalidation', (harness, worktree) => {
+      const identity = { host: harness.server.host, owner: 'group/sub', repo: 'proj' }
+      harness.env.changed({
+        worktree,
+        origin: identity,
+        repository: identity,
+        candidates: [identity],
+        issueRepository: identity,
+        issueSourcePreference: 'auto',
+        issueSourceFellBack: false,
+        remotes: { origin: `http://${harness.server.host}/group/sub/proj.git`, upstream: null }
+      } satisfies Scope)
+    }],
+    ['worktree removal', (harness, worktree) => harness.removeWorktree(worktree.id)]
+  ]
+
+  for (const [change, mutate] of mutations) {
+    await withControlledHarness(1, async (harness) => {
+      const worktree = harness.worktrees[0]!
+      const connection = refreshTestConnection(`direct-stale-${change}`)
+      const barrier = holdStandInResponse(harness, 'GET', `${harness.projectPath}/merge_requests`)
+      try {
+        const pending = harness.call('refresh', {
+          candidate: refreshCandidate(worktree),
+          reason: 'manual'
+        }, connection.caller)
+        await barrier.entered
+        const requestsAtBarrier = harness.server.requests.length
+        await mutate(harness, worktree)
+        barrier.release()
+        const result = await pending as Record<string, any>
+        expect(result, change).toMatchObject({ kind: 'unavailable', reason: 'superseded' })
+        expect(harness.server.requests, change).toHaveLength(requestsAtBarrier)
+        expect(refreshPayloads(harness).filter((event) => event.outcome?.kind === 'found'), change).toHaveLength(0)
+        expect(refreshPayloads(harness).some((event) => event.skippedReason === 'superseded'), change).toBe(true)
+      } finally {
+        barrier.release()
+        barrier.clear()
+        connection.close()
+      }
+    })
+  }
+
+  await withControlledHarness(1, async (harness) => {
+    const worktree = harness.worktrees[0]!
+    const connection = refreshTestConnection('direct-stale-disposal')
+    const barrier = holdStandInResponse(harness, 'GET', `${harness.projectPath}/merge_requests`)
+    try {
+      const pending = harness.call('refresh', {
+        candidate: refreshCandidate(worktree), reason: 'manual'
+      }, connection.caller)
+      await barrier.entered
+      await harness.env.dispose()
+      barrier.release()
+      expect(await pending).toMatchObject({ kind: 'unavailable' })
+      expect(refreshPayloads(harness).filter((event) => event.outcome?.kind === 'found')).toHaveLength(0)
+    } finally {
+      barrier.release()
+      barrier.clear()
+      connection.close()
+    }
+  })
+}, 60_000)
+
+test('disconnecting the last visible owner during a read cannot create a repeating refresh', async () => {
+  await withControlledHarness(1, async (harness, clock) => {
+    const worktree = harness.worktrees[0]!
+    const connection = refreshTestConnection('visible-in-flight-disconnect')
+    const barrier = holdStandInResponse(harness, 'GET', `${harness.projectPath}/merge_requests`)
+    try {
+      expect(await harness.call('visibleRefreshCandidates', {
+        generation: 1,
+        candidates: [refreshCandidate(worktree)]
+      }, connection.caller)).toMatchObject({ accepted: true, candidates: 1 })
+      await clock.advanceTo(clock.now)
+      await barrier.entered
+      const requestsAfterStart = harness.server.requests.length
+      connection.close()
+      barrier.release()
+      await waitForCondition(clock, () =>
+        refreshPayloads(harness).some((event) => event.skippedReason === 'disconnected'),
+      'the disconnected in-flight refresh to finish')
+      expect(harness.server.requests).toHaveLength(requestsAfterStart)
+
+      await clock.advanceTo(clock.now + 16 * 60_000)
+      const observer = refreshTestConnection('visible-disconnect-observer')
+      try {
+        expect(await harness.call('refreshState', {}, observer.caller)).toMatchObject({
+          queued: 0, visibleCandidates: 0, inFlight: 0
+        })
+        expect(harness.server.requests).toHaveLength(requestsAfterStart)
+      } finally {
+        observer.close()
+      }
+    } finally {
+      barrier.release()
+      barrier.clear()
+      connection.close()
+    }
+  })
+}, 60_000)
+test('a slower older visible generation cannot replace a newer concurrent report', async () => {
+  await withControlledHarness(1, async (harness) => {
+    const worktree = harness.worktrees[0]!
+    const connection = refreshTestConnection('visible-generation-race')
+    const resolverEntered = Promise.withResolvers<void>()
+    const releaseResolver = Promise.withResolvers<void>()
+    const originalGitWorktree = harness.env.gitWorktree
+    let firstBranchRead = true
+    harness.env.gitWorktree = async (target, args) => {
+      if (target.id === worktree.id && args[0] === 'symbolic-ref' && firstBranchRead) {
+        firstBranchRead = false
+        resolverEntered.resolve()
+        await releaseResolver.promise
+      }
+      return originalGitWorktree(target, args)
+    }
+    try {
+      const older = harness.call('visibleRefreshCandidates', {
+        generation: 5,
+        candidates: [refreshCandidate(worktree)]
+      }, connection.caller)
+      await resolverEntered.promise
+
+      expect(await harness.call('visibleRefreshCandidates', {
+        generation: 6,
+        candidates: []
+      }, connection.caller)).toMatchObject({ accepted: true, generation: 6, candidates: 0 })
+      releaseResolver.resolve()
+      expect(await older).toMatchObject({ accepted: false, generation: 6, candidates: 0 })
+      expect(await harness.call('refreshState', {}, connection.caller)).toMatchObject({
+        queued: 0, visibleCandidates: 0
+      })
+      expect(harness.server.requests).toEqual([])
+    } finally {
+      releaseResolver.resolve()
+      harness.env.gitWorktree = originalGitWorktree
+      connection.close()
+    }
+  })
+})
+
+test('GitHub and GitLab background budgets do not collide on a shared host string', async () => {
+  await withControlledHarness(2, async (harness, clock) => {
+    const [gitlabWorktree, githubWorktree] = harness.worktrees
+    if (!gitlabWorktree || !githubWorktree) throw new Error('expected two worktrees')
+    const githubRemote = `https://${harness.server.host}/owner/repo.git?source=github`
+    harness.setRemotes(githubWorktree.id, { origin: githubRemote, upstream: null })
+    const githubIdentity = { host: harness.server.host, owner: 'owner', repo: 'repo' }
+    const originalResolve = harness.env.resolve
+    harness.env.resolve = async (params, caller) => {
+      if (params.worktree === githubWorktree.id) {
+        return {
+          worktree: githubWorktree,
+          origin: githubIdentity,
+          repository: githubIdentity,
+          candidates: [githubIdentity],
+          issueRepository: githubIdentity,
+          issueSourcePreference: 'origin',
+          issueSourceFellBack: false,
+          remotes: { origin: githubRemote, upstream: null }
+        }
+      }
+      return originalResolve(params, caller)
+    }
+    const connection = refreshTestConnection('provider-budget-separation')
+    try {
+      const startedAt = clock.now
+      expect(await harness.call('enqueueRefresh', {
+        candidate: refreshCandidate(gitlabWorktree),
+        reason: 'visible'
+      }, connection.caller)).toMatchObject({ kind: 'queued' })
+      expect(await harness.call('enqueueRefresh', {
+        candidate: refreshCandidate(githubWorktree),
+        reason: 'visible'
+      }, connection.caller)).toMatchObject({ kind: 'queued' })
+
+      await clock.advanceTo(startedAt)
+      await waitForCondition(clock, () => refreshOutcomeCount(harness) >= 2, 'both provider budgets to start')
+      const starts = refreshPayloads(harness)
+        .filter((event) => event.status === 'in-flight')
+        .map((event) => event.requestStartedAt as number)
+      expect(starts).toEqual([startedAt, startedAt])
+      expect(await harness.call('refreshState', {}, connection.caller)).toMatchObject({
+        budgets: { backgroundStarts: 2 }
+      })
+      expect(harness.server.requests.length).toBeGreaterThan(0)
+    } finally {
+      connection.close()
+    }
+  })
+}, 20_000)
+test('queued refreshes reject replaced, removed, detached, changed, and host-removed targets before start', async () => {
+  const mutations: [string, (harness: CacheHarness, worktree: Worktree) => void][] = [
+    ['instance replacement', (harness, worktree) => harness.replaceWorktree(worktree.id, { ...worktree, instanceId: 'new-instance' })],
+    ['path replacement', (harness, worktree) => harness.replaceWorktree(worktree.id, { ...worktree, path: `${worktree.path}-new` })],
+    ['branch change', (harness, worktree) => harness.replaceWorktree(worktree.id, { ...worktree, branch: 'release' })],
+    ['HEAD change', (harness, worktree) => harness.replaceWorktree(worktree.id, { ...worktree, head: 'f'.repeat(40) })],
+    ['detachment', (harness, worktree) => harness.replaceWorktree(worktree.id, { ...worktree, branch: null })],
+    ['repository change', (harness, worktree) => harness.replaceWorktree(worktree.id, { ...worktree, repoId: 'repo_deadbeef' })],
+    ['remote change', (harness, worktree) => harness.setRemotes(worktree.id, {
+      origin: `http://${harness.server.host}/group/sub/other.git`, upstream: null
+    })],
+    ['saved configuration change', (harness, worktree) => harness.setConfiguration(worktree, {
+      issueSourcePreference: 'origin', account: null
+    })],
+    ['host removal', (harness) => harness.setGitLabHosts('gitlab.com')],
+    ['worktree removal', (harness, worktree) => harness.removeWorktree(worktree.id)]
+  ]
+  for (const [change, mutate] of mutations) {
+    await withControlledHarness(1, async (harness, clock) => {
+      const worktree = harness.worktrees[0]!
+      const connection = refreshTestConnection(`queued-stale-${change}`)
+      try {
+        expect(await harness.call('enqueueRefresh', {
+          candidate: refreshCandidate(worktree), reason: 'visible'
+        }, connection.caller)).toMatchObject({ kind: 'queued' })
+        mutate(harness, worktree)
+        await clock.advanceTo(clock.now)
+        await waitForCondition(clock, () =>
+          refreshPayloads(harness).some((event) => event.skippedReason === 'superseded'),
+        `${change} queue entry to be skipped`)
+        expect(harness.server.requests, change).toEqual([])
+        expect(await harness.call('refreshState', {}, connection.caller), change).toMatchObject({
+          queued: 0, inFlight: 0
+        })
+      } finally {
+        connection.close()
+      }
+    })
+  }
+}, 60_000)
+
+test('GitHub and GitLab host pacing keys stay distinct when their host strings match', async () => {
+  await withControlledHarness(2, async (harness, clock) => {
+    const [gitlabWorktree, githubWorktree] = harness.worktrees
+    if (!gitlabWorktree || !githubWorktree) throw new Error('expected two worktrees')
+    const githubRemote = `https://${harness.server.host}/owner/repo.git?source=github`
+    harness.setRemotes(githubWorktree.id, { origin: githubRemote, upstream: null })
+    const githubIdentity = { host: harness.server.host, owner: 'owner', repo: 'repo' }
+    const originalResolve = harness.env.resolve
+    harness.env.resolve = async (params, caller) => {
+      if (params.worktree === githubWorktree.id) {
+        return {
+          worktree: githubWorktree,
+          origin: githubIdentity,
+          repository: githubIdentity,
+          candidates: [githubIdentity],
+          issueRepository: githubIdentity,
+          issueSourcePreference: 'origin',
+          issueSourceFellBack: false,
+          remotes: { origin: githubRemote, upstream: null }
+        }
+      }
+      return originalResolve(params, caller)
+    }
+    const connection = refreshTestConnection('provider-budget-separation')
+    try {
+      const startedAt = clock.now
+      expect(await harness.call('enqueueRefresh', {
+        candidate: refreshCandidate(gitlabWorktree), reason: 'visible'
+      }, connection.caller)).toMatchObject({ kind: 'queued' })
+      expect(await harness.call('enqueueRefresh', {
+        candidate: refreshCandidate(githubWorktree), reason: 'visible'
+      }, connection.caller)).toMatchObject({ kind: 'queued' })
+
+      await clock.advanceTo(startedAt)
+      await waitForCondition(clock, () => refreshOutcomeCount(harness) >= 2, 'both provider budgets')
+      const starts = refreshPayloads(harness)
+        .filter((event) => event.status === 'in-flight')
+        .map((event) => event.requestStartedAt as number)
+      expect(starts).toEqual([startedAt, startedAt])
+      expect(await harness.call('refreshState', {}, connection.caller)).toMatchObject({
+        budgets: { backgroundStarts: 2 }
+      })
+      expect(harness.server.requests.length).toBeGreaterThan(0)
+    } finally {
+      connection.close()
+    }
+  })
+}, 20_000)
+test('real daemon GitLab visibility refresh shares connection owners and validates its event schema', async () => {
+  const world = await boot()
+  const head = git(world, ['rev-parse', 'HEAD'])
+  world.server.mergeRequests = []
+  const { events, firstRefresh } = await listenForRefreshEvents(world)
+  const candidate = { worktree: world.worktree, branch: 'feature', headOid: head }
+  const first = await world.call('visibleRefreshCandidates', { generation: 1, candidates: [candidate] })
+  expect(first).toMatchObject({ accepted: true, generation: 1, candidates: 1 })
+  expect(validateValue(methodResultSchema('visibleRefreshCandidates'), first, 'visibility result')).toBeNull()
+
+  const second = await world.connect('ui')
+  let secondClosed = false
+  const closeSecond = () => {
+    if (secondClosed) return
+    secondClosed = true
+    second.close()
+  }
+  try {
+    const overlap = await second.callAny('quirky.hosting/visibleRefreshCandidates', {
+      generation: 0,
+      candidates: [candidate]
+    })
+    expect(overlap).toMatchObject({ accepted: true, generation: 0, candidates: 1 })
+    expect(await world.call('refreshState')).toMatchObject({ owners: 2, visibleCandidates: 1 })
+    closeSecond()
+    expect(await world.call('refreshState')).toMatchObject({ owners: 1, visibleCandidates: 1 })
+
+    await firstRefresh
+    const event = events.map(eventRecord).find((value) => value.type === 'quirky.hosting/refresh')
+    if (!event) throw new Error('expected a GitLab visibility refresh lifecycle event')
+    expect(validateValue(eventDataSchema('refresh'), eventRecord(event.data), 'visibility refresh event')).toBeNull()
+    expect(world.glabInvocations()).toEqual([])
+    expect(world.invocations()).toEqual([])
+  } finally {
+    closeSecond()
+    await world.call('visibleRefreshCandidates', { generation: 2, candidates: [] })
+  }
+}, 20_000)
