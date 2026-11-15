@@ -57,6 +57,17 @@ export const DOCUMENT_CHANGED_MESSAGE = 'The document changed before the lookup 
 export const LOOKUP_REPLACED_MESSAGE = 'A newer lookup replaced this one.'
 export const WORKTREE_MISMATCH_MESSAGE = 'Navigation answered for a different worktree.'
 
+const SAFE_REPORT_ERRORS = new Set([
+  UNSAVED_SOURCE_SYMBOLS_MESSAGE, CHANGED_SOURCE_SYMBOLS_MESSAGE, DELETED_SOURCE_SYMBOLS_MESSAGE,
+  UNSUPPORTED_SOURCE_SYMBOLS_MESSAGE, SOURCE_EDITOR_ONLY_MESSAGE, SOURCE_WINDOW_UNKNOWN_MESSAGE,
+  LOOKUP_CLOSED_MESSAGE, DOCUMENT_CHANGED_MESSAGE, LOOKUP_REPLACED_MESSAGE, WORKTREE_MISMATCH_MESSAGE
+])
+
+function reportError(kind: SourceSymbolsKind, message: string): string {
+  return SAFE_REPORT_ERRORS.has(message) ? message
+    : kind === 'definition' ? 'Go to Definition failed.' : 'Find References failed.'
+}
+
 let nextLocationsGeneration = 0
 
 export function navigationLanguage(path: string): NavigationLanguage | null {
@@ -230,6 +241,7 @@ export type SourceSymbolsController = {
   close(generation?: string): boolean
   retry(generation: string): boolean
   documentChanged(): void
+  bridgeFailure(): (message: string) => void
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -339,12 +351,31 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
   }), [])
 
   const showRefusal = useCallback((kind: SourceSymbolsKind, message: string) => {
-    publishReport({ status: 'error', kind, count: null, truncated: null, error: message })
+    publishReport({ status: 'error', kind, count: null, truncated: null, error: reportError(kind, message) })
     publishPanel({
       generation: nextGeneration(), kind, label: '', status: 'error', locations: [], truncated: false,
       error: message, retryable: false, focusResults: false
     })
   }, [publishPanel, publishReport])
+
+  const bridgeFailure = useCallback(() => {
+    const origin = optionsRef.current
+    const revision = origin.revision.current
+    const request = requestRef.current
+    const generation = panelRef.current?.generation
+    return (message: string) => {
+      const current = optionsRef.current
+      if (!mountedRef.current || !current.enabled || requestRef.current !== request ||
+          current.revision.current !== revision || panelRef.current?.generation !== generation ||
+          current.context !== origin.context || current.engineGeneration !== origin.engineGeneration ||
+          current.buffer.id !== origin.buffer.id || current.tabId !== origin.tabId ||
+          current.buffer.worktreeId !== origin.buffer.worktreeId || current.buffer.path !== origin.buffer.path ||
+          current.buffer.relativePath !== origin.buffer.relativePath) return
+      const kind = activeRef.current?.kind ?? reportRef.current.kind ?? 'definition'
+      cancelActive(message, false)
+      showRefusal(kind, message)
+    }
+  }, [cancelActive, showRefusal])
 
   const completeStale = useCallback((session: LookupSession, state: SessionCurrent) => {
     if (activeRef.current === session) {
@@ -368,7 +399,7 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
   const failSession = useCallback((session: LookupSession, message: string, retryable: boolean) => {
     if (activeRef.current !== session) return
     retryRef.current = retryable ? session : null
-    publishReport({ status: 'error', kind: session.kind, count: null, truncated: null, error: message })
+    publishReport({ status: 'error', kind: session.kind, count: null, truncated: null, error: reportError(session.kind, message) })
     publishPanel(panelFor(session, {
       status: 'error', locations: [], truncated: false, error: message, retryable
     }))
@@ -657,5 +688,5 @@ export function useSourceSymbols(options: UseSourceSymbolsOptions): SourceSymbol
     }
   }, [settle])
 
-  return { report, panel, definition, references, control, open, close, retry, documentChanged }
+  return { report, panel, definition, references, control, open, close, retry, documentChanged, bridgeFailure }
 }

@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { ControlIcon, EmptyState, IconButton, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { EditorUiControl, EditorUiControlAddress, EditorUiControlResult } from './uiControl'
 import { useEditorUiControl, useEditorUiControlReport } from './uiControl'
 import type { NavigationPosition, SourceLocationsPanel as PanelState, SourceSymbolsController, SourceSymbolsKind, SourceSymbolsReport } from './sourceNavigation'
+import { SOURCE_WINDOW_UNKNOWN_MESSAGE } from './sourceNavigation'
 
 const SOURCE_CONTROL_SURFACE = 'view:quirky.editor/document'
 type SourceControlRunner = (action: string, data?: Record<string, unknown>) => Promise<EditorUiControlResult>
@@ -110,8 +111,30 @@ export function SourceLocations({
     }
     return { delivered: false }
   }
-  const sourceControls = useEditorUiControl({ context, address: sourceAddress, handler: sourceHandler })
-  const locationControls = useEditorUiControl({ context, address: locationsAddress, handler: locationHandler })
+  const controllerRef = useRef(controller)
+  controllerRef.current = controller
+  const bridgeContext = useMemo<UiPluginContext>(() => ({
+    ...context,
+    async call(method, params = {}) {
+      const fail = controllerRef.current.bridgeFailure()
+      try {
+        const result = await context.call(method, params)
+        if (method === 'ui.window.self' &&
+            (typeof result !== 'object' || result === null || !('connId' in result) ||
+              typeof result.connId !== 'number' || !Number.isSafeInteger(result.connId) || result.connId <= 0)) {
+          throw new Error(SOURCE_WINDOW_UNKNOWN_MESSAGE)
+        }
+        return result
+      } catch (reason) {
+        const message = method === 'ui.window.self' ? SOURCE_WINDOW_UNKNOWN_MESSAGE
+          : reason instanceof Error ? reason.message : String(reason)
+        fail(message)
+        throw new Error(message)
+      }
+    }
+  }), [context])
+  const sourceControls = useEditorUiControl({ context: bridgeContext, address: sourceAddress, handler: sourceHandler })
+  const locationControls = useEditorUiControl({ context: bridgeContext, address: locationsAddress, handler: locationHandler })
 
   useEffect(() => {
     onSourceControlRunner(sourceControls.run)
@@ -122,6 +145,9 @@ export function SourceLocations({
   useEffect(() => {
     report({ sourceSymbols: summary })
   }, [report, summary.status, summary.kind, summary.count, summary.truncated, summary.error])
+  useEffect(() => () => {
+    report({ sourceSymbols: { status: 'idle', kind: null, count: null, truncated: null, error: null } })
+  }, [report])
 
   const panelRoot = useRef<HTMLElement>(null)
   useEffect(() => {

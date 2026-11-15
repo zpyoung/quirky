@@ -1410,6 +1410,7 @@ test('opening Changes detaches a pending lookup and exposes no symbol controls',
   await outcome
   expect(surface.openCalls).toEqual([])
   expect(surface.report().uiControls?.some(({ target }) => target.startsWith('source-symbols:'))).toBe(false)
+  expect(surface.report().sourceSymbols).toEqual({ status: 'idle', kind: null, count: null, truncated: null, error: null })
   await expect(owner.runCommand('go-to-definition')).rejects.toThrow('Go to Definition and Find References work in the source editor.')
 })
 
@@ -1462,4 +1463,61 @@ test('closing references while a row resolves window identity prevents its open'
   await act(async () => { identity.resolve({ connId: 22 }); await identity.promise })
   expect(surface.openCalls).toEqual([])
   expect(surface.container.querySelector('.qe-source-locations')).toBeNull()
+})
+
+test.each(['reject', 'missing', 'zero'] as const)('a result click surfaces a %s window-bridge identity failure', async (failure) => {
+  let failIdentity = false
+  const surface = await mountDocument({
+    content: SYMBOL_TEXT, navigation: () => symbolAnswer(),
+    windowSelf: () => {
+      if (!failIdentity) return { connId: 22 }
+      if (failure === 'reject') throw new Error('window transport unavailable')
+      return failure === 'missing' ? {} : { connId: 0 }
+    }
+  })
+  await symbolCommand(surface, 'find-references')
+  failIdentity = true
+  await act(async () => { surface.container.querySelector<HTMLButtonElement>('.ui-list-row__main')!.click() })
+  await tickUi()
+  expect(surface.container.textContent).toContain('The daemon did not identify this window.')
+  expect(surface.address('source-locations:').actions).toEqual(['close'])
+  expect(surface.openCalls).toEqual([])
+})
+
+test('backend failure details stay visible locally but never enter the symbol report', async () => {
+  const message = 'File not found: src/use.ts'
+  const surface = await mountDocument({ content: SYMBOL_TEXT, navigation: () => { throw new Error(message) } })
+  await expect(symbolCommand(surface)).rejects.toThrow(`Go to Definition failed: ${message}`)
+  expect(surface.container.textContent).toContain(message)
+  expect(surface.report().sourceSymbols?.error).toBe('Go to Definition failed.')
+  expect(JSON.stringify(surface.report().sourceSymbols)).not.toContain('src/use.ts')
+})
+
+test('renaming unsupported source enables modifier-click without remounting its document', async () => {
+  const surface = await mountDocument({ content: SYMBOL_TEXT, relativePath: 'scratch.txt', navigation: () => symbolAnswer([]) })
+  await act(async () => { surface.updateBuffer({ path: '/fixture/scratch.ts', relativePath: 'scratch.ts', name: 'scratch.ts', revision: 2 }) })
+  await tickUi()
+  const view = surface.view()
+  Object.defineProperty(view, 'posAtCoords', { configurable: true, value: () => view.state.doc.line(4).from + 26 })
+  await act(async () => {
+    view.contentDOM.dispatchEvent(new MouseEvent('mousedown', {
+      bubbles: true, cancelable: true, button: 0,
+      metaKey: CHORD_PLATFORM === 'darwin', ctrlKey: CHORD_PLATFORM !== 'darwin'
+    }))
+  })
+  await tickUi()
+  expect(surface.navigationCalls.map(({ params }) => params)).toEqual([{ worktree: `id:${WORKTREE_ID}`, path: 'scratch.ts', line: 4, column: 27 }])
+})
+
+test('an old result-click bridge failure cannot restore a panel after an edit', async () => {
+  const identity = Promise.withResolvers<unknown>()
+  const surface = await mountDocument({ content: SYMBOL_TEXT, navigation: () => symbolAnswer(), windowSelf: () => identity.promise })
+  await symbolCommand(surface, 'find-references')
+  await act(async () => { surface.container.querySelector<HTMLButtonElement>('.ui-list-row__main')!.click() })
+  await act(async () => { surface.view().dispatch({ changes: { from: 0, insert: 'x' } }) })
+  await act(async () => { identity.reject(new Error('old window transport failure')); await identity.promise.catch(() => {}) })
+  await tickUi()
+  expect(surface.container.querySelector('.qe-source-locations')).toBeNull()
+  expect(surface.report().sourceSymbols?.status).toBe('idle')
+  expect(surface.openCalls).toEqual([])
 })

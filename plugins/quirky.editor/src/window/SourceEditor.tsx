@@ -370,6 +370,8 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   }, [])
   const symbolLanguage = navigationLanguage(props.buffer.relativePath)
   const symbolsEnabled = props.symbols !== undefined && symbolLanguage !== null
+  const symbolsEnabledRef = useRef(symbolsEnabled)
+  symbolsEnabledRef.current = symbolsEnabled
   const sourceSymbols = useSourceSymbols({
     context: props.symbols?.context ?? bridgeContext,
     buffer: props.buffer,
@@ -428,7 +430,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
   }
   function dispatchSymbolControl(action: 'definition' | 'references', position: number, view: EditorView): boolean {
     const run = symbolControlRunner.current
-    if (!symbolsEnabled || !run) return false
+    if (!symbolsEnabledRef.current || !run) return false
     const line = view.state.doc.lineAt(position)
     void run(action, { line: line.number, column: position - line.from + 1 })
     return true
@@ -810,7 +812,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
     const modifier = CHORD_PLATFORM === 'darwin'
       ? event.metaKey && !event.ctrlKey
       : event.ctrlKey && !event.metaKey
-    if (event.button !== 0 || !modifier || event.shiftKey || event.altKey || !symbolsEnabled) return false
+    if (event.button !== 0 || !modifier || event.shiftKey || event.altKey || !symbolsEnabledRef.current) return false
     const target = event.target
     if (!(target instanceof HTMLElement) || !target.closest('.cm-content')) return false
     const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
