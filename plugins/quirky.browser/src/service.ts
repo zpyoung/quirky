@@ -157,6 +157,10 @@ export class BrowserService {
   private active = true
   constructor(private readonly context: PluginContext, private readonly dependencies: BrowserDependencies) {
     this.store = new BrowserStore(context.dataDir)
+    const recovery = this.store.recovery
+    if (recovery) {
+      this.context.log(`browser: set aside unreadable browser-state.json as ${basename(recovery.quarantinedPath)}; recovered ${recovery.recoveredProfileIds.length} profiles from disk`)
+    }
     this.activeIdentityMode = identityModeFromSetting(context.getSetting('identityMode'))
     this.runtime = new BrowserRuntime(this.store, dependencies, (pageId) => this.actions?.clearPageRefs(pageId), this.activeIdentityMode)
     this.actions = new BrowserActions(this.store, this.runtime)
