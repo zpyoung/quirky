@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, ListRow, Menu, TextField, type MenuItem } from '@quirky/ui'
+import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineError, ListRow, Menu, NoticeLine, TextField, type MenuItem } from '@quirky/ui'
 import type { ItemKind, ItemTarget, TaskItem, TasksState, TasksSurfaceProps } from '../contracts'
 import { IssueSurface } from '../issue/IssueSurface'
 import { PrDetail, type ReviewerOptions } from './PrDetail'
@@ -14,6 +14,7 @@ import {
   reviewState, rowKey, rowTarget, strings,
   type CheckResult, type ListData, type ListItem, type ListSource, type MergeMetadata, type Preset
 } from './model'
+import { dispatchListControl, registerListControl, type ListControl } from './list-control'
 import { useReviewNavigation } from './useReviewNavigation'
 import { committed, createSearchLane, expected, observe, sending, settled, typed, type SearchLane } from './search-lane'
 
@@ -26,6 +27,15 @@ type OptimisticRow = {
   generation: number
   keepVisible: boolean
   retention?: { viewKey: string; sourceUrl: string }
+}
+
+type FilterOptionsStatus = { status: 'idle' | 'loading' | 'ready' } | { status: 'failed'; message: string }
+type LatestListActions = {
+  loadList?: (noCache?: boolean, deliberate?: boolean) => Promise<void>
+  sendSearch?: (query: string, patch: Record<string, unknown>) => Promise<TasksState | null>
+  loadChecks?: (item: ListItem) => Promise<void>
+  loadMergeMetadata?: (item: ListItem) => Promise<void>
+  loadFilterOptions?: (repoId: string) => Promise<void>
 }
 
 function pageNumbers(page: number, total: number): Array<number | 'ellipsis'> {
@@ -166,12 +176,16 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   const [loading, setLoading] = useState(seed === null)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [listError, setListError] = useState<string | null>(null)
   const [searchDraft, setSearchDraft] = useState(state.navigation.query)
   const [repoOpen, setRepoOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [reviewersFor, setReviewersFor] = useState<string | null>(null)
   const [reviewerText, setReviewerText] = useState('')
   const [reviewerOptions, setReviewerOptions] = useState<Record<string, ReviewerOptions>>({})
+  const failedReviewerOptions = useRef(new Set<string>())
+  const reviewerReadGenerations = useRef(new Map<string, number>())
+  const [filterOptions, setFilterOptions] = useState<FilterOptionsStatus>({ status: 'idle' })
   const [mergeFor, setMergeFor] = useState<string | null>(null)
   const [mergeMetadata, setMergeMetadata] = useState<Record<string, MergeMetadata>>({ ...seed?.merge })
   const [mergeLoading, setMergeLoading] = useState<Record<string, boolean>>({})
@@ -203,6 +217,8 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   const searchLaneRef = useRef<SearchLane | null>(null)
   const searchLane = searchLaneRef.current ?? (searchLaneRef.current = createSearchLane())
   const [searchSettlement, setSearchSettlement] = useState(0)
+  const latest = useRef<LatestListActions>({})
+  const filterOptionsGeneration = useRef(0)
   const mounted = useRef(true)
   const checkTriggered = useRef(new Set<string>())
   const listScroll = useRef<HTMLDivElement | null>(null)
@@ -228,6 +244,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   const selectedRepoIds = navigation.repoIds === null ? allRepoIds : navigation.repoIds
   const selectedRepos = result?.repositories.filter((repo) => selectedRepoIds.includes(repo.id)) ?? []
   const filterRepoId = selectedRepos.length === 1 ? selectedRepos[0]!.id : null
+  const filterOptionsLoading = filterOptions.status === 'loading' || (filterOptions.status === 'idle' && filtersOpen && filterRepoId !== null)
   if (viewKey.current !== currentKey) {
     viewKey.current = currentKey
     viewGeneration.current += 1
@@ -239,6 +256,17 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   }
   latestKey.current = currentKey
   const visibleResult = resultKey === currentKey ? result : null
+  const selectedSourceValues = selectedRepos.map((repo) => parseSource(visibleResult?.sources[repo.id]))
+  const noGitHubRemote = selectedRepoIds.length > 0 &&
+    selectedRepos.length === selectedRepoIds.length &&
+    selectedSourceValues.every((source) => source.reason === 'missing_origin')
+  useEffect(() => registerListControl(context, (request) => {
+    if (navigation.mode === 'projects') return false
+    if (request.control === 'filters' && noGitHubRemote) return false
+    if (request.control === 'filters') setFiltersOpen(request.open)
+    else setRepoOpen(request.open)
+    return true
+  }), [context, navigation.mode, noGitHubRemote])
   const filters = filtersFromQuery(navigation.query)
   const listItems = useMemo(() => {
     if (!visibleResult) return []
@@ -255,7 +283,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
     return rows
   }, [visibleResult, optimistic, currentKey])
 
-  const fetchList = useCallback(async (noCache: boolean): Promise<ListData> => {
+  const fetchList = async (noCache: boolean): Promise<ListData> => {
     const value = await context.call('quirky.tasks/list', {
       mode,
       repoIds: repoSelectionForList.current.repoIds,
@@ -266,9 +294,9 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
     const parsed = parseListResult(value)
     if (!parsed) throw new Error('The Tasks list API returned an invalid result.')
     return parsed
-  }, [context, currentKey, mode, navigation.page, navigation.query])
+  }
 
-  const loadList = useCallback(async (noCache = false, deliberate = false) => {
+  const loadList = async (noCache = false, deliberate = false) => {
     const key = currentKey
     if (navigation.mode === 'projects') return
     const generation = ++fetchGeneration.current
@@ -289,9 +317,10 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
       setResult(loaded)
       setResultKey(key)
       setError(null)
+      setListError(null)
     } catch (cause) {
       if (!ownsRequest()) return
-      setError(errorMessage(cause))
+      setListError(errorMessage(cause))
       if (focusOwner.current === key) wantsFocus.current = false
       if (resultKeyRef.current !== key) setResult(null)
     } finally {
@@ -300,17 +329,19 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
         setRefreshing(false)
       }
     }
-  }, [currentKey, fetchList, navigation.mode])
+  }
+  latest.current.loadList = loadList
 
   useEffect(() => {
-    void loadList()
-  }, [loadList])
+    void latest.current.loadList?.()
+  }, [context, currentKey, navigation.mode])
 
   useEffect(() => {
     if (listRefreshTokenRef.current === listRefreshToken) return
     listRefreshTokenRef.current = listRefreshToken
-    if (listRefreshToken !== undefined) void loadList(true)
-  }, [listRefreshToken, loadList])
+    if (listRefreshToken !== undefined) void latest.current.loadList?.(true)
+  }, [listRefreshToken])
+
 
   useEffect(() => {
     if (!filtersOpen && !repoOpen) return
@@ -343,30 +374,39 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   }, [visibleResult, currentKey])
 
 
+  const loadFilterOptions = async (repoId: string) => {
+    const generation = ++filterOptionsGeneration.current
+    setFilterOptions({ status: 'loading' })
+    const [labelsResult, assigneesResult] = await Promise.allSettled([
+      context.call('quirky.tasks/options', { repoId, kind: 'labels' }),
+      context.call('quirky.tasks/options', { repoId, kind: 'assignees' })
+    ])
+    if (filterOptionsGeneration.current !== generation) return
+    const labels = labelsResult.status === 'fulfilled' ? object(labelsResult.value)?.labels : null
+    const assignees = assigneesResult.status === 'fulfilled' ? object(assigneesResult.value)?.assignees : null
+    setRepoLabels(Array.isArray(labels) ? labels.filter((entry): entry is string => typeof entry === 'string') : [])
+    setRepoAssignees(Array.isArray(assignees) ? assignees.flatMap((entry) => {
+      const assignee = object(entry)
+      return typeof assignee?.login === 'string' ? [assignee.login] : []
+    }) : [])
+    const failure = labelsResult.status === 'rejected' ? labelsResult : assigneesResult.status === 'rejected' ? assigneesResult : null
+    setFilterOptions(failure ? { status: 'failed', message: errorMessage(failure.reason) } : { status: 'ready' })
+  }
+  latest.current.loadFilterOptions = loadFilterOptions
+
   useEffect(() => {
     if (!filtersOpen || !filterRepoId) {
+      filterOptionsGeneration.current += 1
       setRepoLabels([])
       setRepoAssignees([])
+      setFilterOptions({ status: 'idle' })
       return
     }
-    const repo = result?.repositories.find((entry) => entry.id === filterRepoId)
-    if (!repo) return
-    let live = true
-    void context.call('quirky.tasks/options', { repoId: repo.id, kind: 'labels' }).then((value) => {
-      const labels = object(value)?.labels
-      if (live && Array.isArray(labels)) setRepoLabels(labels.filter((entry): entry is string => typeof entry === 'string'))
-    }).catch(() => live && setRepoLabels([]))
-    void context.call('quirky.tasks/options', { repoId: repo.id, kind: 'assignees' }).then((value) => {
-      const assignees = object(value)?.assignees
-      if (live && Array.isArray(assignees)) setRepoAssignees(assignees.flatMap((entry) => {
-        const assignee = object(entry)
-        return typeof assignee?.login === 'string' ? [assignee.login] : []
-      }))
-    }).catch(() => live && setRepoAssignees([]))
-    return () => { live = false }
-  }, [context, filterRepoId, filtersOpen, result?.repositories])
+    void latest.current.loadFilterOptions?.(filterRepoId)
+    return () => { filterOptionsGeneration.current += 1 }
+  }, [filterRepoId, filtersOpen])
 
-  const navigate = useCallback(async (patch: Record<string, unknown>): Promise<TasksState | null> => {
+  const navigate = async (patch: Record<string, unknown>): Promise<TasksState | null> => {
     try {
       const next = parseTasksState(await context.call('quirky.tasks/navigate', patch))
       if (!next) throw new Error('Invalid Tasks state from daemon')
@@ -376,14 +416,15 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
       setError(errorMessage(cause))
       return null
     }
-  }, [adopt, context])
-  const sendSearch = useCallback(async (query: string, patch: Record<string, unknown>) => {
+  }
+  const sendSearch = async (query: string, patch: Record<string, unknown>) => {
     sending(searchLane, query)
     const reply = await navigate({ ...patch, query })
     settled(searchLane, reply)
     if (mounted.current) setSearchSettlement((value) => value + 1)
     return reply
-  }, [navigate, searchLane])
+  }
+  latest.current.sendSearch = sendSearch
   useEffect(() => {
     const action = observe(searchLane, { mode: navigation.mode, query: navigation.query })
     if (action === 'drop') {
@@ -404,12 +445,12 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
       return
     }
     setSearchDraft(normalized)
-    if (normalized !== navigation.query) void sendSearch(normalized, { page: 1 })
-  }, [navigation.mode, navigation.query, searchLane, searchSettlement, sendSearch])
+    if (normalized !== navigation.query) void latest.current.sendSearch?.(normalized, { page: 1 })
+  }, [navigation.mode, navigation.query, searchLane, searchSettlement])
   const reportNavigationError = useCallback((message: string) => setError(message), [])
   const openReview = useReviewNavigation(context, reportNavigationError)
 
-  const commitSearch = useCallback((value: string) => {
+  const commitSearch = (value: string) => {
     committed(searchLane)
     setSearchDraft(value)
     clearTimeout(searchTimer.current)
@@ -426,7 +467,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
       return
     }
     if (next !== expected(searchLane, navigation.query)) void sendSearch(next, { page: 1, scrollTop: 0 })
-  }, [kind, navigation.query, searchLane, sendSearch])
+  }
 
   const onSearchChange = (value: string) => {
     typed(searchLane)
@@ -508,6 +549,8 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
         try {
           const fresh = await fetchList(true)
           if (!ownsMutation()) return
+          setError(null)
+          setListError(null)
           const current = fresh.items.find((candidate) => rowKey(candidate) === rowKey(item))
           if (current && samePatch(current, patch)) {
             setOptimistic((previous) => {
@@ -520,7 +563,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
           }
           updateListResult(fresh, key)
         } catch (cause) {
-          if (ownsMutation()) setError(errorMessage(cause))
+          if (ownsMutation()) setListError(errorMessage(cause))
         }
       }
     }
@@ -659,7 +702,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   }
 
 
-  const loadChecks = useCallback(async (item: ListItem) => {
+  const loadChecks = async (item: ListItem) => {
     const key = rowKey(item)
     if (checkTriggered.current.has(key)) return
     checkTriggered.current.add(key)
@@ -685,8 +728,9 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
     } finally {
       if (ownsRead()) setChecksLoading((previous) => ({ ...previous, [key]: false }))
     }
-  }, [context, currentKey, currentViewGeneration])
-  const loadMergeMetadata = useCallback(async (item: ListItem) => {
+  }
+  latest.current.loadChecks = loadChecks
+  const loadMergeMetadata = async (item: ListItem) => {
     const key = rowKey(item)
     const owner = `${currentViewGeneration}\u0000${currentKey}`
     if ((mergeMetadataRef.current[key] && !seededMergeKeys.current.has(key)) || mutationInFlight.current.has(key) || mergeReadOwners.current.get(key) === owner) return
@@ -733,15 +777,16 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
         }
       }
     }
-  }, [context, currentKey, currentViewGeneration])
+  }
+  latest.current.loadMergeMetadata = loadMergeMetadata
 
   useEffect(() => {
     if (mode !== 'prs') return
     for (const item of listItems.slice(0, 20)) {
-      void loadChecks(item)
-      void loadMergeMetadata(item)
+      void latest.current.loadChecks?.(item)
+      void latest.current.loadMergeMetadata?.(item)
     }
-  }, [listItems, loadChecks, loadMergeMetadata, mode])
+  }, [listItems, mode, currentKey, currentViewGeneration])
 
   useEffect(() => {
     if (mode !== 'prs' || typeof IntersectionObserver === 'undefined') return
@@ -754,14 +799,14 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
         const key = checkKey ?? reviewKey
         const item = listItems.find((candidate) => rowKey(candidate) === key)
         if (!item) continue
-        if (checkKey) void loadChecks(item)
-        if (reviewKey) void loadMergeMetadata(item)
+        if (checkKey) void latest.current.loadChecks?.(item)
+        if (reviewKey) void latest.current.loadMergeMetadata?.(item)
       }
     }, { rootMargin: '160px' })
     const elements = document.querySelectorAll('[data-check-key], [data-review-key]')
     elements.forEach((element) => observer.observe(element))
     return () => observer.disconnect()
-  }, [listItems, loadChecks, loadMergeMetadata, mode])
+  }, [listItems, mode, currentKey, currentViewGeneration])
 
 
   const toggleMergeMenu = (item: ListItem) => {
@@ -865,17 +910,28 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
     const opening = reviewersFor !== key
     const ownerKey = currentKey
     const ownerGeneration = viewGeneration.current
-    const ownsRead = () => viewGeneration.current === ownerGeneration && latestKey.current === ownerKey
     setReviewersFor(opening ? key : null)
     if (!opening) return
+    const generation = (reviewerReadGenerations.current.get(key) ?? 0) + 1
+    reviewerReadGenerations.current.set(key, generation)
+    const ownsRead = () => reviewerReadGenerations.current.get(key) === generation
+      && viewGeneration.current === ownerGeneration && latestKey.current === ownerKey
     setReviewerText('')
-    if (reviewerOptions[key]) return
+    const retryFailed = failedReviewerOptions.current.delete(key)
+    if (reviewerOptions[key] && !retryFailed) return
+    if (retryFailed) {
+      setReviewerOptions((previous) => {
+        const next = { ...previous }
+        delete next[key]
+        return next
+      })
+    }
     if (!mergeMetadataRef.current[key]) void loadMergeMetadata(item)
     const review = mergeMetadataRef.current[key]?.review
     const recentFromReview = reviewAuthors(review?.reviews)
     const assigneesFromReview = optionalLogins(review?.assignees)
     const requested = optionalLogins(review?.requestedReviewers)
-    if (recentFromReview !== undefined && assigneesFromReview !== undefined) {
+    if (!retryFailed && recentFromReview !== undefined && assigneesFromReview !== undefined) {
       setReviewerOptions((previous) => ({
         ...previous,
         [key]: { recentlyActive: recentFromReview ?? [], suggestions: assigneesFromReview ?? [] }
@@ -895,7 +951,11 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
         }
       }))
     } catch (cause) {
-      if (ownsRead()) setError(errorMessage(cause))
+      if (ownsRead()) {
+        setReviewerOptions((previous) => ({ ...previous, [key]: { recentlyActive: [], suggestions: [] } }))
+        failedReviewerOptions.current.add(key)
+        setError(errorMessage(cause))
+      }
     }
   }
 
@@ -1012,9 +1072,9 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   useEffect(() => {
     const item = selectedPrRef.current
     if (!item) return
-    void loadChecks(item)
-    void loadMergeMetadata(item)
-  }, [selectedPrKey, loadChecks, loadMergeMetadata])
+    void latest.current.loadChecks?.(item)
+    void latest.current.loadMergeMetadata?.(item)
+  }, [selectedPrKey, currentKey, currentViewGeneration])
 
   useEffect(() => {
     if (viewerRequested.current || !result) return
@@ -1068,10 +1128,6 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
 
   if (navigation.mode === 'projects') return null
   const selectedSet = new Set(selectedRepoIds)
-  const selectedSourceValues = selectedRepos.map((repo) => parseSource(visibleResult?.sources[repo.id]))
-  const noGitHubRemote = selectedRepoIds.length > 0 &&
-    selectedRepos.length === selectedRepoIds.length &&
-    selectedSourceValues.every((source) => source.reason === 'missing_origin')
   const repoButtonLabel = selectedRepoIds.length === allRepoIds.length && navigation.repoIds === null
     ? 'All repositories'
     : selectedRepos.length === 1 ? selectedRepos[0]!.displayName || selectedRepos[0]!.name : `${selectedRepos.length} repositories`
@@ -1082,10 +1138,11 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
     : ''
   const sourceContext = noGitHubRemote
     ? selectedRepos.map((repo) => repo.displayName || repo.name).join(', ')
-    : selectedSourceValues.length === 1
-      ? sourceLabel(selectedSourceValues[0]!)
-      : navigation.repoIds === null && !visibleResult ? 'Loading selected projects…'
-        : selectedRepoIds.length > 0 ? `${selectedRepoIds.length} projects` : 'No projects selected'
+    : listError && !visibleResult ? 'Projects not loaded'
+      : selectedSourceValues.length === 1
+        ? sourceLabel(selectedSourceValues[0]!)
+        : navigation.repoIds === null && !visibleResult ? 'Loading selected projects…'
+          : selectedRepoIds.length > 0 ? `${selectedRepoIds.length} projects` : 'No projects selected'
   const hostContext = 'GitHub'
   const noGitHubRemoteMessage = selectedRepos.length === 1
     ? `No GitHub remote is configured for ${selectedRepos[0]!.displayName || selectedRepos[0]!.name}. Add a GitHub remote to this repository to load GitHub tasks.`
@@ -1109,6 +1166,14 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
   const totalPages = visibleResult?.totalPages ?? 1
   const statusOptions = kind === 'issue' ? ['open', 'closed', 'any'] : ['open', 'closed', 'merged', 'any']
   const localError = error
+  const retryList = () => { void loadList(true) }
+  const requestControl = async (control: ListControl, open: boolean) => {
+    try {
+      await dispatchListControl(context, { control, open })
+    } catch (cause) {
+      setError(errorMessage(cause))
+    }
+  }
 
   const changeReviewerText = (value: string) => {
     if (new TextEncoder().encode(value).byteLength <= 2048) setReviewerText(value)
@@ -1170,15 +1235,17 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
 
   let listBody
   if (loading && !visibleResult) {
-    listBody = <div role="status" aria-label="Loading GitHub tasks" className="tasks-list__loading">{Array.from({ length: 12 }, (_, index) => <div key={index} className="tasks-list__skeleton-row" />)}</div>
+    listBody = <div role="status" aria-label="Loading GitHub tasks" className="tasks-list__loading"><NoticeLine>Loading GitHub tasks…</NoticeLine>{Array.from({ length: 12 }, (_, index) => <div key={index} className="tasks-list__skeleton-row" />)}</div>
+  } else if (listError && rows.length === 0) {
+    listBody = <InlineError message={listError} action={{ label: 'Retry', onAction: retryList }} />
   } else if (visibleResult?.repositories.length === 0) {
     listBody = <div role="status" className="tasks-list__empty"><EmptyState message="No eligible Git repositories. Add or select a registered Git repository with a local path to load GitHub tasks." /></div>
   } else if (selectedRepoIds.length === 0) {
-    listBody = <div role="status" className="tasks-list__empty"><EmptyState message="No project sources selected. Select at least one project source so Quirky knows where to fetch GitHub tasks." action={{ label: 'Select projects', onAction: () => setRepoOpen(true) }} /></div>
-  } else if (visibleResult && rows.length === 0 && visibleResult.failures.every((failure) => failure.stage === 'count')) {
+    listBody = <div role="status" className="tasks-list__empty"><EmptyState message="No project sources selected. Select at least one project source so Quirky knows where to fetch GitHub tasks." action={{ label: 'Select projects', onAction: () => { void requestControl('repositories', true) } }} /></div>
+  } else if (visibleResult && rows.length === 0 && visibleResult.failures.every((failure) => failure.stage === 'count') && !allUnavailable) {
     listBody = <div role="status" className="tasks-list__empty"><EmptyState message="No matching GitHub work. Change the query or clear it." action={{ label: 'Reset query', onAction: () => commitSearch(presetQuery(normalizedPreset(state.preferences.defaultTaskViewPreset, kind), kind)) }} /></div>
-  } else if (rows.length === 0 && visibleResult?.failures.length) {
-    listBody = <div role="alert" className="tasks-list__notice tasks-list__notice--error">GitHub data is temporarily unavailable. Its API may be down, rate-limited, or unreachable. Retry shortly.</div>
+  } else if (rows.length === 0 && visibleResult?.failures.length && !allUnavailable) {
+    listBody = <InlineError message="GitHub data is temporarily unavailable. Its API may be down, rate-limited, or unreachable." action={{ label: 'Retry', onAction: retryList }} />
   } else {
     listBody = rows.map(renderRow)
   }
@@ -1279,7 +1346,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
 
           <div className="tasks-list__repository-controls">
             <div className="tasks-list__repo-picker">
-              <Button type="button" aria-haspopup="listbox" aria-expanded={repoOpen} onClick={() => setRepoOpen((open) => !open)}>{repoButtonLabel} ▾</Button>
+              <Button type="button" aria-haspopup="listbox" aria-expanded={repoOpen} onClick={() => { void requestControl('repositories', !repoOpen) }}>{repoButtonLabel} ▾</Button>
               {repoOpen ? (
                 <div role="group" aria-label="Select repositories" className="tasks-list__repo-menu" data-tasks-popover>
                   <label className="tasks-list__check-option">
@@ -1299,19 +1366,27 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
         </div>
 
         {allUnavailable && !noGitHubRemote ? (
-          <div role="alert" className="tasks-list__notice tasks-list__notice--error">
-            {visibleResult?.failures.map((failure) => failure.message).join(' · ') || 'GitHub source is unavailable. Check that gh is installed and authenticated, then refresh.'}
-          </div>
+          <InlineError
+            message={visibleResult?.failures.map((failure) => failure.message).join(' · ') || 'GitHub source is unavailable. Check that gh is installed and authenticated, then refresh.'}
+            action={{ label: 'Retry', onAction: retryList }}
+          />
         ) : null}
         {!noGitHubRemote && !allUnavailable && partialFailureCount > 0 ? (
-          <div role="status" className="tasks-list__notice tasks-list__notice--warning">
-            {sourceFailureCount > 0 ? `${sourceFailureCount} selected source read${sourceFailureCount === 1 ? '' : 's'} failed. Showing available GitHub work; retry to reload.` : `${countFailureCount} result count${countFailureCount === 1 ? '' : 's'} unavailable. Full pages offer a continuation.`}
+          <div role="status">
+            <NoticeLine actions={sourceFailureCount > 0 ? [{ label: 'Retry', onAction: retryList }] : []}>
+              {sourceFailureCount > 0 ? `${sourceFailureCount} selected source read${sourceFailureCount === 1 ? '' : 's'} failed. Showing available GitHub work; retry to reload.` : `${countFailureCount} result count${countFailureCount === 1 ? '' : 's'} unavailable. Full pages offer a continuation.`}
+            </NoticeLine>
           </div>
         ) : null}
-        {localError ? <div role="alert" className="tasks-list__notice tasks-list__notice--error">{localError}{visibleResult ? ' Showing the last loaded results.' : ''}</div> : null}
+        {listError && rows.length > 0 ? (
+          <div role="status">
+            <NoticeLine actions={[{ label: 'Retry', onAction: retryList }]}>Couldn't refresh GitHub tasks. Showing the last loaded results. {listError}</NoticeLine>
+          </div>
+        ) : null}
+        {localError ? <InlineError message={localError} /> : null}
         {!noGitHubRemote ? visibleResult?.failures.map((failure, index) => (
-          <div key={`${failure.repoId}:${index}`} role="status" className="tasks-list__notice tasks-list__notice--warning">
-            {failure.reason === 'missing_origin' ? `No GitHub source detected for ${failure.repoId} — it may have no GitHub remote.` : `${failure.repoId}: ${failure.message}`}
+          <div key={`${failure.repoId}:${index}`} role="status">
+            <NoticeLine>{failure.reason === 'missing_origin' ? `No GitHub source detected for ${failure.repoId} — it may have no GitHub remote.` : `${failure.repoId}: ${failure.message}`}</NoticeLine>
           </div>
         )) : null}
 
@@ -1323,7 +1398,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
                   <Button key={item.id} type="button" onClick={() => presetClick(item)} onContextMenu={(event) => void makeDefaultPreset(item, event)} title="Right-click to make this the default">{item.label}</Button>
                 ))}
               </div>
-              <Button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
+              <Button type="button" aria-haspopup="dialog" aria-expanded={filtersOpen} onClick={() => { void requestControl('filters', !filtersOpen) }}>
                 Filters{filterCount > 0 ? ` (${filterCount})` : ''}</Button>
               <TextField
                 label={`Search GitHub ${kind === 'issue' ? 'issues' : 'pull requests'}`}
@@ -1353,6 +1428,12 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
 
             {filtersOpen ? (
               <div role="dialog" aria-label="GitHub task filters" className="tasks-list__filters">
+                {filterOptionsLoading ? <div role="status"><NoticeLine>Loading repository labels and assignees…</NoticeLine></div> : null}
+                {filterOptions.status === 'failed' ? (
+                  <div role="status">
+                    <NoticeLine actions={[{ label: 'Retry', onAction: () => { if (filterRepoId) void loadFilterOptions(filterRepoId) } }]}>Repository labels and assignees could not be loaded. Showing values from loaded tasks. {filterOptions.message}</NoticeLine>
+                  </div>
+                ) : null}
                 <FormRow label="Status" htmlFor="tasks-list-status-filter">
                   <select id="tasks-list-status-filter" className="ui-text-field__input" value={filters.status || 'any'} onChange={(event) => setFilter('status', event.currentTarget.value === 'any' ? [] : [`is:${event.currentTarget.value}`, ...(filters.draftOnly ? ['is:draft'] : [])])}>
                     {statusOptions.map((value) => <option key={value} value={value}>{value === 'any' ? 'Any state' : value[0]!.toUpperCase() + value.slice(1)}</option>)}
@@ -1369,7 +1450,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
                   <legend>Labels</legend>
                   <div className="tasks-list__label-options">
                     {[...new Set([...repoLabels, ...rows.flatMap((item) => item.labels)])].sort().map((label) => <label key={label} className="tasks-list__check-option"><input type="checkbox" checked={filters.labels.includes(label)} onChange={(event) => toggleLabel(label, event.currentTarget.checked)} />{label}</label>)}
-                    {repoLabels.length === 0 && rows.every((item) => item.labels.length === 0) ? <span>No labels loaded.</span> : null}
+                    {repoLabels.length === 0 && rows.every((item) => item.labels.length === 0) && !filterOptionsLoading ? <EmptyState message="No labels loaded." /> : null}
                   </div>
                 </fieldset>
                 <FormRow label="Assignee" htmlFor="tasks-list-assignee-filter">
@@ -1388,7 +1469,7 @@ export function TasksList({ context, state, refresh, adopt, initialFocus, onData
                     </FormRow>
                   </>
                 ) : null}
-                <Button type="button" onClick={() => { setFilter('all', []); setFiltersOpen(false) }}>Clear all filters</Button>
+                <Button type="button" onClick={() => { setFilter('all', []); void requestControl('filters', false) }}>Clear all filters</Button>
               </div>
             ) : null}
           </>
