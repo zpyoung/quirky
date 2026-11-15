@@ -822,13 +822,14 @@ function WatcherDetailPane({
 }
 
 function HeimdallFleet({
-  context, input, instance, report, updateInputRef
+  context, input, instance, report, updateInputRef, signal
 }: {
   context: UiPluginContext
   input: unknown
   instance: string
   report?: (state: unknown) => void
   updateInputRef: { current(input: unknown): boolean }
+  signal: AbortSignal
 }) {
   const firstTarget = initialTarget(input)
   const [selection, setSelection] = useState(() => ({
@@ -983,6 +984,7 @@ function HeimdallFleet({
   }
 
   const loadDetail = async (requestedTarget: WatcherTarget, generation: string): Promise<void> => {
+    if (signal.aborted) return
     const ticket = ++latestDetailRequest.current
     setDetailBusy(true)
     setDetailError(null)
@@ -1013,6 +1015,7 @@ function HeimdallFleet({
   loadDetailRef.current = loadDetail
 
   const refreshFleet = async (): Promise<void> => {
+    if (signal.aborted) return
     const ticket = ++latestFleetRequest.current
     setRefreshing(true)
     try {
@@ -1073,7 +1076,7 @@ function HeimdallFleet({
     : null
   const ownerIsCurrent = (owner: OperationOwner): boolean => {
     const latest = latestDetailRef.current
-    return selectionRef.current.generation === owner.generation &&
+    return !signal.aborted && selectionRef.current.generation === owner.generation &&
       latest?.generation === owner.generation && latest.ownerEpoch === owner.ownerEpoch
   }
   const requestKey = (target: WatcherTarget, epoch: string): string => JSON.stringify([targetKey(target), epoch])
@@ -1166,6 +1169,7 @@ function HeimdallFleet({
     setFeedback(null)
     try {
       const preview = await context.call('quirky.heimdall/describeCommand', request)
+      if (signal.aborted) return
       const described = latestDetailRef.current
       if (!ownerIsCurrent(renderedOwner) || !described || !sameCommandOwner(request, described.detail)) {
         context.toast('Delete watcher not sent', `The watcher's owner changed; review it and try again.`, { kind: 'warning' })
@@ -1180,6 +1184,7 @@ function HeimdallFleet({
         body: preview,
         confirmLabel: 'Delete watcher'
       })
+      if (signal.aborted) return
       const confirmedDetail = latestDetailRef.current
       if (!ownerIsCurrent(renderedOwner) || !confirmedDetail || !sameCommandOwner(request, confirmedDetail.detail)) {
         context.toast('Delete watcher not sent', `The watcher's owner changed; review it and try again.`, { kind: 'warning' })
@@ -1196,7 +1201,7 @@ function HeimdallFleet({
   }
 
   const controlSessionIsCurrent = (args: FleetControlArgs): boolean => {
-    if (args.instance !== instance || selectionRef.current.generation !== args.generation) return false
+    if (signal.aborted || args.instance !== instance || selectionRef.current.generation !== args.generation) return false
     const currentRevision = args.action === 'cancel-concurrency'
       ? concurrencyRevisionRef.current
       : budgetEditorRevisionRef.current
@@ -1207,7 +1212,7 @@ function HeimdallFleet({
     if (!generation) return
     const args: FleetControlArgs = { action, instance, generation, revision }
     try {
-      const result = await requestFleetControl(context, args)
+      const result = await requestFleetControl(context, args, signal)
       if (result.delivered === 0 && controlSessionIsCurrent(args)) {
         context.toast(title, 'The watcher view changed before the control arrived.', { kind: 'error' })
       }
@@ -1216,6 +1221,7 @@ function HeimdallFleet({
     }
   }
   const dispatchControl = (args: FleetControlArgs): boolean => {
+    if (signal.aborted) return false
     const current = selectionRef.current
     const latest = latestDetailRef.current
     if (!latest || !current.target || current.generation !== args.generation || latest.generation !== args.generation) return false
@@ -1395,10 +1401,14 @@ export function activate(context: UiPluginContext): void {
   context.provide(FLEET_VIEW_ID, (element: HTMLElement, props: MountProps) => {
     Object.assign(element.style, { display: 'flex', flexDirection: 'column', flex: '1', minHeight: '0' })
     const root = createRoot(element)
+    const lifetime = new AbortController()
     const updateInputRef: { current(input: unknown): boolean } = { current: () => false }
-    root.render(<HeimdallFleet context={context} input={props.input} instance={crypto.randomUUID()} report={props.report} updateInputRef={updateInputRef} />)
-    const cleanup = (() => queueMicrotask(() => root.unmount())) as MountCleanup
-    cleanup.updateInput = (input) => updateInputRef.current(input)
+    root.render(<HeimdallFleet context={context} input={props.input} instance={crypto.randomUUID()} report={props.report} updateInputRef={updateInputRef} signal={lifetime.signal} />)
+    const cleanup = (() => {
+      lifetime.abort()
+      queueMicrotask(() => root.unmount())
+    }) as MountCleanup
+    cleanup.updateInput = (input) => !lifetime.signal.aborted && updateInputRef.current(input)
     return cleanup
   })
 }

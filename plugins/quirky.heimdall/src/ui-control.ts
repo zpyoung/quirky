@@ -43,10 +43,12 @@ function fleetControlDescriptor(args: FleetControlArgs): FleetControlDescriptor 
   return { command: UI_CONTROL_COMMAND, args }
 }
 
-/** Sends a control to this context's own window; malformed replies and transport errors reject. */
-export async function requestFleetControl(context: UiPluginContext, args: FleetControlArgs): Promise<FleetControlResult> {
+/** Sends a control to this window while its mount signal is live; malformed replies and transport errors reject. */
+export async function requestFleetControl(context: UiPluginContext, args: FleetControlArgs, signal?: AbortSignal): Promise<FleetControlResult> {
   const normalized = normalizeFleetControlArgs(args)
+  signal?.throwIfAborted()
   const self = await context.call('ui.window.self', {})
+  signal?.throwIfAborted()
   const connId = typeof self === 'object' && self !== null && !Array.isArray(self)
     ? (self as Record<string, unknown>).connId
     : undefined
@@ -60,6 +62,7 @@ export async function requestFleetControl(context: UiPluginContext, args: FleetC
     id: descriptor.command,
     args: descriptor.args
   })
+  signal?.throwIfAborted()
   if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) return invalidReply()
   const replyValue = reply as Record<string, unknown>
   if (!hasExactKeys(replyValue, ['result'])) return invalidReply()

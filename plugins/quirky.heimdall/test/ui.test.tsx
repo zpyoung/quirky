@@ -36,6 +36,15 @@ async function mountReady(fixture: Fixture, input?: unknown) {
   return mounted
 }
 
+async function disposeMount(fixture: Fixture, mounted: Fixture['mounted'][number]): Promise<void> {
+  fixture.mounted.splice(fixture.mounted.indexOf(mounted), 1)
+  await act(async () => {
+    mounted.cleanup()
+    mounted.element.remove()
+    await drainResolutionMicrotasks()
+  })
+}
+
 async function selectRow(root: ParentNode, watcherId: string): Promise<void> {
   const row = [...root.querySelectorAll<HTMLButtonElement>('.ui-list-row__main')].find((item) => item.textContent?.includes(`Watcher ${watcherId}`))
   if (!row) throw new Error(`Fleet row not found: ${watcherId}`)
@@ -1354,4 +1363,195 @@ test('M10: delayed edit cannot reopen after its original revision was opened and
   expect(latestReport(fixture).budgetEditorRevision).toBe(2)
   expect(mounted.element.querySelector('#active-time-limit')).toBeNull()
   expect(fixture.toasts).toHaveLength(0)
+})
+
+test('disposal revokes captured control and input handlers before queued unmount', async () => {
+  const fixture = makeFixture()
+  fixture.setHandler(DETAIL_METHOD, () => makeDetail('a'))
+  const mounted = await mountReady(fixture, { watcherId: 'a' })
+  const args = controlArgs(fixture, 'edit-budget')
+  const callCount = fixture.calls.length
+  fixture.mounted.splice(fixture.mounted.indexOf(mounted), 1)
+  await act(async () => {
+    mounted.cleanup()
+    expect(directControl(fixture, args)).toMatchObject({ delivered: 0 })
+    expect(mounted.cleanup.updateInput?.({ watcherId: 'b' })).toBe(false)
+    await drainResolutionMicrotasks()
+    mounted.element.remove()
+  })
+  expect(fixture.calls).toHaveLength(callCount)
+  expect(fixture.toasts).toEqual([])
+})
+
+test('a debug report queued before disposal cannot copy or toast afterward', async () => {
+  const fixture = makeFixture()
+  const report = deferred<unknown>()
+  fixture.setHandler(DETAIL_METHOD, () => makeDetail('a'))
+  fixture.setHandler(DEBUG_METHOD, () => report.promise)
+  const mounted = await mountReady(fixture, { watcherId: 'a' })
+  await click(mounted.element, 'Copy debug report')
+  const callCount = fixture.calls.length
+  fixture.mounted.splice(fixture.mounted.indexOf(mounted), 1)
+  await act(async () => {
+    report.resolve({ watcherId: 'a' })
+    mounted.cleanup()
+    mounted.element.remove()
+    await drainResolutionMicrotasks()
+  })
+  expect(fixture.clipboardWrites).toEqual([])
+  expect(fixture.toasts).toEqual([])
+  expect(fixture.calls).toHaveLength(callCount)
+})
+
+test('a terminal lookup settling after disposal cannot open a view', async () => {
+  const fixture = makeFixture()
+  const lookup = deferred<unknown>()
+  fixture.setHandler(DETAIL_METHOD, () => makeDetail('a', { workers: [worker()] }))
+  fixture.setHandler('quirky.session/get', () => lookup.promise)
+  const mounted = await mountReady(fixture, { watcherId: 'a' })
+  await click(mounted.element, 'Open terminal')
+  const callCount = fixture.calls.length
+  await disposeMount(fixture, mounted)
+  await resolveDeferred(lookup, { worktreeId: 'wt-1' })
+  expect(fixture.views).toEqual([])
+  expect(fixture.toasts).toEqual([])
+  expect(fixture.calls).toHaveLength(callCount)
+})
+
+test('a pending delete confirmation cannot submit after disposal', async () => {
+  const fixture = makeFixture()
+  fixture.setHandler(DETAIL_METHOD, () => makeDetail('a'))
+  fixture.setHandler(DESCRIBE_METHOD, () => 'Delete A')
+  const mounted = await mountReady(fixture, { watcherId: 'a' })
+  await click(mounted.element, 'Delete watcher')
+  expect(fixture.confirms).toHaveLength(1)
+  const callCount = fixture.calls.length
+  await disposeMount(fixture, mounted)
+  await resolveConfirm(fixture, true)
+  expect(fixture.callsFor(COMMAND_METHOD)).toEqual([])
+  expect(fixture.calls).toHaveLength(callCount)
+  expect(fixture.toasts).toEqual([])
+  expect(fixture.views).toEqual([])
+})
+
+test('an already-sent delete keeps its outcome toast without reopening a disposed fleet', async () => {
+  const fixture = makeFixture()
+  const result = deferred<unknown>()
+  fixture.setHandler(DETAIL_METHOD, () => makeDetail('a'))
+  fixture.setHandler(DESCRIBE_METHOD, () => 'Delete A')
+  fixture.setHandler(COMMAND_METHOD, () => result.promise)
+  const mounted = await mountReady(fixture, { watcherId: 'a' })
+  await click(mounted.element, 'Delete watcher')
+  await resolveConfirm(fixture, true)
+  expect(fixture.callsFor(COMMAND_METHOD)).toHaveLength(1)
+  const callCount = fixture.calls.length
+  await disposeMount(fixture, mounted)
+  await resolveDeferred(result, { kind: 'applied', appliedAtMs: 5 })
+  expect(fixture.views).toEqual([])
+  expect(fixture.calls).toHaveLength(callCount)
+  expect(fixture.toasts.map((toast) => toast.title)).toEqual(['Delete watcher applied'])
+})
+
+test('a pending delete preview cannot open confirmation after disposal', async () => {
+  const fixture = makeFixture()
+  const preview = deferred<unknown>()
+  fixture.setHandler(DETAIL_METHOD, () => makeDetail('a'))
+  fixture.setHandler(DESCRIBE_METHOD, () => preview.promise)
+  const mounted = await mountReady(fixture, { watcherId: 'a' })
+  await click(mounted.element, 'Delete watcher')
+  const callCount = fixture.calls.length
+  await disposeMount(fixture, mounted)
+  await resolveDeferred(preview, 'Delete A')
+  expect(fixture.confirms).toEqual([])
+  expect(fixture.calls).toHaveLength(callCount)
+  expect(fixture.toasts).toEqual([])
+})
+
+test('a disposed control lookup cannot send its second RPC or report transport errors', async () => {
+  for (const outcome of ['resolve', 'reject'] as const) {
+    const fixture = makeFixture()
+    fixture.setHandler(DETAIL_METHOD, () => makeDetail('a'))
+    const mounted = await mountReady(fixture, { watcherId: 'a' })
+    const lookup = fixture.holdNextSelf()
+    await click(mounted.element, 'Edit budget')
+    expect(fixture.callsFor('ui.window.self')).toHaveLength(1)
+    await disposeMount(fixture, mounted)
+    if (outcome === 'resolve') await resolveDeferred(lookup, { connId: 7 })
+    else await rejectDeferred(lookup, new Error('window closed'))
+    expect(fixture.callsFor('ui.window.command.run')).toEqual([])
+    expect(fixture.toasts).toEqual([])
+    expect(fixture.views).toEqual([])
+  }
+})
+
+test('a disposed control delivery stays silent on refusal or transport failure', async () => {
+  for (const outcome of ['resolve', 'reject'] as const) {
+    const fixture = makeFixture()
+    fixture.setHandler(DETAIL_METHOD, () => makeDetail('a'))
+    const mounted = await mountReady(fixture, { watcherId: 'a' })
+    const args = controlArgs(fixture, 'edit-budget')
+    const delivery = deferred<unknown>()
+    fixture.enqueue('ui.window.command.run', delivery.promise)
+    await click(mounted.element, 'Edit budget')
+    expect(fixture.callsFor('ui.window.command.run')).toHaveLength(1)
+    const callCount = fixture.calls.length
+    await disposeMount(fixture, mounted)
+    if (outcome === 'resolve') await resolveDeferred(delivery, { result: { ...args, delivered: 0 } })
+    else await rejectDeferred(delivery, new Error('delivery lost'))
+    expect(fixture.calls).toHaveLength(callCount)
+    expect(fixture.toasts).toEqual([])
+    expect(fixture.views).toEqual([])
+  }
+})
+
+test('an old mount completion cannot mutate or unlock its replacement in the same context', async () => {
+  const fixture = makeFixture()
+  const oldDelete = deferred<unknown>()
+  const newPause = deferred<unknown>()
+  fixture.setHandler(DETAIL_METHOD, () => visibleDetail('a'))
+  fixture.setHandler(DESCRIBE_METHOD, () => 'Delete A')
+  fixture.enqueue(COMMAND_METHOD, oldDelete.promise, newPause.promise)
+  const previous = await mountReady(fixture, { watcherId: 'a' })
+  const oldReport = latestReport(fixture)
+  await click(previous.element, 'Delete watcher')
+  await resolveConfirm(fixture, true)
+  await disposeMount(fixture, previous)
+  const replacement = await mountReady(fixture, { watcherId: 'a' })
+  const replacementReport = latestReport(fixture)
+  expect(replacementReport.instance).not.toBe(oldReport.instance)
+  await click(replacement.element, 'Pause')
+  const readCount = fixture.callsFor(DETAIL_METHOD).length
+  await resolveDeferred(oldDelete, { kind: 'applied', appliedAtMs: 5 })
+  expect(fixture.views).toEqual([])
+  expect(latestReport(fixture).generation).toBe(replacementReport.generation)
+  expect(latestReport(fixture).target).toEqual({ watcherId: 'a' })
+  expect(replacement.element.textContent).toContain('Detail marker a')
+  expect(replacement.element.querySelector('[role="status"]')?.textContent).not.toContain('Delete watcher')
+  expect(fixture.callsFor(DETAIL_METHOD)).toHaveLength(readCount)
+  expect(fixture.callsFor(COMMAND_METHOD)).toHaveLength(2)
+  expect(button(replacement.element, 'Pause').disabled).toBe(true)
+  expect(fixture.toasts.map((toast) => toast.title)).toEqual(['Delete watcher applied'])
+  await resolveDeferred(newPause, { kind: 'applied', appliedAtMs: 6 })
+  expect(button(replacement.element, 'Pause').disabled).toBe(false)
+})
+
+test('same-turn Pause and Disarm reserve one owner command until its settlement', async () => {
+  const fixture = makeFixture()
+  const result = deferred<unknown>()
+  fixture.setHandler(DETAIL_METHOD, () => makeDetail('a'))
+  fixture.enqueue(COMMAND_METHOD, result.promise)
+  const mounted = await mountReady(fixture, { watcherId: 'a' })
+  await act(async () => {
+    button(mounted.element, 'Pause').click()
+    button(mounted.element, 'Disarm').click()
+  })
+  await settleUi()
+  expect(fixture.callsFor(COMMAND_METHOD).map((call) => call.params.command)).toEqual([{ kind: 'pause' }])
+  expect(button(mounted.element, 'Pause').disabled).toBe(true)
+  expect(button(mounted.element, 'Disarm').disabled).toBe(true)
+  await resolveDeferred(result, { kind: 'applied', appliedAtMs: 5 })
+  expect(button(mounted.element, 'Pause').disabled).toBe(false)
+  expect(button(mounted.element, 'Disarm').disabled).toBe(false)
+  await click(mounted.element, 'Disarm')
+  expect(fixture.callsFor(COMMAND_METHOD).map((call) => call.params.command)).toEqual([{ kind: 'pause' }, { kind: 'disarm' }])
 })
