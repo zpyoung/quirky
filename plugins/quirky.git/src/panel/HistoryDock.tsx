@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, EmptyState, IconButton, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'
 import type { GitChange, GitCommit, GitHistory, UiPluginContext } from '@quirky/protocol'
 import { messageOf, relativeTime, shortOid } from './format'
@@ -45,6 +45,32 @@ type Props = {
 type Files = { loading: true } | { entries: GitChange[] } | { error: string }
 type HistoryAction = 'toggle-commit' | 'load-more'
 
+function readHistory(
+  context: UiPluginContext,
+  worktree: string,
+  limit: number | null,
+  requestSequence: { current: number },
+  setLoading: (loading: boolean) => void,
+  setHistory: (history: GitHistory) => void,
+  setError: (error: string | null) => void
+) {
+  const request = ++requestSequence.current
+  setLoading(true)
+  void context
+    .call('quirky.git/history', limit === null ? { worktree } : { worktree, limit })
+    .then((result) => {
+      if (request !== requestSequence.current) return
+      setHistory(result as GitHistory)
+      setError(null)
+      setLoading(false)
+    })
+    .catch((e: unknown) => {
+      if (request !== requestSequence.current) return
+      setError(messageOf(e))
+      setLoading(false)
+    })
+}
+
 /** The collapsed-by-default "Commits" dock: recent commits from HEAD, each expandable to its files. */
 export function HistoryDock({ context, worktree, open, onToggle, head, onOpenCommit, onOpenFile }: Props) {
   const [history, setHistory] = useState<GitHistory | null>(null)
@@ -74,35 +100,17 @@ export function HistoryDock({ context, worktree, open, onToggle, head, onOpenCom
     }
   }, [])
 
-  const readHistory = useCallback(() => {
-    const request = ++historyRead.current
-    setLoading(true)
-    void context
-      .call('quirky.git/history', limit === null ? { worktree } : { worktree, limit })
-      .then((result) => {
-        if (request !== historyRead.current) return
-        setHistory(result as GitHistory)
-        setError(null)
-        setLoading(false)
-      })
-      .catch((e: unknown) => {
-        if (request !== historyRead.current) return
-        setError(messageOf(e))
-        setLoading(false)
-      })
-  }, [context, worktree, limit])
-
   useEffect(() => {
     if (!open) return
-    readHistory()
+    readHistory(context, worktree, limit, historyRead, setLoading, setHistory, setError)
     return () => {
       historyRead.current++
     }
-  }, [open, readHistory, head])
+  }, [context, worktree, open, limit, head])
 
   const onRetryHistory = () => {
     setError(null)
-    readHistory()
+    readHistory(context, worktree, limit, historyRead, setLoading, setHistory, setError)
   }
 
   const onLoadFiles = (commit: GitCommit, retry = false) => {

@@ -1,9 +1,36 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Badge, Button, Dialog, EmptyState, InlineError, ListRow, NoticeLine, TextField } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import { messageOf } from './format'
 
 type Ref = { name: string; kind: 'local' | 'remote' }
+
+function readBranches(
+  context: UiPluginContext,
+  worktree: string,
+  query: string,
+  requestSequence: { current: number },
+  setLoading: (loading: boolean) => void,
+  setRefs: (refs: Ref[]) => void,
+  setReadError: (error: string | null) => void
+) {
+  const request = ++requestSequence.current
+  setLoading(true)
+  void context
+    .call('quirky.git/branches', query.trim() === '' ? { worktree } : { worktree, query: query.trim() })
+    .then((result) => {
+      if (request !== requestSequence.current) return
+      setRefs((result as { refs: Ref[] }).refs)
+      setReadError(null)
+      setLoading(false)
+    })
+    .catch((e: unknown) => {
+      if (request !== requestSequence.current) return
+      setRefs([])
+      setReadError(messageOf(e))
+      setLoading(false)
+    })
+}
 
 type Props = {
   context: UiPluginContext
@@ -43,35 +70,16 @@ export function ChangeBaseDialog({ context, worktree, current, marks = 0, onClos
     onClose()
   }
 
-  const readBranches = useCallback((currentQuery: string) => {
-    const request = ++branchRequest.current
-    setLoading(true)
-    context
-      .call('quirky.git/branches', currentQuery.trim() === '' ? { worktree } : { worktree, query: currentQuery.trim() })
-      .then((result) => {
-        if (request !== branchRequest.current) return
-        setRefs((result as { refs: Ref[] }).refs)
-        setReadError(null)
-        setLoading(false)
-      })
-      .catch((e: unknown) => {
-        if (request !== branchRequest.current) return
-        setRefs([])
-        setReadError(messageOf(e))
-        setLoading(false)
-      })
-  }, [context, worktree])
-
   useEffect(() => {
-    readBranches(query)
+    readBranches(context, worktree, query, branchRequest, setLoading, setRefs, setReadError)
     return () => {
       branchRequest.current++
     }
-  }, [readBranches, query])
+  }, [context, worktree, query])
 
   const onRetryBranches = () => {
     setReadError(null)
-    readBranches(query)
+    readBranches(context, worktree, query, branchRequest, setLoading, setRefs, setReadError)
   }
 
   const onSaveBase = async (params: { base: string } | { clear: true }) => {
