@@ -342,11 +342,17 @@ export function ViewTabs({
               onKeyDown={(event) => move(event, index)}
               onContextMenu={items.length === 0 ? undefined : (event) => {
                 event.preventDefault()
+                const state = current.current
+                if (!state || state.context !== context || state.owner !== owner) return
+                const nextRevision = revision.current + 1
+                if (!Number.isSafeInteger(nextRevision)) return
+                revision.current = nextRevision
+                current.current = { ...state, tabRevision: nextRevision }
                 send('open-view-menu', {
                   id: tab.id,
                   x: event.clientX,
                   y: event.clientY,
-                  revision: current.current?.tabRevision ?? revision.current
+                  revision: nextRevision
                 })
               }}
             >

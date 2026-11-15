@@ -666,6 +666,31 @@ test('ViewTabs rejects an older delayed context-menu open after a newer one', as
   expect(bridge.logs.at(-1)).toBe('worktree: open-view-menu reached no mounted target')
 })
 
+test('ViewTabs keeps the latest requested menu when older transport completes first', async () => {
+  const bridge = createContextHarness()
+  await mount(host, tabsElement(tabsProps(bridge.context)))
+  bridge.defer('open-view-menu')
+  const needsYou = host.querySelector<HTMLElement>('[role="tab"][data-view-id="needs-you"]')!
+  await act(async () => needsYou.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true, cancelable: true, clientX: 8, clientY: 9
+  })))
+  await settle()
+
+  bridge.defer('open-view-menu')
+  const saved = host.querySelector<HTMLElement>('[role="tab"][data-view-id="view_a"]')!
+  await act(async () => saved.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true, cancelable: true, clientX: 20, clientY: 24
+  })))
+  await settle()
+  expect(bridge.pending).toHaveLength(2)
+
+  await bridge.releaseNext()
+  expect(menuItemNamed('Hide Needs you')).toBeNull()
+  await bridge.releaseNext()
+  expect(menuItemNamed('Delete view')).not.toBeNull()
+  expect(menuItemNamed('Hide Needs you')).toBeNull()
+})
+
 test('ViewTabs preserves selection and roving keyboard focus while write actions are disabled', async () => {
   const bridge = createContextHarness()
   const selected: ViewId[] = []
