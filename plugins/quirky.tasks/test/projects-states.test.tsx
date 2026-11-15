@@ -590,8 +590,8 @@ test('22. window dispatch delivers only to matching mounted views and cleans reg
 })
 
 test('23. project control rejects malformed requests and unidentified windows', async () => {
-  const invalidAction = 'projects-control needs an action of picker, column-panel, back-to-picker or column.'
-  for (const input of [{}, null, { action: 'sort' }]) expect(() => parseProjectsControlRequest(input)).toThrow(invalidAction)
+  const invalidAction = 'projects-control needs an action of picker, column-panel, back-to-picker, column, sort, group, zoom, today or edit.'
+  for (const input of [{}, null, { action: 'unknown' }]) expect(() => parseProjectsControlRequest(input)).toThrow(invalidAction)
   expect(() => parseProjectsControlRequest({ action: 'picker', open: 'yes' })).toThrow('projects-control open must be a boolean.')
   const invalidColumn = 'projects-control column needs a fieldId and a visible boolean or a width from 60 to 800.'
   for (const input of [
