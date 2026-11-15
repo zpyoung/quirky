@@ -3,6 +3,7 @@ import { bootHosting, type HostingTest } from '../helpers'
 import { bootGitLab, type GitLabWorld } from './world'
 import type { Handler, HostingEnv } from '../../src/env'
 import { routeByProvider } from '../../src/gitlab/router'
+import { mergeRequest } from './stand-in'
 
 let world: HostingTest | undefined
 async function boot(options: Parameters<typeof bootGitLab>[0] = {}): Promise<GitLabWorld> {
@@ -128,4 +129,60 @@ test('a future GitHub-only method is refused by default on a GitLab origin', asy
     data: { reason: 'unsupported_provider' }
   })
   expect(githubCalls).toBe(0)
+})
+
+const pinnedCalls: Array<{ method: string; params: Record<string, unknown> }> = [
+  { method: 'forBranch', params: {} },
+  { method: 'review', params: { number: 5 } },
+  { method: 'comments', params: { number: 5 } },
+  { method: 'updateReview', params: { number: 5, action: 'close' } },
+  { method: 'reviewComment', params: { number: 5, action: 'inline', headSha: 'a'.repeat(40), path: 'src/a.ts', line: 12, body: 'nit' } },
+  { method: 'resolveThread', params: { number: 5, threadId: 'a'.repeat(40), action: 'resolve' } },
+  { method: 'reviewConversation', params: { number: 5, action: 'add', body: 'lgtm' } },
+  { method: 'reviewConversationConfirmation', params: { number: 5, action: 'add', body: 'lgtm' } }
+]
+
+for (const { method, params } of pinnedCalls) test(`${method} rejects a foreign repository pin before credential lookup or network`, async () => {
+  const w = await boot({ token: null, glabOutput: 'dummy-gitlab-token' })
+  w.server.mergeRequests = [mergeRequest()]
+  await expect(w.call(method, { ...params, prRepo: { ...w.identity, owner: 'different', repo: 'project' } })).rejects.toMatchObject(reason('repository_mismatch'))
+  expect(w.server.requests).toEqual([])
+  expect(w.glabInvocations()).toEqual([])
+})
+
+test('matching repository pins ignore letter case for reads and writes', async () => {
+  const w = await boot()
+  w.server.mergeRequests = [mergeRequest()]
+  w.server.discussions = [{ id: 'a'.repeat(40), individual_note: false, notes: [{ id: 201, body: 'fix', author: { username: 'reviewer' }, created_at: '2026-01-01T00:00:00Z', system: false, resolvable: true, resolved: false }] }]
+  const prRepo = { host: w.identity.host.toUpperCase(), owner: w.identity.owner.toUpperCase(), repo: w.identity.repo.toUpperCase() }
+  expect(await w.call('forBranch', { prRepo })).toMatchObject({ kind: 'found', review: { number: 5 } })
+  expect(await w.call('review', { number: 5, prRepo })).toMatchObject({ kind: 'found', review: { number: 5 } })
+  expect(await w.call('comments', { number: 5, prRepo })).toMatchObject({ comments: [{ id: 201 }] })
+  expect(await w.call('updateReview', { number: 5, action: 'close', prRepo })).toMatchObject({ number: 5, updated: true, state: 'closed' })
+  expect(await w.call('reviewComment', { number: 5, action: 'inline', headSha: 'a'.repeat(40), path: 'src/a.ts', line: 12, body: 'nit', prRepo })).toMatchObject({ number: 5, action: 'inline', comment: { body: 'nit' } })
+  expect(await w.call('resolveThread', { number: 5, threadId: 'a'.repeat(40), action: 'resolve', prRepo })).toMatchObject({ resolved: true })
+  expect(await w.call('reviewConversation', { number: 5, action: 'add', body: 'lgtm', prRepo })).toMatchObject({ comment: { body: 'lgtm' } })
+  expect(await w.call('reviewConversationConfirmation', { number: 5, action: 'add', body: 'lgtm', prRepo })).toBeNull()
+})
+
+test('a populated read cache never bypasses a mismatched pin or changes the origin', async () => {
+  const w = await boot()
+  w.server.mergeRequests = [mergeRequest()]
+  await w.call('forBranch', { prRepo: w.identity })
+  await w.call('review', { number: 5, prRepo: w.identity })
+  await w.call('comments', { number: 5, prRepo: w.identity })
+  const requestCount = w.server.requests.length
+  const original = structuredClone(w.server.mergeRequests)
+  for (const { method, params } of pinnedCalls) {
+    await expect(w.call(method, { ...params, prRepo: { ...w.identity, repo: 'other' } })).rejects.toMatchObject(reason('repository_mismatch'))
+  }
+  expect(w.server.requests).toHaveLength(requestCount)
+  expect(w.server.mergeRequests).toEqual(original)
+})
+
+test('unsupported methods retain unsupported-provider refusal even with a foreign pin', async () => {
+  const w = await boot({ token: null })
+  await expect(w.call('checks', { number: 5, prRepo: { ...w.identity, repo: 'other' } })).rejects.toMatchObject(reason('unsupported_provider'))
+  expect(w.server.requests).toEqual([])
+  expect(w.glabInvocations()).toEqual([])
 })
