@@ -7,6 +7,7 @@ import type {
   DispatchResult,
   Enrollment,
   ExecuteContext,
+  ExecuteResult,
   GateVerdict,
   HandoffResult,
   JournalAppend,

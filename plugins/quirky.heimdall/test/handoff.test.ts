@@ -20,6 +20,7 @@ import type {
   KernelAction,
   KernelOptions,
   KernelStore,
+  KindRegistration,
   KindRegistry,
   OrchestrationPort,
   WatcherKind
@@ -82,6 +83,7 @@ function fixture(): Fixture {
   const result: Fixture = {
     home,
     workspacePath: canonicalWorkspacePath,
+    context,
     get store() { return store },
     reopen() {
       store.close()
@@ -412,7 +414,7 @@ describe('Heimdall atomic sitter handoff', () => {
       }
     } as unknown as PluginContext
     const descriptorRegistry = createKindRegistry(descriptorContext, descriptorFixture.store)
-    const descriptor = (stopHook: string) => ({
+    const descriptor = (stopHook: string): KindRegistration => ({
       id: 'test-plugin-kind', displayName: 'Test plugin kind', enrollmentPayloadSchema: { type: 'object' },
       hooks: {
         authorize: 'test.plugin/authorize', read: 'test.plugin/read', decide: 'test.plugin/decide',
@@ -509,7 +511,7 @@ describe('Heimdall atomic sitter handoff', () => {
     const handoffResults: HandoffResult[] = []
     let successorStartedAfterRelease = false
     let successorCallbackCalled = false
-    let observedLeaseKind: string | null = null
+    const leaseObservation: { kind: string | null } = { kind: null }
     const sourceKind: WatcherKind = {
       id: source.kind,
       displayName: 'Test objective',
@@ -592,7 +594,7 @@ describe('Heimdall atomic sitter handoff', () => {
           holderId: 'handoff-successor-observer'
         })
         const claim = observer.acquire()
-        observedLeaseKind = claim.kind
+        leaseObservation.kind = claim.kind
         successorStartedAfterRelease = claim.kind === 'acquired'
         if (claim.kind === 'acquired') observer.release(claim)
       }
@@ -622,10 +624,8 @@ describe('Heimdall atomic sitter handoff', () => {
     expect(handoffResult?.kind).toBe('handed-off')
     expect(transfers).toBe(1)
     expect(workerReleases).toBe(1)
-    expect({ successorCallbackCalled, observedLeaseKind }).toEqual({
-      successorCallbackCalled: true,
-      observedLeaseKind: 'acquired'
-    })
+    expect(successorCallbackCalled).toBe(true)
+    expect(leaseObservation.kind).toBe('acquired')
     expect(successorStartedAfterRelease).toBe(true)
     expect(stored.store.get(source.watcherId)).toMatchObject({ enabled: false, terminalAtMs: 1_250 })
     await runner.shutdown(0)

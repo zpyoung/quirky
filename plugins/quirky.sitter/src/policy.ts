@@ -254,7 +254,7 @@ export function pinnedActionProblem(
     pin.number !== payload.reviewNumber ||
     pin.url !== payload.reviewUrl ||
     pin.headRefName !== payload.headRefName) return 'objective-review-mismatch'
-  const rawAction = isRecord(action) ? action : {}
+  const rawAction: RecordValue = isRecord(action) ? action : {}
   let head: unknown
   switch (rawAction.kind) {
     case 'rerun-check':
