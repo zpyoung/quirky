@@ -216,6 +216,8 @@ export function NotebookSurface(props: SurfaceProps) {
   const bufferId = buffer.id
   const worktreeId = buffer.worktreeId
   const sourceMode = buffer.mode === 'source'
+  const readOnlyRef = useRef(buffer.readOnly)
+  readOnlyRef.current = buffer.readOnly
   const submittedNotebooks = useRef<Array<{ bufferId: string; content: string; raw: boolean }>>([])
   const sessionRef = useRef<NotebookSession | null>(null)
   if (sessionRef.current === null) {
@@ -843,10 +845,11 @@ export function NotebookSurface(props: SurfaceProps) {
     runtimeForRun: NotebookRuntimeState,
     trustPrompt?: TrustPrompt
   ): Promise<boolean> => {
-    if (!isCurrentSession(expected) || runtimeForRun.busy) return false
-    flushCellChanges()
-    showKernelError(null, expected)
     try {
+      if (!isCurrentSession(expected) || readOnlyRef.current || runtimeForRun.busy) return false
+      flushCellChanges()
+      if (!isCurrentSession(expected) || readOnlyRef.current) return false
+      showKernelError(null, expected)
       const result = request.all
         ? asRecord(await action('runAll', {}, expected))
         : asRecord(await action('run', { index: request.index, mode: request.mode }, expected))
@@ -882,7 +885,7 @@ export function NotebookSurface(props: SurfaceProps) {
   }
 
   const requestRun = async (request: TrustRequest, expected = sessionSnapshot): Promise<boolean> => {
-    if (!isCurrentSession(expected) || runtimePending || !runtime || buffer.readOnly ||
+    if (!isCurrentSession(expected) || runtimePending || !runtime || readOnlyRef.current ||
       !parsed.valid || !parsed.language.startsWith('python') || runtime.busy ||
       busyOperationRef.current?.sessionGeneration === expected.generation) return false
     if (!runtime.trusted) return openTrustPrompt(request, expected, runtime.selectedPython?.path ?? null) !== null
@@ -893,15 +896,15 @@ export function NotebookSurface(props: SurfaceProps) {
   }
 
   const confirmTrust = async (prompt: TrustPrompt, expected = sessionSnapshot): Promise<boolean> => {
-    if (!isTrustPromptCurrent(prompt, expected)) return false
+    if (!isTrustPromptCurrent(prompt, expected) || readOnlyRef.current) return false
     const operation = beginBusy(expected, 'Running notebook…')
     if (!operation) return false
     showControlError(null, expected)
     try {
       await action('trust', {}, expected)
-      if (!isTrustPromptCurrent(prompt, expected)) return false
+      if (!isTrustPromptCurrent(prompt, expected) || readOnlyRef.current) return false
       const refreshed = await refreshRuntime(expected)
-      if (!refreshed || !isTrustPromptCurrent(prompt, expected)) return false
+      if (!refreshed || !isTrustPromptCurrent(prompt, expected) || readOnlyRef.current) return false
       if (!refreshed.trusted || (refreshed.selectedPython?.path ?? null) !== prompt.python) {
         throw new Error('Notebook trust or selected Python changed before execution.')
       }
@@ -1032,9 +1035,9 @@ export function NotebookSurface(props: SurfaceProps) {
   }
   if (pythonNotebook) {
     notebookActions.push('environments')
-    if (!buffer.readOnly && !runtimePending && runtime) {
-      if (!runtime.busy) notebookActions.push('run-all')
+    if (!buffer.readOnly) {
       notebookActions.push('clear-all')
+      if (!runtimePending && runtime && !runtime.busy) notebookActions.push('run-all')
     }
     if (runtime?.busy) notebookActions.push('interrupt')
     if (runtime?.kernel?.status === 'ready' || runtime?.kernel?.status === 'dead') notebookActions.push('restart')
@@ -1303,7 +1306,7 @@ export function NotebookSurface(props: SurfaceProps) {
       surface: controlSurface,
       target: `notebook-trust:${bufferId}`,
       generation: trustPrompt.generation,
-      actions: ['confirm', 'cancel']
+      actions: buffer.readOnly ? ['cancel'] : ['confirm', 'cancel']
     } : null,
     handler: dispatchTrustControl,
     onError: (error) => showControlError(error.message, sessionSnapshot)
@@ -1447,6 +1450,7 @@ export function NotebookSurface(props: SurfaceProps) {
           {visibleOutputs.length > 0 && <div className="notebook-cell-outputs" aria-label={`Outputs for cell ${index + 1}`}>
             {visibleOutputs.map((output, outputIndex) => <CellOutput key={`${output.output_type}-${outputIndex}`} output={output} />)}
             {outputList.length > outputLimit && <>
+              <p role="status">Showing {outputLimit} of {outputList.length} output frames.</p>
               <Button type="button" onClick={() => { void notebookControls.run('show-outputs', { index }) }} disabled={actionBusy || session.pendingStructure}>Show next output frames</Button>
             </>}
           </div>}
@@ -1490,7 +1494,7 @@ export function NotebookSurface(props: SurfaceProps) {
       onClose={() => { void trustControls.run('cancel') }}
       actions={<>
         <Button type="button" onClick={() => { void trustControls.run('cancel') }} disabled={actionBusy}>Cancel</Button>
-        <Button type="button" variant="primary" onClick={() => { void trustControls.run('confirm') }} disabled={actionBusy}>{trustRequest?.all ? 'Run all' : 'Run cell'}</Button>
+        <Button type="button" variant="primary" onClick={() => { void trustControls.run('confirm') }} disabled={actionBusy || buffer.readOnly}>{trustRequest?.all ? 'Run all' : 'Run cell'}</Button>
       </>}
     >
       <p>Notebook cells execute local Python on this machine from the notebook folder. Only run cells from files you trust.</p>

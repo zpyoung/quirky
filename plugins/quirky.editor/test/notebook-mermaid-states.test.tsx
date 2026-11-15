@@ -690,6 +690,10 @@ test.each(validNotebookControls)('public Notebook $name control uses its registe
   if (scenario.prepareFind) {
     expect(await runControl(surface, 'notebook:b1', 'find', { query: 'print' })).toEqual({ delivered: true })
   }
+  if (scenario.action === 'show-outputs') {
+    expect(surface.element.querySelectorAll('pre[data-output-mime="text/plain"]')).toHaveLength(20)
+    expect(surface.element.querySelector('[role="status"]')?.textContent).toBe('Showing 20 of 21 output frames.')
+  }
 
   expect(await runControl(surface, 'notebook:b1', scenario.action, scenario.data)).toEqual({ delivered: true })
   await flush()
@@ -771,6 +775,81 @@ test('Notebook controls reject unknown, extra, forged, mistyped, unsafe-index, a
   expect(await runControl(surface, 'notebook:b1', 'environments', {})).toEqual({ delivered: true })
   const environmentAddress = addressFor(surface, 'notebook-environments:b1')
   expect(await runAddress(surface, environmentAddress, 'select', { python: '/attacker/python' })).toEqual({ delivered: false })
+})
+
+test('a captured trust confirmation refuses a same-buffer read-only cutover', async () => {
+  let trusted = false
+  const calls: Record<string, unknown>[] = []
+  const buffer = makeBuffer()
+  const surface = await renderNotebook(buffer, async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') return runtimeState({ trusted })
+    if (params.action === 'trust') trusted = true
+    return {}
+  })
+  expect(await runControl(surface, 'notebook:b1', 'run-all')).toEqual({ delivered: true })
+  const trust = addressFor(surface, 'notebook-trust:b1')
+  await surface.rerender({ ...buffer, readOnly: true })
+  expect(await runAddress(surface, trust, 'confirm')).toEqual({ delivered: false })
+  expect(calls.filter(({ action }) => ['trust', 'run', 'runAll', 'install', 'venv'].includes(String(action)))).toEqual([])
+})
+
+test('an already-issued trust call cannot execute after a same-buffer read-only cutover', async () => {
+  const gate = Promise.withResolvers<unknown>()
+  let trusted = false
+  const calls: Record<string, unknown>[] = []
+  const buffer = makeBuffer()
+  const surface = await renderNotebook(buffer, async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') return runtimeState({ trusted })
+    if (params.action === 'trust') {
+      await gate.promise
+      trusted = true
+    }
+    return {}
+  })
+  expect(await runControl(surface, 'notebook:b1', 'run-all')).toEqual({ delivered: true })
+  const trust = addressFor(surface, 'notebook-trust:b1')
+  let pending!: Promise<unknown>
+  await act(async () => { pending = invokePublic(surface, controlArgs(trust, 'confirm')) })
+  await flush()
+  expect(calls.filter(({ action }) => action === 'trust')).toHaveLength(1)
+  await surface.rerender({ ...buffer, readOnly: true })
+  let result: unknown
+  await act(async () => { gate.resolve({}); result = await pending })
+  expect(result).toEqual({ delivered: false })
+  expect(calls.filter(({ action }) => action === 'trust')).toHaveLength(1)
+  expect(calls.filter(({ action }) => ['run', 'runAll', 'install', 'venv'].includes(String(action)))).toEqual([])
+})
+
+test.each(['pending', 'failed'] as const)('Clear all outputs remains usable during a %s runtime read', async (phase) => {
+  const state = Promise.withResolvers<unknown>()
+  const calls: Record<string, unknown>[] = []
+  const surface = await renderNotebook(makeBuffer(), async (_method, params) => {
+    calls.push(params)
+    if (params.action === 'state') {
+      if (phase === 'pending') return state.promise
+      throw new Error('fixture state failed')
+    }
+    return {}
+  })
+  try {
+    await flush()
+    expect(addressFor(surface, 'notebook:b1').actions).toContain('clear-all')
+    const clear = button(surface.element, 'Clear all outputs')!
+    expect(clear.disabled).toBe(false)
+    await act(async () => clear.click())
+    await flush()
+    expect(calls.filter(({ action }) => action === 'clear')).toEqual([{ bufferId: 'b1', action: 'clear' }])
+    expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('print(1)')
+    if (phase === 'pending') {
+      expect(surface.element.querySelector('.ui-notice-line')?.textContent).toContain('Loading notebook runtime…')
+    } else {
+      expect(surface.element.querySelector('.ui-inline-error')?.textContent).toContain('fixture state failed')
+    }
+  } finally {
+    await act(async () => { state.resolve(runtimeState()) })
+  }
 })
 
 test('read-only and non-Python notebooks refuse mutations and execution through public controls', async () => {
