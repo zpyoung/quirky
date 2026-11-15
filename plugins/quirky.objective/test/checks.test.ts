@@ -1,20 +1,24 @@
 import { afterEach, expect, test } from 'bun:test'
 import { Buffer } from 'node:buffer'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { PluginContext, RunOptions } from '@quirky/protocol'
+import type { PluginContext, RunOptions, RunResult } from '@quirky/protocol'
 import type { ObjectivePayload } from '../src/contract'
-import type { ObjectiveStore } from '../src/store'
+
 import {
   baselineProblems,
   captureContentIdentity,
+  captureTaskBaseline,
   readIndexSuppressionFlags,
   runCriterionCheck,
   runEnrollmentGate,
   type ObjectiveRuntime
 } from '../src/checks'
+import { captureFolderObservation, isTaskBaseline, type TaskBaseline } from '../src/folder-workspace'
+import type { Issued, ObjectiveStore } from '../src/store'
+type FolderTaskBaseline = Extract<TaskBaseline, { kind: 'folder' }>
 
 const cleanup: (() => void)[] = []
 afterEach(() => { for (const close of cleanup.splice(0).reverse()) close() })
@@ -29,7 +33,15 @@ type OverrunRow = {
   observedPaths: string[]; outsidePaths: string[]; unreportedPaths: string[]; code: string; recordedAtMs: number
 }
 type ProcessCall = { argv: string[]; options?: RunOptions }
-type ProcessHook = (argv: readonly string[], options: RunOptions | undefined) => { stopped?: 'timeout' } | void
+type ProcessHook = (argv: readonly string[], options: RunOptions | undefined) => Partial<RunResult> | void
+
+type FolderRuntimeFixture = {
+  context: PluginContext
+  root: string
+  dataDir: string
+  enrollment: { watcherId: string }
+  runtime: ObjectiveRuntime
+}
 
 function rig(afterRun?: ProcessHook) {
   const root = mkdtempSync(join(tmpdir(), 'objective-checks-'))
@@ -97,6 +109,36 @@ function rig(afterRun?: ProcessHook) {
     await runChecked(['git', 'commit', '-m', 'baseline'], { cwd: root })
   }
   return { root, dataDir, calls, checkRows, overrunRows, payload, enrollment, store, context, runtime, runChecked, initGit }
+}
+
+function folderRuntime(r: FolderRuntimeFixture): ObjectiveRuntime {
+  return {
+    ...r.runtime,
+    workspaceKind: 'folder',
+    captureContentIdentity: () => captureContentIdentity(
+      r.context, r.root, r.dataDir, r.enrollment.watcherId, 'folder'
+    )
+  }
+}
+
+async function captureFolderBaseline(runtime: ObjectiveRuntime): Promise<FolderTaskBaseline> {
+  const baseline = await captureTaskBaseline(runtime)
+  if (baseline.kind !== 'folder') throw new Error('folder runtime returned a Git baseline')
+  return baseline
+}
+
+function folderIssue(
+  r: Pick<FolderRuntimeFixture, 'root' | 'enrollment'>,
+  baseline: FolderTaskBaseline,
+  role: 'implementer' | 'reviewer' | 'integrator',
+  attemptId: string
+): Issued {
+  return {
+    attemptId, watcherId: r.enrollment.watcherId, role, revision: 1,
+    taskKey: role === 'implementer' ? 'implement' : null,
+    reportPath: join(r.root, '.quirky', 'objective', r.enrollment.watcherId, `${attemptId}.json`),
+    issuedAtMs: 1, baseline, baselineTree: null, contentIdentity: baseline.contentIdentity
+  }
 }
 
 type SuppressionFlagCase = {
@@ -564,3 +606,270 @@ test('discards raced check results as stale when workspace content identity chan
   expect(r.checkRows.find(row => row.attemptId === 'raced-attempt')?.status).not.toBe('failed')
   expect(r.calls.filter(call => call.argv[0] === 'sh')).toHaveLength(1)
 })
+test('compares immutable folder dispatch baselines against observed territory for implementers reviewers and integrators', async () => {
+  const r = rig()
+  mkdirSync(join(r.root, 'src'), { recursive: true })
+  writeFileSync(join(r.root, 'src', 'base.txt'), 'dispatch-time source\n')
+  writeFileSync(join(r.root, 'outside-before.txt'), 'pre-existing outside change\n')
+  const runtime = folderRuntime(r)
+  const baseline = await captureFolderBaseline(runtime)
+  expect(isTaskBaseline(baseline)).toBe(true)
+  expect(baseline).toMatchObject({ kind: 'folder', version: 1 })
+  expect(baseline.contentIdentity).toMatch(/^objective-folder-v1:[0-9a-f]{64}$/)
+  expect(await captureFolderObservation(r.root)).toEqual(baseline)
+  expect(await runtime.captureContentIdentity()).toBe(baseline.contentIdentity)
+  expect(r.calls).toEqual([])
+
+  const implementer = folderIssue(r, baseline, 'implementer', 'folder-outside-attempt')
+  writeFileSync(join(r.root, 'src', 'result.txt'), 'ready\n')
+  writeFileSync(join(r.root, 'outside.txt'), 'changed outside territory\n')
+  const outsideObservation = await captureFolderBaseline(runtime)
+  expect(await baselineProblems(runtime, implementer, ['src/result.txt'], outsideObservation))
+    .toEqual(['observed-change-outside-write-territory:outside.txt'])
+  expect(r.overrunRows.at(-1)).toMatchObject({
+    attemptId: implementer.attemptId,
+    observedPaths: ['outside.txt', 'src/result.txt'],
+    outsidePaths: ['outside.txt'],
+    unreportedPaths: [],
+    code: 'observed-change-outside-write-territory'
+  })
+
+  const unreported = folderIssue(r, outsideObservation, 'implementer', 'folder-unreported-attempt')
+  writeFileSync(join(r.root, 'src', 'omitted.txt'), 'not reported\n')
+  const unreportedObservation = await captureFolderBaseline(runtime)
+  expect(await baselineProblems(runtime, unreported, [], unreportedObservation))
+    .toEqual(['unreported-observed-change:src/omitted.txt'])
+  expect(r.overrunRows.at(-1)).toMatchObject({
+    observedPaths: ['src/omitted.txt'], outsidePaths: [], unreportedPaths: ['src/omitted.txt'],
+    code: 'unreported-observed-change'
+  })
+
+  const reviewerBaseline = unreportedObservation
+  const reviewer = folderIssue(r, reviewerBaseline, 'reviewer', 'folder-review-attempt')
+  mkdirSync(dirname(reviewer.reportPath), { recursive: true })
+  writeFileSync(reviewer.reportPath, '{"verdict":"approve"}\n')
+  expect(await baselineProblems(runtime, reviewer, undefined, await captureFolderBaseline(runtime))).toEqual([])
+  unlinkSync(reviewer.reportPath)
+  writeFileSync(join(r.root, 'reviewer-outside.txt'), 'reviewer wrote outside its report\n')
+  expect(await baselineProblems(runtime, reviewer, undefined, await captureFolderBaseline(runtime)))
+    .toEqual(['reviewer-modified-workspace:reviewer-outside.txt'])
+  expect(r.overrunRows.at(-1)).toMatchObject({
+    observedPaths: ['reviewer-outside.txt'], outsidePaths: ['reviewer-outside.txt'],
+    code: 'reviewer-modified-workspace'
+  })
+
+  const integratorBaseline = await captureFolderBaseline(runtime)
+  const integrator = folderIssue(r, integratorBaseline, 'integrator', 'folder-integrator-attempt')
+  writeFileSync(join(r.root, 'src', 'integrated.txt'), 'inside territory\n')
+  expect(await baselineProblems(runtime, integrator, undefined, await captureFolderBaseline(runtime))).toEqual([])
+  const nextIntegrator = await captureFolderBaseline(runtime)
+  writeFileSync(join(r.root, 'outside-integrator.txt'), 'outside territory\n')
+  expect(await baselineProblems(runtime, {
+    ...integrator,
+    attemptId: 'folder-integrator-outside-attempt',
+    baseline: nextIntegrator,
+    contentIdentity: nextIntegrator.contentIdentity
+  }, undefined, await captureFolderBaseline(runtime)))
+    .toEqual(['observed-change-outside-write-territory:outside-integrator.txt'])
+  expect(r.calls).toEqual([])
+}, 30_000)
+
+test('ignores root Heimdall lease churn against immutable folder baselines while observing nearby paths', async () => {
+  const r = rig()
+  mkdirSync(join(r.root, 'src'), { recursive: true })
+  writeFileSync(join(r.root, 'src', 'base.txt'), 'baseline source\n')
+  writeFileSync(join(r.root, 'outside-before.txt'), 'pre-existing outside change\n')
+  const runtime = folderRuntime(r)
+  const baseline = await captureFolderBaseline(runtime)
+  expect(baseline.entries.map(entry => entry.path)).toContain('outside-before.txt')
+  const issued = folderIssue(r, baseline, 'implementer', 'folder-heimdall-lease-attempt')
+  expect(issued.baseline).toBe(baseline)
+
+  const leaseDirectory = join(r.root, '.orca', 'heimdall', 'lease', 'epoch-1')
+  const holderPath = join(leaseDirectory, 'holder.json')
+  const tempPath = join(leaseDirectory, '.holder-temp.tmp')
+  const leaseChanges: (() => void)[] = [
+    () => {
+      mkdirSync(leaseDirectory, { recursive: true })
+      writeFileSync(holderPath, '{"holder":"owner-a","epoch":1}\n')
+    },
+    () => writeFileSync(tempPath, '{"holder":"owner-a","epoch":2}\n'),
+    () => renameSync(tempPath, holderPath),
+    () => writeFileSync(holderPath, '{"holder":"owner-a","released":true}\n'),
+    () => unlinkSync(holderPath)
+  ]
+  for (const change of leaseChanges) {
+    change()
+    const observation = await captureFolderObservation(r.root)
+    expect(observation).toEqual(baseline)
+    expect(await baselineProblems(runtime, issued, [], observation)).toEqual([])
+    expect(r.overrunRows).toEqual([])
+  }
+
+  const nearbyPaths = [
+    '.orca/config.json',
+    '.orca/heimdall/lease-other/file',
+    'src/.orca/heimdall/lease/file'
+  ]
+  for (const path of nearbyPaths) {
+    const absolutePath = join(r.root, path)
+    mkdirSync(dirname(absolutePath), { recursive: true })
+    writeFileSync(absolutePath, 'observed\n')
+  }
+  const observation = await captureFolderObservation(r.root)
+  expect(observation.entries.map(entry => entry.path)).toEqual(expect.arrayContaining(nearbyPaths))
+  expect(await baselineProblems(runtime, issued, [], observation)).toEqual([
+    'observed-change-outside-write-territory:.orca/config.json',
+    'observed-change-outside-write-territory:.orca/heimdall/lease-other/file',
+    'unreported-observed-change:src/.orca/heimdall/lease/file'
+  ])
+  expect(r.overrunRows).toHaveLength(1)
+  expect(r.overrunRows[0]).toMatchObject({
+    observedPaths: nearbyPaths,
+    outsidePaths: nearbyPaths.slice(0, 2),
+    unreportedPaths: [nearbyPaths[2]],
+    code: 'observed-change-outside-write-territory'
+  })
+  expect(r.calls).toEqual([])
+}, 30_000)
+
+test('rejects missing corrupt mismatched and cross-kind folder baseline authority', async () => {
+  const r = rig()
+  mkdirSync(join(r.root, 'src'), { recursive: true })
+  writeFileSync(join(r.root, 'src', 'base.txt'), 'baseline\n')
+  const runtime = folderRuntime(r)
+  const baseline = await captureFolderBaseline(runtime)
+  const issued = folderIssue(r, baseline, 'implementer', 'folder-valid-authority')
+  const missing = { ...issued, attemptId: 'folder-missing-authority', baseline: undefined }
+  expect(await baselineProblems(runtime, missing, [], baseline)).toEqual(['invalid-baseline-tree'])
+
+  const corruptBaseline = {
+    ...baseline,
+    contentIdentity: `objective-folder-v1:${'0'.repeat(64)}`
+  } as FolderTaskBaseline
+  expect(isTaskBaseline(corruptBaseline)).toBe(false)
+  expect(await baselineProblems(runtime, {
+    ...issued, attemptId: 'folder-corrupt-authority', baseline: corruptBaseline
+  }, [], baseline)).toEqual(['invalid-baseline-tree'])
+
+  expect(await baselineProblems(runtime, {
+    ...issued, attemptId: 'folder-git-baseline', baseline: { kind: 'git', treeOid: 'a'.repeat(40) }
+  }, [], baseline)).toEqual(['invalid-baseline-tree'])
+  expect(await baselineProblems(runtime, {
+    ...issued, attemptId: 'folder-fake-git-oid', baselineTree: 'b'.repeat(40)
+  }, [], baseline)).toEqual(['invalid-baseline-tree'])
+
+  const unavailableRuntime: ObjectiveRuntime = {
+    ...runtime,
+    enrollment: { ...runtime.enrollment, workspacePath: join(r.root, 'missing-workspace') }
+  }
+  expect(await baselineProblems(unavailableRuntime, {
+    ...issued, attemptId: 'folder-unavailable-observation'
+  }, [])).toEqual(['baseline-comparison-failed'])
+  expect(r.overrunRows.at(-1)).toMatchObject({
+    observedPaths: [], outsidePaths: [], unreportedPaths: [], code: 'baseline-comparison-failed'
+  })
+  expect(r.overrunRows.map(row => row.code)).toEqual([
+    'invalid-baseline-tree', 'invalid-baseline-tree', 'invalid-baseline-tree', 'invalid-baseline-tree',
+    'baseline-comparison-failed'
+  ])
+  expect(r.calls).toEqual([])
+}, 30_000)
+
+test('folder checks and tiered review retain content-bound evidence without Git', async () => {
+  let checkRoot = ''
+  const r = rig(argv => {
+    if (argv[0] !== 'sh') return
+    const report = join(checkRoot, '.quirky', 'objective', 'watcher-checks', 'temporary-report.json')
+    mkdirSync(dirname(report), { recursive: true })
+    writeFileSync(report, '{"temporary":true}\n')
+    unlinkSync(report)
+  })
+  checkRoot = r.root
+  mkdirSync(join(r.root, 'src'), { recursive: true })
+  writeFileSync(join(r.root, 'src', 'result.txt'), 'ready for the folder checks\n')
+  const runtime = folderRuntime(r)
+  const contentIdentity = await runtime.captureContentIdentity()
+  expect(contentIdentity).toMatch(/^objective-folder-v1:[0-9a-f]{64}$/)
+
+  const contentCommand = 'grep -q ready src/result.txt'
+  expect(await runCriterionCheck(runtime, {
+    revision: 1, taskKey: 'implement', criterionIndex: 0, command: contentCommand, contentIdentity
+  }, 'folder-content-check')).toEqual({ effect: 'landed' })
+  const existsCommand = 'test -f src/result.txt'
+  expect(await runCriterionCheck(runtime, {
+    revision: 1, taskKey: 'implement', criterionIndex: 1, command: existsCommand, contentIdentity
+  }, 'folder-exists-check')).toEqual({ effect: 'landed' })
+  const gateCommand = 'test -f src/result.txt'
+  expect(await runEnrollmentGate(runtime, {
+    revision: 1, gateName: 'ready', command: gateCommand, timeoutSeconds: 37, contentIdentity
+  }, 'folder-gate-pass')).toEqual({ effect: 'landed' })
+  expect(r.checkRows.filter(row => row.attemptId.startsWith('folder-'))).toMatchObject([
+    { attemptId: 'folder-content-check', contentIdentity, status: 'passed', exitCode: 0 },
+    { attemptId: 'folder-exists-check', contentIdentity, status: 'passed', exitCode: 0 },
+    { attemptId: 'folder-gate-pass', contentIdentity, status: 'passed', exitCode: 0 }
+  ])
+  expect(r.calls.filter(call => call.argv[0] === 'sh').map(call => call.options)).toEqual([
+    { cwd: r.root, timeoutMs: 300_000, maxOutputBytes: 1_048_576, overflow: 'truncate' },
+    { cwd: r.root, timeoutMs: 300_000, maxOutputBytes: 1_048_576, overflow: 'truncate' },
+    { cwd: r.root, timeoutMs: 37_000, maxOutputBytes: 1_048_576, overflow: 'truncate' }
+  ])
+  expect(existsSync(join(r.root, '.quirky', 'objective', 'watcher-checks', 'temporary-report.json'))).toBe(false)
+  expect(r.checkRows.find(row => row.attemptId === 'folder-gate-pass')?.contentIdentity).toBe(contentIdentity)
+  expect(r.calls.some(call => call.argv[0] === 'git')).toBe(false)
+  expect(existsSync(join(r.root, '.git'))).toBe(false)
+
+  const failedCommand = 'grep -q absent src/result.txt'
+  expect(await runEnrollmentGate(runtime, {
+    revision: 1, gateName: 'content-missing', command: failedCommand, timeoutSeconds: 5, contentIdentity
+  }, 'folder-gate-fail')).toEqual({ effect: 'not-landed', reason: 'check-failed' })
+  expect(r.checkRows.find(row => row.attemptId === 'folder-gate-fail')).toMatchObject({
+    contentIdentity, command: failedCommand, status: 'failed', exitCode: 1, timedOut: false
+  })
+
+  const timed = rig(argv => argv[0] === 'sh' ? { stopped: 'timeout' } : undefined)
+  mkdirSync(join(timed.root, 'src'), { recursive: true })
+  writeFileSync(join(timed.root, 'src', 'result.txt'), 'ready\n')
+  const timedRuntime = folderRuntime(timed)
+  const timedIdentity = await timedRuntime.captureContentIdentity()
+  expect(await runEnrollmentGate(timedRuntime, {
+    revision: 1, gateName: 'timeout', command: 'true', timeoutSeconds: 5, contentIdentity: timedIdentity
+  }, 'folder-gate-timeout')).toEqual({ effect: 'not-landed', reason: 'check-timed-out' })
+  expect(timed.checkRows.find(row => row.attemptId === 'folder-gate-timeout')).toMatchObject({
+    status: 'failed', timedOut: true
+  })
+
+  const processFailure = rig(argv => argv[0] === 'sh'
+    ? { spawnError: { code: 'ENOENT', message: 'cannot start shell' } }
+    : undefined)
+  mkdirSync(join(processFailure.root, 'src'), { recursive: true })
+  writeFileSync(join(processFailure.root, 'src', 'result.txt'), 'ready\n')
+  const failedRuntime = folderRuntime(processFailure)
+  const failedIdentity = await failedRuntime.captureContentIdentity()
+  expect(await runEnrollmentGate(failedRuntime, {
+    revision: 1, gateName: 'spawn-failure', command: 'true', timeoutSeconds: 5, contentIdentity: failedIdentity
+  }, 'folder-gate-spawn-failure')).toEqual({ effect: 'not-landed', reason: 'check-failed' })
+  expect(processFailure.checkRows.find(row => row.attemptId === 'folder-gate-spawn-failure')).toMatchObject({
+    status: 'failed', timedOut: false
+  })
+
+  let raceRoot = ''
+  const raced = rig(argv => {
+    if (argv[0] === 'sh') writeFileSync(join(raceRoot, 'src', 'result.txt'), 'changed during check\n')
+  })
+  raceRoot = raced.root
+  mkdirSync(join(raced.root, 'src'), { recursive: true })
+  writeFileSync(join(raced.root, 'src', 'result.txt'), 'ready\n')
+  const racedRuntime = folderRuntime(raced)
+  const racedIdentity = await racedRuntime.captureContentIdentity()
+  expect(await runEnrollmentGate(racedRuntime, {
+    revision: 1, gateName: 'stale', command: 'true', timeoutSeconds: 5, contentIdentity: racedIdentity
+  }, 'folder-gate-stale')).toEqual({ effect: 'not-landed', reason: 'check-evidence-stale' })
+  expect(raced.checkRows.find(row => row.attemptId === 'folder-gate-stale')).toMatchObject({
+    contentIdentity: racedIdentity, status: 'stale', exitCode: 0, timedOut: false
+  })
+  expect(r.calls.some(call => call.argv[0] === 'git')).toBe(false)
+  expect(timed.calls.some(call => call.argv[0] === 'git')).toBe(false)
+  expect(processFailure.calls.some(call => call.argv[0] === 'git')).toBe(false)
+  expect(raced.calls.some(call => call.argv[0] === 'git')).toBe(false)
+}, 30_000)
