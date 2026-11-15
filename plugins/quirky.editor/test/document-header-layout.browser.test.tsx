@@ -14,13 +14,14 @@ const BROWSER_IMPORTS: Record<string, string> = {
   'react-dom/client': join(EDITOR_MODULES, 'react-dom/client.js'),
   '@quirky/ui': join(ROOT, 'packages/ui/src/design-system/index.ts'),
   '@codemirror/view': Bun.resolveSync('@codemirror/view', EDITOR_MODULES),
-  '@quirky/protocol': join(ROOT, 'packages/protocol/src/index.ts')
+  '@quirky/protocol': join(ROOT, 'packages/protocol/src/index.ts'),
+  'editor-activation-fixture': join(ROOT, 'plugins/quirky.editor/src/ui.tsx')
 }
 const browserDependencyResolver: Bun.BunPlugin = {
   name: 'document-header-layout-browser-dependencies',
   setup(builder) {
     builder.onResolve(
-      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/ui|@quirky\/protocol|@codemirror\/view)$/ },
+      { filter: /^(?:react|react\/jsx-runtime|react\/jsx-dev-runtime|react-dom|react-dom\/client|@quirky\/ui|@quirky\/protocol|@codemirror\/view|editor-activation-fixture)$/ },
       ({ path }) => ({ path: BROWSER_IMPORTS[path] })
     )
   }
@@ -40,11 +41,14 @@ let browserBundle = ''
 
 function browserEntry(): string {
   const documentSurface = join(ROOT, 'plugins/quirky.editor/src/window/DocumentSurface.tsx')
+  const controls = join(ROOT, 'plugins/quirky.editor/src/window/uiControl.tsx')
   return `
     import { createElement } from 'react'
     import { createRoot } from 'react-dom/client'
     import type { UiPluginContext } from '@quirky/protocol'
     import { DocumentSurface } from ${JSON.stringify(documentSurface)}
+    import { EditorUiControlProvider, createEditorUiControlReportScope } from ${JSON.stringify(controls)}
+    import { activate } from 'editor-activation-fixture'
 
     const bufferId = 'buffer-document-header-layout'
     const tabId = 'tab-document-header-layout'
@@ -116,9 +120,13 @@ function browserEntry(): string {
       editorMinimapEnabled: false,
       editorSidebarWidth: 300
     }
+    const provided = new Map<string, (...args: unknown[]) => unknown>()
     const context = {
       pluginId: 'quirky.editor',
+      provide(id: string, handler: (...args: unknown[]) => unknown) { provided.set(id, handler) },
       call(method: string, params: Record<string, unknown> = {}) {
+        if (method === 'ui.window.self') return Promise.resolve({ connId: 22 })
+        if (method === 'ui.window.command.run') return Promise.resolve(provided.get(String(params.id))!(params.args)).then((result) => ({ result }))
         if (method === 'quirky.editor/viewer' && csv) {
           if (params.action === 'metadata') return Promise.resolve({ rows: csvRows.length, columns: 2, delimiter: ',' })
           if (params.action === 'filter') {
@@ -164,9 +172,11 @@ function browserEntry(): string {
       confirm() { return Promise.resolve(false) },
       nativeDropPaths() { return Promise.resolve(null) }
     } as unknown as UiPluginContext
+    activate(context)
+    const scope = createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document' })
 
     createRoot(document.getElementById('document-root')!).render(
-      createElement(DocumentSurface, { context, input: { bufferId, tabId, mode } })
+      createElement(EditorUiControlProvider, { scope, children: createElement(DocumentSurface, { context, input: { bufferId, tabId, mode } }) })
     )
   `
 }
