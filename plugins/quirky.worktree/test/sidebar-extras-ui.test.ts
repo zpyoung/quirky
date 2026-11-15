@@ -1,5 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test'
+import { dispatchUiControl, UI_CONTROL_COMMAND } from '../src/ui-control'
 import type { ProjectGroup, QuirkyEvent, Repo, Session, UiLayout, UiPluginContext } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
 import { resolveMembershipTarget } from '../src/membership'
@@ -656,6 +657,17 @@ function setup(
         }
         case 'ui.window.self':
           return { connId: 1 }
+        case 'ui.window.command.run': {
+          const args = params.args
+          const scoped = params.id === UI_CONTROL_COMMAND && typeof args === 'object' && args !== null && 'scope' in args
+          if (scoped) {
+            if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
+            return { result: dispatchUiControl(context, args) }
+          }
+          const handler = provided.get(String(params.id))
+          if (typeof handler !== 'function') throw new Error(`unexpected command ${String(params.id)}`)
+          return { result: await (handler as (args: unknown) => unknown)(args) }
+        }
         case 'quirky.worktree/views':
           return { views: [], needsYouHidden: false, rowFact: 'last-activity' }
         case 'quirky.worktree/activeView':
@@ -705,8 +717,9 @@ function setup(
 
   activate(context)
   const mount = provided.get(SLOT) as Mount
-  const flush = async () => act(async () => {
-    for (let i = 0; i < 8; i++) await Promise.resolve()
+  const flush = (action?: () => void) => act(async () => {
+    action?.()
+    for (let i = 0; i < 12; i++) await Promise.resolve()
   })
   return {
     world,
@@ -736,22 +749,16 @@ function setup(
       await flush()
     },
     async setLayout(next: UiLayout) {
-      await act(async () => {
+      await flush(() => {
         current = next
         for (const listener of layoutListeners) listener(next)
-        await Promise.resolve()
       })
-      await flush()
     },
     async click(element: Element) {
-      await act(async () => {
-        ;(element as HTMLElement).click()
-        await Promise.resolve()
-      })
-      await flush()
+      await flush(() => (element as HTMLElement).click())
     },
     async emit(type: string) {
-      await emit({ type, data: {} } as QuirkyEvent)
+      await act(async () => { await emit({ type, data: {} } as QuirkyEvent) })
     },
     deferNextSet() {
       const gate = callGate()
