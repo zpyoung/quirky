@@ -3,6 +3,11 @@ import React, { act } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { Root } from 'react-dom/client'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
+import { existsSync } from 'node:fs'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { chromium, type Browser } from 'playwright'
 import type { ComponentType } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -21,6 +26,8 @@ import {
   type EditorUiControlAddress,
   type EditorUiControlReportScope
 } from '../src/window/uiControl'
+
+const NativeResponse = globalThis.Response
 
 type Handler = (args?: unknown) => unknown
 
@@ -1434,3 +1441,311 @@ test('accepted trusted runs expose shared pending state and refuse duplicate sub
   expect(results).toContainEqual({ delivered: false })
   expect(calls.filter(({ action }) => action === 'runAll')).toHaveLength(1)
 })
+
+async function runMermaidScenario(code: string): Promise<void> {
+  const home = await mkdtemp(join(tmpdir(), 'quirky-mermaid-test-'))
+  try {
+    const child = Bun.spawn([process.execPath, '-'], {
+      cwd: resolve(import.meta.dir, '..'),
+      env: { ...process.env, QUIRKY_HOME: home },
+      stdin: new TextEncoder().encode(code), stdout: 'pipe', stderr: 'pipe'
+    })
+    const [status, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()])
+    if (status !== 0) throw new Error('Isolated Mermaid scenario failed (' + status + '):\n' + stdout + '\n' + stderr)
+  } finally { await rm(home, { recursive: true, force: true }) }
+}
+
+test('Mermaid public retry preserves duplicate targets, stale sessions and inherited Markdown scope', async () => {
+  await runMermaidScenario(String.raw`import assert from 'node:assert/strict'
+import React, { act } from 'react'
+import { mock } from 'bun:test'
+import { GlobalRegistrator } from '@happy-dom/global-registrator'
+GlobalRegistrator.register()
+document.insertBefore(document.implementation.createDocumentType('html', '', ''), document.documentElement)
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
+const requests = [], initializations = []
+mock.module('mermaid', () => ({ default: {
+  initialize(options) { initializations.push(options) },
+  render(id, source) { const pending = Promise.withResolvers(); requests.push({ id, source, ...pending }); return pending.promise }
+} }))
+const { createRoot } = await import('react-dom/client')
+const { MermaidDiagram } = await import('./src/markdown/MermaidDiagram')
+const { MarkdownSurface } = await import('./src/markdown/MarkdownSurface')
+const { activate, deactivate } = await import('./src/ui')
+const controls = await import('./src/window/uiControl')
+const handlers = new Map(), calls = []
+let bridgeFailure = null, bridgeGate = null, refusal = false, self = 22, ownerCommands = 0
+const windows = new Map([[11, new Map([[controls.EDITOR_UI_CONTROL_COMMAND, () => { ownerCommands += 1; return { delivered: true } }]])], [22, handlers]])
+const context = {
+  pluginId: 'quirky.editor',
+  provide: (id, handler) => handlers.set(id, handler), subscribe: () => () => {}, getSetting: () => 300, getLayout: () => ({}), toast() {},
+  executeCommand() { throw Error('Owner-window dispatch is forbidden') },
+  async call(method, params) {
+    calls.push({ method, params })
+    if (method === 'ui.window.self') return { connId: self }
+    if (method === 'ui.window.command.run') {
+      assert.equal(params.connId, 22)
+      if (bridgeGate) return await bridgeGate.promise
+      if (bridgeFailure) throw bridgeFailure
+      return { result: refusal ? { delivered: false } : await windows.get(params.connId).get(params.id)(params.args) }
+    }
+    if (method === 'quirky.editor/markdown') {
+      if (params.action === 'capabilities') return { previewAvailable: true, imageUrls: {} }
+      if (params.action === 'toc') return { headings: [] }
+    }
+    if (method === 'quirky.editor/notes') return { notes: [] }
+    return {}
+  }
+}
+activate(context)
+const host = document.createElement('div'); document.body.append(host)
+const root = createRoot(host)
+let report
+const scope = controls.createEditorUiControlReportScope(value => report = value, { surface: 'view:quirky.editor/document', context })
+scope.report({ mounted: true, bufferId: 'md' })
+const render = async node => act(async () => root.render(React.createElement(controls.EditorUiControlProvider, { scope }, node)))
+const diagrams = source => React.createElement(React.Fragment, null, React.createElement(MermaidDiagram, { source, key: 'first' }), React.createElement(MermaidDiagram, { source, key: 'second' }))
+const invoke = (address, action = 'retry', data) => handlers.get(controls.EDITOR_UI_CONTROL_COMMAND)({ surface: address.surface, target: address.target, generation: address.generation, action, ...(data === undefined ? {} : { data }) })
+const addresses = () => report.uiControls.filter(address => address.target.startsWith('markdown-mermaid:'))
+const fail = async (request, message = 'fixture diagram failed') => act(async () => request.reject(Error(message)))
+const finish = async (request, svg) => act(async () => request.resolve({ svg }))
+try {
+  const maliciousSource = 'graph TD; A[<script>fixture</script>] --> B'
+  await render(diagrams(maliciousSource))
+  assert.equal(addresses().length, 2)
+  assert.notEqual(addresses()[0].target, addresses()[1].target)
+  for (const address of addresses()) assert.match(address.target, /^markdown-mermaid:[1-9][0-9]*$/)
+  assert.equal(host.querySelectorAll('.ui-notice-line').length, 2)
+  assert.equal(host.querySelector('.ui-notice-line').textContent, 'Rendering diagram…')
+  const first = addresses()[0], second = addresses()[1]
+  assert.deepEqual(await invoke(second), { delivered: false })
+  await fail(requests[0]); await fail(requests[1])
+  assert.equal(host.querySelectorAll('.ui-inline-error').length, 2)
+  assert.equal(host.querySelector('.ui-inline-error').textContent, 'Mermaid preview failed. fixture diagram failedRetry')
+  assert.equal(host.querySelector('details pre').textContent, maliciousSource)
+  assert.equal(host.querySelector('details script'), null)
+  assert.deepEqual(await invoke(second, 'unknown'), { delivered: false })
+  assert.deepEqual(await invoke(second, 'retry', { yes: true }), { delivered: false })
+  assert.deepEqual(await invoke(second, 'retry', []), { delivered: false })
+  calls.length = 0
+  await act(async () => host.querySelectorAll('.ui-inline-error button')[1].click())
+  assert.deepEqual(calls.map(call => call.method), ['ui.window.self', 'ui.window.command.run'])
+  assert.equal(calls[1].params.id, 'command:quirky.editor/ui-control')
+  assert.equal(calls[1].params.args.target, second.target)
+  assert.equal(requests.length, 3)
+  assert.equal(host.querySelectorAll('.ui-inline-error').length, 1)
+  assert.equal(host.querySelectorAll('.ui-notice-line').length, 1)
+  assert.equal(addresses()[1].generation, second.generation)
+  await finish(requests[2], '<svg><text>safe second</text></svg>')
+  assert.equal(host.querySelector('[role="img"]').getAttribute('aria-label'), 'Mermaid diagram')
+  assert.equal(host.querySelector('[role="img"]').textContent, 'safe second')
+  assert.deepEqual(await invoke(second), { delivered: false })
+  bridgeFailure = Error('fixture bridge failed')
+  await act(async () => host.querySelector('.ui-inline-error button').click())
+  assert.match(host.querySelector('.ui-inline-error').textContent, /fixture bridge failed/)
+  assert.equal(requests.length, 3)
+  bridgeFailure = null; refusal = true
+  await act(async () => host.querySelector('.ui-inline-error button').click())
+  assert.match(host.querySelector('.ui-inline-error').textContent, /The editor control is no longer available\./)
+  assert.equal(requests.length, 3)
+  refusal = false; self = 0
+  await act(async () => host.querySelector('.ui-inline-error button').click())
+  assert.match(host.querySelector('.ui-inline-error').textContent, /The daemon did not identify this window/)
+  assert.equal(requests.length, 3)
+  self = 22
+  let duplicate
+  await act(async () => { const one = invoke(first); const two = invoke(first); duplicate = await Promise.all([one, two]) })
+  assert.deepEqual(duplicate, [{ delivered: true }, { delivered: false }])
+  assert.equal(requests.length, 4)
+  await render(diagrams('graph TD; New-->Source'))
+  assert.deepEqual(await invoke(first), { delivered: false })
+  const replacement = addresses()[0]
+  await finish(requests[3], '<svg><text>stale source</text></svg>')
+  assert.equal(host.textContent.includes('stale source'), false)
+  await finish(requests[4], '<svg><text>new first</text></svg>'); await finish(requests[5], '<svg><text>new second</text></svg>')
+  document.documentElement.style.setProperty('--ui-text', '#111111')
+  await act(async () => document.documentElement.setAttribute('data-theme', 'light'))
+  assert.notEqual(addresses()[0].generation, replacement.generation)
+  assert.deepEqual(await invoke(replacement), { delivered: false })
+  const light = addresses()[0]
+  await act(async () => document.documentElement.setAttribute('data-theme', 'dark'))
+  assert.notEqual(addresses()[0].generation, light.generation)
+  await finish(requests[6], '<svg><text>stale light</text></svg>')
+  assert.equal(host.textContent.includes('stale light'), false)
+  assert.ok(initializations.every(options => options.securityLevel === 'strict' && options.theme === 'base' && options.startOnLoad === false))
+  assert.ok(initializations.every(options => typeof options.themeVariables.textColor === 'string'))
+  const old = addresses()[0]
+  const markdown = '\`\`\`mermaid\ngraph TD; A-->B\n\`\`\`\n\n\`\`\`mermaid\ngraph TD; A-->B\n\`\`\`\n'
+  const buffer = { id: 'md', worktreeId: 'wt', root: '/fixture', path: '/fixture/readme.md', relativePath: 'readme.md', name: 'readme.md', kind: 'markdown', content: markdown, draft: null, baseline: null, size: markdown.length, readOnly: false, dirty: false, external: null, mode: 'preview', tabId: 'tab', preview: false, pinned: false, untitled: false, revision: 1, contentRevision: 1, view: {}, error: null, diskContentLength: null, diskContentBytes: null, diskSignature: null }
+  await render(React.createElement(MarkdownSurface, { context, buffer, fontSize: 13, onDraft() {}, onAction: context.call, onView() {}, registerCommandHandlers: () => () => {} }))
+  assert.equal(addresses().length, 2)
+  assert.notEqual(addresses()[0].target, addresses()[1].target)
+  assert.notEqual(addresses()[0].target, old.target)
+  assert.deepEqual(await invoke(old), { delivered: false })
+  assert.equal(report.bufferId, 'md')
+  const last = requests.slice(-2)
+  await fail(last[0]); await fail(last[1])
+  const beforeRetry = requests.length
+  await act(async () => host.querySelectorAll('.ui-inline-error button')[1].click())
+  assert.equal(requests.length, beforeRetry + 1)
+  assert.equal(host.querySelectorAll('.ui-inline-error').length, 1)
+  await fail(requests.at(-1))
+  assert.match(host.querySelectorAll('.ui-inline-error')[1].textContent, /fixture diagram failed/)
+  bridgeGate = Promise.withResolvers()
+  await act(async () => host.querySelector('.ui-inline-error button').click())
+  await render(diagrams('graph TD; Replacement-->Current'))
+  bridgeGate.reject(Error('expired bridge failure'))
+  await act(async () => {})
+  assert.equal(host.textContent.includes('expired bridge failure'), false)
+  assert.equal(host.querySelectorAll('.ui-notice-line').length, 2)
+  assert.equal(ownerCommands, 0)
+  const unmounted = addresses()[0]
+  await act(async () => root.unmount()); scope.dispose()
+  assert.deepEqual(await invoke(unmounted), { delivered: false })
+  for (const request of requests) request.resolve({ svg: '<svg><text>after unmount</text></svg>' })
+  await act(async () => {})
+  assert.equal(host.textContent, '')
+  console.log('Mermaid lifecycle, exact-window controls and inherited Markdown scope passed')
+} finally {
+  if (host.textContent) await act(async () => root.unmount())
+  scope.dispose(); deactivate(); await GlobalRegistrator.unregister()
+}
+`)
+}, 30_000)
+
+test('Mermaid retries rejected lazy imports without leaking renderer mocks into other tests', async () => {
+  await runMermaidScenario(String.raw`import assert from 'node:assert/strict'
+import React, { act } from 'react'
+import { mock } from 'bun:test'
+import { GlobalRegistrator } from '@happy-dom/global-registrator'
+GlobalRegistrator.register(); globalThis.IS_REACT_ACT_ENVIRONMENT = true
+mock.module('mermaid', async () => { throw Error('fixture import failed') })
+const { createRoot } = await import('react-dom/client')
+const { MermaidDiagram } = await import('./src/markdown/MermaidDiagram')
+const { activate, deactivate } = await import('./src/ui')
+const controls = await import('./src/window/uiControl')
+const handlers = new Map()
+const context = {
+  pluginId: 'quirky.editor', provide: (id, handler) => handlers.set(id, handler), subscribe: () => () => {}, getSetting: () => 300, getLayout: () => ({}), toast() {},
+  async call(method, params) {
+    if (method === 'ui.window.self') return { connId: 22 }
+    if (method === 'ui.window.command.run') return { result: await handlers.get(params.id)(params.args) }
+    return {}
+  }
+}
+activate(context)
+const host = document.createElement('div'); const root = createRoot(host)
+const scope = controls.createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document', context })
+try {
+  await act(async () => root.render(React.createElement(controls.EditorUiControlProvider, { scope }, React.createElement(MermaidDiagram, { source: 'graph TD; A-->B' }))))
+  assert.match(host.querySelector('.ui-inline-error').textContent, /Mermaid preview failed\. fixture import failed/)
+  await act(async () => host.querySelector('.ui-inline-error button').click())
+  assert.match(host.querySelector('.ui-inline-error').textContent, /fixture import failed/)
+  mock.module('mermaid', () => ({ default: { initialize() {}, render: async () => ({ svg: '<svg><text>retry imported</text></svg>' }) } }))
+  await act(async () => host.querySelector('.ui-inline-error button').click())
+  assert.equal(host.querySelector('[role="img"]').textContent, 'retry imported')
+  assert.equal(host.querySelector('.ui-inline-error'), null)
+  console.log('Rejected Mermaid import cache released; repeated failure and later import retry passed')
+} finally {
+  await act(async () => root.unmount()); scope.dispose(); deactivate(); await GlobalRegistrator.unregister()
+}
+`)
+}, 30_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('Notebook and Mermaid sanitize active output in a real browser and retain shared token themes', async () => {
+  const scratch = await mkdtemp(join(tmpdir(), 'quirky-mermaid-browser-'))
+  const editorRoot = resolve(import.meta.dir, '..')
+  let browser: Browser | undefined
+  let server: Bun.Server<undefined> | undefined
+  try {
+    const entrypoint = join(scratch, 'entry.tsx')
+    await Bun.write(entrypoint, `
+      import React from ${JSON.stringify(Bun.resolveSync('react', editorRoot))}
+      import { createRoot } from ${JSON.stringify(Bun.resolveSync('react-dom/client', editorRoot))}
+      import { MermaidDiagram } from ${JSON.stringify(join(editorRoot, 'src/markdown/MermaidDiagram.tsx'))}
+      import { NotebookSurface } from ${JSON.stringify(join(editorRoot, 'src/notebook/NotebookSurface.tsx'))}
+      import { activate } from ${JSON.stringify(join(editorRoot, 'src/ui.tsx'))}
+      import { createEditorUiControlReportScope, EditorUiControlProvider } from ${JSON.stringify(join(editorRoot, 'src/window/uiControl.tsx'))}
+      const handlers = new Map()
+      const context = {
+        pluginId: 'quirky.editor', provide: (id, handler) => handlers.set(id, handler),
+        subscribe: () => () => {}, getSetting: () => 300, getLayout: () => ({}), toast() {},
+        async call(method, params) {
+          if (method === 'ui.window.self') return { connId: 22 }
+          if (method === 'ui.window.command.run') return { result: await handlers.get(params.id)(params.args) }
+          if (params?.action === 'state') return { trusted: true, busy: false, kernel: { status: 'stopped' } }
+          return {}
+        }
+      }
+      activate(context)
+      const scope = createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document', context })
+      const root = createRoot(document.getElementById('root'))
+      root.render(
+        <EditorUiControlProvider scope={scope}><MermaidDiagram source="graph TD; A-->B" /></EditorUiControlProvider>
+      )
+      window.showNotebook = () => {
+        const content = JSON.stringify({ nbformat: 4, nbformat_minor: 5, metadata: { kernelspec: { language: 'python' } }, cells: [{
+          id: 'cell', cell_type: 'code', metadata: {}, source: 'print(1)', execution_count: 1, outputs: [
+            { output_type: 'display_data', data: { 'text/html': '<strong onclick="window.injected=true">safe html</strong><script>window.injected=true</script>' } },
+            { output_type: 'display_data', data: { 'image/svg+xml': '<svg xmlns="http://www.w3.org/2000/svg" onload="window.injected=true"><script>window.injected=true</script><circle cx="1" cy="1" r="1" /></svg>' } }
+          ]
+        }] })
+        const buffer = { id: 'b1', worktreeId: 'wt', root: '/fixture', path: '/fixture/demo.ipynb', name: 'demo.ipynb', relativePath: 'demo.ipynb', kind: 'notebook', mode: 'rich', content, draft: null, readOnly: false, view: {}, revision: 1, contentRevision: 1 }
+        root.render(<EditorUiControlProvider scope={scope}><NotebookSurface context={context} buffer={buffer} fontSize={13} onDraft={() => {}} onAction={context.call} onView={() => {}} registerCommandHandlers={() => () => {}} /></EditorUiControlProvider>)
+      }
+    `)
+    const bundle = await Bun.build({
+      entrypoints: [entrypoint], target: 'browser', format: 'esm',
+      define: { 'process.env.NODE_ENV': '"production"' },
+      plugins: [{ name: 'isolated-mermaid-renderer', setup(builder) {
+        builder.onResolve({ filter: /^react\/jsx-(?:dev-)?runtime$/ }, ({ path }) => ({ path: Bun.resolveSync(path, editorRoot) }))
+        builder.onResolve({ filter: /^mermaid$/ }, () => ({ path: 'renderer', namespace: 'mermaid-fixture' }))
+        builder.onLoad({ filter: /.*/, namespace: 'mermaid-fixture' }, () => ({ loader: 'js', contents: `
+          export default {
+            initialize(options) { window.mermaidOptions = options },
+            async render() { return { svg: '<svg xmlns="http://www.w3.org/2000/svg" onload="window.injected=true"><script>window.injected=true</script><filter id="safe"/><text onclick="window.injected=true">Safe diagram</text></svg>' } }
+          }
+        ` }))
+      } }]
+    })
+    if (!bundle.success) throw new Error(bundle.logs.map((item) => item.message).join('\n'))
+    browser = await chromium.launch({ headless: true, args: process.platform === 'linux' ? ['--no-sandbox'] : [] })
+    server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new NativeResponse('<!doctype html><html><body><main id="root"></main></body></html>', { headers: { 'Content-Type': 'text/html' } }) })
+    const page = await browser.newPage({ viewport: { width: 1000, height: 600 } })
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto(server.url.href)
+    await page.addStyleTag({ content: await Bun.file(resolve(editorRoot, '../../packages/ui/src/design-system/tokens.css')).text() })
+    await page.addScriptTag({ type: 'module', content: await bundle.outputs[0]!.text() })
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate((value) => { document.documentElement.dataset.theme = value }, theme)
+      await page.waitForFunction("window.mermaidOptions?.themeVariables.textColor === getComputedStyle(document.documentElement).getPropertyValue('--ui-text').trim()")
+      await page.locator('[role="img"] svg').waitFor()
+      expect(await page.locator('[role="img"]').getAttribute('aria-label')).toBe('Mermaid diagram')
+      expect(await page.locator('[role="img"] svg text').textContent()).toBe('Safe diagram')
+      expect(await page.locator('[role="img"] svg filter').count()).toBe(1)
+      expect(await page.locator('[role="img"] script, [role="img"] [onload], [role="img"] [onclick]').count()).toBe(0)
+      expect(await page.evaluate('window.injected')).toBeUndefined()
+      expect(await page.evaluate('window.mermaidOptions')).toMatchObject({ securityLevel: 'strict', startOnLoad: false, theme: 'base' })
+    }
+    await page.evaluate('window.showNotebook()')
+    const frame = page.locator('iframe.notebook-html-output')
+    await frame.waitFor()
+    expect(await frame.getAttribute('sandbox')).toBe('')
+    expect(await frame.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(await frame.getAttribute('srcdoc')).toContain('safe html')
+    expect(await frame.getAttribute('srcdoc')).not.toMatch(/onclick|<script|window\.injected/i)
+    const svgData = await page.locator('img.notebook-image-output').getAttribute('src')
+    expect(svgData).toBeTruthy()
+    const decoded = decodeURIComponent(svgData!.split(',').slice(1).join(','))
+    expect(decoded).toContain('<circle')
+    expect(decoded).not.toMatch(/onload|<script|window\.injected/i)
+    expect(await page.evaluate('window.injected')).toBeUndefined()
+    expect(errors).toEqual([])
+  } finally {
+    await browser?.close()
+    server?.stop(true)
+    await rm(scratch, { recursive: true, force: true })
+  }
+}, 60_000)
+
