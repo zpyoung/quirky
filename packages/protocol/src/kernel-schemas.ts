@@ -43,6 +43,36 @@ const listOf = (items: Schema, description?: string): Schema => ({
   items,
   ...(description ? { description } : {})
 })
+const folderListing = object(
+  {
+    path: string('Canonical absolute directory path.'),
+    parent: { description: 'Canonical absolute parent path, or null at the filesystem root.' },
+    entries: listOf(object({
+      name: string('Directory entry name.'),
+      path: string('Absolute navigable path.')
+    }, ['name', 'path'])),
+    offset: integer(0, 'Zero-based entry offset.'),
+    limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Entries per page.' },
+    hasMore: boolean('Whether another page follows.')
+  },
+  ['path', 'parent', 'entries', 'offset', 'limit', 'hasMore']
+)
+const browserHostPrompt = object(
+  {
+    requestId: string(),
+    kind: { type: 'string', enum: ['folder-picker', 'window-open'] },
+    title: string(),
+    expiresAt: integer(0),
+    busy: boolean(),
+    error: { description: 'An error message, or null when the request has no error.' },
+    draftPath: string(),
+    directory: folderListing,
+    selectedPaths: strings,
+    multiple: boolean()
+  },
+  ['requestId', 'kind', 'title', 'expiresAt', 'busy', 'error']
+)
+
 
 /** `properties` plus the `yes` and `confirmation` params every destructive method accepts. */
 const destructiveParams = (properties: Record<string, Schema>, required: string[] = []): Schema =>
@@ -722,6 +752,52 @@ export const KERNEL_METHOD_SCHEMAS = {
     params: object({ target: { type: 'string', enum: ['sidebar', 'view', 'panel'] } }, ['target']),
     result: uiLayout
   },
+  'ui.url': {
+    description: 'Returns the built browser UI entry URL authenticated with this daemon’s loopback RPC token.',
+    readOnly: true,
+    params: noParams,
+    result: object({ url: string('Authenticated http://127.0.0.1 loopback URL with the token in its fragment.') }, ['url'])
+  },
+  'ui.open': {
+    description: 'Requests that the daemon host open its authenticated browser UI URL with the default browser.',
+    params: noParams,
+    result: object({
+      url: string('The authenticated loopback URL.'),
+      requested: boolean('True when the OS opener accepted the request.')
+    }, ['url', 'requested'])
+  },
+  'ui.folder.list': {
+    description: 'Lists canonical daemon-filesystem directories, including directory symlinks, in a page.',
+    readOnly: true,
+    params: object({
+      path: string('Absolute directory path; omitted starts at the daemon process OS home.'),
+      offset: integer(0, 'Zero-based offset; defaults to 0.'),
+      limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Page size from 1 to 200; defaults to 100.' }
+    }),
+    result: folderListing
+  },
+  'ui.browserHost.control': {
+    description: 'Reads or controls the browser host prompt in one exact live UI connection; CLI callers supply connId.',
+    params: object({
+      connId: integer(1, 'Exact live UI connection ID.'),
+      action: {
+        type: 'string',
+        enum: ['state', 'set-path', 'navigate', 'select', 'confirm', 'cancel', 'open-popup']
+      },
+      requestId: string('Current browser-host request identity required for mutations.'),
+      path: string('Directory path for set-path, navigate or select.'),
+      selected: boolean('Explicit selection state for select.'),
+      offset: integer(0, 'Directory page offset for navigate.')
+    }, ['connId', 'action']),
+    result: object({
+      active: {
+        description: 'The current browser-host prompt snapshot, or null when idle.',
+        properties: browserHostPrompt.properties,
+        required: browserHostPrompt.required
+      }
+    }, ['active'])
+  },
+
   'ui.command.run': {
     description: 'Runs a plugin UI command in one open window and returns its result.',
     params: object({ id: string(), args: { description: "Checked against the command's args schema." } }, ['id']),
