@@ -189,6 +189,19 @@ async function flushViewTimer(): Promise<void> {
   await act(async () => { await promise })
 }
 
+test('SourceEditor renders source operation errors with the shared inline error', async () => {
+  const surface = await mountEditor({
+    ...editorProps(makeBuffer({})),
+    error: 'fixture source failed'
+  })
+
+  const error = surface.container.querySelector('.ui-inline-error')
+  expect(error).not.toBeNull()
+  expect(error?.getAttribute('role')).toBe('alert')
+  expect(error?.textContent).toContain('fixture source failed')
+})
+
+
 test.each(['source', 'changes'] as const)('initial pending tab navigation overrides saved selection and focuses the active %s editor', async (mode) => {
   const tabId = 'tab-1'
   const saved = { selection: { anchor: 0, head: 0 }, cursor: { line: 1, column: 1 }, scrollTop: 0 }

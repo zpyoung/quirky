@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { Button, TextField } from '@quirky/ui'
+import { Button, InlineError, TextField } from '@quirky/ui'
 import { editorTheme } from '@quirky/ui/editor-theme'
 import { defaultKeymap, history, historyKeymap, indentWithTab, isolateHistory, redo, undo } from '@codemirror/commands'
 import { css } from '@codemirror/lang-css'
@@ -732,7 +732,7 @@ export const SourceEditor = forwardRef<SourceEditorHandle, Props>(function Sourc
         <div className="qe-codemirror-host" ref={host} />
         {props.minimap && <canvas ref={canvas} className="qe-editor-minimap" aria-label="Code minimap" title="Click to jump to a section of the file" onClick={scrollFromMinimap} />}
       </div>
-      {(pasteError || props.error) && <div className="qe-editor-error" role="alert">{pasteError ?? props.error}</div>}
+      {(pasteError || props.error) && <div className="qe-editor-error"><InlineError message={pasteError ?? props.error!} /></div>}
       {contextMenu && (
         <div className="qe-source-menu-layer" onClick={() => setContextMenu(null)} onContextMenu={(event) => { event.preventDefault(); setContextMenu(null) }}>
           <div
