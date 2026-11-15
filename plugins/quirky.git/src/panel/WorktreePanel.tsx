@@ -175,14 +175,18 @@ function fencedRevertContext(context: UiPluginContext, ownerCurrent: () => boole
 
 type MutationVerb = 'stage' | 'unstage'
 
+type MutationIntent =
+  | {
+      verb: MutationVerb
+      /** The paths involved, for the failure notice. */
+      targets: string[]
+      bulk: false
+    }
+  | { verb: 'stage'; scope: 'all' | 'tracked'; bulk: true }
+
 type Mutation = {
   method: 'quirky.git/stage' | 'quirky.git/unstage'
   params: Record<string, unknown>
-  verb: MutationVerb
-  /** The paths involved, for the failure notice. */
-  paths: string[]
-  targets?: string[]
-  bulk: boolean
 }
 
 type DraftStore = { get(worktree: string): string; set(worktree: string, text: string): void }
@@ -198,7 +202,7 @@ export type PanelProps = {
 }
 
 /** What the panel knows of a dirty submodule row: whether it is open and what its last read returned. */
-type SubmoduleState = { open: boolean; entries: readonly GitStatusEntry[] | null; failed: boolean; signature: string }
+type SubmoduleState = { open: boolean; entries: readonly GitStatusEntry[] | null; failed: boolean; signature: string; owner: string }
 
 const asText = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null)
 
@@ -232,6 +236,7 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       if (pending?.kind === 'confirm') pending.resolve(false)
       dialogRef.current = null
       headerMenuRef.current = null
+      submoduleReadsRef.current.clear()
       rowMenuRef.current = null
       shipMenuRef.current = null
       launchRef.current = null
@@ -440,6 +445,32 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     }, () => isCurrentOwner(failure.owner) && shipErrorRef.current === failure)
   }
   const [submodules, setSubmodules] = useState<Record<string, SubmoduleState>>({})
+  const submoduleReadsRef = useRef(new Map<string, { owner: string; signature: string }>())
+  const submoduleSignatures = useMemo(() => {
+    const signatures = new Map<string, string>()
+    for (const file of files) {
+      if (file.submodule) signatures.set(file.path, JSON.stringify([file.oldPath, file.status, file.submodule]))
+    }
+    return signatures
+  }, [files])
+  const submoduleSignaturesRef = useRef(submoduleSignatures)
+  submoduleSignaturesRef.current = submoduleSignatures
+  for (const [path, request] of submoduleReadsRef.current) {
+    if (request.owner !== owner.generation || submoduleSignatures.get(path) !== request.signature) submoduleReadsRef.current.delete(path)
+  }
+  useEffect(() => {
+    setSubmodules((previous) => {
+      let next: Record<string, SubmoduleState> | undefined
+      for (const path in previous) {
+        const cached = previous[path]!
+        if (cached.owner !== owner.generation || submoduleSignatures.get(path) !== cached.signature) {
+          next ??= { ...previous }
+          delete next[path]
+        }
+      }
+      return next ?? previous
+    })
+  }, [submoduleSignatures, owner.generation])
   const createIntent = useRef(0)
   const activeCreateIntent = useRef<number | null>(null)
   const activeWorktree = useRef(worktree)
@@ -655,20 +686,42 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   }
 
   const toggleSubmodule = (item: RowItem) => {
-    const file = fileOf(item.path)
-    if (!file?.submodule) return
-    const signature = JSON.stringify(file.submodule)
+    const signature = submoduleSignaturesRef.current.get(item.path)
+    if (signature === undefined) return
     const generation = owner.generation
-    const current = submodules[item.path]
-    setSubmodules((prev) => ({ ...prev, [item.path]: { ...(prev[item.path] ?? { entries: null, signature, failed: false }), open: !current?.open } }))
-    if (current?.open || (current?.entries && current.signature === signature)) return
-    const isCurrent = () => isCurrentOwner(generation) && JSON.stringify(fileOf(item.path)?.submodule) === signature
+    const cached = submodules[item.path]
+    const current = cached?.signature === signature && cached.owner === generation ? cached : undefined
+    setSubmodules((previous) => {
+      const cached = previous[item.path]
+      const current = cached?.signature === signature && cached.owner === generation ? cached : undefined
+      return { ...previous, [item.path]: { ...(current ?? { entries: null, signature, owner: generation, failed: false }), open: !current?.open } }
+    })
+    if (current?.open || current?.entries) return
+    const pending = submoduleReadsRef.current.get(item.path)
+    if (pending?.owner === generation && pending.signature === signature) return
+    const request = { owner: generation, signature }
+    submoduleReadsRef.current.set(item.path, request)
+    const isCurrent = () => isCurrentOwner(generation) && submoduleReadsRef.current.get(item.path) === request &&
+      submoduleSignaturesRef.current.get(item.path) === signature
     void context.call('quirky.git/submoduleStatus', { worktree, path: item.path }).then((result) => {
       if (!isCurrent()) return
       const entries = (result as { entries: GitStatusEntry[] }).entries
-      setSubmodules((prev) => ({ ...prev, [item.path]: { open: prev[item.path]?.open ?? true, entries, signature, failed: false } }))
+      setSubmodules((previous) => {
+        const current = previous[item.path]
+        return current?.signature === signature && current.owner === generation
+          ? { ...previous, [item.path]: { ...current, entries, failed: false } }
+          : previous
+      })
     }).catch(() => {
-      if (isCurrent()) setSubmodules((prev) => ({ ...prev, [item.path]: { open: prev[item.path]?.open ?? true, entries: null, signature, failed: true } }))
+      if (!isCurrent()) return
+      setSubmodules((previous) => {
+        const current = previous[item.path]
+        return current?.signature === signature && current.owner === generation
+          ? { ...previous, [item.path]: { ...current, entries: null, failed: true } }
+          : previous
+      })
+    }).finally(() => {
+      if (submoduleReadsRef.current.get(item.path) === request) submoduleReadsRef.current.delete(item.path)
     })
   }
 
@@ -687,36 +740,38 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     return promise
   }
 
-  const resolveMutation = (mutation: Mutation): Mutation | null => {
-    if (mutation.bulk) {
-      if (status === null || operation !== 'none' || busyLabel !== null) return null
-      if (mutation.params.scope === 'all' && status.capped !== true) return null
-      return mutation
+  const resolveMutation = (intent: MutationIntent): Mutation | null => {
+    if (status === null || busyLabel !== null || reservationsRef.current.has('ship')) return null
+    if (intent.bulk) {
+      if (operation !== 'none' || (intent.scope === 'all' && status.capped !== true)) return null
+      return { method: 'quirky.git/stage', params: { scope: intent.scope } }
     }
-    const targets = mutation.targets ?? mutation.paths.filter((path) => shown.some((file) => file.path === path))
-    if (targets.length === 0) return null
+    if (intent.targets.length === 0) return null
     const paths: string[] = []
-    for (const path of targets) {
+    for (const path of intent.targets) {
       if (!shown.some((file) => file.path === path)) return null
-      const allowed = actionPaths(rowEntries(path), mutation.verb, actionContext)
+      const allowed = actionPaths(rowEntries(path), intent.verb, actionContext)
       if (allowed.length === 0) return null
       paths.push(...allowed)
     }
-    const resolvedPaths = [...new Set(paths)]
-    return resolvedPaths.length === 0
-      ? null
-      : { ...mutation, targets, paths: resolvedPaths, params: { paths: resolvedPaths } }
+    return {
+      method: intent.verb === 'stage' ? 'quirky.git/stage' : 'quirky.git/unstage',
+      params: { paths: [...new Set(paths)] }
+    }
   }
+  const resolveMutationRef = useRef(resolveMutation)
+  resolveMutationRef.current = resolveMutation
 
-  const runMutation = async (mutation: Mutation): Promise<boolean> => {
+  const runMutation = async (intent: MutationIntent): Promise<boolean> => {
     const generation = owner.generation
-    const current = resolveMutation(mutation)
+    if (!isCurrentOwner(generation)) return false
+    const current = resolveMutationRef.current(intent)
     if (current === null) return false
     try {
       await context.call(current.method, { worktree, ...current.params })
       return true
     } catch (error) {
-      if (isCurrentOwner(generation)) notifyMutationFailure(current, error)
+      if (isCurrentOwner(generation)) notifyMutationFailure(intent, error)
       return false
     } finally {
       if (isCurrentOwner(generation)) {
@@ -725,6 +780,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       }
     }
   }
+  const runMutationRef = useRef(runMutation)
+  runMutationRef.current = runMutation
 
   const retryNotice = (run: () => void, available: () => boolean = () => true) => ({
     label: 'Retry',
@@ -735,26 +792,23 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     available: () => isCurrentOwner(owner.generation) && available()
   })
 
-  const notifyMutationFailure = (mutation: Mutation, error: unknown) => {
-    const available = () => resolveMutation(mutation) !== null
-    const key = `mutation:${mutation.verb}:${(mutation.targets ?? mutation.paths).join('\\0')}:${String(mutation.params.scope ?? '')}`
+  const notifyMutationFailure = (intent: MutationIntent, error: unknown) => {
+    const available = () => resolveMutationRef.current(intent) !== null
+    const key = intent.bulk ? `mutation:${intent.verb}::${intent.scope}` : `mutation:${intent.verb}:${intent.targets.join('\\0')}:`
     const retry = retryNotice(() => {
-      startReserved(key, () => runMutation(mutation))
+      startReserved(key, () => runMutationRef.current(intent))
     }, available)
-    if (!mutation.bulk) {
-      const path = mutation.targets?.[0] ?? mutation.paths[0] ?? ''
-      notify({ id: 'source-control-entry-mutation', worktree, title: `Failed to ${mutation.verb} “${path}”`, body: messageOf(error), status: 'failing', actions: [retry] })
+    if (!intent.bulk) {
+      const path = intent.targets[0] ?? ''
+      notify({ id: 'source-control-entry-mutation', worktree, title: `Failed to ${intent.verb} “${path}”`, body: messageOf(error), status: 'failing', actions: [retry] })
       return
     }
-    notify({ id: 'source-control-bulk', worktree, title: `Bulk ${mutation.verb} failed`, body: messageOf(error), status: 'failing', actions: [retry] })
+    notify({ id: 'source-control-bulk', worktree, title: `Bulk ${intent.verb} failed`, body: messageOf(error), status: 'failing', actions: [retry] })
   }
 
-  const stagePaths = (paths: string[], bulk: boolean, targets?: string[]) =>
-    runMutation({ method: 'quirky.git/stage', params: { paths }, verb: 'stage', paths, ...(targets === undefined ? {} : { targets }), bulk })
-  const unstagePaths = (paths: string[], bulk: boolean, targets?: string[]) =>
-    runMutation({ method: 'quirky.git/unstage', params: { paths }, verb: 'unstage', paths, ...(targets === undefined ? {} : { targets }), bulk })
-  const stageScope = (scope: 'all' | 'tracked') =>
-    runMutation({ method: 'quirky.git/stage', params: { scope }, verb: 'stage', paths: [], bulk: true })
+  const stagePaths = (targets: string[]) => runMutation({ verb: 'stage', targets, bulk: false })
+  const unstagePaths = (targets: string[]) => runMutation({ verb: 'unstage', targets, bulk: false })
+  const stageScope = (scope: 'all' | 'tracked') => runMutation({ verb: 'stage', scope, bulk: true })
 
   const fileOf = (path: string): ReviewFile | undefined => files.find((file) => file.path === path)
   const rowEntries = (path: string): GitStatusEntry[] => entries.filter((entry) => entry.path === path)
@@ -890,6 +944,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   }
   const rowSignatureRef = useRef(rowSignature)
   rowSignatureRef.current = rowSignature
+  const markNavigationRef = useRef({ files: visibleFiles, viewMode })
+  markNavigationRef.current = { files: visibleFiles, viewMode }
   const currentRevertPlan = (path: string): Revertable | null => {
     const file = shown.find((candidate) => candidate.path === path)
     if (!file) return null
@@ -933,27 +989,23 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     const currentReviewed = file.mark === 'reviewed'
     const reviewed = desired ?? !currentReviewed
     if (desired !== undefined && desired === currentReviewed) return
-    const signature = rowSignature(path)
-    const eligible = () => {
-      const current = shown.find((candidate) => candidate.path === path)
-      return isCurrentOwner(generation) && signature !== null && rowSignature(path) === signature &&
-        current !== undefined && current.mark !== undefined && current.conflict === undefined &&
-        !rowEntries(path).some((entry) => entry.conflict !== undefined)
-    }
+    const signature = rowSignatureRef.current(path)
+    const eligible = () => isCurrentOwner(generation) && signature !== null && rowSignatureRef.current(path) === signature
     try {
       const expected = reviewed ? await shownHash(context, worktree, path) : undefined
       if (!eligible()) return
       const result = await setReviewMark(context, { worktree, path, reviewed, ...(expected !== undefined && { expected }) })
       if (!isCurrentOwner(generation)) return
       refreshReview()
-      if (result === 'ok' && reviewed) {
-        const next = advanceAfterMark(files, viewMode, path)
+      if (result === 'ok' && reviewed && selectedPath(worktree) === path) {
+        const current = markNavigationRef.current
+        const next = advanceAfterMark(current.files, current.viewMode, path)
         if (next !== null && isCurrentOwner(generation)) selectPath(worktree, next, 'panel')
       }
     } catch (error) {
       if (!eligible()) return
       const retry = retryNotice(() => {
-        startReserved(`mark:${path}`, () => toggleMark(path, reviewed))
+        startReserved(`mark:${path}`, () => toggleMarkRef.current(path, reviewed))
       }, eligible)
       notify({
         id: 'source-control-entry-mutation',
@@ -965,6 +1017,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
       })
     }
   }
+  const toggleMarkRef = useRef(toggleMark)
+  toggleMarkRef.current = toggleMark
 
   const failureText = (error: unknown): string => {
     const failures = dataOf(error).failures
@@ -1144,7 +1198,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     dragText: (item) => absolute(item.path),
     expansion: (item): Expansion | null => {
       if (!item.submodule) return null
-      const state = submodules[item.path]
+      const cached = submodules[item.path]
+      const state = cached?.owner === owner.generation && cached.signature === submoduleSignatures.get(item.path) ? cached : undefined
       return { open: state?.open ?? false, entries: state?.entries ?? null, failed: state?.failed ?? false }
     },
     toggleExpansion: (item) => postMainControl('row-toggle-submodule', { path: item.path }),
@@ -1818,38 +1873,28 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     }
   }
 
-  const runStep = (kind: ShipStepKind, messageOverride?: string): void => {
+  const runStep = (kind: ShipStepKind, messageOverride?: string): Promise<unknown> | void => {
     if (step === null || step.kind !== kind || !step.enabled) return
     setShipError(null)
     switch (kind) {
       case 'commit-staged':
-        void commitWith('staged', undefined, messageOverride)
-        return
+        return commitWith('staged', undefined, messageOverride)
       case 'commit-all':
-        void commitWith('all', undefined, messageOverride)
-        return
+        return commitWith('all', undefined, messageOverride)
       case 'commit-selected':
-        void commitWith('selected', undefined, messageOverride)
-        return
+        return commitWith('selected', undefined, messageOverride)
       case 'pull':
-        void remote('pull')
-        return
+        return remote('pull')
       case 'sync':
-        void remote('sync')
-        return
+        return remote('sync')
       case 'publish':
-        void remote('push')
-        return
+        return remote('push')
       case 'push':
-        if (status && shouldForcePushWithLease(status.upstreamStatus)) void forcePush()
-        else void remote('push')
-        return
+        return status && shouldForcePushWithLease(status.upstreamStatus) ? forcePush() : remote('push')
       case 'create-pr':
-        void createReview()
-        return
+        return createReview()
       case 'view-pr':
-        void viewReview()
-        return
+        return viewReview()
       case 'up-to-date':
         return
     }
@@ -2285,13 +2330,13 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
         if (stageable.length === 0) return false
         return startReserved(`mutation:stage:${path}:`, () => {
           setMenu(null)
-          return stagePaths(stageable, false, [path])
+          return stagePaths([path])
         })
       case 'unstage':
         if (unstageable.length === 0 || stageable.length > 0) return false
         return startReserved(`mutation:unstage:${path}:`, () => {
           setMenu(null)
-          return unstagePaths(unstageable, false, [path])
+          return unstagePaths([path])
         })
       case 'copy-path':
       case 'copy-relative-path':

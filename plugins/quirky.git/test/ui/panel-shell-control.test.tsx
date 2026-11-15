@@ -894,3 +894,373 @@ test('refused base-dialog Close retains its draft and leaves the original comple
     expect(dialog()).toBeNull()
   } finally { panel.unmount() }
 })
+
+type ControlledPanel = {
+  fake: Fake
+  element: HTMLElement
+  unmount: () => void
+  controls: () => ControlAddress[]
+  address: (action: string) => ControlAddress
+  send: (control: ControlAddress, action: string, data?: Record<string, unknown>) => Promise<{ delivered: boolean }>
+}
+
+const refreshControlled = async (panel: ControlledPanel) => {
+  await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+  await settle()
+}
+
+const failedReviewMarkRetry = async () => {
+  const panel = await controlled((fake) => {
+    fake.on('quirky.git/diff', () => ({ modifiedHash: 'fixture-hash' }))
+    fake.on('quirky.git/setReviewMark', () => { throw failure('fixture mark failed') })
+  })
+  expect(await panel.send(panel.address('row-toggle-mark'), 'row-toggle-mark', { path: 'a.ts' })).toEqual({ delivered: true })
+  expect(noticeOf(panel.element)?.getAttribute('role')).toBe('alert')
+  return { panel, retry: panel.address('run') }
+}
+
+const cancelConfirmationIfOpen = async (panel: ControlledPanel) => {
+  if (panel.controls().some((control) => control.actions.includes('cancel'))) {
+    await panel.send(panel.address('confirm'), 'cancel')
+  }
+}
+
+const readyPushTarget = {
+  ready: true,
+  remote: 'fork',
+  branch: 'zoe/feat',
+  localBranch: 'zoe/feat',
+  localHead: 'a'.repeat(40),
+  headOid: 'c'.repeat(40),
+  number: 7,
+  fork: true,
+  repository: { host: 'github.com', owner: 'zoe', repo: 'project' }
+}
+
+const configureForcePush = (fake: Fake, pushTarget: () => unknown, forcePush?: () => unknown) => {
+  fake.status = statusOf([], { upstreamStatus: upstream(2, 2, true) })
+  fake.compare = SOMETHING_TO_SHIP
+  fake.on('quirky.hosting/forBranch', () => ({
+    kind: 'found',
+    review: { number: 7, url: 'https://github.com/zoe/project/pull/7', state: 'open' }
+  }))
+  fake.on('quirky.git/pushTarget', pushTarget)
+  if (forcePush !== undefined) fake.on('quirky.git/forcePush', forcePush)
+}
+
+test('a held review hash cannot mark a row removed by a same-worktree refresh', async () => {
+  const hash = Promise.withResolvers<unknown>()
+  const panel = await controlled((fake) => fake.on('quirky.git/diff', () => hash.promise))
+  try {
+    expect(q(panel.element, '[data-row-path="a.ts"]')).not.toBeNull()
+    expect(await panel.send(panel.address('row-toggle-mark'), 'row-toggle-mark', { path: 'a.ts' })).toEqual({ delivered: true })
+    panel.fake.status = statusOf([entry('dir/b.ts')])
+    await refreshControlled(panel)
+    expect(q(panel.element, '[data-row-path="a.ts"]')).toBeNull()
+    await act(async () => hash.resolve({ modifiedHash: 'fixture-hash' }))
+    await settle()
+    expect(panel.fake.called('quirky.git/setReviewMark')).toEqual([])
+  } finally {
+    await act(async () => hash.resolve({ modifiedHash: 'fixture-hash' }))
+    await settle()
+    panel.unmount()
+  }
+})
+
+test('a held review hash cannot mark a row whose review mark changed while it was loading', async () => {
+  const hash = Promise.withResolvers<unknown>()
+  const panel = await controlled((fake) => fake.on('quirky.git/diff', () => hash.promise))
+  try {
+    expect(await panel.send(panel.address('row-toggle-mark'), 'row-toggle-mark', { path: 'a.ts' })).toEqual({ delivered: true })
+    panel.fake.marks['a.ts'] = 'reviewed'
+    await refreshControlled(panel)
+    const row = q(panel.element, '[data-row-path="a.ts"]')
+    expect(row).not.toBeNull()
+    expect(q(row!, '.git-row__mark [role="img"]')?.getAttribute('aria-label')).toBe('Reviewed')
+    await act(async () => hash.resolve({ modifiedHash: 'fixture-hash' }))
+    await settle()
+    expect(panel.fake.called('quirky.git/setReviewMark')).toEqual([])
+  } finally {
+    await act(async () => hash.resolve({ modifiedHash: 'fixture-hash' }))
+    await settle()
+    panel.unmount()
+  }
+})
+
+test('a held review hash cannot mark a row that becomes conflicted while it was loading', async () => {
+  const hash = Promise.withResolvers<unknown>()
+  const panel = await controlled((fake) => fake.on('quirky.git/diff', () => hash.promise))
+  try {
+    expect(await panel.send(panel.address('row-toggle-mark'), 'row-toggle-mark', { path: 'a.ts' })).toEqual({ delivered: true })
+    panel.fake.status = statusOf([
+      entry('a.ts', 'conflicts', 'modified', { conflict: { kind: 'both_modified', state: 'unresolved' } }),
+      entry('dir/b.ts')
+    ], { operation: 'merge' })
+    await refreshControlled(panel)
+    const row = q(panel.element, '[data-row-path="a.ts"]')
+    expect(row).not.toBeNull()
+    expect(q(row!, '[aria-label="Unresolved conflict (Both modified)"]')).not.toBeNull()
+    await act(async () => hash.resolve({ modifiedHash: 'fixture-hash' }))
+    await settle()
+    expect(panel.fake.called('quirky.git/setReviewMark')).toEqual([])
+  } finally {
+    await act(async () => hash.resolve({ modifiedHash: 'fixture-hash' }))
+    await settle()
+    panel.unmount()
+  }
+})
+
+test('a failed review-mark Retry refuses a row removed in the same worktree', async () => {
+  const { panel, retry } = await failedReviewMarkRetry()
+  try {
+    const calls = panel.fake.called('quirky.git/setReviewMark').length
+    panel.fake.status = statusOf([entry('dir/b.ts')])
+    await refreshControlled(panel)
+    expect(q(panel.element, '[data-row-path="a.ts"]')).toBeNull()
+    expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+    expect(panel.fake.called('quirky.git/setReviewMark')).toHaveLength(calls)
+  } finally { panel.unmount() }
+})
+
+test('a failed review-mark Retry refuses a row that is already reviewed', async () => {
+  const { panel, retry } = await failedReviewMarkRetry()
+  try {
+    const calls = panel.fake.called('quirky.git/setReviewMark').length
+    panel.fake.marks['a.ts'] = 'reviewed'
+    await refreshControlled(panel)
+    const row = q(panel.element, '[data-row-path="a.ts"]')
+    expect(row).not.toBeNull()
+    expect(q(row!, '.git-row__mark [role="img"]')?.getAttribute('aria-label')).toBe('Reviewed')
+    expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+    expect(panel.fake.called('quirky.git/setReviewMark')).toHaveLength(calls)
+  } finally { panel.unmount() }
+})
+
+test('a failed Stage Retry refuses a row removed in the same worktree', async () => {
+  const panel = await controlled((fake) => fake.on('quirky.git/stage', () => { throw failure('fixture stage failed') }))
+  try {
+    await panel.send(panel.address('row-menu-open'), 'row-menu-open', { path: 'dir/b.ts' })
+    await panel.send(panel.address('stage'), 'stage')
+    const retry = panel.address('run')
+    const calls = panel.fake.called('quirky.git/stage').length
+    panel.fake.status = statusOf([entry('a.ts', 'staged')])
+    await refreshControlled(panel)
+    expect(q(panel.element, '[data-row-path="dir/b.ts"]')).toBeNull()
+    expect(q(panel.element, '[data-row-path="a.ts"]')).not.toBeNull()
+    expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+    expect(panel.fake.called('quirky.git/stage')).toHaveLength(calls)
+  } finally { panel.unmount() }
+})
+
+test('a failed Unstage Retry refuses a visible row while the worktree is busy fetching', async () => {
+  const panel = await controlled((fake) => fake.on('quirky.git/unstage', () => { throw failure('fixture unstage failed') }))
+  try {
+    await panel.send(panel.address('row-menu-open'), 'row-menu-open', { path: 'a.ts' })
+    await panel.send(panel.address('unstage'), 'unstage')
+    const retry = panel.address('run')
+    const calls = panel.fake.called('quirky.git/unstage').length
+    panel.fake.status = { ...panel.fake.status, busy: 'fetch' }
+    await refreshControlled(panel)
+    expect(q(panel.element, '[data-row-path="a.ts"]')).not.toBeNull()
+    expect(primary(panel.element).getAttribute('aria-busy')).toBe('true')
+    expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+    expect(panel.fake.called('quirky.git/unstage')).toHaveLength(calls)
+  } finally { panel.unmount() }
+})
+
+test('a delayed submodule read cannot populate a replacement submodule at the same path', async () => {
+  const oldRead = Promise.withResolvers<unknown>()
+  const oldSubmodule = { commitChanged: false, trackedChanges: true, untrackedChanges: false }
+  const newSubmodule = { commitChanged: true, trackedChanges: false, untrackedChanges: false }
+  let reads = 0
+  const panel = await controlled((fake) => {
+    fake.status = statusOf([entry('vendor/lib', 'unstaged', 'modified', { submodule: oldSubmodule })])
+    fake.on('quirky.git/submoduleStatus', () => {
+      reads++
+      return reads === 1 ? oldRead.promise : { entries: [entry('current-child.ts')] }
+    })
+  })
+  try {
+    await click(byLabel(panel.element, 'Expand vendor/lib'))
+    expect(panel.fake.called('quirky.git/submoduleStatus')).toHaveLength(1)
+    panel.fake.status = statusOf([])
+    await refreshControlled(panel)
+    expect(q(panel.element, '[data-row-path="vendor/lib"]')).toBeNull()
+    panel.fake.status = statusOf([entry('vendor/lib', 'unstaged', 'modified', { submodule: newSubmodule })])
+    await refreshControlled(panel)
+    expect(q(panel.element, '[data-row-path="vendor/lib"]')).not.toBeNull()
+    const collapse = byLabel(panel.element, 'Collapse vendor/lib')
+    if (collapse) await click(collapse)
+    await click(byLabel(panel.element, 'Expand vendor/lib'))
+    await settle()
+    expect(panel.fake.called('quirky.git/submoduleStatus')).toHaveLength(2)
+    const names = () => [...panel.element.querySelectorAll<HTMLElement>('[data-submodule-entry] [data-row-name]')].map((node) => node.textContent)
+    expect(names()).toEqual(['current-child.ts'])
+    await act(async () => oldRead.resolve({ entries: [entry('stale-child.ts')] }))
+    await settle()
+    expect(names()).toEqual(['current-child.ts'])
+  } finally {
+    await act(async () => oldRead.resolve({ entries: [entry('stale-child.ts')] }))
+    await settle()
+    panel.unmount()
+  }
+})
+
+test('force-push reservation survives a held target read and confirmation, then releases on cancellation', async () => {
+  const heldTarget = Promise.withResolvers<unknown>()
+  let targetReads = 0
+  const panel = await controlled((fake) => configureForcePush(fake, () => {
+    targetReads++
+    return targetReads === 2 ? heldTarget.promise : readyPushTarget
+  }))
+  try {
+    expect(targetReads).toBe(1)
+    const step = panel.address('ship-step')
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: true })
+    expect(targetReads).toBe(2)
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: false })
+    expect(targetReads).toBe(2)
+    expect(panel.fake.called('quirky.git/forcePush')).toEqual([])
+    expect(panel.controls().some((control) => control.actions.includes('confirm'))).toBe(false)
+
+    await act(async () => heldTarget.resolve(readyPushTarget))
+    await settle()
+    const confirm = panel.address('confirm')
+    const generation = confirm.generation
+    expect(dialog()?.textContent).toContain('c'.repeat(40))
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: false })
+    expect(targetReads).toBe(2)
+    expect(panel.fake.called('quirky.git/forcePush')).toEqual([])
+    expect(panel.address('confirm').generation).toBe(generation)
+
+    expect(await panel.send(confirm, 'cancel')).toEqual({ delivered: true })
+    await settle()
+    expect(dialog()).toBeNull()
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: true })
+    expect(targetReads).toBe(3)
+    const nextConfirm = panel.address('confirm')
+    expect(nextConfirm.generation).not.toBe(generation)
+    await panel.send(nextConfirm, 'cancel')
+  } finally {
+    await act(async () => heldTarget.resolve(readyPushTarget))
+    await settle()
+    await cancelConfirmationIfOpen(panel)
+    panel.unmount()
+  }
+})
+
+test('force-push reservation releases after prerequisite failure, operation failure and success', async () => {
+  const heldPush = Promise.withResolvers<unknown>()
+  let targetReads = 0
+  let pushes = 0
+  const panel = await controlled((fake) => configureForcePush(fake, () => {
+    targetReads++
+    if (targetReads === 2) throw failure('fixture target read failed')
+    return readyPushTarget
+  }, () => {
+    pushes++
+    return pushes === 1 ? heldPush.promise : { ok: true }
+  }))
+  try {
+    const step = panel.address('ship-step')
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: true })
+    expect(targetReads).toBe(2)
+    expect(dialog()).toBeNull()
+
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: true })
+    expect(targetReads).toBe(3)
+    await panel.send(panel.address('confirm'), 'cancel')
+    await settle()
+    expect(dialog()).toBeNull()
+
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: true })
+    expect(targetReads).toBe(4)
+    expect(await panel.send(panel.address('confirm'), 'confirm')).toEqual({ delivered: true })
+    await settle()
+    expect(targetReads).toBe(5)
+    expect(pushes).toBe(1)
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: false })
+    expect(targetReads).toBe(5)
+    expect(pushes).toBe(1)
+
+    await act(async () => heldPush.reject(failure('fixture force push failed')))
+    await settle()
+    expect(dialog()).toBeNull()
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: true })
+    expect(targetReads).toBe(6)
+    expect(await panel.send(panel.address('confirm'), 'confirm')).toEqual({ delivered: true })
+    await settle()
+    expect(targetReads).toBe(7)
+    expect(pushes).toBe(2)
+    expect(dialog()).toBeNull()
+
+    expect(await panel.send(step, 'ship-step', { kind: 'push' })).toEqual({ delivered: true })
+    expect(targetReads).toBe(8)
+    await panel.send(panel.address('confirm'), 'cancel')
+    await settle()
+    expect(dialog()).toBeNull()
+  } finally {
+    await act(async () => heldPush.resolve({ ok: true }))
+    await settle()
+    await cancelConfirmationIfOpen(panel)
+    panel.unmount()
+  }
+})
+
+for (const verb of ['stage', 'unstage'] as const) {
+  test(`a failed ${verb} Retry refuses a visible row whose staging eligibility changed`, async () => {
+    const path = verb === 'stage' ? 'dir/b.ts' : 'a.ts'
+    const panel = await controlled((fake) => fake.on(`quirky.git/${verb}`, () => { throw failure('fixture mutation failed') }))
+    try {
+      await panel.send(panel.address('row-menu-open'), 'row-menu-open', { path })
+      await panel.send(panel.address(verb), verb)
+      const retry = panel.address('run')
+      const calls = panel.fake.called(`quirky.git/${verb}`).length
+      panel.fake.status = statusOf([entry(path, verb === 'stage' ? 'staged' : 'unstaged')])
+      await refreshControlled(panel)
+      expect(q(panel.element, `[data-row-path="${path}"]`)).not.toBeNull()
+      expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: false })
+      expect(panel.fake.called(`quirky.git/${verb}`)).toHaveLength(calls)
+    } finally { panel.unmount() }
+  })
+}
+
+test('a valid review-mark Retry retains its reviewed intent and delegates once', async () => {
+  const { panel, retry } = await failedReviewMarkRetry()
+  try {
+    panel.fake.on('quirky.git/setReviewMark', (params) => {
+      expect(params).toMatchObject({ worktree: 'feat', path: 'a.ts', reviewed: true, expected: 'fixture-hash' })
+      panel.fake.marks['a.ts'] = 'reviewed'
+      return { mark: 'reviewed' }
+    })
+    expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: true })
+    expect(panel.fake.called('quirky.git/setReviewMark')).toHaveLength(2)
+    expect(q(q(panel.element, '[data-row-path="a.ts"]')!, '.git-row__mark [role="img"]')?.getAttribute('aria-label')).toBe('Reviewed')
+  } finally { panel.unmount() }
+})
+
+test('an identical submodule recreated after removal does not inherit the old read or expansion', async () => {
+  const oldRead = Promise.withResolvers<unknown>()
+  const submodule = { commitChanged: false, trackedChanges: true, untrackedChanges: false }
+  let reads = 0
+  const panel = await controlled((fake) => {
+    fake.status = statusOf([entry('vendor/lib', 'unstaged', 'modified', { submodule })])
+    fake.on('quirky.git/submoduleStatus', () => ++reads === 1 ? oldRead.promise : { entries: [entry('current-child.ts')] })
+  })
+  try {
+    await click(byLabel(panel.element, 'Expand vendor/lib'))
+    panel.fake.status = statusOf([])
+    await refreshControlled(panel)
+    panel.fake.status = statusOf([entry('vendor/lib', 'unstaged', 'modified', { submodule })])
+    await refreshControlled(panel)
+    expect(byLabel(panel.element, 'Expand vendor/lib')).not.toBeNull()
+    await click(byLabel(panel.element, 'Expand vendor/lib'))
+    expect(panel.fake.called('quirky.git/submoduleStatus')).toHaveLength(2)
+    await act(async () => oldRead.resolve({ entries: [entry('stale-child.ts')] }))
+    await settle()
+    expect([...panel.element.querySelectorAll('[data-submodule-entry] [data-row-name]')].map(node => node.textContent)).toEqual(['current-child.ts'])
+  } finally {
+    await act(async () => oldRead.resolve({ entries: [] }))
+    panel.unmount()
+  }
+})
