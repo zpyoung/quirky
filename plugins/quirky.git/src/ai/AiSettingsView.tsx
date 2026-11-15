@@ -52,17 +52,13 @@ async function readRecipes(
   )
   if (!alive.current || request !== latest.current) return
   const error = results.find((result) => result.error !== null)?.error
-  if (error !== null && error !== undefined) {
-    setState((previous) => ({ ...previous, loading: false, error: `Could not read the AI recipes: ${error}` }))
-    return
-  }
   const updates = results.flatMap((result): Array<[AiAction, Recipe]> =>
     result.recipe ? [[result.recipe.action, result.recipe]] : []
   )
   setState((previous) => ({
     recipes: Object.fromEntries([...Object.entries(previous.recipes), ...updates]) as Recipes,
     loading: false,
-    error: null
+    error: error == null ? null : `Could not read the AI recipes: ${error}`
   }))
 }
 

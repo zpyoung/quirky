@@ -225,6 +225,29 @@ describe('AI settings shared states', () => {
     unmount()
   })
 
+  test('a partial recipe failure preserves that action without discarding successful recipes', async () => {
+    let failedAction = 'branchName'
+    let version = 'first'
+    const { fake, element, unmount } = await openSettings((f) => f.on('quirky.git/aiRecipe', (params) => {
+      const action = String(params.action)
+      if (action === failedAction) throw new Error('partial read failed')
+      return recipe(action, { args: `--${version}-${action}` })
+    }))
+    expect(inSection(element, 'commitMessage', 'Commit message CLI arguments').value).toBe('--first-commitMessage')
+    expect(inSection(element, 'branchName', 'Branch name CLI arguments').value).toBe('')
+    expect(q(element, '.ui-inline-error')?.textContent).toBe('Could not read the AI recipes: partial read failedRetry')
+
+    failedAction = 'commitMessage'
+    version = 'second'
+    await act(async () => fake.emit({ type: 'quirky.git/aiChanged', data: { repoId: null } }))
+    await settle()
+    expect(inSection(element, 'commitMessage', 'Commit message CLI arguments').value).toBe('--first-commitMessage')
+    expect(inSection(element, 'branchName', 'Branch name CLI arguments').value).toBe('--second-branchName')
+    expect(qa(element, '.ui-inline-error')).toHaveLength(1)
+    expect(fake.toasts).toEqual([])
+    unmount()
+  })
+
   test('recipe rereads are latest-wins and a later failure preserves the last recipes', async () => {
     const reads = Array.from({ length: 20 }, () => deferred<unknown>())
     let count = 0
