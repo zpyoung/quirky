@@ -13,6 +13,10 @@ const escapedGlobalDiagnostic = (column: number, line = 1) => ({
   file, line, column, rule: 'process/no-escaped-global',
   message: 'Read Bun, Atomics, process, module and the global object only through a static, allowed member.',
 })
+const dynamicCodeDiagnostic = (column: number, line = 1) => ({
+  file, line, column, rule: 'process/no-dynamic-code',
+  message: 'Load modules by literal specifier and run no generated code.',
+})
 const roots: string[] = []
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 function put(root: string, path: string, source: string) {
@@ -129,6 +133,106 @@ test.each(taskOneErrorCases)('reports exact task 1 diagnostic and padded column:
     ...expected, column: expected.column + padding,
   }])
 })
+const taskTwoErrorCases = [
+  ['scenario 1 process root alias', 'const p = process; p.getBuiltinModule("node:child_process")', escapedGlobalDiagnostic(11)],
+  ['scenario 1 CommonJS module root alias', 'const m = module; m.require("node:child_process")', escapedGlobalDiagnostic(11)],
+  ['scenario 4 import.meta.require child process', 'import.meta.require("child_process")', spawnDiagnostic(1)],
+  ['scenario 4 process.getBuiltinModule child process', 'process.getBuiltinModule("node:child_process")', spawnDiagnostic(1)],
+  ['scenario 4 createRequire child process', 'import { createRequire } from "node:module"; createRequire(import.meta.url)("child_process")', spawnDiagnostic(46)],
+  ['scenario 5 concatenated dynamic import', 'import("node:child_" + "process")', dynamicCodeDiagnostic(1)],
+  ['scenario 5 template dynamic import', 'import(`node:${name}`)', dynamicCodeDiagnostic(1)],
+  ['scenario 5 nonliteral require', 'const m = "child_process"; require(m)', dynamicCodeDiagnostic(28)],
+  ['scenario 5 nonliteral module.require', 'module.require(name)', dynamicCodeDiagnostic(1)],
+  ['scenario 5 nonliteral import.meta.require', 'import.meta.require(name)', dynamicCodeDiagnostic(1)],
+  ['scenario 5 nonliteral process.getBuiltinModule', 'process.getBuiltinModule(name)', dynamicCodeDiagnostic(1)],
+  ['scenario 5 aliased require loader', 'const r = require; r("child_process")', dynamicCodeDiagnostic(11)],
+  ['scenario 5 escaped import.meta.require loader', 'f(import.meta.require)', dynamicCodeDiagnostic(3)],
+  ['scenario 5 escaped process.getBuiltinModule loader', 'const g = process.getBuiltinModule; g("child_process")', dynamicCodeDiagnostic(11)],
+  ['scenario 5 escaped createRequire result', 'import { createRequire } from "node:module"; const r = createRequire(import.meta.url); r("child_process")', dynamicCodeDiagnostic(56)],
+  ['scenario 5 escaped createRequire binding', 'import { createRequire as cr } from "node:module"; f(cr)', dynamicCodeDiagnostic(54)],
+  ['scenario 5 escaped namespace createRequire', 'import * as M from "node:module"; const c = M.createRequire; c(u)("x")', dynamicCodeDiagnostic(45)],
+  ['scenario 5 createRequire re-export', 'export { createRequire } from "node:module"', dynamicCodeDiagnostic(10)],
+  ['scenario 5 vm import', 'import vm from "node:vm"', dynamicCodeDiagnostic(1)],
+  ['scenario 5 vm require', 'require("vm").runInThisContext("Bun.spawn([])")', dynamicCodeDiagnostic(1)],
+  ['scenario 5 eval call', 'eval("Bun.spawn([])")', dynamicCodeDiagnostic(1)],
+  ['scenario 5 indirect eval call', '(0, eval)("x")', dynamicCodeDiagnostic(5)],
+  ['scenario 5 new Function call', 'new Function("return Bun")()', dynamicCodeDiagnostic(5)],
+  ['scenario 5 Function call', 'Function("return 1")', dynamicCodeDiagnostic(1)],
+  ['scenario 5 Function member access', 'Function.prototype.toString', dynamicCodeDiagnostic(1)],
+  ['scenario 5 globalThis.eval call', 'globalThis.eval("x")', dynamicCodeDiagnostic(1)],
+  ['scenario 5 eval in operator', '"x" in eval', dynamicCodeDiagnostic(8)],
+  ['scenario 5 require in operator', '"x" in require', dynamicCodeDiagnostic(8)],
+  ['scenario 5 createRequire result outside call', 'import { createRequire } from "node:module"; createRequire(import.meta.url)', dynamicCodeDiagnostic(46)],
+  ['scenario 5 new createRequire', 'import { createRequire } from "node:module"; new createRequire(u)', dynamicCodeDiagnostic(50)],
+  ['scenario 5 escaped global eval alias', 'const e = globalThis.eval; e("x")', dynamicCodeDiagnostic(11)],
+  ['scenario 5 process.binding call', 'process.binding("spawn_sync")', dynamicCodeDiagnostic(1)],
+  ['scenario 5 process.mainModule loader', 'process.mainModule.require("child_process")', dynamicCodeDiagnostic(1)],
+  ['scenario 5 destructured process loader', 'const { getBuiltinModule: g } = process', dynamicCodeDiagnostic(9)],
+  ['scenario 12 imported default process spawn loader', 'import process from "node:process"; process.getBuiltinModule("child_process")', spawnDiagnostic(37)],
+  ['scenario 12 imported process nonliteral loader', 'import process from "process"; process.getBuiltinModule(name)', dynamicCodeDiagnostic(32)],
+  ['scenario 12 namespace process spawn loader', 'import * as P from "node:process"; P.getBuiltinModule("node:child_process")', spawnDiagnostic(36)],
+  ['scenario 12 namespace process escape', 'import * as P from "process"; f(P)', escapedGlobalDiagnostic(33)],
+  ['scenario 12 imported getBuiltinModule spawn loader', 'import { getBuiltinModule } from "node:process"; getBuiltinModule("child_process")', spawnDiagnostic(50)],
+  ['scenario 12 aliased getBuiltinModule nonliteral loader', 'import { getBuiltinModule as g } from "process"; g(name)', dynamicCodeDiagnostic(50)],
+  ['scenario 12 escaped imported getBuiltinModule', 'import { getBuiltinModule } from "node:process"; f(getBuiltinModule)', dynamicCodeDiagnostic(52)],
+  ['scenario 12 process default forbidden binding', 'import { default as P } from "node:process"; P.binding("x")', dynamicCodeDiagnostic(46)],
+  ['scenario 12 imported process dlopen', 'import { dlopen } from "process"', dynamicCodeDiagnostic(10)],
+  ['scenario 12 imported process mainModule', 'import { mainModule } from "node:process"', dynamicCodeDiagnostic(10)],
+  ['scenario 12 imported process execve', 'import { execve } from "node:process"', spawnDiagnostic(10)],
+  ['scenario 12 process execve', 'process.execve("/bin/sh", [])', spawnDiagnostic(1)],
+  ['scenario 12 destructured process execve', 'const { execve } = process', spawnDiagnostic(9)],
+  ['scenario 12 process re-export', 'export * from "node:process"', dynamicCodeDiagnostic(1)],
+  ['scenario 12 getBuiltinModule re-export', 'export { getBuiltinModule } from "process"', dynamicCodeDiagnostic(10)],
+  ['scenario 12 process require spawn loader', 'require("node:process").getBuiltinModule("child_process")', spawnDiagnostic(1)],
+  ['scenario 12 process require escape', 'const P = require("process"); P.getBuiltinModule("x")', escapedGlobalDiagnostic(11)],
+  ['scenario 12 dynamic process import loader', '(await import("node:process")).getBuiltinModule(name)', dynamicCodeDiagnostic(1)],
+  ['scenario 12 process default namespace spawn loader', 'import * as P from "node:process"; P.default.getBuiltinModule("child_process")', spawnDiagnostic(36)],
+  ['scenario 12 assigned process default escape', 'import * as P from "node:process"; const p = P.default; p.getBuiltinModule("child_process")', escapedGlobalDiagnostic(46)],
+  ['scenario 12 destructured process default escape', 'import * as P from "process"; const { default: p } = P', escapedGlobalDiagnostic(39)],
+  ['scenario 12 nested process default loader', 'import * as P from "process"; const { default: { getBuiltinModule } } = P', dynamicCodeDiagnostic(50)],
+  ['scenario 12 process default execve', 'import * as P from "node:process"; P.default.execve("/bin/sh", [])', spawnDiagnostic(36)],
+  ['scenario 12 computed process default loader', 'import * as P from "process"; P["default"].getBuiltinModule(name)', dynamicCodeDiagnostic(31)],
+  ['scenario 12 imported process default loader', 'import P from "node:process"; P.default.getBuiltinModule(name)', dynamicCodeDiagnostic(31)],
+  ['scenario 12 required process default loader', 'require("node:process").default.getBuiltinModule(name)', dynamicCodeDiagnostic(1)],
+  ['scenario 12 dynamic process default binding', '(await import("process")).default.binding("x")', dynamicCodeDiagnostic(1)],
+  ['scenario 12 required process default escape', 'const p = require("process").default', escapedGlobalDiagnostic(11)],
+  ['scenario 12 Bun default namespace spawn', 'import * as B from "bun"; B.default.spawn([])', spawnDiagnostic(27)],
+  ['scenario 12 Bun default namespace escape', 'import * as B from "bun"; const b = B.default', escapedGlobalDiagnostic(37)],
+  ['scenario 12 destructured Bun default spawnSync', 'import * as B from "bun"; const { default: { spawnSync } } = B', spawnDiagnostic(46)],
+  ['scenario 12 module createRequire spawn loader', 'import M from "node:module"; M.createRequire(u)("child_process")', spawnDiagnostic(30)],
+  ['scenario 12 module _load', 'import M from "module"; M._load("child_process")', dynamicCodeDiagnostic(25)],
+  ['scenario 12 imported Module _load', 'import { Module } from "node:module"; Module._load("child_process")', dynamicCodeDiagnostic(39)],
+  ['scenario 12 imported Module escape', 'import { Module } from "node:module"; f(Module)', escapedGlobalDiagnostic(41)],
+  ['scenario 12 nested module Module createRequire', 'import * as M from "module"; M.Module.createRequire(u)(name)', dynamicCodeDiagnostic(30)],
+  ['scenario 12 imported module _load', 'import { _load } from "node:module"', dynamicCodeDiagnostic(10)],
+  ['scenario 12 module re-export', 'export * from "module"', dynamicCodeDiagnostic(1)],
+  ['scenario 12 CommonJS module constructor _load', 'module.constructor._load("child_process")', dynamicCodeDiagnostic(1)],
+  ['scenario 12 CommonJS module parent require', 'module.parent.require("child_process")', dynamicCodeDiagnostic(1)],
+  ['scenario 12 require main require', 'require.main.require("child_process")', dynamicCodeDiagnostic(1)],
+  ['scenario 12 require cache', 'require.cache', dynamicCodeDiagnostic(1)],
+  ['scenario 13 getBuiltinModule instantiation', 'const g = process.getBuiltinModule<any>', dynamicCodeDiagnostic(11)],
+  ['scenario 4 globalThis.require child process', 'globalThis.require("child_process")', spawnDiagnostic(1)],
+  ['scenario 5 dynamic module-builtin member', 'import M from "module"; M[key]', dynamicCodeDiagnostic(25)],
+  ['scenario 5 dynamic CommonJS module member', 'module[key]', dynamicCodeDiagnostic(1)],
+  ['scenario 5 dynamic require member', 'require[key]', dynamicCodeDiagnostic(1)],
+  ['scenario 2 process rest destructuring', 'const { ...rest } = process', escapedGlobalDiagnostic(9)],
+  ['scenario 2 process computed destructuring', 'const { [key]: value } = process', escapedGlobalDiagnostic(9)],
+  ['scenario 2 module-builtin rest destructuring', 'import M from "module"; const { ...rest } = M', escapedGlobalDiagnostic(33)],
+  ['scenario 2 module-builtin computed destructuring', 'import M from "module"; const { [key]: target } = M', escapedGlobalDiagnostic(33)],
+  ['scenario 2 process default rest destructuring', 'import P from "node:process"; const { default: { ...rest } } = P', escapedGlobalDiagnostic(50)],
+  ['scenario 2 process default forbidden member destructuring', 'import P from "node:process"; const { default: { binding } } = P', dynamicCodeDiagnostic(50)],
+  ['scenario 2 module Module rest destructuring', 'import M from "node:module"; const { Module: { ...rest } } = M', escapedGlobalDiagnostic(48)],
+  ['scenario 2 module Module forbidden member destructuring', 'import M from "node:module"; const { Module: { _load } } = M', dynamicCodeDiagnostic(48)],
+] as const
+test.each(taskTwoErrorCases)('reports exact capability diagnostic and padded column: %s', (_name, source, expected) => {
+  expect(scanSourceContent(file, source)).toEqual([expected])
+  const padding = 1_048_577
+  const paddedLines = source.split('\n')
+  paddedLines[expected.line - 1] = `${' '.repeat(padding)}${paddedLines[expected.line - 1]!}`
+  expect(scanSourceContent(file, paddedLines.join('\n'))).toEqual([{
+    ...expected, column: expected.column + padding,
+  }])
+})
 const genericInstantiationCases = (['spawn', 'spawnSync', '$'] as const).map(member =>
   [`generic ${member} instantiation`, `const f = Bun.${member}<unknown>`, 1] as const)
 const extractionCases = [
@@ -215,8 +319,26 @@ const taskOneAllowedCases = [
   ['scenario 13 allowed Bun member instantiation', 'const f = (Bun as any).file<any>; f("x")'],
   ['scenario 13 Bun file heritage', 'class C extends Bun.file {}'],
   ['scenario 13 Bun spawn interface heritage', 'interface C extends Bun.spawn {}'],
+  ['scenario 7 entry 4', 'process.env.HOME; process.platform; const { env } = process; module.exports = {}'],
+  ['scenario 7 entry 6', 'Atomics.waitAsync(i, 0, 0); Atomics.notify(i, 0); Atomics.load(i, 0)'],
+  ['scenario 7 entry 7', 'import { createRequire } from "node:module"; createRequire(p).resolve("agent-browser/package.json"); require.resolve(name); require("./local.json"); import("./x.ts")'],
+  ['scenario 7 entry 11', 'typeof eval; typeof Function; typeof globalThis.eval; typeof self.Function'],
+  ['scenario 7 entry 12', 'typeof require'],
+  ['scenario 7 entry 13', 'import { createRequire } from "node:module"; typeof createRequire'],
+  ['scenario 7 entry 14', 'import { createRequire } from "node:module"; createRequire(import.meta.url).resolve("x")'],
+  ['scenario 8 capability process import shadowed by parameter', 'import process from "node:process"; function f(process) { return process }'],
+  ['scenario 8 capability loader import shadowed by parameter', 'import { getBuiltinModule } from "node:process"; function f(getBuiltinModule) { return getBuiltinModule }'],
+  ['scenario 12 safe control 1', 'import process from "node:process"; process.env.HOME; process.platform; const { cwd } = process'],
+  ['scenario 12 safe control 2', 'import { env, platform, cwd } from "node:process"; env.HOME; cwd()'],
+  ['scenario 12 safe control 3', 'export { env } from "node:process"'],
+  ['scenario 12 safe control 4', 'import { builtinModules, isBuiltin } from "node:module"; builtinModules.includes(x); isBuiltin(x)'],
+  ['scenario 12 safe control 5', 'import M from "node:module"; M.builtinModules; M.isBuiltin("fs")'],
+  ['scenario 12 safe control 6', 'import type P from "node:process"; type T = typeof P.getBuiltinModule'],
+  ['scenario 12 safe control 7', 'import * as P from "node:process"; P.default.env.HOME; P.default.platform; const { default: { cwd } } = P'],
+  ['scenario 12 safe control 8', 'import * as B from "bun"; B.default.file("x"); B.default.env.HOME'],
+  ['scenario 8 capability process import-equals shadowed by parameter', 'import P = require("node:process"); function f(P) { return P }'],
 ] as const
-test.each(taskOneAllowedCases)('keeps applicable task 1 controls allowed: %s', (_name, source) => {
+test.each(taskOneAllowedCases)('keeps specified capability controls allowed: %s', (_name, source) => {
   expect(scanSourceContent(file, source)).toEqual([])
 })
 test('reports exact positions, ordering, and padded source without truncation', () => {
@@ -231,6 +353,16 @@ test.each(['tsx', 'jsx', 'TSX', 'JSX'])('scans runtime expressions inside %s mar
   expect(diagnostics.map(d => [d.line, d.column, d.rule])).toEqual([[1, 20, 'process/no-direct-spawn']])
 })
 
+test('reports both non-literal host imports when the one-entry baseline is exceeded', () => {
+  const path = 'packages/daemon/src/plugins/host.ts'
+  const root = fixture({ [path]: 1 })
+  put(root, path, 'import(name)\nimport(other)')
+  expect(capture(root)).toEqual({
+    status: 1,
+    stdout: '',
+    stderr: `${path}:1:1 process/baseline-exceeded: found 2, baseline 1.\n${path}:1:1 process/no-dynamic-code: Load modules by literal specifier and run no generated code.\n${path}:2:1 process/no-dynamic-code: Load modules by literal specifier and run no generated code.\n`,
+  })
+})
 test('scans each production root and plugin entry without a manifest', () => {
   const root = fixture()
   for (const path of ['packages/daemon/src/a.ts', 'packages/git/src/a.mts', 'plugins/example/entry.ts']) put(root, path, 'Bun.spawn([])')
@@ -391,12 +523,13 @@ test('package scripts preserve every typecheck stage and insert the spawn guard'
 })
 test('repository fits its ceiling and CLI resolves root independently of cwd', () => {
   const root = resolve(import.meta.dir, '..')
-  const result = capture(root)
-  expect(result.status).toBe(0)
-  expect(result.stdout).toBe('')
-  expect(result.stderr.split('\n').filter(Boolean).every(line => line.includes(' process/baseline-stale:'))).toBe(true)
+  expect(capture(root)).toEqual({ status: 0, stdout: '', stderr: '' })
   const expected = capture(root, true)
-  expect(expected.status).toBe(0)
+  expect(expected).toEqual({
+    status: 0,
+    stdout: '{\n  "packages/daemon/src/plugins/host.ts": 1\n}\n',
+    stderr: '',
+  })
   const home = fixture()
   const cli = Bun.spawnSync([process.execPath, resolve(import.meta.dir, 'spawn-lint.ts'), '--print-baseline'], {
     cwd: resolve(import.meta.dir), env: isolatedEnv(home),
