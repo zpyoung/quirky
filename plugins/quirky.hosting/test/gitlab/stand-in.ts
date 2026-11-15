@@ -7,13 +7,13 @@ export type GitLabRequestRecord = {
   body: unknown
   authorization: string | null
 }
-
 export type GitLabServer = { port: number | undefined; url: URL; stop(closeActiveConnections?: boolean): void }
 export type GitLabTraceFixture = {
   chunks: Array<string | Uint8Array>
   status?: number
   headers?: Record<string, string>
 }
+export type GitLabRetryMode = 'drop-after-mutation' | 'server-error-after-mutation' | 'malformed-after-mutation' | 'output-limit-after-mutation'
 export type GitLabStandIn = {
   server: GitLabServer
   url: string
@@ -29,6 +29,7 @@ export type GitLabStandIn = {
   pipelines: Record<string, any>[]
   jobs: Record<string, any>[]
   traces: Map<string, GitLabTraceFixture>
+  retryModes: Map<string, GitLabRetryMode>
   responseBarriers: Map<string, () => Promise<void>>
   nextPages: Map<string, string>
   createMode: GitLabCreateMode
@@ -90,6 +91,7 @@ export function startGitLab(): GitLabStandIn {
   let pipelines: Record<string, any>[] = []
   let jobs: Record<string, any>[] = []
   let traces = new Map<string, GitLabTraceFixture>()
+  let retryModes = new Map<string, GitLabRetryMode>()
   let responseBarriers = new Map<string, () => Promise<void>>()
   let nextPages = new Map<string, string>()
   let createMode: GitLabCreateMode = 'normal'
@@ -132,6 +134,37 @@ export function startGitLab(): GitLabStandIn {
       }
     })
     return new Response(body, { status: trace.status ?? 200, headers })
+  }
+  function retryJob(jobId: string): Response {
+    const index = jobs.findIndex((value) => String(value.id) === jobId)
+    if (index < 0) return json({ message: 'Not Found' }, 404)
+    const original = jobs[index]!
+    const nextId = jobs.reduce((highest, value) => Math.max(highest, Number(value.id) || 0), 0) + 1
+    const originalPipeline = isRecord(original.pipeline) ? original.pipeline : {}
+    const retried = {
+      ...original,
+      id: nextId,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      started_at: null,
+      finished_at: null,
+      web_url: `${apiUrl}/group/sub/proj/-/jobs/${nextId}`,
+      pipeline: { ...originalPipeline, status: 'pending' }
+    }
+    jobs = [...jobs.slice(0, index), ...jobs.slice(index + 1), retried]
+
+    const mode = retryModes.get(jobId)
+    if (mode === 'drop-after-mutation') return lostResponse()
+    if (mode === 'server-error-after-mutation') return json({ message: 'fixture retry response unavailable' }, 500)
+    if (mode === 'malformed-after-mutation') return json({ id: nextId }, 201)
+    if (mode === 'output-limit-after-mutation') {
+      const body = new Uint8Array(4 * 1024 * 1024 + 1).fill(0x78)
+      return new Response(body, {
+        status: 201,
+        headers: { 'content-type': 'application/json', 'content-length': String(4 * 1024 * 1024 + 1) }
+      })
+    }
+    return json(retried, 201)
   }
 
   function lostResponse(): Response {
@@ -343,6 +376,9 @@ export function startGitLab(): GitLabStandIn {
       const pipeline = pipelines.find((value) => String(value.id) === parts[1])
       return pipeline ? json(pipeline) : json({ message: 'Not Found' }, 404)
     }
+    if (parts[0] === 'jobs' && parts.length === 3 && parts[2] === 'retry' && method === 'POST') {
+      return retryJob(parts[1]!)
+    }
     if (parts[0] === 'jobs' && parts.length === 3 && parts[2] === 'trace' && method === 'GET') {
       if (!jobs.some((job) => String(job.id) === parts[1])) return json({ message: 'Not Found' }, 404)
       return traceResponse(parts[1]!)
@@ -431,6 +467,8 @@ export function startGitLab(): GitLabStandIn {
     set pipelines(value: Record<string, any>[]) { pipelines = value },
     get jobs() { return jobs },
     set jobs(value: Record<string, any>[]) { jobs = value },
+    get retryModes() { return retryModes },
+    set retryModes(value: Map<string, GitLabRetryMode>) { retryModes = value },
     get traces() { return traces },
     set traces(value: Map<string, GitLabTraceFixture>) { traces = value },
     get responseBarriers() { return responseBarriers },

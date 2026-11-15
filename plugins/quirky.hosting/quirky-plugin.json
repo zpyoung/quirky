@@ -252,14 +252,14 @@
       },
       {
         "id": "checks",
-        "description": "List checks, legacy statuses, and approval-required suites for a pull request.",
+        "description": "List current GitLab merge-request pipeline checks (job IDs and pipeline IDs) or GitHub pull-request checks.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "noCache": {"type": "boolean"}}, "required": ["number"]},
         "result": {"type": "object", "properties": {"number": {"type": "integer"}, "headSha": {}, "rollup": {"type": "string", "enum": ["neutral", "pending", "success", "failure", "unknown"]}, "checks": {"type": "array", "items": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["check_run", "status", "approval"]}, "name": {"type": "string"}, "status": {"type": "string"}, "conclusion": {}, "url": {}, "checkRunId": {}, "workflowRunId": {}, "suiteId": {}, "required": {"description": "Whether this check is required for the pull request, or null when unavailable."}}}}, "partial": {"type": "boolean"}, "partialFailures": {"type": "array", "items": {"type": "string"}}}, "required": ["number", "rollup", "checks", "partial", "partialFailures"]}
       },
       {
         "id": "checkDetails",
-        "description": "Read check annotations, jobs, and bounded failed-job log tails.",
+        "description": "Read one current GitLab merge-request job and its bounded, redacted trace, or GitHub check details.",
         "readOnly": true,
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "checkRunId": {"type": "integer", "minimum": 1}, "workflowRunId": {"type": "integer", "minimum": 1}, "jobName": {"type": "string"}, "noCache": {"type": "boolean"}}, "required": ["number", "checkRunId"]},
         "result": {"type": "object", "properties": {"check": {"type": "object"}, "annotations": {"type": "array", "items": {"type": "object"}}, "jobs": {"type": "array", "items": {"type": "object"}}, "logTails": {"type": "array", "items": {"type": "object", "properties": {"jobId": {"type": "integer"}, "jobName": {"type": "string"}, "tail": {"type": "string"}}, "required": ["jobId", "jobName", "tail"]}}, "partialFailures": {"type": "array", "items": {"type": "string"}}, "truncated": {"type": "boolean"}}, "required": ["check", "annotations", "jobs", "logTails", "partialFailures", "truncated"]}
@@ -267,7 +267,7 @@
       {
         "id": "rerunChecks",
         "timeout": "30m",
-        "description": "Rerun all or failed-only GitHub Actions checks, reporting partial starts honestly.",
+        "description": "Explicitly retry individually verified GitLab jobs (failed/canceled only, or successful too) or GitHub Actions checks; report partial and uncertain starts.",
         "params": {"type": "object", "properties": {"worktree": {"type": "string"}, "number": {"type": "integer", "minimum": 1}, "prRepo": {"type": "object", "properties": {"host": {"type": "string"}, "owner": {"type": "string"}, "repo": {"type": "string"}}, "required": ["host", "owner", "repo"]}, "failedOnly": {"type": "boolean"}, "allowPartial": {"type": "boolean", "default": false, "description": "Allow failed-only reruns against an incomplete check list; omitted means false."}}, "required": ["number", "failedOnly"]},
         "result": {"type": "object", "properties": {"started": {"type": "integer"}, "targetCount": {"type": "integer"}, "completedSteps": {"type": "array", "items": {"type": "string"}}, "partial": {"type": "boolean", "description": "True when only the observed failed checks were rerun from a truncated list."}}, "required": ["started", "targetCount", "completedSteps"]}
       },

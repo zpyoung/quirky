@@ -14,13 +14,25 @@ afterEach(async () => {
 
 const reason = (value: string) => ({ data: { reason: value } })
 async function expectInputRejected(request: Promise<unknown>): Promise<void> {
-  const error = await request.then(() => undefined, value => value as { code?: number; data?: { reason?: string } })
-  expect(error !== undefined && (error.code === -32602 || error.data?.reason === 'invalid_input')).toBe(true)
+  const error = await request.then(() => undefined, value => value)
+  const rejected = error !== undefined && typeof error === 'object' && error !== null && (
+    ('code' in error && error.code === -32602)
+    || ('data' in error && typeof error.data === 'object' && error.data !== null && !Array.isArray(error.data)
+      && 'reason' in error.data && error.data.reason === 'invalid_input')
+  )
+  expect(rejected).toBe(true)
 }
 function errorReasonValue(error: unknown): unknown {
   if (typeof error !== 'object' || error === null || !('data' in error)) return undefined
   const data = error.data
-  return typeof data === 'object' && data !== null && 'reason' in data ? data.reason : undefined
+  return typeof data === 'object' && data !== null && !Array.isArray(data) && 'reason' in data
+    ? data.reason
+    : undefined
+}
+function errorDataValue(error: unknown, key: string): unknown {
+  if (typeof error !== 'object' || error === null || !('data' in error)) return undefined
+  const data = error.data
+  return typeof data === 'object' && data !== null && !Array.isArray(data) ? Reflect.get(data, key) : undefined
 }
 const projectPath = (world: GitLabWorld) => `/api/v4/projects/${encodeURIComponent(`${world.identity.owner}/${world.identity.repo}`)}`
 const mergeRequestPath = (world: GitLabWorld, number = 5) => `${projectPath(world)}/merge_requests/${number}`
@@ -578,7 +590,7 @@ test('detail rechecks local branch, head, detachment, origin, host allowlist, an
     ['branch', async (world) => { runGit(world, ['checkout', '-b', 'stale-target-branch']) }],
     ['head', async (world) => { runGit(world, ['commit', '--allow-empty', '-m', 'advance fixture head']) }],
     ['detached worktree', async (world) => { runGit(world, ['checkout', '--detach', 'HEAD']) }],
-    ['origin', async (world) => { runGit(world, ['remote', 'set-url', 'origin', 'https://gitlab.com/other/group/proj.git']) }],
+    ['origin', async (world) => { runGit(world, ['remote', 'set-url', 'origin', `http://${world.identity.host}/other/group/proj.git`]) }],
     ['host allowlist', async (world) => {
       await world.client.callAny('setting.set', { id: 'setting:quirky.hosting/gitlabHosts', value: 'gitlab.com' })
     }],
@@ -788,9 +800,8 @@ test('a removed and recreated worktree instance cannot inherit an in-flight deta
   expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
 }, 20_000)
 test('a new read on an already-unlisted GitLab host retains unsupported-provider fallback', async () => {
-  const world = await bootGitLab({
-    remote: 'https://gitlab.example.com/group/sub/proj.git'
-  })
+  const world = await boot({ ghSource: 'process.stdout.write("{}")' })
+  await world.client.callAny('setting.set', { id: 'setting:quirky.hosting/gitlabHosts', value: 'gitlab.com' })
   active = world
   for (const [method, params] of [
     ['checks', { number: 5 }],
@@ -800,7 +811,6 @@ test('a new read on an already-unlisted GitLab host retains unsupported-provider
   }
   expect(world.server.requests).toEqual([])
   expect(world.glabInvocations()).toEqual([])
-  expect(world.invocations()).toEqual([])
 })
 test('project and merge-request read failures preserve their provider reason', async () => {
   const world = await boot()
@@ -890,6 +900,34 @@ test('an aborted trace transport preserves selected details as a timeout', async
     globalThis.fetch = fetcher
   }
 }, 20_000)
+test('a retry deadline after provider mutation is uncertain and never resends the POST', async () => {
+  const fetcher = globalThis.fetch
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') throw new Error('Unexpected fixture host')
+    if (url.pathname.endsWith('/jobs/201/retry') && init?.method === 'POST') {
+      const response = await fetcher(input, init)
+      await response.arrayBuffer()
+      throw Object.assign(new Error('simulated retry deadline'), { name: 'AbortError' })
+    }
+    return fetcher(input, init)
+  }) as typeof fetch
+  try {
+    const world = await boot()
+    setupDefault(world)
+    const error = await world.call('rerunChecks', { number: 5, failedOnly: true }).catch((value) => value)
+    expect(errorReasonValue(error)).toBe('unknown_completion')
+    expect(errorDataValue(error, 'uncertain')).toBe(true)
+    expect(errorDataValue(error, 'startedCount')).toBe(0)
+    expect(errorDataValue(error, 'completedSteps')).toEqual([])
+    expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+      `${jobPath(world, 201)}/retry`
+    ])
+    expect(world.server.jobs.some((value) => value.id === 201)).toBe(false)
+  } finally {
+    globalThis.fetch = fetcher
+  }
+}, 20_000)
 
 test('project and merge-request numeric identity fields reject malformed provider schemas', async () => {
   const world = await boot()
@@ -915,4 +953,578 @@ test('project and merge-request numeric identity fields reject malformed provide
     diff_refs: { base_sha: 'b'.repeat(40), start_sha: 'c'.repeat(40), head_sha: head }
   })]
   await expect(world.call('checks', { number: 5, noCache: true })).rejects.toMatchObject(reason('schema_drift'))
+}, 20_000)
+
+test('explicit failed-only retry starts one verified job, emits changed, and invalidates cached checks', async () => {
+  const world = await boot()
+  setupDefault(world)
+  const events: unknown[] = []
+  world.client.onEvent((event) => events.push(event))
+  await world.client.callAny('events.subscribe', {})
+
+  const before = await world.call('checks', { number: 5 }) as { checks: Array<{ checkRunId: number | null }> }
+  expect(before.checks[0]?.checkRunId).toBe(201)
+  const result = await world.call('rerunChecks', {
+    number: 5,
+    failedOnly: true,
+    prRepo: {
+      host: world.identity.host.toUpperCase(),
+      owner: world.identity.owner.toUpperCase(),
+      repo: world.identity.repo.toUpperCase()
+    }
+  })
+  expect(result).toEqual({ started: 1, targetCount: 1, completedSteps: ['check:201'] })
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => ({
+    path: request.path, body: request.body
+  }))).toEqual([{ path: `${jobPath(world, 201)}/retry`, body: null }])
+  expect(events).toContainEqual(expect.objectContaining({
+    type: 'quirky.hosting/changed',
+    data: expect.objectContaining({ worktreeId: world.worktree, number: 5, operation: 'rerunChecks', completedSteps: ['check:201'] })
+  }))
+
+  const after = await world.call('checks', { number: 5 }) as {
+    checks: Array<{ name: string; checkRunId: number | null; status: string; conclusion: string | null }>
+  }
+  expect(after.checks).toEqual([
+    { kind: 'check_run', name: 'build', status: 'queued', conclusion: null, url: `${world.server.url}/group/sub/proj/-/jobs/203`, checkRunId: 203, workflowRunId: 90, suiteId: null, required: null },
+    { kind: 'check_run', name: 'lint', status: 'completed', conclusion: 'success', url: `${world.server.url}/group/sub/proj/-/jobs/202`, checkRunId: 202, workflowRunId: 90, suiteId: null, required: null }
+  ])
+}, 20_000)
+test('all retryable jobs use individual retry endpoints and never play or retry a pipeline', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  const jobs = [
+    job(world, 201, 'build', 'failed', head),
+    job(world, 202, 'lint', 'success', head),
+    job(world, 203, 'package', 'canceled', head),
+    job(world, 204, 'skipped', 'skipped', head),
+    job(world, 205, 'manual', 'manual', head),
+    job(world, 206, 'running', 'running', head)
+  ]
+  setCurrentPipeline(world, head, 90, 'failed', jobs)
+
+  const result = await world.call('rerunChecks', { number: 5, failedOnly: false })
+  expect(result).toEqual({
+    started: 3,
+    targetCount: 3,
+    completedSteps: ['check:201', 'check:202', 'check:203']
+  })
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => ({
+    path: request.path, body: request.body
+  }))).toEqual([201, 202, 203].map((id) => ({ path: `${jobPath(world, id)}/retry`, body: null })))
+  expect(world.server.requests.some((request) => request.path.includes('/play'))).toBe(false)
+  expect(world.server.requests.some((request) => request.path === `${projectPath(world)}/pipelines/90/retry`)).toBe(false)
+}, 20_000)
+
+test('failed-only retries allowed failures and canceled jobs but not successful jobs', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  const jobs = [
+    job(world, 201, 'allowed-build', 'failed', head, 90, { allow_failure: true }),
+    job(world, 202, 'lint', 'success', head),
+    job(world, 203, 'package', 'canceled', head),
+    job(world, 204, 'skipped', 'skipped', head)
+  ]
+  setCurrentPipeline(world, head, 90, 'failed', jobs)
+
+  expect(await world.call('rerunChecks', { number: 5, failedOnly: true })).toEqual({
+    started: 2,
+    targetCount: 2,
+    completedSteps: ['check:201', 'check:203']
+  })
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+    `${jobPath(world, 201)}/retry`,
+    `${jobPath(world, 203)}/retry`
+  ])
+}, 20_000)
+
+test('failed-only and all retries refuse when no jobs match their selectors', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  setCurrentPipeline(world, head, 90, 'failed', [
+    job(world, 204, 'skipped', 'skipped', head),
+    job(world, 205, 'manual', 'manual', head),
+    job(world, 206, 'running', 'running', head)
+  ])
+
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: true })).rejects.toMatchObject(reason('no_failed_checks'))
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: false })).rejects.toMatchObject(reason('no_rerunnable_checks'))
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+})
+test('retry validates numeric IDs, boolean flags, and repository pins before provider requests', async () => {
+  const world = await boot()
+  setupDefault(world)
+
+  await expectInputRejected(world.call('rerunChecks', { failedOnly: true }))
+  for (const number of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, '5', null]) {
+    await expectInputRejected(world.call('rerunChecks', { number, failedOnly: true }))
+  }
+  for (const failedOnly of [undefined, null, 1, 'true']) {
+    await expectInputRejected(world.call('rerunChecks', {
+      number: 5,
+      ...(failedOnly === undefined ? {} : { failedOnly })
+    }))
+  }
+  for (const allowPartial of [null, 1, 'true']) {
+    await expectInputRejected(world.call('rerunChecks', { number: 5, failedOnly: true, allowPartial }))
+  }
+  await expect(world.call('rerunChecks', {
+    number: 5,
+    failedOnly: true,
+    prRepo: { ...world.identity, repo: 'other' }
+  })).rejects.toMatchObject(reason('repository_mismatch'))
+  expect(world.server.requests).toEqual([])
+}, 20_000)
+test('allowPartial permits only failed-only job-limit truncation, never other incomplete targets', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  const jobs = Array.from({ length: 600 }, (_, index) => job(
+    world,
+    index === 0 ? 201 : index === 1 ? 202 : 1000 + index,
+    `job-${String(index).padStart(3, '0')}`,
+    index === 0 ? 'failed' : index === 1 ? 'canceled' : 'success',
+    head,
+    90,
+    index === 0 ? { allow_failure: true } : {}
+  ))
+  setCurrentPipeline(world, head, 90, 'failed', jobs)
+
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: true })).rejects.toMatchObject(reason('checks_incomplete'))
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: false, allowPartial: true })).rejects.toMatchObject(reason('checks_incomplete'))
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+
+  const partial = await world.call('rerunChecks', { number: 5, failedOnly: true, allowPartial: true })
+  expect(partial).toEqual({
+    started: 2,
+    targetCount: 2,
+    completedSteps: ['check:201', 'check:202'],
+    partial: true
+  })
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+    `${jobPath(world, 201)}/retry`,
+    `${jobPath(world, 202)}/retry`
+  ])
+
+  const current = pipeline(500, head)
+  world.server.requests.length = 0
+  world.server.mergeRequestPipelines.set('5', Array.from({ length: 600 }, (_, index) => pipeline(index + 1, head)))
+  world.server.pipelines = [current]
+  world.server.jobs = [job(world, 701, 'build', 'failed', head, 500)]
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: true, allowPartial: true })).rejects.toMatchObject(reason('checks_incomplete'))
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+  world.server.requests.length = 0
+  const foreignHead = 'e'.repeat(40)
+  const currentForForeignHead = pipeline(90, foreignHead)
+  world.server.mergeRequests = [mergeRequest({
+    sha: foreignHead,
+    diff_refs: { base_sha: 'b'.repeat(40), start_sha: 'c'.repeat(40), head_sha: foreignHead }
+  })]
+  world.server.mergeRequestPipelines.set('5', [currentForForeignHead])
+  world.server.pipelines = [currentForForeignHead]
+  world.server.jobs = [job(world, 702, 'build', 'failed', foreignHead, 90)]
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: true, allowPartial: true })).rejects.toMatchObject(reason('stale_head'))
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+}, 30_000)
+
+test('allowPartial does not bypass jobs read failures or malformed pagination', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  const jobs = Array.from({ length: 150 }, (_, index) => job(world, 2000 + index, `job-${index}`, index === 0 ? 'failed' : 'success', head))
+  setCurrentPipeline(world, head, 90, 'failed', jobs)
+  const jobsPath = pipelineJobsPath(world, 90)
+
+  world.server.failures.set(`GET ${jobsPath}?page=2`, { status: 500 })
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: true, allowPartial: true })).rejects.toMatchObject(reason('checks_incomplete'))
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+
+  world.server.requests.length = 0
+  world.server.failures.clear()
+  world.server.nextPages.set(`GET ${jobsPath}?page=1`, 'https://attacker.invalid/api/v4/jobs?page=2')
+  const malformed = await world.call('rerunChecks', { number: 5, failedOnly: true, allowPartial: true }).catch((error) => error)
+  expect(['checks_incomplete', 'schema_drift']).toContain(errorReasonValue(malformed))
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+  world.server.requests.length = 0
+  world.server.nextPages.clear()
+  world.server.jobs = [job(world, 201, 'build', 'failed', head, 90, { commit: { short_id: 'missing-full-sha' } })]
+  await expect(world.call('rerunChecks', { number: 5, failedOnly: true, allowPartial: true })).rejects.toMatchObject(reason('schema_drift'))
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+}, 20_000)
+test('the first retry refusal preserves 403 and 429 provider reasons with one attempted POST', async () => {
+  for (const [status, expectedReason] of [[403, 'permission_denied'], [429, 'rate_limited']] as const) {
+    const world = await boot()
+    setupDefault(world)
+    world.server.failures.set(`POST ${jobPath(world, 201)}/retry`, {
+      status,
+      headers: status === 429 ? { 'Retry-After': '60' } : undefined
+    })
+
+    const error = await world.call('rerunChecks', { number: 5, failedOnly: false }).catch((value) => value)
+    expect(errorReasonValue(error)).toBe(expectedReason)
+    if (status === 429) {
+      const retryDisabledUntil = errorDataValue(error, 'retryDisabledUntil')
+      expect(typeof retryDisabledUntil).toBe('number')
+      expect(typeof retryDisabledUntil === 'number' && retryDisabledUntil > Date.now()).toBe(true)
+    }
+    expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+      `${jobPath(world, 201)}/retry`
+    ])
+    expect(world.server.jobs.some((value) => value.id === 201)).toBe(true)
+    await world.cleanup()
+    active = undefined
+  }
+}, 30_000)
+
+test('a second-target refusal reports the exact confirmed partial start for two targets', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  setCurrentPipeline(world, head, 90, 'failed', [
+    job(world, 201, 'build', 'failed', head),
+    job(world, 202, 'lint', 'failed', head),
+  ])
+  const events: unknown[] = []
+  world.client.onEvent((event) => events.push(event))
+  await world.client.callAny('events.subscribe', {})
+  world.server.failures.set(`POST ${jobPath(world, 202)}/retry`, { status: 403 })
+
+  const error = await world.call('rerunChecks', { number: 5, failedOnly: false }).catch((value) => value)
+  expect(errorReasonValue(error)).toBe('partial_failure')
+  expect(errorDataValue(error, 'partial')).toBe(true)
+  expect(errorDataValue(error, 'startedCount')).toBe(1)
+  expect(errorDataValue(error, 'targetCount')).toBe(2)
+  expect(errorDataValue(error, 'completedSteps')).toEqual(['check:201'])
+  expect(errorDataValue(error, 'causeReason')).toBe('permission_denied')
+  expect(events).toContainEqual(expect.objectContaining({
+    type: 'quirky.hosting/changed',
+    data: expect.objectContaining({ number: 5, operation: 'rerunChecks', partial: true, completedSteps: ['check:201'] })
+  }))
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+    `${jobPath(world, 201)}/retry`,
+    `${jobPath(world, 202)}/retry`
+  ])
+}, 20_000)
+
+test('a post-mutation drop, server error, output cap, or malformed success is never retried', async () => {
+  const modes = ['drop-after-mutation', 'server-error-after-mutation', 'output-limit-after-mutation', 'malformed-after-mutation'] as const
+  for (const mode of modes) {
+    const world = await boot()
+    setupDefault(world)
+    const events: unknown[] = []
+    world.client.onEvent((event) => events.push(event))
+    await world.client.callAny('events.subscribe', {})
+    world.server.retryModes.set('201', mode)
+
+    const error = await world.call('rerunChecks', { number: 5, failedOnly: true }).catch((value) => value)
+    expect(errorReasonValue(error)).toBe('unknown_completion')
+    expect(errorDataValue(error, 'uncertain')).toBe(true)
+    expect(errorDataValue(error, 'startedCount')).toBe(0)
+    expect(errorDataValue(error, 'completedSteps')).toEqual([])
+    expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+      `${jobPath(world, 201)}/retry`
+    ])
+    expect(world.server.jobs.some((value) => value.id === 201)).toBe(false)
+    expect(world.server.jobs.some((value) => value.name === 'build' && value.status === 'pending')).toBe(true)
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'quirky.hosting/changed',
+      data: expect.objectContaining({ number: 5, operation: 'rerunChecks', uncertain: true })
+    }))
+    await world.cleanup()
+    active = undefined
+  }
+}, 60_000)
+
+test('an uncertain later POST reports only the prior confirmed start and stops before the next job', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  setCurrentPipeline(world, head, 90, 'failed', [
+    job(world, 201, 'build', 'failed', head),
+    job(world, 202, 'lint', 'failed', head),
+    job(world, 203, 'package', 'failed', head)
+  ])
+  world.server.retryModes.set('202', 'drop-after-mutation')
+  const events: unknown[] = []
+  world.client.onEvent((event) => events.push(event))
+  await world.client.callAny('events.subscribe', {})
+
+  const error = await world.call('rerunChecks', { number: 5, failedOnly: false }).catch((value) => value)
+  expect(errorReasonValue(error)).toBe('partial_failure')
+  expect(errorDataValue(error, 'partial')).toBe(true)
+  expect(errorDataValue(error, 'startedCount')).toBe(1)
+  expect(errorDataValue(error, 'targetCount')).toBe(3)
+  expect(errorDataValue(error, 'completedSteps')).toEqual(['check:201'])
+  expect(errorDataValue(error, 'uncertain')).toBe(true)
+  expect(errorDataValue(error, 'causeReason')).toBe('unknown_completion')
+  expect(errorDataValue(error, 'unknownTarget')).toBe('check:202')
+  expect(events).toContainEqual(expect.objectContaining({
+    type: 'quirky.hosting/changed',
+    data: expect.objectContaining({ number: 5, operation: 'rerunChecks', partial: true, uncertain: true })
+  }))
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+    `${jobPath(world, 201)}/retry`,
+    `${jobPath(world, 202)}/retry`
+  ])
+}, 20_000)
+test('retry refuses local, remote, MR-head, pipeline, host, and saved-config changes before the first POST', async () => {
+  const mutations: Array<[string, (world: GitLabWorld, head: string) => Promise<void>]> = [
+    ['local head', async (world) => { runGit(world, ['commit', '--allow-empty', '-m', 'advance retry head']) }],
+    ['branch', async (world) => { runGit(world, ['checkout', '-b', 'retry-stale-branch']) }],
+    ['origin', async (world) => { runGit(world, ['remote', 'set-url', 'origin', `http://${world.identity.host}/other/group/proj.git`]) }],
+    ['MR head', async (world) => {
+      const changed = 'd'.repeat(40)
+      world.server.mergeRequests = [mergeRequest({
+        sha: changed,
+        diff_refs: { base_sha: 'b'.repeat(40), start_sha: 'c'.repeat(40), head_sha: changed }
+      })]
+    }],
+    ['selected pipeline', async (world, head) => {
+      const newer = pipeline(91, head)
+      world.server.mergeRequestPipelines.set('5', [pipeline(90, head), newer])
+      world.server.pipelines = [pipeline(90, head), newer]
+    }],
+    ['host allowlist', async (world) => {
+      await world.client.callAny('setting.set', { id: 'setting:quirky.hosting/gitlabHosts', value: 'gitlab.com' })
+    }],
+    ['saved configuration', async (world) => {
+      runGit(world, ['remote', 'set-url', 'origin', 'https://github.com/test-owner/test-repo.git'])
+      await world.call('configure', { issueSourcePreference: 'upstream' })
+      runGit(world, ['remote', 'set-url', 'origin', `http://${world.identity.host}/group/sub/proj.git`])
+    }]
+  ]
+
+  for (const [label, mutate] of mutations) {
+    const world = await boot(label === 'saved configuration' ? { ghSource: 'process.stdout.write("{}")' } : {})
+    const head = localHead(world)
+    setCurrentPipeline(world, head, 90, 'failed', [
+      job(world, 201, 'build', 'failed', head),
+      job(world, 202, 'lint', 'failed', head)
+    ])
+    const barrier = holdResponse(world, 'GET', jobPath(world, 201))
+    const pending = world.call('rerunChecks', { number: 5, failedOnly: false }).then(
+      value => ({ kind: 'resolved' as const, value }),
+      error => ({ kind: 'rejected' as const, error })
+    )
+    try {
+      const requestStarted = await Promise.race([barrier.arrived.then(() => true), pending.then(() => false)])
+      expect(requestStarted).toBe(true)
+      await mutate(world, head)
+    } finally {
+      barrier.release()
+    }
+    const outcome = await pending
+    expect(outcome.kind).toBe('rejected')
+    if (outcome.kind === 'rejected') {
+      expect(['stale_head', 'stale_target']).toContain(errorReasonValue(outcome.error))
+    }
+    expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
+    await world.cleanup()
+    active = undefined
+  }
+}, 60_000)
+
+test('a target change between retry POSTs reports one confirmed start and does not retarget job two', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  setCurrentPipeline(world, head, 90, 'failed', [
+    job(world, 201, 'build', 'failed', head),
+    job(world, 202, 'lint', 'failed', head)
+  ])
+  const barrier = holdResponse(world, 'GET', jobPath(world, 202))
+  const pending = world.call('rerunChecks', { number: 5, failedOnly: false }).then(
+    value => ({ kind: 'resolved' as const, value }),
+    error => ({ kind: 'rejected' as const, error })
+  )
+  try {
+    const requestStarted = await Promise.race([barrier.arrived.then(() => true), pending.then(() => false)])
+    expect(requestStarted).toBe(true)
+    const changed = 'e'.repeat(40)
+    world.server.mergeRequests = [mergeRequest({
+      sha: changed,
+      diff_refs: { base_sha: 'b'.repeat(40), start_sha: 'c'.repeat(40), head_sha: changed }
+    })]
+  } finally {
+    barrier.release()
+  }
+
+  const outcome = await pending
+  expect(outcome.kind).toBe('rejected')
+  if (outcome.kind === 'rejected') {
+    expect(errorReasonValue(outcome.error)).toBe('partial_failure')
+    expect(errorDataValue(outcome.error, 'partial')).toBe(true)
+    expect(errorDataValue(outcome.error, 'startedCount')).toBe(1)
+    expect(errorDataValue(outcome.error, 'targetCount')).toBe(2)
+    expect(errorDataValue(outcome.error, 'completedSteps')).toEqual(['check:201'])
+  }
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+    `${jobPath(world, 201)}/retry`
+  ])
+}, 20_000)
+test('retry refuses a job that stops being retryable before the second POST', async () => {
+  const world = await boot()
+  const head = localHead(world)
+  setCurrentPipeline(world, head, 90, 'failed', [
+    job(world, 201, 'build', 'failed', head),
+    job(world, 202, 'lint', 'failed', head)
+  ])
+  const barrier = holdResponse(world, 'GET', jobPath(world, 202))
+  const pending = world.call('rerunChecks', { number: 5, failedOnly: false }).then(
+    value => ({ kind: 'resolved' as const, value }),
+    error => ({ kind: 'rejected' as const, error })
+  )
+  try {
+    const requestStarted = await Promise.race([barrier.arrived.then(() => true), pending.then(() => false)])
+    expect(requestStarted).toBe(true)
+    world.server.jobs = world.server.jobs.map((value) => value.id === 202 ? { ...value, status: 'manual' } : value)
+  } finally {
+    barrier.release()
+  }
+
+  const outcome = await pending
+  expect(outcome.kind).toBe('rejected')
+  if (outcome.kind === 'rejected') {
+    expect(errorReasonValue(outcome.error)).toBe('partial_failure')
+    expect(errorDataValue(outcome.error, 'startedCount')).toBe(1)
+    expect(errorDataValue(outcome.error, 'completedSteps')).toEqual(['check:201'])
+  }
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+    `${jobPath(world, 201)}/retry`
+  ])
+}, 20_000)
+test('retry reports a partial start when local head or selected pipeline changes between targets', async () => {
+  const mutations: Array<[(world: GitLabWorld, head: string) => void, string]> = [
+    [(world) => { runGit(world, ['commit', '--allow-empty', '-m', 'advance head between retry targets']) }, 'stale_head'],
+    [(world, head) => {
+      const current = pipeline(90, head)
+      const replacement = pipeline(91, head)
+      world.server.mergeRequestPipelines.set('5', [current, replacement])
+      world.server.pipelines = [current, replacement]
+    }, 'stale_target']
+  ]
+  for (const [mutate, staleReason] of mutations) {
+    const world = await boot()
+    const head = localHead(world)
+    setCurrentPipeline(world, head, 90, 'failed', [
+      job(world, 201, 'build', 'failed', head),
+      job(world, 202, 'lint', 'failed', head)
+    ])
+    const barrier = holdResponse(world, 'GET', jobPath(world, 202))
+    const pending = world.call('rerunChecks', { number: 5, failedOnly: false }).then(
+      value => ({ kind: 'resolved' as const, value }),
+      error => ({ kind: 'rejected' as const, error })
+    )
+    try {
+      const requestStarted = await Promise.race([barrier.arrived.then(() => true), pending.then(() => false)])
+      expect(requestStarted).toBe(true)
+      mutate(world, head)
+    } finally {
+      barrier.release()
+    }
+
+    const outcome = await pending
+    expect(outcome.kind).toBe('rejected')
+    if (outcome.kind === 'rejected') {
+      expect(errorReasonValue(outcome.error)).toBe('partial_failure')
+      expect(errorDataValue(outcome.error, 'startedCount')).toBe(1)
+      expect(errorDataValue(outcome.error, 'completedSteps')).toEqual(['check:201'])
+      expect(errorDataValue(outcome.error, 'causeReason')).toBe(staleReason)
+    }
+    expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+      `${jobPath(world, 201)}/retry`
+    ])
+    await world.cleanup()
+    active = undefined
+  }
+}, 40_000)
+test('generated CLI checks, details, and retry return the routed JSON envelopes with exact flags', async () => {
+  const world = await boot()
+  setupDefault(world)
+
+  const expectedChecks = await world.call('checks', { number: 5, noCache: true })
+  const checksCli = await world.cli([
+    '--json', 'hosting', 'checks',
+    '--worktree', world.worktree,
+    '--number', '5',
+    '--no-cache'
+  ])
+  expect(checksCli.code).toBe(0)
+  expect(JSON.parse(checksCli.stdout)).toEqual(expectedChecks)
+
+  const expectedDetails = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 })
+  const detailsCli = await world.cli([
+    '--json', 'hosting', 'check-details',
+    '--worktree', world.worktree,
+    '--number', '5',
+    '--check-run-id', '201',
+    '--workflow-run-id', '90'
+  ])
+  expect(detailsCli.code).toBe(0)
+  expect(JSON.parse(detailsCli.stdout)).toEqual(expectedDetails)
+
+  const retryCli = await world.cli([
+    '--json', 'hosting', 'rerun-checks',
+    '--worktree', world.worktree,
+    '--number', '5',
+    '--failed-only'
+  ])
+  expect(retryCli.code).toBe(0)
+  expect(JSON.parse(retryCli.stdout)).toEqual({
+    started: 1,
+    targetCount: 1,
+    completedSteps: ['check:201']
+  })
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => ({
+    path: request.path, body: request.body
+  }))).toEqual([{ path: `${jobPath(world, 201)}/retry`, body: null }])
+  expect(world.glabInvocations()).toEqual([])
+  expect(world.invocations()).toEqual([])
+}, 30_000)
+test('retry refuses a removed and recreated worktree instance before its first POST', async () => {
+  const world = await boot()
+  const original = await world.client.callAny('quirky.worktree/show', { worktree: world.worktree }) as { repoId: string }
+  runGit(world, ['branch', 'retry-instance-target'])
+  const createTarget = async (branch: string) => await world.client.callAny('quirky.worktree/create', {
+    repo: original.repoId,
+    name: 'retry-instance-target',
+    branch
+  }) as { worktree: { id: string; instanceId: string } }
+  const first = await createTarget('retry-instance-target')
+  const head = localHead(world)
+  const branch = 'retry-instance-target'
+  const current = pipeline(90, head, { ref: branch })
+  world.server.mergeRequests = [mergeRequest({
+    sha: head,
+    source_branch: branch,
+    diff_refs: { base_sha: 'b'.repeat(40), start_sha: 'c'.repeat(40), head_sha: head },
+    head_pipeline: { ...current }
+  })]
+  world.server.mergeRequestPipelines.set('5', [current])
+  world.server.pipelines = [current]
+  world.server.jobs = [job(world, 201, 'build', 'failed', head, 90, {
+    pipeline: { id: 90, project_id: 42, ref: branch, sha: head, status: 'failed' }
+  })]
+  const barrier = holdResponse(world, 'GET', jobPath(world, 201))
+  const pending = world.call('rerunChecks', {
+    worktree: first.worktree.id,
+    number: 5,
+    failedOnly: true
+  }).then(
+    value => ({ kind: 'resolved' as const, value }),
+    error => ({ kind: 'rejected' as const, error })
+  )
+  try {
+    const requestStarted = await Promise.race([barrier.arrived.then(() => true), pending.then(() => false)])
+    expect(requestStarted).toBe(true)
+    await world.client.callAny('quirky.worktree/remove', { worktree: first.worktree.id, yes: true })
+    runGit(world, ['branch', 'retry-instance-replacement'])
+    const replacement = await createTarget('retry-instance-replacement')
+    expect(replacement.worktree.id).toBe(first.worktree.id)
+    expect(replacement.worktree.instanceId).not.toBe(first.worktree.instanceId)
+  } finally {
+    barrier.release()
+  }
+
+  const outcome = await pending
+  expect(outcome.kind).toBe('rejected')
+  if (outcome.kind === 'rejected') {
+    expect(errorReasonValue(outcome.error)).toBe('stale_target')
+  }
+  expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
 }, 20_000)

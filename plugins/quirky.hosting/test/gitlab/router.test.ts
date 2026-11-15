@@ -27,7 +27,12 @@ test('subgroups route repository identity without credentials or requests, inclu
 })
 
 test('unlisted hosts retain the GitHub unsupported-provider error', async () => {
-  const w = await boot({ remote: 'https://gitlab.example.com/a/b.git', ghSource: 'process.stdout.write("{}")' })
+  const w = await boot({ ghSource: 'process.stdout.write("{}")' })
+  const remote = Bun.spawnSync(['git', 'remote', 'set-url', 'origin', `${w.server.url}/a/b.git`], {
+    cwd: w.repoPath, stdout: 'pipe', stderr: 'pipe'
+  })
+  if (remote.exitCode !== 0) throw new Error('Could not configure the unlisted-host fixture')
+  await w.client.callAny('setting.set', { id: 'setting:quirky.hosting/gitlabHosts', value: 'gitlab.com' })
   await expect(w.call('repository')).rejects.toMatchObject({ message: 'The origin remote is not GitHub.com or a host authenticated by gh.', ...reason('unsupported_provider') })
   expect(w.server.requests).toEqual([])
   expect(w.glabInvocations()).toEqual([])
@@ -44,7 +49,7 @@ test('GitHub repository keeps its existing shape and path', async () => {
 test('GitLab refuses every unimplemented method before auth or network; cachedReviews passes through', async () => {
   const w = await boot()
   const requests: Record<string, Record<string, unknown>> = {
-    merge: { number: 5, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct' }, autoMerge: { number: 5, action: 'enable', method: 'squash' }, createStacked: { title: 'x', parentNumber: 5 }, reviewers: { number: 5, action: 'add', logins: ['x'] }, reviewAssignees: { number: 5, action: 'add', logins: ['x'] }, reviewStack: { number: 5 }, pushRepository: { remote: 'origin' }, rerunChecks: { number: 5, failedOnly: true }, reaction: { number: 5, action: 'add', subjectId: 'x', content: '+1' }, fileViewed: { number: 5, path: 'x', viewed: true }, files: { number: 5 }, fileContents: { number: 5, path: 'x', side: 'head' }, rateLimit: {}, accounts: {}, configure: {}, configuration: {}
+    merge: { number: 5, expectedHead: 'a'.repeat(40), method: 'squash', action: 'direct' }, autoMerge: { number: 5, action: 'enable', method: 'squash' }, createStacked: { title: 'x', parentNumber: 5 }, reviewers: { number: 5, action: 'add', logins: ['x'] }, reviewAssignees: { number: 5, action: 'add', logins: ['x'] }, reviewStack: { number: 5 }, pushRepository: { remote: 'origin' }, reaction: { number: 5, action: 'add', subjectId: 'x', content: '+1' }, fileViewed: { number: 5, path: 'x', viewed: true }, files: { number: 5 }, fileContents: { number: 5, path: 'x', side: 'head' }, rateLimit: {}, accounts: {}, configure: {}, configuration: {}
   }
   for (const [method, params] of Object.entries(requests)) {
     await expect(w.call(method, { ...params, ...(method === 'merge' ? { yes: true } : {}) })).rejects.toMatchObject({ message: `GitLab hosting does not answer quirky.hosting/${method} yet.`, ...reason('unsupported_provider') })
@@ -182,7 +187,14 @@ test('a populated read cache never bypasses a mismatched pin or changes the orig
 
 test('unsupported methods retain unsupported-provider refusal even with a foreign pin', async () => {
   const w = await boot({ token: null })
-  await expect(w.call('rerunChecks', { number: 5, failedOnly: true, prRepo: { ...w.identity, repo: 'other' } })).rejects.toMatchObject(reason('unsupported_provider'))
+  await expect(w.call('merge', {
+    number: 5,
+    expectedHead: 'a'.repeat(40),
+    method: 'squash',
+    action: 'direct',
+    yes: true,
+    prRepo: { ...w.identity, repo: 'other' }
+  })).rejects.toMatchObject(reason('unsupported_provider'))
   expect(w.server.requests).toEqual([])
   expect(w.glabInvocations()).toEqual([])
 })

@@ -31,8 +31,14 @@ type Target = {
   partialFailures: string[]
   incomplete: boolean
 }
-type Enumerated<T> = { items: T[]; truncated: boolean; unavailable: boolean }
-type JobList = { jobs: Job[]; partialFailures: string[] }
+type Enumerated<T> = { items: T[]; truncated: boolean; unavailable: boolean; malformedPagination: boolean }
+type JobList = {
+  jobs: Job[]
+  partialFailures: string[]
+  truncated: boolean
+  unavailable: boolean
+  malformedPagination: boolean
+}
 type LocalFence = {
   worktree: { id: string; instanceId: string; repoId: string; path: string }
   branch: string
@@ -59,6 +65,14 @@ const HARD_READ_REASONS: Record<string, true> = {
   stale_head: true,
   stale_target: true,
   foreign_target: true
+}
+const KNOWN_RETRY_REFUSALS: Record<string, true> = {
+  auth_required: true,
+  permission_denied: true,
+  rate_limited: true,
+  validation_error: true,
+  not_found: true,
+  already_exists: true
 }
 
 export function createGitLabCheckMethods(env: HostingEnv, client: GitLabClient): GitLabHandlers {
@@ -167,7 +181,8 @@ export function createGitLabCheckMethods(env: HostingEnv, client: GitLabClient):
         partialFailures,
         truncated
       }
-    }
+    },
+    rerunChecks: (scope, params, caller) => rerunChecks(env, client, scope, params, caller),
   }
 }
 
@@ -284,6 +299,7 @@ async function enumeratePages<T>(
   const seenPages = new Set<number>([1])
   let page = 1
   let truncated = false
+  let malformedPagination = false
   for (let index = 0; index < MAX_PAGES; index += 1) {
     let response: GitLabResponse
     try {
@@ -293,40 +309,49 @@ async function enumeratePages<T>(
       await afterProviderRead?.()
     } catch (error) {
       if (isHardReadError(error)) throw error
-      return { items, truncated, unavailable: true }
+      return { items, truncated, unavailable: true, malformedPagination }
     }
     if (!Array.isArray(response.json) || response.json.length > PAGE_SIZE) schemaDrift(env)
     for (const value of response.json) items.push(parseItem(value))
 
     if (response.nextPageInvalid) {
       truncated = true
+      malformedPagination = true
       break
     }
     const nextPage = response.nextPage
     if (nextPage === null) break
-    if (nextPage <= page || seenPages.has(nextPage) || index === MAX_PAGES - 1) {
+    if (nextPage <= page || seenPages.has(nextPage)) {
+      truncated = true
+      malformedPagination = true
+      break
+    }
+    if (index === MAX_PAGES - 1) {
       truncated = true
       break
     }
     seenPages.add(nextPage)
     page = nextPage
   }
-  return { items, truncated, unavailable: false }
+  return { items, truncated, unavailable: false, malformedPagination }
 }
 
 async function loadJobs(
   env: HostingEnv,
   client: GitLabClient,
   scope: GitLabScope,
-  target: Target
+  target: Target,
+  afterProviderRead?: () => Promise<void>
 ): Promise<JobList> {
   const pipeline = target.pipeline
-  if (pipeline === null) return { jobs: [], partialFailures: [] }
+  if (pipeline === null) {
+    return { jobs: [], partialFailures: [], truncated: false, unavailable: false, malformedPagination: false }
+  }
   const rows = new Map<number, Job>()
   const enumeration = await enumeratePages(env, client, scope,
     `${projectPath(scope)}/pipelines/${pipeline.id}/jobs`,
     { per_page: PAGE_SIZE, include_retried: false },
-    (value) => parseListedJob(env, value, target, pipeline.id))
+    (value) => parseListedJob(env, value, target, pipeline.id), afterProviderRead)
   for (const job of enumeration.items) {
     const previous = rows.get(job.id)
     if (previous !== undefined && !sameJobIdentity(previous, job)) schemaDrift(env)
@@ -335,8 +360,230 @@ async function loadJobs(
   const partialFailures: string[] = []
   if (enumeration.unavailable) partialFailures.push('jobs_unavailable')
   if (enumeration.truncated) partialFailures.push('jobs_truncated')
-  return { jobs: [...rows.values()], partialFailures }
+  return {
+    jobs: [...rows.values()],
+    partialFailures,
+    truncated: enumeration.truncated,
+    unavailable: enumeration.unavailable,
+    malformedPagination: enumeration.malformedPagination
+  }
 }
+async function rerunChecks(
+  env: HostingEnv,
+  client: GitLabClient,
+  scope: GitLabScope,
+  params: Record<string, unknown>,
+  caller?: PluginCaller
+): Promise<Record<string, unknown>> {
+  const number = requiredPositive(env, params.number, 'A positive merge request number is required.')
+  if (typeof params.failedOnly !== 'boolean') {
+    throw env.invalid('invalid_input', 'failedOnly must be a boolean.')
+  }
+  if (params.allowPartial !== undefined && typeof params.allowPartial !== 'boolean') {
+    throw env.invalid('invalid_input', 'allowPartial must be a boolean.')
+  }
+  if (caller === undefined) throw env.invalid('invalid_input', 'A caller is required to verify this worktree.')
+  const failedOnly = params.failedOnly
+  const allowPartial = params.allowPartial === true
+  const local = await readLocalFence(env, scope, caller)
+  const afterProviderRead = () => assertLocalFence(env, scope, caller, local)
+  const target = await loadTarget(env, client, scope, number, afterProviderRead, true)
+  requireCompleteTarget(env, target)
+  assertLocalMatchesTarget(env, local, target)
+  if (target.pipeline === null) {
+    await assertNoCurrentPipeline(env, client, scope, number, target, caller, local)
+    throw noRetryTargets(env, failedOnly)
+  }
+
+  const jobs = await loadJobs(env, client, scope, target, afterProviderRead)
+  if (jobs.unavailable || jobs.malformedPagination
+    || (jobs.truncated && !(failedOnly && allowPartial))) {
+    throw incompleteChecks(env)
+  }
+  const partial = jobs.truncated
+  const targets = jobs.jobs
+    .filter((job) => isRetryableJob(job, failedOnly))
+    .sort((left, right) => left.id - right.id)
+  if (targets.length === 0) {
+    await assertCurrentTarget(env, client, scope, number, target, caller, local)
+    throw noRetryTargets(env, failedOnly)
+  }
+
+  const targetCount = targets.length
+  const completedSteps: string[] = []
+  const retriedJobIds = new Set(jobs.jobs.map((job) => job.id))
+  for (const selectedJob of targets) {
+    let currentJob: Job
+    try {
+      currentJob = await prepareRetryJob(env, client, scope, number, target, selectedJob, failedOnly, caller, local)
+      await assertLocalFence(env, scope, caller, local)
+    } catch (error) {
+      if (completedSteps.length === 0) throw error
+      return throwRetryPartial(env, scope, number, targetCount, completedSteps,
+        errorReason(error) ?? 'checks_incomplete')
+    }
+
+    let retriedJob: Job
+    try {
+      const response = await client.request(scope, {
+        method: 'POST', path: `${projectPath(scope)}/jobs/${currentJob.id}/retry`
+      })
+      retriedJob = parseRetriedJob(env, response.json, currentJob, target)
+      if (retriedJobIds.has(retriedJob.id)) schemaDrift(env)
+    } catch (error) {
+      if (isKnownRetryRefusal(error)) {
+        if (completedSteps.length === 0) throw error
+        return throwRetryPartial(env, scope, number, targetCount, completedSteps,
+          errorReason(error) ?? 'server_error')
+      }
+      return throwUnknownRetry(env, scope, number, targetCount, completedSteps, currentJob.id)
+    }
+    retriedJobIds.add(retriedJob.id)
+    completedSteps.push(`check:${currentJob.id}`)
+  }
+
+  env.changed(scope, {
+    number,
+    operation: 'rerunChecks',
+    completedSteps,
+    ...(partial ? { partial: true, targetCount } : {})
+  })
+  return {
+    started: completedSteps.length,
+    targetCount,
+    completedSteps,
+    ...(partial ? { partial: true } : {})
+  }
+}
+async function assertNoCurrentPipeline(
+  env: HostingEnv,
+  client: GitLabClient,
+  scope: GitLabScope,
+  number: number,
+  expected: Target,
+  caller: PluginCaller,
+  local: LocalFence
+): Promise<void> {
+  await assertLocalFence(env, scope, caller, local)
+  const current = await loadTarget(env, client, scope, number, () => assertLocalFence(env, scope, caller, local), true)
+  if (current.headSha !== expected.headSha || current.sourceBranch !== expected.sourceBranch) {
+    throw gitlabError(env, 'stale_head', 'The merge request changed while its retry targets were loading.')
+  }
+  requireCompleteTarget(env, current)
+  if (current.projectId !== expected.projectId || current.pipeline !== null) {
+    throw gitlabError(env, 'stale_target', 'The current merge request pipeline changed while its retry targets were loading.')
+  }
+  await assertLocalFence(env, scope, caller, local)
+  assertLocalMatchesTarget(env, local, current)
+}
+
+
+async function prepareRetryJob(
+  env: HostingEnv,
+  client: GitLabClient,
+  scope: GitLabScope,
+  number: number,
+  target: Target,
+  selectedJob: Job,
+  failedOnly: boolean,
+  caller: PluginCaller,
+  local: LocalFence
+): Promise<Job> {
+  await assertCurrentTarget(env, client, scope, number, target, caller, local)
+  const response = await client.request(scope, {
+    method: 'GET', path: `${projectPath(scope)}/jobs/${selectedJob.id}`
+  })
+  await assertLocalFence(env, scope, caller, local)
+  const current = parseDetailJob(env, response.json, selectedJob.id, target)
+  if (!sameJobIdentity(selectedJob, current) || !isRetryableJob(current, failedOnly)) {
+    throw gitlabError(env, 'stale_target', 'The GitLab job is no longer a retryable member of the selected pipeline.')
+  }
+  await assertCurrentTarget(env, client, scope, number, target, caller, local)
+  return current
+}
+
+function parseRetriedJob(env: HostingEnv, value: unknown, selectedJob: Job, target: Target): Job {
+  if (!isRecord(value)) schemaDrift(env)
+  const retried = parseJobIdentity(env, value)
+  if (target.pipeline === null || retried.id === selectedJob.id || retried.name !== selectedJob.name
+    || retried.pipelineId !== target.pipeline.id || retried.projectId !== target.projectId
+    || !sameSha(retried.sha, target.headSha) || !sameSha(retried.commitSha, target.headSha)
+    || retried.ref !== target.sourceBranch) schemaDrift(env)
+  return retried
+}
+
+function isRetryableJob(job: Job, failedOnly: boolean): boolean {
+  if (job.status === 'failed' || job.status === 'canceled') return true
+  return !failedOnly && job.status === 'success'
+}
+
+function noRetryTargets(env: HostingEnv, failedOnly: boolean): Error {
+  return env.invalid(
+    failedOnly ? 'no_failed_checks' : 'no_rerunnable_checks',
+    failedOnly ? 'No failed or canceled GitLab jobs are available to retry.' : 'No GitLab jobs are available to retry.'
+  )
+}
+
+function incompleteChecks(env: HostingEnv): Error {
+  return gitlabError(env, 'checks_incomplete', 'GitLab job retry targets could not be completely verified.')
+}
+
+function throwRetryPartial(
+  env: HostingEnv,
+  scope: GitLabScope,
+  number: number,
+  targetCount: number,
+  completedSteps: string[],
+  causeReason: string
+): never {
+  const data = {
+    partial: true,
+    startedCount: completedSteps.length,
+    targetCount,
+    completedSteps,
+    causeReason
+  }
+  env.changed(scope, { number, operation: 'rerunChecks', ...data })
+  throw gitlabError(env, 'partial_failure', 'Some GitLab jobs were retried. Refresh checks before retrying.', data)
+}
+
+function throwUnknownRetry(
+  env: HostingEnv,
+  scope: GitLabScope,
+  number: number,
+  targetCount: number,
+  completedSteps: string[],
+  jobId: number
+): never {
+  const unknownTarget = `check:${jobId}`
+  if (completedSteps.length === 0) {
+    const data = {
+      uncertain: true,
+      startedCount: 0,
+      targetCount,
+      completedSteps
+    }
+    env.changed(scope, { number, operation: 'rerunChecks', ...data, unknownTarget })
+    throw gitlabError(env, 'unknown_completion', 'GitLab may have retried this job. Refresh checks before retrying.', data)
+  }
+  const data = {
+    partial: true,
+    startedCount: completedSteps.length,
+    targetCount,
+    completedSteps,
+    uncertain: true,
+    causeReason: 'unknown_completion',
+    unknownTarget
+  }
+  env.changed(scope, { number, operation: 'rerunChecks', ...data })
+  throw gitlabError(env, 'partial_failure', 'Some GitLab jobs were retried; the latest job result is unknown. Refresh checks before retrying.', data)
+}
+
+function isKnownRetryRefusal(error: unknown): boolean {
+  const reason = errorReason(error)
+  return reason !== null && KNOWN_RETRY_REFUSALS[reason] === true
+}
+
 
 function parseProject(env: HostingEnv, value: unknown, scope: GitLabScope): Project {
   if (!isRecord(value) || !positive(value.id)
