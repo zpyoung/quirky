@@ -1966,7 +1966,9 @@ function ProjectRoadmap(props: {
           const to = placement.to.toISOString().slice(0, 10)
           return <div key={placement.itemId} className="quirky-tasks-project-roadmap__grid quirky-tasks-project-roadmap__row">
             <div className="quirky-tasks-project-roadmap__item">
-              <Button type="button" className="quirky-tasks-project-roadmap__item-title" onClick={item === undefined ? undefined : () => props.onOpen(item)}>{placement.title}</Button>
+              {item
+                ? <Button type="button" className="quirky-tasks-project-roadmap__item-title" onClick={() => props.onOpen(item)}>{placement.title}</Button>
+                : <Button type="button" className="quirky-tasks-project-roadmap__item-title" disabled>{placement.title}</Button>}
               {item && props.actions(item)}
             </div>
             <div className="quirky-tasks-project-roadmap__timeline">
