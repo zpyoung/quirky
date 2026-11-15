@@ -138,6 +138,7 @@ export function throwIfAborted(signal: AbortSignal): void {
 export function abortable<T>(promise: PromiseLike<T>, signal: AbortSignal): Promise<T> {
   const { promise: result, resolve, reject } = Promise.withResolvers<T>()
   if (signal.aborted) {
+    void Promise.resolve(promise).catch(() => undefined)
     reject(createAbortError())
     return result
   }

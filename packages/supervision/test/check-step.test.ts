@@ -86,6 +86,51 @@ test('abort, explicit cancellation, and repeated disposal coalesce for one activ
   await flush()
 })
 
+test('cancelCheck sends one cancellation for an active check by itself', async () => {
+  const runReply = deferred<unknown>()
+  const calls: { method: string; params?: Record<string, unknown> }[] = []
+  const evidence = { checkId: input.checkId, ran: true, exitCode: 0 }
+  const engine = engineFor(async (method, params) => {
+    calls.push({ method, params })
+    if (method === 'quirky.checks/run') return runReply.promise
+    if (method === 'quirky.checks/cancel') return { cancelled: true }
+    throw new Error(`unexpected RPC ${method}`)
+  })
+
+  const running = engine.runCheck(input)
+  await flush()
+  await engine.cancelCheck(input.checkId)
+  expect(calls.filter((call) => call.method === 'quirky.checks/cancel')).toEqual([
+    { method: 'quirky.checks/cancel', params: { checkId: input.checkId } }
+  ])
+
+  runReply.resolve(evidence)
+  expect(await running).toBe(evidence)
+})
+
+test('disposing sends one cancellation for an active check by itself', async () => {
+  const runReply = deferred<unknown>()
+  const calls: { method: string; params?: Record<string, unknown> }[] = []
+  const evidence = { checkId: input.checkId, ran: true, exitCode: 0 }
+  const engine = engineFor(async (method, params) => {
+    calls.push({ method, params })
+    if (method === 'quirky.checks/run') return runReply.promise
+    if (method === 'quirky.checks/cancel') return { cancelled: true }
+    throw new Error(`unexpected RPC ${method}`)
+  })
+
+  const running = engine.runCheck(input)
+  await flush()
+  engine.dispose()
+  await flush()
+  expect(calls.filter((call) => call.method === 'quirky.checks/cancel')).toEqual([
+    { method: 'quirky.checks/cancel', params: { checkId: input.checkId } }
+  ])
+
+  runReply.resolve(evidence)
+  expect(await running).toBe(evidence)
+})
+
 test('abort before runCheck starts issues neither a run nor a cancellation request', async () => {
   const calls: string[] = []
   const engine = engineFor(async (method) => { calls.push(method); return {} })

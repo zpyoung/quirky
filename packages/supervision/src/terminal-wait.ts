@@ -133,6 +133,7 @@ export function createTerminalWait(
           }),
           signal
         )
+        throwIfAborted(signal)
         const result = validateReply(raw)
         last = result
         consumedMs = Math.max(consumedMs, Math.max(0, clock.now() - startedAt))
@@ -140,7 +141,11 @@ export function createTerminalWait(
         if (result.status === 'matched' && input.until.includes(result.state)) {
           const accepted = input.accept === undefined
             ? true
-            : await abortable(Promise.resolve().then(() => input.accept!(result)), signal)
+            : await abortable(Promise.resolve().then(() => {
+              throwIfAborted(signal)
+              return input.accept!(result)
+            }), signal)
+          throwIfAborted(signal)
           if (accepted) return result
         }
 

@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test'
+import { abortable } from '../src/contracts'
 import { createSupervision } from '../src/index'
 import type { SupervisionContext, SupervisionEngine, TerminalWaitResult } from '../src/index'
 
@@ -175,6 +176,30 @@ test('abort stops a held terminal RPC promptly and ignores its late reply', asyn
   expect(timers.pending()).toBe(0)
 })
 
+test('abort after a terminal RPC resolves prevents accepting its reply', async () => {
+  const controller = new AbortController()
+  let accepts = 0
+  const reply = {
+    then(resolve: (value: unknown) => void) {
+      resolve(matched('idle'))
+      // This runs after the RPC reply reaction but before waitTerminal resumes.
+      queueMicrotask(() => controller.abort())
+    }
+  } as unknown as Promise<unknown>
+  const engine = engineFor(() => reply)
+
+  const waiting = engine.waitTerminal({
+    session: 's1', until: ['idle'], timeoutMs: 500, signal: controller.signal,
+    accept: () => {
+      accepts++
+      throw new Error('must not accept an aborted reply')
+    }
+  })
+
+  await rejectWith(waiting, { name: 'AbortError' })
+  expect(accepts).toBe(0)
+})
+
 test('an already-aborted wait and invalid local timeout arguments make no RPC', async () => {
   const calls: string[] = []
   const engine = engineFor(async (method) => { calls.push(method); return matched('idle') })
@@ -190,6 +215,23 @@ test('an already-aborted wait and invalid local timeout arguments make no RPC', 
     await expect(engine.waitTerminal({ session: 's1', until: ['idle'], timeoutMs: timeoutMs!, ...rest })).rejects.toBeInstanceOf(Error)
   }
   expect(calls).toEqual([])
+})
+
+test('abortable consumes a rejected promise when the signal is already aborted', async () => {
+  const controller = new AbortController()
+  controller.abort()
+  const rejected = Promise.reject(new Error('already rejected'))
+  void rejected.catch(() => undefined)
+  let consumed = false
+  const trackedRejected: PromiseLike<never> = {
+    then(onfulfilled, onrejected) {
+      consumed = true
+      return rejected.then(onfulfilled, onrejected)
+    }
+  }
+
+  await rejectWith(abortable(trackedRejected, controller.signal), { name: 'AbortError' })
+  expect(consumed).toBe(true)
 })
 
 test('malformed terminal replies reject as invalid-response while transport errors keep their identity', async () => {
