@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, EmptyState, IconButton, ListRow, SectionHeader } from '@quirky/ui'
+import { Badge, Button, EmptyState, IconButton, InlineError, ListRow, NoticeLine, SectionHeader } from '@quirky/ui'
 import type { GitConflictKind, GitStatus } from '@quirky/protocol'
 import { DIFF_VIEW_ID, PANEL_ID, diffViewKey, type ReviewSnapshot } from '../shared/view-input'
 import { messageOf, POLL_MS, useRefreshTriggers } from './data'
 import { openHostedDiff } from './hosted-tabs'
-import { ErrorNotice } from './Fallbacks'
+import { requestViewControl, useViewControl, viewControlGeneration, viewTarget } from './view-control'
 import type { ModeProps } from './types'
 
 /** How a snapshotted conflict stands now. */
@@ -13,6 +13,10 @@ export type ReviewState = 'unresolved' | 'resolved' | 'gone'
 type Row = { path: string; kind: GitConflictKind; state: ReviewState }
 
 const BADGE: Record<ReviewState, string> = { unresolved: 'Unresolved', resolved: 'Resolved', gone: 'Gone' }
+const noControlData = (data: Record<string, unknown> | undefined): boolean =>
+  data === undefined || Object.keys(data).length === 0
+const pathControlData = (data: Record<string, unknown> | undefined): data is { path: string } =>
+  data !== undefined && Object.keys(data).length === 1 && typeof data.path === 'string'
 
 type Status = Pick<GitStatus, 'entries'>
 
@@ -53,11 +57,22 @@ export async function reviewStates(
  */
 export function ConflictReview({ context, input, report, bind, close }: ModeProps) {
   const worktree = input.worktree
+  const [controlGeneration] = useState(viewControlGeneration)
+  const controlTarget = viewTarget('conflicts', {
+    worktree,
+    ...(input.tabId === undefined ? {} : { tabId: input.tabId })
+  })
   const [rows, setRows] = useState<Row[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [capturedAt, setCapturedAt] = useState<Date | null>(input.review ? new Date(input.review.capturedAt) : null)
   const snapshot = useRef<ReviewSnapshot['entries'] | null>(input.review?.entries ?? null)
   const inFlight = useRef(false)
+  const active = useRef(true)
+  const openingPaths = useRef(new Set<string>())
+  useEffect(() => {
+    active.current = true
+    return () => { active.current = false }
+  }, [])
 
   const readStatus = async () => (await context.call('quirky.git/status', { worktree })) as GitStatus
 
@@ -75,13 +90,17 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
     inFlight.current = true
     try {
       const status = await readStatus()
+      if (!active.current) return
       if (snapshot.current === null) {
         snapshot.current = snapshotOf(status)
         setCapturedAt(new Date())
       }
-      setRows(await reviewStates(snapshot.current, status, onDisk))
+      const nextRows = await reviewStates(snapshot.current, status, onDisk)
+      if (!active.current) return
+      setRows(nextRows)
       setError(null)
     } catch (e) {
+      if (!active.current) return
       setError(messageOf(e))
     } finally {
       inFlight.current = false
@@ -110,9 +129,29 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
         worktree, mode: 'conflict-file', path, groupId: input.groupId, preview: false, review
       })
     } catch (error) {
-      context.toast('Could not open diff', messageOf(error))
+      if (active.current) context.toast('Could not open diff', messageOf(error), { kind: 'error' })
     }
   }
+
+  const actions = ['close']
+  if (rows?.some((row) => row.state === 'unresolved')) actions.push('open')
+  const postControl = (action: string, data?: Record<string, unknown>) => {
+    void requestViewControl(context, { target: controlTarget, generation: controlGeneration, action, ...(data === undefined ? {} : { data }) })
+  }
+  useViewControl(context, { target: controlTarget, generation: controlGeneration, actions }, ({ action, data }) => {
+    if (action === 'close') {
+      if (!noControlData(data)) return false
+      close()
+      return true
+    }
+    if (action !== 'open' || !pathControlData(data)) return false
+    const path = data.path
+    if (!rows?.some((row) => row.path === path && row.state === 'unresolved') || openingPaths.current.has(path)) return false
+    openingPaths.current.add(path)
+    void openConflictFile(path).finally(() => openingPaths.current.delete(path))
+    return true
+  })
+
 
   useEffect(() => {
     void refresh()
@@ -147,7 +186,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
         actions={
           <div className="ui-cluster">
             <Button onClick={() => void refresh()}>Refresh</Button>
-            <IconButton label="Close" title="Close" onClick={close}>×</IconButton>
+            <IconButton label="Close" title="Close" onClick={() => postControl('close')}>×</IconButton>
           </div>
         }
       />
@@ -165,7 +204,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
                     <Badge tone={row.state === 'unresolved' ? 'needs-you' : row.state === 'resolved' ? 'accent' : 'neutral'}>{BADGE[row.state]}</Badge>
                     {row.state === 'unresolved' && (
                       <Button
-                        onClick={() => void openConflictFile(row.path)}
+                        onClick={() => postControl('open', { path: row.path })}
                       >
                         Open
                       </Button>
@@ -177,8 +216,13 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
           ))}
         </nav>
         <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto', padding: 'var(--ui-space-12)' }}>
-          {error !== null && <ErrorNotice message={error} subject="conflicts" />}
-          {rows === null && error === null && <p className="ui-text-muted">Loading conflicts...</p>}
+          {error !== null && (
+            <InlineError
+              message={`Error loading conflicts: ${error}`}
+              action={{ label: 'Retry', onAction: () => void refresh() }}
+            />
+          )}
+          {rows === null && error === null && <div role="status"><NoticeLine>Loading conflicts...</NoticeLine></div>}
           {rows !== null && !allResolved && (
             <p>
               {`${unresolved} unresolved conflict${unresolved === 1 ? '' : 's'}`}
@@ -191,7 +235,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
               <p>This review snapshot no longer has any live unresolved conflicts.</p>
               <div className="ui-cluster">
                 <Button onClick={() => context.togglePanel(PANEL_ID, true)}>Source Control</Button>
-                <Button onClick={close}>Dismiss</Button>
+                <Button onClick={() => postControl('close')}>Dismiss</Button>
               </div>
             </section>
           )}
