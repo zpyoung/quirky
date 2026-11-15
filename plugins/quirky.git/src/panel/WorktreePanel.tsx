@@ -413,26 +413,44 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     return true
   }
   const controlUnavailable = 'The source control action is no longer available.'
-  const deliverLocalControl = async function deliverLocalControl(control: GitUiControl, current: () => boolean): Promise<void> {
+  const deliverLocalControl = async function deliverLocalControl(control: GitUiControl, current: () => boolean): Promise<boolean> {
     try {
       const result = await requestGitUiControl(context, control)
       if (!result.delivered) throw new Error(controlUnavailable)
+      return true
     } catch (error) {
       if (current()) context.toast('Could not run Source Control action', messageOf(error), { kind: 'error' })
+      return false
     }
   }
-  const postLocalControl = (control: GitUiControl, current: () => boolean): void => {
-    void deliverLocalControl(control, current)
-  }
-  const postMainControl = (action: string, data?: Record<string, unknown>): void => {
+  const postLocalControl = (control: GitUiControl, current: () => boolean): Promise<boolean> =>
+    deliverLocalControl(control, current)
+  const postMainControl = (action: string, data?: Record<string, unknown>): Promise<boolean> => {
     const generation = owner.generation
-    postLocalControl({
+    return postLocalControl({
       surface: PANEL_ID,
       target: `worktree:${worktree}`,
       generation,
       action,
       ...(data === undefined ? {} : { data })
     }, () => isCurrentOwner(generation))
+  }
+  const listInputRef = useRef<{ generation: string; promise: Promise<boolean> } | null>(null)
+  /** Orders list input through command acceptance, never through long-operation completion. */
+  const enqueueListInput = (input: () => Promise<boolean> | void, dependent = false): void => {
+    const generation = owner.generation
+    const previous = listInputRef.current
+    const run = async (accepted = true): Promise<boolean> => {
+      if (!isCurrentOwner(generation) || (dependent && !accepted)) return false
+      const result = await input()
+      return dependent || result !== false
+    }
+    const promise = previous?.generation === generation ? previous.promise.then(run) : run()
+    const pending = { generation, promise }
+    listInputRef.current = pending
+    void promise.finally(() => {
+      if (listInputRef.current === pending) listInputRef.current = null
+    })
   }
   const postShipErrorControl = (action: string): void => {
     const failure = shipError
@@ -1192,8 +1210,8 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
   }
 
   const handlers: RowHandlers = {
-    click: (item) => postMainControl(item.submodule ? 'row-toggle-submodule' : 'row-open', { path: item.path }),
-    contextMenu: (item, x, y) => postMainControl('row-menu-open', { path: item.path, x, y }),
+    click: (item) => enqueueListInput(() => postMainControl(item.submodule ? 'row-toggle-submodule' : 'row-open', { path: item.path })),
+    contextMenu: (item, x, y) => enqueueListInput(() => postMainControl('row-menu-open', { path: item.path, x, y })),
     buttons: rowButtons,
     dragText: (item) => absolute(item.path),
     expansion: (item): Expansion | null => {
@@ -1261,29 +1279,39 @@ export function WorktreePanel({ context, worktree, report, notify, drafts, offer
     ]
   }
 
+  const listKeyStateRef = useRef({ shown, uncommittedPaths })
+  listKeyStateRef.current = { shown, uncommittedPaths }
   const onListKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return
+    const key = event.key
     const onButton = (event.target as HTMLElement).closest('button') !== null
-    if (onButton && event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Escape') return
-    if (ticks !== null && event.key === 'Escape') return
-    if (ticks !== null && event.key === ' ' && selected !== null && uncommittedPaths.includes(selected)) {
-      event.preventDefault()
-      postMainControl('row-toggle-check', { path: selected })
-      return
-    }
-    const intent = keyIntent(shown, selected, event.key)
-    if (intent === null) return
+    if (onButton && key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Escape') return
+    if (ticks !== null && key === 'Escape') return
+    const current = selectedPath(worktree)
+    const queuedKey = listInputRef.current?.generation === owner.generation &&
+      (key === 'ArrowDown' || key === 'ArrowUp' || key === 'Enter' || key === ' ' || key === 'Backspace' || key === 'Delete' || key === 'Escape')
+    const toggleCheck = ticks !== null && key === ' ' && current !== null && uncommittedPaths.includes(current)
+    if (!queuedKey && !toggleCheck && keyIntent(shown, current, key) === null) return
     event.preventDefault()
-    switch (intent.type) {
-      case 'select':
-        return selectPath(worktree, intent.path, 'panel')
-      case 'open':
-        return postMainControl('row-open', { path: intent.path })
-      case 'toggle-mark':
-        return postMainControl('row-toggle-mark', { path: intent.path })
-      case 'revert':
-        return postMainControl('row-revert', { path: intent.path })
-    }
+    enqueueListInput(() => {
+      const current = selectedPath(worktree)
+      const state = listKeyStateRef.current
+      if (ticksRef.current !== null && key === ' ' && current !== null && state.uncommittedPaths.includes(current)) {
+        return postMainControl('row-toggle-check', { path: current })
+      }
+      const intent = keyIntent(state.shown, current, key)
+      if (intent === null) return
+      switch (intent.type) {
+        case 'select':
+          return selectPath(worktree, intent.path, 'panel')
+        case 'open':
+          return postMainControl('row-open', { path: intent.path })
+        case 'toggle-mark':
+          return postMainControl('row-toggle-mark', { path: intent.path })
+        case 'revert':
+          return postMainControl('row-revert', { path: intent.path })
+      }
+    }, true)
   }
 
   const toggleTick = (path: string) => {

@@ -1264,3 +1264,144 @@ test('an identical submodule recreated after removal does not inherit the old re
     panel.unmount()
   }
 })
+const heldRowOpenSpace = async (priorSelection: 'b.ts' | null) => {
+  const panel = await controlled((fake) => {
+    fake.status = statusOf([entry('a.ts'), entry('b.ts')])
+    fake.marks['a.ts'] = 'reviewed'
+  })
+  const heldSelf = Promise.withResolvers<unknown>()
+  try {
+    if (priorSelection !== null) {
+      await click(q(panel.element, `[data-row-path="${priorSelection}"]`))
+      expect(q(panel.element, `[data-row-path="${priorSelection}"]`)?.getAttribute('aria-selected')).toBe('true')
+    }
+
+    const rowOpenAddress = panel.address('row-open')
+    const bridgeStart = panel.fake.called('ui.window.command.run')
+      .filter(({ params }) => params.id === GIT_UI_CONTROL_COMMAND).length
+    let holdingRowOpen = true
+    let heldCalls = 0
+    panel.fake.on('ui.window.self', () => {
+      if (!holdingRowOpen) return { connId: panel.fake.connId }
+      holdingRowOpen = false
+      heldCalls++
+      return heldSelf.promise
+    })
+
+    await click(q(panel.element, '[data-row-path="a.ts"]'))
+    expect(heldCalls).toBe(1)
+    expect(panel.fake.called('ui.window.command.run').filter(({ params }) => params.id === GIT_UI_CONTROL_COMMAND))
+      .toHaveLength(bridgeStart)
+
+    expect([...panel.element.querySelectorAll('[data-row-path][aria-selected="true"]')]
+      .map((row) => row.getAttribute('data-row-path'))).toEqual(priorSelection === null ? [] : ['b.ts'])
+
+
+    await press(q(panel.element, '[role="listbox"]')!, ' ')
+    expect(panel.fake.called('quirky.git/setReviewMark')).toEqual([])
+    await act(async () => heldSelf.resolve({ connId: panel.fake.connId }))
+    await settle()
+
+    expect(panel.fake.called('quirky.git/setReviewMark').map(({ params }) => ({
+      path: params.path,
+      reviewed: params.reviewed
+    }))).toEqual([{ path: 'a.ts', reviewed: false }])
+    expect(panel.fake.marks['a.ts']).toBe('none')
+    expect(panel.fake.marks['b.ts'] ?? 'none').toBe('none')
+    expect(q(panel.element, '[data-row-path="a.ts"]')?.getAttribute('aria-selected')).toBe('true')
+    expect(q(panel.element, '[data-row-path="b.ts"]')?.getAttribute('aria-selected')).not.toBe('true')
+
+    const routed = panel.fake.called('ui.window.command.run')
+      .filter(({ params }) => params.id === GIT_UI_CONTROL_COMMAND)
+      .slice(bridgeStart)
+    const mainControlAddress = {
+      surface: rowOpenAddress.surface,
+      target: rowOpenAddress.target,
+      generation: rowOpenAddress.generation
+    }
+    expect(routed.map(({ params }) => ({
+      connId: params.connId,
+      id: params.id,
+      args: params.args
+    }))).toEqual([
+      {
+        connId: panel.fake.connId,
+        id: GIT_UI_CONTROL_COMMAND,
+        args: { ...mainControlAddress, action: 'row-open', data: { path: 'a.ts' } }
+      },
+      {
+        connId: panel.fake.connId,
+        id: GIT_UI_CONTROL_COMMAND,
+        args: { ...mainControlAddress, action: 'row-toggle-mark', data: { path: 'a.ts' } }
+      }
+    ])
+  } finally {
+    await act(async () => heldSelf.resolve({ connId: panel.fake.connId }))
+    await settle()
+    panel.unmount()
+  }
+}
+
+test('Space queued during a held row-open targets the accepted row, not the previous selection', async () => {
+  await heldRowOpenSpace('b.ts')
+})
+
+test('Space queued during a held row-open targets the accepted row when nothing was selected', async () => {
+  await heldRowOpenSpace(null)
+})
+
+for (const outcome of ['refused', 'owner-replaced'] as const) {
+  test(`queued Space does not act on another row after row-open is ${outcome}`, async () => {
+    const panel = await controlled((fake) => {
+      fake.status = statusOf([entry('a.ts'), entry('b.ts')])
+      fake.marks['a.ts'] = 'reviewed'
+    })
+    const heldSelf = Promise.withResolvers<unknown>()
+    try {
+      await click(q(panel.element, '[data-row-path="b.ts"]'))
+      const oldGeneration = panel.address('row-open').generation
+      let hold = true
+      panel.fake.on('ui.window.self', () => {
+        if (!hold) return { connId: panel.fake.connId }
+        hold = false
+        return heldSelf.promise
+      })
+      if (outcome === 'refused') {
+        panel.fake.on('ui.window.command.run', (params) => ({
+          result: (params.args as Control).action === 'row-open'
+            ? { delivered: false }
+            : panel.dispatch(params.args)
+        }))
+      }
+      await click(q(panel.element, '[data-row-path="a.ts"]'))
+      await press(q(panel.element, '[role="listbox"]')!, ' ')
+      expect(panel.fake.called('quirky.git/setReviewMark')).toEqual([])
+      if (outcome === 'owner-replaced') {
+        await act(async () => panel.fake.setLayout(layoutFor('other')))
+        await settle()
+        await act(async () => panel.fake.setLayout(layoutFor('feat')))
+        await settle()
+        expect(panel.address('row-open').generation).not.toBe(oldGeneration)
+        await click(q(panel.element, '[data-row-path="b.ts"]'))
+        expect(q(panel.element, '[data-row-path="b.ts"]')?.getAttribute('aria-selected')).toBe('true')
+      }
+      await act(async () => heldSelf.resolve({ connId: panel.fake.connId }))
+      await settle()
+      expect(panel.fake.called('quirky.git/setReviewMark')).toEqual([])
+      expect(panel.fake.marks['a.ts']).toBe('reviewed')
+      expect(panel.fake.marks['b.ts'] ?? 'none').toBe('none')
+      expect(q(panel.element, '[data-row-path="b.ts"]')?.getAttribute('aria-selected')).toBe('true')
+      expect(panel.fake.called('ui.window.command.run')
+        .some(({ params }) => (params.args as Control).action === 'row-toggle-mark')).toBe(false)
+      if (outcome === 'refused') {
+        expect(panel.fake.toastOptions.at(-1)).toMatchObject({ kind: 'error' })
+      } else {
+        expect(panel.fake.toasts).toEqual([])
+      }
+    } finally {
+      await act(async () => heldSelf.resolve({ connId: panel.fake.connId }))
+      await settle()
+      panel.unmount()
+    }
+  })
+}
