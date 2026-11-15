@@ -160,7 +160,7 @@ async function lstatDuringScan(path: string): Promise<BigIntStats> {
 
 function decodeName(name: Buffer): string {
   try {
-    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(name)
+    const decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(name)
     if (!decoded || !isUtf8String(decoded) || decoded === '.' || decoded === '..' || decoded.includes('/')) {
       fail('folder-tree-unsupported-path', 'filesystem entry name cannot be represented safely')
     }

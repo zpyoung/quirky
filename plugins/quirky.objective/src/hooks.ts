@@ -156,6 +156,8 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
     let workspacePath: string
     try {
       workspacePath = await realpath(enrollment.workspacePath)
+      if (workspace.kind === 'folder' &&
+        (workspacePath !== enrollment.workspacePath || workspace.path !== enrollment.workspacePath)) throw new Error('path changed')
       if (workspacePath !== await realpath(workspace.path) || !(await stat(workspacePath)).isDirectory()) throw new Error('path changed')
     } catch {
       throw new Error('worktree-unresolved: the registered workspace path changed or disappeared')

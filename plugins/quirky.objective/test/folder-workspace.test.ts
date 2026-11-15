@@ -414,3 +414,19 @@ test('path replacement and streamed read errors fail folder observations closed'
     }
   })
 })
+
+test('leading BOM bytes cannot disguise source files as excluded administration', async () => {
+  await withWorkspace(async root => {
+    const paths = ['src/\uFEFF.git', '\uFEFF.quirky/objective/report.json']
+    for (const path of paths) writeWorkspaceFile(root, path, 'initial bytes')
+    expect((await captureFolderObservation(root)).entries.map(entry => entry.path)).toEqual(paths)
+    for (const path of paths) {
+      const before = await captureFolderObservation(root)
+      writeWorkspaceFile(root, path, 'changed bytes')
+      const changed = await captureFolderObservation(root)
+      expect(changed.contentIdentity).not.toBe(before.contentIdentity)
+      rmSync(join(root, path))
+      expect((await captureFolderObservation(root)).contentIdentity).not.toBe(changed.contentIdentity)
+    }
+  })
+})

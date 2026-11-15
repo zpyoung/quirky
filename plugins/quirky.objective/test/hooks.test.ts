@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import type { OrchestrationSubmission, PluginContext, PluginStore, RunOptions, StoreMigration, StoreValue } from '@quirky/protocol'
@@ -1159,3 +1159,28 @@ test('lands a verification-only repair after a historical block and stops termin
     kind: 'terminal', state: 'landed', reason: 'files-on-disk landing bar reached'
   })
 }, 30_000)
+
+test('folder canonical roots cannot be replaced by symlinks after enrollment', async () => {
+  for (const repoId of ['folder-project', 'group:team']) {
+    const r = rig('standard', 'folder', repoId)
+    folderWorkspace(r)
+    activateFolderPlan(r)
+    const before = await r.hooks.read({ enrollment: r.enrollment })
+    const target = realpathSync(mkdtempSync(join(tmpdir(), 'objective-root-target-')))
+    const savedRoot = `${r.root}-saved`
+    cleanup.push(() => rmSync(target, { recursive: true, force: true }))
+    cleanup.push(() => rmSync(savedRoot, { recursive: true, force: true }))
+    writeFileSync(join(target, 'outside.txt'), 'not authorized')
+    renameSync(r.root, savedRoot)
+    symlinkSync(target, r.root)
+
+    await expect(r.hooks.read({ enrollment: r.enrollment })).rejects.toThrow('worktree-unresolved')
+    await expect(r.hooks.detail({ watcherId: 'watcher' })).rejects.toThrow('worktree-unresolved')
+    await expect(r.hooks.execute({ action: folderNodeAction(before.contentIdentity),
+      enrollment: r.enrollment, attemptId: 'retargeted-root' })).rejects.toThrow('worktree-unresolved')
+    expect(await r.submit(r.path)).toMatchObject({ kind: 'rejected', code: 'worktree-unresolved' })
+    expect(readFileSync(join(target, 'outside.txt'), 'utf8')).toBe('not authorized')
+    expect(existsSync(join(target, '.quirky'))).toBe(false)
+    expect(r.store.issued('watcher').some(row => row.attemptId === 'retargeted-root')).toBe(false)
+  }
+})
