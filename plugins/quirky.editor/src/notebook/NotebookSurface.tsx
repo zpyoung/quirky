@@ -51,6 +51,7 @@ type SetupPrompt = {
   python: string | null
 }
 type BusyOperation = { token: symbol; sessionGeneration: string }
+type PendingSave = Pick<NotebookSession, 'bufferId' | 'worktreeId' | 'generation' | 'contentRevision'> & { token: symbol; draft: string | null }
 type SessionMessage = { sessionGeneration: string; message: string }
 type SetupFailure = { sessionGeneration: string; promptGeneration: string; message: string }
 type OperationNotice = BusyOperation & { message: string }
@@ -220,6 +221,7 @@ export function NotebookSurface(props: SurfaceProps) {
   readOnlyRef.current = buffer.readOnly
   const submittedNotebooks = useRef<Array<{ bufferId: string; content: string; raw: boolean }>>([])
   const sessionRef = useRef<NotebookSession | null>(null)
+  const pendingSaveRef = useRef<PendingSave | null>(null)
   if (sessionRef.current === null) {
     sessionRef.current = {
       bufferId,
@@ -350,6 +352,7 @@ export function NotebookSurface(props: SurfaceProps) {
     content: string
     sourceSignature: string
     structureSignature: string
+    generation: string
   } | null>(null)
   useEffect(() => {
     let active = true
@@ -386,7 +389,7 @@ export function NotebookSurface(props: SurfaceProps) {
 
   useEffect(() => {
     const previous = lastObservedNotebook.current
-    lastObservedNotebook.current = { bufferId, worktreeId, content, sourceSignature, structureSignature }
+    lastObservedNotebook.current = { bufferId, worktreeId, content, sourceSignature, structureSignature, generation: sessionGeneration }
     if (previous?.bufferId === bufferId && previous.worktreeId === worktreeId && previous.content === content) return
 
     if (previous?.bufferId === bufferId && previous.worktreeId === worktreeId) {
@@ -400,6 +403,12 @@ export function NotebookSurface(props: SurfaceProps) {
       if (previous.sourceSignature === sourceSignature) return
     }
 
+    const pendingSave = pendingSaveRef.current
+    const saveConflict = previous?.bufferId === bufferId && previous.worktreeId === worktreeId &&
+      pendingSave?.bufferId === bufferId && pendingSave.worktreeId === worktreeId &&
+      pendingSave.generation === previous.generation && pendingSave.draft !== null &&
+      buffer.draft !== null && buffer.contentRevision > pendingSave.contentRevision &&
+      content !== pendingSave.draft
     submittedNotebooks.current = []
     pendingCellChanges.current.clear()
     if (cellTimer.current !== undefined) {
@@ -417,10 +426,12 @@ export function NotebookSurface(props: SurfaceProps) {
     setupPromptRef.current = null
     setSetupPromptState(null)
     setSetupErrorState(null)
-    setSourceErrorState(null)
+    setSourceErrorState(saveConflict
+      ? { sessionGeneration, message: 'Your local draft conflicts with a newer shared version.' }
+      : null)
     setKernelErrorState(null)
     setControlErrorState(null)
-  }, [bufferId, worktreeId, buffer.contentRevision, buffer.draft, content, sourceSignature, structureSignature])
+  }, [bufferId, worktreeId, buffer.contentRevision, buffer.draft, content, sourceSignature, structureSignature, sessionGeneration])
 
 
   const refreshRuntime = async (expected = sessionSnapshot): Promise<NotebookRuntimeState | null> => {
@@ -517,6 +528,10 @@ export function NotebookSurface(props: SurfaceProps) {
 
   const submitNotebookDraft = (draft: string, raw = false) => {
     submittedNotebooks.current.push({ bufferId, content: draft, raw })
+    const pendingSave = pendingSaveRef.current
+    if (pendingSave && isCurrentSession(pendingSave) && busyOperationRef.current?.token === pendingSave.token) {
+      pendingSave.draft = draft
+    }
     onDraft(draft)
   }
 
@@ -550,16 +565,24 @@ export function NotebookSurface(props: SurfaceProps) {
   const saveNotebook = async (expected = sessionSnapshot): Promise<boolean> => {
     const operation = beginBusy(expected)
     if (!operation) return false
-    flushCellChanges()
-    showSourceError(null, expected)
-    showControlError(null, expected)
+    const submitted = submittedNotebooks.current.at(-1)
+    pendingSaveRef.current = {
+      ...expected,
+      contentRevision: sessionRef.current!.contentRevision,
+      token: operation.token,
+      draft: submitted?.bufferId === expected.bufferId ? submitted.content : null
+    }
     try {
+      flushCellChanges()
+      showSourceError(null, expected)
+      showControlError(null, expected)
       await action('save', {}, expected)
       return isCurrentSession(expected)
     } catch (error) {
       showSourceError(error instanceof Error ? error.message : String(error), expected)
       throw error
     } finally {
+      if (pendingSaveRef.current?.token === operation.token) pendingSaveRef.current = null
       finishBusy(operation, expected)
     }
   }

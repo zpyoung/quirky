@@ -777,6 +777,69 @@ test('Notebook controls reject unknown, extra, forged, mistyped, unsafe-index, a
   expect(await runAddress(surface, environmentAddress, 'select', { python: '/attacker/python' })).toEqual({ delivered: false })
 })
 
+async function startPendingNotebookSave() {
+  const completion = Promise.withResolvers<unknown>()
+  const drafts: string[] = []
+  const original = makeBuffer()
+  const surface = await renderNotebook(original, async (_method, params) => {
+    if (params.action === 'state') return runtimeState()
+    if (params.action === 'save') return completion.promise
+    return {}
+  }, makeContext(), () => {}, (draft) => drafts.push(draft))
+  expect(await runControl(surface, 'notebook:b1', 'edit-cell', { index: 0, editing: true })).toEqual({ delivered: true })
+  const textarea = surface.element.querySelector<HTMLTextAreaElement>('textarea.notebook-cell-editor')!
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (!setter) throw new Error('The textarea value setter is unavailable.')
+  await act(async () => {
+    setter.call(textarea, 'print("local")')
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  let pending!: Promise<unknown>
+  await act(async () => { pending = invokePublic(surface, controlArgs(addressFor(surface, 'notebook:b1'), 'save')) })
+  await flush()
+  expect(drafts).toHaveLength(1)
+  return { surface, original, completion, pending, drafts }
+}
+
+test('a competing shared draft retains the pending Notebook Save conflict explanation', async () => {
+  const { surface, original, completion, pending, drafts } = await startPendingNotebookSave()
+  const competitor = notebookContent([makeCell('print("shared")')])
+  await surface.rerender({ ...original, draft: competitor, contentRevision: 2 })
+  expect(surface.element.textContent).toContain('conflicts with a newer shared version')
+  await act(async () => {
+    completion.reject(new Error('Your local draft conflicts with a newer shared version.'))
+    await expect(pending).rejects.toThrow('conflicts with a newer shared version')
+  })
+  await flush()
+  expect(surface.element.textContent).toContain('conflicts with a newer shared version')
+  expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('print("shared")')
+  expect(drafts).toHaveLength(1)
+})
+
+test.each(['another-buffer', 'replacement-content', 'later-draft'] as const)(
+  'a pending Notebook Save cannot publish conflict feedback into %s',
+  async (replacement) => {
+    const { surface, original, completion, pending } = await startPendingNotebookSave()
+    if (replacement === 'later-draft') {
+      await surface.rerender({ ...original, draft: notebookContent([makeCell('first competitor')]), contentRevision: 2 })
+      expect(surface.element.textContent).toContain('conflicts with a newer shared version')
+    }
+    const nextContent = notebookContent([makeCell('unrelated replacement')])
+    await surface.rerender(makeBuffer(replacement === 'another-buffer' ? 'b2' : 'b1', nextContent, {
+      draft: replacement === 'later-draft' ? nextContent : null,
+      contentRevision: 3
+    }))
+    await act(async () => {
+      completion.reject(new Error('Your local draft conflicts with a newer shared version.'))
+      await expect(pending).rejects.toThrow('conflicts with a newer shared version')
+    })
+    await flush()
+    expect(surface.element.textContent).not.toContain('conflicts with a newer shared version')
+    expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(surface.element.querySelector('.notebook-cell-source')?.textContent).toBe('unrelated replacement')
+  }
+)
+
 test('a captured trust confirmation refuses a same-buffer read-only cutover', async () => {
   let trusted = false
   const calls: Record<string, unknown>[] = []
