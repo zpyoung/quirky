@@ -1,7 +1,10 @@
 import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync } from 'node:fs'
 import { join } from 'node:path'
 import type { OrchestrationSubmission, OrchestrationSubmissionVerdict, PluginContext } from '@quirky/protocol'
-import { contractProblems, objectivePayload, resolveWorkspace, type ObjectiveDetail, type ObjectivePayload } from './contract'
+import {
+  contractProblems, objectivePayload, resolveWorkspace,
+  type ExpectedReview, type HandoffLink, type ObjectiveCompletion, type ObjectiveDetail, type ObjectivePayload, type RepoIdentity
+} from './contract'
 import { decideObjective, deriveProgress, nextStep, paceObjective, stopObjective } from './decide'
 import type { ObjectiveJournalEntry, ObjectiveProgress, ObjectiveSnapshot, ObjectiveWorld } from './decide'
 import { implementerReportProblems, integratorReportProblems, plannerReportProblems, repairReportProblems, reportDigest, reviewerReportProblems } from './plan'
@@ -11,18 +14,47 @@ import type { ObjectiveStore } from './store'
 import { baselineProblems, captureContentIdentity, runCriterionCheck, runEnrollmentGate, type ObjectiveRuntime } from './checks'
 import { commitLocalBranch, readLocalGitHead, recordFilesOnDisk } from './landing'
 import type { ObjectiveAction } from './decide'
+import {
+  authorityFromLanding, expectedReviewFromLanding, executeRemoteLanding, handoffPayloadReview,
+  observeRemoteLanding, resolveRemoteLandingOutcome, reviewMatchesExpectedPin, hostedReviewMatchesAuthority
+} from './remote-landing'
 
 export interface ObjectiveEnrollment {
   watcherId: string; kind: string; workspacePath: string; worktreeId?: string | null; terminalAtMs?: number | null
   kindPayload: ObjectivePayload; capabilities: Record<string, 'off' | 'gated' | 'on'>
+
+  enabled?: boolean; paused?: boolean; parkReason?: string | null; malformed?: string
 }
-interface Inspection { enrollment: ObjectiveEnrollment; journal: ObjectiveJournalEntry[] }
-type WorldEnrollment = Pick<ObjectiveEnrollment, 'watcherId' | 'kindPayload' | 'capabilities'>
+interface Inspection {
+  enrollment: ObjectiveEnrollment
+  journal: ObjectiveJournalEntry[]
+  status?: { state: string } | null
+  summary?: { watcherId: string; kind: string; state: string; reason: string; atMs: number } | null
+}
+type WorldEnrollment = Pick<ObjectiveEnrollment, 'watcherId' | 'worktreeId' | 'kindPayload' | 'capabilities'>
 type HookWorld = ObjectiveWorld & { enrollment: WorldEnrollment }
 type Action = ObjectiveAction & { contentIdentity: string }
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
+function repositoryIdentity(value: unknown): value is RepoIdentity {
+  return record(value) && typeof value.host === 'string' && value.host.length > 0 &&
+    typeof value.owner === 'string' && value.owner.length > 0 &&
+    typeof value.repo === 'string' && value.repo.length > 0
+}
+function handoffLink(journal: ObjectiveJournalEntry[]): HandoffLink | null {
+  for (let index = journal.length - 1; index >= 0; index--) {
+    const entry = journal[index]!
+    if (entry.kind !== 'terminal' || !record(entry.handoff)) continue
+    const link = entry.handoff
+    if (typeof link.watcherId === 'string' && link.watcherId.length > 0 &&
+      typeof link.kind === 'string' && link.kind.length > 0) {
+      return { watcherId: link.watcherId, kind: link.kind }
+    }
+  }
+  return null
+}
+
 const rejected = (code: string, reason: string): OrchestrationSubmissionVerdict => ({ kind: 'rejected', code, reason })
 
 function readIssuedReport(path: string): { value: unknown } | { problem: { code: string; reason: string } } {
@@ -63,11 +95,13 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
     const revision = store.revision(watcherId)
     const issued = store.issued(watcherId)
     return {
-      enrollment: { watcherId, kindPayload: enrollment.kindPayload, capabilities: enrollment.capabilities },
+      enrollment: { watcherId, worktreeId: enrollment.worktreeId ?? null, kindPayload: enrollment.kindPayload, capabilities: enrollment.capabilities },
       planMode: enrollment.capabilities.plan ?? 'off',
       contract: enrollment.kindPayload, capabilities: enrollment.capabilities,
-      contentIdentity: snapshot?.contentIdentity, observedAtMs: snapshot?.observedAtMs,
-      git: snapshot?.world.git,
+      ...(snapshot ? { contentIdentity: snapshot.contentIdentity, observedAtMs: snapshot.observedAtMs } : {}),
+      worktreeId: enrollment.worktreeId ?? null,
+      ...(snapshot?.world.git === undefined ? {} : { git: snapshot.world.git }),
+      ...(snapshot?.world.remote === undefined ? {} : { remote: snapshot.world.remote }),
       revision: revision ? {
         number: revision.number, digest: revision.digest, plan: revision.plan,
         tasks: revision.plan.plan.tasks.map(task => ({ taskKey: task.taskKey, deps: task.deps, criteriaCount: task.criteria.length, criteria: task.criteria }))
@@ -94,14 +128,141 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
     if (record(result) && typeof result.defaultAgent === 'string' && !['auto', 'shell'].includes(result.defaultAgent)) return result.defaultAgent
     return 'claude'
   }
+  async function mergedChildCompletion(
+    source: ObjectiveEnrollment,
+    link: HandoffLink,
+    review: ExpectedReview
+  ): Promise<Pick<ObjectiveCompletion, 'state' | 'reason' | 'mergedEvidence'>> {
+    const unavailable = (reason: string) => ({ state: 'unavailable' as const, reason, mergedEvidence: null })
+    const blocked = (reason: string) => ({ state: 'blocked' as const, reason, mergedEvidence: null })
+    let child: Inspection | null
+    try { child = await inspect(link.watcherId) } catch { return unavailable('sitter-unavailable') }
+    if (!child) return unavailable('sitter-unavailable')
+    if (child.enrollment.kind !== link.kind || link.kind !== 'hosted-review') return blocked('sitter-kind-mismatch')
+    if (child.enrollment.workspacePath !== source.workspacePath ||
+      child.enrollment.worktreeId !== source.worktreeId) return blocked('sitter-workspace-mismatch')
+    const childPayload = child.enrollment.kindPayload
+    if (!record(childPayload) || childPayload.worktreeId !== source.worktreeId) return blocked('sitter-workspace-mismatch')
+    const childPin = handoffPayloadReview(childPayload)
+    if (!childPin || !reviewMatchesExpectedPin(childPin, review)) return blocked('objective-review-mismatch')
+    if (child.enrollment.malformed || child.status?.state === 'malformed') return unavailable('sitter-malformed')
+    const summary = child.summary
+    if (summary?.state === 'merged') {
+      if (child.enrollment.terminalAtMs == null || summary.watcherId !== link.watcherId || summary.kind !== link.kind ||
+        !Number.isFinite(summary.atMs)) return unavailable('sitter-summary-unavailable')
+      return {
+        state: 'landed',
+        reason: 'merged landing bar reached',
+        mergedEvidence: { review, watcherId: link.watcherId, observedAtMs: summary.atMs }
+      }
+    }
+    if (child.enrollment.terminalAtMs != null) return blocked(`sitter-${summary?.state ?? 'closed-without-merge'}`)
+    if (child.enrollment.enabled === false) return blocked('sitter-disabled')
+    if (child.enrollment.paused || child.enrollment.parkReason != null) {
+      return blocked(`sitter-${child.enrollment.parkReason ?? 'paused'}`)
+    }
+    if (child.status?.state === 'disabled' || child.status?.state === 'parked' || child.status?.state === 'closed') {
+      return blocked(`sitter-${child.status.state}`)
+    }
+    return { state: 'waiting', reason: 'awaiting-sitter-merge', mergedEvidence: null }
+  }
+
+  async function completionFor(
+    enrollment: ObjectiveEnrollment,
+    journal: ObjectiveJournalEntry[],
+    contentIdentity: string | null,
+    terminal: boolean,
+    next: { action: ObjectiveAction | null; reason?: string }
+  ): Promise<ObjectiveCompletion> {
+    const requestedBar = enrollment.kindPayload.landingBar
+    const revision = store.revision(enrollment.watcherId)
+    const landings = store.landings(enrollment.watcherId)
+    const matches = (row: (typeof landings)[number]) =>
+      row.payload.revision === revision?.number &&
+      (terminal || (contentIdentity !== null && row.contentIdentity === contentIdentity))
+    const landing = (rung: (typeof landings)[number]['rung']) =>
+      landings.filter(row => row.rung === rung && matches(row)).at(-1)
+    const files = landing('files-on-disk')
+    const committed = landing('committed-local-branch')
+    const pushed = landing('pushed-ref')
+    const hosted = landing('hosted-review')
+    const pushedAuthority = authorityFromLanding(pushed ?? undefined)
+    const hostedAuthority = authorityFromLanding(hosted ?? undefined)
+    const review = expectedReviewFromLanding(hosted ?? undefined)
+    const validPushed = Boolean(pushed && pushedAuthority &&
+      pushed.payload.remoteHeadSha === pushedAuthority.headSha)
+    const validHosted = Boolean(hosted && hostedAuthority && review &&
+      hostedReviewMatchesAuthority(review, hostedAuthority))
+    const link = handoffLink(journal)
+    let reachedBar: ObjectiveCompletion['reachedBar'] = validHosted ? 'hosted-review'
+      : validPushed ? 'pushed-ref'
+        : committed ? 'committed-local-branch'
+          : files ? 'files-on-disk' : null
+
+    if (requestedBar === 'files-on-disk' && files) {
+      return { requestedBar, reachedBar, state: 'landed', reason: 'files-on-disk landing bar reached', handoff: link, mergedEvidence: null }
+    }
+    if (requestedBar === 'committed-local-branch' && committed) {
+      return { requestedBar, reachedBar, state: 'landed', reason: 'committed-local-branch landing bar reached', handoff: link, mergedEvidence: null }
+    }
+    if (requestedBar === 'pushed-ref' && validPushed) {
+      return { requestedBar, reachedBar, state: 'landed', reason: 'pushed-ref landing bar reached', handoff: link, mergedEvidence: null }
+    }
+    if (requestedBar === 'hosted-review' && validHosted) {
+      if (terminal && link) {
+        return { requestedBar, reachedBar, state: 'landed', reason: 'hosted-review landing bar reached', handoff: link, mergedEvidence: null }
+      }
+      if (terminal) {
+        return { requestedBar, reachedBar, state: 'unavailable', reason: 'handoff-lineage-unavailable', handoff: null, mergedEvidence: null }
+      }
+      return { requestedBar, reachedBar, state: 'waiting', reason: 'awaiting-sitter-merge', handoff: null, mergedEvidence: null }
+    }
+    if (requestedBar === 'merged' && validHosted) {
+      if (!link) {
+        return terminal
+          ? { requestedBar, reachedBar, state: 'unavailable', reason: 'handoff-lineage-unavailable', handoff: null, mergedEvidence: null }
+          : { requestedBar, reachedBar, state: 'waiting', reason: 'awaiting-sitter-merge', handoff: null, mergedEvidence: null }
+      }
+      const child = await mergedChildCompletion(enrollment, link, review!)
+      reachedBar = child.state === 'landed' ? 'merged' : 'hosted-review'
+      return { requestedBar, reachedBar, ...child, handoff: link }
+    }
+
+    if (terminal) {
+      return { requestedBar, reachedBar, state: 'unavailable', reason: 'landing-evidence-unavailable', handoff: link, mergedEvidence: null }
+    }
+    const reason = next.reason ?? 'objective-in-progress'
+    const unavailable = /unavailable|not-found|requires-github|malformed|indeterminate/iu.test(reason)
+    const blocked = /blocked|failed|exhausted|changed|mismatch|stale|not-open|draft|not-committed|incomplete|capability-off/iu.test(reason)
+    return {
+      requestedBar,
+      reachedBar,
+      state: unavailable ? 'unavailable' : blocked ? 'blocked' : 'working',
+      reason,
+      handoff: link,
+      mergedEvidence: null
+    }
+  }
+
   return {
     async authorize({ input }: { input: { kindPayload: unknown } }) {
       const raw = record(input.kindPayload) ? input.kindPayload : {}
       const workspace = await resolveWorkspace((method, params) => context.call(method, params), typeof raw.worktree === 'string' ? raw.worktree : 'active')
+      const kindPayload = objectivePayload(input.kindPayload, `id:${workspace.id}`)
+      if (kindPayload.landingBar === 'hosted-review' || kindPayload.landingBar === 'merged') {
+        try {
+          const resolved = await context.call('quirky.hosting/repository', { worktree: workspace.id })
+          if (!record(resolved) || resolved.worktreeId !== workspace.id ||
+            !repositoryIdentity(resolved.origin) || !Array.isArray(resolved.candidates) ||
+            !resolved.candidates.some(repositoryIdentity)) throw new Error('invalid GitHub repository result')
+        } catch {
+          throw new Error('landing-bar-requires-github: an authenticated GitHub repository could not be resolved')
+        }
+      }
       return {
         workspaceKey: `local::${workspace.path}`, workspacePath: workspace.path,
         executionHostId: 'local', schedulerOwner: 'daemon', worktreeId: workspace.id, repoId: workspace.repoId,
-        kindPayload: objectivePayload(input.kindPayload, `id:${workspace.id}`)
+        kindPayload
       }
     },
     validate({ candidate }: { candidate: { kindPayload: ObjectivePayload; owner?: unknown } }): void {
@@ -112,6 +273,12 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       const contentIdentity = await runtime(enrollment).captureContentIdentity()
       const currentWorld = world(enrollment)
       currentWorld.git = await readLocalGitHead(context, enrollment.workspacePath)
+      if (enrollment.kindPayload.landingBar === 'pushed-ref' ||
+        enrollment.kindPayload.landingBar === 'hosted-review' || enrollment.kindPayload.landingBar === 'merged') {
+        currentWorld.remote = await observeRemoteLanding(
+          context, enrollment.workspacePath, enrollment.worktreeId, enrollment.kindPayload
+        )
+      }
       const observedAtMs = Date.now()
       currentWorld.contentIdentity = contentIdentity
       currentWorld.observedAtMs = observedAtMs
@@ -121,15 +288,33 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       return decideObjective({ ...snapshot, world: world(enrollment, snapshot) }, journal)
     },
     stop({ snapshot, journal, enrollment }: { snapshot: ObjectiveSnapshot; journal: ObjectiveJournalEntry[]; enrollment: ObjectiveEnrollment }) {
+      const bar = enrollment.kindPayload.landingBar
+      if (bar === 'pushed-ref' || bar === 'hosted-review' || bar === 'merged') {
+        return (async () => {
+          const contentIdentity = await runtime(enrollment).captureContentIdentity()
+          const currentWorld = world(enrollment)
+          currentWorld.git = await readLocalGitHead(context, enrollment.workspacePath)
+          currentWorld.remote = await observeRemoteLanding(
+            context, enrollment.workspacePath, enrollment.worktreeId, enrollment.kindPayload
+          )
+          const observedAtMs = Date.now()
+          currentWorld.contentIdentity = contentIdentity
+          currentWorld.observedAtMs = observedAtMs
+          return stopObjective({ freshness: 'live', contentIdentity, observedAtMs, world: currentWorld }, journal)
+        })()
+      }
       return stopObjective({ ...snapshot, world: world(enrollment, snapshot) }, journal)
     },
     pace({ snapshot, journal }: { snapshot: ObjectiveSnapshot & { world: HookWorld }; journal: ObjectiveJournalEntry[] }) {
       return paceObjective({ ...snapshot, world: world(snapshot.world.enrollment, snapshot) }, journal)
     },
     resolveOutcome({ attempt, enrollment }: { attempt: { attemptId: string; action: Action }; enrollment: ObjectiveEnrollment }):
-      { effect: 'landed' | 'not-landed'; reason?: string } | null {
+      { effect: 'landed' | 'not-landed' | 'indeterminate'; reason?: string } | Promise<{ effect: 'landed' } | null> | null {
       const { action } = attempt
       const watcherId = enrollment.watcherId
+      if (action.kind === 'push-ref' || action.kind === 'open-hosted-review') {
+        return resolveRemoteLandingOutcome(runtime(enrollment), action, attempt.attemptId, enrollment.worktreeId)
+      }
       if (action.kind === 'activate-plan') {
         return store.revision(watcherId)?.sourceAttemptId === action.plannerAttemptId &&
           store.report(action.plannerAttemptId)?.digest === action.digest ? { effect: 'landed' } : null
@@ -167,6 +352,12 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
         return { effect: 'landed' }
       }
       const run = runtime(enrollment)
+      if (action.kind === 'push-ref' || action.kind === 'open-hosted-review') {
+        const inspection = await inspect(enrollment.watcherId)
+        if (!inspection) return { effect: 'not-landed', reason: 'objective-watcher-unavailable' }
+        return executeRemoteLanding(run, action, attemptId, inspection.journal,
+          deriveProgress(world(enrollment), inspection.journal).tasks, enrollment.worktreeId)
+      }
       if (action.kind === 'run-check') return runCriterionCheck(run, action, attemptId)
       if (action.kind === 'run-gate') return runEnrollmentGate(run, action, attemptId)
       if (action.kind === 'record-landing') {
@@ -298,28 +489,50 @@ export function createObjectiveHooks(context: PluginContext, store: ObjectiveSto
       const inspection = await inspect(watcherId)
       if (!inspection || inspection.enrollment.kind !== 'objective') return null
       const enrollment = inspection.enrollment
-      const contentIdentity = await runtime(enrollment).captureContentIdentity()
-      const git = await readLocalGitHead(context, enrollment.workspacePath)
+      const terminal = enrollment.terminalAtMs != null
+      const revision = store.revision(watcherId)
+      const landings = store.landings(watcherId)
+      const link = handoffLink(inspection.journal)
+      const historicalRemote = terminal && (link !== null || landings.some(row =>
+        (row.rung === 'pushed-ref' || row.rung === 'hosted-review') && row.payload.revision === revision?.number
+      ))
+      const contentIdentity = historicalRemote ? null : await runtime(enrollment).captureContentIdentity()
+      const git = historicalRemote
+        ? { branch: null, headSha: null }
+        : await readLocalGitHead(context, enrollment.workspacePath)
       const currentWorld = world(enrollment)
-      currentWorld.contentIdentity = contentIdentity
+      if (contentIdentity !== null) currentWorld.contentIdentity = contentIdentity
       currentWorld.observedAtMs = Date.now()
       currentWorld.git = git
+      if (!historicalRemote && (enrollment.kindPayload.landingBar === 'pushed-ref' ||
+        enrollment.kindPayload.landingBar === 'hosted-review' || enrollment.kindPayload.landingBar === 'merged')) {
+        currentWorld.remote = await observeRemoteLanding(
+          context, enrollment.workspacePath, enrollment.worktreeId, enrollment.kindPayload
+        )
+      }
       const progress = deriveProgress(currentWorld, inspection.journal)
-      const terminal = enrollment.terminalAtMs != null
       const next = terminal ? { action: null, reason: 'objective-bar-reached' } : nextStep(currentWorld, inspection.journal)
-      const draftReport = progress.draft ? store.report(progress.draft.plannerAttemptId) : null
-      const draftPlan = draftReport?.report as PlannerReport | RepairPlannerReport | undefined
-      const revision = store.revision(watcherId)
       if (terminal) {
-        const saved = store.landings(watcherId).filter(row => row.rung === 'files-on-disk' && row.payload.revision === revision?.number).at(-1)
+        const saved = landings.filter(row => row.rung === 'files-on-disk' && row.payload.revision === revision?.number).at(-1)
         if (Array.isArray(saved?.payload.tasks)) progress.tasks = saved.payload.tasks as ObjectiveProgress['tasks']
       }
+      const draftReport = progress.draft ? store.report(progress.draft.plannerAttemptId) : null
+      const draftPlan = draftReport?.report as PlannerReport | RepairPlannerReport | undefined
+      const completion = await completionFor(enrollment, inspection.journal, contentIdentity, terminal, next)
+      const displayNext = completion.state === 'landed'
+        ? { action: null, reason: 'objective-bar-reached' }
+        : completion.state === 'waiting'
+          ? { action: null, reason: 'awaiting-sitter-merge' }
+          : completion.state === 'blocked' || completion.state === 'unavailable'
+            ? { action: null, reason: completion.reason }
+            : next
       return {
         watcherId, worktreeId: enrollment.worktreeId ?? null, workspacePath: enrollment.workspacePath,
         contract: enrollment.kindPayload, effectiveConcurrency: 1, contentIdentity, git,
         rejectedDrafts: store.rejectedDrafts(watcherId), gates: store.checks(watcherId).filter(check => check.kind === 'gate'),
-        verdicts: store.verdicts(watcherId), landings: store.landings(watcherId),
-        next: { actionKind: next.action?.kind ?? null, evidenceKey: next.action?.evidenceKey ?? null, reason: next.action ? null : next.reason ?? null },
+        verdicts: store.verdicts(watcherId), landings,
+        completion,
+        next: { actionKind: displayNext.action?.kind ?? null, evidenceKey: displayNext.action?.evidenceKey ?? null, reason: displayNext.action ? null : displayNext.reason ?? null },
         draft: draftReport && draftPlan ? { plannerAttemptId: draftReport.attemptId, digest: draftReport.digest,
           kind: 'repair' in draftPlan ? 'repair' : 'initial',
           ...('repair' in draftPlan ? { repair: draftPlan.repair } : { tasks: draftPlan.plan.tasks }), assumptions: draftPlan.assumptions } : null,
