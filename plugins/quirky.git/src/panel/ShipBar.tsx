@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from 'react'
+import type { MouseEvent, ReactNode, RefObject } from 'react'
 import { ControlIcon, FormRow, IconButton, InlineError, SplitButton } from '@quirky/ui'
 import type { ContextMenuItem } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
@@ -60,6 +60,10 @@ export const shipMenuEntries = (items: readonly ShipMenuItem[], onChoose: (id: S
 
 /** The quiet status line of a branch with nothing left to do, with the caret beside it. */
 function QuietStep({ step, menuOpen, onOpenMenu }: Pick<Props, 'step' | 'menuOpen' | 'onOpenMenu'>) {
+  const onOpenMenuClick = (event: MouseEvent<HTMLButtonElement>) => {
+    const box = event.currentTarget.getBoundingClientRect()
+    onOpenMenu({ x: box.right, y: box.bottom })
+  }
   return (
     <div className="ui-cluster git-ship__quiet">
       <p className="ui-text-muted" role="status" title={step.reason} data-git-up-to-date>{step.label}</p>
@@ -67,10 +71,7 @@ function QuietStep({ step, menuOpen, onOpenMenu }: Pick<Props, 'step' | 'menuOpe
         label={CARET_LABEL}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        onClick={(event) => {
-          const box = event.currentTarget.getBoundingClientRect()
-          onOpenMenu({ x: box.right, y: box.bottom })
-        }}
+        onClick={onOpenMenuClick}
       >
         <ControlIcon name="caret-down" />
       </IconButton>

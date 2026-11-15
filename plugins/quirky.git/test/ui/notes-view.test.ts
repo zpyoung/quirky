@@ -32,6 +32,7 @@ type View = ReturnType<typeof modifiedEditor>
 let fake: Fake
 let mounted: ReturnType<typeof mountView> | null = null
 let observer: ReturnType<typeof stubIntersectionObserver> | null = null
+let toastOptions: unknown[] = []
 let server: ReturnType<typeof serve>
 
 /** An in-memory stand-in for the daemon's notes methods that announces every change. */
@@ -102,6 +103,13 @@ const open = async (notes: TestNote[] = [], diff = forty, viewInput: object = in
 beforeEach(() => {
   document.body.innerHTML = ''
   fake = fakeContext(layoutFor('w1'))
+  toastOptions = []
+  fake.context.toast = (title, body, options) => {
+    fake.toasts.push([title, body])
+    toastOptions.push(options)
+  }
+  fake.handlers['ui.window.self'] = () => ({ connId: 22 })
+  fake.handlers['ui.window.command.run'] = async (params) => ({ result: await fake.run('ui-control', params.args) })
 })
 afterEach(async () => {
   mounted?.unmount()
@@ -572,7 +580,8 @@ describe('NA-8: a failed save keeps the draft', () => {
     await setValue(area, 'Handle the empty list')
     await press(area, 'Enter')
     await wait(10)
-    expect(fake.toasts.map(([title]) => title)).toEqual(['Failed to save comment'])
+    expect(toastOptions).toEqual([{ kind: 'error' }])
+    expect(fake.toasts).toEqual([['Failed to save comment', 'Unknown worktree']])
     expect(draftOf(element)).not.toBeNull()
     expect(textareaOf(draftOf(element)!).value).toBe('Handle the empty list')
     expect(buttonIn(draftOf(element)!, 'Add note')!.disabled).toBe(false)
@@ -587,6 +596,7 @@ describe('NA-8: a failed save keeps the draft', () => {
     const area = textareaOf(draftOf(element)!)
     await setValue(area, ' '.repeat(70_000) + 'x')
     await press(area, 'Enter')
+    expect(toastOptions).toEqual([{ kind: 'error' }])
     expect(fake.toasts).toEqual([['Comment is too large to submit safely.', '']])
     expect(addCalls()).toHaveLength(0)
   })
