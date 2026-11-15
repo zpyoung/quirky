@@ -382,14 +382,14 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     controller.abort()
   }
 
-  const update = (runId: string, patch: AutomationRunPatch): AutomationRun | null => {
-    if (disposed) return null
+  const update = (runId: string, patch: AutomationRunPatch, options?: { allowAfterDisposal: boolean }): AutomationRun | null => {
+    if (disposed && !options?.allowAfterDisposal) return null
     const before = hooks.store.getRun(runId)
     if (!before || !hooks.store.get(before.automationId)) return null
     if (finalStatus(before.status)) return before
     try {
       const result = hooks.store.updateRun(runId, patch, hooks.clock())
-      hooks.changed(result.automationId, result.id)
+      if (!disposed) hooks.changed(result.automationId, result.id)
       return result
     } catch (error) {
       const current = hooks.store.getRun(runId)
@@ -615,12 +615,9 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
         return { kind: 'failed', run: failed }
       }
       const current = hooks.store.getRun(runId)
-      if (disposed) {
-        return current ? { kind: 'sent', run: current } : { kind: 'deleted' }
-      }
       if (!current || !hooks.store.get(current.automationId)) return { kind: 'deleted' }
       if (finalStatus(current.status)) return { kind: 'sent', run: current }
-      const dispatched = update(runId, { status: 'dispatched' })
+      const dispatched = update(runId, { status: 'dispatched' }, { allowAfterDisposal: true })
       return dispatched ? { kind: 'sent', run: dispatched } : { kind: 'deleted' }
     })
   }
@@ -852,7 +849,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       if (typeof id !== 'string' || id.length === 0) return finish(runId, 'dispatch_failed', 'Workspace creation returned no workspace identity.')
       const existing = hooks.store.getRun(runId)
       if (!existing || !hooks.store.get(existing.automationId)) return null
-      const recorded = update(runId, { workspaceId: id, workspaceDisplayName: displayName })
+      const recorded = update(runId, { workspaceId: id, workspaceDisplayName: displayName }, { allowAfterDisposal: true })
       if (!recorded) return null
       workspaceId = id
       workspaceDisplayName = displayName

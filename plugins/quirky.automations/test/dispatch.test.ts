@@ -588,6 +588,69 @@ describe('automation run dispatcher', () => {
     expect(harness.calls.filter((call) => call.method === 'quirky.structured/send')).toHaveLength(1)
     expect(createCount(harness)).toBe(1)
   })
+  test('an accepted reuse send is persisted after disposal and restart reattaches its watch', async () => {
+    const harness = fixtureWithEngineSpies()
+    const { definition, run: firstRun } = newRun(harness, { reuseSession: true })
+    harness.onCreate = (session) => successfulClaudeResult(harness, session.id, 'initial turn')
+    await harness.dispatcher.dispatch(firstRun.id)
+    await waitRun(harness, firstRun.id, 'completed')
+
+    harness.onCreate = null
+    const send = Promise.withResolvers<unknown>()
+    harness.setSendGate(send.promise)
+    const secondRun = harness.store.createRun(definition.id, { trigger: 'manual', scheduledFor: now + 1, now: now + 1 })
+    const dispatch = harness.dispatcher.dispatch(secondRun.id)
+    await harness.sendWasStarted
+
+    const pending = harness.store.getRun(secondRun.id)
+    expect(pending?.status).toBe('dispatching')
+    expect(pending?.sessionId).toBe('s_1')
+    expect(pending?.dispatchState).toMatchObject({ reused: true, messageCursor: 3 })
+    const sessionId = pending?.sessionId
+    if (!sessionId) throw new Error('expected the reused run to retain its session')
+    const changesBeforeDispose = harness.changedRuns.length
+    const observationCallsBeforeDispose = harness.calls.filter((call) => [
+      'quirky.structured/messages', 'quirky.session/get'
+    ].includes(call.method)).length
+
+    harness.dispatcher.dispose()
+    send.resolve({ ok: true })
+    await dispatch
+
+    const accepted = harness.store.getRun(secondRun.id)
+    expect(accepted?.status).toBe('dispatched')
+    expect(accepted?.sessionId).toBe(sessionId)
+    expect(accepted?.dispatchState).toMatchObject({ reused: true, messageCursor: 3 })
+    expect(harness.changedRuns).toHaveLength(changesBeforeDispose)
+    expect(harness.calls.filter((call) => [
+      'quirky.structured/messages', 'quirky.session/get'
+    ].includes(call.method))).toHaveLength(observationCallsBeforeDispose)
+    expect(harness.engine?.watchStructured).toBe(1)
+    expect(harness.calls.filter((call) => call.method === 'quirky.structured/send')).toHaveLength(1)
+    expect(createCount(harness)).toBe(1)
+
+    const messages = Promise.withResolvers<ScriptedMessage[]>()
+    harness.setMessagesGate(messages.promise)
+    const resumedRead = harness.waitForNextMessagesRead()
+    const restarted = createAutomationDispatcher(harness.context, harness.hooks)
+    fixtures.unshift({ dispatcher: restarted, close: () => {} })
+    await restarted.start()
+    await resumedRead
+
+    harness.appendMessage(sessionId, 'assistant', 'result recovered after restart')
+    harness.appendMessage(sessionId, 'result', 'turn complete', {
+      type: 'result', subtype: 'success', is_error: false
+    })
+    harness.setStatus(sessionId, 'done')
+    messages.resolve(harness.messages.get(sessionId)!.filter((message) => message.seq > 3))
+
+    const completed = await waitRun(harness, secondRun.id, 'completed')
+    expect(completed.outputSnapshot?.content).toBe('result recovered after restart')
+    expect(completed.dispatchState?.messageCursor).toBe(3)
+    expect(harness.calls.filter((call) => call.method === 'quirky.structured/send')).toHaveLength(1)
+    expect(createCount(harness)).toBe(1)
+  })
+
 
   test('Codex token evidence is per-turn and missing cost does not erase known cost', async () => {
     const harness = fixture()
@@ -837,6 +900,36 @@ describe('automation run dispatcher', () => {
     expect(harness.engine?.stop).toBe(1)
     expect(harness.engine?.dispose).toBe(1)
   })
+  test('disposal retains a late-created workspace identity without launching a session', async () => {
+    const harness = fixture()
+    const worktree = Promise.withResolvers<Record<string, unknown>>()
+    harness.setWorktreeGate(worktree.promise)
+    const { run } = newRun(harness, { workspaceMode: 'new_per_run', workspaceId: null })
+    const dispatch = harness.dispatcher.dispatch(run.id)
+    await harness.worktreeWasStarted
+
+    expect(harness.store.getRun(run.id)?.status).toBe('dispatching')
+    const changesBeforeDispose = harness.changedRuns.length
+    harness.dispatcher.dispose()
+    worktree.resolve({
+      worktree: { id: 'wt_late', path: '/repo-a/late', name: 'late-created-workspace', repoId: 'repo-a' },
+      setup: { ran: 'skipped' },
+      warnings: []
+    })
+
+    await dispatch
+
+    const retained = harness.store.getRun(run.id)
+    expect(retained?.status).toBe('dispatching')
+    expect(retained?.workspaceId).toBe('wt_late')
+    expect(retained?.workspaceDisplayName).toBe('late-created-workspace')
+    expect(retained?.sessionId).toBeNull()
+    expect(harness.changedRuns).toHaveLength(changesBeforeDispose)
+    expect(harness.calls.filter((call) => [
+      'quirky.structured/create', 'quirky.structured/send', 'quirky.structured/messages', 'quirky.session/get'
+    ].includes(call.method))).toHaveLength(0)
+  })
+
   test('a deleted run stops its late-created session', async () => {
     const harness = fixtureWithEngineSpies()
     const create = Promise.withResolvers<ScriptedSession>()
