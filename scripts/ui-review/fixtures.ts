@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { delimiter, dirname, join, resolve } from 'node:path'
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER } from '@quirky/protocol'
 import { createCodexAppServerFixture } from '../../plugins/quirky.structured/test/fakes/codex-app-server'
 import { prepareTasksFixture, type TasksFixture } from './tasks-fixture'
@@ -114,7 +114,7 @@ export function createIsolatedRuntimeEnvironment(
 ): Record<string, string> {
   const root = resolve(home)
   const env: Record<string, string> = {
-    PATH: '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
+    PATH: `${join(root, 'fakebin')}${delimiter}/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin`,
     HOME: root,
     TMPDIR: join(root, 'tmp'),
     TMP: join(root, 'tmp'),
@@ -126,7 +126,7 @@ export function createIsolatedRuntimeEnvironment(
     XDG_RUNTIME_DIR: join(root, 'runtime'),
     QUIRKY_HOME: root,
     QUIRKY_AGENT_SEARCH_DIRS: join(root, 'fakebin'),
-    SHELL: '/bin/sh',
+    SHELL: join(root, 'fakebin', 'sh'),
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_SYSTEM: '/dev/null',
     GIT_CONFIG_NOSYSTEM: '1',
@@ -251,6 +251,7 @@ export function prepareProviderExecutables(root: string): void {
   const native = createCodexAppServerFixture(join(root, 'providers', 'codex-native'), { uniqueThreads: true })
   const acceptanceAgent = resolve(import.meta.dir, '../../plugins/quirky.orchestration/test/workers/acceptance-agent.ts')
   mkdirSync(bin, { recursive: true, mode: 0o700 })
+  writeFileSync(join(bin, 'sh'), '#!/bin/sh\n[ "$1" = "-l" ] && shift\nexec /bin/sh "$@"\n', { mode: 0o700 })
   for (const provider of ['claude', 'codex'] as const) {
     const source = `#!${process.execPath}
 import { mkdirSync, writeFileSync } from 'node:fs'

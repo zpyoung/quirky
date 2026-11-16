@@ -18,6 +18,9 @@ import {
   type RegisteredCaptureFixtures
 } from './fixtures'
 import { fixtureIssue, fixturePullRequest } from '../../plugins/quirky.tasks/test/fixtures/list'
+import { createProcessRunner } from '../../packages/process/src/api'
+import type { ProcessRunner } from '@quirky/protocol'
+import { resolveCodexThroughLoginShell } from '../../plugins/quirky.structured/codex-path'
 
 const TASKS_FIXTURE_OWNER = 'fixture-owner'
 const TASKS_FIXTURE_REPO = 'ui-review-fixture'
@@ -379,6 +382,26 @@ test('provider environment is pinned to fixture executables and the private work
   const withoutRepo = createIsolatedRuntimeEnvironment(home)
   expect(withoutRepo.QUIRKY_AGENT_SEARCH_DIRS).toBe(join(home, 'fakebin'))
   expect(withoutRepo.WORKER_TEST_CLI).toBeUndefined()
+})
+
+test('fixture login shell resolves local Codex without reading a hostile profile', async () => {
+  const home = freshHome()
+  const env = createIsolatedRuntimeEnvironment(home)
+  prepareProviderExecutables(home)
+  const profileMarker = join(home, 'profile-was-loaded')
+  writeFileSync(join(home, '.profile'), `touch '${profileMarker}'\nPATH=/usr/bin:/bin\nexport PATH\n`)
+  const processRunner = createProcessRunner({ owner: 'ui-review-fixture-login-shell-test' })
+  const runner: ProcessRunner = {
+    run: (argv, options) => processRunner.run(argv, { ...(options ?? {}), env })
+  }
+  try {
+    expect(env.SHELL).toBe(join(home, 'fakebin', 'sh'))
+    expect(env.PATH.split(delimiter)[0]).toBe(join(home, 'fakebin'))
+    expect(await resolveCodexThroughLoginShell(runner, env.SHELL)).toBe(join(home, 'fakebin', 'codex'))
+    expect(existsSync(profileMarker)).toBe(false)
+  } finally {
+    await processRunner.dispose()
+  }
 })
 
 test('codex forwards app-server to the native fixture executable', async () => {
