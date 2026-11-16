@@ -494,6 +494,7 @@ describe('quirky.accounts completion API acceptance', () => {
         await runnerGate.promise
       },
       async send() {},
+      async interrupt() {},
       async stop() {
         stops += 1
         runnerGate.resolve()

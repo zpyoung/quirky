@@ -35,6 +35,11 @@ export class ChatRunner implements StructuredRunner {
     this.context.appendMessage({ sessionId, role: 'user', text, item: { kind: 'user', text, ...(options?.queuedId ? { queuedId: options.queuedId } : {}) } })
     this.context.setStatus(sessionId, 'working')
   }
+  interrupted: string[] = []
+  async interrupt(sessionId: string) {
+    this.interrupted.push(sessionId)
+    this.context.setStatus(sessionId, 'done')
+  }
   async stop(_sessionId: string) {}
   finish(sessionId: string) {
     this.context.setStatus(sessionId, 'done')

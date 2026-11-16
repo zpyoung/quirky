@@ -4,6 +4,8 @@ import type { ClaudeQuery, ClaudeQueryParams } from '../../claude-runner'
 export class FakeQuery implements ClaudeQuery {
   written: any[] = []
   interrupted = 0
+  /** Makes `interrupt` never settle, like an agent that ignores it. */
+  hangInterrupt = false
   closed = 0
   private buffer: any[] = []
   private waiting: { resolve: (r: IteratorResult<any>) => void; reject: (e: Error) => void } | null = null
@@ -37,6 +39,7 @@ export class FakeQuery implements ClaudeQuery {
 
   async interrupt() {
     this.interrupted++
+    if (this.hangInterrupt) await new Promise(() => {})
   }
 
   close() {

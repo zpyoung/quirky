@@ -150,6 +150,21 @@
         }
       },
       {
+        "id": "interrupt",
+        "description": "Ends the current turn of a structured session and leaves it idle and usable, with its queue untouched. Does not close the provider connection.",
+        "params": {
+          "type": "object",
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "ok": { "type": "boolean" } },
+          "required": ["ok"]
+        }
+      },
+      {
         "id": "stopOwned",
         "description": "Plugin callers only: stops live connections created by this exact plugin under a resource key, including a create whose reply was lost. Session history is retained.",
         "params": {

@@ -778,7 +778,7 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "if (session.status === 'exited') return <div style={ended} role=\"status\">session ended</div>"
+        "quote": "if (session.status === 'exited') {"
       },
       "anchor": "if (session.status === 'exited')",
       "reason": "An ended session has no composer; the notice reports the session lifecycle, not a loading, empty or failed read."
@@ -786,7 +786,7 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "if (session.status === 'exited') return <div style={ended} role=\"status\">session ended</div>"
+        "quote": "<div style={ended} role=\"status\">session ended</div>"
       },
       "anchor": "role=\"status\"",
       "reason": "Announces the ended-session notice classified at the branch above."
@@ -1760,13 +1760,13 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.call('quirky.structured/stop', { session: session.id })"
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
         },
-        "target": "quirky.structured/stop",
+        "target": "quirky.structured/interrupt",
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/stop', { session: session.id })\n    } catch (error) {\n      context.toast('Could not stop', messageOf(error))\n    }\n  }"
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      context.toast('Could not stop', messageOf(error))\n    }\n  }"
           }
         ]
       }

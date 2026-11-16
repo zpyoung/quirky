@@ -357,6 +357,39 @@ for (const variant of ['pi', 'omp'] as const) {
       await expect(setup.runner.send(setup.session.id, 'late')).rejects.toThrow('not running')
     })
 
+    test('interrupt aborts, ends the turn as stopped and keeps the child open for the next send', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'tool_execution_start', toolCallId: 'c1', toolName: 'bash', args: { command: 'sleep 99' } })
+      await setup.runner.interrupt(setup.session.id)
+      expect(transport.commands('abort').length).toBe(1)
+      expect(transport.closed).toBe(false)
+      expect(setup.ofKind('activity').map((item) => item.state)).toEqual(['running', 'stopped'])
+      expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'stopped' }])
+      expect(setup.statuses.at(-1)).toBe('done')
+      expect(setup.statuses).not.toContain('exited')
+      transport.emit({ type: 'agent_end' })
+      expect(setup.ofKind('turn-end')).toHaveLength(1)
+      await setup.runner.send(setup.session.id, 'again')
+      expect(transport.commands('prompt')).toHaveLength(2)
+      expect(setup.statuses.at(-1)).toBe('working')
+    })
+
+    test('interrupt with no open turn does nothing', async () => {
+      const transport = await begin(null)
+      await setup.runner.interrupt(setup.session.id)
+      expect(transport.commands('abort')).toEqual([])
+      expect(setup.ofKind('turn-end')).toEqual([])
+    })
+
+    test('an abort the agent never answers falls back to a full stop', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' })
+      transport.silent.add('abort')
+      await setup.runner.interrupt(setup.session.id)
+      expect(transport.closed).toBe(true)
+      expect(setup.statuses.at(-1)).toBe('exited')
+    })
+
     test('stop answers pending dialogs with nothing and still exits', async () => {
       const transport = await begin()
       transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-9', method: 'confirm', title: 'Go?' })

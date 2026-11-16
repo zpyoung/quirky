@@ -187,6 +187,21 @@ class PiRunner implements StructuredRunner {
     await this.submit(run, message, options)
   }
 
+  async interrupt(sessionId: string): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended || !run.ready || !run.working) return
+    this.closeTurn(run, 'stopped')
+    run.idleStatus = 'done'
+    try {
+      await run.rpc.request('abort', {}, ABORT_TIMEOUT_MS)
+    } catch {
+      await this.stop(sessionId)
+      return
+    }
+    if (run.stopped || run.ended) return
+    this.context.setStatus(sessionId, 'done')
+  }
+
   async stop(sessionId: string): Promise<void> {
     const startup = this.starting.get(sessionId)
     if (startup) {

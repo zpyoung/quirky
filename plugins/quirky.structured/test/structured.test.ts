@@ -43,6 +43,9 @@ class FakeRunner implements StructuredRunner {
     this.sent.push({ sessionId, text })
     this.context.appendMessage({ sessionId, role: 'user', text, data: { n: 1 } })
   }
+  async interrupt(sessionId: string) {
+    this.context.setStatus(sessionId, 'done')
+  }
   async stop(sessionId: string) {
     this.stopped.push(sessionId)
   }
