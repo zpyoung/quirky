@@ -1088,6 +1088,7 @@ test('owned fixture lifecycle removes its root after setup and build failures', 
 })
 
 async function realBrowserScenario(injectFlowFailureAfterAcquisition: boolean): Promise<void> {
+  const executablePath = browserExecutable()
   const beforeStatus = checkoutGitStatus(REPO_ROOT)
   const beforeOutputs = checkoutOutputSnapshot(REPO_ROOT)
   let proof: RealBrowserProof | undefined
@@ -1100,7 +1101,6 @@ async function realBrowserScenario(injectFlowFailureAfterAcquisition: boolean): 
     expect(plan.pluginIds.length).toBeGreaterThan(0)
     const markers = stampOwnedBuildArtifacts(fixture)
 
-    const executablePath = browserExecutable()
     await fixture.startDaemon(executablePath)
     if (!fixture.client || !fixture.daemon) throw new Error('owned daemon startup did not return a client and process')
     const client = fixture.client

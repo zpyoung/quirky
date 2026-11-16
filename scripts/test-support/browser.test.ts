@@ -98,20 +98,26 @@ test('capture preserves the shared candidates and Playwright-first callback orde
   }
 })
 
-test('daemon browser prerequisites fail before allocating a daemon fixture', () => {
+test('browser proof prerequisites fail before allocating daemon or UI fixtures', () => {
   const root = mkdtempSync(join(tmpdir(), 'browser-prerequisite-'))
   try {
     const daemonTest = join(import.meta.dir, '../../packages/daemon/test/index-preload.browser.test.ts')
+    const uiTest = join(import.meta.dir, '../../packages/ui/test/browser-tab.e2e.test.ts')
     const helpers = join(import.meta.dir, '../../packages/daemon/test/helpers.ts')
     const resolver = join(import.meta.dir, 'browser.ts')
     const probe = `
       import { mock } from 'bun:test'
-      const registered = []
+      import * as fs from 'node:fs'
+      const registered = new Map()
       let allocated = false
       let resolved = false
-      const register = (name, callback) => registered.push(callback)
+      const register = (name, callback) => registered.set(name, callback)
       register.skipIf = (skip) => skip ? () => {} : register
       mock.module('bun:test', () => ({ test: register, expect: () => {} }))
+      mock.module('node:fs', () => ({
+        ...fs,
+        mkdtempSync: () => { allocated = true; throw new Error('UI fixture allocated') }
+      }))
       mock.module(${JSON.stringify(helpers)}, () => ({
         makeTempHome: () => { allocated = true; throw new Error('fixture allocated') },
         startHarness: () => { throw new Error('daemon started') }
@@ -119,11 +125,21 @@ test('daemon browser prerequisites fail before allocating a daemon fixture', () 
       mock.module(${JSON.stringify(resolver)}, () => ({
         browserExecutable: () => { resolved = true; throw new Error('No executable Chrome or Chromium: prerequisite fixture') }
       }))
-      // Load after mocks so prerequisite failure cannot allocate a real daemon fixture.
+      // Load after mocks so prerequisite failures cannot allocate real fixtures.
       await import(${JSON.stringify(daemonTest)})
-      let error = ''
-      try { await registered[0]?.() } catch (failure) { error = failure.message }
-      console.log(JSON.stringify({ allocated, resolved, error, tests: registered.length }))
+      await import(${JSON.stringify(uiTest)})
+      const proofs = []
+      for (const name of [
+        'preloads plugin UI before dynamic import and resolves its import-map dependency',
+        'real browser proof cleans successful and injected-flow lifecycles'
+      ]) {
+        allocated = false
+        resolved = false
+        let error = ''
+        try { await registered.get(name)?.() } catch (failure) { error = failure.message }
+        proofs.push({ allocated, resolved, error, registered: registered.has(name) })
+      }
+      console.log(JSON.stringify(proofs))
     `
     const child = Bun.spawnSync([process.execPath, '-e', probe], {
       cwd: join(import.meta.dir, '../..'),
@@ -132,12 +148,12 @@ test('daemon browser prerequisites fail before allocating a daemon fixture', () 
       stderr: 'pipe'
     })
     expect(child.exitCode).toBe(0)
-    expect(JSON.parse(child.stdout.toString())).toEqual({
+    expect(JSON.parse(child.stdout.toString())).toEqual(Array.from({ length: 2 }, () => ({
       allocated: false,
       resolved: true,
       error: 'No executable Chrome or Chromium: prerequisite fixture',
-      tests: 1
-    })
+      registered: true
+    })))
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
