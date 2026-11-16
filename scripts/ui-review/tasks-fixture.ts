@@ -23,6 +23,18 @@ export type TasksFixture = {
 function ghWrapperSource(repo: string): string {
   return String.raw`
 const args = process.argv.slice(2)
+const apiArgs = []
+if (args[0] === 'api') {
+  for (let index = 1; index < args.length; index++) {
+    if (args[index] === '--hostname') {
+      index++
+      continue
+    }
+    if (args[index].startsWith('--hostname=')) continue
+    apiArgs.push(args[index])
+  }
+}
+const apiEndpoint = apiArgs.find((argument) => argument === 'rate_limit' || argument.startsWith('repos/'))
 const fixtureOwner = ${JSON.stringify(TASKS_FIXTURE_OWNER)}
 const fixtureRepo = ${JSON.stringify(repo)}
 const answer = (value) => {
@@ -39,15 +51,15 @@ if (args[0] === 'auth' && args[1] === 'token') {
     : ${JSON.stringify(TASKS_FIXTURE_TOKEN)})
   process.exit(0)
 }
-if (args[0] === 'api' && args[1] === 'rate_limit') {
+if (apiEndpoint === 'rate_limit') {
   answer({ resources: {
     core: { limit: 5000, remaining: 4200, reset: 1999999999 },
     search: { limit: 30, remaining: 28, reset: 1999999999 },
     graphql: { limit: 5000, remaining: 4000, reset: 1999999999 }
   } })
 }
-if (args[0] === 'api' && typeof args[1] === 'string' && args[1].startsWith('repos/' + fixtureOwner + '/' + fixtureRepo + '/pulls?')) {
-  const request = new URL('https://api.github.com/' + args[1])
+if (typeof apiEndpoint === 'string' && apiEndpoint.startsWith('repos/' + fixtureOwner + '/' + fixtureRepo + '/pulls?')) {
+  const request = new URL('https://api.github.com/' + apiEndpoint)
   const head = request.searchParams.get('head')
   if (head === fixtureOwner + ':ui-review-ready' || head === fixtureOwner + ':main') answer([])
   if (head === fixtureOwner + ':feature/capture-fixture-tasks') {

@@ -338,6 +338,15 @@ test('fake gh answers the Reviews routes and delegates other commands to the Tas
       graphql: { limit: 5000, remaining: 4000, reset: 1999999999 }
     })
 
+    expect(JSON.parse(runFixtureGh(gh, ['api', '--hostname=github.com', 'rate_limit'], home, env)))
+      .toEqual(rateLimit)
+    expect(JSON.parse(runFixtureGh(gh, [
+      'api',
+      '--hostname', 'github.com',
+      `repos/${TASKS_FIXTURE_OWNER}/${TASKS_FIXTURE_REPO}/pulls?head=fixture-owner:ui-review-ready&state=all&per_page=100`,
+      '-X', 'GET'
+    ], home, env))).toEqual([])
+
     for (const head of ['fixture-owner:ui-review-ready', 'fixture-owner:main']) {
       expect(JSON.parse(runFixtureGh(gh, [
         'api',
@@ -497,7 +506,7 @@ test('claude launches the acceptance agent only with both private bridge variabl
 test('claude stays silent and alive without the private worker CLI', async () => {
   const home = freshHome()
   prepareProviderExecutables(home)
-  const env = { ...createIsolatedRuntimeEnvironment(home), QUIRKY_SESSION_ID: 'idle-provider-session' }
+  const env: Record<string, string> = { ...createIsolatedRuntimeEnvironment(home), QUIRKY_SESSION_ID: 'idle-provider-session' }
   delete env.WORKER_TEST_CLI
   const child = Bun.spawn([join(home, 'fakebin', 'claude')], {
     env,
