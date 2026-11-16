@@ -69,6 +69,9 @@ test('Search Settings candidates and static checks pass in the collected invento
   expect(graph.failures).toEqual([])
 
   const candidates = discoverCandidates(vault, graph.files).filter((candidate) => candidate.file === searchSettingsFile)
+  expect(candidates).toHaveLength(37)
+  expect(candidates.filter((candidate) => candidate.category === 'state')).toHaveLength(31)
+  expect(candidates.filter((candidate) => candidate.category === 'action')).toHaveLength(6)
   expect(candidates.filter(({ anchorText }) => anchorText === 'status && (status.filesFailed > 0 || status.degradedRoots.length > 0) ?')
     .map(({ category, kind }) => ({ category, kind }))).toEqual([{ category: 'state', kind: 'conditional-render' }])
   expect(candidates.filter((candidate) => candidate.kind === 'unresolved-assignment')).toEqual([])
@@ -114,6 +117,7 @@ test('Search Settings coverage declares its shared loading and failure branches 
 
   expect(coverage.notState.filter(({ anchor }) => anchor === 'state.scopeStatusError ?'
     || anchor === 'status && (status.filesFailed > 0 || status.degradedRoots.length > 0) ?')).toEqual([])
+  expect(coverage.notState).toHaveLength(19)
   expect(coverage.notState.every(({ site, reason }) => site.file === searchSettingsFile && reason.length > 0)).toBe(true)
   expect(coverage.actions).toHaveLength(6)
   expect(coverage.actions.every((action) => 'route' in action && action.site.file === searchSettingsFile && (action.route.via?.length ?? 0) > 0)).toBe(true)
