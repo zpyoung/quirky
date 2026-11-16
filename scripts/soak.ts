@@ -3,11 +3,12 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from '
 import { resolve, join } from 'node:path'
 import { readRuntime } from '@quirky/protocol/node'
 import { parseArguments, USAGE, UsageError } from './soak/arguments.ts'
-import type { PanelRefreshRecord, Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
+import type { DayInputs, PanelRequestRecord, PanelRefreshRecord, Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
+import { applyPhase, daySchedule, startDay, type DayDriver } from './soak/day.ts'
 import { startFault, setGitDelay, type RunningFault } from './soak/faults.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
 import { startProbe, type Probe } from './soak/probe.ts'
-import { isPanelRefreshRequest, judge, windowAlive } from './soak/verdict.ts'
+import { isPanelRefreshRequest, judge, panelOfRequest, windowAlive } from './soak/verdict.ts'
 import { chromiumPath, openWindows, type SoakWindows } from './soak/windows.ts'
 import { startWorld, type SoakWorld } from './soak/world.ts'
 
@@ -132,6 +133,10 @@ export async function main(argv: string[]): Promise<number> {
   let probe: Probe | undefined
   let fault: RunningFault | undefined
   let windows: SoakWindows | undefined
+  let dayDriver: DayDriver | undefined
+  let day: DayInputs | undefined
+  const windowRequestSeconds = Array.from({ length: config.windows }, () => Array<number>(Math.ceil(config.minutes * 60)).fill(0))
+  const panelRequests: PanelRequestRecord[] = []
   const panelRefreshes: PanelRefreshRecord[] = []
   let measurementStart: number | null = null
   let measurementEnd: number | null = null
@@ -152,14 +157,24 @@ export async function main(argv: string[]): Promise<number> {
       windows = await openWindows({
         world, count: config.windows, executable: executable!, out: config.out, signal: setupAbort.signal,
         onRequest: (request) => {
-          if (measurementStart === null || measurementEnd === null || request.at < measurementStart || request.at > measurementEnd
-            || !isPanelRefreshRequest(request.method, request.params)) return
-          panelRefreshes.push({
-            at: Number(((request.at - measurementStart) / 1000).toFixed(3)),
-            index: request.index, worktree: request.worktree, method: request.method
+          if (measurementStart === null || measurementEnd === null || request.at < measurementStart || request.at >= measurementEnd) return
+          const at = Number(((request.at - measurementStart) / 1000).toFixed(3))
+          const buckets = windowRequestSeconds[request.index]!
+          const second = Math.floor((request.at - measurementStart) / 1000)
+          buckets[second] = (buckets[second] ?? 0) + 1
+          const panel = panelOfRequest(request.method, request.params)
+          if (panel !== null) panelRequests.push({ at, index: request.index, panel })
+          if (isPanelRefreshRequest(request.method, request.params)) panelRefreshes.push({
+            at, index: request.index, worktree: request.worktree, method: request.method
           })
         }
       })
+      await applyPhase({ control: world.control, windows, phase: 0, previous: null, signal: setupAbort.signal })
+      day = {
+        enabled: config.fault === undefined,
+        windows: windows.liveness!().map(({ index, worktree }) => ({ index, worktree })),
+        worktrees: world.fixtures.worktrees.map(({ id }) => id)
+      }
     }
     const feedbackWorktrees = config.fault === 'feedback'
       ? await readyFeedbackWindows(world, windows!, setupAbort.signal)
@@ -170,6 +185,12 @@ export async function main(argv: string[]): Promise<number> {
     measurementStart = startedAt
     measurementEnd = startedAt + config.minutes * 60_000
     const startedIso = new Date().toISOString()
+    if (day?.enabled) {
+      dayDriver = startDay({
+        control: world.control, windows: windows!, startedAt, signal: runAbort.signal,
+        schedule: daySchedule({ seconds: config.minutes * 60, windows: day.windows, worktrees: day.worktrees })
+      })
+    }
     let samplingStopped = false
     let daemonMissing = false
     probe = startProbe({
@@ -177,6 +198,7 @@ export async function main(argv: string[]): Promise<number> {
       startedAt,
       signal: runAbort.signal,
       maxStallMs: config.limits.maxStallMs,
+      gitProbe: { worktrees: world.fixtures.worktrees.map(({ id }) => id) },
       isDaemonDead: () => daemonMissing || world!.control.isClosed || readRuntime(world!.home) === null || !isPidAlive(world!.daemonPid),
       onDaemonLost: () => {
         samplingStopped = true
@@ -231,10 +253,11 @@ export async function main(argv: string[]): Promise<number> {
       await pause(Math.min(sampleStart + 1000, deadline) - performance.now(), runAbort.signal)
     }
     measurementEnd = Math.min(performance.now(), measurementEnd!)
-    if (interrupted) return interrupted
     if (!samplingStopped && !daemonMissing) probe.finish()
     else probe.stop()
-    const durationSeconds = Number(elapsed().toFixed(3))
+    const dayResult = await dayDriver?.stop() ?? { switches: [], phases: [], taskInteractions: [], drainError: null }
+    if (interrupted) return interrupted
+    const durationSeconds = Number(((measurementEnd - startedAt) / 1000).toFixed(3))
     if (attemptedSamples > 0 && skippedSamples / attemptedSamples > 0.1) {
       throw new Error(`ps failed for ${skippedSamples} of ${attemptedSamples} samples`)
     }
@@ -265,6 +288,14 @@ export async function main(argv: string[]): Promise<number> {
       events: probe.events,
       panelRefreshes,
       probes: probe.probes,
+      gitProbes: probe.gitProbes,
+      windowRequestSeconds,
+      panelRequests,
+      day,
+      switches: dayResult.switches,
+      phases: dayResult.phases,
+      taskInteractions: dayResult.taskInteractions,
+      dayDrainError: dayResult.drainError,
       workers: world.workers.map(({ worktree, path }) => heartbeat(worktree, path, now)),
       daemonExited: daemonMissing || probe.daemonExited(),
       daemonLog,
@@ -289,6 +320,13 @@ export async function main(argv: string[]): Promise<number> {
       windows: windowEvidence.records,
       windowRequests: windowEvidence.requests,
       panelRefreshes,
+      gitProbes: probe.gitProbes,
+      windowRequestSeconds,
+      panelRequests,
+      day: day ?? null,
+      switches: dayResult.switches,
+      phases: dayResult.phases,
+      taskInteractions: dayResult.taskInteractions,
       daemon: { pid: world.daemonPid, rssKbFirst: rss[0] ?? null, rssKbMax: rss.length ? Math.max(...rss) : null, rssKbLast: rss.at(-1) ?? null },
       skippedSamples,
       skippedBeats: skippedBeatCount,
@@ -311,6 +349,7 @@ export async function main(argv: string[]): Promise<number> {
     fault?.stop()
     try {
       try {
+        await dayDriver?.stop()
         await windows?.stop()
       } finally {
         await world?.stop()
