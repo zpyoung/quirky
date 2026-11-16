@@ -59,6 +59,12 @@ native file reveal or operating-system notification permission, click, or dismis
 `quirky://pair` link, or pasting the code. Pairing pins the desktop key; bearer credentials stay
 in the phone's secure store. No relay or cloud account is used.
 
+If pairing reports that the device registry or encryption identity was damaged and set aside,
+a local owner can run `quirky mobile reset-pairing --confirm`. The command keeps set-aside files,
+but every paired device must pair again. Owner CLI grants are revoked when a new identity is
+created. If the owner grant registry can't be written, restart Quirky and run the command again,
+as its error instructs.
+
 The desktop Mobile page and Settings > Mobile offer “Try again” when settings fail to load.
 “Copy pairing code” is also available as
 `quirky ui run command:quirky.mobile/copy-pairing-code` while a pairing panel is open.

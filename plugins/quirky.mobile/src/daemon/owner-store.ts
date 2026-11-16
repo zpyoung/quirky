@@ -58,6 +58,12 @@ export function setOwnerGrantRecoveryHooksForTests(hooks: OwnerGrantRecoveryHook
   recoveryHooksForTests = hooks
 }
 
+let ownerGrantWriteHooksForTests: { beforeRename?(): void; afterRename?(): void } | null = null
+
+export function setOwnerGrantWriteHooksForTests(hooks: { beforeRename?(): void; afterRename?(): void } | null): void {
+  ownerGrantWriteHooksForTests = hooks
+}
+
 function guardedQuarantine(path: string, identity: FileIdentity): QuarantineResult {
   let destination: string | null = null
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -147,7 +153,9 @@ function writeSecureAtomic(path: string, content: string): void {
   }
   closeSync(descriptor)
   try {
+    ownerGrantWriteHooksForTests?.beforeRename?.()
     renameSync(temporary, path)
+    ownerGrantWriteHooksForTests?.afterRename?.()
     chmodSync(path, 0o600)
     syncDirectory(directory)
   } catch (error) {
@@ -265,6 +273,14 @@ export class OwnerGrantStore {
     const next = this.grantsValue.filter((_, current) => current !== index)
     this.persist(next)
     return true
+  }
+
+  revokeAll(): number {
+    this.ensureAvailable()
+    const revoked = this.grantsValue.length
+    if (revoked === 0) return 0
+    this.persist([])
+    return revoked
   }
 
   private load(): void {

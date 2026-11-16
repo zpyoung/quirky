@@ -240,6 +240,32 @@
         }
       },
       {
+        "id": "resetPairing",
+        "description": "Local owner recovery: start an empty device registry, and a new E2EE identity only when its file is missing (revoking owner CLI grants first), after the store set either aside. Never deletes set-aside files.",
+        "destructive": true,
+        "confirm": "Reset Quirky mobile pairing? Every paired phone must pair again, and owner CLI grants are revoked if a new encryption identity is created.",
+        "params": {
+          "type": "object",
+          "properties": { "confirm": { "type": "boolean" } },
+          "required": ["confirm"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "identityCreated": { "type": "boolean" },
+            "unpairedDevices": { "type": "number" },
+            "ownerGrantsRevoked": { "type": "number" },
+            "ownerGrantsRemaining": {},
+            "previousRegistry": {},
+            "quarantined": { "type": "array", "items": { "type": "string" } },
+            "unsynced": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["identityCreated", "unpairedDevices", "ownerGrantsRevoked", "ownerGrantsRemaining", "previousRegistry", "quarantined", "unsynced"],
+          "additionalProperties": false
+        }
+      },
+      {
         "id": "devices",
         "description": "List durably paired mobile devices; pending offers are excluded.",
         "readOnly": true,
@@ -730,6 +756,12 @@
         "positionals": [{ "name": "grant-id", "description": "the owner grant UUID", "required": true }],
         "flags": { "confirm": { "type": "boolean", "description": "Required explicit confirmation to revoke the grant." } },
         "methods": ["quirky.mobile/ownerRevoke"]
+      },
+      {
+        "id": "reset-pairing",
+        "summary": "start mobile pairing over after its registry or identity was set aside (local owner only)",
+        "flags": { "confirm": { "type": "boolean", "description": "Required explicit confirmation; every paired device must pair again." } },
+        "methods": ["quirky.mobile/resetPairing"]
       },
       { "id": "devices", "summary": "list paired mobile devices", "methods": ["quirky.mobile/devices"] },
       {
