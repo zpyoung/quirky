@@ -48,13 +48,22 @@ test.skipIf(executable === null)('measures two real renderer windows without cou
     expect(report.checks.refreshes.ok).toBe(true)
     expect(report.checks.refreshes.missingWindows).toEqual([])
     expect(report.checks.refreshes.byWindow).toHaveLength(2)
-    for (const [index, window] of report.windows.entries()) {
-      expect(report.panelRefreshes.some((record) => record.index === index && record.worktree === window.worktree)).toBe(true)
+    for (const record of report.panelRefreshes) {
+      expect(Number.isFinite(record.at)).toBe(true)
+      expect(record.at).toBeGreaterThanOrEqual(0)
+      expect(record.at).toBeLessThanOrEqual(report.durationSeconds)
+      expect(['quirky.git/status', 'quirky.reviews/checksRefresh']).toContain(record.method)
+      expect(report.windows.some((window) => window.index === record.index && window.worktree === record.worktree)).toBe(true)
     }
-    expect(report.panelRefreshes.every(({ at, method }) => at >= 0 && at <= report.durationSeconds && method === 'quirky.git/status')).toBe(true)
+    const gitRefreshes = report.panelRefreshes.filter(({ method }) => method === 'quirky.git/status')
+    for (const window of report.windows) {
+      expect(gitRefreshes.filter((record) => record.index === window.index && record.worktree === window.worktree).length).toBeGreaterThanOrEqual(3)
+    }
+    expect(gitRefreshes.length).toBeGreaterThanOrEqual(6)
     expect(report.disqualified).toContain('ran 0.4 minutes, needs 30')
     expect(report.disqualified.some((reason) => reason.includes('windows connected'))).toBe(false)
     expect(report.windows).toHaveLength(2)
+    expect(report.windows.map(({ index }) => index)).toEqual([0, 1])
     expect(report.windows[0]!.worktree).not.toBe(report.windows[1]!.worktree)
     expect(report.windows[0]!.connId).not.toBe(report.windows[1]!.connId)
     for (const record of report.windows) {
@@ -63,7 +72,6 @@ test.skipIf(executable === null)('measures two real renderer windows without cou
       expect(record.requests).toBeGreaterThanOrEqual(10)
       expect(record.sockets).toBeGreaterThanOrEqual(1)
     }
-    expect(report.windowRequests.find(({ method }) => method === 'quirky.git/status')?.total).toBeGreaterThanOrEqual(6)
     const browserPid = Number(readFileSync(join(out, 'browser.pid'), 'utf8').trim())
     const daemonPid = Number(readFileSync(join(out, 'daemon.pid'), 'utf8').trim())
     const samples = readFileSync(join(out, 'samples.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line) as Sample)
