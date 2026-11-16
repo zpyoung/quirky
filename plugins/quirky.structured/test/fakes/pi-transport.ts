@@ -12,6 +12,8 @@ export class FakePiTransport implements PiTransport {
   /** Commands the fake never answers, to hold a request open. */
   readonly silent = new Set<string>()
   closed = false
+  /** When set, the next writes of a command with this `type` throw as an oversized or broken pipe would. */
+  readonly failWrites = new Map<string, Error>()
   stderrTail: string[] = []
 
   constructor(
@@ -26,6 +28,8 @@ export class FakePiTransport implements PiTransport {
 
   write(frame: PiFrame): void {
     if (this.closed) throw new Error('transport is closed')
+    const failure = this.failWrites.get(String(frame.type))
+    if (failure) throw failure
     this.written.push(frame)
     if (typeof frame.id !== 'string' || frame.type === 'extension_ui_response' || this.silent.has(String(frame.type))) return
     const reply = this.replies.get(String(frame.type))?.(frame) ?? { success: true }

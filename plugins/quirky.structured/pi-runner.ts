@@ -87,7 +87,8 @@ type Running = {
   calls: CallTracker
   stream: ProseStream
   pendingDialogs: number
-  cancelledDialogs: Set<string>
+  dialogCancels: Map<string, () => void>
+  exit?: PiExit
   deniedReasons: string[]
 }
 
@@ -165,12 +166,15 @@ class PiRunner implements StructuredRunner {
           transcriptPath: text(state?.sessionFile) || null
         })
         if (startup.stopped) return
+        this.requireLive(run)
         if (this.variant === 'omp') await run.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
         if (startup.stopped) return
+        this.requireLive(run)
         this.running.set(session.id, run)
         run.ready = true
         if (prompt === undefined || prompt === '') this.context.setStatus(session.id, 'running')
-        else await this.submit(run, prompt, {})
+        // a rejected first prompt is already journaled as an error item; the session itself started
+        else await this.submit(run, prompt, {}).catch(() => undefined)
       } catch (error) {
         await run.rpc.close()
         if (startup.stopped) return
@@ -179,6 +183,11 @@ class PiRunner implements StructuredRunner {
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
     }
+  }
+
+  /** Fails startup when the child exited during an awaited step, so no session is reported running without a process. */
+  private requireLive(run: Running): void {
+    if (run.ended) throw new Error(run.exit ? `${this.variant} ${describeExit(run.exit)}` : `${this.variant} exited during startup`)
   }
 
   async send(sessionId: string, message: string, options: StructuredSendOptions = {}): Promise<void> {
@@ -236,7 +245,7 @@ class PiRunner implements StructuredRunner {
       calls: new CallTracker(),
       stream: new ProseStream(),
       pendingDialogs: 0,
-      cancelledDialogs: new Set(),
+      dialogCancels: new Map(),
       deniedReasons: []
     }
     run.rpc = new PiRpc(
@@ -310,7 +319,7 @@ class PiRunner implements StructuredRunner {
       const data = record(await run.rpc.request(steering ? 'steer' : 'prompt', params, SEND_TIMEOUT_MS))
       if (!steering && (data?.disposition === 'handled' || data?.agentInvoked === false)) this.finishTurn(run, 'done')
     } catch (error) {
-      if (run.stopped || run.ended) return
+      if (run.stopped || run.ended) throw new Error('session is not running', { cause: error })
       const reason = error instanceof Error ? error.message : String(error)
       this.context.appendMessage({
         sessionId: run.sessionId,
@@ -322,6 +331,7 @@ class PiRunner implements StructuredRunner {
         run.failedTurn = true
         this.finishTurn(run, 'failed')
       }
+      throw error
     }
   }
 
@@ -411,6 +421,7 @@ class PiRunner implements StructuredRunner {
   private onExit(run: Running, exit: PiExit): void {
     if (run.stopped || run.ended) return
     run.ended = true
+    run.exit = exit
     if (!run.ready) return
     this.running.delete(run.sessionId)
     const wasWorking = run.working
@@ -439,7 +450,7 @@ class PiRunner implements StructuredRunner {
         if (id !== '') void this.dialog(run, id, frame)
         return
       case 'cancel':
-        run.cancelledDialogs.add(text(frame.targetId))
+        run.dialogCancels.get(text(frame.targetId))?.()
         return
       case 'notify':
         if (text(frame.message) !== '') this.status(run, oneLine(text(frame.message)), frame)
@@ -452,19 +463,24 @@ class PiRunner implements StructuredRunner {
   private async dialog(run: Running, id: string, frame: PiFrame): Promise<void> {
     run.pendingDialogs++
     this.context.setStatus(run.sessionId, 'waiting')
-    let response: PiFrame
+    const cancelled = Promise.withResolvers<null>()
+    run.dialogCancels.set(id, () => cancelled.resolve(null))
+    let response: PiFrame | null
     try {
-      response = await this.answer(run, frame)
+      const answer = this.answer(run, frame)
+      answer.catch(() => undefined)
+      response = await Promise.race([answer, cancelled.promise])
     } catch {
       response = { cancelled: true }
     } finally {
+      run.dialogCancels.delete(id)
       run.pendingDialogs--
       if (!run.stopped && !run.ended && run.pendingDialogs === 0) {
         this.context.setStatus(run.sessionId, run.working ? 'working' : run.idleStatus)
       }
     }
     if (run.stopped || run.ended) return
-    if (!run.cancelledDialogs.delete(id)) {
+    if (response !== null) {
       try {
         run.rpc.send({ type: 'extension_ui_response', id, ...response })
       } catch {
