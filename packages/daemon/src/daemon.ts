@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PROTOCOL_VERSION } from '@quirky/protocol'
 import { stopAllProcesses } from '@quirky/process'
@@ -160,6 +160,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
   const rpcToken = identity.token ?? randomBytes(24).toString('hex')
   const hookToken = identity.hookToken ?? randomBytes(24).toString('hex')
   const listenSocketPath = options.socketPath ?? socketPath(home, 'quirkyd.sock')
+  const uiDir = resolve(options.uiDir ?? defaultUiDir())
 
   const store = new Store(join(home, 'quirky.db'), {
     onRecover: (recovery) => log(describeSqliteRecovery(recovery))
@@ -188,6 +189,8 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
     hookToken,
     hookUrl: () => `http://127.0.0.1:${port}/hook`,
     safeMode: options.safeMode ?? false,
+    browserUiUrl: () => `http://127.0.0.1:${port}/#token=${encodeURIComponent(rpcToken)}`,
+    browserUiIndexPath: join(uiDir, 'index.html'),
     socketPath: listenSocketPath,
     onRemoveClient: (conn) => lateRuntime?.layout.dropConnection(conn),
     onEvent: (event) => lateRuntime?.events.deliver(event)
@@ -282,7 +285,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       port: listenPort,
       rpcToken,
       daemonVersion,
-      uiDir: options.uiDir ?? defaultUiDir(),
+      uiDir,
       log
     })
   let server: ReturnType<typeof listen>

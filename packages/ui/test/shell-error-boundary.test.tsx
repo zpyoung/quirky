@@ -289,7 +289,7 @@ test('keeps healthy children and a normal no-token App isolated from another roo
       expect(noTokenApp.container.querySelector('[role="alert"]')).toBeNull()
       expect(noTokenApp.container.querySelector('h1')?.textContent).toBe('Not connected')
       expect(noTokenApp.container.querySelector('p')?.textContent).toContain('This page needs an access token.')
-      expect(noTokenApp.container.querySelector('code')?.textContent).toBe('#token=…')
+      expect(noTokenApp.container.querySelector('code')?.textContent).toBe('quirky ui url')
       expect(noTokenApp.container.querySelectorAll('button, [role="button"]')).toHaveLength(0)
       expectFallback(failedApp.container, 'private host diagnostic')
 

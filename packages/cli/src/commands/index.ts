@@ -37,6 +37,7 @@ import {
   uiRun,
   uiSidebar,
   uiConfigurePanel,
+  uiUrl,
   uiState
 } from './ui'
 import type { Command, Context } from './types'
@@ -75,6 +76,7 @@ export const COMMANDS: Command[] = [
   jobList,
   jobRun,
   uiContributions,
+  uiUrl,
   uiState,
   uiOpenView,
   uiCloseView,
