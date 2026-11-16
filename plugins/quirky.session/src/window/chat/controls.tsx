@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import type { AgentCapabilities, Capability, Session, UiPluginContext } from '@quirky/protocol'
 import { AgentIcon, Badge, Button, ControlIcon, IconButton, SelectField } from '@quirky/ui'
 
@@ -59,7 +59,7 @@ export function launchPicks(session: Session): Pick<Picks, 'model' | 'effort'> {
 
 const bar = { display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: 'var(--ui-space-8)', minWidth: 0 } satisfies CSSProperties
 const chip = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-4)' } satisfies CSSProperties
-const hidden = { display: 'none' } satisfies CSSProperties
+const DROP_HINT = 'Drop images onto the composer'
 
 /** The agent a session runs; fixed because an agent cannot change once its session exists. */
 export function AgentChip({ session }: { session: Session }) {
@@ -76,14 +76,18 @@ export function AgentChip({ session }: { session: Session }) {
 }
 
 /**
- * Whether `file` can be attached as an image: the absolute path comes from the shell (`File.path`) or,
- * for a native drop, from the window; a file with no known path is refused.
+ * The absolute path of each of `files`, null where none is known. A file carries its own `path` in some
+ * shells; otherwise the paths come from the window's native drop report, which matches only the whole
+ * set of files from one drop, so every file of the drop must be passed together.
  */
-export async function absolutePathOf(context: UiPluginContext, file: File): Promise<string | null> {
-  const direct = (file as File & { path?: unknown }).path
-  if (typeof direct === 'string' && direct.startsWith('/')) return direct
-  const dropped = await context.nativeDropPaths([file]).catch(() => null)
-  return dropped?.[0] ?? null
+export async function absolutePathsOf(context: UiPluginContext, files: File[]): Promise<(string | null)[]> {
+  const direct = files.map((file) => {
+    const path = (file as File & { path?: unknown }).path
+    return typeof path === 'string' && path.startsWith('/') ? path : null
+  })
+  if (direct.every((path) => path !== null)) return direct
+  const dropped = await context.nativeDropPaths(files).catch(() => null)
+  return files.map((_, index) => direct[index] ?? dropped?.[index] ?? null)
 }
 
 export type ControlsProps = {
@@ -93,12 +97,13 @@ export type ControlsProps = {
   options: AgentOptions | null
   picks: Picks
   onPicks: (picks: Picks) => void
-  onAttach: (files: File[]) => void
 }
 
-/** The composer's agent chip, model and effort pickers, permission mode, plan toggle and attach button. */
-export function Controls({ session, capabilities, options, picks, onPicks, onAttach }: ControlsProps) {
-  const fileInput = useRef<HTMLInputElement>(null)
+/**
+ * The composer's agent chip, model and effort pickers, permission mode, plan toggle and attach button.
+ * The desktop shell has no native file picker, so the attach button only tells the user to drop images.
+ */
+export function Controls({ context, session, capabilities, options, picks, onPicks }: ControlsProps) {
   const launched = launchPicks(session)
   const model = picks.model ?? launched.model ?? options?.models[0]?.id ?? null
   const choices = options ? effortChoices(options, model) : []
@@ -160,23 +165,14 @@ export function Controls({ session, capabilities, options, picks, onPicks, onAtt
       >
         Plan mode
       </Button>
-      <IconButton label="Attach images" disabled={imagesReason !== undefined} title={imagesReason} onClick={() => fileInput.current?.click()}>
+      <IconButton
+        label="Attach images"
+        disabled={imagesReason !== undefined}
+        title={imagesReason ?? DROP_HINT}
+        onClick={() => context.toast('Attach images', DROP_HINT)}
+      >
         <ControlIcon name="plus" />
       </IconButton>
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/*"
-        multiple
-        style={hidden}
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(event) => {
-          const files = [...(event.target.files ?? [])]
-          event.target.value = ''
-          if (files.length > 0) onAttach(files)
-        }}
-      />
     </div>
   )
 }

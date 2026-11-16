@@ -1,7 +1,7 @@
-import { useEffect, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import { useEffect, useState, type ClipboardEvent, type CSSProperties, type DragEvent, type KeyboardEvent } from 'react'
 import type { AgentCapabilities, Session, UiPluginContext } from '@quirky/protocol'
 import { Button, ScopeChip } from '@quirky/ui'
-import { absolutePathOf, Controls, NO_PICKS, useAgentOptions, type Picks } from './controls'
+import { absolutePathsOf, Controls, NO_PICKS, reasonOf, useAgentOptions, type Picks } from './controls'
 import { Mentions, useFileSearch } from './Mentions'
 import { QueuedList } from './QueuedList'
 
@@ -101,13 +101,36 @@ export function Composer({
   }
 
   const attach = async (files: File[]) => {
-    const added: Attachment[] = []
-    for (const file of files) {
-      const path = await absolutePathOf(context, file)
-      if (path) added.push({ name: file.name, path })
-      else context.toast('Could not attach', `${file.name} has no file path`)
+    const unsupported = reasonOf(capabilities?.images)
+    if (unsupported) {
+      context.toast('Could not attach', unsupported)
+      return
     }
+    const paths = await absolutePathsOf(context, files)
+    const added: Attachment[] = []
+    files.forEach((file, index) => {
+      const path = paths[index]
+      if (!file.type.startsWith('image/')) context.toast('Could not attach', `${file.name} is not an image`)
+      else if (path) added.push({ name: file.name, path })
+      else context.toast('Could not attach', `${file.name} has no file path`)
+    })
     setAttachments((current) => [...current, ...added.filter((image) => !current.some((existing) => existing.path === image.path))])
+  }
+
+  const hasFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes('Files')
+
+  const onDrop = (event: DragEvent) => {
+    if (!hasFiles(event)) return
+    event.preventDefault()
+    const files = [...event.dataTransfer.files]
+    if (files.length > 0) void attach(files)
+  }
+
+  const onPaste = (event: ClipboardEvent) => {
+    const files = [...(event.clipboardData?.files ?? [])]
+    if (files.length === 0) return
+    event.preventDefault()
+    void attach(files)
   }
 
   const trackMention = (value: string, caret: number) => {
@@ -132,7 +155,7 @@ export function Composer({
         setActive((current) => (current + step + search.items.length) % search.items.length)
         return
       }
-      if (event.key === 'Enter' || event.key === 'Tab') {
+      if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
         event.preventDefault()
         pickMention(search.items[Math.min(active, search.items.length - 1)]!)
         return
@@ -152,7 +175,14 @@ export function Composer({
   if (session.status === 'exited') return <div style={ended} role="status">session ended</div>
 
   return (
-    <div style={layout}>
+    <div
+      style={layout}
+      onDragOver={(event) => {
+        if (hasFiles(event)) event.preventDefault()
+      }}
+      onDrop={onDrop}
+      onPaste={onPaste}
+    >
       <QueuedList context={context} session={session} capabilities={capabilities} />
       {mention && <Mentions search={search} active={active} onPick={pickMention} />}
       {attachments.length > 0 && (
@@ -196,7 +226,6 @@ export function Composer({
             setPicks(next)
             onPick?.(next)
           }}
-          onAttach={(files) => void attach(files)}
         />
         {working && (
           <span style={running}>

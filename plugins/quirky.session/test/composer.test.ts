@@ -287,22 +287,88 @@ describe('the composer controls', () => {
     expect(plan.getAttribute('aria-pressed')).toBe('true')
   })
 
-  test('attaches images by absolute path and sends them', async () => {
+  const dropOn = async (target: Element, files: File[], types: string[] = ['Files']) => {
+    const event = new Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'dataTransfer', { value: { files, types } })
+    await act(async () => void target.dispatchEvent(event))
+    return event
+  }
+  const image = (name: string) => new File(['x'], name, { type: 'image/png' })
+
+  test('the attach button explains that images are dropped and opens no picker', async () => {
     await mount()
-    const input = host!.querySelector<HTMLInputElement>('input[type="file"]')!
-    expect(input.accept).toBe('image/*')
-    const file = Object.assign(new File(['x'], 'shot.png', { type: 'image/png' }), { path: '/tmp/shot.png' })
-    await act(async () => {
-      Object.defineProperty(input, 'files', { value: [file], configurable: true })
-      input.dispatchEvent(new Event('change', { bubbles: true }))
-    })
+    expect(host!.querySelector('input[type="file"]')).toBeNull()
+    const attach = buttonNamed('Attach images')!
+    expect(attach.title).toBe('Drop images onto the composer')
+    await click(attach)
+    expect(fake.toasts).toEqual([{ title: 'Attach images', body: 'Drop images onto the composer' }])
+  })
+
+  test('attaches dropped images by the native drop paths, resolved together, and sends them', async () => {
+    await mount()
+    const asked: string[][] = []
+    ;(fake.context as { nativeDropPaths: unknown }).nativeDropPaths = async (files: ArrayLike<{ name: string }>) => {
+      asked.push(Array.from(files, (file) => file.name))
+      return ['/home/me/shot.png', '/home/me/notes.txt']
+    }
+    const event = await dropOn(host!.firstElementChild!, [image('shot.png'), new File(['t'], 'notes.txt', { type: 'text/plain' })])
     await settle()
-    expect(host!.textContent).toContain('shot.png')
+    expect(event.defaultPrevented).toBe(true)
+    expect(asked).toEqual([['shot.png', 'notes.txt']])
+    expect(host!.querySelector('[aria-label="Attached images"]')!.textContent).toContain('shot.png')
+    expect(fake.toasts).toEqual([{ title: 'Could not attach', body: 'notes.txt is not an image' }])
     await type('look')
     await press('Enter')
     await settle()
-    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 's1', text: 'look', images: ['/tmp/shot.png'], when: 'now' })
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 's1', text: 'look', images: ['/home/me/shot.png'], when: 'now' })
     expect(host!.textContent).not.toContain('shot.png')
+  })
+
+  test('a dropped image with no known path toasts instead of attaching', async () => {
+    await mount()
+    await dropOn(host!.firstElementChild!, [image('shot.png')])
+    await settle()
+    expect(host!.querySelector('[aria-label="Attached images"]')).toBeNull()
+    expect(fake.toasts).toEqual([{ title: 'Could not attach', body: 'shot.png has no file path' }])
+  })
+
+  test('a dropped file that carries its own absolute path attaches without a native report', async () => {
+    await mount()
+    await dropOn(host!.firstElementChild!, [Object.assign(image('shot.png'), { path: '/tmp/shot.png' })])
+    await settle()
+    expect(host!.querySelector('[aria-label="Attached images"]')!.textContent).toContain('shot.png')
+  })
+
+  test('a drop that carries no files is left alone', async () => {
+    await mount()
+    const event = await dropOn(host!.firstElementChild!, [], ['text/plain'])
+    expect(event.defaultPrevented).toBe(false)
+  })
+
+  test('dropping images is refused with the capability reason when the agent takes none', async () => {
+    await mount({}, { capabilities: { ...PI, images: { ok: false, reason: 'pi takes no images' } } })
+    await dropOn(host!.firstElementChild!, [Object.assign(image('shot.png'), { path: '/tmp/shot.png' })])
+    await settle()
+    expect(host!.querySelector('[aria-label="Attached images"]')).toBeNull()
+    expect(fake.toasts).toEqual([{ title: 'Could not attach', body: 'pi takes no images' }])
+  })
+
+  test('pasted image files attach through the same path resolution', async () => {
+    await mount()
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', { value: { files: [Object.assign(image('clip.png'), { path: '/tmp/clip.png' })] } })
+    await act(async () => void box().dispatchEvent(event))
+    await settle()
+    expect(event.defaultPrevented).toBe(true)
+    expect(host!.querySelector('[aria-label="Attached images"]')!.textContent).toContain('clip.png')
+  })
+
+  test('pasting text is left to the textarea', async () => {
+    await mount()
+    const event = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', { value: { files: [] } })
+    await act(async () => void box().dispatchEvent(event))
+    expect(event.defaultPrevented).toBe(false)
   })
 })
 
@@ -334,6 +400,25 @@ describe('@ mentions', () => {
     await press('Enter')
     expect(box().value).toBe('@src/main.ts ')
     expect(fake.callsTo('quirky.structured/send')).toHaveLength(0)
+  })
+
+  test('Shift+Enter with the list open leaves the keystroke to the textarea, so it inserts a newline', async () => {
+    await mount({ 'quirky.editor/quickOpen': (params) => search(params.query) })
+    await type('@src')
+    await settle()
+    const event = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true })
+    await act(async () => void box().dispatchEvent(event))
+    expect(event.defaultPrevented).toBe(false)
+    expect(box().value).toBe('@src')
+    expect(fake.callsTo('quirky.structured/send')).toHaveLength(0)
+  })
+
+  test('Tab picks the highlighted file', async () => {
+    await mount({ 'quirky.editor/quickOpen': (params) => search(params.query) })
+    await type('@src')
+    await settle()
+    await press('Tab')
+    expect(box().value).toBe('@src/app.ts ')
   })
 
   test('says file search is unavailable when the editor plugin is missing', async () => {
