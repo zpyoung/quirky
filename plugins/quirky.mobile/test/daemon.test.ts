@@ -365,7 +365,7 @@ describe('mobile daemon integration', () => {
     await revokedReconnect.close()
   })
 
-  test('owner-cli grants persist across restart and corrupt registries fail closed', async () => {
+  test('owner-cli grants persist across restart and a corrupt registry is set aside', async () => {
     const home = makeTempHome('quirky-owner-grant-')
     harness = await boot(home)
     const api = await harness.connect('cli')
@@ -397,7 +397,11 @@ describe('mobile daemon integration', () => {
     await cleanupHarness(harness)
     harness = await boot(home)
     const corruptedApi = await harness.connect('cli')
-    await expect(corruptedApi.callAny('quirky.mobile/ownerGrants', {})).rejects.toMatchObject({ code: RpcErrorCode.Conflict })
+    const grants = await corruptedApi.callAny('quirky.mobile/ownerGrants', {})
+    expect(grants).toEqual([])
+    const quarantined = readdirSync(join(home, 'plugin-data', 'quirky.mobile'))
+      .filter((name) => /^owner-grants\.json\.corrupt-\d+-[0-9a-f]{8}$/.test(name))
+    expect(quarantined).toHaveLength(1)
     const corruptedState = await corruptedApi.callAny('quirky.mobile/state', {}) as { listener: { port: number } }
     const deniedAfterCorruption = MobileTestClient.connect(`ws://127.0.0.1:${corruptedState.listener.port}`, offer.publicKeyB64, offer.deviceToken)
     await expect(deniedAfterCorruption.authenticated).rejects.toThrow()

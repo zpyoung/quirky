@@ -10,7 +10,8 @@ import type { Candidate, CheckResult, CoverageFile, Evidence, Inventory, PluginI
 const EDITOR = 'plugins/quirky.editor'
 const FRAGMENT = `${EDITOR}/ui-scoreboard/document-and-source.json`
 const PARENT = `${EDITOR}/ui-scoreboard/explorer-and-overlays.json`
-const OWNED = [`${EDITOR}/src/window/DocumentSurface.tsx`, `${EDITOR}/src/window/SourceEditor.tsx`]
+const OWNED = [`${EDITOR}/src/window/DocumentSurface.tsx`, `${EDITOR}/src/window/SourceEditor.tsx`, `${EDITOR}/src/window/SourceLocations.tsx`, `${EDITOR}/src/window/sourceNavigation.ts`]
+const UI_COMPONENTS = OWNED.filter((file) => file.endsWith('.tsx'))
 const COMMAND = 'command:quirky.editor/ui-control'
 const SURFACE = 'view:quirky.editor/document'
 const PASS: Record<string, true> = { 'state-covered': true, 'state-not-applicable': true, 'not-state': true, 'action-routed': true, 'action-transient': true, 'action-not-user': true }
@@ -48,10 +49,10 @@ function routeFor(file: string) {
   return entry
 }
 
-test('document/source owns the complete two-file slice without declaring sibling surfaces', () => {
+test('document/source owns the complete symbol-navigation slice without declaring sibling surfaces', () => {
   expect(coverage.surfaces).toEqual({})
-  for (const file of OWNED) {
-    expect(graph.files).toContain(file)
+  for (const file of OWNED) expect(graph.files).toContain(file)
+  for (const file of UI_COMPONENTS) {
     expect(candidates.filter((candidate) => candidate.file === file).length).toBeGreaterThan(0)
   }
   const declarations = (plugin.coverageFragments ?? []).filter((fragment) => Object.hasOwn(parseCoverage(fragment.content).surfaces, SURFACE))
@@ -74,7 +75,7 @@ test('document/source owns the complete two-file slice without declaring sibling
   expect(baselineChecks.find((entry) => entry.id === 'compatibility-tokens')?.status).toBe('pass')
 })
 
-test.each(OWNED)('the descriptor in %s resolves to the public ui run route', (file) => {
+test.each(UI_COMPONENTS)('the descriptor in %s resolves to the public ui run route', (file) => {
   const action = routeFor(file)
   expect(action.route.invoke.quote).toMatch(/command\s*:\s*EDITOR_UI_CONTROL_COMMAND/)
   const invoke = resolveRef(plugin, graph.files, action.route.invoke)
@@ -109,5 +110,24 @@ test('replacing a witnessed shared error with raw markup invalidates error evide
     ? { ...source, content: source.content.replace(quote, raw) } : source) }
   expect(auditPlugin(inventory, edited).find((check) => check.id === 'error')!.evidence).toContainEqual(expect.objectContaining({
     code: 'evidence-missing', coverageFile: FRAGMENT,
+  }))
+})
+
+test('symbol locations witness shared states and the open action cannot lose its route', () => {
+  const file = `${EDITOR}/src/window/SourceLocations.tsx`
+  for (const [state, component] of [['loading', 'NoticeLine'], ['empty', 'EmptyState'], ['error', 'InlineError']] as const) {
+    expect(coverage.states.some((entry) => entry.site.file === file && entry.surface === SURFACE
+      && entry.state === state && entry.render.component === component)).toBe(true)
+  }
+  const action = coverage.actions.find((entry) => entry.site.file === file && entry.site.quote.includes("'open'") && 'route' in entry)
+  expect(action).toBeDefined()
+  if (!action) throw new Error('No source-locations open route')
+  const site = resolveRef(plugin, graph.files, action.site)
+  if ('code' in site) throw new Error(site.message)
+  const candidate = selectCandidate(site, candidates, 'action', action.anchor)
+  if ('code' in candidate) throw new Error(candidate.message)
+  const line = site.source.getLineAndCharacterOfPosition(candidate.anchorStart).line + 1
+  expect(issues(withCoverage({ ...coverage, actions: coverage.actions.filter((entry) => entry !== action) }))).toContainEqual(expect.objectContaining({
+    code: 'coverage-missing', source: expect.objectContaining({ file, line }),
   }))
 })
