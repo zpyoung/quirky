@@ -1516,37 +1516,48 @@ for (const provider of ['github', 'gitlab'] as const) {
   })
 }
 
-test('unresolved settings remain neutral and do not arm a budget timer or permit budget reads', async () => {
-  const refresh = deferred<unknown>()
-  const harness = createHarness({
-    initialState: settingsSnapshot(null), view: SETTINGS_VIEW,
-    methods: { 'quirky.reviews/hostingSettingsRefresh': () => refresh.promise },
+for (const identityShape of ['explicit-null', 'explicit-undefined', 'fresh-absent'] as const) {
+  test(`unresolved settings ${identityShape} stay neutral without budget timers or reads`, async () => {
+    const initial = settingsSnapshot(null)
+    if (identityShape === 'explicit-undefined') {
+      initial.settings.provider = undefined
+      initial.settings.repository = undefined
+    } else if (identityShape === 'fresh-absent') {
+      delete initial.settings.provider
+      delete initial.settings.repository
+      initial.settings.fetchedAt = 0
+    }
+    const refresh = deferred<unknown>()
+    const harness = createHarness({
+      initialState: initial, view: SETTINGS_VIEW,
+      methods: { 'quirky.reviews/hostingSettingsRefresh': () => refresh.promise },
+    })
+    const originalSet = window.setInterval
+    const originalClear = window.clearInterval
+    const intervals: number[] = []
+    let mounted: MountedSurface | undefined
+    try {
+      window.setInterval = ((_handler: TimerHandler, delay?: number) => { intervals.push(delay ?? 0); return intervals.length }) as typeof window.setInterval
+      window.clearInterval = (() => {}) as typeof window.clearInterval
+      mounted = mountSurface(harness, SETTINGS_VIEW)
+      await settle()
+      expect(mounted.element.querySelector('article[aria-label="GitHub"]')?.textContent).not.toContain('Checking GitHub')
+      expect(mounted.element.textContent).not.toContain('Loading GitHub API budget')
+      expect(intervals).toHaveLength(0)
+      const control = currentControl(harness, SETTINGS_VIEW, 'settings-hosting')
+      expect(actionEnabled(control, 'budget-refresh')).toBe(false)
+      expect(await invoke(harness, control, 'budget-refresh')).toEqual({ delivered: false, reason: 'disabled' })
+      act(() => document.dispatchEvent(new Event('visibilitychange')))
+      await settle()
+      expect(harness.calls.filter((call) => call.method === 'quirky.reviews/hostingBudget')).toHaveLength(0)
+    } finally {
+      mounted?.unmount()
+      await act(async () => { refresh.resolve({ worktree: WORKTREE, refreshed: false, fetchedAt: 0 }); await refresh.promise })
+      window.setInterval = originalSet
+      window.clearInterval = originalClear
+    }
   })
-  const originalSet = window.setInterval
-  const originalClear = window.clearInterval
-  const intervals: number[] = []
-  let mounted: MountedSurface | undefined
-  try {
-    window.setInterval = ((_handler: TimerHandler, delay?: number) => { intervals.push(delay ?? 0); return intervals.length }) as typeof window.setInterval
-    window.clearInterval = (() => {}) as typeof window.clearInterval
-    mounted = mountSurface(harness, SETTINGS_VIEW)
-    await settle()
-    expect(mounted.element.querySelector('article[aria-label="GitHub"]')?.textContent).not.toContain('Checking GitHub')
-    expect(mounted.element.textContent).not.toContain('Loading GitHub API budget')
-    expect(intervals).toHaveLength(0)
-    const control = currentControl(harness, SETTINGS_VIEW, 'settings-hosting')
-    expect(actionEnabled(control, 'budget-refresh')).toBe(false)
-    expect(await invoke(harness, control, 'budget-refresh')).toEqual({ delivered: false, reason: 'disabled' })
-    act(() => document.dispatchEvent(new Event('visibilitychange')))
-    await settle()
-    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/hostingBudget')).toHaveLength(0)
-  } finally {
-    mounted?.unmount()
-    await act(async () => { refresh.resolve({ worktree: WORKTREE, refreshed: false, fetchedAt: 0 }); await refresh.promise })
-    window.setInterval = originalSet
-    window.clearInterval = originalClear
-  }
-})
+}
 
 test('GitHub files navigation mounts the actual files control that GitLab omits', async () => {
   const harness = createHarness({ initialState: stateFor({ repo: GITHUB_REPO, provider: 'github', detailTab: 'files' }), view: REVIEW_VIEW })

@@ -290,10 +290,12 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   const settingsMatches = worktree !== null && settings.worktree === worktree
   const diagnostics = settingsMatches ? providerCheck(settings.diagnostics) : null
   const declaredProvider = settingsMatches ? settings.provider : null
+  const legacyGitHubObservation = settingsMatches && settings.fetchedAt > 0 &&
+    !Object.hasOwn(settings, 'provider') && !Object.hasOwn(settings, 'repository')
   const providerId: ReviewProvider | null = declaredProvider === 'github' || declaredProvider === 'gitlab'
     ? declaredProvider
     : declaredProvider === null || declaredProvider === undefined
-      ? diagnostics ? diagnostics.provider ?? 'github' : null
+      ? diagnostics ? diagnostics.provider ?? 'github' : legacyGitHubObservation ? 'github' : null
       : null
   const provider = diagnostics && (diagnostics.provider ?? 'github') === providerId ? diagnostics : null
   const isGitLab = providerId === 'gitlab'
