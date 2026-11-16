@@ -72,7 +72,7 @@ type Fixture = {
   setNextCreateReply: (reply: unknown) => void
   setNextSendReply: (reply: unknown) => void
   breakNativeIdentity: (sessionId: string) => void
-  setSessionStatus: (sessionId: string, status: Session['status']) => void
+  setSessionAgentStatus: (sessionId: string, agentStatus: NonNullable<Session['agentStatus']>) => void
   delayNextCreate: () => { entered: Promise<void>; release: () => void }
   delayNextResume: () => { entered: Promise<void>; release: () => void }
   delayNextSend: () => { entered: Promise<void>; release: () => void }
@@ -436,9 +436,9 @@ function makeFixture(): Fixture {
       const existing = sessions.get(sessionId)
       if (existing) sessions.set(sessionId, { ...existing, providerSession: null })
     },
-    setSessionStatus: (sessionId, status) => {
+    setSessionAgentStatus: (sessionId, agentStatus) => {
       const existing = sessions.get(sessionId)
-      if (existing) sessions.set(sessionId, { ...existing, status })
+      if (existing) sessions.set(sessionId, { ...existing, status: 'running', agentStatus })
     },
     restart: () => {
       const next = createControllerWithEngineSpies(host, engines, engineEvents)
@@ -767,18 +767,24 @@ describe('owner runtime journal and conversation', () => {
     expect(fixture.calls.resumes[0]?.params.prompt).toContain(pending.reportPath)
     expect(fixture.calls.ownedStops).toHaveLength(0)
     expect(fixture.calls.resumes[0]?.params).toMatchObject({ lifetime: 'plugin', lifetimeKey: fixture.enrollment.watcherId })
+    const createPrompt = fixture.calls.creates[0]?.params.prompt
+    if (typeof createPrompt !== 'string') throw new Error('owner create did not receive a brief prompt')
+    const resumeParams = fixture.calls.resumes[0]?.params
+    const resumeSession = resumeParams?.session
+    const resumePrompt = resumeParams?.prompt
+    if (typeof resumeSession !== 'string' || typeof resumePrompt !== 'string') throw new Error('owner resume did not receive its session and prompt')
     expect(fixture.engines[0]?.calls.creates[0]).toEqual({
       lifetime: 'plugin',
       lifetimeKey: fixture.enrollment.watcherId,
       worktree: 'id:worktree-1',
       agent: 'claude',
-      prompt: fixture.calls.creates[0]?.params.prompt,
+      prompt: createPrompt,
       model: 'claude-sonnet-4',
       options: { effort: 'high' }
     })
     expect(fixture.engines[1]?.calls.resumes[0]).toEqual({
-      session: fixture.calls.resumes[0]?.params.session,
-      prompt: fixture.calls.resumes[0]?.params.prompt,
+      session: resumeSession,
+      prompt: resumePrompt,
       lifetime: 'plugin',
       lifetimeKey: fixture.enrollment.watcherId
     })
@@ -979,8 +985,18 @@ describe('owner runtime journal and conversation', () => {
   test('an idle owner session cannot apply an intervention without the ready report', async () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:idle-no-report'))
-    const sessionId = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
-    fixture.setSessionStatus(sessionId, 'idle')
+    const sessionId = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId
+    if (sessionId === null) throw new Error('owner session was not created')
+    fixture.setSessionAgentStatus(sessionId, {
+      state: 'done',
+      display: 'idle',
+      label: 'Idle',
+      detail: 'No active turn',
+      progress: null,
+      stateStartedAt: fixture.now(),
+      evidenceAt: fixture.now(),
+      restoredUnconfirmed: false
+    })
 
     await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
 
@@ -994,6 +1010,8 @@ describe('owner runtime journal and conversation', () => {
   test('sends one silence reminder and parks once after the second interval', async () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:silence'))
+    const sessionId = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId
+    if (sessionId === null) throw new Error('owner session was not created')
     fixture.setNow(10_000 + 900_000 - 1)
     const beforeReminder = await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
     expect(beforeReminder.nextCheckAtMs).toBe(910_000)
@@ -1022,12 +1040,14 @@ describe('owner runtime journal and conversation', () => {
     })
     expect(fixture.calls.sends).toHaveLength(1)
     expect(fixture.engines[0]?.calls.sends).toEqual([fixture.calls.sends[0]?.params as unknown as SendInput])
-    expect(fixture.engines[0]?.calls.sends[0]?.session).toBe(fixture.controller.inspect(fixture.enrollment.watcherId).sessionId)
+    expect(fixture.engines[0]?.calls.sends[0]?.session).toBe(sessionId)
   })
 
   test('accepts only the exact parked escalation answer and sends its body to the same conversation', async () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:answer'))
+    const sessionId = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId
+    if (sessionId === null) throw new Error('owner session was not created')
     fixture.setNow(10_000 + 900_000)
     await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
     fixture.setNow(10_000 + 1_800_000)
@@ -1042,7 +1062,7 @@ describe('owner runtime journal and conversation', () => {
     expect(await fixture.controller.answer(fixture.enrollment.watcherId, escalationId!, answer)).toMatchObject({ handled: true })
     expect(fixture.calls.sends).toHaveLength(2)
     expect(fixture.engines[0]?.calls.sends).toEqual(fixture.calls.sends.map((call) => call.params as unknown as SendInput))
-    expect(fixture.engines[0]?.calls.sends[1]?.session).toBe(fixture.controller.inspect(fixture.enrollment.watcherId).sessionId)
+    expect(fixture.engines[0]?.calls.sends[1]?.session).toBe(sessionId)
     expect(fixture.engines[0]?.calls.sends[1]?.text).toContain(answer)
     expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.phase).toBe('waiting')
     expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.reportKey).not.toBe(before.pending?.reportKey)
