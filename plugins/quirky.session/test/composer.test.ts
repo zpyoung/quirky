@@ -5,7 +5,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { RpcError, RpcErrorCode, type AgentCapabilities, type QueuedMessage } from '@quirky/protocol'
 import { fakeContext, session, settle, type FakeContext } from './ui-fake'
 
-type Props = { capabilities?: AgentCapabilities | null; working?: boolean; agent?: string; status?: 'running' | 'exited' }
+type Props = { capabilities?: AgentCapabilities | null; working?: boolean; agent?: string; status?: 'starting' | 'running' | 'exited' }
 type Handler = (params: Record<string, any>) => unknown
 
 const OK = { ok: true } as const
@@ -294,6 +294,30 @@ describe('the composer controls', () => {
     expect(fake.callsTo('quirky.structured/models')[0]!.params).toEqual({ session: 's1' })
     expect([...control('Model')!.options].map((option) => option.textContent)).toEqual(['One (a)', 'Two (b)'])
     expect(control('Model')!.value).toBe('a/one')
+    expect(control('Model')!.disabled).toBe(false)
+  })
+
+  test('refetches the live models once a starting session is running', async () => {
+    let runnerUp = false
+    await mount(
+      {
+        'quirky.agents/options': () => ({ ...OPTIONS, agent: 'pi', models: [] }),
+        'quirky.structured/models': () => {
+          if (!runnerUp) throw new Error('session is not running')
+          return { models: [{ id: 'a/one', label: 'One (a)' }], current: 'a/one' }
+        }
+      },
+      { agent: 'pi', capabilities: { ...PI, model: OK }, status: 'starting' }
+    )
+    expect(control('Model')!.disabled).toBe(true)
+    expect(control('Model')!.title).toBe('Loading models')
+    runnerUp = true
+    const chat = session({ id: 's1', kind: 'structured', agent: 'pi', status: 'running' })
+    await act(async () => {
+      root!.render(createElement(Composer, { context: fake.context, session: chat, capabilities: { ...PI, model: OK }, working: false }))
+    })
+    await settle()
+    expect([...control('Model')!.options].map((option) => option.textContent)).toEqual(['One (a)'])
     expect(control('Model')!.disabled).toBe(false)
   })
 

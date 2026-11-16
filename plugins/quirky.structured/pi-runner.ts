@@ -200,7 +200,21 @@ class PiRunner implements StructuredRunner {
     await this.submit(run, message, options)
   }
 
-  async configure(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+  private configureChains = new Map<string, Promise<unknown>>()
+
+  /** Applies settings changes for one session in call order, so a slow older request cannot override a newer one. */
+  configure(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const previous = this.configureChains.get(sessionId) ?? Promise.resolve()
+    const result = previous.then(() => this.applySettings(sessionId, settings))
+    const settled = result.then(() => undefined, () => undefined)
+    this.configureChains.set(sessionId, settled)
+    void settled.then(() => {
+      if (this.configureChains.get(sessionId) === settled) this.configureChains.delete(sessionId)
+    })
+    return result
+  }
+
+  private async applySettings(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended || !run.ready) throw new Error('session is not running')
     if (settings.model !== undefined) {
