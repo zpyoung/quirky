@@ -81,3 +81,32 @@ test('authoritative Network metadata corrects a held Fetch-domain resource type'
   ledger.hold({ ...request('reused', 'network-fetch'), resourceType: 'XHR' })
   expect(ledger.list()[0]!.resourceType).toBe('XHR')
 })
+
+test('discard permanently empties a binding without affecting a fresh ledger', () => {
+  const ledger = new InterceptLedger()
+  expect(ledger.discarded).toBe(false)
+  ledger.hold(request('held-request', 'network-held'))
+  ledger.hold(request('second-request', 'network-second'))
+  ledger.suspended = true
+  expect(ledger.discard()).toEqual(['held-request', 'second-request'])
+  expect(ledger.discarded).toBe(true)
+  expect(ledger.list()).toEqual([])
+  expect(ledger.discard()).toEqual([])
+  expect(ledger.take()).toEqual([])
+  ledger.suspended = false
+  expect(ledger.hold(request('late-request', 'network-held'))).toBe(false)
+  ledger.updateResourceType('network-held', 'Document')
+  ledger.forget('network-second')
+  expect(ledger.list()).toEqual([])
+
+  const replacement = new InterceptLedger()
+  expect(replacement.discarded).toBe(false)
+  expect(replacement.hold(request('held-request', 'network-held'))).toBe(true)
+  expect(replacement.take()).toEqual(['held-request'])
+  expect(replacement.discarded).toBe(false)
+  expect(replacement.hold(request('next-request', 'network-next'))).toBe(true)
+  replacement.forget('network-held')
+  replacement.updateResourceType('network-held', 'Document')
+  expect(replacement.list()).toEqual([{ ...request('next-request'), pending: true }])
+  expect(replacement.discard()).toEqual(['next-request'])
+})
