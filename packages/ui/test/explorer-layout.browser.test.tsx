@@ -10,6 +10,11 @@ import type { UiPluginContext } from '@quirky/protocol'
 import { chromium, type Browser, type Locator, type Page } from 'playwright'
 import type { ExplorerPanel as ExplorerPanelComponent } from '../../../plugins/quirky.editor/src/window/ExplorerPanel'
 import type { ToolPanelFrame as ToolPanelFrameComponent } from '../src/design-system'
+import type {
+  createEditorUiControlReportScope as CreateEditorUiControlReportScope,
+  EditorUiControlProvider as EditorUiControlProviderComponent,
+  runEditorUiControl as RunEditorUiControl
+} from '../../../plugins/quirky.editor/src/window/uiControl'
 
 const ROOT = resolve(import.meta.dir, '../../..')
 const EDITOR_MODULES = join(ROOT, 'plugins/quirky.editor/node_modules')
@@ -85,6 +90,10 @@ const liveListing = { ...listing, entries: liveRootEntries }
 let createRoot: typeof createRootFunction
 let ExplorerPanel: typeof ExplorerPanelComponent
 let ToolPanelFrame: typeof ToolPanelFrameComponent
+let createEditorUiControlReportScope: typeof CreateEditorUiControlReportScope
+let EditorUiControlProvider: typeof EditorUiControlProviderComponent
+let runEditorUiControl: typeof RunEditorUiControl
+let disposeControlScope: (() => void) | undefined
 let root: Root | null = null
 let container: HTMLDivElement
 
@@ -95,6 +104,7 @@ beforeAll(async () => {
   ;({ createRoot } = await import('react-dom/client'))
   ;({ ExplorerPanel } = await import('../../../plugins/quirky.editor/src/window/ExplorerPanel'))
   ;({ ToolPanelFrame } = await import('../src/design-system'))
+  ;({ createEditorUiControlReportScope, EditorUiControlProvider, runEditorUiControl } = await import('../../../plugins/quirky.editor/src/window/uiControl'))
   if (!existsSync(executable)) return
   const tempDir = mkdtempSync(join(tmpdir(), 'quirky-explorer-inline-layout-'))
   try {
@@ -129,6 +139,8 @@ afterAll(async () => {
 afterEach(async () => {
   await act(async () => root?.unmount())
   root = null
+  disposeControlScope?.()
+  disposeControlScope = undefined
   document.body.replaceChildren()
 })
 
@@ -146,7 +158,16 @@ function makeContext(layoutWorktree: string | null): UiPluginContext {
   return {
     pluginId: 'quirky.editor',
     log() {},
-    call: async (method: string) => respond(method),
+    call: async (method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.command.run') {
+        if (params.connId !== 22 || params.id !== 'command:quirky.editor/ui-control') {
+          throw new Error('The Explorer control must use its mounted-window route.')
+        }
+        return { result: await runEditorUiControl(params.args) }
+      }
+      return respond(method)
+    },
     subscribe: () => () => {},
     getSetting: (name: string) => settings[name],
     getLayout: () => ({ worktree: layoutWorktree, view: null, panel: null, sidebar: true, focus: 'view' }),
@@ -168,19 +189,26 @@ async function waitForExplorerReady(selector: string): Promise<void> {
 async function mountExplorer(layoutWorktree: string | null): Promise<string> {
   await act(async () => root?.unmount())
   root = null
+  disposeControlScope?.()
+  disposeControlScope = undefined
   document.body.replaceChildren()
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
+  const context = makeContext(layoutWorktree)
+  const scope = createEditorUiControlReportScope(undefined, { surface: 'panel:quirky.editor/explorer', context })
+  disposeControlScope = () => scope.dispose()
   await act(async () => {
     root!.render(
-      <ToolPanelFrame title="Explorer">
-        <section className="plugin-slot">
-          <div className="plugin-slot-body">
-            <ExplorerPanel context={makeContext(layoutWorktree)} />
-          </div>
-        </section>
-      </ToolPanelFrame>,
+      <EditorUiControlProvider scope={scope}>
+        <ToolPanelFrame title="Explorer">
+          <section className="plugin-slot">
+            <div className="plugin-slot-body">
+              <ExplorerPanel context={context} report={scope.report} />
+            </div>
+          </section>
+        </ToolPanelFrame>
+      </EditorUiControlProvider>,
     )
   })
   await waitForExplorerReady(layoutWorktree === null ? '.qe-explorer-worktree' : '.qe-explorer-row')
@@ -205,11 +233,13 @@ async function designSystemStyles(): Promise<string> {
 
 function liveBrowserEntry(): string {
   const explorerPanel = join(ROOT, 'plugins/quirky.editor/src/window/ExplorerPanel.tsx')
+  const uiControlModule = join(ROOT, 'plugins/quirky.editor/src/window/uiControl.tsx')
   return `
     import { createElement } from 'react'
     import { createRoot } from 'react-dom/client'
     import { ToolPanelFrame } from '@quirky/ui'
     import { ExplorerPanel } from ${JSON.stringify(explorerPanel)}
+    import { EditorUiControlProvider, createEditorUiControlReportScope, runEditorUiControl } from ${JSON.stringify(uiControlModule)}
 
     const settings = ${JSON.stringify(settings)}
     const listing = ${JSON.stringify(liveListing)}
@@ -219,6 +249,13 @@ function liveBrowserEntry(): string {
       pluginId: 'quirky.editor',
       log() {},
       call: async (method, params) => {
+        if (method === 'ui.window.self') return { connId: 22 }
+        if (method === 'ui.window.command.run') {
+          if (params?.connId !== 22 || params.id !== 'command:quirky.editor/ui-control') {
+            throw new Error('The Explorer control must use its mounted-window route.')
+          }
+          return { result: await runEditorUiControl(params.args) }
+        }
         if (method === 'quirky.editor/state') {
           return { buffers: [], tabs: [], explorer: { worktreeId: 'w1', showDotfiles: true, expanded: ['src'] }, search: null, quickOpenHistory: [], closeRequests: [] }
         }
@@ -240,10 +277,12 @@ function liveBrowserEntry(): string {
       onConnection: () => () => {},
       toast() {}
     }
-    const explorer = createElement(ExplorerPanel, { context })
+    const scope = createEditorUiControlReportScope(undefined, { surface: 'panel:quirky.editor/explorer', context })
+    const explorer = createElement(ExplorerPanel, { context, report: scope.report })
     const pluginSlot = createElement('section', { className: 'plugin-slot' }, createElement('div', { className: 'plugin-slot-body' }, explorer))
     const panel = createElement(ToolPanelFrame, { title: 'Explorer' }, pluginSlot)
-    createRoot(document.getElementById('explorer-mount')).render(panel)
+    const providedPanel = createElement(EditorUiControlProvider, { scope }, panel)
+    createRoot(document.getElementById('explorer-mount')).render(providedPanel)
   `
 }
 

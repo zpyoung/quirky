@@ -197,6 +197,12 @@ function pageMarkup(): string {
       <body><main id="document-pane"><div id="document-root"></div></main></body>
     </html>`
 }
+async function loadFixturePage(page: Page): Promise<void> {
+  await page.route('http://127.0.0.1/document-header-layout', (route) =>
+    route.fulfill({ contentType: 'text/html', body: pageMarkup() })
+  )
+  await page.goto('http://127.0.0.1/document-header-layout')
+}
 
 async function measureHeader(page: Page) {
   return page.evaluate(() => {
@@ -317,7 +323,7 @@ test.skipIf(!existsSync(executable))('keeps the Markdown document header in two 
   const context = await browser!.newContext({ viewport: { width: 800, height: 600 } })
   const page = await context.newPage()
   try {
-    await page.setContent(pageMarkup())
+    await loadFixturePage(page)
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }
@@ -370,7 +376,7 @@ test.skipIf(!existsSync(executable))('keeps every rich Markdown toolbar command 
   const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
   const page = await context.newPage()
   try {
-    await page.setContent(pageMarkup())
+    await loadFixturePage(page)
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }
@@ -429,7 +435,7 @@ test.skipIf(!existsSync(executable))('spans the Markdown preview toolbar across 
   const context = await browser!.newContext({ viewport: { width: 800, height: 600 } })
   const page = await context.newPage()
   try {
-    await page.setContent(pageMarkup())
+    await loadFixturePage(page)
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }
@@ -471,7 +477,7 @@ test.skipIf(!existsSync(executable))('keeps CSV rows visible with paste and rang
   const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
   const page = await context.newPage()
   try {
-    await page.setContent(pageMarkup())
+    await loadFixturePage(page)
     for (const stylesheet of STYLESHEETS) {
       await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
     }

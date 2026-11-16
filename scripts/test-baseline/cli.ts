@@ -6,7 +6,7 @@ import { readSpeedEvidence } from '../speed/ci'
 import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline, findBaselines } from './baseline'
 import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
-import { renderComment } from './report'
+import { displayKey, renderComment } from './report'
 import { findSpawners, selectTests } from './select'
 import { DURATION_BASELINES, MAX_SHARDS_MAIN, MAX_SHARDS_PR, medianDurations, SHARD_TARGET_MS, splitShards } from './shards'
 import type { Attempt, Baseline, ChangedPath, FileResult, GhRunner, Plan, Selection, Verdict } from './types'
@@ -24,6 +24,8 @@ const EVENTS = ['pull_request', 'push', 'workflow_dispatch']
 const NOT_ON_CI_LIST = 'scripts/test-not-on-ci.txt'
 const MACOS_LIST = 'scripts/test-on-macos.txt'
 const ALONE_LIST = 'scripts/test-alone.txt'
+
+const DAEMON_LINUX_SKIPS = 'scripts/test-baseline/daemon-linux-skips.json'
 
 /**
  * What the commands touch outside their arguments. Tests replace `gh`, the clock, the process
@@ -153,6 +155,23 @@ function readJson(path: string): unknown {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string')
+
+function readDaemonSkipReasons(path: string): Record<string, string> {
+  let value: unknown
+  try {
+    value = readJson(path)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
+    throw new Error(`cannot read ${path}: ${error instanceof Error ? error.message : error}`)
+  }
+  if (!isRecord(value) || Array.isArray(value)) throw new Error(`${path} must contain a JSON object`)
+  for (const [key, reason] of Object.entries(value)) {
+    if (typeof reason !== 'string' || reason.trim().length === 0) {
+      throw new Error(`${path} has an invalid reason for ${JSON.stringify(key)}`)
+    }
+  }
+  return value as Record<string, string>
+}
 
 function asPlan(value: unknown): Plan {
   if (
@@ -366,8 +385,35 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
 
   const loaded = loadResults(inDir)
   problems.push(...loaded.problems)
+  let daemonSkipReasons: Record<string, string> = {}
+  try {
+    daemonSkipReasons = readDaemonSkipReasons(join(ctx.cwd, DAEMON_LINUX_SKIPS))
+  } catch (error) {
+    problems.push(error instanceof Error ? error.message : String(error))
+  }
+  const linuxDaemonFiles = new Set(plan.linuxShards.flat().filter((file) => file.startsWith('packages/daemon/')))
+  const reportedExceptions = new Set<string>()
+  for (const result of loaded.results) {
+    if (!result.file.startsWith('packages/daemon/')) continue
+    if (linuxDaemonFiles.has(result.file) && result.platform !== 'linux') {
+      problems.push(`daemon file planned for Linux was reported as ${result.platform}: ${result.file}`)
+    }
+    if (result.platform !== 'linux') continue
+    for (const attempt of [result.first, result.rerun]) {
+      if (!attempt) continue
+      for (const test of attempt.tests) {
+        if (test.status !== 'skipped') continue
+        const reason = Object.hasOwn(daemonSkipReasons, test.key) ? daemonSkipReasons[test.key] : undefined
+        if (reason === undefined) {
+          problems.push(`unlisted Linux daemon skip: ${displayKey(test.key)}`)
+        } else if (!reportedExceptions.has(test.key)) {
+          ctx.err(`allowed Linux daemon skip: ${displayKey(test.key)} — ${reason}\n`)
+          reportedExceptions.add(test.key)
+        }
+      }
+    }
+  }
   const merged = [...new Map<string, FileResult>(loaded.results.map((result) => [result.file, result])).values()]
-
   const verdict = compareResults({
     baseline,
     results: merged,
