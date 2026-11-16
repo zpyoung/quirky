@@ -68,6 +68,32 @@ describe('send when', () => {
     expect(chat.runner.sent.map((sent) => sent.text)).toEqual(['right away'])
   })
 
+  test('a rejected queued send is tried once, noted, and flushing resumes after a direct send', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    await chat.call('quirky.structured/send', { session: session.id, text: 'keep me', when: 'idle' })
+    let attempts = 0
+    const realSend = chat.runner.send.bind(chat.runner)
+    chat.runner.send = async (...args) => {
+      attempts++
+      return realSend(...args)
+    }
+    chat.runner.sendError = new Error('agent gone')
+    chat.runner.finish(session.id)
+    await waitFor(() => attempts === 1)
+    chat.runner.finish(session.id)
+    await Bun.sleep(100)
+    expect(attempts).toBe(1)
+    expect(((await chat.call('quirky.structured/queue', { session: session.id })) as QueuedMessage[]).map((m) => m.text)).toEqual(['keep me'])
+    const notes = (await chat.messages(session.id)).filter((m) => m.role === 'system' && m.text.includes("Couldn't send the queued message"))
+    expect(notes).toHaveLength(1)
+
+    chat.runner.sendError = null
+    await chat.call('quirky.structured/send', { session: session.id, text: 'direct' })
+    chat.runner.finish(session.id)
+    await waitFor(() => chat!.runner.sent.some((sent) => sent.text === 'keep me'))
+  })
+
   test('a flush that fails keeps the message queued', async () => {
     chat = await bootChat()
     const session = await working(chat)
@@ -374,5 +400,20 @@ describe('configure', () => {
     const session = await working(chat)
     expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, planMode: 'yes' }))).code).toBe(RpcErrorCode.InvalidParams)
     expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, bogus: 1 }))).code).toBe(RpcErrorCode.InvalidParams)
+  })
+})
+
+describe('stop during the baseline snapshot', () => {
+  test('a start whose snapshot resolves after stop never reaches the agent', async () => {
+    chat = await bootChat({ git: true })
+    const gate = Promise.withResolvers<{ tree: string }>()
+    chat.git.snapshotTree = () => gate.promise
+    const session = await chat.create('go')
+    await waitFor(() => chat!.git.calls.some((call) => call.method === 'snapshotTree'))
+    await chat.call('quirky.structured/stop', { session: session.id })
+    gate.resolve({ tree: 'late' })
+    await Bun.sleep(100)
+    expect(await chat.messages(session.id)).toEqual([])
+    expect(chat.world.statusLog.some((entry) => entry.status === 'working')).toBe(false)
   })
 })

@@ -45,7 +45,10 @@ export class FakeQuery implements ClaudeQuery {
     if (this.hangInterrupt) await new Promise(() => {})
   }
 
+  permissionModeDelayMs: (mode: string) => number = () => 0
+
   async setPermissionMode(mode: string) {
+    await new Promise((resolve) => setTimeout(resolve, this.permissionModeDelayMs(mode)))
     this.permissionModes.push(mode)
   }
 

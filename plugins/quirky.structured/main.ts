@@ -60,6 +60,12 @@ type LiveSession = {
   viewIds: Set<string>
 }
 
+class SessionGone extends Error {
+  constructor() {
+    super('structured session is not active')
+  }
+}
+
 /** The longest prefix of `text` that fits in `maxBytes` of UTF-8, never cutting inside a character. */
 function capUtf8(text: string, maxBytes: number): string {
   const bytes = Buffer.from(text, 'utf8')
@@ -361,11 +367,17 @@ export function activate(context: PluginContext): void {
     return kept.length === 0 ? undefined : kept
   }
 
-  /** Sends the oldest queued message once the session is idle; a failed send puts the message back. */
+  /** Sessions whose queue stays put after a failed queued send, until the user acts on the session. */
+  const flushPaused = new Set<string>()
+
+  const sessionGone = (sessionId: string, entry: LiveSession): boolean =>
+    !active || live.get(sessionId) !== entry || entry.stopping || entry.status === 'exited'
+
+  /** Sends the oldest queued message once the session is idle; a failed send puts the message back and pauses automatic flushing. */
   const flushQueue = (sessionId: string): Promise<void> =>
     enqueueSend(sessionId, async () => {
       const entry = live.get(sessionId)
-      if (!active || !entry || entry.stopping || entry.status !== 'done') return
+      if (!active || !entry || entry.stopping || entry.status !== 'done' || flushPaused.has(sessionId)) return
       const next = queue.list(sessionId)[0]
       if (!next) return
       const taken = queue.take(sessionId, next.id)
@@ -377,6 +389,7 @@ export function activate(context: PluginContext): void {
         const images = revalidatedImages(sessionId, next.images)
         const undo = await openTurnBaseline(sessionId)
         try {
+          if (sessionGone(sessionId, entry)) throw new SessionGone()
           await runner.send(sessionId, next.text, {
             ...(images === undefined ? {} : { images }),
             queuedId: next.id
@@ -388,6 +401,12 @@ export function activate(context: PluginContext): void {
       } catch (error) {
         queue.restore(sessionId, taken)
         emitQueue(sessionId)
+        if (error instanceof SessionGone) return
+        if (!flushPaused.has(sessionId)) {
+          flushPaused.add(sessionId)
+          const text = "Couldn't send the queued message; it's still queued."
+          appendMessage({ sessionId, role: 'system', text, item: statusItem(text) })
+        }
         context.log(`could not send queued message to ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
       }
     }).catch((error: unknown) => {
@@ -806,13 +825,17 @@ export function activate(context: PluginContext): void {
         if (!active || !entry || entry.stopping) return
         const undo = prompt === undefined || prompt === '' ? () => {} : await openTurnBaseline(session.id)
         try {
+          if (sessionGone(session.id, entry)) throw new SessionGone()
           await runner.start(session, prompt, options)
         } catch (error) {
           undo()
           throw error
         }
       })
-      .catch((error: unknown) => startupFailed(session.id, token, error))
+      .catch((error: unknown) => {
+        if (error instanceof SessionGone) return
+        startupFailed(session.id, token, error)
+      })
     startTasks.set(session.id, task)
     void task.then(() => {
       if (startTasks.get(session.id) === task) startTasks.delete(session.id)
@@ -1247,6 +1270,8 @@ export function activate(context: PluginContext): void {
     const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
     const undo = await openTurnBaseline(session.id)
     try {
+      if (entry && sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
+      flushPaused.delete(session.id)
       if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, text)
       else await runner.send(session.id, text, { images: extras.images })
     } catch (error) {
@@ -1416,6 +1441,7 @@ export function activate(context: PluginContext): void {
     const request = queuedRequest(params, ['id'])
     const session = await requireStructured(request.session)
     if (queue.take(session.id, request.id!) === null) throw context.error('not-found', `no queued message ${request.id}`)
+    flushPaused.delete(session.id)
     emitQueue(session.id)
     return { ok: true }
   }
@@ -1427,6 +1453,7 @@ export function activate(context: PluginContext): void {
     }
     const session = await requireStructured(request.session)
     if (!queue.edit(session.id, request.id!, params.text)) throw context.error('not-found', `no queued message ${request.id}`)
+    flushPaused.delete(session.id)
     emitQueue(session.id)
     return { ok: true }
   }
@@ -1454,6 +1481,8 @@ export function activate(context: PluginContext): void {
         const images = revalidatedImages(session.id, taken.message.images)
         const undo = await openTurnBaseline(session.id)
         try {
+          if (sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
+          flushPaused.delete(session.id)
           await runner.send(session.id, taken.message.text, {
             ...(images === undefined ? {} : { images }),
             queuedId: taken.message.id
@@ -1485,6 +1514,7 @@ export function activate(context: PluginContext): void {
         ? identity.processIncarnation
         : null
     if (entry) entry.stopping = true
+    flushPaused.delete(sessionId)
     const promise = Promise.resolve().then(async () => {
       const runner = runnerBySession.get(sessionId)
       releaseStructuredLease(sessionId)

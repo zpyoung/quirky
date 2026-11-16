@@ -130,6 +130,16 @@ describe('configure', () => {
     expect(query.permissionModes).toEqual(['acceptEdits', 'plan', 'acceptEdits'])
   })
 
+  test('overlapping configure calls apply in order and report what the SDK was last told', async () => {
+    const query = await begin()
+    query.permissionModeDelayMs = (mode) => (mode === 'plan' ? 40 : 0)
+    const first = runner.configure!(session.id, { planMode: true })
+    const second = runner.configure!(session.id, { permissionMode: 'acceptEdits', planMode: false })
+    const [, last] = await Promise.all([first, second])
+    expect(query.permissionModes).toEqual(['plan', 'acceptEdits'])
+    expect(last).toMatchObject({ permissionMode: 'acceptEdits', planMode: false })
+  })
+
   test('a session that is not running refuses', async () => {
     await expect(runner.configure!('s_none', { planMode: true })).rejects.toThrow('session is not running')
   })
