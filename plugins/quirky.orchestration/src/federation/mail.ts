@@ -875,7 +875,13 @@ export function createFederationMail(
   const startTimer = (): void => {
     if (disposed) return
     if (timer !== null) clearInterval(timer)
-    timer = setInterval(scheduleKnownBindings, SYNC_INTERVAL_MS)
+    timer = setInterval(() => {
+      try {
+        scheduleKnownBindings()
+      } catch (error) {
+        log(`federation mail tick failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }, SYNC_INTERVAL_MS)
     timer.unref?.()
     scheduleKnownBindings()
   }

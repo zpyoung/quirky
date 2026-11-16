@@ -53,7 +53,7 @@ export function commandHandlers(context: UiPluginContext): Record<string, (args?
     try {
       await opening
     } catch (error) {
-      context.toast('Could not open diff', messageOf(error))
+      context.toast('Could not open diff', messageOf(error), { kind: 'error' })
     }
   }
   const open = (input: DiffViewInput) => shown(openHostedDiff(context, input))
