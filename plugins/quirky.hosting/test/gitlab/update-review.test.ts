@@ -90,7 +90,7 @@ function mrAtHead(head: string, overrides: Record<string, unknown> = {}): Record
   })
 }
 
-test.failing('ready with an unchanged reply is unknown completion', async () => {
+test('ready with an unchanged reply is unknown completion', async () => {
   const world = await boot({ title: 'Draft: unchanged', draft: true })
   world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body: mr({ title: 'Draft: unchanged', draft: true }) })
 
@@ -100,7 +100,7 @@ test.failing('ready with an unchanged reply is unknown completion', async () => 
   expectReadbackCount(world, 1)
 })
 
-test.failing('close with an unchanged reply is unknown completion', async () => {
+test('close with an unchanged reply is unknown completion', async () => {
   const world = await boot({ title: 'Open work', draft: false })
   world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body: mr({ title: 'Open work', draft: false }) })
 
@@ -110,7 +110,7 @@ test.failing('close with an unchanged reply is unknown completion', async () => 
   expectReadbackCount(world, 1)
 })
 
-test.failing('reopen with an unchanged reply is unknown completion', async () => {
+test('reopen with an unchanged reply is unknown completion', async () => {
   const world = await boot({ state: 'closed', title: 'Closed work', draft: false })
   world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body: mr({ state: 'closed', title: 'Closed work', draft: false }) })
 
@@ -120,7 +120,7 @@ test.failing('reopen with an unchanged reply is unknown completion', async () =>
   expectReadbackCount(world, 1)
 })
 
-test.failing('draft with an unchanged reply is unknown completion', async () => {
+test('draft with an unchanged reply is unknown completion', async () => {
   const world = await boot({ title: 'Unchanged', draft: false })
   world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body: mr({ title: 'Unchanged', draft: false }) })
 
@@ -130,7 +130,7 @@ test.failing('draft with an unchanged reply is unknown completion', async () => 
   expectReadbackCount(world, 1)
 })
 
-test.failing('ready on a closed draft returns the closed state after clearing draft', async () => {
+test('ready on a closed draft returns the closed state after clearing draft', async () => {
   const world = await boot({ state: 'closed', title: 'Draft: closed work', draft: true })
 
   expect(await update(world, 'ready')).toEqual({ number: 5, updated: true, state: 'closed' })
@@ -139,7 +139,7 @@ test.failing('ready on a closed draft returns the closed state after clearing dr
   expectPutCount(world, 1)
 })
 
-test.failing('ready with an incomplete object reply is unknown completion', async () => {
+test('ready with an incomplete object reply is unknown completion', async () => {
   const world = await boot({ title: 'Draft: x', draft: true })
   world.server.failures.set(`PUT ${reviewPath(world)}`, {
     status: 200,
@@ -161,7 +161,7 @@ const invalidReplyCases: Array<{ name: string; body: Record<string, any> }> = [
   { name: 'null draft flag', body: mr({ draft: null }) }
 ]
 for (const { name, body } of invalidReplyCases) {
-  test.failing(`ready with a reply containing ${name} is unknown completion`, async () => {
+  test(`ready with a reply containing ${name} is unknown completion`, async () => {
     const world = await boot({ title: 'Draft: x', draft: true })
     world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body })
 
@@ -178,7 +178,7 @@ const wrongIdentityReplyCases: Array<{ name: string; body: Record<string, any> }
   { name: 'a missing project id', body: mr({}, ['project_id']) }
 ]
 for (const { name, body } of wrongIdentityReplyCases) {
-  test.failing(`ready with ${name} in the reply is unknown completion`, async () => {
+  test(`ready with ${name} in the reply is unknown completion`, async () => {
     const world = await boot({ title: 'Draft: x', draft: true })
     world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body })
 
@@ -194,7 +194,7 @@ const nonObjectReplies: Array<{ name: string; body: unknown }> = [
   { name: 'null', body: null }
 ]
 for (const { name, body } of nonObjectReplies) {
-  test.failing(`close with ${name} reply is unknown completion`, async () => {
+  test(`close with ${name} reply is unknown completion`, async () => {
     const world = await boot({ title: 'Open work', draft: false })
     world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body })
 
@@ -205,7 +205,7 @@ for (const { name, body } of nonObjectReplies) {
 }
 
 for (const [name, raw] of [['unparseable', 'not json'], ['empty', '']] as const) {
-  test.failing(`close with an ${name} raw reply is unknown completion`, async () => {
+  test(`close with an ${name} raw reply is unknown completion`, async () => {
     const world = await boot({ title: 'Open work', draft: false })
     world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, raw })
 
@@ -215,7 +215,7 @@ for (const [name, raw] of [['unparseable', 'not json'], ['empty', '']] as const)
   })
 }
 
-test.failing('close with a reply over the output limit is unknown completion', async () => {
+test('close with a reply over the output limit is unknown completion', async () => {
   const world = await boot({ title: 'Open work', draft: false })
   world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body: 'x'.repeat(4 * 1024 * 1024 + 16) })
 
@@ -224,7 +224,7 @@ test.failing('close with a reply over the output limit is unknown completion', a
   expectReadbackCount(world, 1)
 })
 
-test.failing('ready with a malformed reply succeeds when readback sees the landed update', async () => {
+test('ready with a malformed reply succeeds when readback sees the landed update', async () => {
   const world = await boot({ title: 'Draft: x', draft: true })
   world.server.responseBarriers.set(`PUT ${reviewPath(world)}`, async () => {
     Object.assign(world.server.mergeRequests[0]!, { title: 'Add x', draft: false })
@@ -237,7 +237,7 @@ test.failing('ready with a malformed reply succeeds when readback sees the lande
   expectReadbackCount(world, 1)
 })
 
-test.failing('close with failed readback is unknown completion', async () => {
+test('close with failed readback is unknown completion', async () => {
   const world = await boot({ title: 'Open work', draft: false })
   world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body: mr({ title: 'Open work', draft: false }) })
   world.server.responseBarriers.set(`PUT ${reviewPath(world)}`, async () => {
@@ -249,7 +249,7 @@ test.failing('close with failed readback is unknown completion', async () => {
   expectReadbackCount(world, 1)
 })
 
-test.failing('close with invalid readback is unknown completion', async () => {
+test('close with invalid readback is unknown completion', async () => {
   const world = await boot({ title: 'Open work', draft: false })
   world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body: mr({ title: 'Open work', draft: false }) })
   world.server.responseBarriers.set(`PUT ${reviewPath(world)}`, async () => {
@@ -275,7 +275,7 @@ const invalidPrewriteCases: Array<{ name: string; body: Record<string, any>; act
   { name: 'a string legacy draft flag', body: mr({ work_in_progress: 'no' }), action: 'draft' }
 ]
 for (const { name, body, action } of invalidPrewriteCases) {
-  test.failing(`updateReview rejects a pre-write MR with ${name}`, async () => {
+  test(`updateReview rejects a pre-write MR with ${name}`, async () => {
     const world = await boot()
     world.server.failures.set(`GET ${reviewPath(world)}`, { status: 200, body })
 
@@ -296,7 +296,7 @@ for (const [name, params, unchanged] of [
   ['title', { title: 'New title' }, mr({ title: 'Open work', draft: false })],
   ['body', { body: 'new body' }, mr({ title: 'Open work', draft: false })]
 ] as const) {
-  test.failing(`edit ${name} with an unchanged reply is unknown completion`, async () => {
+  test(`edit ${name} with an unchanged reply is unknown completion`, async () => {
     const world = await boot({ title: 'Open work', draft: false })
     world.server.failures.set(`PUT ${reviewPath(world)}`, { status: 200, body: unchanged })
 
@@ -314,35 +314,35 @@ test('edit confirms a body after CRLF normalization', async () => {
   expectPutCount(world, 1)
 })
 
-test.failing('close on a closed MR is a no-op with its validated state', async () => {
+test('close on a closed MR is a no-op with its validated state', async () => {
   const world = await boot({ state: 'closed', title: 'Closed work', draft: false })
 
   expect(await update(world, 'close')).toEqual({ number: 5, updated: false, state: 'closed' })
   expectPutCount(world, 0)
 })
 
-test.failing('reopen on an open draft is a no-op with draft state', async () => {
+test('reopen on an open draft is a no-op with draft state', async () => {
   const world = await boot({ state: 'opened', title: 'Draft: open work', draft: true })
 
   expect(await update(world, 'reopen')).toEqual({ number: 5, updated: false, state: 'draft' })
   expectPutCount(world, 0)
 })
 
-test.failing('reopen on an open non-draft is a no-op with open state', async () => {
+test('reopen on an open non-draft is a no-op with open state', async () => {
   const world = await boot({ state: 'opened', title: 'Open work', draft: false })
 
   expect(await update(world, 'reopen')).toEqual({ number: 5, updated: false, state: 'open' })
   expectPutCount(world, 0)
 })
 
-test.failing('draft on a closed draft is a no-op with closed state', async () => {
+test('draft on a closed draft is a no-op with closed state', async () => {
   const world = await boot({ state: 'closed', title: 'Draft: closed work', draft: true })
 
   expect(await update(world, 'draft')).toEqual({ number: 5, updated: false, state: 'closed' })
   expectPutCount(world, 0)
 })
 
-test.failing('draft on a merged draft is a no-op with merged state', async () => {
+test('draft on a merged draft is a no-op with merged state', async () => {
   const world = await boot({ state: 'merged', title: 'Draft: merged work', draft: true })
 
   expect(await update(world, 'draft')).toEqual({ number: 5, updated: false, state: 'merged' })
@@ -367,7 +367,7 @@ for (const [action, message] of [
   ['reopen', 'GitLab cannot reopen a merged merge request.'],
   ['close', 'GitLab cannot close a merged merge request.']
 ] as const) {
-  test.failing(`${action} on a merged MR is refused`, async () => {
+  test(`${action} on a merged MR is refused`, async () => {
     const world = await boot({ state: 'merged', title: 'Merged work', draft: false })
 
     await expect(update(world, action)).rejects.toMatchObject({ message, ...reason('invalid_state') })
@@ -375,7 +375,7 @@ for (const [action, message] of [
   })
 }
 
-test.failing('reopen of a closed draft returns draft state', async () => {
+test('reopen of a closed draft returns draft state', async () => {
   const world = await boot({ state: 'closed', title: 'Draft: x', draft: true })
 
   expect(await update(world, 'reopen')).toEqual({ number: 5, updated: true, state: 'draft' })
@@ -417,7 +417,7 @@ test('ready is confirmed by clearing work_in_progress without a draft key', asyn
   expectPutCount(world, 1)
 })
 
-test.failing('ready stays unknown when work_in_progress remains true', async () => {
+test('ready stays unknown when work_in_progress remains true', async () => {
   const world = await boot({ title: 'x', work_in_progress: true }, ['draft'])
 
   await expectUnknownCompletion(update(world, 'ready'))
@@ -448,7 +448,7 @@ test('ready on an unprefixed MR with no draft flag is a no-op', async () => {
   expectPutCount(world, 0)
 })
 
-test.failing('ready with a conflicting legacy draft signal stays unknown', async () => {
+test('ready with a conflicting legacy draft signal stays unknown', async () => {
   const world = await boot({ title: 'x', draft: false, work_in_progress: true })
 
   await expectUnknownCompletion(update(world, 'ready'))
@@ -465,7 +465,7 @@ test('draft on a prefix-conflicting MR is a no-op with draft state', async () =>
   expectPutCount(world, 0)
 })
 
-test.failing('ready rejects a reply with a true legacy draft signal', async () => {
+test('ready rejects a reply with a true legacy draft signal', async () => {
   const world = await boot({ title: 'Draft: x', draft: true })
   world.server.failures.set(`PUT ${reviewPath(world)}`, {
     status: 200,
@@ -477,7 +477,7 @@ test.failing('ready rejects a reply with a true legacy draft signal', async () =
   expectReadbackCount(world, 1)
 })
 
-test.failing('ready rejects a reply whose title still has a draft prefix', async () => {
+test('ready rejects a reply whose title still has a draft prefix', async () => {
   const world = await boot({ title: 'Draft: x', draft: true })
   world.server.failures.set(`PUT ${reviewPath(world)}`, {
     status: 200,
@@ -513,15 +513,15 @@ async function expectUnconfirmedWriteInvalidatesCache(
   expect(world.server.requests).toHaveLength(requestCount)
 }
 
-test.failing('unchanged ready reply emits changed and invalidates a fresh cache', async () => {
+test('unchanged ready reply emits changed and invalidates a fresh cache', async () => {
   await expectUnconfirmedWriteInvalidatesCache('ready', { status: 200, body: mr({ title: 'Draft: x', draft: true }) }, { title: 'Draft: x', draft: true })
 })
 
-test.failing('invalid ready reply emits changed and invalidates a fresh cache', async () => {
+test('invalid ready reply emits changed and invalidates a fresh cache', async () => {
   await expectUnconfirmedWriteInvalidatesCache('ready', { status: 200, body: { iid: 5, id: 5, project_id: 42 } }, { title: 'Draft: x', draft: true })
 })
 
-test.failing('non-object close reply emits changed and invalidates a fresh cache', async () => {
+test('non-object close reply emits changed and invalidates a fresh cache', async () => {
   await expectUnconfirmedWriteInvalidatesCache('close', { status: 200, body: 'ok' }, { title: 'Open work', draft: false })
 })
 
