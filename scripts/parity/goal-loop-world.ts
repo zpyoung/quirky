@@ -1,12 +1,13 @@
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
 import { get } from 'node:http'
-import { daemonEntryHash, readRuntime } from '@quirky/protocol/node'
+import { daemonEntryHash, readRuntime, type DaemonHealth, type RuntimeInfo } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope, type ProcessScopeSpawnOptions } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { captureCliChild, CliWorldError, type CliBoundedChild, type CliWorldResult } from './cli-world'
 import { installGoalLoopFixtures, type GoalLoopFixtureFaults, type GoalLoopFixturePaths } from './goal-loop-fixtures'
 import { installGoalLoopNetworkGuard } from './goal-loop-network'
+import { daemonStatus } from './daemon-status'
 
 const COMMAND_TIMEOUT_MS = 15_000
 const STARTUP_TIMEOUT_MS = 30_000
@@ -528,36 +529,51 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
   const tokens: string[] = []
   let world: GoalLoopWorld
 
-  const healthy = async (): Promise<boolean> => {
-    const runtime = readRuntime(root)
-    if (!runtime || !daemon || runtime.pid !== daemon.pid) return false
-    const { promise, resolve } = Promise.withResolvers<boolean>()
+  const healthy = async (runtime: RuntimeInfo | null, timeoutMs = PROCESS_CHECK_TIMEOUT_MS): Promise<DaemonHealth | null> => {
+    if (!runtime || !daemon || runtime.pid !== daemon.pid) return null
+    const { promise, resolve } = Promise.withResolvers<DaemonHealth | null>()
     // Bun caches inherited proxy selection even after process.env is isolated
-    const request = get({ hostname: '127.0.0.1', port: runtime.port, path: '/health', agent: false, timeout: PROCESS_CHECK_TIMEOUT_MS }, (response) => {
+    const request = get({ hostname: '127.0.0.1', port: runtime.port, path: '/health', agent: false, timeout: timeoutMs }, (response) => {
       let body = ''
       response.setEncoding('utf8')
       response.on('data', (chunk: string) => {
         body += chunk
         if (Buffer.byteLength(body) > MAX_DIAGNOSTIC_BYTES) {
           request.destroy()
-          resolve(false)
+          resolve(null)
         }
       })
-      response.on('error', () => resolve(false))
-      response.on('aborted', () => resolve(false))
+      response.on('error', () => resolve(null))
+      response.on('aborted', () => resolve(null))
       response.on('end', () => {
         try {
           const value: unknown = JSON.parse(body)
-          resolve(response.statusCode === 200 && typeof value === 'object' && value !== null && 'pid' in value && value.pid === runtime.pid)
+          if (response.statusCode !== 200 || typeof value !== 'object' || value === null || !('pid' in value) || value.pid !== runtime.pid) {
+            resolve(null)
+            return
+          }
+          resolve({
+            pid: runtime.pid,
+            ...('daemonVersion' in value && typeof value.daemonVersion === 'string' ? { daemonVersion: value.daemonVersion } : {}),
+            ...('startupSettled' in value && typeof value.startupSettled === 'boolean' ? { startupSettled: value.startupSettled } : {})
+          })
         } catch {
-          resolve(false)
+          resolve(null)
         }
       })
     })
-    request.on('error', () => resolve(false))
-    request.on('timeout', () => { request.destroy(); resolve(false) })
+    request.on('error', () => resolve(null))
+    request.on('timeout', () => { request.destroy(); resolve(null) })
     return promise
   }
+
+  const daemonHealthy = (signal?: AbortSignal): Promise<boolean> => daemon
+    ? daemonStatus(root, daemon, options.deadline ?? Number.POSITIVE_INFINITY, {
+      signal,
+      probeTimeoutMs: PROCESS_CHECK_TIMEOUT_MS,
+      isDaemonAlive: async (runtime, timeoutMs) => await healthy(runtime, timeoutMs) !== null
+    })
+    : Promise.resolve(false)
 
   const cleanupResources = (cleanupOptions: GoalLoopWorldCleanupOptions = {}): Promise<void> => {
     if (cleanupPromise) return cleanupPromise
@@ -768,7 +784,7 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
             if (runtime) {
               if (runtime.pid !== daemon.pid) throw new CliWorldError('daemon-readiness', 'runtime record belongs to a different process')
               if (runtime.entryHash !== expectedHash) throw new CliWorldError('daemon-readiness', 'runtime record does not match the checkout daemon entrypoint')
-              if (runtime.port > 0 && await healthy()) {
+              if (runtime.port > 0 && (await healthy(runtime))?.startupSettled === true) {
                 tokens.push(runtime.token, runtime.hookToken)
                 ready = true
                 break
@@ -784,7 +800,10 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
           }
           started = true
           await options.hooks?.afterReady?.(world)
-          if (!(await healthy())) throw new CliWorldError('daemon-exited', 'owned daemon exited after readiness')
+          if (daemon.exitCode !== null || !(await daemonHealthy(options.signal))) {
+            checkInterrupted(options.signal)
+            throw new CliWorldError('daemon-exited', 'owned daemon exited after readiness')
+          }
           if (options.hooks?.onActiveTurn) {
             activeTurnTimer = setInterval(() => {
               if (closed || activeTurnHook) return
@@ -812,7 +831,10 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
     async cli(args, cliOptions = {}) {
       if (closed) throw new CliWorldError('world-closed', 'goal-loop world has already been cleaned up')
       if (!started || !daemon) throw new CliWorldError('world-not-started', 'call start() before using the checkout CLI')
-      if (daemon.exitCode !== null || !(await healthy())) throw new CliWorldError('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
+      if (daemon.exitCode !== null || !(await daemonHealthy(cliOptions.signal ?? options.signal))) {
+        checkInterrupted(cliOptions.signal ?? options.signal)
+        throw new CliWorldError('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
+      }
       if (activeTurnHookError !== undefined) {
         const error = activeTurnHookError
         activeTurnHookError = undefined
@@ -839,7 +861,8 @@ export async function createGoalLoopWorld(options: GoalLoopWorldOptions = {}): P
         }
         throw new CliWorldError('cli-failed', redactDiagnostic(errorText(error), root, tokens))
       }
-      if (daemon.exitCode !== null || !(await healthy())) {
+      if (daemon.exitCode !== null || !(await daemonHealthy(cliOptions.signal ?? options.signal))) {
+        checkInterrupted(cliOptions.signal ?? options.signal)
         throw new CliWorldError('daemon-exited', 'owned daemon exited during the CLI operation; refusing subsequent calls', redactDiagnostic(result.stderr, root, tokens))
       }
       return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr }

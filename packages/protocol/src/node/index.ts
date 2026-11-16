@@ -46,6 +46,12 @@ export type RuntimeInfo = {
   entryHash?: string
 }
 
+export type DaemonHealth = {
+  pid: number
+  daemonVersion?: string
+  startupSettled?: boolean
+}
+
 export const HEALTH_PATH = '/health'
 
 export function quirkyHome(): string {
@@ -139,19 +145,35 @@ export function rpcUrl(info: RuntimeInfo): string {
   return `ws://127.0.0.1:${info.port}${RPC_PATH}?token=${encodeURIComponent(info.token)}`
 }
 
-/** True when the daemon described by `info` answers its health check. */
-export async function isDaemonAlive(info: RuntimeInfo | null, timeoutMs = 1500): Promise<boolean> {
-  if (!info) return false
+/** Reads the daemon's `/health` answer when it comes from `info.pid` within `timeoutMs`. */
+export async function readDaemonHealth(
+  info: RuntimeInfo | null,
+  timeoutMs = 1500
+): Promise<DaemonHealth | null> {
+  if (!info) return null
   try {
     const response = await fetch(`http://127.0.0.1:${info.port}${HEALTH_PATH}`, {
       signal: AbortSignal.timeout(timeoutMs)
     })
-    if (!response.ok) return false
-    const body = (await response.json()) as { pid?: number }
-    return body.pid === info.pid
+    if (!response.ok) return null
+    const body = (await response.json()) as {
+      pid?: number
+      daemonVersion?: unknown
+      startupSettled?: unknown
+    }
+    if (body.pid !== info.pid) return null
+    const health: DaemonHealth = { pid: info.pid }
+    if (typeof body.daemonVersion === 'string') health.daemonVersion = body.daemonVersion
+    if (typeof body.startupSettled === 'boolean') health.startupSettled = body.startupSettled
+    return health
   } catch {
-    return false
+    return null
   }
+}
+
+/** True when the daemon described by `info` answers its health check. */
+export async function isDaemonAlive(info: RuntimeInfo | null, timeoutMs = 1500): Promise<boolean> {
+  return (await readDaemonHealth(info, timeoutMs)) !== null
 }
 
 const SOURCE_ENTRY = join('packages', 'daemon', 'src', 'main.ts')

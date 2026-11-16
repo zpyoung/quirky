@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { tmpdir } from 'node:os'
-import { daemonEntryHash, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
+import { daemonEntryHash, isDaemonAlive, readDaemonHealth, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope, type ProcessScopeSpawnOptions } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment, prepareCaptureFixtureHome, type FixtureWorktree } from '../ui-review/fixtures'
 import type { Page } from 'playwright'
@@ -11,6 +11,7 @@ import type { SoakWindows, WindowStartupObservation } from '../soak/windows'
 import type { WindowRecord } from '../soak/contracts'
 import { createCliFixtures, installCliFixtureTools, type CliFixturePaths, type CliFixtureTools, type FixtureCommandResult } from './cli-fixtures'
 import { buildCliActorCommand } from './cli-actor'
+import { daemonStatus } from './daemon-status'
 
 const MAX_STDOUT_BYTES = 16 * 1024 * 1024
 const MAX_STDERR_BYTES = 8 * 1024
@@ -618,11 +619,21 @@ function checkReadyRuntime(home: string, daemonPid: number, entryHash: string): 
   }
 }
 
-async function healthCheck(home: string, daemonPid: number, env: Record<string, string>, signal?: AbortSignal): Promise<boolean> {
+async function healthCheck(home: string, daemon: CliBoundedChild, env: Record<string, string>, signal?: AbortSignal): Promise<boolean> {
   checkInterrupted(signal)
-  const runtime = readRuntime(home)
-  if (!runtime || runtime.pid !== daemonPid) return false
-  return withOwnedProcessEnvironment(env, () => isDaemonAlive(runtime, 250))
+  let pendingProbe: Promise<boolean> | undefined
+  try {
+    return await daemonStatus(home, daemon, Number.POSITIVE_INFINITY, {
+      signal,
+      probeTimeoutMs: 250,
+      isDaemonAlive: (runtime, timeoutMs) => {
+        pendingProbe = withOwnedProcessEnvironment(env, () => isDaemonAlive(runtime, timeoutMs))
+        return pendingProbe
+      }
+    })
+  } finally {
+    await pendingProbe?.catch(() => {})
+  }
 }
 
 async function waitForCliFilesDaemonHealth(options: {
@@ -904,7 +915,8 @@ function makeWorld(options: {
       validateCliArgv(argv, options.paths.cliEntry)
       const cwd = resolveCliCwd(executeOptions.cwd, options.paths.repoRoot, options.home)
       captureProcesses()
-      if (!(await healthCheck(options.home, options.daemon.pid, options.env, signal))) {
+      if (!(await healthCheck(options.home, options.daemon, options.env, signal))) {
+        checkInterrupted(signal)
         throw new CliWorldError('daemon-exited', 'owned daemon is not healthy; refusing CLI auto-start')
       }
       const timeoutMs = Math.min(COMMAND_TIMEOUT_MS, executeOptions.timeoutMs ?? COMMAND_TIMEOUT_MS)
@@ -921,7 +933,8 @@ function makeWorld(options: {
         throw new CliWorldError('cli-failed', errorText(error))
       }
       captureProcesses()
-      if (options.daemon.exitCode !== null || !(await healthCheck(options.home, options.daemon.pid, options.env, signal))) {
+      if (options.daemon.exitCode !== null || !(await healthCheck(options.home, options.daemon, options.env, signal))) {
+        checkInterrupted(signal)
         throw new CliWorldError('daemon-exited', 'owned daemon exited during the CLI operation; refusing further CLI calls', result.stderr)
       }
       return result
@@ -1102,6 +1115,7 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
     diagnostics.push(createTailCapture(daemon.stdout), createTailCapture(daemon.stderr))
     const expectedHash = daemonEntryHash(daemonEntry)
     const readinessDeadline = Math.min(startupDeadline, Date.now() + STARTUP_TIMEOUT_MS)
+    let ready = false
     while (Date.now() < readinessDeadline) {
       checkInterrupted(options.signal)
       if (daemon.exitCode !== null) {
@@ -1116,12 +1130,16 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
       if (runtime) {
         if (runtime.pid !== daemon.pid) throw new CliWorldError('daemon-readiness', 'runtime.json belongs to a different process')
         if (runtime.entryHash !== expectedHash) throw new CliWorldError('daemon-readiness', 'runtime.json does not match the checkout daemon entrypoint')
-        if (await healthCheck(home, daemon.pid, env, options.signal)) break
+        const health = await withOwnedProcessEnvironment(env, () => readDaemonHealth(runtime, 250))
+        if (health?.pid === daemon.pid && health.startupSettled === true) {
+          ready = true
+          break
+        }
       }
       await Bun.sleep(50)
     }
     checkInterrupted(options.signal)
-    if (!(await healthCheck(home, daemon.pid, env, options.signal))) {
+    if (!ready) {
       throw new CliWorldError('daemon-readiness-timeout', 'owned daemon did not become healthy within 30 seconds', diagnostics.map((capture) => capture.text()).join('\n'))
     }
     checkReadyRuntime(home, daemon.pid, expectedHash)
@@ -1139,7 +1157,8 @@ export async function createCliWorld(options: CliWorldOptions = {}): Promise<Cli
       tokens
     })
     await options.hooks?.afterReady?.(world)
-    if (!(await healthCheck(home, daemon.pid, env, options.signal))) {
+    if (!(await healthCheck(home, daemon, env, options.signal))) {
+      checkInterrupted(options.signal)
       throw new CliWorldError('daemon-exited', 'owned daemon exited after readiness')
     }
     return world
