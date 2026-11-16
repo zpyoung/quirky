@@ -85,15 +85,61 @@ describe('settings', () => {
     expect(root.textContent).not.toContain('read-only')
     expect(root.querySelector('[role="alert"]')).toBeNull()
   })
-  test('shows one read error with unavailable coverage and depth placeholders', async () => {
-    const f = fake({ 'quirky.orchestration/skillStatus': () => { throw new Error('daemon down') }, 'quirky.orchestration/policyShow': () => ({ nestedWorkerMaxDepth: 1, canChange: true }) })
+  test.each([
+    ['quirky.orchestration/skillStatus', 'reject'],
+    ['quirky.orchestration/policyShow', 'reject'],
+    ['quirky.orchestration/skillStatus', 'invalid'],
+    ['quirky.orchestration/policyShow', 'invalid'],
+  ])('shows scoped shared errors, recovers, and retains data after %s %s', async (method, failure) => {
+    let failed = true
+    const respond = (name: string, value: unknown) => () => {
+      if (failed && name === method) {
+        if (failure === 'reject') throw new Error('daemon down')
+        return {}
+      }
+      return value
+    }
+    const f = fake({
+      'quirky.orchestration/skillStatus': respond('quirky.orchestration/skillStatus', missing),
+      'quirky.orchestration/policyShow': respond('quirky.orchestration/policyShow', { nestedWorkerMaxDepth: 2, canChange: true }),
+    })
     const root = await mount(f, SV)
-    expect([...root.querySelectorAll('div.ui-inline-error[role="alert"] .ui-inline-error__message')].map((e) => e.textContent)).toEqual(['daemon down'])
+    const messages = () => [...root.querySelectorAll('.ui-inline-error[role="alert"] .ui-inline-error__message')].map((e) => e.textContent)
+    const cause = failure === 'reject' ? 'daemon down' : 'The orchestration setup API returned an invalid status.'
+    expect(messages()).toEqual([
+      'Skill coverage is unavailable.',
+      cause,
+      'Agent coverage is unavailable.',
+      'Nested worker depth is unavailable.',
+    ])
+    expect(root.querySelectorAll('[role="alert"]')).toHaveLength(4)
     expect(root.querySelector('.ui-error-text')).toBeNull()
-    expect(root.textContent).toContain('Agent coverage is unavailable.')
-    expect(root.textContent).toContain('Nested worker depth is unavailable.')
+    expect(root.querySelector('.ui-notice-line')).toBeNull()
     expect(root.textContent).not.toContain('read-only')
-    expect(root.querySelector('p.ui-notice-line')).toBeNull()
+    expect(root.querySelector('input[aria-label="Nested worker depth"]')).toBeNull()
+    expect(btn(root, 'Install').disabled).toBe(true)
+    expect(btn(root, 'Re-check').disabled).toBe(false)
+
+    failed = false
+    await act(async () => { btn(root, 'Re-check').click() })
+    await settle()
+    expect(messages()).toEqual([])
+    expect(root.textContent).toContain('/p/SKILL.md')
+    expect((root.querySelector('input[aria-label="Nested worker depth"]') as HTMLInputElement).value).toBe('2')
+    expect(btn(root, 'Install').disabled).toBe(false)
+    expect(btn(root, 'Save depth').disabled).toBe(false)
+    expect(btn(root, 'Copy command').disabled).toBe(false)
+    expect(btn(root, 'Copy prompt: Run a phased workflow').disabled).toBe(false)
+
+    failed = true
+    await act(async () => { btn(root, 'Re-check').click() })
+    await settle()
+    expect(messages()).toEqual([cause])
+    expect(root.textContent).toContain('/p/SKILL.md')
+    expect((root.querySelector('input[aria-label="Nested worker depth"]') as HTMLInputElement).value).toBe('2')
+    expect(root.textContent).not.toContain('coverage is unavailable.')
+    expect(root.textContent).not.toContain('Nested worker depth is unavailable.')
+    expect(root.querySelector('.ui-notice-line')).toBeNull()
   })
   test.each(['permission denied', null])('shows an agent error once below its row: %s', async (detail) => {
     const st = { state: 'error', agents: [{ id: 'codex', label: 'Codex', state: 'error', path: '/p', detail }], installCommand: 'quirky orchestration skill-install', text: 'One target needs attention.' }
