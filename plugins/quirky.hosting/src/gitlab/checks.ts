@@ -25,6 +25,7 @@ type Project = { id: number }
 type MergeRequest = { headSha: string; sourceBranch: string }
 type Target = {
   projectId: number
+  mergeRequestIid: number
   headSha: string
   sourceBranch: string
   pipeline: Pipeline | null
@@ -213,6 +214,7 @@ async function loadTarget(
   if (pipelines.unavailable) {
     return {
       projectId: project.id,
+      mergeRequestIid: number,
       headSha: mergeRequest.headSha,
       sourceBranch: mergeRequest.sourceBranch,
       pipeline: null,
@@ -235,6 +237,7 @@ async function loadTarget(
   if (selected === null) {
     return {
       projectId: project.id,
+      mergeRequestIid: number,
       headSha: mergeRequest.headSha,
       sourceBranch: mergeRequest.sourceBranch,
       pipeline: null,
@@ -255,6 +258,7 @@ async function loadTarget(
     partialFailures.push('pipelines_unavailable')
     return {
       projectId: project.id,
+      mergeRequestIid: number,
       headSha: mergeRequest.headSha,
       sourceBranch: mergeRequest.sourceBranch,
       pipeline: null,
@@ -271,13 +275,14 @@ async function loadTarget(
     if (forDetails) throw gitlabError(env, 'stale_head', 'The verified pipeline belongs to a different merge request head.')
     schemaDrift(env)
   }
-  if (verified.ref !== mergeRequest.sourceBranch) {
+  if (!isCurrentMergeRequestRef(verified.ref, number, mergeRequest.sourceBranch)) {
     if (forDetails) throw gitlabError(env, 'foreign_target', 'The verified pipeline does not match the merge request branch.')
     schemaDrift(env)
   }
 
   return {
     projectId: project.id,
+    mergeRequestIid: number,
     headSha: mergeRequest.headSha,
     sourceBranch: mergeRequest.sourceBranch,
     pipeline: verified,
@@ -506,7 +511,7 @@ function parseRetriedJob(env: HostingEnv, value: unknown, selectedJob: Job, targ
   if (target.pipeline === null || retried.id === selectedJob.id || retried.name !== selectedJob.name
     || retried.pipelineId !== target.pipeline.id || retried.projectId !== target.projectId
     || !sameSha(retried.sha, target.headSha) || !sameSha(retried.commitSha, target.headSha)
-    || retried.ref !== target.sourceBranch) schemaDrift(env)
+    || !isCurrentMergeRequestRef(retried.ref, target.mergeRequestIid, target.sourceBranch)) schemaDrift(env)
   return retried
 }
 
@@ -601,6 +606,9 @@ function parseMergeRequest(env: HostingEnv, value: unknown, number: number, proj
   if (value.sha !== undefined && value.sha !== null && (!shaValue(value.sha) || !sameSha(value.sha, headSha))) schemaDrift(env)
   return { headSha, sourceBranch: value.source_branch }
 }
+function isCurrentMergeRequestRef(ref: string, mergeRequestIid: number, sourceBranch: string): boolean {
+  return ref === sourceBranch || ref === `refs/merge-requests/${mergeRequestIid}/head`
+}
 
 function parsePipelineEntry(env: HostingEnv, value: unknown, projectId: number): Pipeline {
   if (!isRecord(value) || !positive(value.id) || value.project_id !== projectId
@@ -625,7 +633,7 @@ function parseListedJob(env: HostingEnv, value: unknown, target: Target, pipelin
   const identity = parseJobIdentity(env, value)
   if (identity.id <= 0 || identity.pipelineId !== pipelineId || identity.projectId !== target.projectId
     || !sameSha(identity.sha, target.headSha) || !sameSha(identity.commitSha, target.headSha)
-    || identity.ref !== target.sourceBranch) schemaDrift(env)
+    || !isCurrentMergeRequestRef(identity.ref, target.mergeRequestIid, target.sourceBranch)) schemaDrift(env)
   if (isRecord(value) && value.project_id !== undefined && value.project_id !== target.projectId) schemaDrift(env)
   return identity
 }
@@ -641,7 +649,7 @@ function parseDetailJob(env: HostingEnv, value: unknown, requestedId: number, ta
   if (!sameSha(identity.sha, target.headSha) || !sameSha(identity.commitSha, target.headSha)) {
     throw gitlabError(env, 'stale_head', 'The GitLab job belongs to a different merge request head.')
   }
-  if (identity.ref !== target.sourceBranch) {
+  if (!isCurrentMergeRequestRef(identity.ref, target.mergeRequestIid, target.sourceBranch)) {
     throw gitlabError(env, 'foreign_target', 'The GitLab job does not belong to the selected merge request pipeline.')
   }
   return identity
@@ -911,16 +919,14 @@ function traceFailureMarker(reason: string | null): string {
 }
 
 function sanitizeTrace(value: string, token: string): { text: string; truncated: boolean } {
-  let clean = value
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]|\u009b[0-?]*[ -/]*[@-~]/gu, '')
-    .replace(/(?:\u001b\]|\u009d)(?:[^\u0007\u001b\u009c]|\u001b(?!\\))*?(?:\u0007|\u001b\\|\u009c)/gu, '')
+  const stripped = stripTraceControlsAndTerminalSequences(value)
+  let clean = preserveTraceUrlSchemeSeparators(stripped.text, stripped.controlBoundaries)
     .replace(/\r\n?/gu, '\n')
-    .replace(/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@?#]+@/giu, '$1')
-  if (token.length > 0) clean = clean.split(token).join('[REDACTED]')
+  clean = redactTraceUserinfo(clean)
+  if (token.length > 0) clean = replaceTraceToken(clean, token)
   clean = clean
     .replace(/(?:glpat-|gldt-|glrt-)[A-Za-z0-9_-]+/gu, '[REDACTED]')
     .replace(/\bBearer\s+[^\s"'<>]+/giu, 'Bearer [REDACTED]')
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/gu, '')
 
   const hadTrailingNewline = clean.endsWith('\n')
   let lines = clean.length === 0 ? [] : clean.split('\n')
@@ -936,6 +942,188 @@ function sanitizeTrace(value: string, token: string): { text: string; truncated:
     text = new TextDecoder('utf-8').decode(bytes.subarray(start))
   }
   return { text, truncated }
+}
+
+function stripTraceControlsAndTerminalSequences(value: string): {
+  text: string
+  controlBoundaries: Uint8Array
+} {
+  const output = new Uint16Array(value.length)
+  const controlBoundaries = new Uint8Array(value.length + 1)
+  let outputLength = 0
+  for (let index = 0; index < value.length;) {
+    const code = value.charCodeAt(index)
+    let sequenceEnd: number | null = null
+    if (code === 0x1b && value.charCodeAt(index + 1) === 0x5b) {
+      sequenceEnd = skipTraceCsi(value, index + 2)
+    } else if (code === 0x9b) {
+      sequenceEnd = skipTraceCsi(value, index + 1)
+    } else if (code === 0x1b && value.charCodeAt(index + 1) === 0x5d) {
+      sequenceEnd = skipTraceOsc(value, index + 2)
+    } else if (code === 0x9d) {
+      sequenceEnd = skipTraceOsc(value, index + 1)
+    }
+    if (sequenceEnd !== null) {
+      controlBoundaries[outputLength] = 1
+      index = sequenceEnd
+      continue
+    }
+    if (code <= 0x08 || code === 0x0b || code === 0x0c
+      || (code >= 0x0e && code <= 0x1f) || (code >= 0x7f && code <= 0x9f)) {
+      controlBoundaries[outputLength] = 1
+      index += 1
+      continue
+    }
+    output[outputLength++] = code
+    index += 1
+  }
+  return {
+    text: traceStringFromCodeUnits(output, outputLength),
+    controlBoundaries: controlBoundaries.subarray(0, outputLength + 1)
+  }
+}
+
+function traceUrlSchemeStarts(value: string): Uint8Array {
+  const starts = new Uint8Array(value.length)
+  let searchFrom = 0
+  while (true) {
+    const separator = value.indexOf('://', searchFrom)
+    if (separator < 0) return starts
+    let schemeStart = separator
+    while (schemeStart > 0) {
+      const code = value.charCodeAt(schemeStart - 1)
+      const letter = (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)
+      const digit = code >= 0x30 && code <= 0x39
+      if (!letter && !digit && code !== 0x2b && code !== 0x2e && code !== 0x2d) break
+      schemeStart -= 1
+    }
+    for (let index = schemeStart; index < separator; index += 1) {
+      const code = value.charCodeAt(index)
+      if ((code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)) starts[index] = 1
+    }
+    searchFrom = separator + 3
+  }
+}
+
+function preserveTraceUrlSchemeSeparators(value: string, controlBoundaries: Uint8Array): string {
+  const urlSchemeStarts = traceUrlSchemeStarts(value)
+  let separatorCount = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (controlBoundaries[index] === 1 && urlSchemeStarts[index] === 1) separatorCount += 1
+  }
+  if (separatorCount === 0) return value
+
+  const output = new Uint16Array(value.length + separatorCount)
+  let outputLength = 0
+  for (let index = 0; index < value.length; index += 1) {
+    if (controlBoundaries[index] === 1 && urlSchemeStarts[index] === 1) output[outputLength++] = 0x20
+    output[outputLength++] = value.charCodeAt(index)
+  }
+  return traceStringFromCodeUnits(output, outputLength)
+}
+
+function traceStringFromCodeUnits(value: Uint16Array, length: number): string {
+  const chunks: string[] = []
+  const chunkSize = 8192
+  for (let start = 0; start < length; start += chunkSize) {
+    chunks.push(String.fromCharCode(...value.subarray(start, Math.min(start + chunkSize, length))))
+  }
+  return chunks.join('')
+}
+
+function skipTraceCsi(value: string, start: number): number {
+  for (let index = start; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code >= 0x40 && code <= 0x7e) return index + 1
+    if (code >= 0x20 && code <= 0x3f) continue
+    return start
+  }
+  return value.length
+}
+
+function skipTraceOsc(value: string, start: number): number {
+  for (let index = start; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code === 0x07 || code === 0x9c) return index + 1
+    if (code === 0x1b && value.charCodeAt(index + 1) === 0x5c) return index + 2
+  }
+  return value.length
+}
+
+function redactTraceUserinfo(value: string): string {
+  const parts: string[] = []
+  let copyFrom = 0
+  let searchFrom = 0
+  while (true) {
+    const separator = value.indexOf('://', searchFrom)
+    if (separator < 0) break
+
+    let schemeStart = separator
+    while (schemeStart > 0) {
+      const code = value.charCodeAt(schemeStart - 1)
+      const letter = (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)
+      const digit = code >= 0x30 && code <= 0x39
+      if (!letter && !digit && code !== 0x2b && code !== 0x2e && code !== 0x2d) break
+      schemeStart -= 1
+    }
+    let hasSchemeBoundary = false
+    for (let index = schemeStart; index < separator; index += 1) {
+      const code = value.charCodeAt(index)
+      const previous = value.charCodeAt(index - 1)
+      const letter = (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)
+      const previousWord = (previous >= 0x41 && previous <= 0x5a) || (previous >= 0x61 && previous <= 0x7a)
+        || (previous >= 0x30 && previous <= 0x39) || previous === 0x5f
+      if (letter && (index === 0 || !previousWord)) {
+        hasSchemeBoundary = true
+        break
+      }
+    }
+    if (!hasSchemeBoundary) {
+      searchFrom = separator + 3
+      continue
+    }
+
+    const userinfoStart = separator + 3
+    let userinfoEnd = userinfoStart
+    while (userinfoEnd < value.length) {
+      const code = value.charCodeAt(userinfoEnd)
+      if (code === 0x2f || code === 0x40 || code === 0x3f || code === 0x23 || isTraceWhitespace(code)) break
+      userinfoEnd += 1
+    }
+    if (userinfoEnd > userinfoStart && value.charCodeAt(userinfoEnd) === 0x40) {
+      parts.push(value.slice(copyFrom, separator + 3))
+      copyFrom = userinfoEnd + 1
+      searchFrom = copyFrom
+    } else {
+      searchFrom = separator + 3
+    }
+  }
+  if (copyFrom === 0) return value
+  parts.push(value.slice(copyFrom))
+  return parts.join('')
+}
+
+
+function isTraceWhitespace(code: number): boolean {
+  return (code >= 0x09 && code <= 0x0d) || code === 0x20 || code === 0x00a0
+    || code === 0x1680 || (code >= 0x2000 && code <= 0x200a)
+    || code === 0x2028 || code === 0x2029 || code === 0x202f
+    || code === 0x205f || code === 0x3000 || code === 0xfeff
+}
+
+function replaceTraceToken(value: string, token: string): string {
+  const firstMatch = value.indexOf(token)
+  if (firstMatch < 0) return value
+  const parts: string[] = []
+  let copyFrom = 0
+  let match = firstMatch
+  while (match >= 0) {
+    parts.push(value.slice(copyFrom, match), '[REDACTED]')
+    copyFrom = match + token.length
+    match = value.indexOf(token, copyFrom)
+  }
+  parts.push(value.slice(copyFrom))
+  return parts.join('')
 }
 
 function jobUrl(scope: GitLabScope, jobId: number): string {

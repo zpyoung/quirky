@@ -148,6 +148,7 @@ test('routed checks select the current MR pipeline and map its failed and succes
   expect(world.invocations()).toEqual([])
 })
 
+// A two-read detail integration path takes about 5.9s because it repeats local-Git fences.
 test('routed checkDetails verifies and reads only the selected current-head job trace', async () => {
   const world = await boot()
   const { head } = setupDefault(world)
@@ -171,7 +172,29 @@ test('routed checkDetails verifies and reads only the selected current-head job 
   expect(world.server.requests.every((request) => request.authorization === 'Bearer dummy-gitlab-token')).toBe(true)
   expect(world.glabInvocations()).toEqual([])
   expect(world.invocations()).toEqual([])
-})
+}, 20_000)
+test('checks, details, and retries accept the current merge-request pipeline ref', async () => {
+  const world = await boot()
+  const { current, jobs } = setupDefault(world)
+  const mergeRequestRef = 'refs/merge-requests/5/head'
+  current.ref = mergeRequestRef
+  world.server.mergeRequests[0]!.head_pipeline = { ...current }
+  for (const value of jobs) value.pipeline.ref = mergeRequestRef
+
+  const checks = await world.call('checks', { number: 5, noCache: true }) as { checks: CheckRecord[] }
+  expect(checks.checks.map((check) => check.checkRunId)).toEqual([201, 202])
+  const details = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 })
+  expect(details).toMatchObject({ check: { id: 201, workflowRunId: 90 }, partialFailures: [] })
+  expect(await world.call('rerunChecks', { number: 5, failedOnly: true })).toEqual({
+    started: 1,
+    targetCount: 1,
+    completedSteps: ['check:201']
+  })
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+    `${jobPath(world, 201)}/retry`
+  ])
+}, 20_000)
+
 test('every GitLab job status and allowed failure maps to the public check vocabulary', async () => {
   const world = await boot()
   const head = localHead(world)
@@ -568,6 +591,41 @@ test('detail rejects a verified pipeline from another project or head before tra
     expect(world.server.requests.some((request) => request.path.endsWith('/trace'))).toBe(false)
   }
 })
+test('other merge-request refs remain foreign across pipeline, job, and retry verification', async () => {
+  const world = await boot()
+  const { head, current, jobs } = setupDefault(world)
+  const otherMergeRequestRef = 'refs/merge-requests/6/head'
+  const wrongPipeline = pipeline(90, head, { ref: otherMergeRequestRef })
+  world.server.mergeRequestPipelines.set('5', [wrongPipeline])
+  world.server.pipelines = [wrongPipeline]
+  world.server.mergeRequests[0]!.head_pipeline = { ...wrongPipeline }
+
+  await expect(world.call('checks', { number: 5, noCache: true })).rejects.toMatchObject(reason('schema_drift'))
+  await expect(world.call('checkDetails', { number: 5, checkRunId: 201 })).rejects.toMatchObject(reason('foreign_target'))
+
+  world.server.mergeRequestPipelines.set('5', [current])
+  world.server.pipelines = [current]
+  world.server.mergeRequests[0]!.head_pipeline = { ...current }
+  jobs[0]!.pipeline.ref = otherMergeRequestRef
+  world.server.jobs = jobs
+  await expect(world.call('checks', { number: 5, noCache: true })).rejects.toMatchObject(reason('schema_drift'))
+  await expect(world.call('checkDetails', { number: 5, checkRunId: 201 })).rejects.toMatchObject(reason('foreign_target'))
+
+  jobs[0]!.pipeline.ref = 'feature'
+  const invalidRetry = {
+    ...jobs[0],
+    id: 203,
+    status: 'pending',
+    pipeline: { ...jobs[0]!.pipeline, ref: otherMergeRequestRef }
+  }
+  world.server.failures.set(`POST ${jobPath(world, 201)}/retry`, { status: 201, body: invalidRetry })
+  const retryError = await world.call('rerunChecks', { number: 5, failedOnly: true }).catch((value) => value)
+  expect(errorReasonValue(retryError)).toBe('unknown_completion')
+  expect(world.server.requests.filter((request) => request.method === 'POST').map((request) => request.path)).toEqual([
+    `${jobPath(world, 201)}/retry`
+  ])
+})
+
 
 function holdResponse(world: GitLabWorld, method: string, path: string): { arrived: Promise<void>; release(): void } {
   const arrival = Promise.withResolvers<void>()
@@ -663,7 +721,10 @@ test('trace streaming removes split terminal controls, active and GitLab tokens,
       '1mred\u001b[0m\r\n\u001b]0;private title',
       '\u0007Authorization: Bearer fixture-bearer-secret\r',
       `token=${'dummy-gitlab-token'} glpat-Token_123-ABC gldt-Token_234-DEF glrt-Token_345-GHI`,
-      '\u0001https://alice:password@example.test/path\tcolumn'
+      '\u0001https://alice:password@example.test/path\tcolumn\n',
+      'split=dummy-gitlab\u0001-token glpat-Token_123\u0001-ABC\n',
+      'Authorization: Bea\u0001rer\u0002 split-bearer-secret\n',
+      'https://alice\u0001:pass\u0002word@example.test'
     ]
   })
 
@@ -672,15 +733,34 @@ test('trace streaming removes split terminal controls, active and GitLab tokens,
   expect(tail).toContain('beforered\n')
   expect(tail).toContain('Authorization:')
   expect(tail).toContain('[REDACTED]')
-  expect(tail).toContain('https://example.test/path\tcolumn')
+  expect(tail).toContain('https://example.test/path\tcolumn\n')
+  expect(tail).toContain('https://example.test')
   expect(tail).not.toContain('\r')
   expect(tail).not.toContain('\u001b')
   expect(tail).not.toContain('\u0001')
-  for (const secret of ['dummy-gitlab-token', 'fixture-bearer-secret', 'glpat-Token_123-ABC', 'gldt-Token_234-DEF', 'glrt-Token_345-GHI', 'alice:password@']) {
+  expect(tail).not.toContain('\u0002')
+  for (const secret of ['dummy-gitlab-token', 'fixture-bearer-secret', 'split-bearer-secret', 'glpat-Token_123-ABC', 'gldt-Token_234-DEF', 'glrt-Token_345-GHI', 'alice:password@', 'password@example.test']) {
     expect(tail).not.toContain(secret)
   }
   expect(result.logTails).toHaveLength(1)
-})
+}, 20_000)
+test('large malformed trace text is sanitized without quadratic escape or userinfo searches', async () => {
+  const world = await boot()
+  setupDefault(world)
+  const limit = 4 * 1024 * 1024
+  const prefix = 'a.a.a.'.repeat(64 * 1024)
+  const trace = `${prefix}\n\u001b]${'x'.repeat(limit - prefix.length - 3)}`
+  world.server.traces.set('201', { chunks: [trace] })
+
+  const result = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as {
+    logTails: Array<{ tail: string }>
+    truncated: boolean
+  }
+  expect(result.logTails[0]?.tail).toBe(`${prefix.slice(-(16 * 1024 - 1))}\n`)
+  expect(result.truncated).toBe(true)
+}, 20_000)
+
+
 
 test('trace tails retain exactly the last 100 lines and cap UTF-8 output without splitting code points', async () => {
   const world = await boot()
@@ -704,12 +784,39 @@ test('trace tails retain exactly the last 100 lines and cap UTF-8 output without
   expect(Buffer.byteLength(over.logTails[0]?.tail ?? '', 'utf8')).toBe(16 * 1024)
   expect(over.truncated).toBe(true)
 
-  world.server.traces.set('201', { chunks: ['🙂'.repeat(4097)] })
+  world.server.traces.set('201', { chunks: [`x${'🙂'.repeat(4097)}y`] })
   const multibyte = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as { logTails: Array<{ tail: string }>; truncated: boolean }
-  expect(Buffer.byteLength(multibyte.logTails[0]?.tail ?? '', 'utf8')).toBe(16 * 1024)
-  expect(multibyte.logTails[0]?.tail).toBe('🙂'.repeat(4096))
+  expect(Buffer.byteLength(multibyte.logTails[0]?.tail ?? '', 'utf8')).toBe(16 * 1024 - 3)
+  expect(multibyte.logTails[0]?.tail).toBe(`${'🙂'.repeat(4095)}y`)
+  expect(multibyte.logTails[0]?.tail).not.toContain('\uFFFD')
   expect(multibyte.truncated).toBe(true)
 }, 20_000)
+test('trace secrets remain redacted across the byte-tail window', async () => {
+  const world = await boot()
+  setupDefault(world)
+  const token = 'dummy-gitlab-token'
+  world.server.traces.set('201', {
+    chunks: [`${token}${'x'.repeat(16 * 1024 - token.length + 10)}`]
+  })
+  const active = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as {
+    logTails: Array<{ tail: string }>
+    truncated: boolean
+  }
+  expect(active.logTails[0]?.tail).toBe(`EDACTED]${'x'.repeat(16 * 1024 - 8)}`)
+  expect(active.logTails[0]?.tail).not.toContain('lab-token')
+  expect(active.truncated).toBe(true)
+
+  const userinfo = 'https://alice:password@example.test/'
+  const raw = userinfo + 'x'.repeat(16 * 1024 + 15 - userinfo.length)
+  world.server.traces.set('201', { chunks: [raw] })
+  const url = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as {
+    logTails: Array<{ tail: string }>
+  }
+  expect(url.logTails[0]?.tail).toContain('https://example.test/')
+  expect(url.logTails[0]?.tail).not.toContain('password')
+  expect(url.logTails[0]?.tail).not.toContain('assword@example.test')
+}, 20_000)
+
 
 test('trace stream accepts exactly 4 MiB and reports an honest partial detail above the cap', async () => {
   const world = await boot()
@@ -722,10 +829,32 @@ test('trace stream accepts exactly 4 MiB and reports an honest partial detail ab
   expect(exact.logTails[0]?.tail).toHaveLength(16 * 1024)
   expect(exact.truncated).toBe(true)
 
-  world.server.traces.set('201', { chunks: [new Uint8Array(limit + 1).fill(0x78)] })
-  const over = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as { partialFailures: string[]; logTails: Array<{ tail: string }> }
-  expect(over.partialFailures.length).toBeGreaterThan(0)
+  world.server.traces.set('201', {
+    chunks: [new Uint8Array(limit + 1).fill(0x78)],
+    headers: { 'Content-Length': String(limit) }
+  })
+  const over = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as {
+    partialFailures: string[]
+    truncated: boolean
+    logTails: Array<{ tail: string }>
+  }
+  expect(over.partialFailures).toEqual(['trace_output_limit'])
+  expect(over.truncated).toBe(true)
   expect(over.logTails).toEqual([])
+
+  world.server.traces.set('201', {
+    chunks: [new Uint8Array(limit + 1).fill(0x78)],
+    headers: { 'Content-Length': String(limit + 1) }
+  })
+  const declared = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as {
+    partialFailures: string[]
+    truncated: boolean
+    logTails: Array<{ tail: string }>
+  }
+  expect(declared.partialFailures).toEqual(['trace_output_limit'])
+  expect(declared.truncated).toBe(true)
+  expect(declared.logTails).toEqual([])
+
 }, 20_000)
 
 test('trace redirects are refused and never forward the bearer credential', async () => {
@@ -744,7 +873,7 @@ test('trace redirects are refused and never forward the bearer credential', asyn
       headers: { Location: target.url.origin }
     })
     const result = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as { partialFailures: string[]; logTails: unknown[] }
-    expect(result.partialFailures.length).toBeGreaterThan(0)
+    expect(result.partialFailures).toEqual(['trace_unavailable'])
     expect(result.logTails).toEqual([])
     expect(redirectedRequests).toBe(0)
     expect(world.server.requests.every((request) => request.authorization === 'Bearer dummy-gitlab-token')).toBe(true)
@@ -993,12 +1122,12 @@ test('all retryable jobs use individual retry endpoints and never play or retry 
   const world = await boot()
   const head = localHead(world)
   const jobs = [
-    job(world, 201, 'build', 'failed', head),
-    job(world, 202, 'lint', 'success', head),
+    job(world, 206, 'running', 'running', head),
     job(world, 203, 'package', 'canceled', head),
-    job(world, 204, 'skipped', 'skipped', head),
+    job(world, 201, 'build', 'failed', head),
     job(world, 205, 'manual', 'manual', head),
-    job(world, 206, 'running', 'running', head)
+    job(world, 204, 'skipped', 'skipped', head),
+    job(world, 202, 'lint', 'success', head)
   ]
   setCurrentPipeline(world, head, 90, 'failed', jobs)
 
@@ -1019,10 +1148,10 @@ test('failed-only retries allowed failures and canceled jobs but not successful 
   const world = await boot()
   const head = localHead(world)
   const jobs = [
-    job(world, 201, 'allowed-build', 'failed', head, 90, { allow_failure: true }),
-    job(world, 202, 'lint', 'success', head),
     job(world, 203, 'package', 'canceled', head),
-    job(world, 204, 'skipped', 'skipped', head)
+    job(world, 204, 'skipped', 'skipped', head),
+    job(world, 202, 'lint', 'success', head),
+    job(world, 201, 'allowed-build', 'failed', head, 90, { allow_failure: true })
   ]
   setCurrentPipeline(world, head, 90, 'failed', jobs)
 
@@ -1235,9 +1364,9 @@ test('an uncertain later POST reports only the prior confirmed start and stops b
   const world = await boot()
   const head = localHead(world)
   setCurrentPipeline(world, head, 90, 'failed', [
+    job(world, 203, 'package', 'failed', head),
     job(world, 201, 'build', 'failed', head),
-    job(world, 202, 'lint', 'failed', head),
-    job(world, 203, 'package', 'failed', head)
+    job(world, 202, 'lint', 'failed', head)
   ])
   world.server.retryModes.set('202', 'drop-after-mutation')
   const events: unknown[] = []
