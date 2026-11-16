@@ -1,4 +1,4 @@
-import { beforeAll, expect, test } from 'bun:test'
+import { beforeAll, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import * as ts from 'typescript'
 import { resolve } from 'node:path'
@@ -7,6 +7,7 @@ import { discoverCandidates, discoverUiFiles } from '../../../../scripts/ui-scor
 import { createEvidenceResolver, parseCoverage, selectCandidate } from '../../../../scripts/ui-scoreboard/audit-evidence'
 import { collectInventory } from '../../../../scripts/ui-scoreboard/inventory'
 import { checkPlugin } from '../../../../scripts/ui-scoreboard/tokens'
+import * as tokens from '../../../../scripts/ui-scoreboard/tokens'
 import { checkRatchet, parseRatchetConfig } from '../../../../scripts/ui-scoreboard/ratchet'
 import type { CoverageFile, Inventory, PluginInventory, StaticCheckId } from '../../../../scripts/ui-scoreboard/contracts'
 
@@ -91,7 +92,22 @@ test('workspace action must remain publicly declared', () => {
 test('Terminal enrollment retains all five checks and the entire static ratchet passes', () => {
   const enrollment = parseRatchetConfig(readFileSync(resolve(import.meta.dir, '../../../../scripts/ui-scoreboard-ratchet.json'), 'utf8'))
   expect(enrollment['quirky.terminal']).toEqual(CHECKS)
-  expect(checkRatchet(inventory, enrollment)).toEqual({ exitCode: 0, failures: [] })
+  const pluginSpy = spyOn(tokens, 'checkPlugin')
+  const hostSpy = spyOn(tokens, 'checkHostTokens')
+  try {
+    const started = performance.now()
+    const result = checkRatchet(inventory, enrollment)
+    console.info(`Terminal full static ratchet: ${(performance.now() - started).toFixed(0)} ms`)
+    expect(result).toEqual({ exitCode: 0, failures: [] })
+    expect(pluginSpy.mock.calls.map(([input, id]) => {
+      expect(input).toBe(inventory)
+      return id
+    }).sort()).toEqual(Object.keys(enrollment).filter((id) => id !== 'host').sort())
+    expect(hostSpy.mock.calls).toEqual([[inventory]])
+  } finally {
+    pluginSpy.mockRestore()
+    hostSpy.mockRestore()
+  }
 }, 60_000)
 
 test('Terminal-only ratchet reports a workspace loading regression', () => {
