@@ -69,7 +69,7 @@ function readSessionRow(value: unknown): OrchestrationSession {
   return { id, worktreeId, cwd }
 }
 
-export async function startOrchestrationFixture(options: { additionalBuiltins?: string[] } = {}): Promise<OrchestrationFixture> {
+export async function startOrchestrationFixture(options: { additionalBuiltins?: string[]; log?: (message: string) => void } = {}): Promise<OrchestrationFixture> {
   const root = mkdtempSync(join(tmpdir(), 'quirky-orchestration-'))
   const home = join(root, 'quirky-home')
   const userHome = join(root, 'cli-homes')
@@ -143,7 +143,7 @@ export async function startOrchestrationFixture(options: { additionalBuiltins?: 
   let setupClient: QuirkyClient | undefined
   let cliNumber = 0
   const startDaemon = async (): Promise<void> => {
-    harness = await startHarness({ home, builtinPluginsDir })
+    harness = await startHarness({ home, builtinPluginsDir, log: options.log })
     setupClient = await harness.connect('cli', 'orchestration-fixture')
   }
   const stopTransientProcesses = async (): Promise<void> => {
