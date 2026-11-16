@@ -117,6 +117,7 @@ async function launchChrome(
 ): Promise<void> {
   const dependencies: BrowserDependencies = {
     ...browserDependencies(BROWSER_ROOT, runner),
+    chromeProcesses: { async snapshot() { return [] }, async inspect() { return null }, signal() {} },
     ...(chromePath === undefined ? {} : { chromePath }),
     spawn(command) {
       commands.push([...command])
@@ -329,6 +330,7 @@ test('Chrome uses a recording launcher and stops its owned sleep child', async (
     const processSpawn = createBrowserSpawn(runner)
     const dependencies: BrowserDependencies = {
       ...browserDependencies(BROWSER_ROOT, runner),
+      chromeProcesses: { async snapshot() { return [] }, async inspect() { return null }, signal() {} },
       chromePath: process.execPath,
       spawn(command, options) {
         launched.push([...command])
@@ -360,6 +362,7 @@ test('startChrome rejects a null pid immediately without stopping the inactive c
     }, stops)
     const dependencies: BrowserDependencies = {
       ...browserDependencies(BROWSER_ROOT, runner),
+      chromeProcesses: { async snapshot() { return [] }, async inspect() { return null }, signal() {} },
       chromePath: process.execPath,
       spawn: () => inactive
     }
@@ -375,6 +378,7 @@ test('startChrome maps synchronous spawn failures without stopping a child', asy
     const dependencies: BrowserDependencies = {
       ...browserDependencies(BROWSER_ROOT, runner),
       chromePath: process.execPath,
+      chromeProcesses: { async snapshot() { return [] }, async inspect() { return null }, signal() {} },
       spawn() {
         throw new Error('ENOENT')
       }
