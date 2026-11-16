@@ -1,7 +1,7 @@
 # Agent chat with agent-drawn views
 
 ## Status & amendments
-Status: Approved 2026-11-16 in the brainstorm companion. SC-5 (Restart on an agent that can't resume) is still open.
+Status: Approved 2026-11-16 in the brainstorm companion. SC-5 (Restart on an agent that can't resume) is still open. Tech spec: authored (tier gate fired: crosses subsystems), see tech.md.
 
 **Amendments:** none yet.
 
