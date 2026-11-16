@@ -225,21 +225,78 @@ for (const surface of surfaces) {
 }
 
 test('a failed refresh retains the loaded shell child beside the shared error', async () => {
-  const harness = makeContext()
-  let stateReads = 0
-  harness.methods.set('quirky.reviews/state', () => {
-    stateReads += 1
-    if (stateReads === 1) return reviewsState()
-    throw new Error('later read failed')
-  })
-  const { element } = await mountSurface(harness, CHECKS_PANEL)
-  await settle()
-  expect(element.querySelector('.ui-tool-panel-frame')).not.toBeNull()
+  const originalNow = Date.now
+  const originalGlobalSetTimeout = globalThis.setTimeout
+  const originalGlobalClearTimeout = globalThis.clearTimeout
+  const originalWindowSetTimeout = window.setTimeout
+  const originalWindowClearTimeout = window.clearTimeout
+  let now = originalNow()
+  let nextTimer = 0
+  const scheduled = new Map<number, { deadline: number; run(): void }>()
+  const schedule = (handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+    const id = --nextTimer
+    scheduled.set(id, {
+      deadline: now + Number(delay ?? 0),
+      run: () => { if (typeof handler === 'function') handler(...args) }
+    })
+    return id
+  }
+  const clearScheduled = (id: unknown) => {
+    if (typeof id !== 'number') return false
+    return scheduled.delete(id)
+  }
+  Date.now = () => now
+  globalThis.setTimeout = ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+    if (delay < 1_000) return Reflect.apply(originalGlobalSetTimeout, globalThis, [handler, delay, ...args])
+    return schedule(handler, delay, ...args)
+  }) as typeof globalThis.setTimeout
+  globalThis.clearTimeout = ((id: unknown) => {
+    if (!clearScheduled(id)) Reflect.apply(originalGlobalClearTimeout, globalThis, [id])
+  }) as typeof globalThis.clearTimeout
+  window.setTimeout = ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+    if (delay < 1_000) return Reflect.apply(originalWindowSetTimeout, window, [handler, delay, ...args])
+    return schedule(handler, delay, ...args)
+  }) as typeof window.setTimeout
+  window.clearTimeout = ((id: unknown) => {
+    if (!clearScheduled(id)) Reflect.apply(originalWindowClearTimeout, window, [id])
+  }) as typeof window.clearTimeout
+  const advanceAutomaticState = async () => {
+    now += 3_000
+    const due = [...scheduled.entries()].filter(([, timer]) => timer.deadline <= now)
+    if (due.length === 0) throw new Error('No automatic Checks state refresh reached its deadline.')
+    await act(async () => {
+      for (const [id, timer] of due) {
+        scheduled.delete(id)
+        timer.run()
+      }
+      await Promise.resolve()
+    })
+    await settle()
+  }
+  try {
+    const harness = makeContext()
+    let stateReads = 0
+    harness.methods.set('quirky.reviews/state', () => {
+      stateReads += 1
+      if (stateReads === 1) return reviewsState()
+      throw new Error('later read failed')
+    })
+    const { element } = await mountSurface(harness, CHECKS_PANEL)
+    await settle()
+    expect(element.querySelector('.ui-tool-panel-frame')).not.toBeNull()
 
-  await act(async () => { await harness.emitChanged() })
-  expect(element.querySelector('.ui-inline-error')?.textContent).toContain('later read failed')
-  expect(element.querySelector('.ui-tool-panel-frame')).not.toBeNull()
-  expect(element.querySelector('.ui-notice-line')).toBeNull()
+    await act(async () => { await harness.emitChanged() })
+    await advanceAutomaticState()
+    expect(element.querySelector('.ui-inline-error')?.textContent).toContain('later read failed')
+    expect(element.querySelector('.ui-tool-panel-frame')).not.toBeNull()
+    expect(element.querySelector('.ui-notice-line')).toBeNull()
+  } finally {
+    Date.now = originalNow
+    globalThis.setTimeout = originalGlobalSetTimeout
+    globalThis.clearTimeout = originalGlobalClearTimeout
+    window.setTimeout = originalWindowSetTimeout
+    window.clearTimeout = originalWindowClearTimeout
+  }
 })
 
 test('a retained Checks shell cannot retry a replacement layout worktree through its old descriptor', async () => {

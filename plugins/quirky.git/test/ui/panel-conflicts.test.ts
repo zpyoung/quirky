@@ -1,11 +1,11 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, buttonText, click, compareOf, entry, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, statusOf } = s
+const { act, buttonText, click, compareOf, entry, fakeContext, layoutFor, mountPanel, press, q, qa, rowOf, settle, settleAfter, statusOf } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
@@ -123,17 +123,26 @@ describe('SC-41: conflicts lead to Continue', () => {
   })
 
   test('markers are re-checked on each status read, so saving the file enables Stage', async () => {
-    let content = '<<<<<<< a\nx\n=======\ny\n>>>>>>> b\n'
-    const { fake, element, unmount } = await open((f) => {
-      f.status = statusOf([conflict('a.ts')], { operation: 'merge' })
-      f.on('quirky.git/conflictFile', (params) => ({ path: params.path, content }))
-    })
-    expect(await stageEnabled(element, 'a.ts')).toBe(false)
-    content = 'fixed\n'
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
-    expect(await stageEnabled(element, 'a.ts')).toBe(true)
-    unmount()
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      let content = '<<<<<<< a\nx\n=======\ny\n>>>>>>> b\n'
+      const opened = await open((f) => {
+        f.status = statusOf([conflict('a.ts')], { operation: 'merge' })
+        f.on('quirky.git/conflictFile', (params) => ({ path: params.path, content }))
+      })
+      unmount = opened.unmount
+      const { fake, element } = opened
+      expect(await stageEnabled(element, 'a.ts')).toBe(false)
+      content = 'fixed\n'
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      await settleAfter(3_000)
+      expect(await stageEnabled(element, 'a.ts')).toBe(true)
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 
   test('a resolved-locally row shows its check badge and offers no Stage; the banner then offers Continue merge', async () => {
@@ -148,15 +157,24 @@ describe('SC-41: conflicts lead to Continue', () => {
   })
 
   test('once the operation ends the ship bar is back and offers Push', async () => {
-    const { fake, element, unmount } = await open((f) => {
-      f.status = statusOf([], { operation: 'merge' })
-    })
-    fake.status = statusOf([], { ahead: 2, upstreamStatus: { hasUpstream: true, name: 'origin/zoe/feat', sha: 'b'.repeat(40), ahead: 2, behind: 0, behindPatchEquivalent: null } })
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
-    expect(q(element, '.ui-split-button__primary')?.textContent).toBe('Push 2 commits')
-    expect(q(element, '[role="status"] .ui-inline-agent-card')).toBeNull()
-    unmount()
+    jest.useFakeTimers()
+    let unmount: (() => void) | undefined
+    try {
+      const opened = await open((f) => {
+        f.status = statusOf([], { operation: 'merge' })
+      })
+      unmount = opened.unmount
+      const { fake, element } = opened
+      fake.status = statusOf([], { ahead: 2, upstreamStatus: { hasUpstream: true, name: 'origin/zoe/feat', sha: 'b'.repeat(40), ahead: 2, behind: 0, behindPatchEquivalent: null } })
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settle()
+      await settleAfter(3_000)
+      expect(q(element, '.ui-split-button__primary')?.textContent).toBe('Push 2 commits')
+      expect(q(element, '[role="status"] .ui-inline-agent-card')).toBeNull()
+    } finally {
+      unmount?.()
+      jest.useRealTimers()
+    }
   })
 
   test('a conflict card with no ship bar behind it keeps the compare quiet', async () => {

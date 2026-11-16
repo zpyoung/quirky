@@ -82,12 +82,15 @@ describe('the ship button runs its step, then refreshes status and compare', () 
           }
         } }
       ])
-      expect(calls.filter(({ method: called }) => called !== 'ui.window.self' && called !== 'ui.window.command.run')).toEqual([
-        { method, params: { worktree: 'feat' } },
+      const rpcCalls = calls.filter(({ method: called }) => called !== 'ui.window.self' && called !== 'ui.window.command.run')
+      expect(rpcCalls).toHaveLength(4)
+      expect(rpcCalls[0]).toEqual({ method, params: { worktree: 'feat' } })
+      expect(rpcCalls.slice(1, 3)).toHaveLength(2)
+      expect(rpcCalls.slice(1, 3)).toEqual(expect.arrayContaining([
         { method: 'quirky.git/status', params: { worktree: 'feat' } },
-        { method: 'quirky.git/compare', params: { worktree: 'feat' } },
-        { method: 'quirky.git/review', params: { worktree: 'feat' } }
-      ])
+        { method: 'quirky.git/compare', params: { worktree: 'feat' } }
+      ]))
+      expect(rpcCalls[3]).toEqual({ method: 'quirky.git/review', params: { worktree: 'feat' } })
       unmount()
     })
   }

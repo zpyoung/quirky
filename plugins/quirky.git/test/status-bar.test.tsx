@@ -146,7 +146,7 @@ describe('quirky.git ahead and behind status bar item', () => {
     }
   })
 
-  test('it reads matching worktree events and follows the selected worktree after the shared cooldown', async () => {
+  test('it reads again on this worktree\'s git events and follows the selected worktree', async () => {
     jest.useFakeTimers()
     let unmount: (() => void) | null = null
     try {

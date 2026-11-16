@@ -174,7 +174,7 @@ function changed(worktreeId?: string): QuirkyEvent {
   } as unknown as QuirkyEvent
 }
 
-test('Checks scopes automatic reads and treats only a reconnect as a connection recovery', async () => {
+test('Checks scopes refreshes to its selected worktree and keeps connection and cleanup behavior', async () => {
   jest.useFakeTimers()
   const fake = fakeContext(WORKTREE_A)
   const surface = await mountSurface(fake, CHECKS_PANEL)
@@ -219,7 +219,7 @@ test('Checks scopes automatic reads and treats only a reconnect as a connection 
   expect(stateCalls(fake)).toHaveLength(3)
 })
 
-test('Checks replaces its scoped subscription and starts cold target reads immediately', async () => {
+test('Checks replaces its subscription and state selector when layout worktree changes', async () => {
   jest.useFakeTimers()
   const fake = fakeContext(WORKTREE_A)
   const surface = await mountSurface(fake, CHECKS_PANEL)
@@ -252,7 +252,7 @@ test('Checks replaces its scoped subscription and starts cold target reads immed
   expect(fake.subscriptions.every(({ active }) => !active)).toBe(true)
 })
 
-test('Checks without a selection queues unscoped invalidations against its target clock', async () => {
+test('Checks without a selection subscribes unscoped and refreshes the latest entry', async () => {
   jest.useFakeTimers()
   const fake = fakeContext(null)
   const surface = await mountSurface(fake, CHECKS_PANEL)

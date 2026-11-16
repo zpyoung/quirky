@@ -101,7 +101,7 @@ describe('quirky.git source-control panel', () => {
     unmount()
   })
 
-  test('refreshes matching Git changes after the bounded status interval and ignores other events', async () => {
+  test('refreshes on quirky.git/changed for this worktree and ignores other events', async () => {
     jest.useFakeTimers()
     let dispose: (() => void) | null = null
     try {

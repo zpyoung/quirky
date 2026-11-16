@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
 import type { GitUiControl, GitUiControlAddress as ControlAddress, GitUiControlResult } from '../../src/ui-control'
@@ -7,7 +7,7 @@ import type { Fake } from './panel-support'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 // React-bound modules are imported after the DOM is installed so their initialization sees it.
-const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, press, q, settle, statusOf, type } = await import('./panel-support')
+const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, press, q, settle, settleAfter, statusOf, type } = await import('./panel-support')
 const { createElement } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { activate } = await import('../../src/ui')
@@ -24,7 +24,10 @@ const {
 afterAll(() => GlobalRegistrator.unregister())
 const mountedPanels = new Set<() => void>()
 beforeEach(() => { document.body.innerHTML = '' })
-afterEach(() => { for (const unmount of mountedPanels) unmount() })
+afterEach(() => {
+  for (const unmount of mountedPanels) unmount()
+  jest.useRealTimers()
+})
 
 const primary = (element: HTMLElement) => q(element, '.ui-split-button__primary') as HTMLButtonElement
 const errorLine = (element: HTMLElement) => q(element, '.ui-inline-error')
@@ -454,6 +457,7 @@ describe('exact-window parent controllers', () => {
   }
 
   test('same-turn ship requests reserve one commit and late success retains an edited draft', async () => {
+    jest.useFakeTimers()
     const pending = Promise.withResolvers<unknown>()
     const panel = await controlled((fake) => fake.on('quirky.git/commit', () => pending.promise))
     try {
@@ -480,7 +484,7 @@ describe('exact-window parent controllers', () => {
       await act(async () => panel.fake.setLayout(layoutFor('other')))
       await settle()
       await act(async () => panel.fake.setLayout(layoutFor('feat')))
-      await settle()
+      await settleAfter(3000)
       await type(message(panel.element), 'newer draft')
       await act(async () => pending.resolve({ sha: 'd'.repeat(40) }))
       await settle()
@@ -779,19 +783,20 @@ test('a review hash read cannot mark a replacement worktree session after A to B
 })
 
 test('ship-step validates its captured kind and busy state rather than substituting the new step', async () => {
+  jest.useFakeTimers()
   const panel = await controlled()
   try {
     const address = panel.address('ship-step')
     panel.fake.status = statusOf([], { upstreamStatus: upstream(1, 0) })
     panel.fake.compare = SOMETHING_TO_SHIP
     await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
+    await settleAfter(3000)
     expect(await panel.send(address, 'ship-step', { kind: 'commit-staged', message: 'stale commit' })).toEqual({ delivered: false })
     expect(panel.fake.called('quirky.git/commit')).toEqual([])
     expect(panel.fake.called('quirky.git/push')).toEqual([])
     panel.fake.status = { ...panel.fake.status, busy: 'fetch' }
     await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
+    await settleAfter(3000)
     expect(await panel.send(address, 'ship-step', { kind: 'push' })).toEqual({ delivered: false })
     expect(panel.fake.called('quirky.git/push')).toEqual([])
   } finally { panel.unmount() }
@@ -821,13 +826,14 @@ test('a force-push confirmation never substitutes a changed pull-request lease',
 })
 
 test('branch A to B to A replaces ownership without resurrecting the original address', async () => {
+  jest.useFakeTimers()
   const panel = await controlled()
   try {
     const first = panel.address('filter-open')
     for (const branch of ['zoe/other', 'zoe/feat']) {
       panel.fake.status = { ...panel.fake.status, branch }
       await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-      await settle()
+      await settleAfter(3000)
       expect(panel.address('filter-open').generation).not.toBe(first.generation)
     }
     expect(await panel.send(first, 'filter-open')).toEqual({ delivered: false })
@@ -1066,6 +1072,7 @@ test('a failed Stage Retry refuses a row removed in the same worktree', async ()
 })
 
 test('a failed Unstage Retry refuses a visible row while the worktree is busy fetching', async () => {
+  jest.useFakeTimers()
   const panel = await controlled((fake) => fake.on('quirky.git/unstage', () => { throw failure('fixture unstage failed') }))
   try {
     await panel.send(panel.address('row-menu-open'), 'row-menu-open', { path: 'a.ts' })
@@ -1073,7 +1080,8 @@ test('a failed Unstage Retry refuses a visible row while the worktree is busy fe
     const retry = panel.address('run')
     const calls = panel.fake.called('quirky.git/unstage').length
     panel.fake.status = { ...panel.fake.status, busy: 'fetch' }
-    await refreshControlled(panel)
+    await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+    await settleAfter(3000)
     expect(q(panel.element, '[data-row-path="a.ts"]')).not.toBeNull()
     expect(primary(panel.element).getAttribute('aria-busy')).toBe('true')
     expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: false })
@@ -1222,6 +1230,7 @@ test('force-push reservation releases after prerequisite failure, operation fail
 
 for (const verb of ['stage', 'unstage'] as const) {
   test(`a failed ${verb} Retry refuses a visible row whose staging eligibility changed`, async () => {
+    jest.useFakeTimers()
     const path = verb === 'stage' ? 'dir/b.ts' : 'a.ts'
     const panel = await controlled((fake) => fake.on(`quirky.git/${verb}`, () => { throw failure('fixture mutation failed') }))
     try {
@@ -1230,7 +1239,8 @@ for (const verb of ['stage', 'unstage'] as const) {
       const retry = panel.address('run')
       const calls = panel.fake.called(`quirky.git/${verb}`).length
       panel.fake.status = statusOf([entry(path, verb === 'stage' ? 'staged' : 'unstaged')])
-      await refreshControlled(panel)
+      await act(async () => panel.fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
+      await settleAfter(3000)
       expect(q(panel.element, `[data-row-path="${path}"]`)).not.toBeNull()
       expect(await panel.send(retry, 'run', { label: 'Retry' })).toEqual({ delivered: false })
       expect(panel.fake.called(`quirky.git/${verb}`)).toHaveLength(calls)
