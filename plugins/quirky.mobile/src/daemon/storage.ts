@@ -146,9 +146,13 @@ function lstatIfPresent(path: string): Stats | null {
   }
 }
 
+function isPairingQuarantineName(name: string): boolean {
+  return /^(?:devices\.json|e2ee-keypair\.json)\.corrupt-[0-9]+-[0-9a-f]{8}(?![\s\S])/.test(name)
+}
+
 function pairingResetQuarantineNames(dataDir: string): string[] {
   return readdirSync(dataDir).filter((name) => {
-    if (!/^(?:devices\.json|e2ee-keypair\.json)\.corrupt-\d+-[0-9a-f]{8}$/.test(name)) return false
+    if (!isPairingQuarantineName(name)) return false
     try {
       return lstatSync(join(dataDir, name)).isFile()
     } catch {
@@ -264,7 +268,7 @@ function normalizeSettings(value: unknown): MobileSettings | null {
   return { machineName, showMobileButton, onboardingSeen, autoRestoreFitMs, customAddresses: addresses }
 }
 
-/** Private durable pairing state; corruption is quarantined and never reinterpreted as an empty registry. */
+/** Private durable pairing state; quarantine prevents fresh initialization on later starts. */
 export class MobileStore {
   private readonly identityPath: string
   private readonly registryPath: string
@@ -504,9 +508,21 @@ export class MobileStore {
 
 
   private loadIdentityAndRegistry(): void {
-    const hasIdentity = existsSync(this.identityPath)
-    const hasRegistry = existsSync(this.registryPath)
+    let hasIdentity: boolean
+    let hasRegistry: boolean
+    try {
+      hasIdentity = existsSync(this.identityPath)
+      hasRegistry = existsSync(this.registryPath)
+    } catch {
+      return
+    }
     if (!hasIdentity && !hasRegistry) {
+      try {
+        if (lstatIfPresent(this.identityPath) || lstatIfPresent(this.registryPath)) return
+        if (readdirSync(this.dataDir).some(isPairingQuarantineName)) return
+      } catch {
+        return
+      }
       this.createInitialIdentity()
       this.devicesValue = []
       this.registryAvailable = true
