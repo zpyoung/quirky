@@ -69,7 +69,7 @@ function browserEntry(): string {
     import { DEFAULT_STOCK_OPTIONS } from ${JSON.stringify(controlTypesModule)}
     import { dispatchUiControl, UI_CONTROL_COMMAND } from ${JSON.stringify(uiControlModule)}
 
-    const branch = ${JSON.stringify(BRANCH)}
+    const branch = document.getElementById('host').dataset.branch ?? ${JSON.stringify(BRANCH)}
     const repo = { id: 'repo', name: 'QuirkyApp', path: '/workspace/QuirkyApp', addedAt: 1, kind: 'git', displayName: null, groupId: null }
     const tags = [
       { id: 'urgent', name: 'urgent', color: 'coral' },
@@ -245,7 +245,7 @@ async function settle(page: Page): Promise<void> {
   }))
 }
 
-async function mount(width = 320, theme: 'dark' | 'light' = 'dark'): Promise<Page> {
+async function mount(width = 320, theme: 'dark' | 'light' = 'dark', branch = BRANCH): Promise<Page> {
   const page = await browser!.newPage({ viewport: { width: 1200, height: 800 } })
   pages.push(page)
   await page.setContent(`<!doctype html>
@@ -256,6 +256,9 @@ async function mount(width = 320, theme: 'dark' | 'light' = 'dark'): Promise<Pag
       #host > .ui-tool-panel-frame { height: 100%; min-width: 0; }
       #tree-scroll { box-sizing: border-box; height: 280px; min-width: 0; width: 100%; }
     </style></head><body><div id="host" data-tool-panel=""></div></body></html>`)
+  await page.locator('#host').evaluate((element, value) => {
+    ;(element as HTMLElement).dataset.branch = value
+  }, branch)
   await page.addScriptTag({ content: bundle.js })
   await page.waitForFunction(() => document.querySelectorAll('.worktree-tree [data-worktree-id]').length === 5)
   await settle(page)
@@ -341,6 +344,37 @@ function expectContained(inner: Rect, outer: Rect): void {
 
 function expectNear(actual: number, expected: number, tolerance = 0.5): void {
   expect(Math.abs(actual - expected)).toBeLessThanOrEqual(tolerance)
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  test(`keeps short fact text aligned to the trail and hidden menu at 320px (${theme})`, async () => {
+    const page = await mount(320, theme, 'now')
+    const metrics = await page.locator('[data-worktree-id="grandchild"] .worktree-trail').evaluate((trail) => {
+      const fact = trail.querySelector<HTMLElement>('.worktree-fact')!
+      const reveal = trail.querySelector<HTMLElement>('.worktree-reveal')!
+      const menu = reveal.querySelector<HTMLElement>('.worktree-menu')!
+      const text = fact.firstChild!
+      const range = document.createRange()
+      range.selectNodeContents(text)
+      const glyphs = range.getBoundingClientRect()
+      return {
+        text: range.toString(),
+        factOpacity: getComputedStyle(fact).opacity,
+        menuOpacity: getComputedStyle(reveal).opacity,
+        glyphWidth: glyphs.width,
+        slotWidth: trail.getBoundingClientRect().width,
+        textRight: glyphs.right,
+        trailRight: trail.getBoundingClientRect().right,
+        menuRight: menu.getBoundingClientRect().right
+      }
+    })
+    expect(metrics.text).toBe('now')
+    expect(metrics.factOpacity).toBe('1')
+    expect(metrics.menuOpacity).toBe('0')
+    expect(metrics.slotWidth - metrics.glyphWidth).toBeGreaterThan(1)
+    expectNear(metrics.textRight, metrics.trailRight)
+    expectNear(metrics.textRight, metrics.menuRight)
+  }, 60_000)
 }
 
 test('keeps the real Worktree tree dense, hit-testable and inside its panel at narrow widths', async () => {

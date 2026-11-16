@@ -220,6 +220,7 @@
   max-width: 9rem;
   width: 100%;
   overflow: hidden;
+  text-align: end;
   text-overflow: ellipsis;
   transition: opacity 150ms ease-out;
   white-space: nowrap;
