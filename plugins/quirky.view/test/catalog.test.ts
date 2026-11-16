@@ -265,8 +265,58 @@ describe('field', () => {
     expect(errorsOf(field({ ...select, options: [{ value: 'token', label: 'T' }] }))[0].message).toBe('credential-shaped option value is not permitted')
   })
 
-  test('pattern and preview are not part of a view field', () => {
-    expect(errorsOf(field({ id: 't', type: 'text', question: 'T?', pattern: '(a+)+' }))[0].message).toContain("unknown field 'pattern'")
+  test('a text field takes an ask pattern and keeps it', () => {
+    const question = { id: 'ticket', type: 'text', question: 'Ticket ID?', pattern: '^[A-Z]+-[0-9]+$', default: 'ABC-12' }
+    expect(validateViewSpec(field(question))).toEqual({ ok: true, spec: field(question) as never })
+  })
+
+  test.each([
+    ['not a string', 5, 'pattern must be a string'],
+    ['too long', 'a'.repeat(201), 'pattern must be at most 200 characters'],
+    ['invalid', '(', 'pattern must be a valid regular expression'],
+    ['nested repetition', '(a+)+', 'pattern must not nest repetition (e.g. (a+)+); it can hang the regex engine'],
+    ['repeated alternation', '(a|ab)+', 'pattern must not repeat a group with alternatives (e.g. (a|ab)+); it can hang the regex engine'],
+    ['too many quantifiers', 'a+b+c+d+', 'pattern must have at most 3 variable quantifiers; it can hang the regex engine']
+  ])('an unsafe or malformed pattern is refused: %s', (_name, pattern, message) => {
+    expect(errorsOf(field({ id: 't', type: 'text', question: 'T?', pattern }))).toEqual([{ path: 'root.props.question.pattern', message }])
+  })
+
+  test('a default must match the pattern', () => {
+    expect(errorsOf(field({ id: 't', type: 'text', question: 'T?', pattern: '^[0-9]+$', default: 'abc' }))).toEqual([
+      { path: 'root.props.question.default', message: 'default does not match pattern' }
+    ])
+  })
+
+  test('pattern applies only to text fields and preview is not part of a view field', () => {
+    expect(errorsOf(field({ ...select, pattern: 'a' }))[0]).toEqual({ path: 'root.props.question.pattern', message: 'pattern does not apply to select' })
+    expect(errorsOf(field({ id: 't', type: 'text', question: 'T?', preview: 'x' }))[0].message).toContain("unknown field 'preview'")
+  })
+})
+
+describe('markdown link scan cost', () => {
+  const quarter = 250 * 1000
+  test.each([
+    ['unclosed brackets', '['.repeat(quarter)],
+    ['bang brackets', '!['.repeat(quarter / 2)],
+    ['backtick run', '`'.repeat(quarter)],
+    ['reference-like lines', '[a\n'.repeat(quarter / 6)]
+  ])('a ~250 KB adversarial spec validates quickly: %s', (_name, text) => {
+    const raw = markdown(text)
+    expect(Buffer.byteLength(JSON.stringify(raw))).toBeLessThanOrEqual(MAX_SPEC_BYTES)
+    const started = performance.now()
+    const result = validateViewSpec(raw)
+    expect(performance.now() - started).toBeLessThan(500)
+    expect(result.ok).toBe(true)
+  })
+
+  test('link checks still flag unsafe destinations', () => {
+    const messages = errorsOf(markdown('[a](javascript:x) ![i](http://x/y.png)\n\n[r]: ftp://z\n<mailto:a@b.c> `[c](javascript:y)`')).map((error) => error.message)
+    expect(messages).toEqual([
+      "markdown link 'javascript:x' must be an absolute http(s) URL",
+      'markdown images are not allowed; a view never loads remote content',
+      "markdown link 'ftp://z' must be an absolute http(s) URL",
+      "markdown link 'mailto:a@b.c' must be an absolute http(s) URL"
+    ])
   })
 })
 
