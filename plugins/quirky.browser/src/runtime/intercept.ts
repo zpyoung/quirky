@@ -12,11 +12,16 @@ export type HeldRequest = {
 /** Tracks only requests still held by Chrome on one page binding. */
 export class InterceptLedger {
   suspended = false
+  private terminal = false
+
+  get discarded(): boolean {
+    return this.terminal
+  }
   private readonly requests = new Map<string, HeldRequest>()
   private readonly networkRequests = new Map<string, string>()
 
   hold(request: Omit<HeldRequest, 'pending'> & { networkId?: string }): boolean {
-    if (this.suspended || this.requests.size >= MAX_HELD_REQUESTS || this.requests.has(request.id)) return false
+    if (this.discarded || this.suspended || this.requests.size >= MAX_HELD_REQUESTS || this.requests.has(request.id)) return false
     const { networkId, ...record } = request
     this.requests.set(record.id, { ...record, pending: true })
     if (networkId) this.networkRequests.set(networkId, record.id)
@@ -46,6 +51,11 @@ export class InterceptLedger {
     this.requests.clear()
     this.networkRequests.clear()
     return ids
+  }
+
+  discard(): string[] {
+    this.terminal = true
+    return this.take()
   }
 }
 

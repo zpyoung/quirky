@@ -170,6 +170,7 @@ type BoundPage = {
   sessionId: string
   generation: number
   runtime: RuntimePageState
+  interceptDiscard?: Promise<void>
 }
 
 type RuntimeEpoch = {
@@ -983,6 +984,10 @@ export class BrowserRuntime {
             void this.endPaneWatch(state, 'Watch received an invalid intercepted request.')
             return
           }
+          if (binding.runtime.intercepts.discarded) {
+            void this.failIntercept(epoch, binding, requestId)
+            return
+          }
           const settings = this.pageSettings(page.browserPageId)
           const request = objectValue(event.params.request)
           if (!this.interceptReleases.has(page.browserPageId) && settings.routes.length > 0 && request && binding.runtime.intercepts.hold({
@@ -1160,7 +1165,7 @@ export class BrowserRuntime {
     if (!watch.epoch.invalid && !watch.epoch.stopping) {
       const fetch = fetchDomainCommand(this.pageSettings(watch.pageId), false)
       // disabling Fetch resumes held traffic, so leave it intact on targets being destroyed
-      const restoreFetch = this.closingPages.has(watch.pageId) || this.changingPages.has(watch.pageId)
+      const restoreFetch = watch.binding.runtime.intercepts.discarded || this.closingPages.has(watch.pageId) || this.changingPages.has(watch.pageId)
         ? Promise.resolve() : watch.epoch.cdp.send(fetch.method, fetch.params, watch.binding.sessionId, 5_000)
       await Promise.allSettled([
         watch.epoch.cdp.send('Page.stopScreencast', {}, watch.binding.sessionId, 5_000),
@@ -1461,7 +1466,10 @@ export class BrowserRuntime {
       if (epoch) {
         epoch.stopping = true
         const bindings = [...epoch.pages.values()]
-        for (const binding of bindings) this.startPageTermination(binding.runtime)
+        const discards = bindings.map((binding) => {
+          this.startPageTermination(binding.runtime)
+          return this.discardIntercepts(epoch, binding)
+        })
         for (const page of this.store.listPages()) {
           if (page.profileId === profileId) this.invalidatePage(page.browserPageId, false)
         }
@@ -1469,6 +1477,7 @@ export class BrowserRuntime {
           for (const controller of controllers) controller.abort()
         }
         try {
+          await Promise.all(discards)
           await this.teardownEpoch(epoch)
         } finally {
           for (const binding of bindings) this.finishPageTermination(binding.runtime)
@@ -1600,7 +1609,6 @@ export class BrowserRuntime {
 
   async closePageOutOfBand(pageId: string): Promise<void> {
     this.closingPages.add(pageId)
-    this.invalidatePage(pageId, true)
     const targets: Array<{ epoch: RuntimeEpoch; binding: BoundPage }> = []
     for (const profile of this.profiles.values()) {
       const epoch = profile.epoch
@@ -1608,14 +1616,21 @@ export class BrowserRuntime {
       if (!epoch || !binding || epoch.invalid) continue
       binding.runtime.pendingDialog = undefined
       this.startPageTermination(binding.runtime)
+      void this.discardIntercepts(epoch, binding)
       this.closingTargets.add(binding.targetId)
       targets.push({ epoch, binding })
     }
+    const watchId = this.paneWatchesByPage.get(pageId)
+    const watch = watchId ? this.paneWatches.get(watchId) : undefined
+    const watchCleanup = watch ? this.endPaneWatch(watch, 'The managed page identity changed or closed.') : Promise.resolve()
+    this.invalidatePage(pageId, true)
     for (const profile of this.profiles.values()) {
       for (const controller of profile.controllers.get(pageId) ?? []) controller.abort()
     }
+    await watchCleanup
     for (const { epoch, binding } of targets) {
       try {
+        await this.discardIntercepts(epoch, binding)
         await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000)
       } catch { /* target close is bounded by queued cleanup */ }
       finally { this.finishPageTermination(binding.runtime) }
@@ -1626,26 +1641,30 @@ export class BrowserRuntime {
     if (this.closingPages.has(pageId)) throw fault('browser_tab_closed', 'the managed page is closing')
     if (this.changingPages.has(pageId)) throw fault('browser_tab_changed', 'the managed page is already changing browser profiles')
     this.changingPages.add(pageId)
-    const watchId = this.paneWatchesByPage.get(pageId)
-    const watch = watchId ? this.paneWatches.get(watchId) : undefined
-    if (watch) await this.endPaneWatch(watch, 'The managed page changed browser profiles.')
-    this.invalidatePage(pageId, true)
     const targets: Array<{ epoch: RuntimeEpoch; binding: BoundPage }> = []
     for (const profile of this.profiles.values()) {
       const epoch = profile.epoch
       const binding = epoch?.pages.get(pageId)
       if (!epoch || !binding || epoch.invalid) continue
       this.startPageTermination(binding.runtime)
+      void this.discardIntercepts(epoch, binding)
       binding.runtime.pendingDialog = undefined
       this.closingTargets.add(binding.targetId)
       targets.push({ epoch, binding })
     }
+    const watchId = this.paneWatchesByPage.get(pageId)
+    const watch = watchId ? this.paneWatches.get(watchId) : undefined
+    const watchCleanup = watch ? this.endPaneWatch(watch, 'The managed page changed browser profiles.') : Promise.resolve()
+    this.invalidatePage(pageId, true)
     for (const profile of this.profiles.values()) {
       for (const controller of profile.controllers.get(pageId) ?? []) controller.abort()
     }
+    await watchCleanup
     for (const { epoch, binding } of targets) {
-      try { await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000) }
-      catch { /* profile switch will create a fresh target */ }
+      try {
+        await this.discardIntercepts(epoch, binding)
+        await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000)
+      } catch { /* profile switch will create a fresh target */ }
       finally { this.finishPageTermination(binding.runtime) }
     }
   }
@@ -1660,8 +1679,24 @@ export class BrowserRuntime {
     this.changingPages.delete(pageId)
   }
 
+  private async failIntercept(epoch: RuntimeEpoch, binding: BoundPage, requestId: string): Promise<void> {
+    if (epoch.invalid) return
+    try {
+      await epoch.cdp.send('Fetch.failRequest', { requestId, errorReason: 'Aborted' }, binding.sessionId, 5_000)
+    } catch { /* cancellation cannot invalidate a healthy epoch */ }
+  }
+
+  private discardIntercepts(epoch: RuntimeEpoch, binding: BoundPage): Promise<void> {
+    if (binding.interceptDiscard) return binding.interceptDiscard
+    const completion = Promise.withResolvers<void>()
+    binding.interceptDiscard = completion.promise
+    const requestIds = binding.runtime.intercepts.discard()
+    void Promise.allSettled(requestIds.map((requestId) => this.failIntercept(epoch, binding, requestId)))
+      .then(() => completion.resolve())
+    return completion.promise
+  }
+
   private startPageTermination(state: RuntimePageState): void {
-    state.intercepts.take()
     if (state.termination) return
     const termination = Promise.withResolvers<void>()
     state.termination = termination.promise
@@ -1690,6 +1725,10 @@ export class BrowserRuntime {
     const profile = this.profile(profileId)
     const epoch = profile.epoch
     const binding = epoch?.pages.get(pageId)
+    if (epoch && binding) {
+      this.startPageTermination(binding.runtime)
+      void this.discardIntercepts(epoch, binding)
+    }
     this.invalidatePage(pageId, false)
     if (epoch && binding && !epoch.invalid) await this.closeBinding(epoch, pageId, binding)
     this.closingPages.delete(pageId)
@@ -2163,18 +2202,30 @@ export class BrowserRuntime {
   }
 
   private async closeBinding(epoch: RuntimeEpoch, pageId: string, binding: BoundPage): Promise<void> {
-    if (!epoch.invalid) {
-      this.closingTargets.add(binding.targetId)
-      this.invalidateHelperReferences(epoch)
-      try { await nativeRequest(epoch.helper.socketPath, 'tab_close', { tabId: binding.tabId }, 5_000) } catch { /* target may already be closed */ }
-      if (epoch.activeTabId === binding.tabId) epoch.activeTabId = undefined
-      try { await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000) } catch { /* Chrome may already have closed this target */ }
-      try { await epoch.cdp.send('Target.detachFromTarget', { sessionId: binding.sessionId }, undefined, 5_000) } catch { /* session is already detached */ }
-    }
-    epoch.pages.delete(pageId)
-    if (epoch.cookiePageId === pageId) {
-      epoch.cookiePageId = undefined
-      epoch.cookiePage = undefined
+    this.startPageTermination(binding.runtime)
+    const discard = this.discardIntercepts(epoch, binding)
+    const watchId = this.paneWatchesByPage.get(pageId)
+    const watch = watchId ? this.paneWatches.get(watchId) : undefined
+    try {
+      await Promise.all([
+        discard,
+        watch?.binding === binding ? this.endPaneWatch(watch, 'The managed page identity changed or closed.') : Promise.resolve()
+      ])
+      if (!epoch.invalid) {
+        this.closingTargets.add(binding.targetId)
+        this.invalidateHelperReferences(epoch)
+        try { await nativeRequest(epoch.helper.socketPath, 'tab_close', { tabId: binding.tabId }, 5_000) } catch { /* target may already be closed */ }
+        if (epoch.activeTabId === binding.tabId) epoch.activeTabId = undefined
+        try { await epoch.cdp.send('Target.closeTarget', { targetId: binding.targetId }, undefined, 5_000) } catch { /* Chrome may already have closed this target */ }
+        try { await epoch.cdp.send('Target.detachFromTarget', { sessionId: binding.sessionId }, undefined, 5_000) } catch { /* session is already detached */ }
+      }
+      if (epoch.pages.get(pageId) === binding) epoch.pages.delete(pageId)
+      if (epoch.cookiePage === binding) {
+        epoch.cookiePageId = undefined
+        epoch.cookiePage = undefined
+      }
+    } finally {
+      this.finishPageTermination(binding.runtime)
     }
   }
   private async ensureBinding(epoch: RuntimeEpoch, page: BrowserPage, generation: number): Promise<BoundPage> {
@@ -2630,11 +2681,19 @@ export class BrowserRuntime {
       this.finishHarEntry(state, requestId, 0, errorText)
     })
     epoch.cdp.subscribe('Fetch.requestPaused', (event) => {
-      if (event.sessionId !== binding.sessionId || this.paneWatchesByPage.has(binding.pageId) || validateValue({
+      if (event.sessionId !== binding.sessionId || validateValue({
         type: 'object', properties: { requestId: { type: 'string' }, request: { type: 'object', additionalProperties: true }, resourceType: { type: 'string' } },
         required: ['requestId', 'request', 'resourceType'], additionalProperties: true
       }, event.params, 'intercepted request')) return
       const params = event.params as Record<string, unknown>
+      const watchId = this.paneWatchesByPage.get(binding.pageId)
+      const watch = watchId ? this.paneWatches.get(watchId) : undefined
+      if (watch?.binding === binding && this.isCurrentPaneWatch(watch)) return
+      if (state.intercepts.discarded) {
+        void this.failIntercept(epoch, binding, params.requestId as string)
+        return
+      }
+      if (epoch.invalid || epoch.stopping || this.paneWatchesByPage.has(binding.pageId)) return
       const request = params.request as Record<string, unknown>
       if (!this.interceptReleases.has(binding.pageId) && this.pageSettings(binding.pageId).routes.length > 0 && state.intercepts.hold({
         id: params.requestId as string,
@@ -2848,6 +2907,7 @@ export class BrowserRuntime {
   private invalidateEpoch(profile: ProfileRuntime, epoch: RuntimeEpoch | undefined, reason: string): void {
     if (!epoch || epoch.stopping || epoch.invalid) return
     epoch.invalid = true
+    for (const binding of epoch.pages.values()) binding.runtime.intercepts.discard()
     profile.failureReason = reason.slice(0, 300)
     for (const page of this.store.listPages()) {
       if (page.profileId !== epoch.profileId) continue
@@ -2863,6 +2923,7 @@ export class BrowserRuntime {
     if (epoch.teardown) return await epoch.teardown
     epoch.stopping = true
     epoch.teardown = (async () => {
+      await Promise.all([...epoch.pages.values()].map((binding) => this.discardIntercepts(epoch, binding)))
       if (!epoch.invalid) {
         await epoch.cdp.send('Browser.close', {}, undefined, 1_500).catch(() => {})
         await Promise.race([

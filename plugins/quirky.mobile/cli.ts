@@ -1,5 +1,6 @@
 import type { CliArgs, CliContext, CliModule } from '@quirky/protocol'
 import { validMobileBrowserParams } from '@quirky/protocol'
+import type { MobilePairingResetResult } from './src/daemon/service'
 
 const WATCH_METHODS: Record<string, string> = {
   create: 'quirky.mobile/browserWatchCreate', start: 'quirky.mobile/browserWatchStart',
@@ -149,6 +150,21 @@ export const commands: CliModule['commands'] = {
     }
     const value = await context.call('quirky.mobile/ownerRevoke', { grantId, confirm: true })
     context.out.result(value, () => JSON.stringify(value))
+  },
+  async 'reset-pairing'(args, context) {
+    if (args.positionals.length > 0 || Object.keys(args.flags).some((key) => key !== 'confirm') || args.flags.confirm !== true) {
+      throw context.usage('usage: mobile reset-pairing --confirm')
+    }
+    const value = await context.call('quirky.mobile/resetPairing', { confirm: true }) as MobilePairingResetResult
+    context.out.result(value, () => [
+      'mobile pairing reset',
+      `paired devices that must pair again: ${value.unpairedDevices}`,
+      `new encryption identity: ${value.identityCreated ? 'yes' : 'no'}`,
+      `owner CLI grants revoked: ${value.ownerGrantsRevoked}`,
+      `kept set-aside files: ${value.quarantined.join(', ')}`,
+      ...(value.previousRegistry === null ? [] : [`kept previous registry: ${value.previousRegistry}`]),
+      ...(value.unsynced.length === 0 ? [] : [`written but not yet durable (directory sync failed): ${value.unsynced.join(', ')}`])
+    ].join('\n'))
   },
   async devices(args, context) {
     noArgs(args, context)
