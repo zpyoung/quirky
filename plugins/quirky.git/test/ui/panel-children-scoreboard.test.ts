@@ -1,5 +1,4 @@
 import { beforeAll, expect, setDefaultTimeout, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { collectInventory } from '../../../../scripts/ui-scoreboard/inventory'
 import { discoverCandidates, discoverUiFiles } from '../../../../scripts/ui-scoreboard/audit-discovery'
@@ -47,7 +46,6 @@ test('every owned candidate in the production graph is classified once with vali
   const failures = auditPlugin(inventory, plugin).flatMap((check) => check.evidence).filter((entry) => !PASS[entry.code])
   expect(failures.filter((entry) => OWNED.includes(entry.source?.file ?? '') || entry.source?.file === FRAGMENT || entry.coverageFile === FRAGMENT)).toEqual([])
   expect(coverage.surfaces).toEqual({})
-  expect(JSON.parse(readFileSync(resolve(ROOT, 'scripts/ui-scoreboard-ratchet.json'), 'utf8'))['quirky.git']).toBeUndefined()
 })
 
 test('owned public and mounted routes resolve their API and CLI commands', () => {

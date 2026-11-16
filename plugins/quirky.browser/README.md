@@ -4,11 +4,12 @@
 
 ## Requirements
 
-- Install Google Chrome or Chromium on macOS; the plugin does not bundle a browser.
+- Install Google Chrome or Chromium on macOS or Linux; the plugin does not bundle a browser.
 - The desktop bundle includes the pinned `agent-browser` helper (0.27.0).
 - Set `QUIRKY_BROWSER_CHROME` to an absolute executable path if the standard Chrome/Chromium locations are unsuitable.
+- Default discovery tries the macOS Google Chrome and Chromium app executables, then `/usr/bin/google-chrome`, `/usr/bin/google-chrome-stable`, `/usr/bin/chromium`, and `/usr/bin/chromium-browser`, in that order. Candidates must be executable.
 
-The Native Browser view embeds a sandboxed system webview without starting automation Chrome. Watch explicitly shows an existing managed agent page through its CDP screencast. Disabling the plugin closes only helper and Chrome processes it owns. macOS is the exercised platform; other platforms are not claimed as supported.
+Managed automation and Watch support installed Chrome/Chromium on macOS and Linux. The Native Browser view embeds a sandboxed system webview in the desktop shell without starting automation Chrome; its macOS-specific capabilities remain separate. Watch explicitly shows an existing managed agent page through its CDP screencast. Disabling the plugin closes only helper and Chrome processes it owns.
 
 Chrome, the native helper, Safe Storage lookups and user-approved `open` commands use the plugin's shared process runner. Shutdown awaits owned children and bounded process-group cleanup; `groupSurvived` reports descendants that remain after that bound, rather than guaranteeing the whole group is gone. Download opening and external-app approval return immediately; failed launches log a reason with paths and URLs redacted. Safe Storage reads stop after five seconds or more than 4,096 stdout bytes and never log credentials.
 
@@ -193,7 +194,7 @@ Cookie and storage CRUD share the same scoped API/CLI. Dialog accept/dismiss use
 
 ## Running browser tests
 
-Run the single-file browser CLI parity acceptance with `bun test scripts/parity/browser.test.ts`; see the [Orca browser parity table](../../docs/parity/orca-browser.md) for the 80-command inventory and the reasons rows are left out. The acceptance uses real owned browser processes and requires macOS with installed Chrome, as listed in `scripts/test-on-macos.txt`; the remote Linux host does not provide Chrome.
+Run the single-file browser CLI parity acceptance with `bun test scripts/parity/browser.test.ts`; see the [Orca browser parity table](../../docs/parity/orca-browser.md) for the 80-command inventory and the reasons rows are left out. The acceptance uses real owned browser processes and requires installed Chrome/Chromium on macOS or Linux. Linux CI shards verify a sandboxed headless launch before running tests; a missing or unusable browser fails the shard preparation.
 
 The browser harness installs the public dependencies of its real plugins, including the Worktrees dependency on `quirky.cli`. It uses temporary process homes and synthetic cookie source files and cleans up the owned browser and daemon. UI import tests verify explicit discovery, file recovery, captured destination confirmation and command execution without pinning explanatory copy or button punctuation.
 

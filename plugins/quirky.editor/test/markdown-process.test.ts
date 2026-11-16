@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import * as fs from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { PluginCaller, ProcessSpawner, SpawnExit, SpawnOptions, SpawnedProcess, StopOptions } from '@quirky/protocol'
 import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
@@ -16,6 +17,20 @@ const roots: string[] = []
 const runners: OwnedProcessRunner[] = []
 const originalChromePath = process.env.CHROME_PATH
 const originalQuirkyHome = process.env.QUIRKY_HOME
+const originalChromeBin = process.env.CHROME_BIN
+
+const PDF_CHROME_CANDIDATES = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  join(homedir(), 'Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  join(homedir(), 'Applications/Chromium.app/Contents/MacOS/Chromium'),
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser'
+]
+const LINUX_PDF_CANDIDATES = PDF_CHROME_CANDIDATES.slice(4)
+
 
 type SpawnCall = { argv: string[]; options: SpawnOptions }
 type FakePlan = {
@@ -68,6 +83,72 @@ function setChromePath(root: string): string {
   process.env.CHROME_PATH = path
   return path
 }
+
+async function withPdfChromeProbes<T>(
+  executablePaths: readonly string[],
+  action: () => Promise<T>,
+  additionalPaths: readonly string[] = []
+): Promise<T> {
+  const virtualPaths = new Set([...PDF_CHROME_CANDIDATES, ...additionalPaths])
+  const executableSet = new Set(executablePaths)
+  const originalAccessSync = fs.accessSync
+  const accessSpy = spyOn(fs, 'accessSync').mockImplementation((path, mode) => {
+    const candidate = String(path)
+    if (virtualPaths.has(candidate)) {
+      if (executableSet.has(candidate)) return
+      throw Object.assign(new Error(`not executable: ${candidate}`), { code: 'EACCES' })
+    }
+    return originalAccessSync(path, mode)
+  })
+  try {
+    return await action()
+  } finally {
+    accessSpy.mockRestore()
+  }
+}
+
+async function withPdfChromeEnvironment<T>(
+  chromePath: string | undefined,
+  chromeBin: string | undefined,
+  action: () => Promise<T>
+): Promise<T> {
+  const previousPath = process.env.CHROME_PATH
+  const previousBin = process.env.CHROME_BIN
+  if (chromePath === undefined) delete process.env.CHROME_PATH
+  else process.env.CHROME_PATH = chromePath
+  if (chromeBin === undefined) delete process.env.CHROME_BIN
+  else process.env.CHROME_BIN = chromeBin
+  try {
+    return await action()
+  } finally {
+    if (previousPath === undefined) delete process.env.CHROME_PATH
+    else process.env.CHROME_PATH = previousPath
+    if (previousBin === undefined) delete process.env.CHROME_BIN
+    else process.env.CHROME_BIN = previousBin
+  }
+}
+
+async function exportPdfWithVirtualChrome(
+  executablePaths: readonly string[],
+  chromePath?: string,
+  chromeBin?: string
+): Promise<string> {
+  return await withPdfChromeEnvironment(chromePath, chromeBin, async () =>
+    withPdfChromeProbes(executablePaths, async () => {
+      const fixture = exportFixture((renderedPdf) => {
+        writeFileSync(renderedPdf, pdfBytes())
+        return { exit: { exitCode: 0, signal: null, durationMs: 1 }, stdout: textStream() }
+      }, { existing: false, browserOverride: false })
+      const result = await fixture.promise
+      expect(result).toEqual({ path: fixture.outputPath, size: pdfBytes().length })
+      expect(fixture.calls).toHaveLength(1)
+      assertPdfPublished(fixture.outputPath)
+      expectCleaned(fixture)
+      return fixture.calls[0]!.argv[0]!
+    }, [chromePath, chromeBin].filter((path): path is string => path !== undefined))
+  )
+}
+
 
 function textStream(...chunks: string[]): ReadableStream<Uint8Array> {
   let index = 0
@@ -152,7 +233,7 @@ function outputPathFrom(argv: readonly string[], prefix: string): string {
 
 function exportFixture(
   plan: (renderedPdf: string, runs: FakeRun[]) => FakePlan,
-  settings: { existing?: boolean; replaceExisting?: boolean; timeoutMs?: number; pollIntervalMs?: number } = {}
+  settings: { existing?: boolean; replaceExisting?: boolean; timeoutMs?: number; pollIntervalMs?: number; browserOverride?: boolean } = {}
 ): {
   root: string
   outputPath: string
@@ -161,7 +242,7 @@ function exportFixture(
   promise: Promise<{ path: string; size: number }>
 } {
   const root = temporaryRoot()
-  setChromePath(root)
+  if (settings.browserOverride !== false) setChromePath(root)
   const outputPath = join(root, 'report.pdf')
   if (settings.existing ?? true) writeFileSync(outputPath, 'existing destination bytes')
   const calls: SpawnCall[] = []
@@ -181,6 +262,47 @@ function exportFixture(
   })
   return { root, outputPath, calls, runs, promise }
 }
+
+test('PDF export discovers each Linux Chrome name after the preserved macOS candidates', async () => {
+  await withPdfChromeEnvironment(undefined, undefined, async () => {
+    for (const candidate of LINUX_PDF_CANDIDATES) {
+      const executable = await exportPdfWithVirtualChrome([candidate])
+      expect(executable).toBe(candidate)
+    }
+    const macOrder = await exportPdfWithVirtualChrome(PDF_CHROME_CANDIDATES)
+    expect(macOrder).toBe(PDF_CHROME_CANDIDATES[0])
+    const linuxOrder = await exportPdfWithVirtualChrome(LINUX_PDF_CANDIDATES)
+    expect(linuxOrder).toBe('/usr/bin/google-chrome')
+    const skippedUnusable = await exportPdfWithVirtualChrome([LINUX_PDF_CANDIDATES[1]!])
+    expect(skippedUnusable).toBe('/usr/bin/google-chrome-stable')
+  })
+})
+
+test('PDF export preserves override priority and skips unusable overrides', async () => {
+  const chromePath = '/synthetic/chrome-path'
+  const chromeBin = '/synthetic/chrome-bin'
+  const preferredPath = await exportPdfWithVirtualChrome([chromePath, chromeBin], chromePath, chromeBin)
+  expect(preferredPath).toBe(chromePath)
+  const fallbackBin = await exportPdfWithVirtualChrome([chromeBin], chromePath, chromeBin)
+  expect(fallbackBin).toBe(chromeBin)
+  const fallbackMac = await exportPdfWithVirtualChrome([PDF_CHROME_CANDIDATES[0]!], chromePath, chromeBin)
+  expect(fallbackMac).toBe(PDF_CHROME_CANDIDATES[0])
+})
+
+test('PDF export reports the established error when all executable candidates are unavailable', async () => {
+  await withPdfChromeEnvironment(undefined, undefined, async () =>
+    withPdfChromeProbes([], async () => {
+      const fixture = exportFixture(() => {
+        throw new Error('the renderer must not launch without Chrome')
+      }, { browserOverride: false })
+      await expect(fixture.promise).rejects.toThrow('PDF export requires an installed Google Chrome or Chromium browser. Set CHROME_PATH to its executable.')
+      expect(fixture.calls).toEqual([])
+      assertDestinationPreserved(fixture.outputPath)
+    })
+  )
+})
+
+
 
 
 function expectSpawnConfiguration(call: SpawnCall, timeoutMs: number, home: string, signal?: AbortSignal): void {
@@ -317,6 +439,8 @@ afterEach(async () => {
     } finally {
       if (originalChromePath === undefined) delete process.env.CHROME_PATH
       else process.env.CHROME_PATH = originalChromePath
+      if (originalChromeBin === undefined) delete process.env.CHROME_BIN
+      else process.env.CHROME_BIN = originalChromeBin
       if (originalQuirkyHome === undefined) delete process.env.QUIRKY_HOME
       else process.env.QUIRKY_HOME = originalQuirkyHome
     }

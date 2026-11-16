@@ -243,4 +243,29 @@ describe('vault CLI', () => {
     },
     120_000
   )
+  test.skipIf(process.platform !== 'linux')(
+    'delete reports the OS Trash refusal and preserves the supported Claude source',
+    async () => {
+      const vault = await start()
+      const listed = await vault.call<PublicListResult>('list', { agents: ['claude'], unlimited: true })
+      const selected = listed.sessions[0]
+      if (!selected?.source.filePath) throw new Error('Claude source fixture path was redacted')
+      const originalBytes = readFileSync(selected.source.filePath)
+
+      const deleted = await run(vault, ['vault', 'delete', selected.id, '--yes', '--json'])
+      expect(deleted.code).toBe(0)
+      expect(deleted.stderr).toBe('')
+      expect(JSON.parse(deleted.stdout)).toEqual({
+        deleted: false,
+        trashed: 0,
+        alreadyMissing: false,
+        reason: 'OS Trash is supported only on macOS'
+      })
+      expect(existsSync(selected.source.filePath)).toBe(true)
+      expect(readFileSync(selected.source.filePath)).toEqual(originalBytes)
+      const after = await vault.call<PublicListResult>('list', { agents: ['claude'], unlimited: true })
+      expect(after.sessions.some((entry) => entry.id === selected.id)).toBe(true)
+    }
+  )
+
 })
