@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import type { ProcessSpawner, SpawnExit, SpawnOptions, SpawnedProcess, StopOptions } from '@quirky/protocol'
 import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import { startChrome } from '../src/runtime/chrome'
@@ -13,6 +14,16 @@ import { stopOwned } from '../src/runtime/process'
 
 const BROWSER_ROOT = resolve(import.meta.dir, '..')
 let nextRunnerId = 0
+const DEFAULT_CHROME_CANDIDATES = [
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser'
+]
+const LINUX_CHROME_CANDIDATES = DEFAULT_CHROME_CANDIDATES.slice(2)
+
 
 function createRunner(): OwnedProcessRunner {
   return createProcessRunner({ owner: `quirky.browser.lifecycle-test-${++nextRunnerId}` })
@@ -53,6 +64,208 @@ function expectUnavailable(error: unknown, detail: string): void {
     message: `browser_unavailable: ${detail}`
   })
 }
+
+async function withChromeProbes<T>(
+  existing: readonly string[],
+  executablePaths: readonly string[],
+  action: () => Promise<T>,
+  additionalPaths: readonly string[] = []
+): Promise<T> {
+  const virtualPaths = new Set([...DEFAULT_CHROME_CANDIDATES, ...additionalPaths])
+  const existingPaths = new Set(existing)
+  const executableSet = new Set(executablePaths)
+  const originalExistsSync = fs.existsSync
+  const originalAccessSync = fs.accessSync
+  const existsSpy = spyOn(fs, 'existsSync').mockImplementation((path) => {
+    const candidate = String(path)
+    return virtualPaths.has(candidate) ? existingPaths.has(candidate) : originalExistsSync(path)
+  })
+  const accessSpy = spyOn(fs, 'accessSync').mockImplementation((path, mode) => {
+    const candidate = String(path)
+    if (virtualPaths.has(candidate)) {
+      if (executableSet.has(candidate)) return
+      throw Object.assign(new Error(`not executable: ${candidate}`), { code: 'EACCES' })
+    }
+    return originalAccessSync(path, mode)
+  })
+  try {
+    return await action()
+  } finally {
+    accessSpy.mockRestore()
+    existsSpy.mockRestore()
+  }
+}
+
+async function withBrowserOverride<T>(value: string | undefined, action: () => Promise<T>): Promise<T> {
+  const original = process.env.QUIRKY_BROWSER_CHROME
+  if (value === undefined) delete process.env.QUIRKY_BROWSER_CHROME
+  else process.env.QUIRKY_BROWSER_CHROME = value
+  try {
+    return await action()
+  } finally {
+    if (original === undefined) delete process.env.QUIRKY_BROWSER_CHROME
+    else process.env.QUIRKY_BROWSER_CHROME = original
+  }
+}
+
+async function launchChrome(
+  profileRoot: string,
+  runner: OwnedProcessRunner,
+  chromePath: string | null | undefined,
+  commands: string[][],
+  stops: StopOptions[]
+): Promise<void> {
+  const dependencies: BrowserDependencies = {
+    ...browserDependencies(BROWSER_ROOT, runner),
+    ...(chromePath === undefined ? {} : { chromePath }),
+    spawn(command) {
+      commands.push([...command])
+      const userDataDir = command.find((arg) => arg.startsWith('--user-data-dir='))!.slice('--user-data-dir='.length)
+      writeFileSync(join(userDataDir, 'DevToolsActivePort'), '9222\n/devtools/browser/discovery-test\n')
+      return {
+        pid: 12345,
+        exited: new Promise<SpawnExit>(() => {}),
+        async stop(options) {
+          stops.push(options ?? {})
+          return { exitCode: null, signal: 'SIGTERM', stopped: 'stop', durationMs: 1 }
+        }
+      }
+    }
+  }
+  const chrome = await startChrome(profileRoot, dependencies)
+  await chrome.asyncClose()
+}
+
+test('startChrome discovers Linux candidates in order and skips missing or non-executable entries', async () => {
+  await withBrowserOverride(undefined, async () => {
+    for (const candidate of LINUX_CHROME_CANDIDATES) {
+      await withFixture(async (profileRoot, runner) => {
+        const commands: string[][] = []
+        const stops: StopOptions[] = []
+        await withChromeProbes([candidate], [candidate], () => launchChrome(profileRoot, runner, undefined, commands, stops))
+        expect(commands[0]?.[0]).toBe(candidate)
+        expect(stops).toEqual([{ graceMs: 5_000 }])
+      })
+    }
+    await withFixture(async (profileRoot, runner) => {
+      const commands: string[][] = []
+      const stops: StopOptions[] = []
+      await withChromeProbes(
+        DEFAULT_CHROME_CANDIDATES,
+        DEFAULT_CHROME_CANDIDATES,
+        () => launchChrome(profileRoot, runner, undefined, commands, stops)
+      )
+      expect(commands[0]?.[0]).toBe(DEFAULT_CHROME_CANDIDATES[0])
+    })
+
+    await withFixture(async (profileRoot, runner) => {
+      const commands: string[][] = []
+      const stops: StopOptions[] = []
+      await withChromeProbes(
+        [DEFAULT_CHROME_CANDIDATES[0]!, DEFAULT_CHROME_CANDIDATES[1]!, LINUX_CHROME_CANDIDATES[0]!],
+        [DEFAULT_CHROME_CANDIDATES[1]!, LINUX_CHROME_CANDIDATES[0]!],
+        () => launchChrome(profileRoot, runner, undefined, commands, stops)
+      )
+      expect(commands[0]?.[0]).toBe(DEFAULT_CHROME_CANDIDATES[1])
+    })
+
+    await withFixture(async (profileRoot, runner) => {
+      const commands: string[][] = []
+      const stops: StopOptions[] = []
+      await withChromeProbes(LINUX_CHROME_CANDIDATES, LINUX_CHROME_CANDIDATES, () => launchChrome(profileRoot, runner, undefined, commands, stops))
+      expect(commands[0]?.[0]).toBe('/usr/bin/google-chrome')
+    })
+
+    await withFixture(async (profileRoot, runner) => {
+      const commands: string[][] = []
+      const stops: StopOptions[] = []
+      await withChromeProbes(
+        [LINUX_CHROME_CANDIDATES[0]!, LINUX_CHROME_CANDIDATES[1]!],
+        [LINUX_CHROME_CANDIDATES[1]!],
+        () => launchChrome(profileRoot, runner, undefined, commands, stops)
+      )
+      expect(commands[0]?.[0]).toBe('/usr/bin/google-chrome-stable')
+    })
+  })
+})
+
+test('startChrome preserves explicit, null, and environment override policies', async () => {
+  const dependencyPath = '/synthetic/dependency-chrome'
+  const environmentPath = '/synthetic/environment-chrome'
+  await withBrowserOverride(environmentPath, async () => {
+    await withFixture(async (profileRoot, runner) => {
+      const commands: string[][] = []
+      const stops: StopOptions[] = []
+      await withChromeProbes(
+        [dependencyPath, environmentPath],
+        [dependencyPath, environmentPath],
+        () => launchChrome(profileRoot, runner, dependencyPath, commands, stops),
+        [dependencyPath, environmentPath]
+      )
+      expect(commands[0]?.[0]).toBe(dependencyPath)
+    })
+
+    await withFixture(async (profileRoot, runner) => {
+      const commands: string[][] = []
+      const stops: StopOptions[] = []
+      await withChromeProbes(
+        [LINUX_CHROME_CANDIDATES[0]!, environmentPath],
+        [LINUX_CHROME_CANDIDATES[0]!, environmentPath],
+        () => launchChrome(profileRoot, runner, null, commands, stops),
+        [environmentPath]
+      )
+      expect(commands[0]?.[0]).toBe(LINUX_CHROME_CANDIDATES[0])
+    })
+
+    await withFixture(async (profileRoot, runner) => {
+      const commands: string[][] = []
+      const stops: StopOptions[] = []
+      await withChromeProbes([environmentPath], [environmentPath], () => launchChrome(profileRoot, runner, undefined, commands, stops), [environmentPath])
+      expect(commands[0]?.[0]).toBe(environmentPath)
+    })
+  })
+})
+
+test('startChrome refuses unusable explicit paths and empty default discovery without spawning', async () => {
+  const guidance = 'QUIRKY_BROWSER_CHROME must name an absolute executable Chrome or Chromium binary; install Chrome or set that variable to its executable path'
+  const unavailable = 'no Chrome or Chromium executable was found; install Chrome or set QUIRKY_BROWSER_CHROME to its absolute executable path'
+  const invalid = [
+    { path: 'relative/chrome', existing: [], executable: [] },
+    { path: '/synthetic/missing-chrome', existing: [], executable: [] },
+    { path: '/synthetic/non-executable-chrome', existing: ['/synthetic/non-executable-chrome'], executable: [] }
+  ]
+  await withBrowserOverride('/synthetic/environment-chrome', async () => {
+    for (const item of invalid) {
+      await withFixture(async (profileRoot, runner) => {
+        const commands: string[][] = []
+        const stops: StopOptions[] = []
+        const error = await withChromeProbes(
+          item.existing,
+          item.executable,
+          () => launchChrome(profileRoot, runner, item.path, commands, stops).then(() => undefined, (reason: unknown) => reason),
+          [item.path, '/synthetic/environment-chrome']
+        )
+        expectUnavailable(error, guidance)
+        expect(commands).toEqual([])
+        expect(stops).toEqual([])
+      })
+    }
+
+    await withFixture(async (profileRoot, runner) => {
+      const commands: string[][] = []
+      const stops: StopOptions[] = []
+      const error = await withChromeProbes(
+        [],
+        [],
+        () => launchChrome(profileRoot, runner, null, commands, stops).then(() => undefined, (reason: unknown) => reason),
+        ['/synthetic/environment-chrome']
+      )
+      expectUnavailable(error, unavailable)
+      expect(commands).toEqual([])
+    })
+  })
+})
+
 
 function expectProcessGone(pid: number): void {
   let error: unknown
@@ -109,6 +322,7 @@ test('createBrowserSpawn uses the shared runner with ignored streams and no time
   }
 })
 
+ 
 test('Chrome uses a recording launcher and stops its owned sleep child', async () => {
   await withFixture(async (profileRoot, runner) => {
     const launched: string[][] = []
