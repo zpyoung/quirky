@@ -20,8 +20,15 @@ export type TasksFixture = {
   sshCommand: string
 }
 
-const GH_WRAPPER_SOURCE = String.raw`
+function ghWrapperSource(repo: string): string {
+  return String.raw`
 const args = process.argv.slice(2)
+const fixtureOwner = ${JSON.stringify(TASKS_FIXTURE_OWNER)}
+const fixtureRepo = ${JSON.stringify(repo)}
+const answer = (value) => {
+  console.log(JSON.stringify(value))
+  process.exit(0)
+}
 if (args[0] === '--version') {
   process.stdout.write('gh version 2.80.0 (fixture)\n')
   process.exit(0)
@@ -32,11 +39,37 @@ if (args[0] === 'auth' && args[1] === 'token') {
     : ${JSON.stringify(TASKS_FIXTURE_TOKEN)})
   process.exit(0)
 }
+if (args[0] === 'api' && args[1] === 'rate_limit') {
+  answer({ resources: {
+    core: { limit: 5000, remaining: 4200, reset: 1999999999 },
+    search: { limit: 30, remaining: 28, reset: 1999999999 },
+    graphql: { limit: 5000, remaining: 4000, reset: 1999999999 }
+  } })
+}
+if (args[0] === 'api' && typeof args[1] === 'string' && args[1].startsWith('repos/' + fixtureOwner + '/' + fixtureRepo + '/pulls?')) {
+  const request = new URL('https://api.github.com/' + args[1])
+  const head = request.searchParams.get('head')
+  if (head === fixtureOwner + ':ui-review-ready' || head === fixtureOwner + ':main') answer([])
+  if (head === fixtureOwner + ':feature/capture-fixture-tasks') {
+    answer([{
+      number: 32,
+      state: 'open',
+      head: {
+        ref: 'feature/capture-fixture-tasks',
+        repo: { name: fixtureRepo, owner: { login: fixtureOwner } }
+      }
+    }])
+  }
+}
+if (args[0] === 'repo' && args[1] === 'view') {
+  answer({ defaultBranchRef: { name: 'main' } })
+}
 const source = process.env.QUIRKY_TEST_GH_SOURCE
 if (typeof source !== 'string' || source.length === 0) throw new Error('missing isolated fixture source')
 // The list-fixture module is materialized in the isolated home, so this executable cannot import it statically.
 await import(source)
 `
+}
 
 const SSH_DENY_SOURCE = String.raw`
 process.stderr.write('GitHub transport is disabled for the UI review fixture\n')
@@ -75,7 +108,7 @@ export function prepareTasksFixture(home: string, repo: string, env: Record<stri
   const state = seedListFixture({ [`${TASKS_FIXTURE_OWNER}/${repo}`]: [issue, pullRequest] }, { auth: true })
   writeFileSync(join(fixtureDir, 'state.json'), JSON.stringify(state), { mode: 0o600 })
   writeFileSync(sourcePath, listFixtureSource, { mode: 0o600 })
-  writeFileSync(ghPath, `#!${process.execPath}\n${GH_WRAPPER_SOURCE}\n`, { mode: 0o700 })
+  writeFileSync(ghPath, `#!${process.execPath}\n${ghWrapperSource(repo)}\n`, { mode: 0o700 })
   writeFileSync(sshPath, `#!${process.execPath}\n${SSH_DENY_SOURCE}\n`, { mode: 0o700 })
   chmodSync(ghPath, 0o700)
   chmodSync(sshPath, 0o700)

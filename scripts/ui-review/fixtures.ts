@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER } from '@quirky/protocol'
+import { createCodexAppServerFixture } from '../../plugins/quirky.structured/test/fakes/codex-app-server'
 import { prepareTasksFixture, type TasksFixture } from './tasks-fixture'
 
 const FIXTURE_FILES = {
@@ -124,6 +125,7 @@ export function createIsolatedRuntimeEnvironment(
     XDG_STATE_HOME: join(root, 'state'),
     XDG_RUNTIME_DIR: join(root, 'runtime'),
     QUIRKY_HOME: root,
+    QUIRKY_AGENT_SEARCH_DIRS: join(root, 'fakebin'),
     SHELL: '/bin/sh',
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_CONFIG_SYSTEM: '/dev/null',
@@ -142,6 +144,7 @@ export function createIsolatedRuntimeEnvironment(
     env.QUIRKY_BUILTIN_PLUGINS_DIR = join(repoRoot, 'plugins')
     env.QUIRKY_UI_DIR = resolve(options.uiDir ?? join(repoRoot, 'packages/ui/dist'))
     env.QUIRKY_CLI_ENTRY = join(repoRoot, 'packages/cli/src/main.ts')
+    env.WORKER_TEST_CLI = env.QUIRKY_CLI_ENTRY
   }
   return env
 }
@@ -243,8 +246,11 @@ function writeFile(root: string, relativePath: string, content: string): void {
   writeFileSync(path, content, { mode: 0o600 })
 }
 
-function prepareProviderExecutables(root: string): void {
+export function prepareProviderExecutables(root: string): void {
   const bin = join(root, 'fakebin')
+  const native = createCodexAppServerFixture(join(root, 'providers', 'codex-native'), { uniqueThreads: true })
+  const acceptanceAgent = resolve(import.meta.dir, '../../plugins/quirky.orchestration/test/workers/acceptance-agent.ts')
+  mkdirSync(bin, { recursive: true, mode: 0o700 })
   for (const provider of ['claude', 'codex'] as const) {
     const source = `#!${process.execPath}
 import { mkdirSync, writeFileSync } from 'node:fs'
@@ -271,6 +277,14 @@ if (process.argv.includes('login')) {
   }
   process.exit(0)
 }
+if (provider === 'codex') {
+  // The app-server executable is generated under this fixture's private home.
+  await import(${JSON.stringify(native.executable)})
+} else if (process.env.QUIRKY_SESSION_ID && process.env.WORKER_TEST_CLI) {
+  process.stdout.write('\\x1b[?2004h')
+  // This fake agent is selected only for the private worker bridge.
+  await import(${JSON.stringify(acceptanceAgent)})
+}
 process.on('SIGTERM', () => process.exit(0))
 process.on('SIGINT', () => process.exit(0))
 setInterval(() => {}, 60_000)
@@ -293,7 +307,7 @@ export async function prepareCaptureFixtureHome(
     path: project === PRIMARY_PROJECT ? repoPath : join(root, 'projects', project)
   }))
   const worktreesRoot = join(root, 'worktrees')
-  const createdPaths = [...projects.map((project) => project.path), worktreesRoot, join(root, 'tasks-fixture'), join(root, 'fakebin')]
+  const createdPaths = [...projects.map((project) => project.path), worktreesRoot, join(root, 'tasks-fixture'), join(root, 'fakebin'), join(root, 'providers'), join(root, 'transcripts')]
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
@@ -514,19 +528,167 @@ export type CaptureTerminalFixture = { sessionId: string; tabId: string; paneId:
 export async function createCaptureTerminalFixture(
   client: FixtureRpcClient,
   fixtures: RegisteredCaptureFixtures,
-  options: FixtureOptions
+  options: FixtureOptions,
+  title = 'UI Review Fixture Shell'
 ): Promise<CaptureTerminalFixture> {
   const result = record(await callRpc(client, 'quirky.terminal/newTab', {
     workspace: fixtures.primaryWorktree.id,
     cwd: fixtures.primaryWorktree.path,
     agent: 'shell',
-    title: 'UI Review Fixture Shell',
+    title,
     activate: true
   }, options))
   return {
     sessionId: requiredString(result.session, 'quirky.terminal/newTab'),
     tabId: requiredString(result.tab, 'quirky.terminal/newTab tab'),
     paneId: requiredString(result.pane, 'quirky.terminal/newTab pane')
+  }
+}
+
+export async function closeCaptureTerminalFixture(
+  client: FixtureRpcClient,
+  terminal: CaptureTerminalFixture,
+  options: FixtureOptions
+): Promise<void> {
+  await callRpc(client, 'quirky.terminal/closeTab', { tab: terminal.tabId, yes: true }, options)
+}
+
+export type TranscriptFixture = { sessionId: string; transcriptPath: string }
+
+export async function createTranscriptFixture(
+  client: FixtureRpcClient,
+  fixtures: RegisteredCaptureFixtures,
+  options: FixtureOptions
+): Promise<TranscriptFixture> {
+  const terminal = await createCaptureTerminalFixture(client, fixtures, options, 'UI Review Transcript')
+  const transcriptPath = join(fixtures.home, 'transcripts', 'ui-review-transcript.jsonl')
+  const records = [
+    {
+      type: 'user',
+      sessionId: terminal.sessionId,
+      isSidechain: false,
+      message: { id: 'ui-review-transcript-user-1', role: 'user', content: 'Summarize the fixture change.' }
+    },
+    {
+      type: 'assistant',
+      sessionId: terminal.sessionId,
+      isSidechain: false,
+      cwd: fixtures.primaryWorktree.path,
+      gitBranch: 'ui-review-fixture',
+      message: {
+        id: 'ui-review-transcript-answer-1',
+        role: 'assistant',
+        model: 'fixture-model',
+        usage: { input_tokens: 6, output_tokens: 9 },
+        content: [{ type: 'text', text: 'The fixture provides local, deterministic review data.' }]
+      }
+    },
+    {
+      type: 'user',
+      sessionId: terminal.sessionId,
+      isSidechain: false,
+      message: { id: 'ui-review-transcript-user-2', role: 'user', content: 'What must stay local?' }
+    },
+    {
+      type: 'assistant',
+      sessionId: terminal.sessionId,
+      isSidechain: false,
+      cwd: fixtures.primaryWorktree.path,
+      gitBranch: 'ui-review-fixture',
+      message: {
+        id: 'ui-review-transcript-answer-2',
+        role: 'assistant',
+        model: 'fixture-model',
+        usage: { input_tokens: 5, output_tokens: 10 },
+        content: [{ type: 'text', text: 'All provider and GitHub activity stays inside this fixture.' }]
+      }
+    }
+  ]
+  writeFile(fixtures.home, 'transcripts/ui-review-transcript.jsonl', `${records.map((record) => JSON.stringify(record)).join('\n')}\n`)
+  await callRpc(client, 'quirky.session/setProviderSession', {
+    session: terminal.sessionId,
+    id: 'ui-review-transcript',
+    transcriptPath
+  }, options)
+  return { sessionId: terminal.sessionId, transcriptPath }
+}
+
+export type LoopFixture = { loopId: string }
+
+export async function createLoopFixture(
+  client: FixtureRpcClient,
+  fixtures: RegisteredCaptureFixtures,
+  options: FixtureOptions
+): Promise<LoopFixture> {
+  let step = 'quirky.agents/refresh'
+  let loopId: string | null = null
+  let lastSnapshot: Record<string, unknown> | null = null
+  try {
+    await callRpc(client, step, {}, options)
+    step = 'quirky.agents/setEnabled'
+    await callRpc(client, step, { agent: 'codex', enabled: true }, options)
+    step = 'quirky.loops/create'
+    const created = record(await callRpc(client, step, {
+      worktreeId: fixtures.primaryWorktree.id,
+      name: 'UI review loop',
+      agent: 'codex',
+      config: {
+        promptSource: { kind: 'repeat', body: 'Summarize the fixture change in one sentence.' },
+        pacing: { kind: 'on-idle' },
+        sessionPolicy: 'fresh',
+        done: {},
+        caps: { maxIterations: 1 },
+        noProgress: false,
+        checkpointCommits: false,
+        askBeforeNext: false,
+        resumeAtLimitReset: false
+      }
+    }, options))
+    loopId = requiredString(created.id, step)
+
+    step = 'quirky.loops/get'
+    const deadline = Date.now() + options.timeoutMs
+    for (;;) {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) {
+        throw new Error(`timed out after ${options.timeoutMs}ms; last snapshot ${JSON.stringify(lastSnapshot)}`)
+      }
+      try {
+        lastSnapshot = record(await callRpc(client, step, { loopId }, {
+          ...options,
+          timeoutMs: Math.max(1, Math.min(options.timeoutMs, remaining))
+        }))
+      } catch (error) {
+        if (Date.now() >= deadline) {
+          throw new Error(`timed out after ${options.timeoutMs}ms; last snapshot ${JSON.stringify(lastSnapshot)}`)
+        }
+        throw error
+      }
+      if (
+        lastSnapshot.state === 'paused' &&
+        lastSnapshot.pauseReason === 'cap-iterations' &&
+        lastSnapshot.iterationsCompleted === 1
+      ) return { loopId }
+
+      const waitMs = deadline - Date.now()
+      if (waitMs <= 0) {
+        throw new Error(`timed out after ${options.timeoutMs}ms; last snapshot ${JSON.stringify(lastSnapshot)}`)
+      }
+      await Bun.sleep(Math.min(100, waitMs))
+    }
+  } catch (error) {
+    if (loopId) {
+      const timeoutMs = Math.max(1, Math.min(options.timeoutMs, 1_000))
+      try {
+        await bounded(
+          client.callAny('quirky.loops/stop', { loopId, mode: 'now' }, { timeoutMs }),
+          timeoutMs,
+          undefined,
+          'quirky.loops/stop'
+        )
+      } catch {}
+    }
+    throw new Error(`loop fixture ${step}: ${errorMessage(error)}`)
   }
 }
 
