@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 
 const PLUGIN_ID = 'quirky.git'
@@ -60,16 +60,13 @@ export function useDiffSettings(context: UiPluginContext): {
     })
   }, [context])
 
-  const setSetting = useCallback(
-    (name: SettingName, value: boolean | string) => {
-      setSettings((current) => applyValue(current, name, value))
-      context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value }).catch((error) => {
-        setSettings(read(context))
-        context.toast('Setting failed', error instanceof Error ? error.message : String(error))
-      })
-    },
-    [context]
-  )
+  function setSetting(name: SettingName, value: boolean | string) {
+    setSettings((current) => applyValue(current, name, value))
+    void context.call('setting.set', { id: `setting:${PLUGIN_ID}/${name}`, value }).catch((error) => {
+      setSettings(read(context))
+      context.toast('Setting failed', error instanceof Error ? error.message : String(error), { kind: 'error' })
+    })
+  }
 
   return { settings, setSetting }
 }
