@@ -7,7 +7,7 @@ import type { SoakWorld } from './world.ts'
 
 export type WindowStartupObservation = {
   stage: 'launch' | 'connect' | 'context' | 'page' | 'navigation'
-    | 'connection' | 'shell' | 'worktree' | 'layout' | 'changes' | 'ready' | 'failed'
+    | 'connection' | 'shell' | 'shell-ready' | 'worktree' | 'layout' | 'changes' | 'ready' | 'failed'
   elapsedMs: number
   index?: number
   worktree?: string
@@ -611,6 +611,7 @@ export async function openWindows(options: {
         signal,
         '.shell-workspace visibility'
       )
+      report('shell-ready')
       sessions.push({ index, attribution, connId, page, metrics, statusRequests })
     }
 

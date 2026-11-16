@@ -1157,6 +1157,35 @@ test('CLI-files report transfers validated failed-startup evidence without fabri
   })
   expect(serialized).not.toContain('owned world cleanup identity could not be verified')
 })
+test('CLI-files report transfers shell-ready diagnostics while retaining cleanup proof', async () => {
+  const evidence = validStartupEvidence({ browser: true })
+  const shellReady = { stage: 'shell-ready', elapsedMs: 7, index: 0, worktree: 'ready', connId: 41, browserPid: 801 }
+  evidence.diagnostics.renderer.push(shellReady)
+  const failure = typedStartupError(evidence, 'renderer-disconnected', 'shell readiness failed')
+  const report = await runCliFilesParity({ createWorld: async () => { throw failure } })
+
+  expect(report.startup).toEqual(evidence.diagnostics)
+  expect(report.ok).toBe(false)
+  expect(report.cleanup.ok).toBe(true)
+  expect(report.cleanup.evidence).toMatchObject({
+    processIdentitiesGone: true,
+    homeRemoved: true,
+    daemonIdentityFound: true,
+    browserIdentityFound: true,
+    trackedIdentities: [
+      expect.objectContaining({ kind: 'daemon', pid: 701, gone: true }),
+      expect.objectContaining({ kind: 'browser', pid: 801, gone: true })
+    ],
+    unresolvedAcquisition: false,
+    scopeCleanupComplete: true,
+    acquisitionSettled: true
+  })
+  expect(report.observations).toHaveLength(13)
+  expect(report.observations.every(observation => observation.status === 'not-run' && observation.receiptIds.length === 0)).toBe(true)
+  expect(report.receipts).toEqual([])
+  expect(report.parityComplete).toBe(false)
+})
+
 test('CLI-files runner removes unknown WebSocket URL secrets while preserving the path', async () => {
   const evidence = validStartupEvidence({ daemon: true, browser: false })
   evidence.diagnostics.logs.daemonTail =
@@ -1205,6 +1234,7 @@ test('CLI-files runner rejects ordinary errors, malformed roots, uncertain teard
       evidence.diagnostics.renderer[0]!.browserPid = 801
     }],
     ['malformed phase array', evidence => { Object.assign(evidence.diagnostics, { phase: ['renderer'] }) }],
+    ['unknown renderer stage', evidence => { evidence.diagnostics.renderer[0]!.stage = 'unknown-stage' }],
     ['malformed renderer stage array', evidence => { Object.assign(evidence.diagnostics.renderer[0]!, { stage: ['failed'] }) }],
     ['unknown process table', evidence => { evidence.cleanup.evidence.processIdentitiesGone = false }],
     ['home removal not verified', evidence => { evidence.cleanup.evidence.homeRemoved = false }],
@@ -1223,6 +1253,9 @@ test('CLI-files runner rejects ordinary errors, malformed roots, uncertain teard
     const evidence = validStartupEvidence({ daemon: true, browser: false })
     mutate(evidence)
     const report = await runCliFilesParity({ createWorld: async () => { throw typedStartupError(evidence, 'renderer-disconnected', label) } })
+    if (label === 'unknown renderer stage') {
+      expect(report.startup, label).toBeUndefined()
+    }
     expect(report.cleanup.ok, label).toBe(false)
     expect(report.ok, label).toBe(false)
     expect(report.parityComplete, label).toBe(false)

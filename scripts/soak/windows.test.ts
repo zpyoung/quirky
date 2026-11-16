@@ -861,6 +861,20 @@ test('reports per-window startup stages and ready identities with the captured b
     expect.objectContaining({ index: 0, worktree: 'ready', connId: 41 }),
     expect.objectContaining({ index: 1, worktree: 'retry', connId: 42 })
   ]))
+  const completed = result.events.filter(({ stage }) => stage === 'shell-ready')
+  expect(completed).toHaveLength(2)
+  expect(completed).toEqual([
+    expect.objectContaining({ index: 0, worktree: 'ready', connId: 41, browserPid: 801 }),
+    expect.objectContaining({ index: 1, worktree: 'retry', connId: 42, browserPid: 801 })
+  ])
+  const setup = result.events.findIndex(({ stage }) => stage === 'changes')
+  for (const completion of completed) {
+    const start = result.events.findIndex(({ stage, index }) => stage === 'shell' && index === completion.index)
+    const end = result.events.indexOf(completion)
+    expect(end).toBeGreaterThan(start)
+    expect(end).toBeLessThan(setup)
+    expect(completion.elapsedMs).toBeGreaterThanOrEqual(result.events[start]!.elapsedMs)
+  }
   const navigation = result.events.findIndex(({ stage }) => stage === 'navigation')
   expect(result.events.findIndex(({ stage, browserPid }) => stage === 'launch' && browserPid === 801))
     .toBeLessThan(navigation)
@@ -868,6 +882,14 @@ test('reports per-window startup stages and ready identities with the captured b
   expect(result.finished?.records.map(({ requests }) => requests)).toEqual([1, 1])
   expect(result.finished?.requests).toContainEqual({ method: 'quirky.git/status', total: 2 })
   expect(result.events.every(({ elapsedMs }) => Number.isFinite(elapsedMs) && elapsedMs >= 0)).toBe(true)
+})
+
+test('reports one shell completion for a single-window caller', async () => {
+  const result = await runRecordingWindowScenario('matching-during-navigation')
+  expect(result.resolved).toBe(true)
+  expect(result.events.filter(({ stage }) => stage === 'shell-ready')).toEqual([
+    expect.objectContaining({ index: 0, worktree: 'ready', connId: 41, browserPid: 801 })
+  ])
 })
 
 test('retains bounded navigation failure diagnostics without authenticated URL secrets', async () => {
