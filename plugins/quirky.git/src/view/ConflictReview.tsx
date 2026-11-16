@@ -129,7 +129,7 @@ export function ConflictReview({ context, input, report, bind, close }: ModeProp
         worktree, mode: 'conflict-file', path, groupId: input.groupId, preview: false, review
       })
     } catch (error) {
-      if (active.current) context.toast('Could not open diff', messageOf(error), { kind: 'error' })
+      context.toast('Could not open diff', messageOf(error), { kind: 'error' })
     }
   }
 

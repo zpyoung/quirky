@@ -209,7 +209,7 @@ function DiffTab({ context, input, report }: { context: UiPluginContext; input: 
   }
   useViewControl(
     context,
-    closeDialogGeneration === null
+    closeDialogGeneration === null || closeBusy
       ? null
       : { target: closeDialogTarget, generation: closeDialogGeneration, actions: closeDialogActions },
     ({ action, generation, data }) => {

@@ -975,7 +975,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
         {source !== null && sourceData.status?.capped === true && (
           <p className="ui-text-muted git-review__notice">Git status stopped at its entry limit, so this list is incomplete.</p>
         )}
-        {!loading && loadError === null && staleError === null && items.length === 0 && <EmptyState message={emptyMessage} />}
+        {!loading && loadError === null && items.length === 0 && <EmptyState message={emptyMessage} />}
         {items.map((item) => {
           const view = viewOf(item)
           return (

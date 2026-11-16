@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import type { GitDiff, GitStatusEntry, ReviewModel } from '@quirky/protocol'
+import { RpcErrorCode, type GitDiff, type GitStatus, type GitStatusEntry, type ReviewModel } from '@quirky/protocol'
 import { freshCard, reconcileCards } from '../../src/view/review-layout'
 import { registerDom } from './register-dom'
 
@@ -9,12 +9,23 @@ registerDom()
 const s = await import('./support')
 afterAll(() => GlobalRegistrator.unregister())
 
-const { act, byText, click, fakeContext, layoutFor, mountView, modifiedEditor, reviewFile, reviewModel, settle, status, textDiff } = s
+const { act, byLabel, byText, click, fakeContext, layoutFor, mountView, modifiedEditor, reviewFile, reviewModel, settle, status, textDiff } = s
 
 const A = 'a.ts'
 const GUIDE = 'guide.md'
 const files = () => [reviewFile(A), reviewFile(GUIDE)]
 const model = () => reviewModel(files())
+const unresolvedConflicts = () =>
+  [{ path: 'a.ts', area: 'conflicts', status: 'modified', conflict: { kind: 'both_modified', state: 'unresolved' } }] satisfies GitStatusEntry[]
+const conflictFileResult = (overrides: Record<string, unknown> = {}) => ({
+  path: 'math.ts',
+  kind: 'both_modified',
+  state: 'unresolved',
+  content: '<<<<<<< ours\nleft\n=======\nright\n>>>>>>> theirs\n',
+  hash: 'h1',
+  operation: 'merge',
+  ...overrides
+})
 const card = (root: ParentNode, path: string) => root.querySelector<HTMLElement>(`section[data-path="${path}"]`)!
 const body = (root: ParentNode, path: string) => card(root, path).querySelector<HTMLElement>('[data-review-body]')!
 const readError = (root: ParentNode) => root.querySelector<HTMLElement>('.ui-inline-error')
@@ -143,6 +154,22 @@ describe('shared diff-view states', () => {
     expect(mounted.element.querySelector('[role="alert"]')).toBeNull()
     expect(mounted.element.querySelectorAll('section[data-path]')).toHaveLength(2)
   })
+  test('an empty review stays visible under a stale reread error', async () => {
+    let reads = 0
+    fake.handlers['quirky.git/review'] = () => {
+      reads++
+      if (reads > 1) throw new Error('repository unavailable')
+      return reviewModel([])
+    }
+    mounted = mountView(fake, { worktree: 'w1', mode: 'review' })
+    await settle()
+    expect(mounted.element.querySelector('.ui-empty-state')).not.toBeNull()
+
+    await act(async () => fake.emit({ type: 'quirky.git/reviewChanged', data: { worktreeId: 'w1' } } as never))
+    await settle()
+    expect(readError(mounted.element)?.textContent).toContain('Review may be out of date: repository unavailable')
+    expect(mounted.element.querySelector('.ui-empty-state')).not.toBeNull()
+  })
 
   test('card loading and read errors render shared states, then Retry loads the diff', async () => {
     let rejectDiff!: (reason: Error) => void
@@ -194,6 +221,112 @@ describe('shared diff-view states', () => {
     expect(card(mounted.element, GUIDE).querySelector('.ui-empty-state')).toBeNull()
     expect(card(mounted.element, GUIDE).querySelectorAll('[role="alert"]')).toHaveLength(1)
   })
+  test('conflicts show loading, then retry a failed status read exactly once', async () => {
+    const pending = Promise.withResolvers<GitStatus>()
+    let reads = 0
+    fake.handlers['quirky.git/status'] = () => {
+      reads++
+      return reads === 1 ? pending.promise : status(unresolvedConflicts())
+    }
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflicts' })
+    await settle()
+    expect(mounted.element.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe('Loading conflicts...')
+
+    await act(async () => pending.reject(new Error('not a repository')))
+    await settle()
+    const error = readError(mounted.element)
+    expect(error?.querySelector('.ui-inline-error__message')?.textContent).toBe('Error loading conflicts: not a repository')
+    expect(byText(error!, 'Retry')).not.toBeNull()
+    const callsBeforeRetry = fake.callsTo('quirky.git/status').length
+
+    await click(byText(error!, 'Retry'))
+    expect(fake.callsTo('quirky.git/status')).toHaveLength(callsBeforeRetry + 1)
+    expect(fake.callsTo('quirky.git/status').at(-1)?.params).toEqual({ worktree: 'w1' })
+    expect(readError(mounted.element)).toBeNull()
+    expect(mounted.element.querySelector('[data-path="a.ts"]')?.textContent).toContain('Unresolved')
+  })
+
+  test('conflict file loading and errors retry its read, then keep a failed reread above the editor', async () => {
+    const pending = Promise.withResolvers<unknown>()
+    let reads = 0
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      reads++
+      return reads === 1 ? pending.promise : conflictFileResult()
+    }
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflict-file', path: 'math.ts' })
+    await settle()
+    expect(mounted.element.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe('Loading diff...')
+    expect(fake.callsTo('quirky.git/conflictFile')).toHaveLength(1)
+
+    await act(async () => pending.reject(new Error('math.ts is not in conflict.')))
+    await settle()
+    const error = readError(mounted.element)
+    expect(error?.querySelector('.ui-inline-error__message')?.textContent).toBe(
+      'Error loading conflict file: math.ts is not in conflict.'
+    )
+    expect(byText(error!, 'Retry')).not.toBeNull()
+    const callsBeforeRetry = fake.callsTo('quirky.git/conflictFile').length
+
+    await click(byText(error!, 'Retry'))
+    expect(fake.callsTo('quirky.git/conflictFile')).toHaveLength(callsBeforeRetry + 1)
+    expect(fake.callsTo('quirky.git/conflictFile').at(-1)?.params).toEqual({ worktree: 'w1', path: 'math.ts' })
+    const editor = mounted.element.querySelector('[data-diff-editor]')
+    expect(editor).not.toBeNull()
+    const editorView = modifiedEditor(mounted.element)
+
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw new Error('fixture read failed')
+    }
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    const staleError = readError(mounted.element)
+    const retainedEditor = mounted.element.querySelector('[data-diff-editor]')
+    expect(staleError?.querySelector('.ui-inline-error__message')?.textContent).toBe(
+      'Error loading conflict file: fixture read failed'
+    )
+    expect(retainedEditor).toBe(editor)
+    expect(modifiedEditor(mounted.element)).toBe(editorView)
+    expect(staleError!.compareDocumentPosition(retainedEditor!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  test('a conflict file error does not coexist with the unavailable-file empty state', async () => {
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw Object.assign(new Error('math.ts is not in conflict.'), { code: RpcErrorCode.NotFound })
+    }
+    fake.handlers['quirky.git/status'] = () => status()
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflict-file', path: 'math.ts' })
+    await settle()
+    expect(mounted.element.querySelector('.ui-empty-state')?.textContent).toBe('No working-tree file is available.')
+
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      throw new Error('fixture read failed')
+    }
+    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+    await settle()
+    expect(readError(mounted.element)?.textContent).toContain('Error loading conflict file: fixture read failed')
+    expect(mounted.element.querySelector('.ui-empty-state')).toBeNull()
+  })
+
+  test('a conflict-open failure still toasts after its view unmounts', async () => {
+    const pendingWorkspace = Promise.withResolvers<unknown>()
+    const toastOptions: unknown[] = []
+    fake.context.toast = (title, message, options) => {
+      fake.toasts.push([title, message])
+      toastOptions.push(options)
+    }
+    fake.handlers['quirky.git/status'] = () => status(unresolvedConflicts())
+    fake.handlers['quirky.terminal/workspace'] = () => pendingWorkspace.promise
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflicts' })
+    await settle()
+    await click(byText(mounted.element, 'Open'))
+    mounted.unmount()
+    mounted = null
+
+    await act(async () => pendingWorkspace.reject(new Error('terminal unavailable')))
+    await settle()
+    expect(fake.toasts.at(-1)).toEqual(['Could not open diff', 'terminal unavailable'])
+    expect(toastOptions.at(-1)).toEqual({ kind: 'error' })
+  })
 
   test('reconciliation preserves identity unless a stored card mark changes', () => {
     const unchanged = { a: { ...freshCard('none'), collapsed: true }, b: freshCard('reviewed') }
@@ -225,5 +358,49 @@ describe('shared diff-view states', () => {
 
     expect(fake.toasts.at(-1)).toEqual(['Save failed', 'disk full'])
     expect(toastOptions.at(-1)).toEqual({ kind: 'error' })
+  })
+  test('setting failures toast as errors at runtime', async () => {
+    const toastOptions: unknown[] = []
+    const call = fake.context.call.bind(fake.context)
+    fake.context.call = ((method: string, params?: Record<string, unknown>) => {
+      if (method === 'setting.set') {
+        fake.calls.push({ method, params: params ?? {} })
+        return Promise.reject(new Error('setting refused'))
+      }
+      return call(method, params)
+    }) as typeof fake.context.call
+    fake.context.toast = (title, message, options) => {
+      fake.toasts.push([title, message])
+      toastOptions.push(options)
+    }
+    mounted = mountView(fake, { worktree: 'w1', mode: 'review' })
+    await settle()
+    await click(byLabel(mounted.element, 'More actions'))
+    const wordWrap = [...mounted.element.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')].find((item) =>
+      item.textContent?.includes('Word wrap')
+    )
+    await click(wordWrap)
+
+    expect(fake.toasts.at(-1)).toEqual(['Setting failed', 'setting refused'])
+    expect(toastOptions.at(-1)).toEqual({ kind: 'error' })
+  })
+
+  test('Keep file unavailable remains an advisory toast without options', async () => {
+    let reads = 0
+    const toastOptions: unknown[] = []
+    fake.handlers['quirky.git/conflictFile'] = () => {
+      reads++
+      return conflictFileResult({ kind: 'deleted_by_them', content: reads === 1 ? 'working tree content\n' : null })
+    }
+    fake.context.toast = (title, message, options) => {
+      fake.toasts.push([title, message])
+      toastOptions.push(options)
+    }
+    mounted = mountView(fake, { worktree: 'w1', mode: 'conflict-file', path: 'math.ts' })
+    await settle()
+    await click(byText(mounted.element, 'Keep file'))
+
+    expect(fake.toasts.at(-1)).toEqual(['Keep file unavailable', 'The working-tree file no longer exists.'])
+    expect(toastOptions.at(-1)).toBeUndefined()
   })
 })

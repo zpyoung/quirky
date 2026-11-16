@@ -498,7 +498,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
         />
       )}
       <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }}>
-        {operationEnded && !file ? (
+        {operationEnded && !file && error === null ? (
           <EmptyState message="No working-tree file is available." />
         ) : error !== null && !file ? null : !file ? (
           <div role="status"><NoticeLine>Loading diff...</NoticeLine></div>

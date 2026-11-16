@@ -362,13 +362,45 @@ describe('review controls', () => {
     const second = mountView(alreadyReviewed, { worktree: 'w1', mode: 'review' })
     await settle()
     const secondAddress = addressOf(second, 'review:w1')
+    expect(second.element.querySelector('[data-path="guide.md"]')?.hasAttribute('data-active')).toBe(false)
     const before = second.element.innerHTML
     expect(await dispatchInAct(alreadyReviewed, control(secondAddress, 'mark', { path: 'a.ts', reviewed: true }))).toEqual({ delivered: true })
     expect(alreadyReviewed.called('quirky.git/setReviewMark')).toHaveLength(0)
+    expect(second.element.querySelector('[data-path="guide.md"]')?.hasAttribute('data-active')).toBe(false)
     expect(second.element.querySelector('[data-path="a.ts"]')?.getAttribute('data-active')).toBe(
       before.includes('data-active=""') ? '' : null
     )
   })
+  test('unmarking a reviewed card does not reveal the next card', async () => {
+    const fake = makeReviewFake(22, { 'a.ts': 'reviewed' })
+    activate(fake.context)
+    const mounted = mountView(fake, { worktree: 'w1', mode: 'review' })
+    await settle()
+    expect(mounted.element.querySelector('[data-path="guide.md"]')?.hasAttribute('data-active')).toBe(false)
+
+    await click(button(mounted.element, '✓ Reviewed'))
+    await settle()
+
+    expect(fake.called('quirky.git/setReviewMark')).toEqual([{
+      method: 'quirky.git/setReviewMark',
+      params: { worktree: 'w1', path: 'a.ts', reviewed: false }
+    }])
+    expect(mounted.element.querySelector('[data-path="guide.md"]')?.hasAttribute('data-active')).toBe(false)
+  })
+
+  test('clicking Mark reviewed reveals the next unreviewed card', async () => {
+    const fake = makeReviewFake()
+    activate(fake.context)
+    const mounted = mountView(fake, { worktree: 'w1', mode: 'review' })
+    await settle()
+    expect(mounted.element.querySelector('[data-path="guide.md"]')?.hasAttribute('data-active')).toBe(false)
+
+    await click(button(mounted.element, 'Mark reviewed'))
+    await settle()
+
+    expect(mounted.element.querySelector('[data-path="guide.md"]')?.hasAttribute('data-active')).toBe(true)
+  })
+
 
   test.each(['none', 'changed'] as const)('clearing an already-unreviewed %s mark is idempotent', async (mark) => {
     const fake = makeReviewFake(22, { 'a.ts': mark })
@@ -793,6 +825,7 @@ describe('close dialog controls', () => {
       })
       await settle()
       expect(reply).toEqual({ result: { delivered: true } })
+      expect(controlsOf(mounted).find(({ target }) => target === 'close-dialog:w1')).toBeUndefined()
       expect(fake.called('quirky.git/save')).toHaveLength(1)
       const began = oldNow()
       Date.now = () => began + 30_001
@@ -831,7 +864,10 @@ describe('close dialog controls', () => {
     expect(mounted.element.querySelector('[role="dialog"]')).not.toBeNull()
     const stale = dialogAddress(mounted)
     mounted.unmount()
-    await expect(pending).resolves.toBeUndefined()
+    const pendingSentinel = Symbol('requestClose did not settle')
+    const sentinel = Promise.withResolvers<typeof pendingSentinel>()
+    setTimeout(() => sentinel.resolve(pendingSentinel), 0)
+    expect(await Promise.race([pending, sentinel.promise])).toBeUndefined()
     expect(fake.views).toEqual([])
     expect(await dispatchInAct(fake, control(stale, 'cancel'))).toEqual({ delivered: false })
   })
@@ -943,6 +979,7 @@ describe('accepted long-running controls and failed delivery', () => {
     expect(mounted.element.innerHTML).toBe(originalDom)
     expect(daemonCalls(fake)).toEqual(initialDaemonCalls)
     expect(fake.called('ui.window.command.run').filter(({ params }) => params.id === GIT_UI_CONTROL_COMMAND)).toHaveLength(initialControlCalls + 2)
+    panel.unmount()
   })
 
   test('a delivery failure that settles after unmount does not show a toast', async () => {

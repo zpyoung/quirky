@@ -89,7 +89,7 @@ Explicit standalone diffs opened through `ui.view.open` publish a top-level slot
 
 ### Scoped diff controls
 
-Diff slot reports expose mounted actions in `uiControls`, alongside review-note controls. Discover them with `quirky ui state --json`; each address carries a `surface`, `target`, `generation`, and available `actions`.
+Standalone diff slot reports expose mounted actions in `uiControls`, alongside review-note controls. Discover them with `quirky ui state --json`; each address carries a `surface`, `target`, `generation`, and available `actions`. Hosted diff tabs mount with input only and publish no `uiControls`, so their generations cannot be discovered through this command.
 
 Run an action with `quirky ui run command:quirky.git/ui-control --args '<control JSON>' --json`. For an exact window, use `quirky api call ui.window.command.run --conn-id <window> --id command:quirky.git/ui-control --args '<control JSON>' --json`. Control JSON contains `surface`, `target`, `generation`, `action`, and optional `data`; collapse-all takes `{"collapsed":true}`. A delivered reply means the view accepted the action, not that an asynchronous save or Git operation finished. Scope changes and remounts invalidate older generations.
 

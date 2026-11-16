@@ -12,7 +12,6 @@ import {
   type UiPluginContext
 } from '@quirky/protocol'
 import { createNativeBrowserCapability } from '../../../../packages/ui/src/native-browser'
-import { dispatchGitUiControl, GIT_UI_CONTROL_COMMAND } from '../../src/ui-control'
 
 // the caller registers happy-dom first, then imports this module
 const { act } = await import('react')
@@ -491,7 +490,6 @@ export function fakeContext(initial: UiLayout, requestedConnectionId?: number): 
     }
   }
   fakesByConnectionId.set(connId, fake)
-  fake.provided.set(GIT_UI_CONTROL_COMMAND, (args: unknown) => dispatchGitUiControl(fake.context, args))
   return fake
 }
 
