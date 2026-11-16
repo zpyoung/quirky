@@ -72,7 +72,7 @@ test('discovers the full 68-candidate orchestration UI graph', () => {
   expect(graph.files).toHaveLength(13)
 
   const candidates = discoverCandidates(plugin, graph.files)
-  expect(candidates).toHaveLength(68)
+  expect(candidates).toHaveLength(71)
   expect(candidates.filter((candidate) => candidate.kind.startsWith('unresolved-'))).toEqual([])
 
   const observedCounts = Object.fromEntries(
@@ -86,7 +86,7 @@ test('discovers the full 68-candidate orchestration UI graph', () => {
   )
   expect(observedCounts).toEqual({
     [UI_SOURCE]: { state: 3, action: 3 },
-    [SETTINGS_SOURCE]: { state: 30, action: 12 },
+    [SETTINGS_SOURCE]: { state: 33, action: 12 },
     [REMOTE_SOURCE]: { state: 18, action: 2 },
   })
 }, 30_000)
@@ -114,8 +114,8 @@ test('passes all four source audits and all five static plugin checks', () => {
 test('coverage has the reviewed three-surface state and action shape', () => {
   expect(parseCoverage(plugin.coverage!.content)).toEqual(coverage)
   expect(Object.keys(coverage.surfaces).sort()).toEqual([...SURFACES].sort())
-  expect(coverage.states).toHaveLength(15)
-  expect(coverage.notState).toHaveLength(22)
+  expect(coverage.states).toHaveLength(18)
+  expect(coverage.notState).toHaveLength(19)
   expect(coverage.actions).toHaveLength(17)
 
   expect(coverage.surfaces[OVERLAY]).toMatchObject({
@@ -138,7 +138,7 @@ test('coverage has the reviewed three-surface state and action shape', () => {
   }
   expect(stateCounts).toEqual({
     [OVERLAY]: { error: 1 },
-    [SETTINGS]: { loading: 3, empty: 1, error: 5 },
+    [SETTINGS]: { loading: 3, empty: 1, error: 8 },
     [REMOTE]: { loading: 2, empty: 1, error: 2 },
   })
 }, 30_000)
@@ -196,6 +196,76 @@ test('rejects a raw error render after the remote InlineError witness is replace
     code: 'evidence-missing',
     message: expect.stringContaining('<InlineError message={error} />'),
   }))
+}, 30_000)
+
+test('requires each unavailable settings renderer to stay on its exact InlineError candidate', () => {
+  const renderers = [
+    {
+      siteQuote: 'status ?',
+      anchor: 'status ?',
+      elementQuote: '<InlineError message="Skill coverage is unavailable." />',
+    },
+    {
+      siteQuote: 'status && status.agents.length > 0\n              ?',
+      anchor: 'status && status.agents.length > 0\n              ?',
+      elementQuote: '<InlineError message="Agent coverage is unavailable." />',
+    },
+    {
+      siteQuote: 'policy === null ?',
+      anchor: 'policy === null ?',
+      elementQuote: '<InlineError message="Nested worker depth is unavailable." />',
+    },
+  ] as const
+  const graph = discoverUiFiles(plugin)
+  const candidates = discoverCandidates(plugin, graph.files)
+
+  for (const renderer of renderers) {
+    const witnesses = coverage.states.filter((entry) =>
+      entry.surface === SETTINGS && entry.state === 'error' &&
+      entry.site.file === SETTINGS_SOURCE && entry.site.quote === renderer.siteQuote,
+    )
+    expect(witnesses).toHaveLength(1)
+    expect(witnesses[0]).toMatchObject({
+      anchor: renderer.anchor,
+      render: {
+        component: 'InlineError',
+        element: { file: SETTINGS_SOURCE, quote: renderer.elementQuote },
+        import: {
+          file: SETTINGS_SOURCE,
+          quote: "import { Badge, Button, Dialog, EmptyState, InlineError, ListRow, NoticeLine, TextField, ToolPanelFrame } from '@quirky/ui'",
+        },
+      },
+    })
+    expect(candidates.filter((candidate) =>
+      candidate.file === SETTINGS_SOURCE &&
+      candidate.category === 'state' &&
+      candidate.kind === 'conditional-render' &&
+      candidate.anchorText === renderer.anchor,
+    )).toHaveLength(1)
+
+    const { inventory: removedInventory, plugin: removedPlugin } = clonedFixture()
+    const removedCoverage = parseCoverage(removedPlugin.coverage!.content)
+    removedCoverage.states = removedCoverage.states.filter((entry) =>
+      entry.site.file !== SETTINGS_SOURCE || entry.site.quote !== renderer.siteQuote,
+    )
+    removedPlugin.coverage!.content = JSON.stringify(removedCoverage)
+    const missingWitness = checkIn(removedInventory, removedPlugin, 'error')
+    expect(missingWitness.status).toBe('fail')
+    expect(missingWitness.evidence).toContainEqual(expect.objectContaining({
+      code: 'coverage-missing',
+      message: `Unmapped state candidate conditional-render: ${renderer.anchor}`,
+    }))
+
+    const { inventory: rawInventory, plugin: rawPlugin } = clonedFixture()
+    replaceOnce(sourceIn(rawPlugin, SETTINGS_SOURCE), renderer.elementQuote, '<p role="alert">Setup status failed.</p>')
+    const rawRender = checkIn(rawInventory, rawPlugin, 'error')
+    expect(rawRender.status).toBe('fail')
+    expect(rawRender.evidence).toContainEqual(expect.objectContaining({
+      code: 'evidence-missing',
+      coverageFile: COVERAGE_FILE,
+      message: expect.stringContaining(JSON.stringify(renderer.elementQuote)),
+    }))
+  }
 }, 30_000)
 
 test('finds an unresolved window listener when the dismissal signal is replaced', () => {
