@@ -18,6 +18,7 @@ import {
   type RegisteredCaptureFixtures
 } from './fixtures'
 import { fixtureIssue, fixturePullRequest } from '../../plugins/quirky.tasks/test/fixtures/list'
+import { CHECKS_FIXTURE_BRANCH } from './tasks-fixture'
 import { createProcessRunner } from '../../packages/process/src/api'
 import type { ProcessRunner } from '@quirky/protocol'
 import { resolveCodexThroughLoginShell } from '../../plugins/quirky.structured/codex-path'
@@ -66,6 +67,48 @@ function runFixtureGh(ghPath: string, args: string[], cwd: string, env: Record<s
 function gitOrigin(path: string, env: Record<string, string>): string | null {
   const result = Bun.spawnSync(['git', '-C', path, 'config', '--get', 'remote.origin.url'], { env, stdin: 'ignore' })
   return result.exitCode === 0 ? result.stdout.toString().trim() : null
+}
+
+function runFixtureGit(path: string, args: string[], env: Record<string, string>): string {
+  const result = Bun.spawnSync(['git', '-C', path, ...args], { env, stdin: 'ignore' })
+  const stdout = result.stdout.toString().trim()
+  if (result.exitCode !== 0) {
+    throw new Error(`local fixture git ${args.join(' ')} failed (${result.exitCode}): ${result.stderr.toString().trim()}`)
+  }
+  return stdout
+}
+
+async function runFixtureGhWithInput(
+  ghPath: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string>,
+  input: string
+): Promise<string> {
+  const child = Bun.spawn([ghPath, ...args], { cwd, env, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' })
+  const stdoutText = new Response(child.stdout).text()
+  const stderrText = new Response(child.stderr).text()
+  child.stdin.write(input)
+  child.stdin.end()
+  const { promise: timeout, reject: rejectTimeout } = Promise.withResolvers<number>()
+  const timer = setTimeout(() => rejectTimeout(new Error(`local fixture gh ${args.join(' ')} exceeded 5000ms`)), 5_000)
+  try {
+    const status = await Promise.race([child.exited, timeout])
+    const [stdout, stderr] = await Promise.all([stdoutText, stderrText])
+    if (status !== 0) throw new Error(`local fixture gh ${args.join(' ')} failed (${status}): ${stderr.trim()}`)
+    return stdout
+  } finally {
+    clearTimeout(timer)
+    if (child.exitCode === null) {
+      child.kill('SIGTERM')
+      const stopped = await Promise.race([child.exited.then(() => true), Bun.sleep(250).then(() => false)])
+      if (!stopped) {
+        child.kill('SIGKILL')
+        await Promise.race([child.exited, Bun.sleep(250)])
+      }
+    }
+    await Promise.allSettled([stdoutText, stderrText])
+  }
 }
 
 const temporaryHomes: string[] = []
@@ -325,6 +368,28 @@ test('isolated provider logins write disposable credentials and guard the host K
   }
 })
 
+test('primary fixture tracks a divergent local bare origin with ahead and behind commits', async () => {
+  const home = freshHome()
+  const env = createIsolatedRuntimeEnvironment(home)
+  const prepared = await prepareCaptureFixtureHome(home, { timeoutMs: 10_000, env })
+  try {
+    expect(gitOrigin(prepared.repoPath, env)).toBe(TASKS_FIXTURE_ORIGIN)
+    expect(runFixtureGit(prepared.repoPath, ['remote', 'get-url', '--all', 'origin'], env)).toBe(TASKS_FIXTURE_ORIGIN)
+    expect(existsSync(join(home, 'origin.git', 'HEAD'))).toBe(true)
+    expect(runFixtureGit(prepared.repoPath, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'], env))
+      .toBe('origin/main')
+
+    const [ahead, behind] = runFixtureGit(prepared.repoPath, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'], env)
+      .split(/\s+/u).map(Number)
+    expect(ahead).toBeGreaterThanOrEqual(1)
+    expect(behind).toBeGreaterThanOrEqual(1)
+    expect(runFixtureGit(prepared.repoPath, ['ls-remote', 'origin', 'refs/heads/main'], env))
+      .toMatch(/\trefs\/heads\/main$/u)
+  } finally {
+    prepared.cleanup()
+  }
+})
+
 test('fake gh answers the Reviews routes and delegates other commands to the Tasks fixture', async () => {
   const home = freshHome()
   const env = createIsolatedRuntimeEnvironment(home)
@@ -354,6 +419,74 @@ test('fake gh answers the Reviews routes and delegates other commands to the Tas
         '-X', 'GET'
       ], home, env))).toEqual([])
     }
+
+    runFixtureGit(prepared.repoPath, ['branch', CHECKS_FIXTURE_BRANCH], env)
+    const checksHeadSha = runFixtureGit(prepared.repoPath, ['rev-parse', `refs/heads/${CHECKS_FIXTURE_BRANCH}`], env)
+    const checksBaseSha = runFixtureGit(prepared.repoPath, ['rev-parse', 'refs/remotes/origin/main'], env)
+    expect(checksHeadSha).toMatch(/^[a-f0-9]{40}$/u)
+    expect(checksBaseSha).toMatch(/^[a-f0-9]{40}$/u)
+    expect(runFixtureGit(prepared.repoPath, ['rev-parse', `refs/heads/${CHECKS_FIXTURE_BRANCH}`], env)).toBe(checksHeadSha)
+    const checksPull = JSON.parse(runFixtureGh(gh, [
+      'api',
+      '--hostname', 'github.com',
+      `repos/${TASKS_FIXTURE_OWNER}/${TASKS_FIXTURE_REPO}/pulls?head=fixture-owner:${CHECKS_FIXTURE_BRANCH}&state=all&per_page=100`,
+      '-X', 'GET'
+    ], home, env))
+    expect(checksPull).toMatchObject([{
+      number: 33,
+      state: 'open',
+      head: {
+        ref: CHECKS_FIXTURE_BRANCH,
+        sha: checksHeadSha,
+        repo: { name: TASKS_FIXTURE_REPO, owner: { login: TASKS_FIXTURE_OWNER } }
+      },
+      base: { ref: 'main', sha: checksBaseSha }
+    }])
+
+    const review = JSON.parse(runFixtureGh(gh, [
+      'pr', 'view', '33', '--repo', `${TASKS_FIXTURE_OWNER}/${TASKS_FIXTURE_REPO}`,
+      '--json', 'number,title,state,url,headRefName,baseRefName,headRefOid,statusCheckRollup'
+    ], home, env))
+    expect(review).toMatchObject({
+      number: 33,
+      state: 'OPEN',
+      headRefName: CHECKS_FIXTURE_BRANCH,
+      baseRefName: 'main',
+      headRefOid: checksHeadSha,
+      statusCheckRollup: [
+        { name: 'CI / unit', status: 'COMPLETED', conclusion: 'SUCCESS' },
+        { name: 'CI / lint', status: 'COMPLETED', conclusion: 'FAILURE' }
+      ]
+    })
+    expect(JSON.parse(runFixtureGh(gh, [
+      'pr', 'checks', '33', '--json', 'name,state,link', '--repo', `${TASKS_FIXTURE_OWNER}/${TASKS_FIXTURE_REPO}`
+    ], home, env))).toEqual([
+      { name: 'CI / unit', state: 'SUCCESS', link: expect.any(String) },
+      { name: 'CI / lint', state: 'FAILURE', link: expect.any(String) }
+    ])
+
+    const restReview = JSON.parse(runFixtureGh(gh, [
+      'api', '--hostname', 'github.com',
+      `repos/${TASKS_FIXTURE_OWNER}/${TASKS_FIXTURE_REPO}/pulls/33`, '-X', 'GET'
+    ], home, env))
+    expect(restReview).toMatchObject({
+      number: 33,
+      state: 'open',
+      head: { ref: CHECKS_FIXTURE_BRANCH, sha: checksHeadSha },
+      base: { ref: 'main', sha: checksBaseSha }
+    })
+
+    const rollup = JSON.parse(await runFixtureGhWithInput(gh, [
+      'api', '--hostname', 'github.com', 'graphql', '-X', 'POST', '--input', '-'
+    ], home, env, JSON.stringify({
+      query: 'query HostingChecksRollup { repository { pullRequest { headRefOid } } }',
+      variables: { owner: TASKS_FIXTURE_OWNER, name: TASKS_FIXTURE_REPO, number: 33 }
+    })))
+    expect(rollup.data.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.contexts.nodes)
+      .toMatchObject([
+        { name: 'CI / unit', status: 'COMPLETED', conclusion: 'SUCCESS' },
+        { name: 'CI / lint', status: 'COMPLETED', conclusion: 'FAILURE' }
+      ])
     expect(JSON.parse(runFixtureGh(gh, [
       'api',
       `repos/${TASKS_FIXTURE_OWNER}/${TASKS_FIXTURE_REPO}/pulls?head=fixture-owner:feature/capture-fixture-tasks&state=all&per_page=100`,

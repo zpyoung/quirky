@@ -308,7 +308,7 @@ export async function prepareCaptureFixtureHome(
     path: project === PRIMARY_PROJECT ? repoPath : join(root, 'projects', project)
   }))
   const worktreesRoot = join(root, 'worktrees')
-  const createdPaths = [...projects.map((project) => project.path), worktreesRoot, join(root, 'tasks-fixture'), join(root, 'fakebin'), join(root, 'providers'), join(root, 'transcripts')]
+  const createdPaths = [...projects.map((project) => project.path), worktreesRoot, join(root, 'tasks-fixture'), join(root, 'fakebin'), join(root, 'providers'), join(root, 'transcripts'), join(root, 'origin.git'), join(root, 'origin-seed')]
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
@@ -344,8 +344,25 @@ export async function prepareCaptureFixtureHome(
     await runGit(['-C', repoPath, 'config', 'user.email', 'ui-review-fixture@localhost'], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'add', '--all'], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'commit', '-m', 'Seed UI screenshot fixture'], root, env, options.timeoutMs, options.signal)
+    const bareOrigin = join(root, 'origin.git')
+    const remoteSeed = join(root, 'origin-seed')
+    await runGit(['init', '--bare', '--initial-branch=main', bareOrigin], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'remote', 'add', 'origin', tasks.originUrl], root, env, options.timeoutMs, options.signal)
     await runGit(['-C', repoPath, 'config', '--local', 'core.sshCommand', tasks.sshCommand], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'push', 'origin', 'main'], root, env, options.timeoutMs, options.signal)
+
+    await runGit(['clone', bareOrigin, remoteSeed], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', remoteSeed, 'config', 'user.name', 'UI Screenshot Fixture'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', remoteSeed, 'config', 'user.email', 'ui-review-fixture@localhost'], root, env, options.timeoutMs, options.signal)
+    writeFile(remoteSeed, 'origin-only.txt', 'A commit made on the local bare origin.\n')
+    await runGit(['-C', remoteSeed, 'add', 'origin-only.txt'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', remoteSeed, 'commit', '-m', 'Advance the local bare origin'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', remoteSeed, 'push', 'origin', 'main'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'fetch', 'origin'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'branch', '--set-upstream-to=origin/main', 'main'], root, env, options.timeoutMs, options.signal)
+    writeFile(repoPath, 'src/local-review-fixture.ts', 'export const localReviewFixture = true\n')
+    await runGit(['-C', repoPath, 'add', 'src/local-review-fixture.ts'], root, env, options.timeoutMs, options.signal)
+    await runGit(['-C', repoPath, 'commit', '-m', 'Add a local Reviews fixture commit'], root, env, options.timeoutMs, options.signal)
 
     for (const project of projects.filter((candidate) => candidate.path !== repoPath)) {
       writeFile(project.path, 'README.md', `# ${project.name}\n\nA second disposable project for renderer capture.\n`)

@@ -17,7 +17,9 @@ const FIXED_TARGETS = [
   'overlay:quirky.editor/close',
   'overlay:quirky.editor/quick-open',
   'overlay:quirky.handoff/dialog',
-  'view:quirky.accounts/session-accessory'
+  'view:quirky.accounts/session-accessory',
+  'status-bar:quirky.git/ahead-behind',
+  'status-bar:quirky.reviews/checks'
 ]
 
 test('plugin fixture surfaces capture in both themes without failures', async () => {
@@ -38,7 +40,7 @@ test('plugin fixture surfaces capture in both themes without failures', async ()
       signal: AbortSignal.timeout(890_000)
     })
     expect(manifest.failures).toEqual([])
-    expect(manifest.captures).toHaveLength(22)
+    expect(manifest.captures).toHaveLength(2 * FIXED_TARGETS.length)
     for (const targetId of FIXED_TARGETS) {
       for (const theme of ['dark', 'light']) {
         expect(manifest.captures.find((cell) => cell.targetId === targetId && cell.theme === theme)?.status).toBe('captured')

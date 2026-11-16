@@ -23,6 +23,7 @@ import {
   type RegisteredCaptureFixtures,
   type TranscriptFixture
 } from './fixtures'
+import { CHECKS_FIXTURE_BRANCH } from './tasks-fixture'
 import { createRemoteFixtures, type RemoteFixtures } from './remote-fixtures'
 import { captureBrowserExecutable } from './browser'
 import {
@@ -434,21 +435,25 @@ async function waitForRendererModel(runtime: CaptureRuntime): Promise<void> {
   await runtime.page.locator('.tool-shell__stripe').first().waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
 }
 
-async function openAccountsSessionContext(runtime: CaptureRuntime): Promise<void> {
+async function openLocalWorktreeContext(
+  runtime: CaptureRuntime,
+  worktree = runtime.fixtures.primaryWorktree
+): Promise<void> {
   const view = runtime.model.views.find((candidate) => candidate.id === 'view:quirky.session/worktree')
-  if (!view) throw new Error('the local session worktree view is unavailable for Accounts fixture preparation')
+  if (!view) throw new Error('the local session worktree view is unavailable for fixture preparation')
+  const usePrimarySession = worktree.id === runtime.fixtures.primaryWorktree.id
   const target: CaptureTarget = { id: view.id, plugin: view.plugin, title: view.title, kind: 'view' }
   const input = fixtureViewInput(
-    runtime.fixtures,
+    { ...runtime.fixtures, primaryWorktree: worktree },
     target,
     runtime.editorBuffer,
-    runtime.terminalFixture,
+    usePrimarySession ? runtime.terminalFixture : null,
     runtime.structuredSessionId,
     {
       transcript: runtime.transcriptFixture,
       loop: runtime.loopFixture,
       remote: runtime.remoteFixtures,
-      cellTerminal: runtime.cellTerminalFixture
+      cellTerminal: usePrimarySession ? runtime.cellTerminalFixture : null
     }
   )
   await rpc(runtime.client, 'ui.view.open', { id: view.id, input }, runtime.options.timeoutMs, runtime.options.signal)
@@ -900,7 +905,7 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
       throw new Error(`unsupported host target ${target.id}`)
     case 'view': {
       if (target.id === 'view:quirky.accounts/session-accessory') {
-        await openAccountsSessionContext(runtime)
+        await openLocalWorktreeContext(runtime)
         await prepareAccountsStaleSession(runtime, 'codex')
       }
       const input = fixtureViewInput(runtime.fixtures, target, runtime.editorBuffer, runtime.terminalFixture, runtime.structuredSessionId, {
@@ -934,7 +939,7 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
     }
     case 'overlay':
       if (target.id === 'overlay:quirky.accounts/switch-dialog') {
-        await openAccountsSessionContext(runtime)
+        await openLocalWorktreeContext(runtime)
         await prepareAccountsStaleSession(runtime, 'claude')
         await waitForOverlay(
           runtime,
@@ -1032,7 +1037,19 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
     case 'sidebar-section':
     case 'activity-item':
     case 'status-bar':
-      if (target.plugin === 'quirky.editor' || target.plugin === 'quirky.git') await openWorktreeContext(runtime)
+      if (target.id === 'status-bar:quirky.reviews/checks') {
+        const worktree = runtime.fixtures.worktrees.find((entry) =>
+          entry.repoId === runtime.fixtures.repo.id && entry.name === CHECKS_FIXTURE_BRANCH)
+        if (!worktree) throw new Error('the Reviews checks fixture worktree is unavailable')
+        await openLocalWorktreeContext(runtime, worktree)
+        const refreshed = record(await rpc(runtime.client, 'quirky.reviews/checksRefresh',
+          { worktree: worktree.id, force: true }, runtime.options.timeoutMs, runtime.options.signal))
+        if (refreshed.ok !== true) throw new Error(`Reviews checks fixture refresh failed: ${String(refreshed.error ?? refreshed.kind ?? 'unknown')}`)
+      } else if (target.id === 'status-bar:quirky.git/ahead-behind') {
+        await openLocalWorktreeContext(runtime)
+      } else if (target.plugin === 'quirky.editor' || target.plugin === 'quirky.git') {
+        await openWorktreeContext(runtime)
+      }
       await openSurfaceTool(runtime, target)
       return
   }
