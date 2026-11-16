@@ -65,7 +65,7 @@ function nonblankActions(value: unknown): value is string[] {
   return true
 }
 
-function canonicalContext(context: UiPluginContext): UiPluginContext {
+export function canonicalContext(context: UiPluginContext): UiPluginContext {
   return scopesByContext.get(context)?.owner ?? context
 }
 

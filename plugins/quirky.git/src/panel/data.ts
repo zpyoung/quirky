@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GitCompare, GitStatus, UiPluginContext, Worktree } from '@quirky/protocol'
 import { conflictBlocks } from '../view/conflict-markers'
 import { dataOf, messageOf } from './format'
+import { readWindowStatus, subscribeWindowStatus } from '../status-resource'
 
 export const STATUS_POLL_MS = 3000
 export const COMPARE_POLL_MS = 30_000
@@ -118,8 +119,8 @@ export type StatusData = {
 const NO_PATHS: ReadonlySet<string> = new Set()
 
 /**
- * Polls `quirky.git/status` every 3 seconds while mounted and again on this worktree's
- * `quirky.git/changed` events. An unchanged result keeps the previous object so nothing re-renders.
+ * Shares bounded status reads with the other Git surfaces. Equal snapshots and readiness sets
+ * keep their existing object identities so an unchanged repository does not re-render.
  */
 export function useStatus(context: UiPluginContext, worktree: string): StatusData {
   const [status, setStatus] = useState<GitStatus | null>(null)
@@ -129,45 +130,81 @@ export function useStatus(context: UiPluginContext, worktree: string): StatusDat
   const [unreadableConflicts, setUnreadableConflicts] = useState<ReadonlySet<string>>(NO_PATHS)
   const newest = useRef(0)
   const alive = useRef(true)
+  const refreshes = useRef(new Set<AbortController>())
+  const processing = useRef<{ status: GitStatus; promise: Promise<void> } | null>(null)
+
+  const applyStatus = useCallback((next: GitStatus): Promise<void> => {
+    if (!alive.current) return Promise.resolve()
+    const pending = processing.current
+    if (pending?.status === next) return pending.promise
+
+    const ticket = ++newest.current
+    const promise = findConflictReadiness(context, worktree, next).then((readiness) => {
+      if (!alive.current || ticket !== newest.current) return
+      setStatus((previous) => (same(previous, next) ? previous : next))
+      setMarkersGone((previous) =>
+        same([...previous].sort(), [...readiness.markersGone].sort()) ? previous : readiness.markersGone)
+      setUnreadableConflicts((previous) =>
+        same([...previous].sort(), [...readiness.unreadableConflicts].sort()) ? previous : readiness.unreadableConflicts)
+      setError(null)
+      setUnavailable(null)
+    })
+    const current = { status: next, promise }
+    processing.current = current
+    void promise.then(
+      () => {
+        if (processing.current === current) processing.current = null
+      },
+      () => {
+        if (processing.current === current) processing.current = null
+      }
+    )
+    return promise
+  }, [context, worktree])
+
+  const onStatus = useCallback((result: { status: GitStatus | null; error: unknown | null }) => {
+    if (!alive.current) return
+    if (result.status !== null) {
+      void applyStatus(result.status)
+      return
+    }
+    if (result.error === null) return
+    newest.current += 1
+    if (dataOf(result.error).reason === 'folder-workspace') setUnavailable(messageOf(result.error))
+    else setError(messageOf(result.error))
+  }, [applyStatus])
 
   const refresh = useMemo(() => {
     async function refresh(): Promise<GitStatus | null> {
-      const ticket = ++newest.current
+      newest.current += 1
+      processing.current = null
+      const controller = new AbortController()
+      refreshes.current.add(controller)
       try {
-        const next = (await context.call('quirky.git/status', { worktree })) as GitStatus
-        const readiness = await findConflictReadiness(context, worktree, next)
-        if (!alive.current || ticket !== newest.current) return next
-        setStatus((prev) => (same(prev, next) ? prev : next))
-        setMarkersGone((prev) => (same([...prev].sort(), [...readiness.markersGone].sort()) ? prev : readiness.markersGone))
-        setUnreadableConflicts((prev) => (same([...prev].sort(), [...readiness.unreadableConflicts].sort()) ? prev : readiness.unreadableConflicts))
-        setError(null)
-        setUnavailable(null)
+        const next = await readWindowStatus(context, worktree, { fresh: true, signal: controller.signal })
+        if (!alive.current || controller.signal.aborted) return null
+        await applyStatus(next)
         return next
-      } catch (e) {
-        if (!alive.current || ticket !== newest.current) return null
-        if (dataOf(e).reason === 'folder-workspace') setUnavailable(messageOf(e))
-        else setError(messageOf(e))
+      } catch {
         return null
+      } finally {
+        refreshes.current.delete(controller)
       }
     }
     return refresh
-  }, [context, worktree])
+  }, [applyStatus, context, worktree])
 
   useEffect(() => {
     alive.current = true
-    void refresh()
-    const timer = setInterval(() => void refresh(), STATUS_POLL_MS)
-    const unsubscribe = context.subscribe((event) => {
-      if (event.type !== 'quirky.git/changed') return
-      const id = (event.data as { worktreeId?: unknown } | undefined)?.worktreeId
-      if (typeof id !== 'string' || id === worktree) void refresh()
-    })
+    const unsubscribe = subscribeWindowStatus(context, worktree, STATUS_POLL_MS, onStatus)
     return () => {
       alive.current = false
-      clearInterval(timer)
+      newest.current += 1
+      for (const controller of refreshes.current) controller.abort()
+      refreshes.current.clear()
       unsubscribe()
     }
-  }, [context, worktree, refresh])
+  }, [context, onStatus, worktree])
 
   return { status, error, unavailable, markersGone, unreadableConflicts, refresh }
 }
