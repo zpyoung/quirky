@@ -442,6 +442,9 @@ button.ui-status-bar-item:focus-visible {
 .shell-palette .ui-text-field__input {
   background: var(--ui-transparent);
   border-color: var(--ui-transparent);
+}
+
+.shell-palette .ui-text-field__input:focus {
   outline: none;
 }
 
@@ -493,6 +496,10 @@ button.ui-status-bar-item:focus-visible {
 
 .window-bar__new-agent svg {
   color: var(--ui-hue-coral);
+}
+
+.ui-dialog:has(#settings-form) {
+  box-shadow: 0 var(--ui-space-8) var(--ui-space-24) var(--ui-shadow);
 }
 
 .ui-dialog:has(#settings-form) .ui-dialog__close {
