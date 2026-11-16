@@ -1180,7 +1180,7 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
       </div>
       {snapshot.view.host === 'local' && !snapshot.searchStatus?.enabled ? <SearchDisclosure enabled={false} busy={snapshot.searchStatus === null} searchTip={snapshot.searchTip} onEnable={() => void model.setSearchEnabled(true, 'local').catch((error) => context.toast('Could not enable search', `Try again. ${messageOf(error)}`))} /> : null}
       <div className="qvh-query-status" role="status" aria-live="polite" data-vault-query-status data-vault-search-error={snapshot.search.error ? 'true' : undefined}>
-        {searchMessage.message}
+        {searchMessage.message !== null ? <NoticeLine>{searchMessage.message}</NoticeLine> : null}
         {searchMessage.repaired ? <span data-vault-query-repaired>{searchMessage.repaired}</span> : null}
         {searchMessage.limits.map((limit) => <span key={limit.id} data-vault-truncation={limit.id}>{limit.text}</span>)}
         {searchMessage.retry && snapshot.view.query.trim() ? <Button data-vault-retry-search disabled={snapshot.search.loading} onClick={() => void model.runSearch({ freshness: 'wait-until-current' })}>Retry search</Button> : null}
@@ -1217,8 +1217,8 @@ function HistoryPanel({ context, controller, report }: HistoryPanelProps) {
     <div className="qvh-scan-strip" data-vault-scan-status={snapshot.list.loading ? 'scanning' : 'settled'}>
       {snapshot.list.loading ? <><NoticeLine>Scanning {snapshot.scanProgress?.scannedFiles ?? 0} files{snapshot.scanProgress?.current ? ` · ${snapshot.scanProgress.current}` : ''}</NoticeLine><span className="qvh-progress"><span /></span><span>{model.scanElapsed(now)}</span></> : <><span>Scanned {snapshot.list.result?.scannedFiles ?? 0} files</span><span>{model.ageText(now)}</span><span>{snapshot.list.result?.total ?? 0} sessions</span></>}
     </div>
-    {snapshot.hostOutcomes.filter((host) => host.kind !== 'ok').map((host) => <div className="qvh-issue" role="status" key={host.hostId}>{host.label}: {host.reason ?? (host.kind === 'unavailable' ? 'This host does not provide history search.' : 'This host could not be reached.')}</div>)}
-    {snapshot.list.result?.issues.map((issue, index) => <div className="qvh-issue" role="status" key={`${issue.hostId}:${issue.filePath ?? issue.root ?? index}`}>{issue.kind === 'notice' ? 'Notice: ' : 'History source issue: '}{issue.reason}</div>)}
+    {snapshot.hostOutcomes.filter((host) => host.kind !== 'ok').map((host) => <div className="qvh-issue" role="status" key={host.hostId}><NoticeLine>{host.label}: {host.reason ?? (host.kind === 'unavailable' ? 'This host does not provide history search.' : 'This host could not be reached.')}</NoticeLine></div>)}
+    {snapshot.list.result?.issues.map((issue, index) => <div className="qvh-issue" role="status" key={`${issue.hostId}:${issue.filePath ?? issue.root ?? index}`}><NoticeLine>{issue.kind === 'notice' ? 'Notice: ' : 'History source issue: '}{issue.reason}</NoticeLine></div>)}
     {snapshot.list.error ? <InlineError message={snapshot.list.error} action={{ label: 'Retry', onAction: () => snapshot.viewReady ? void model.refreshList(true) : void model.retryView() }} /> : null}
     <div className="qvh-sortbar">
       <strong>{snapshot.view.query.trim() && snapshot.searchStatus?.enabled ? `${snapshot.search.response?.kind === 'results' ? snapshot.search.response.hits.length : 0} matches` : `${allRows.length} of ${snapshot.list.result?.total ?? 0} sessions`}</strong>
