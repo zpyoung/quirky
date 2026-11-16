@@ -125,6 +125,13 @@ function navigation(page: AutomationNavigation['page'], patch: Partial<Automatio
 }
 
 const emptyEditorData: AutomationEditorData = { hosts: [], projects: [], workspaces: [], agents: [], errors: [] }
+const labeledEditorData: AutomationEditorData = {
+  hosts: [{ id: 'local', label: 'Local build host', available: true }],
+  projects: [{ id: 'repo-1', name: 'Sample project', hostId: 'local', path: '/repo-1', kind: 'git' }],
+  workspaces: [],
+  agents: [{ id: 'claude', label: 'Claude Code', enabled: true, installed: true, isDefault: true }],
+  errors: []
+}
 
 function makeRig(options: {
   definitions?: AutomationDefinition[]
@@ -313,6 +320,44 @@ function expectNotice(container: HTMLElement, text: string): HTMLElement {
 
 function noticeActions(line: HTMLElement): string[] {
   return [...line.querySelectorAll<HTMLButtonElement>('.ui-notice-line__action')].map((button) => button.textContent?.trim() ?? '')
+}
+
+function metricByLabel(container: HTMLElement, label: string): HTMLElement {
+  const metric = [...container.querySelectorAll<HTMLElement>('.auto-metric')]
+    .find((candidate) => candidate.querySelector('strong')?.textContent === label)
+  if (!metric) throw new Error(`Missing metric: ${label}`)
+  return metric
+}
+
+function sharedNotice(parent: ParentNode): HTMLElement {
+  const line = parent.querySelector<HTMLElement>('[role="status"] > .ui-notice-line')
+  if (!line) throw new Error('Missing NoticeLine in a status wrapper')
+  expect(line.parentElement?.getAttribute('role')).toBe('status')
+  expect(line.parentElement?.tagName).toBe('DIV')
+  expect(line.closest('span')).toBeNull()
+  return line
+}
+
+function expectSharedNotice(parent: ParentNode, text: string): HTMLElement {
+  const line = sharedNotice(parent)
+  expect(line.querySelector('.ui-notice-line__text')?.textContent?.trim()).toBe(text)
+  return line
+}
+
+function expectMetricNotice(container: HTMLElement, label: string, text: string): HTMLElement {
+  return expectSharedNotice(metricByLabel(container, label), text)
+}
+
+function expectCellNotice(row: HTMLTableRowElement, index: number, text: string): HTMLElement {
+  const cell = row.cells.item(index)
+  if (!cell) throw new Error(`Missing list cell ${index}`)
+  return expectSharedNotice(cell, text)
+}
+
+function rowByKey(container: HTMLElement, key: string): HTMLTableRowElement {
+  const row = container.querySelector<HTMLTableRowElement>(`tr[data-row-key="${key}"]`)
+  if (!row) throw new Error(`Missing automation row: ${key}`)
+  return row
 }
 
 type DeferredRig = {
@@ -907,14 +952,17 @@ test('stale usage reads are dropped after changing automation or reloading histo
   const usageA = deferCalls(switchRig, `${API}runs`, (params) => params.limit === 100 && params.automationId === automationA)
   const switchContainer = await switchRig.mount('detail', { automationId: automationA, tab: 'overview' })
   await settle()
+  expectMetricNotice(switchContainer, 'Last run', 'Loading…')
   const staleUsage = usageA.pending.at(-1)
   if (!staleUsage) throw new Error('Missing deferred usage read for automation A')
   usageA.stop()
   await switchRig.render({ automationId: automationB })
   await settle()
+  expect(metricByLabel(switchContainer, 'Last run').textContent).toContain('No runs yet')
   await act(async () => staleUsage.result.reject(new Error('Usage store offline.')))
   await settle()
   expect(switchContainer.textContent).not.toContain('Usage store offline.')
+  expect(metricByLabel(switchContainer, 'Last run').textContent).toContain('No runs yet')
 
   const reloadRig = makeRig()
   const stopInitialFailure = reloadRig.respond(
@@ -1129,4 +1177,159 @@ test('a pending external delete description serializes other rows and cannot reo
   expect(container.querySelector('[role="dialog"]')).toBeNull()
   expect(rig.calls).toHaveLength(callsBeforeCancel)
   expectNoRawStateClasses(container)
+})
+
+test('pending overview usage renders a shared notice in every metric and completed empty history keeps its copy', async () => {
+  const rig = makeRig()
+  const usageReads = deferCalls(rig, `${API}runs`, (params) => params.limit === 100)
+  const container = await rig.mount('detail', { automationId: AUTOMATION_ID, tab: 'overview' })
+  await settle()
+  const pendingUsage = usageReads.pending.at(-1)
+  if (!pendingUsage) throw new Error('Missing deferred overview usage read')
+
+  expectMetricNotice(container, 'Last run', 'Loading…')
+  expectMetricNotice(container, 'Est. spend', 'Loading…')
+  expectMetricNotice(container, 'Tokens', 'Loading…')
+  expectMetricNotice(container, 'Usage coverage', 'Loading run history…')
+
+  usageReads.stop()
+  await act(async () => pendingUsage.result.resolve({ runs: [], nextCursor: null }))
+  await settle()
+  expect(metricByLabel(container, 'Last run').textContent).toContain('No runs yet')
+  expect(metricByLabel(container, 'Est. spend').textContent).toContain('Not available yet')
+  expect(metricByLabel(container, 'Tokens').textContent).toContain('Not available yet')
+  expect(metricByLabel(container, 'Usage coverage').textContent).toContain('No runs')
+  expect(metricByLabel(container, 'Last run').querySelector('.ui-notice-line')).toBeNull()
+  expect(metricByLabel(container, 'Est. spend').querySelector('.ui-notice-line')).toBeNull()
+  expect(metricByLabel(container, 'Tokens').querySelector('.ui-notice-line')).toBeNull()
+  expect(metricByLabel(container, 'Usage coverage').querySelector('.ui-notice-line')).toBeNull()
+})
+
+test('overview read failures and dated status fallbacks use shared Last run notices', async () => {
+  const failedUsage = makeRig()
+  failedUsage.respond(`${API}runs`, () => Promise.reject(new Error('Usage store offline.')), (params) => params.limit === 100, false)
+  const failedContainer = await failedUsage.mount('detail', { automationId: AUTOMATION_ID, tab: 'overview' })
+  await settle()
+  expectMetricNotice(failedContainer, 'Last run', 'Run history unavailable')
+  expect(metricByLabel(failedContainer, 'Est. spend').textContent).not.toContain('$0')
+  expect(metricByLabel(failedContainer, 'Tokens').textContent).not.toContain('0 tokens')
+
+  const datedDefinition = { ...definition(), lastRunAt: 1_700_000_000_000 }
+  const datedRig = makeRig({ definitions: [datedDefinition] })
+  const datedUsage = deferCalls(datedRig, `${API}runs`, (params) => params.limit === 100)
+  const datedContainer = await datedRig.mount('detail', { automationId: AUTOMATION_ID, tab: 'overview' })
+  await settle()
+  const completedEmptyRead = datedUsage.pending.at(-1)
+  if (!completedEmptyRead) throw new Error('Missing deferred dated usage read')
+  datedUsage.stop()
+  await act(async () => completedEmptyRead.result.resolve({ runs: [], nextCursor: null }))
+  await settle()
+  const datedNotice = sharedNotice(metricByLabel(datedContainer, 'Last run'))
+  expect(datedNotice.querySelector('.ui-notice-line__text')?.textContent).toContain(' · status unavailable')
+  expect(metricByLabel(datedContainer, 'Last run').textContent).not.toContain('Run history unavailable')
+})
+
+test('deferred and rejected list history renders shared notices in both cells and preserves row actions and tooltips', async () => {
+  const rig = makeRig({ editorData: labeledEditorData })
+  const historyReads = deferCalls(rig, `${API}runs`, (params) => params.limit === 1)
+  const container = await rig.mount('list')
+  await settle()
+  const pendingHistory = historyReads.pending.at(-1)
+  if (!pendingHistory) throw new Error('Missing deferred list last-run read')
+  const row = rowByKey(container, `native:${AUTOMATION_ID}`)
+  expectCellNotice(row, 5, 'Loading…')
+  expectCellNotice(row, 7, 'Loading run usage…')
+  expect(row.cells[0]?.textContent).toContain('Nightly review')
+  expect(row.cells[1]?.textContent?.trim()).not.toBe('')
+  expect(row.cells[7]?.textContent).toContain('Claude Code')
+  expect(row.querySelector('.auto-row-menu__trigger')).not.toBeNull()
+  expect(row.cells[7]?.getAttribute('title')).toBe('Claude Code · Local build host · Loading run usage…')
+
+  historyReads.stop()
+  await act(async () => pendingHistory.result.reject(new Error('History store offline.')))
+  await settle()
+  const failedRow = rowByKey(container, `native:${AUTOMATION_ID}`)
+  expectCellNotice(failedRow, 5, 'History unavailable')
+  expectCellNotice(failedRow, 7, 'Usage unavailable')
+  expect(failedRow.cells[0]?.textContent).toContain('Nightly review')
+  expect(failedRow.cells[1]?.textContent?.trim()).not.toBe('')
+  expect(failedRow.cells[7]?.textContent).toContain('Claude Code')
+  expect(failedRow.querySelector('.auto-row-menu__trigger')).not.toBeNull()
+  expect(failedRow.cells[7]?.getAttribute('title')).toBe('Claude Code · Local build host · Usage unavailable')
+})
+
+test('completed list reads keep formatted, absent, and external usage as ordinary tooltip data', async () => {
+  const knownAutomation = definition('Known usage', 'automation-known')
+  const missingAutomation = definition('Missing usage', 'automation-missing')
+  const emptyAutomation = definition('No prior run', 'automation-empty')
+  const knownRun = run({
+    id: 'known-usage-run',
+    automationId: knownAutomation.id,
+    usage: { status: 'known', estimatedCostUsd: 0.42, totalTokens: 1_200 }
+  })
+  const missingRun = run({
+    id: 'missing-usage-run',
+    automationId: missingAutomation.id,
+    usage: null
+  })
+  const rig = makeRig({
+    definitions: [knownAutomation, missingAutomation, emptyAutomation],
+    runs: [knownRun, missingRun],
+    managers: [externalManager()],
+    editorData: labeledEditorData
+  })
+  const container = await rig.mount('list')
+  await settle()
+  const formattedTokens = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(1_200)
+  const knownRow = rowByKey(container, `native:${knownAutomation.id}`)
+  expect(knownRow.cells[5]?.textContent).toContain('Done')
+  expect(knownRow.cells[7]?.textContent).toContain(`$0.42 est. · ${formattedTokens} tokens`)
+  expect(knownRow.cells[7]?.querySelector('.ui-notice-line')).toBeNull()
+  expect(knownRow.cells[7]?.getAttribute('title')).toBe(`Claude Code · Local build host · $0.42 est. · ${formattedTokens} tokens`)
+
+  const missingRow = rowByKey(container, `native:${missingAutomation.id}`)
+  expect(missingRow.cells[7]?.textContent).toContain('Usage unavailable')
+  expect(missingRow.cells[7]?.querySelector('.ui-notice-line')).toBeNull()
+  expect(missingRow.cells[7]?.getAttribute('title')).toBe('Claude Code · Local build host · Usage unavailable')
+
+  const emptyRow = rowByKey(container, `native:${emptyAutomation.id}`)
+  expect(emptyRow.cells[5]?.textContent).toContain('Never ran')
+  expect(emptyRow.cells[7]?.textContent).toContain('No run usage yet')
+  expect(emptyRow.cells[7]?.querySelector('.ui-notice-line')).toBeNull()
+  expect(emptyRow.cells[7]?.getAttribute('title')).toBe('Claude Code · Local build host · No run usage yet')
+
+  const externalRow = rowByKey(container, 'external:openclaw:local:job-1')
+  expect(externalRow.cells[7]?.textContent).toContain('External scheduler')
+  expect(externalRow.cells[7]?.querySelector('.ui-notice-line')).toBeNull()
+  expect(externalRow.cells[7]?.getAttribute('title')).toBe('External · OpenClaw · External scheduler')
+})
+
+test('last-good overview usage remains visible during a deferred refresh and updates when it resolves', async () => {
+  const rig = makeRig({
+    runs: [run({ usage: { status: 'known', estimatedCostUsd: 0.25, totalTokens: 750 } })]
+  })
+  const container = await rig.mount('detail', { automationId: AUTOMATION_ID, tab: 'overview' })
+  await settle()
+  expect(metricByLabel(container, 'Est. spend').textContent).toContain('$0.25')
+  expect(metricByLabel(container, 'Tokens').textContent).toContain('750 tokens')
+
+  const refreshReads = deferCalls(rig, `${API}runs`, (params) => params.limit === 100)
+  await rig.emitChanged()
+  await settle()
+  const pendingRefresh = refreshReads.pending.at(-1)
+  if (!pendingRefresh) throw new Error('Missing deferred last-good usage refresh')
+  expect(metricByLabel(container, 'Est. spend').textContent).toContain('$0.25')
+  expect(metricByLabel(container, 'Tokens').textContent).toContain('750 tokens')
+  expect(metricByLabel(container, 'Est. spend').querySelector('.ui-notice-line')).toBeNull()
+  expect(metricByLabel(container, 'Tokens').querySelector('.ui-notice-line')).toBeNull()
+
+  refreshReads.stop()
+  await act(async () => pendingRefresh.result.resolve({
+    runs: [run({ id: 'new-usage-run', usage: { status: 'known', estimatedCostUsd: 0.5, totalTokens: 1_600 } })],
+    nextCursor: null
+  }))
+  await settle()
+  const formattedTokens = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(1_600)
+  expect(metricByLabel(container, 'Est. spend').textContent).toContain('$0.50')
+  expect(metricByLabel(container, 'Tokens').textContent).toContain(`${formattedTokens} tokens`)
 })

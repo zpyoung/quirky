@@ -11,6 +11,16 @@ export type CaptureTarget = {
   title: string
   kind: 'host' | 'panel' | 'view' | 'sidebar-section' | 'activity-item' | 'status-bar' | 'overlay' | 'settings-section'
 }
+export type ToolNavigationAlias = {
+  declaration: CaptureTarget
+  toolId: string
+  renderedTarget: CaptureTarget
+  reason: 'tool-navigation-alias'
+}
+export type ContributionInventory = {
+  declaredTargets: CaptureTarget[]
+  toolAliases: ToolNavigationAlias[]
+}
 export type ImageEvidence = { path: string; sha256: string }
 export type CaptureEvidence = {
   targetId: string
@@ -32,6 +42,8 @@ export type CaptureManifest = {
   targets: CaptureTarget[]
   captures: CaptureEvidence[]
   failures: string[]
+  contributionInventory?: ContributionInventory
+  activatedVisibilitySettings?: string[]
 }
 export type CaptureOptions = {
   repoRoot: string

@@ -69,9 +69,11 @@ test('Search Settings candidates and static checks pass in the collected invento
   expect(graph.failures).toEqual([])
 
   const candidates = discoverCandidates(vault, graph.files).filter((candidate) => candidate.file === searchSettingsFile)
-  expect(candidates).toHaveLength(36)
-  expect(candidates.filter((candidate) => candidate.category === 'state')).toHaveLength(30)
+  expect(candidates).toHaveLength(37)
+  expect(candidates.filter((candidate) => candidate.category === 'state')).toHaveLength(31)
   expect(candidates.filter((candidate) => candidate.category === 'action')).toHaveLength(6)
+  expect(candidates.filter(({ anchorText }) => anchorText === 'status && (status.filesFailed > 0 || status.degradedRoots.length > 0) ?')
+    .map(({ category, kind }) => ({ category, kind }))).toEqual([{ category: 'state', kind: 'conditional-render' }])
   expect(candidates.filter((candidate) => candidate.kind === 'unresolved-assignment')).toEqual([])
 
   const auditChecks = auditPlugin(inventory, vault)
@@ -86,7 +88,7 @@ test('Search Settings candidates and static checks pass in the collected invento
   expect(pluginChecks.every(({ status }) => status === 'pass')).toBe(true)
 })
 
-test('Search Settings coverage declares exact surfaces, states, notState entries and actions', () => {
+test('Search Settings coverage declares its shared loading and failure branches and actions', () => {
   const fragment = searchSettingsFragment()
   const coverage = parseCoverage(fragment.content)
 
@@ -102,23 +104,20 @@ test('Search Settings coverage declares exact surfaces, states, notState entries
     error: { applicable: false, reason: embeddedReason, evidence: embeddedMountEvidence },
   })
 
-  expect(coverage.states).toHaveLength(4)
-  expect(coverage.states.map(({ state, surface, render }) => `${surface}:${state}:${render.component}`).sort()).toEqual([
-    `${viewSurface}:error:InlineError`,
-    `${viewSurface}:error:InlineError`,
-    `${viewSurface}:loading:NoticeLine`,
-    `${viewSurface}:loading:NoticeLine`,
-  ])
+  expect(coverage.states.map(({ state, surface, anchor, render }) => [surface, state, anchor, render.component]).sort()).toEqual([
+    [viewSurface, 'error', 'hostError !== null ?', 'InlineError'],
+    [viewSurface, 'error', 'state.error ?', 'InlineError'],
+    [viewSurface, 'error', 'state.scopeStatusError ?', 'NoticeLine'],
+    [viewSurface, 'error', 'status && (status.filesFailed > 0 || status.degradedRoots.length > 0) ?', 'NoticeLine'],
+    [viewSurface, 'loading', 'hostError === null && !remoteStatus ?', 'NoticeLine'],
+    [viewSurface, 'loading', 'state.loading ?', 'NoticeLine'],
+  ].sort())
   expect(coverage.states.every(({ site }) => site.file === searchSettingsFile)).toBe(true)
-  expect(coverage.states.map(({ render }) => 'element' in render ? render.element.quote : '').sort()).toEqual([
-    '<InlineError message={hostError} />',
-    '<InlineError message={state.error} />',
-    'data-vault-host-checking><NoticeLine>Checking search status…</NoticeLine>',
-    'data-vault-search-loading><NoticeLine>Checking search status…</NoticeLine>',
-  ])
   expect(coverage.states.every(({ render }) => 'import' in render && render.import.file === searchSettingsFile && render.import.quote.includes("from '@quirky/ui'"))).toBe(true)
 
-  expect(coverage.notState).toHaveLength(22)
+  expect(coverage.notState.filter(({ anchor }) => anchor === 'state.scopeStatusError ?'
+    || anchor === 'status && (status.filesFailed > 0 || status.degradedRoots.length > 0) ?')).toEqual([])
+  expect(coverage.notState).toHaveLength(19)
   expect(coverage.notState.every(({ site, reason }) => site.file === searchSettingsFile && reason.length > 0)).toBe(true)
   expect(coverage.actions).toHaveLength(6)
   expect(coverage.actions.every((action) => 'route' in action && action.site.file === searchSettingsFile && (action.route.via?.length ?? 0) > 0)).toBe(true)

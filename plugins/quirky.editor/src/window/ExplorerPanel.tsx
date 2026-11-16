@@ -1797,7 +1797,7 @@ export function ExplorerPanel({ context, report }: { context: UiPluginContext; r
       {editorStateError && <InlineError message={editorStateError} />}
       {namesFilterError && <InlineError message={namesFilterError} />}
       {treeLoading && <div role="status" aria-live="polite"><NoticeLine>Loading files…</NoticeLine></div>}
-      {gitError && <p className="muted" role="status">Git status unavailable: {gitError}</p>}
+      {gitError && <div role="status" aria-live="polite"><NoticeLine>Git status unavailable: {gitError}</NoticeLine></div>}
       {searchMode === 'names' && namesFilterPending && <div role="status" aria-live="polite"><NoticeLine>Searching files…</NoticeLine></div>}
       {searchMode === 'names' ? (
         <div

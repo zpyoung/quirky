@@ -1380,9 +1380,19 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
             <td>{row.projectName}{definition && definition.workspaceMode === 'existing' && <span className="auto-cell-sub">{detailWorkspace(definition, data.editorData)}</span>}{job?.promptPreview && <span className="auto-cell-sub">{job.promptPreview}</span>}</td>
             <td>{row.hostName}{row.kind === 'external' && manager?.status === 'unavailable' && <span className="auto-cell-sub">Unknown or unavailable host</span>}</td>
             <td>{definition ? formatNextRun(definition.nextRunAt, definition.enabled, definition.timezone) : job ? formatNextRun(parseExternalDate(job.nextRunAt), job.enabled) : 'Unavailable'}</td>
-            <td>{row.lastRunRead === 'loading' ? 'Loading…' : row.lastRunRead === 'unavailable' ? 'History unavailable' : row.lastRunAt === null && row.lastStatus === null ? 'Never ran' : <>{latestStatus(row)}<span className="auto-cell-sub">{row.lastRunAt === null ? 'Time unavailable' : formatRelative(row.lastRunAt, Date.now())}</span></>}{job?.lastError && <span className="auto-cell-sub" title={job.lastError}>{job.lastError.length > 180 ? `${job.lastError.slice(0, 180)}…` : job.lastError}</span>}</td>
+            <td>
+              {row.lastRunRead === 'loading' && <div role="status"><NoticeLine>Loading…</NoticeLine></div>}
+              {row.lastRunRead === 'unavailable' && <div role="status"><NoticeLine>History unavailable</NoticeLine></div>}
+              {row.lastRunRead === 'available' && (row.lastRunAt === null && row.lastStatus === null ? 'Never ran' : <>{latestStatus(row)}<span className="auto-cell-sub">{row.lastRunAt === null ? 'Time unavailable' : formatRelative(row.lastRunAt, Date.now())}</span></>)}
+              {job?.lastError && <span className="auto-cell-sub" title={job.lastError}>{job.lastError.length > 180 ? `${job.lastError.slice(0, 180)}…` : job.lastError}</span>}
+            </td>
             <td><Badge tone={row.enabled ? 'working' : 'neutral'}>{row.enabled ? 'Enabled' : 'Paused'}</Badge>{row.kind === 'external' && <span className="auto-cell-sub">{job?.state ?? externalStatusLabel(row.lastStatus)}</span>}</td>
-            <td title={`${row.agentName ?? 'External'} · ${row.hostName} · ${rowUsage}`}>{row.agentName ?? '—'}<span className="auto-cell-sub">{rowUsage}</span></td>
+            <td title={`${row.agentName ?? 'External'} · ${row.hostName} · ${rowUsage}`}>
+              {row.agentName ?? '—'}
+              {row.lastRunRead === 'loading' && <div role="status"><NoticeLine>Loading run usage…</NoticeLine></div>}
+              {row.lastRunRead === 'unavailable' && <div role="status"><NoticeLine>Usage unavailable</NoticeLine></div>}
+              {row.lastRunRead === 'available' && <span className="auto-cell-sub">{rowUsage}</span>}
+            </td>
             <td>{renderRowMenu(row)}</td>
           </tr>
         })}
@@ -1443,10 +1453,23 @@ export function AutomationsPage(props: AutomationSurfaceProps) {
             <div className="auto-metric"><strong>Agent</strong><span>{agentLabel(data.editorData, definition.agentId)}</span></div>
           </div>}
           <div className="auto-metric-grid">
-            <div className="auto-metric"><strong>Last run</strong><span>{lastRun ? `${statusLabel(lastRun.status)} · ${formatRelative(lastRun.scheduledFor, Date.now())}` : usageUnavailable ? 'Run history unavailable' : definition.lastRunAt !== undefined ? `${formatDate(definition.lastRunAt)} · status unavailable` : usageLoading ? 'Loading…' : 'No runs yet'}</span></div>
-            <div className="auto-metric"><strong>Est. spend</strong><span className={usage.cost === null ? 'auto-usage-missing' : ''}>{usageLoading ? 'Loading…' : usageCostLabel(usage)}</span></div>
-            <div className="auto-metric"><strong>Tokens</strong><span className={usage.tokens === null ? 'auto-usage-missing' : ''}>{usageLoading ? 'Loading…' : usageTokensLabel(usage)}</span></div>
-            <div className="auto-metric"><strong>Usage coverage</strong><span>{usageLoading ? 'Loading run history…' : usageCoverageLabel(usage)}</span></div>
+            <div className="auto-metric">
+              <strong>Last run</strong>
+              {lastRun ? <span>{`${statusLabel(lastRun.status)} · ${formatRelative(lastRun.scheduledFor, Date.now())}`}</span>
+                : usageUnavailable ? <div role="status"><NoticeLine>Run history unavailable</NoticeLine></div>
+                  : definition.lastRunAt !== undefined ? <div role="status"><NoticeLine>{formatDate(definition.lastRunAt)} · status unavailable</NoticeLine></div>
+                    : usageLoading ? <div role="status"><NoticeLine>Loading…</NoticeLine></div>
+                      : <span>No runs yet</span>}
+            </div>
+            <div className="auto-metric"><strong>Est. spend</strong>{usageLoading
+              ? <div className={usage.cost === null ? 'auto-usage-missing' : ''} role="status"><NoticeLine>Loading…</NoticeLine></div>
+              : <span className={usage.cost === null ? 'auto-usage-missing' : ''}>{usageCostLabel(usage)}</span>}</div>
+            <div className="auto-metric"><strong>Tokens</strong>{usageLoading
+              ? <div className={usage.tokens === null ? 'auto-usage-missing' : ''} role="status"><NoticeLine>Loading…</NoticeLine></div>
+              : <span className={usage.tokens === null ? 'auto-usage-missing' : ''}>{usageTokensLabel(usage)}</span>}</div>
+            <div className="auto-metric"><strong>Usage coverage</strong>{usageLoading
+              ? <div role="status"><NoticeLine>Loading run history…</NoticeLine></div>
+              : <span>{usageCoverageLabel(usage)}</span>}</div>
           </div>
           {history.error && <div role="status"><NoticeLine>Run history is unavailable from this host. This does not mean the automation failed or has no runs. {history.error}</NoticeLine></div>}
           <section className="auto-prompt-disclosure"><div className="auto-section-heading"><strong>Prompt</strong><Button aria-expanded={navigation.promptExpanded} onClick={() => void navigate({ promptExpanded: !navigation.promptExpanded })}>{navigation.promptExpanded ? 'Show less' : 'Show more'}</Button></div><pre>{navigation.promptExpanded ? definition.prompt : definition.prompt.slice(0, 400)}{!navigation.promptExpanded && definition.prompt.length > 400 ? '…' : ''}</pre></section>

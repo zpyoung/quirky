@@ -66,6 +66,13 @@ describe('UI capture inventory', () => {
       'view:acme.editor/document', 'overlay:acme.editor/quick-open'
     ])
     expect(() => selectCaptureTargets(targets, ['acme'])).toThrow(/unknown.*selector/i)
+
+    const declaration = target('sidebar-section:acme.mobile/navigation', 'acme.mobile', 'sidebar-section')
+    const body = target('view:acme.mobile/page', 'acme.mobile', 'view')
+    expect(() => selectCaptureTargets([body], [declaration.id], {
+      declaredTargets: [declaration, body],
+      toolAliases: [{ declaration, renderedTarget: body, toolId: declaration.id, reason: 'tool-navigation-alias' }]
+    })).toThrow(`${declaration.id} is not mounted; tool ${declaration.id} renders ${body.id}`)
   })
 
   test('rejects empty and unknown selectors instead of returning an empty success', () => {
@@ -121,6 +128,8 @@ const tool = (id: string, contributionId: string | null, aliases: string[] = [co
 function toolModel(): UiModel {
   return {
     ...model(),
+    sidebarSections: [...model().sidebarSections, slot('sidebar-section:acme.tasks/list', 'acme.tasks')],
+    views: [...model().views, slot('view:acme.tasks/page', 'acme.tasks')],
     tools: [
       tool('sidebar-section:acme.worktrees/list', 'sidebar-section:acme.worktrees/list'),
       tool('sidebar-section:acme.tasks/list', 'view:acme.tasks/page', ['sidebar-section:acme.tasks/list', 'view:acme.tasks/page']),
@@ -557,7 +566,7 @@ test('Accounts prepares and closes each cell with its own terminal session', asy
   })
   fake.runtime.model = {
     ...fake.runtime.model,
-    views: [{ id: 'view:quirky.session/worktree', plugin: 'quirky.session', title: 'Worktree sessions' }]
+    views: [...fake.runtime.model.views, slot('view:quirky.session/worktree', 'quirky.session', 'Worktree sessions')]
   } as never
   try {
     await captureTargetCell(fake.runtime, target('view:quirky.accounts/session-accessory', 'quirky.accounts', 'view'), 'dark')
@@ -637,6 +646,31 @@ describe('opening the tool that hosts a target', () => {
 
     await expect(openSurfaceTool(runtime as never, tasks)).rejects.toThrow(/view:acme\.tasks\/page/)
     expect(calls.map((call) => call.method)).not.toContain('ui.tool.open')
+  })
+
+  test('a canonical view body opens the sidebar tool instead of a center view', async () => {
+    const body = target('view:acme.tasks/page', 'acme.tasks', 'view')
+    const { runtime, calls } = fakeRuntime(() => ({ slots: [] }))
+
+    await openSurfaceTool(runtime as never, body)
+
+    expect(hostingToolFor(runtime.model, body)).toBe('sidebar-section:acme.tasks/list')
+    expect(calls).toEqual([{ method: 'ui.tool.open', params: { id: 'sidebar-section:acme.tasks/list' } }])
+    expect(hostingToolFor(runtime.model, target('view:acme.editor/document', 'acme.editor', 'view'))).toBeNull()
+  })
+
+  test('a shown body is not ready until its production tool is publicly open', async () => {
+    const body = target('view:acme.tasks/page', 'acme.tasks', 'view')
+    const { runtime } = fakeRuntime(() => ({ slots: [{ id: body.id, shown: true }], layout: { tools: { open: {} } } }))
+    runtime.options.timeoutMs = 5
+    await expect(waitForStateShown(runtime as never, body, 'sidebar-section:acme.tasks/list'))
+      .rejects.toThrow('public UI state did not show view:acme.tasks/page in tool sidebar-section:acme.tasks/list')
+
+    const opened = fakeRuntime(() => ({
+      slots: [{ id: body.id, shown: true }],
+      layout: { tools: { open: { 'left-top': 'sidebar-section:acme.tasks/list' } } }
+    }))
+    await waitForStateShown(opened.runtime as never, body, 'sidebar-section:acme.tasks/list')
   })
 
   test('a status-bar target opens no tool', async () => {
@@ -1159,7 +1193,7 @@ mock.module('@quirky/protocol/node', () => ({
         if (method === 'status.get') return { home: current.scopeHome }
         if (method === 'ui.contributions') return {
           views: [], panels: [], sidebarSections: [], activityItems: [], statusBars: [],
-          overlays: [], settingsSections: [], modules: {}
+          overlays: [], settingsSections: [], settings: [], modules: {}
         }
         if (method === 'theme.list') return {
           themes: [

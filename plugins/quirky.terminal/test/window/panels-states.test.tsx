@@ -102,6 +102,42 @@ describe('Terminal panel and floating surface states', () => {
 
     expectLoading(element, 'Capturing iPhone 16…')
   })
+  test('a missing selected simulator uses shared guidance without switching or capturing another device', async () => {
+    const reports: unknown[] = []
+    const fake = fakeContext({
+      'quirky.terminal/emulators': () => ({ available: true, devices: [{ id: 'D2', name: 'iPhone 16', state: 'Booted' }] })
+    })
+    const { element } = await render(createElement(modules.emulator.EmulatorView, {
+      context: fake.context,
+      input: { device: 'D1' },
+      report: (state) => reports.push(state)
+    }))
+
+    expect(element.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe(
+      'The selected simulator is no longer available. Choose another device explicitly.'
+    )
+    expect(reports.at(-1)).toMatchObject({ selected: 'D1' })
+    expect(fake.callsTo('quirky.terminal/emulatorFrame')).toEqual([])
+  })
+
+  test('a selected stopped simulator uses shared guidance without capturing a frame', async () => {
+    const reports: unknown[] = []
+    const fake = fakeContext({
+      'quirky.terminal/emulators': () => ({ available: true, devices: [{ id: 'D1', name: 'iPhone 16', state: 'Shutdown' }] })
+    })
+    const { element } = await render(createElement(modules.emulator.EmulatorView, {
+      context: fake.context,
+      input: { device: 'D1' },
+      report: (state) => reports.push(state)
+    }))
+
+    expect(element.querySelector('[role="status"] .ui-notice-line')?.textContent).toBe(
+      'iPhone 16 is Shutdown. Start this exact device in Simulator, then Refresh.'
+    )
+    expect(reports.at(-1)).toMatchObject({ selected: 'D1' })
+    expect(fake.callsTo('quirky.terminal/emulatorFrame')).toEqual([])
+  })
+
 
   test('5. Shortcut Settings announces its initial load', async () => {
     const fake = fakeContext({ 'ui.contributions': () => new Promise(() => {}) })

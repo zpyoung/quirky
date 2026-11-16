@@ -194,6 +194,18 @@ UI contribution inventory in dark and light. It does not open the foreground nat
 load your profile, install hooks, or use your provider accounts. Chromium and all app processes are
 owned by the run and stopped before it returns.
 
+Capture enables only the boolean gates listed in `ui.contributions.visibilitySettings`,
+verifies their effective values, and refetches contributions before selecting targets.
+These writes stay in the disposable home; product defaults and your profile are unchanged.
+The manifest records the sorted activated setting IDs.
+
+The declaration inventory includes every contribution, but screenshots cover the bodies the
+production shell mounts. A sidebar declaration that navigates to a different declared view
+or panel is recorded as a `tool-navigation-alias`, with its logical owner, tool ID and actual
+body ID. Its source is still audited; it receives no image or score. Exact `--only` selectors
+for these declarations fail with the tool and body IDs rather than silently redirecting.
+Plugin selectors capture that plugin's real bodies and disclose its non-mounted declarations.
+
 Install the development dependencies, then either install a Playwright browser with
 `bunx playwright install chromium` or pass `--browser /absolute/path/to/chromium`.
 For model review, install `pi-watch`, authenticate its model provider with `pi /login`, and
@@ -236,8 +248,8 @@ remain strictly validated; surrounding prose, nested fences and other non-JSON r
 Exit 0 means a complete requested capture-only inventory (**not reviewed**) or all requested
 reviews passed; exit 1 means capture/coverage/mount or score failure; exit 2 means invalid
 arguments, missing prerequisites, invalid evidence or reviewer/runtime failure. Signals await
-cleanup before returning 130/143. Unmounted, hidden, persistently loading, missing-required-input
-and native-only surfaces fail explicitly rather than disappearing from coverage; legitimate empty
+cleanup before returning 130/143. Required targets that are unmounted, hidden, persistently loading,
+missing-required-input or native-only fail explicitly rather than disappearing from coverage; legitimate empty
 states remain reviewable. Renderer screenshots do not certify OS chrome, native browser embedding,
 focus or notifications; those belong to native QA. The existing, not-yet-restyled UI is expected
 to fail against the new goldens.
@@ -272,6 +284,11 @@ print their paths, and retain failures and non-applicable reasons. Full and plug
 plugin, omits host checks, and always records `goalPassed: false`; exit 0 means that plugin's
 checks passed. Plugins without declared capture targets receive `N/A` for screenshots even if
 they have a UI bundle; their source audits still run.
+Reports carry `contributionInventory` and a **Declared but not mounted** table. Source and
+runtime declaration ownership, kinds and tool mappings must agree before image review.
+Counts come from that projection: each real target requires dark and light evidence; alias
+records are not screenshot cells. Historical manifests without this metadata remain reviewable,
+but cannot prove alias coverage against a source inventory that requires it.
 Dirty production source blocks capture; source changes during measurement invalidate the run.
 Exit 0 certifies a complete passing full report, passing plugin checks, or a passing ratchet;
 1 means failed checks, 2 means operational/inventory errors. Cancellation awaits cleanup and exits 130/143.

@@ -458,9 +458,8 @@ test('host, default-tab, recipe and partial-search diagnostics remain advisories
   const hostWarning = await waitFor(() =>
     [...local.dialog.querySelectorAll<HTMLElement>('[role="status"]')].find((status) => status.textContent?.includes('Remote host discovery is unavailable'))
   )
-  expect(hostWarning.textContent).toBe('Remote host discovery is unavailable: Catalog offline')
+  expect(hostWarning.querySelector<HTMLElement>('.ui-notice-line')?.textContent).toBe('Remote host discovery is unavailable: Catalog offline')
   expect(hostWarning.classList.contains('ui-help-text')).toBe(true)
-  expect(hostWarning.querySelector('.ui-notice-line')).toBeNull()
   expect(local.dialog.querySelector('[role="alert"]')).toBeNull()
   expect(local.dialog.querySelector('.ui-empty-state')).toBeNull()
 

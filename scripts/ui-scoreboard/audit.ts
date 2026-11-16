@@ -383,7 +383,7 @@ export function auditPlugin(inventory: Inventory, plugin: PluginInventory): Chec
     const render = (entry: CoverageFile['states'][number], candidate: Candidate | undefined) => {
       const ids: AuditId[] = [entry.state]
       const value: Render = entry.render
-      const accepted = entry.state === 'loading' ? ['EmptyState', 'NoticeLine'] : entry.state === 'empty' ? ['EmptyState'] : ['InlineError', 'FormRow', 'toast']
+      const accepted = entry.state === 'loading' ? ['EmptyState', 'NoticeLine'] : entry.state === 'empty' ? ['EmptyState'] : ['InlineError', 'FormRow', 'toast', 'NoticeLine']
       if (!accepted.includes(value.component)) add(ids, issue('render-not-accepted', `${value.component} is not accepted for ${entry.state}`))
       const renderRef = value.component === 'toast' ? value.call : value.element
       const resolvedRender = resolver.resolveRef(renderRef)
