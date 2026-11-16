@@ -140,6 +140,18 @@ describe('the turn-changes view lists what a turn changed', () => {
     expect(text(element)).toBe('This turn changed no files.')
   })
 
+  test('says the changes are loading while the read is pending', async () => {
+    let release: (value: unknown) => void = () => {}
+    fake.handlers['quirky.git/treeChanges'] = () => new Promise((resolve) => { release = resolve })
+    const element = await open()
+    expect(text(q(element, '[role="status"] .ui-notice-line'))).toBe('Loading changes...')
+
+    await act(async () => release({ changes: CHANGES }))
+    await settle()
+    expect(q(element, '[role="status"] .ui-notice-line')).toBeNull()
+    expect(qa(element, '[data-turn-file]').length).toBe(CHANGES.length)
+  })
+
   test('a failed read shows the daemon message', async () => {
     fake.handlers['quirky.git/treeChanges'] = () => {
       throw s.failure('unknown tree ' + INPUT.toTree, 'unknown-tree')

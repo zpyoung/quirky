@@ -384,4 +384,43 @@ describe('the ask card view', () => {
     const element = await mountCard(fakeContext([approvalAsk()]), {})
     expect(element.querySelector('button')).toBeNull()
   })
+
+  test('shows a loading line until the ask has been read', async () => {
+    const fake = fakeContext([approvalAsk()])
+    const call = fake.context.call.bind(fake.context)
+    let release: (asks: Ask[]) => void = () => {}
+    ;(fake.context as { call: unknown }).call = (method: string, params?: Record<string, unknown>) =>
+      method === 'quirky.ask/list' && params?.askId === 'ask_a' ? new Promise<Ask[]>((resolve) => { release = resolve }) : call(method, params)
+    const element = await mountCard(fake, { askId: 'ask_a' })
+    expect(element.querySelector('.ui-notice-line')?.textContent).toBe('Loading question…')
+    expect(element.querySelector('[data-approval-card]')).toBeNull()
+
+    await act(async () => release([approvalAsk()]))
+    expect(element.querySelector('.ui-notice-line')).toBeNull()
+    expect(element.querySelector('[data-approval-card]')).not.toBeNull()
+  })
+
+  test('says so when the daemon no longer has the ask', async () => {
+    const element = await mountCard(fakeContext([]), { askId: 'ask_gone' })
+    expect(element.querySelector('.ui-empty-state')?.textContent).toBe('This question is no longer available.')
+    expect(element.querySelector('button')).toBeNull()
+  })
+
+  test('a failed read shows the error and Retry reads the ask again', async () => {
+    const fake = fakeContext([approvalAsk()])
+    const call = fake.context.call.bind(fake.context)
+    let failing = true
+    ;(fake.context as { call: unknown }).call = async (method: string, params?: Record<string, unknown>) => {
+      if (method === 'quirky.ask/list' && params?.askId === 'ask_a' && failing) throw new Error('daemon unreachable')
+      return call(method, params)
+    }
+    const element = await mountCard(fake, { askId: 'ask_a' })
+    expect(element.querySelector('[role="alert"]')?.textContent).toContain('daemon unreachable')
+
+    failing = false
+    await click(buttonIn(element, 'Retry')!)
+    await settled()
+    expect(element.querySelector('[role="alert"]')).toBeNull()
+    expect(element.querySelector('[data-approval-card]')).not.toBeNull()
+  })
 })

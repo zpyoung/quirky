@@ -117,6 +117,8 @@ export function Controls({ context, session, capabilities, options, picks, onPic
   const planReason = reasonOf(capabilities?.planMode)
   const imagesReason = reasonOf(capabilities?.images)
 
+  const onAttachHint = () => context.toast('Attach images', DROP_HINT)
+
   const modelList = options?.models ?? []
   const unlisted = model !== null && !modelList.some((entry) => entry.id === model)
 
@@ -169,7 +171,7 @@ export function Controls({ context, session, capabilities, options, picks, onPic
         label="Attach images"
         disabled={imagesReason !== undefined}
         title={imagesReason ?? DROP_HINT}
-        onClick={() => context.toast('Attach images', DROP_HINT)}
+        onClick={onAttachHint}
       >
         <ControlIcon name="plus" />
       </IconButton>

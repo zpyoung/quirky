@@ -31,14 +31,14 @@ const column = {
   display: 'flex',
   flexDirection: 'column',
   gap: 'var(--ui-space-8)',
-  maxWidth: 'var(--compat-px-720)',
+  maxWidth: 'calc(720 * var(--ui-length-unit))',
   minWidth: 0,
   margin: '0 auto',
   padding: '0 var(--ui-space-16)'
 } satisfies CSSProperties
 const pane = {
   display: 'flex',
-  flex: '0 0 var(--compat-px-320)',
+  flex: '0 0 calc(320 * var(--ui-length-unit))',
   flexDirection: 'column',
   minHeight: 0,
   minWidth: 0,
