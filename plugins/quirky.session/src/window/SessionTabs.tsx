@@ -1,6 +1,7 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, IconButton, Tabs } from '@quirky/ui'
+import { Badge, Button, Dialog, IconButton, Tabs } from '@quirky/ui'
+import { AgentPicker } from './chat/AgentPicker'
 import type { WorktreeSessions } from './model'
 import { NewSessionMenu } from './NewSessionMenu'
 import { PromptDialog, type NewSessionRequest } from './PromptDialog'
@@ -66,6 +67,7 @@ function tabLabel(session: Session, now: number, index: number): string {
 
 export function SessionTabs({ context, store, sessions, active }: Props) {
   const [pending, setPending] = useState<NewSessionRequest | null>(null)
+  const [choosing, setChoosing] = useState(false)
   const now = useNow()
   const items = useMemo(() => sessions.map((session, index) => ({ id: session.id, label: tabLabel(session, now, index) })), [sessions, now])
 
@@ -82,7 +84,7 @@ export function SessionTabs({ context, store, sessions, active }: Props) {
         <div style={tabs}>
           <Tabs label="Sessions" items={items} value={active?.id ?? ''} onChange={(id) => store.open(id)} />
         </div>
-        <div style={actions}><NewSessionMenu context={context} onPick={pick} /></div>
+        <div style={actions}><NewSessionMenu context={context} onPick={pick} onChat={() => setChoosing(true)} /></div>
       </div>
       {active && activePresentation && (
         <div style={summary} role="status">
@@ -119,6 +121,18 @@ export function SessionTabs({ context, store, sessions, active }: Props) {
             </div>
           ))}
         </div>
+      )}
+      {choosing && (
+        <Dialog open title="New chat" onClose={() => setChoosing(false)}>
+          <AgentPicker
+            context={context}
+            worktree={store.report().worktree}
+            onCreated={(created) => {
+              setChoosing(false)
+              store.open(created.id)
+            }}
+          />
+        </Dialog>
       )}
       {pending && (
         <PromptDialog
