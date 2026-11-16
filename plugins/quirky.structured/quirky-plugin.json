@@ -287,6 +287,32 @@
         "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
       },
       {
+        "id": "models",
+        "description": "The models a running session's agent offers, as ids `configure` accepts, with the model the session launched with. Runners without a live list return an empty list; a session that is not running fails with conflict.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "models": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "id": { "type": "string" }, "label": { "type": "string" } },
+                "required": ["id", "label"]
+              }
+            },
+            "current": { "description": "The model the session launched with, or null." }
+          },
+          "required": ["models", "current"]
+        }
+      },
+      {
         "id": "configure",
         "description": "Applies composer picks to a running session: model and effort, permission mode, plan mode. Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
         "params": {

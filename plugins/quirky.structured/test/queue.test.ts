@@ -378,6 +378,27 @@ describe('turn baseline', () => {
   })
 })
 
+describe('models', () => {
+  test('returns the runner list', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    chat.runner.models = async () => [{ id: 'a/one', label: 'One (a)' }]
+    expect(await chat.call('quirky.structured/models', { session: session.id })).toEqual({ models: [{ id: 'a/one', label: 'One (a)' }], current: null })
+  })
+
+  test('is empty for a runner without models', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    expect(await chat.call('quirky.structured/models', { session: session.id })).toEqual({ models: [], current: null })
+  })
+
+  test('rejects unknown params', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    expect((await chat.failure(chat.call('quirky.structured/models', { session: session.id, bogus: 1 }))).code).toBe(RpcErrorCode.InvalidParams)
+  })
+})
+
 describe('configure', () => {
   test('hands the picks to the runner and reports the settings in force', async () => {
     chat = await bootChat()

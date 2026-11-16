@@ -43,6 +43,33 @@ export function useAgentOptions(context: UiPluginContext, agent: string): AgentO
   return options
 }
 
+type LiveModels = { models: Choice[]; current: string | null } | 'failed' | null
+
+/** Loads the running agent's own model list, only for an agent whose catalog lists none. */
+function useLiveModels(context: UiPluginContext, session: Session, capabilities: AgentCapabilities | null, options: AgentOptions | null): LiveModels {
+  const [live, setLive] = useState<LiveModels>(null)
+  const wanted = options !== null && options.models.length === 0 && capabilities?.model.ok === true
+  useEffect(() => {
+    setLive(null)
+    if (!wanted) return
+    let cancelled = false
+    context
+      .call('quirky.structured/models', { session: session.id })
+      .then((loaded) => {
+        if (cancelled) return
+        const found = loaded as { models?: { id: string; label: string }[]; current?: string | null } | undefined
+        setLive({ models: (found?.models ?? []).map((entry) => ({ value: entry.id, label: entry.label })), current: found?.current ?? null })
+      })
+      .catch(() => {
+        if (!cancelled) setLive('failed')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [context, session.id, wanted])
+  return wanted ? live : null
+}
+
 const effortChoices = (options: AgentOptions, model: string | null): Choice[] => {
   const known = options.models.find((entry) => entry.id === model)
   const effort = (known?.options ?? options.unlistedOptions).find((option) => option.id === 'effort')
@@ -105,13 +132,23 @@ export type ControlsProps = {
  */
 export function Controls({ context, session, capabilities, options, picks, onPicks }: ControlsProps) {
   const launched = launchPicks(session)
-  const model = picks.model ?? launched.model ?? options?.models[0]?.id ?? null
+  const live = useLiveModels(context, session, capabilities, options)
+  const liveList = live !== null && live !== 'failed' ? live.models : []
+  const modelList: Choice[] = (options?.models ?? []).map((entry) => ({ value: entry.id, label: entry.label })).concat(liveList)
+  const liveCurrent = live !== null && live !== 'failed' ? live.current : null
+  const model = picks.model ?? launched.model ?? liveCurrent ?? modelList[0]?.value ?? null
   const choices = options ? effortChoices(options, model) : []
   const effort = picks.effort ?? launched.effort ?? choices[0]?.value ?? ''
   const modes = capabilities?.permissionModes
   const mode = picks.mode ?? (modes?.ok ? modes.modes[0] : undefined) ?? ''
 
-  const modelReason = reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? undefined : 'This agent takes no model setting')
+  const noModels =
+    live === null ? (options !== null && modelList.length === 0 && capabilities?.model.ok ? 'Loading models' : undefined)
+    : live === 'failed' ? 'Models unavailable'
+    : modelList.length === 0 ? 'No models listed for this agent'
+    : undefined
+  const modelReason =
+    reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? noModels : 'This agent takes no model setting')
   const effortReason = reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined)
   const modeReason = reasonOf(modes)
   const planReason = reasonOf(capabilities?.planMode)
@@ -119,8 +156,7 @@ export function Controls({ context, session, capabilities, options, picks, onPic
 
   const onAttachHint = () => context.toast('Attach images', DROP_HINT)
 
-  const modelList = options?.models ?? []
-  const unlisted = model !== null && !modelList.some((entry) => entry.id === model)
+  const unlisted = model !== null && !modelList.some((entry) => entry.value === model)
 
   return (
     <div style={bar}>
@@ -134,7 +170,7 @@ export function Controls({ context, session, capabilities, options, picks, onPic
       >
         {unlisted && <option value={model}>{model}</option>}
         {modelList.map((entry) => (
-          <option key={entry.id} value={entry.id}>{entry.label}</option>
+          <option key={entry.value} value={entry.value}>{entry.label}</option>
         ))}
       </SelectField>
       <SelectField

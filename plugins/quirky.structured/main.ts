@@ -1376,6 +1376,27 @@ export function activate(context: PluginContext): void {
     return found
   }
 
+  const models: MethodHandler = async (params) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'session')
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured models does not support ${unsupported}`)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    const session = await requireStructured(params.session)
+    let current: string | null = null
+    try {
+      current = launchOptionsFromSnapshot(session).model ?? null
+    } catch {
+      // a malformed snapshot only loses the current-model hint
+    }
+    const runner = runnerBySession.get(session.id)
+    const entry = live.get(session.id)
+    if (!runner?.models || !entry || entry.stopping || entry.status === 'exited') return { models: [], current }
+    try {
+      return { models: await runner.models(session.id), current }
+    } catch (error) {
+      throw context.error('conflict', error instanceof Error ? error.message : String(error))
+    }
+  }
+
   const configure: MethodHandler = async (params) => {
     const unsupported = Object.keys(params).find((key) => !['session', 'model', 'effort', 'permissionMode', 'planMode'].includes(key))
     if (unsupported !== undefined) throw context.error('invalid-params', `structured configure does not support ${unsupported}`)
@@ -1641,6 +1662,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/messages', messages)
   context.provide('method:quirky.structured/send', send)
   context.provide('method:quirky.structured/capabilities', capabilities)
+  context.provide('method:quirky.structured/models', models)
   context.provide('method:quirky.structured/queue', queued)
   context.provide('method:quirky.structured/dequeue', dequeue)
   context.provide('method:quirky.structured/editQueued', editQueued)

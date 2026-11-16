@@ -216,6 +216,21 @@ class PiRunner implements StructuredRunner {
     return { ...run.settings }
   }
 
+  /** Lists the agent's available models as `provider/id`, so each id is one `configure` accepts. */
+  async models(sessionId: string): Promise<{ id: string; label: string }[]> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended || !run.ready) throw new Error('session is not running')
+    const data = record(await run.rpc.request('get_available_models', {}, SEND_TIMEOUT_MS))
+    return (Array.isArray(data?.models) ? data.models : []).flatMap((entry) => {
+      const found = record(entry)
+      const provider = text(found?.provider)
+      const id = text(found?.id)
+      if (provider === '' || id === '') return []
+      const name = text(found?.name)
+      return [{ id: `${provider}/${id}`, label: name === '' ? `${provider}/${id}` : `${name} (${provider})` }]
+    })
+  }
+
   /** Splits `provider/model-id`; a bare id is looked up among the agent's available models. */
   private async resolveModel(run: Running, model: string): Promise<{ provider: string; modelId: string }> {
     const slash = model.indexOf('/')

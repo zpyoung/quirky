@@ -41,6 +41,7 @@ export class ChatRunner implements StructuredRunner {
     this.configured.push({ sessionId, settings })
     return settings
   }
+  models?: (sessionId: string) => Promise<{ id: string; label: string }[]>
   /** Runs when a message reaches the agent, before it is recorded; lets a test observe ordering. */
   onSend: (() => void) | null = null
   interrupted: string[] = []

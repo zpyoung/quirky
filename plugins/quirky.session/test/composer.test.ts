@@ -283,6 +283,29 @@ describe('the composer controls', () => {
     expect([...control('Effort')!.options].map((option) => option.textContent)).toEqual(['Low', 'High'])
   })
 
+  test('fills the model select from the live session when the agents catalog is empty', async () => {
+    await mount(
+      {
+        'quirky.agents/options': () => ({ ...OPTIONS, agent: 'pi', models: [] }),
+        'quirky.structured/models': () => ({ models: [{ id: 'a/one', label: 'One (a)' }, { id: 'b/two', label: 'Two (b)' }], current: 'a/one' })
+      },
+      { agent: 'pi', capabilities: { ...PI, model: OK } }
+    )
+    expect(fake.callsTo('quirky.structured/models')[0]!.params).toEqual({ session: 's1' })
+    expect([...control('Model')!.options].map((option) => option.textContent)).toEqual(['One (a)', 'Two (b)'])
+    expect(control('Model')!.value).toBe('a/one')
+    expect(control('Model')!.disabled).toBe(false)
+  })
+
+  test('disables the model select with a reason when no list exists anywhere', async () => {
+    await mount(
+      { 'quirky.agents/options': () => ({ ...OPTIONS, agent: 'pi', models: [] }), 'quirky.structured/models': () => ({ models: [], current: null }) },
+      { agent: 'pi', capabilities: { ...PI, model: OK } }
+    )
+    expect(control('Model')!.disabled).toBe(true)
+    expect(control('Model')!.title).toBe('No models listed for this agent')
+  })
+
   test('shows the agent as a fixed chip', async () => {
     await mount()
     expect(host!.querySelector('[aria-label="Agent"]')!.textContent).toContain('claude')
