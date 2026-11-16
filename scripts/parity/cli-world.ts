@@ -648,6 +648,7 @@ async function waitForCliFilesDaemonHealth(options: {
   probe: typeof isDaemonAlive
   processTable: typeof processSnapshot
   identityAfterSuccess: boolean
+  timeoutLabel: string
   now?: () => number
   sleep?: (milliseconds: number) => Promise<void>
 }): Promise<{
@@ -660,14 +661,19 @@ async function waitForCliFilesDaemonHealth(options: {
   const retryDeadline = startedAt + Math.max(0, Math.min(5_000, options.deadline - Date.now()))
   let processIdentity = options.processIdentity
   let aborted = options.signal.aborted
+  let loopStopped = false
   let probes = 0
   let lastProbeMs = 0
   let daemonState = 'not-sampled'
   let runtimeMatches = false
   const stopped = Promise.withResolvers<void>()
+  const stopLoop = () => {
+    loopStopped = true
+    stopped.resolve()
+  }
   const onAbort = () => {
     aborted = true
-    stopped.resolve()
+    stopLoop()
   }
   const matchesExpectedRuntime = (runtime: RuntimeInfo | null | undefined): runtime is RuntimeInfo => {
     const expected = options.expectedRuntime
@@ -701,10 +707,9 @@ async function waitForCliFilesDaemonHealth(options: {
       runtimeMatches
     }
   })
-  options.signal.addEventListener('abort', onAbort, { once: true })
-  if (options.signal.aborted) onAbort()
-  try {
+  const runHealthLoop = async () => {
     while (now() < retryDeadline) {
+      if (loopStopped) return result(false)
       if (aborted || options.signal.aborted || Date.now() >= options.deadline) return result(false)
       const runtime = options.readOwnedRuntime(options.home)
       runtimeMatches = matchesExpectedRuntime(runtime)
@@ -719,6 +724,7 @@ async function waitForCliFilesDaemonHealth(options: {
         () => options.probe(runtime, Math.max(1, Math.min(300, remaining)))
       )
       const alive = await Promise.race([healthProbe, stopped.promise.then(() => false)])
+      if (loopStopped) return result(false)
       lastProbeMs = Math.max(0, Math.round(now() - probeStartedAt))
       if (aborted || options.signal.aborted || Date.now() >= options.deadline) return result(false)
       const afterProbe = options.readOwnedRuntime(options.home)
@@ -732,9 +738,26 @@ async function waitForCliFilesDaemonHealth(options: {
       const pause = Math.min(50, retryDeadline - now(), options.deadline - Date.now())
       if (pause <= 0) return result(false)
       await Promise.race([sleep(pause), stopped.promise])
+      if (loopStopped) return result(false)
     }
     return result(false)
+  }
+  options.signal.addEventListener('abort', onAbort, { once: true })
+  if (options.signal.aborted) onAbort()
+  try {
+    return await waitForCliFilesOperation(
+      runHealthLoop(),
+      options.signal,
+      options.deadline,
+      5_000,
+      options.timeoutLabel,
+      () => {
+        stopLoop()
+        return result(false)
+      }
+    )
   } finally {
+    stopLoop()
     options.signal.removeEventListener('abort', onAbort)
   }
 }
@@ -1363,14 +1386,26 @@ async function waitForCliFilesOperation<T>(
   signal: AbortSignal,
   deadline: number,
   timeoutMs: number,
-  label: string
+  label: string,
+  timeoutResult?: () => T
 ): Promise<T> {
   const remaining = cliFilesRemaining(signal, deadline)
   const timeout = Math.min(timeoutMs, remaining)
   if (timeout <= 0) throw new CliWorldError('deadline', `${label} has no time remaining`)
-  const timedOut = Promise.withResolvers<never>()
+  const fullTimeoutResult = timeoutMs < remaining ? timeoutResult : undefined
+  const timedOut = Promise.withResolvers<T>()
   const interrupted = Promise.withResolvers<never>()
-  const timer = setTimeout(() => timedOut.reject(new CliWorldError('deadline', `${label} exceeded its deadline`)), timeout)
+  const timer = setTimeout(() => {
+    if (fullTimeoutResult && Date.now() < deadline) {
+      try {
+        timedOut.resolve(fullTimeoutResult())
+      } catch (error) {
+        timedOut.reject(error)
+      }
+    } else {
+      timedOut.reject(new CliWorldError('deadline', `${label} exceeded its deadline`))
+    }
+  }, timeout)
   const abort = () => {
     const reason = signal.reason
     interrupted.reject(reason instanceof Error ? reason : new CliWorldError('interrupted', 'CLI files work was interrupted'))
@@ -1778,27 +1813,22 @@ export async function createCliFilesWorld(
     if (soakWorld.home !== home || soakWorld.daemonPid !== daemonPid) {
       throw new CliWorldError('daemon-identity', 'soak world no longer identifies the owned home and daemon')
     }
-    const health = await waitForCliFilesOperation(
-      waitForCliFilesDaemonHealth({
-        home,
-        daemonPid,
-        expectedRuntime,
-        ...(daemonIdentity ? { processIdentity: daemonIdentity } : {}),
-        env,
-        signal: activeSignal,
-        deadline: activeDeadline,
-        readOwnedRuntime: dependencies.readRuntime ?? readRuntime,
-        probe: dependencies.isDaemonAlive ?? isDaemonAlive,
-        processTable,
-        identityAfterSuccess: false,
-        ...(dependencies.now ? { now: dependencies.now } : {}),
-        ...(dependencies.sleep ? { sleep: dependencies.sleep } : {})
-      }),
-      activeSignal,
-      activeDeadline,
-      5_000,
-      'owned daemon health check'
-    )
+    const health = await waitForCliFilesDaemonHealth({
+      home,
+      daemonPid,
+      expectedRuntime,
+      ...(daemonIdentity ? { processIdentity: daemonIdentity } : {}),
+      env,
+      signal: activeSignal,
+      deadline: activeDeadline,
+      readOwnedRuntime: dependencies.readRuntime ?? readRuntime,
+      probe: dependencies.isDaemonAlive ?? isDaemonAlive,
+      processTable,
+      identityAfterSuccess: false,
+      timeoutLabel: 'owned daemon health check',
+      ...(dependencies.now ? { now: dependencies.now } : {}),
+      ...(dependencies.sleep ? { sleep: dependencies.sleep } : {})
+    })
     if (!health.alive) {
       throw new CliWorldError(
         'daemon-exited',
@@ -2195,27 +2225,22 @@ export async function createCliFilesWorld(
       || initialRuntime.entryHash !== expectedRuntime.entryHash) {
       throw new CliWorldError('daemon-identity', 'runtime.json does not identify the started daemon in the owned home')
     }
-    const health = await waitForCliFilesOperation(
-      waitForCliFilesDaemonHealth({
-        home,
-        daemonPid,
-        expectedRuntime,
-        ...(daemonIdentityAtSpawn ? { processIdentity: daemonIdentityAtSpawn } : {}),
-        env,
-        signal,
-        deadline,
-        readOwnedRuntime: dependencies.readRuntime ?? readRuntime,
-        probe: dependencies.isDaemonAlive ?? isDaemonAlive,
-        processTable,
-        identityAfterSuccess: true,
-        ...(dependencies.now ? { now: dependencies.now } : {}),
-        ...(dependencies.sleep ? { sleep: dependencies.sleep } : {})
-      }),
+    const health = await waitForCliFilesDaemonHealth({
+      home,
+      daemonPid,
+      expectedRuntime,
+      ...(daemonIdentityAtSpawn ? { processIdentity: daemonIdentityAtSpawn } : {}),
+      env,
       signal,
       deadline,
-      5_000,
-      'owned daemon readiness check'
-    )
+      readOwnedRuntime: dependencies.readRuntime ?? readRuntime,
+      probe: dependencies.isDaemonAlive ?? isDaemonAlive,
+      processTable,
+      identityAfterSuccess: true,
+      timeoutLabel: 'owned daemon readiness check',
+      ...(dependencies.now ? { now: dependencies.now } : {}),
+      ...(dependencies.sleep ? { sleep: dependencies.sleep } : {})
+    })
     if (!health.alive) {
       throw new CliWorldError(
         'daemon-exited',

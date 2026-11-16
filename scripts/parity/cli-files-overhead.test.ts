@@ -320,6 +320,125 @@ test('startup health refusal keeps the same bounded probe diagnostics', async ()
   expect(Buffer.byteLength((error as Error & { stderrTail?: string }).stderrTail ?? '')).toBeLessThanOrEqual(1_024)
   expect(clock.now()).toBe(5_000)
 })
+// These cases leave loop time real but hold the post-probe sleep so only the real outer timer can finish health checking.
+test('a real per-call health expiry includes bounded probe diagnostics', async () => {
+  const fixture = cliFilesStandIns()
+  const world = await createWorld({}, fixture.dependencies)
+  let releaseSleep: (() => void) | undefined
+  try {
+    fixture.resetPerCallEvidence()
+    fixture.state.probeHealthy = false
+    fixture.dependencies.sleep = () => {
+      const pendingSleep = Promise.withResolvers<void>()
+      releaseSleep = pendingSleep.resolve
+      return pendingSleep.promise
+    }
+    const error = await failureOf(world.execute(cliArgv(world)))
+    expect(error).toMatchObject({ kind: 'daemon-exited', message: 'owned daemon is not healthy; refusing CLI auto-start' })
+    const diagnostic = JSON.parse(error.stderrTail ?? 'null')
+    expect(Number.isInteger(diagnostic.probes)).toBe(true)
+    expect(diagnostic.probes).toBeGreaterThan(0)
+    expect(diagnostic).toMatchObject({ daemonState: 'S', runtimeMatches: true })
+    expect(Buffer.byteLength(error.stderrTail ?? '')).toBeLessThanOrEqual(1_024)
+    expect(fixture.counts.cli).toBe(0)
+    const probesAtExpiry = fixture.counts.probes
+    releaseSleep?.()
+    const eventLoopTurn = Promise.withResolvers<void>()
+    setImmediate(eventLoopTurn.resolve)
+    await eventLoopTurn.promise
+    expect(fixture.counts.probes).toBe(probesAtExpiry)
+  } finally {
+    releaseSleep?.()
+    fixture.state.probeHealthy = true
+    await world.cleanup()
+  }
+}, 12_000)
+
+test('a real startup health expiry includes bounded probe diagnostics', async () => {
+  const fixture = cliFilesStandIns()
+  fixture.state.probeHealthy = false
+  let releaseSleep: (() => void) | undefined
+  fixture.dependencies.sleep = () => {
+    const pendingSleep = Promise.withResolvers<void>()
+    releaseSleep = pendingSleep.resolve
+    return pendingSleep.promise
+  }
+  let world: CliFilesWorld | undefined
+  try {
+    const error = await failureOf(createWorld({}, fixture.dependencies).then((createdWorld) => {
+      world = createdWorld
+      return createdWorld
+    }))
+    expect(error).toMatchObject({ kind: 'daemon-exited', message: 'owned daemon did not remain healthy after startup' })
+    const diagnostic = JSON.parse(error.stderrTail ?? 'null')
+    expect(Number.isInteger(diagnostic.probes)).toBe(true)
+    expect(diagnostic.probes).toBeGreaterThan(0)
+    expect(diagnostic).toMatchObject({ daemonState: 'S', runtimeMatches: true })
+    expect(Buffer.byteLength(error.stderrTail ?? '')).toBeLessThanOrEqual(1_024)
+    expect(fixture.counts.cli).toBe(0)
+    const probesAtExpiry = fixture.counts.probes
+    releaseSleep?.()
+    const eventLoopTurn = Promise.withResolvers<void>()
+    setImmediate(eventLoopTurn.resolve)
+    await eventLoopTurn.promise
+    expect(fixture.counts.probes).toBe(probesAtExpiry)
+  } finally {
+    releaseSleep?.()
+    if (world) await world.cleanup()
+    rmSync(fixture.home, { recursive: true, force: true })
+  }
+}, 12_000)
+
+test('a nonsettling probe is stopped when the real health timer expires', async () => {
+  const fixture = cliFilesStandIns()
+  const world = await createWorld({}, fixture.dependencies)
+  const pendingProbe = Promise.withResolvers<boolean>()
+  try {
+    fixture.resetPerCallEvidence()
+    fixture.dependencies.now = () => 0
+    fixture.dependencies.sleep = async () => {}
+    fixture.dependencies.isDaemonAlive = () => {
+      fixture.counts.probes++
+      if (fixture.counts.probes === 1) {
+        return pendingProbe.promise
+      }
+      return Promise.resolve(true)
+    }
+    const error = await failureOf(world.execute(cliArgv(world)))
+    expect(error).toMatchObject({ kind: 'daemon-exited', message: 'owned daemon is not healthy; refusing CLI auto-start' })
+    const diagnostic = JSON.parse(error.stderrTail ?? 'null')
+    expect(diagnostic.probes).toBe(1)
+    expect(fixture.counts.cli).toBe(0)
+    const probesAtExpiry = fixture.counts.probes
+    pendingProbe.resolve(false)
+    const eventLoopTurn = Promise.withResolvers<void>()
+    setImmediate(eventLoopTurn.resolve)
+    await eventLoopTurn.promise
+    expect(fixture.counts.probes).toBe(probesAtExpiry)
+  } finally {
+    await world.cleanup()
+  }
+}, 12_000)
+
+
+test('a shorter work deadline remains a generic error for a nonsettling health probe', async () => {
+  const fixture = cliFilesStandIns()
+  const world = await createWorld({ deadline: Date.now() + 3_000 }, fixture.dependencies)
+  try {
+    fixture.resetPerCallEvidence()
+    fixture.dependencies.isDaemonAlive = () => {
+      fixture.counts.probes++
+      return Promise.withResolvers<boolean>().promise
+    }
+    const error = await failureOf(world.execute(cliArgv(world)))
+    expect(error).toMatchObject({ kind: 'deadline', message: 'owned daemon health check exceeded its deadline' })
+    expect(fixture.counts.probes).toBe(1)
+    expect(fixture.counts.cli).toBe(0)
+  } finally {
+    await world.cleanup()
+  }
+}, 12_000)
+
 
 test('the final ownership snapshot tracks a daemon child', async () => {
   const fixture = cliFilesStandIns()
