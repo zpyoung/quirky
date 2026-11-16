@@ -214,6 +214,14 @@ test('refuses every held or mismatched owner without clearing the marker or chan
       { name: 'negative PID', update: identity => ({ ...identity, pid: -41, pgid: -41 }) },
       { name: 'different executable', update: (identity) => ({ ...identity, executable: '/not/configured/chrome' }) },
       {
+        name: 'headless text in argv zero',
+        update: identity => ({ ...identity, argv: ['--headless=new', ...identity.argv.slice(1).filter(argument => argument !== '--headless=new')] })
+      },
+      {
+        name: 'ownership switches after the terminator',
+        update: identity => ({ ...identity, argv: [identity.argv[0]!, `--user-data-dir=${userDataDir}`, '--', '--headless=new', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'] })
+      },
+      {
         name: 'non-headless launch',
         update: (identity) => ({ ...identity, argv: identity.argv.filter((argument) => argument !== '--headless=new') })
       },
@@ -569,5 +577,22 @@ test('allows a contained chrome-profile symlink through normal ownership checks'
     expect(fake.signals).toEqual([[matching.pid, 'SIGTERM']])
     expect(launched).toBe(1)
     expect(chrome.browserWebSocketUrl).toBe('ws://127.0.0.1:9333/devtools/browser/fresh')
+  })
+})
+
+test('leaves an unrelated Chrome whose positional arguments resemble ownership switches alone', async () => {
+  await withProfile(async profileRoot => {
+    const userDataDir = join(profileRoot, 'chrome-profile')
+    mkdirSync(userDataDir)
+    const identity = chromeIdentity(userDataDir)
+    identity.argv = [identity.argv[0]!, '--', ...identity.argv.slice(1)]
+    const fake = fakeAccess([identity], root => fake.current.delete(root.pid))
+    const chrome = await startChrome(profileRoot, dependencies(profileRoot, fake.access, (_command, launchedDir) => {
+      writeFileSync(join(launchedDir, 'DevToolsActivePort'), '9333\n/devtools/browser/fresh\n')
+      return pendingChild()
+    }))
+    expect(fake.signals).toEqual([])
+    expect(fake.current.has(identity.pid)).toBe(true)
+    expect(chrome.cdpUrl).toBe('http://127.0.0.1:9333')
   })
 })

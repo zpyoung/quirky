@@ -67,11 +67,12 @@ function validateProfileDirectory(profileRoot: string, userDataDir: string): str
   return directory
 }
 
-function optionValues(argv: readonly string[], name: string): string[] {
+function optionValues(argv: readonly string[], name: string, takesValue = true): string[] {
   const values: string[] = []
   for (let index = 1; index < argv.length; index++) {
     const argument = argv[index]!
-    if (argument === name) values.push(argv[index + 1] ?? '')
+    if (argument === '--') break
+    if (argument === name) values.push(takesValue ? argv[index + 1] ?? '' : '')
     else if (argument.startsWith(`${name}=`)) values.push(argument.slice(name.length + 1))
   }
   return values
@@ -93,14 +94,13 @@ function isOwnedOrphan(identity: ChromeProcessIdentity, directory: string, execu
     typeof identity.started !== 'string' || !identity.started ||
     !isAbsolute(identity.executable) || canonicalPath(identity.executable) !== canonicalPath(executablePath)) return false
   const argv = identity.argv
-  const headless = argv.filter(argument => argument === '--headless' || argument.startsWith('--headless='))
+  const headless = optionValues(argv, '--headless', false)
   const addresses = optionValues(argv, '--remote-debugging-address')
   const ports = optionValues(argv, '--remote-debugging-port')
   return optionValues(argv, '--user-data-dir').length === 1 && selectsDirectory(identity, directory) &&
-    headless.length === 1 && (headless[0] === '--headless=new' || headless[0] === '--headless') &&
+    headless.length === 1 && (headless[0] === 'new' || headless[0] === '') &&
     addresses.length === 1 && addresses[0] === '127.0.0.1' && ports.length === 1 && ports[0] === '0' &&
-    !argv.some(argument => argument === '--type' || argument.startsWith('--type=') ||
-      argument === '--remote-debugging-pipe' || argument.startsWith('--remote-debugging-pipe='))
+    optionValues(argv, '--type').length === 0 && optionValues(argv, '--remote-debugging-pipe', false).length === 0
 }
 
 function sameIdentity(expected: ChromeProcessIdentity, actual: ChromeProcessIdentity): boolean {
@@ -130,7 +130,10 @@ async function waitForDisappearance(access: ChromeProcessAccess, identity: Chrom
 }
 
 async function reclaimProfile(directory: string, executablePath: string, dependencies: BrowserDependencies): Promise<void> {
-  const access = dependencies.chromeProcesses ?? createChromeProcessAccess(dependencies.process, { executablePath })
+  const access = dependencies.chromeProcesses ?? createChromeProcessAccess(dependencies.process, {
+    executablePath,
+    resolvedExecutablePath: canonicalPath(executablePath)
+  })
   const holders = (await access.snapshot()).filter(identity => selectsDirectory(identity, directory))
   if (holders.some(identity => !isOwnedOrphan(identity, directory, executablePath))) throw profileInUse()
   const remaining: ChromeProcessIdentity[] = []

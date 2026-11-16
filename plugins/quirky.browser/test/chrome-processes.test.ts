@@ -1,8 +1,10 @@
 import { expect, test } from 'bun:test'
-import { realpathSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:fs'
 import { createProcessRunner } from '../../../packages/process/src/api'
 import type { BrowserProcess } from '../src/runtime/dependencies'
 import { createChromeProcessAccess } from '../src/runtime/chrome-processes'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 const MAX_TABLE_BYTES = 4 * 1024 * 1024
 const MAX_ARGV_BYTES = 1024 * 1024
@@ -494,4 +496,32 @@ test('recognizes a configured executable truncated to Darwin MAXCOMLEN before na
   })
 
   await expectInspectionFailure(access.snapshot())
+})
+
+test('discovers the configured Linux executable despite comm truncation', async () => {
+  const executablePath = '/opt/custom/custom-chrome-browser'
+  const access = fakeAccess('linux', processRow(240, 1, 240, 501, 'custom-chrome-b'), {
+    executablePath,
+    readLinuxProcessArgs: () => linuxProcessArgs([executablePath, '--headless=new']),
+    readLinuxExecutable: () => executablePath
+  })
+  expect((await access.snapshot())[0]?.executable).toBe(executablePath)
+})
+
+test('discovers the resolved executable behind a differently named configured symlink', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'browser-executable-alias-'))
+  const alias = join(home, 'configured-browser')
+  symlinkSync(process.execPath, alias)
+  try {
+    const executable = realpathSync(alias)
+    const access = fakeAccess('linux', processRow(240, 1, 240, 501, executable.split('/').at(-1)!), {
+      executablePath: alias,
+      resolvedExecutablePath: executable,
+      readLinuxProcessArgs: () => linuxProcessArgs([alias, '--headless=new']),
+      readLinuxExecutable: () => executable
+    })
+    expect((await access.snapshot())[0]?.executable).toBe(executable)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
 })

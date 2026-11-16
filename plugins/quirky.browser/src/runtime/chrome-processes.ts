@@ -26,6 +26,7 @@ export type ChromeProcessAccessOptions = {
   readLinuxProcessArgs?: (pid: number, maxBytes: number) => Uint8Array | null
   readLinuxExecutable?: (pid: number) => string
   executablePath?: string
+  resolvedExecutablePath?: string
 }
 
 type ProcessMetadata = Omit<ChromeProcessIdentity, 'executable' | 'argv'> & { command: string }
@@ -113,7 +114,7 @@ function parseProcessTable(text: string): ProcessMetadata[] {
 
 function isChromeCandidate(
   metadata: ProcessMetadata,
-  configuredExecutableName: string,
+  configuredExecutableNames: readonly string[],
   platform: string
 ): boolean {
   let command = metadata.command.trim()
@@ -127,15 +128,18 @@ function isChromeCandidate(
         name === known.slice(0, DARWIN_MAXCOMLEN))
     ) return true
   }
-  return !!configuredExecutableName && (
-    name === configuredExecutableName ||
-    (platform === 'darwin' && configuredExecutableName.length > DARWIN_MAXCOMLEN &&
-      name === configuredExecutableName.slice(0, DARWIN_MAXCOMLEN))
-  )
+  const limit = platform === 'darwin' ? DARWIN_MAXCOMLEN : 15
+  return configuredExecutableNames.some(configured => name === configured ||
+    name === Buffer.from(configured).subarray(0, limit).toString('utf8'))
 }
 
 function isChromeRoot(identity: ChromeProcessIdentity): boolean {
-  return !identity.argv.some((argument) => argument === '--type' || argument.startsWith('--type='))
+  for (let index = 1; index < identity.argv.length; index++) {
+    const argument = identity.argv[index]!
+    if (argument === '--') break
+    if (argument === '--type' || argument.startsWith('--type=')) return false
+  }
+  return true
 }
 
 function decodeArgument(bytes: Uint8Array): string {
@@ -246,9 +250,9 @@ export function createChromeProcessAccess(
   const platform = overrides.platform ?? process.platform
   const now = overrides.now ?? (() => performance.now())
 
-  const configuredExecutableName = overrides.executablePath
-    ? basename(overrides.executablePath).toLowerCase()
-    : ''
+  const configuredExecutableNames = [overrides.executablePath, overrides.resolvedExecutablePath]
+    .filter((path): path is string => !!path)
+    .map(path => basename(path).toLowerCase())
 
   function ensureSupported(): void {
     if (platform !== 'darwin' && platform !== 'linux') throw inspectionError()
@@ -361,7 +365,7 @@ export function createChromeProcessAccess(
       const identities: ChromeProcessIdentity[] = []
       for (const candidate of metadata) {
         ensureTime(deadline)
-        if (!isChromeCandidate(candidate, configuredExecutableName, platform)) continue
+        if (!isChromeCandidate(candidate, configuredExecutableNames, platform)) continue
         const identity = await readIdentity(candidate, deadline)
         if (identity !== null && isChromeRoot(identity)) identities.push(identity)
       }
