@@ -80,8 +80,8 @@ export type ProcessScope = {
   >(command: string[], options?: ProcessScopeSpawnOptions<In, Out, Err>): Bun.Subprocess<In, Out, Err>
   /** Adds an already-started process to this scope using its current PID/start identity. */
   track(pid: number): void
-  /** Gracefully signals owned processes, force-kills survivors and disposes the guardian. */
-  cleanup(): Promise<void>
+  /** Gracefully signals owned processes, force-kills survivors and disposes the guardian. An explicit env isolates cleanup process inspection. */
+  cleanup(env?: Record<string, string>): Promise<void>
   /** Synchronously force-kills identities already visible to the scope and leaves the guardian active. */
   killNow(): void
 }
@@ -105,13 +105,14 @@ function parseProcessTable(text: string): ProcessSnapshot {
   return rows
 }
 
-function processTableResult() {
-  return Bun.spawnSync(['ps', '-A', '-o', 'pid=,ppid=,pgid=,lstart=,command='])
+function processTableResult(env?: Record<string, string>) {
+  const command = ['ps', '-A', '-o', 'pid=,ppid=,pgid=,lstart=,command=']
+  return env === undefined ? Bun.spawnSync(command) : Bun.spawnSync(command, { env })
 }
 
-function processSnapshot(): ProcessSnapshot {
+function processSnapshot(env?: Record<string, string>): ProcessSnapshot {
   try {
-    const result = processTableResult()
+    const result = processTableResult(env)
     return result.exitCode === 0 ? parseProcessTable(result.stdout.toString()) : new Map()
   } catch {
     return new Map()
@@ -273,27 +274,28 @@ function registerFreshClaims(config: ScopeConfig, snapshot: ProcessSnapshot): vo
   }
 }
 
-function processEnvironment(pid: number): string {
+function processEnvironment(pid: number, env?: Record<string, string>): string {
   try {
     if (process.platform === 'linux') return readFileSync(`/proc/${pid}/environ`).toString('utf8')
-    const result = Bun.spawnSync(['ps', 'eww', '-p', String(pid), '-o', 'command='])
+    const command = ['ps', 'eww', '-p', String(pid), '-o', 'command=']
+    const result = env === undefined ? Bun.spawnSync(command) : Bun.spawnSync(command, { env })
     return result.exitCode === 0 ? result.stdout.toString() : ''
   } catch {
     return ''
   }
 }
 
-function hasScopeEnvironment(identity: ProcessIdentity, config: ScopeConfig, token: string): boolean {
+function hasScopeEnvironment(identity: ProcessIdentity, config: ScopeConfig, token: string, env?: Record<string, string>): boolean {
   const key = `${config.scopeDirectory}:${identity.pid}:${identity.started}`
   const cached = scopeEnvironmentCache.get(key)
   if (cached !== undefined) return cached
-  const environment = processEnvironment(identity.pid)
+  const environment = processEnvironment(identity.pid, env)
   const matches = environment.includes(`QUIRKY_HOME=${config.home}`) || environment.includes(`QUIRKY_TEST_SCOPE=${token}`)
   scopeEnvironmentCache.set(key, matches)
   return matches
 }
 
-function scopeEnvironmentDescendants(config: ScopeConfig, snapshot: ProcessSnapshot, token: string): void {
+function scopeEnvironmentDescendants(config: ScopeConfig, snapshot: ProcessSnapshot, token: string, env?: Record<string, string>): void {
   const descendants = new Set<number>([config.owner.pid])
   let changed = true
   while (changed) {
@@ -308,14 +310,14 @@ function scopeEnvironmentDescendants(config: ScopeConfig, snapshot: ProcessSnaps
     if (config.protectedPids.includes(pid)) continue
     const identity = snapshot.get(pid)
     if (!identity || (processStartTime(identity, config) ?? 0) < config.createdAt - 1_000) continue
-    if (hasScopeEnvironment(identity, config, token)) writeProcessRecord(config, identity, true, identity.pgid === identity.pid)
+    if (hasScopeEnvironment(identity, config, token, env)) writeProcessRecord(config, identity, true, identity.pgid === identity.pid)
   }
 }
 
-function collectOwned(config: ScopeConfig, token: string): { snapshot: ProcessSnapshot; records: ProcessRecord[] } {
-  const snapshot = processSnapshot()
+function collectOwned(config: ScopeConfig, token: string, env?: Record<string, string>): { snapshot: ProcessSnapshot; records: ProcessRecord[] } {
+  const snapshot = processSnapshot(env)
   registerFreshClaims(config, snapshot)
-  scopeEnvironmentDescendants(config, snapshot, token)
+  scopeEnvironmentDescendants(config, snapshot, token, env)
 
   const byPid = new Map<number, ProcessRecord>()
   for (const record of processRecords(config)) {
@@ -337,8 +339,8 @@ function collectOwned(config: ScopeConfig, token: string): { snapshot: ProcessSn
   return { snapshot, records: [...byPid.values()] }
 }
 
-function signalRecords(config: ScopeConfig, records: ProcessRecord[], signal: NodeJS.Signals): void {
-  const snapshot = processSnapshot()
+function signalRecords(config: ScopeConfig, records: ProcessRecord[], signal: NodeJS.Signals, env?: Record<string, string>): void {
+  const snapshot = processSnapshot(env)
   const signaledGroups = new Set<number>()
   for (const record of records) {
     if (config.protectedPids.includes(record.pid)) continue
@@ -429,11 +431,11 @@ function removeScopeFiles(config: ScopeConfig): void {
   rmSync(config.scopeDirectory, { recursive: true, force: true })
 }
 
-function signalGuardian(config: ScopeConfig, signal: NodeJS.Signals): void {
+function signalGuardian(config: ScopeConfig, signal: NodeJS.Signals, env?: Record<string, string>): void {
   const guardian = readJson(config.guardianFile)
   if (!guardian || typeof guardian !== 'object') return
   const identity = guardian as ProcessIdentity
-  const current = processSnapshot().get(identity.pid)
+  const current = processSnapshot(env).get(identity.pid)
   if (!sameProcess(identity, current) || identity.pid === process.pid) return
   try {
     process.kill(identity.pid, signal)
@@ -442,20 +444,20 @@ function signalGuardian(config: ScopeConfig, signal: NodeJS.Signals): void {
   }
 }
 
-function cleanupSynchronously(config: ScopeConfig, token: string): void {
-  const owned = collectOwned(config, token)
-  signalRecords(config, owned.records, 'SIGKILL')
+function cleanupSynchronously(config: ScopeConfig, token: string, env?: Record<string, string>): void {
+  const owned = collectOwned(config, token, env)
+  signalRecords(config, owned.records, 'SIGKILL', env)
 }
 
-async function waitForGuardian(config: ScopeConfig, deadline: number): Promise<void> {
+async function waitForGuardian(config: ScopeConfig, deadline: number, env?: Record<string, string>): Promise<void> {
   const guardian = readJson(config.guardianFile)
   if (!guardian || typeof guardian !== 'object') return
   const identity = guardian as ProcessIdentity
   while (Date.now() < deadline) {
-    if (!sameProcess(identity, processSnapshot().get(identity.pid))) return
+    if (!sameProcess(identity, processSnapshot(env).get(identity.pid))) return
     await Bun.sleep(20)
   }
-  signalGuardian(config, 'SIGKILL')
+  signalGuardian(config, 'SIGKILL', env)
 }
 
 export function createProcessScope(home?: string): ProcessScope {
@@ -529,15 +531,15 @@ export function createProcessScope(home?: string): ProcessScope {
     return child
   }
 
-  const cleanup = (): Promise<void> => {
+  const cleanup = (env?: Record<string, string>): Promise<void> => {
     if (cleanupPromise) return cleanupPromise
     disposed = true
     writeFileSync(config.disposeFile, String(Date.now()), { mode: 0o600 })
     cleanupPromise = (async () => {
       const cleanupDeadline = Date.now() + 5_000
       while (Date.now() < cleanupDeadline && !existsSync(config.doneFile)) await Bun.sleep(20)
-      if (!existsSync(config.doneFile)) cleanupSynchronously(config, token)
-      await waitForGuardian(config, Date.now() + 1_000)
+      if (!existsSync(config.doneFile)) cleanupSynchronously(config, token, env)
+      await waitForGuardian(config, Date.now() + 1_000, env)
       removeScopeFiles(config)
       if (allocatedHome) rmSync(scopeHome, { recursive: true, force: true })
     })()

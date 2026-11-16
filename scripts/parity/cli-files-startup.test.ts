@@ -2,8 +2,9 @@ import { expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { isDeepStrictEqual } from 'node:util'
 import * as cliWorldModule from './cli-world'
-import { getProcessInspectionMetadata } from './cli-world'
+import { getProcessInspectionMetadata, type CliFilesWorld } from './cli-world'
 import { CliFilesRunner, runCliFilesParity } from './cli-files'
 
 type ProcessIdentity = {
@@ -85,18 +86,11 @@ type FakeScope = {
   home: string
   env: Record<string, string>
   spawn(command: string[], options?: { env?: Record<string, string> }): FakeChild
-  cleanup(): Promise<void>
+  cleanup(env?: Record<string, string>): Promise<void>
   killNow(): void
   track(pid: number): void
 }
-type Factory = (options?: { signal?: AbortSignal; deadline?: number }, dependencies?: Record<string, unknown>) => Promise<{
-  home: string
-  env: Record<string, string>
-  buildElapsedMs: number
-  startupDiagnostics?: StartupDiagnostics
-  cleanup(): Promise<void>
-  cleanupEvidence: StartupEvidence['cleanup']['evidence']
-}>
+type Factory = (options?: { signal?: AbortSignal; deadline?: number }, dependencies?: Record<string, unknown>) => Promise<CliFilesWorld>
 const cliWorldNamespace = cliWorldModule as unknown as {
   createCliFilesWorld?: Factory
   CliFilesStartupError?: StartupErrorConstructor
@@ -219,7 +213,10 @@ function makeFactoryFixture(options: {
     preparedEnv: undefined as Record<string, string> | undefined,
     buildEnv: undefined as Record<string, string> | undefined,
     daemonEnv: undefined as Record<string, string> | undefined,
-    lastObservation: undefined as StartupObservation | undefined
+    lastObservation: undefined as StartupObservation | undefined,
+    processSnapshotCalls: 0,
+    shownRecordChecks: 0,
+    shownConnectionChecks: 0
   }
   const worktrees = [
     { id: 'wt-a', path: join(home, 'repos', 'a'), repoId: 'repo-a', name: 'a', isMain: false, status: 'idle' },
@@ -234,7 +231,10 @@ function makeFactoryFixture(options: {
   const windows = {
     pages,
     browserPid: 801,
-    finish: async () => ({ records: records.map(record => ({ ...record })), requests: [] }),
+    finish: async () => {
+      state.shownRecordChecks += 1
+      return { records: records.map(record => ({ ...record })), requests: [] }
+    },
     stop: async () => {
       events.push('browser.stop')
       state.livePids.delete(801)
@@ -260,6 +260,7 @@ function makeFactoryFixture(options: {
     }
   }
   const processSnapshot = (_ownedHome: string): Map<number, ProcessIdentity> => {
+    state.processSnapshotCalls += 1
     if (state.failProcessTable) throw new Error('recording process table unavailable')
     const pids = new Set(state.livePids)
     if (state.reusedDaemonPid) pids.add(701)
@@ -323,6 +324,7 @@ function makeFactoryFixture(options: {
     control: {
       callAny: async (method: string) => {
         if (method === 'ui.state') {
+          state.shownConnectionChecks += 1
           if (options.uiStateFailure) throw new Error('recording UI state failed')
           return { windows: [41, 42].map(connId => ({ connId })) }
         }
@@ -1717,5 +1719,386 @@ test('CLI-files drains started snapshot reads before preserving the primary fail
     clearTimeout(runner.workTimer)
     clearTimeout(runner.cleanupTimer)
     runner.workController.abort()
+  }
+})
+test('CLI-files concurrent live health probes restore the caller environment and spawn function', async () => {
+  const fixture = makeFactoryFixture()
+  const originalEnvironment = { ...process.env }
+  const originalSpawnSync = Bun.spawnSync
+  const healthResponses: Array<PromiseWithResolvers<boolean>> = []
+  const firstHealthStarted = Promise.withResolvers<void>()
+  const secondHealthStarted = Promise.withResolvers<void>()
+  let holdHealthResponses = false
+  let world: CliFilesWorld | undefined
+  const liveChecks: Promise<unknown>[] = []
+  try {
+    process.env.QUIRKY_HEALTH_ENV_LIFETIME = 'caller'
+    fixture.dependencies.isDaemonAlive = async () => {
+      if (!holdHealthResponses) return true
+      const response = Promise.withResolvers<boolean>()
+      healthResponses.push(response)
+      if (healthResponses.length === 1) firstHealthStarted.resolve()
+      if (healthResponses.length === 2) secondHealthStarted.resolve()
+      return response.promise
+    }
+    world = await requireFactory()({}, fixture.dependencies)
+    const callerEnvironment = { ...process.env }
+    const identityReadsBefore = fixture.state.processSnapshotCalls
+    const shownRecordChecksBefore = fixture.state.shownRecordChecks
+    const shownConnectionChecksBefore = fixture.state.shownConnectionChecks
+    holdHealthResponses = true
+    const first = world.assertLive().then(() => undefined, error => error)
+    const second = world.assertLive().then(() => undefined, error => error)
+    liveChecks.push(first, second)
+
+    await firstHealthStarted.promise
+    const eventLoopTurn = Promise.withResolvers<void>()
+    setImmediate(eventLoopTurn.resolve)
+    await eventLoopTurn.promise
+    const overlappedBeforeFirstRelease = healthResponses.length === 2
+
+    healthResponses[0]!.resolve(true)
+    const firstFailure = await first
+    await secondHealthStarted.promise
+    healthResponses[1]!.resolve(true)
+    const secondFailure = await second
+
+    expect(firstFailure).toBeUndefined()
+    expect(secondFailure).toBeUndefined()
+    expect(overlappedBeforeFirstRelease).toBe(true)
+    expect(isDeepStrictEqual({ ...process.env }, callerEnvironment)).toBe(true)
+    expect(Bun.spawnSync).toBe(originalSpawnSync)
+    expect(fixture.state.processSnapshotCalls).toBeGreaterThan(identityReadsBefore)
+    expect(fixture.state.shownRecordChecks).toBeGreaterThan(shownRecordChecksBefore)
+    expect(fixture.state.shownConnectionChecks).toBeGreaterThan(shownConnectionChecksBefore)
+  } finally {
+    holdHealthResponses = false
+    for (const response of healthResponses) response.resolve(true)
+    await Promise.allSettled(liveChecks)
+    try {
+      await world?.cleanup()
+    } finally {
+      Bun.spawnSync = originalSpawnSync
+      for (const key of Object.keys(process.env)) delete process.env[key]
+      Object.assign(process.env, originalEnvironment)
+      fixture.dispose()
+    }
+  }
+})
+
+test('CLI-files aborts a pending live health probe without holding caller globals through cleanup', async () => {
+  const fixture = makeFactoryFixture()
+  const originalEnvironment = { ...process.env }
+  const originalSpawnSync = Bun.spawnSync
+  const pendingHealth = Promise.withResolvers<boolean>()
+  const healthStarted = Promise.withResolvers<void>()
+  const cleanupTimedOut = Promise.withResolvers<boolean>()
+  let cleanupTimer: ReturnType<typeof setTimeout> | undefined
+  let holdHealthResponse = false
+  let world: CliFilesWorld | undefined
+  let liveCheck: Promise<unknown> | undefined
+  let cleanup: Promise<void> | undefined
+  try {
+    process.env.QUIRKY_HEALTH_ENV_LIFETIME = 'caller'
+    fixture.dependencies.isDaemonAlive = async () => {
+      if (!holdHealthResponse) return true
+      healthStarted.resolve()
+      return pendingHealth.promise
+    }
+    world = await requireFactory()({}, fixture.dependencies)
+    const callerEnvironment = { ...process.env }
+    holdHealthResponse = true
+    const controller = new AbortController()
+    liveCheck = world.assertLive({ signal: controller.signal }).then(
+      () => undefined,
+      error => error
+    )
+    await healthStarted.promise
+    controller.abort(new Error('recorded health cancellation'))
+    const cancellation = await liveCheck
+    expect(cancellation).toMatchObject({ message: 'recorded health cancellation' })
+
+    cleanup = world.cleanup()
+    // A real-time bound detects a cleanup deadlock, for which no event can be awaited.
+    cleanupTimer = setTimeout(() => cleanupTimedOut.resolve(false), 1_000)
+    const cleanedUp = await Promise.race([
+      cleanup.then(() => true, () => false),
+      cleanupTimedOut.promise
+    ])
+    expect(cleanedUp).toBe(true)
+    expect(isDeepStrictEqual({ ...process.env }, callerEnvironment)).toBe(true)
+    expect(Bun.spawnSync).toBe(originalSpawnSync)
+  } finally {
+    holdHealthResponse = false
+    pendingHealth.resolve(true)
+    const releasedProbeTurn = Promise.withResolvers<void>()
+    setImmediate(releasedProbeTurn.resolve)
+    await releasedProbeTurn.promise
+    clearTimeout(cleanupTimer)
+    await Promise.allSettled([...(liveCheck ? [liveCheck] : []), ...(cleanup ? [cleanup] : [])])
+    try {
+      await world?.cleanup()
+    } finally {
+      Bun.spawnSync = originalSpawnSync
+      for (const key of Object.keys(process.env)) delete process.env[key]
+      Object.assign(process.env, originalEnvironment)
+      fixture.dispose()
+    }
+  }
+})
+test('CLI-files synchronous scope calls forward both supported Bun spawn forms with the owned environment', async () => {
+  const fixture = makeFactoryFixture({ worldStopFailure: true })
+  const originalEnvironment = { ...process.env }
+  const originalSpawnSync = Bun.spawnSync
+  const spawnCalls: unknown[][] = []
+  const argvEnvironment = { PATH: '/explicit/argv' }
+  const objectEnvironment = { PATH: '/explicit/object' }
+  const explicitOwnedSpawnSync = ((...args: unknown[]) => {
+    spawnCalls.push(args)
+    return { exitCode: 0, stdout: '', stderr: '' }
+  }) as unknown as typeof Bun.spawnSync
+  const originalScopeSpawn = fixture.scope.spawn.bind(fixture.scope)
+  let spawnHome: string | undefined
+  let unsupportedRejected = false
+  let world: CliFilesWorld | undefined
+  fixture.scope.spawn = (command, options) => {
+    if (spawnCalls.length === 0) {
+      spawnHome = process.env.QUIRKY_HOME
+      const spawnSync = Bun.spawnSync as unknown as (...args: unknown[]) => unknown
+      spawnSync(['/recorded/argv-explicit'], { env: argvEnvironment })
+      spawnSync(['/recorded/argv-owned'])
+      spawnSync({ cmd: ['/recorded/object-explicit'], env: objectEnvironment })
+      spawnSync({ cmd: ['/recorded/object-undefined'], env: undefined })
+      spawnSync({ cmd: ['/recorded/object-owned'] })
+      try {
+        spawnSync({ cmd: 'unsupported-command' })
+      } catch {
+        unsupportedRejected = true
+      }
+    }
+    return originalScopeSpawn(command, options)
+  }
+  try {
+    Bun.spawnSync = explicitOwnedSpawnSync
+    world = await requireFactory()({}, fixture.dependencies)
+    const cleanupFailure = await world.cleanup().then(
+      () => undefined,
+      error => error
+    )
+    const cleanupMessage = cleanupFailure instanceof Error ? cleanupFailure.message : String(cleanupFailure)
+    expect(cleanupMessage.includes('scope process calls must use executable argv')).toBe(false)
+    expect(cleanupMessage).toContain('recording world stop failed')
+    expect(spawnCalls).toHaveLength(5)
+    const explicitArgvOptions = spawnCalls[0]![1] as { env?: Record<string, string> }
+    const ownedEnvironment = spawnCalls[1]![1] as { env?: Record<string, string> }
+    const explicitObjectCall = spawnCalls[2]![0] as { cmd: string[]; env?: Record<string, string> }
+    const objectWithoutEnv = spawnCalls[3]![0] as { cmd: string[]; env?: Record<string, string> }
+    const objectWithOmittedEnv = spawnCalls[4]![0] as { cmd: string[]; env?: Record<string, string> }
+
+    expect(spawnHome).toBe(fixture.home)
+    expect(spawnCalls.map(([first]) => Array.isArray(first) ? 'argv' : 'object'))
+      .toEqual(['argv', 'argv', 'object', 'object', 'object'])
+    expect(explicitArgvOptions.env).toBe(argvEnvironment)
+    expect(ownedEnvironment.env?.QUIRKY_HOME).toBe(fixture.home)
+    expect(explicitObjectCall.env).toBe(objectEnvironment)
+    expect(objectWithoutEnv.env?.QUIRKY_HOME).toBe(fixture.home)
+    expect(objectWithOmittedEnv.env?.QUIRKY_HOME).toBe(fixture.home)
+    expect(unsupportedRejected).toBe(true)
+    expect(Bun.spawnSync).toBe(explicitOwnedSpawnSync)
+    expect(isDeepStrictEqual({ ...process.env }, originalEnvironment)).toBe(true)
+  } finally {
+    try {
+      if (world) await Promise.allSettled([world.cleanup()])
+    } finally {
+      Bun.spawnSync = originalSpawnSync
+      for (const key of Object.keys(process.env)) delete process.env[key]
+      Object.assign(process.env, originalEnvironment)
+      fixture.dispose()
+    }
+  }
+})
+test('CLI-files default health fetch uses its owned loopback environment and releases caller globals while pending', async () => {
+  const fixture = makeFactoryFixture()
+  const originalEnvironment = { ...process.env }
+  const originalSpawnSync = Bun.spawnSync
+  const healthResponse = Promise.withResolvers<Response>()
+  const proxyResponse = Promise.withResolvers<Response>()
+  const arrival = Promise.withResolvers<'health' | 'proxy' | 'settled' | 'timeout'>()
+  const proxyKeys = ['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']
+  let healthRequests = 0
+  let proxyRequests = 0
+  let holdResponses = false
+  let healthServer: Bun.Server<undefined> | undefined
+  let proxyServer: Bun.Server<undefined> | undefined
+  let arrivalTimer: NodeJS.Timeout | undefined
+  let controller: AbortController | undefined
+  let world: CliFilesWorld | undefined
+  let liveCheck: Promise<unknown> | undefined
+  try {
+    healthServer = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: () => {
+        healthRequests += 1
+        if (!holdResponses) return Response.json({ pid: 701 })
+        arrival.resolve('health')
+        return healthResponse.promise
+      }
+    })
+    proxyServer = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: () => {
+        proxyRequests += 1
+        if (!holdResponses) return Response.json({ pid: 701 })
+        arrival.resolve('proxy')
+        return proxyResponse.promise
+      }
+    })
+    const healthPort = healthServer.port
+    const proxyPort = proxyServer.port
+    if (healthPort === undefined || proxyPort === undefined) throw new Error('health fixture requires TCP listener ports')
+    for (const key of proxyKeys) delete process.env[key]
+    process.env.HTTP_PROXY = `http://127.0.0.1:${proxyPort}`
+
+    const startWorld = fixture.dependencies.startWorld as (
+      worldOptions: Record<string, unknown>,
+      startDependencies: Record<string, unknown>
+    ) => Promise<{ runtime: { port: number } }>
+    fixture.dependencies.startWorld = async (
+      worldOptions: Record<string, unknown>,
+      startDependencies: Record<string, unknown>
+    ) => {
+      const started = await startWorld(worldOptions, startDependencies)
+      started.runtime.port = healthPort
+      return started
+    }
+    const readRuntime = fixture.dependencies.readRuntime as () => {
+      pid: number; home: string; port: number; token: string; hookToken: string; entryHash: string
+    } | undefined
+    fixture.dependencies.readRuntime = () => {
+      const runtime = readRuntime()
+      return runtime ? { ...runtime, port: healthPort } : undefined
+    }
+    delete fixture.dependencies.isDaemonAlive
+
+    world = await requireFactory()({}, fixture.dependencies)
+    const callerEnvironment = { ...process.env }
+    const healthRequestsBefore = healthRequests
+    const proxyRequestsBefore = proxyRequests
+    holdResponses = true
+    controller = new AbortController()
+    liveCheck = world.assertLive({ signal: controller.signal }).then(
+      () => undefined,
+      error => error
+    )
+    // Bound the local-server wait so a broken fetch setup cannot strand this regression.
+    arrivalTimer = setTimeout(() => {
+      arrival.resolve('timeout')
+      controller?.abort(new Error('loopback health request did not arrive'))
+    }, 1_000)
+    const observedRoute = await Promise.race([
+      arrival.promise,
+      liveCheck.then(() => 'settled' as const)
+    ])
+
+    expect(observedRoute).toBe('health')
+    expect(healthRequests).toBeGreaterThan(healthRequestsBefore)
+    expect(proxyRequests).toBe(proxyRequestsBefore)
+    expect(isDeepStrictEqual({ ...process.env }, callerEnvironment)).toBe(true)
+    expect(Bun.spawnSync).toBe(originalSpawnSync)
+
+    healthResponse.resolve(Response.json({ pid: 701 }))
+    expect(await liveCheck).toBeUndefined()
+    expect(proxyRequests).toBe(proxyRequestsBefore)
+  } finally {
+    holdResponses = false
+    controller?.abort(new Error('health probe test cleanup'))
+    healthResponse.resolve(Response.json({ pid: 701 }))
+    proxyResponse.resolve(Response.json({ pid: 701 }))
+    clearTimeout(arrivalTimer)
+    const releasedResponseTurn = Promise.withResolvers<void>()
+    setImmediate(releasedResponseTurn.resolve)
+    await releasedResponseTurn.promise
+    await Promise.allSettled([...(liveCheck ? [liveCheck] : []), ...(world ? [world.cleanup()] : [])])
+    try {
+      await Promise.allSettled([healthServer?.stop(true), proxyServer?.stop(true)])
+    } finally {
+      Bun.spawnSync = originalSpawnSync
+      for (const key of Object.keys(process.env)) delete process.env[key]
+      Object.assign(process.env, originalEnvironment)
+      fixture.dispose()
+    }
+  }
+})
+test('CLI-files overlapping failed-stop cleanups keep explicit environments across awaits without changing globals', async () => {
+  const fixtureA = makeFactoryFixture({ worldStopFailure: true })
+  const fixtureB = makeFactoryFixture({ worldStopFailure: true })
+  const callerEnvironment = { ...process.env }
+  const callerSpawnSync = Bun.spawnSync
+  const enteredA = Promise.withResolvers<void>()
+  const enteredB = Promise.withResolvers<void>()
+  const releaseA = Promise.withResolvers<void>()
+  const releaseB = Promise.withResolvers<void>()
+  const cleanupFailure = new Error('recorded scope cleanup failure')
+  const originalCleanupA = fixtureA.scope.cleanup.bind(fixtureA.scope)
+  const originalCleanupB = fixtureB.scope.cleanup.bind(fixtureB.scope)
+  const environments: Array<Record<string, string> | undefined> = []
+  let worldA: CliFilesWorld | undefined
+  let worldB: CliFilesWorld | undefined
+  let resultA: Promise<unknown> | undefined
+  let resultB: Promise<unknown> | undefined
+  fixtureA.scope.cleanup = async env => {
+    environments[0] = env
+    enteredA.resolve()
+    await releaseA.promise
+    expect(isDeepStrictEqual({ ...process.env }, callerEnvironment)).toBe(true)
+    expect(Bun.spawnSync).toBe(callerSpawnSync)
+    await originalCleanupA()
+    throw cleanupFailure
+  }
+  fixtureB.scope.cleanup = async env => {
+    environments[1] = env
+    enteredB.resolve()
+    await releaseB.promise
+    expect(isDeepStrictEqual({ ...process.env }, callerEnvironment)).toBe(true)
+    expect(Bun.spawnSync).toBe(callerSpawnSync)
+    await originalCleanupB()
+  }
+  try {
+    worldA = await requireFactory()({}, fixtureA.dependencies)
+    worldB = await requireFactory()({}, fixtureB.dependencies)
+    resultA = worldA.cleanup().then(() => undefined, error => error)
+    await enteredA.promise
+    expect(environments[0]?.QUIRKY_HOME).toBe(fixtureA.home)
+    expect(isDeepStrictEqual({ ...process.env }, callerEnvironment)).toBe(true)
+    expect(Bun.spawnSync).toBe(callerSpawnSync)
+    resultB = worldB.cleanup().then(() => undefined, error => error)
+    await enteredB.promise
+    expect(environments[1]?.QUIRKY_HOME).toBe(fixtureB.home)
+    expect(environments[0]).not.toBe(environments[1])
+    expect(isDeepStrictEqual({ ...process.env }, callerEnvironment)).toBe(true)
+    releaseA.resolve()
+    releaseB.resolve()
+    const [failureA, failureB] = await Promise.all([resultA, resultB])
+    expect((failureA as Error).message).toContain('recorded scope cleanup failure')
+    expect((failureA as Error).message).toContain('recording world stop failed')
+    expect((failureB as Error).message).toContain('recording world stop failed')
+    expect(fixtureA.events.filter(event => event === 'scope.cleanup')).toHaveLength(1)
+    expect(fixtureB.events.filter(event => event === 'scope.cleanup')).toHaveLength(1)
+    expect(isDeepStrictEqual({ ...process.env }, callerEnvironment)).toBe(true)
+    expect(Bun.spawnSync).toBe(callerSpawnSync)
+  } finally {
+    releaseA.resolve()
+    releaseB.resolve()
+    await Promise.allSettled([
+      ...(resultA ? [resultA] : worldA ? [worldA.cleanup()] : []),
+      ...(resultB ? [resultB] : worldB ? [worldB.cleanup()] : [])
+    ])
+    Bun.spawnSync = callerSpawnSync
+    for (const key of Object.keys(process.env)) delete process.env[key]
+    Object.assign(process.env, callerEnvironment)
+    fixtureA.dispose()
+    fixtureB.dispose()
   }
 })

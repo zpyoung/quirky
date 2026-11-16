@@ -220,11 +220,21 @@ function ownImplicitProcessCalls(env: Record<string, string>): () => void {
   const original = Bun.spawnSync
   Bun.spawnSync = new Proxy(original, {
     apply(target, receiver, args: unknown[]) {
-      const [command, options] = args
-      if (!Array.isArray(command)) throw new Error('scope process calls must use executable argv')
-      const supplied = options && typeof options === 'object' ? options : {}
-      const childEnv = 'env' in supplied ? supplied.env : env
-      return Reflect.apply(target, receiver, [command, { ...supplied, env: childEnv }])
+      const [commandOrOptions, options] = args
+      if (Array.isArray(commandOrOptions)) {
+        const supplied = options && typeof options === 'object'
+          ? options as Record<string, unknown>
+          : {}
+        const childEnv = supplied.env === undefined ? env : supplied.env
+        return Reflect.apply(target, receiver, [commandOrOptions, { ...supplied, env: childEnv }])
+      }
+      if (commandOrOptions !== null && typeof commandOrOptions === 'object'
+        && 'cmd' in commandOrOptions && Array.isArray(commandOrOptions.cmd)) {
+        const supplied = commandOrOptions as Record<string, unknown>
+        const childEnv = supplied.env === undefined ? env : supplied.env
+        return Reflect.apply(target, receiver, [{ ...supplied, env: childEnv }])
+      }
+      throw new Error('scope process calls must use executable argv')
     }
   })
   return () => { Bun.spawnSync = original }
@@ -244,25 +254,12 @@ function withOwnedProcessEnvironment<T>(env: Record<string, string>, operation: 
   }
 }
 
-async function withOwnedProcessEnvironmentAsync<T>(env: Record<string, string>, operation: () => Promise<T>): Promise<T> {
-  const previous = { ...process.env }
-  for (const key of Object.keys(process.env)) delete process.env[key]
-  Object.assign(process.env, env)
-  const restoreProcessCalls = ownImplicitProcessCalls(env)
-  try {
-    return await operation()
-  } finally {
-    restoreProcessCalls()
-    for (const key of Object.keys(process.env)) delete process.env[key]
-    Object.assign(process.env, previous)
-  }
-}
-
 function safeProcessScope(
   scope: ProcessScope,
   env: Record<string, string>,
   onSpawn?: (command: string[], child: { pid: number; exited: Promise<number> }, spawnedAt: number) => void
 ): ProcessScope {
+  let cleanupPromise: Promise<void> | undefined
   return {
     home: scope.home,
     env: scope.env,
@@ -283,7 +280,8 @@ function safeProcessScope(
       withOwnedProcessEnvironment(env, () => scope.track(pid))
     },
     cleanup() {
-      return withOwnedProcessEnvironmentAsync(env, () => scope.cleanup())
+      cleanupPromise ??= Promise.resolve().then(() => scope.cleanup(env))
+      return cleanupPromise
     },
     killNow() {
       withOwnedProcessEnvironment(env, () => scope.killNow())
@@ -624,7 +622,7 @@ async function healthCheck(home: string, daemonPid: number, env: Record<string, 
   checkInterrupted(signal)
   const runtime = readRuntime(home)
   if (!runtime || runtime.pid !== daemonPid) return false
-  return withOwnedProcessEnvironmentAsync(env, () => isDaemonAlive(runtime, 250))
+  return withOwnedProcessEnvironment(env, () => isDaemonAlive(runtime, 250))
 }
 
 async function waitForCliFilesDaemonHealth(options: {
@@ -681,10 +679,11 @@ async function waitForCliFilesDaemonHealth(options: {
       if (!matchesExpectedRuntime(runtime) || !hasLiveProcessIdentity()) return false
       const remaining = Math.min(retryDeadline - now(), options.deadline - Date.now())
       if (remaining <= 0) return false
-      const alive = await Promise.race([
-        withOwnedProcessEnvironmentAsync(options.env, () => options.probe(runtime, Math.max(1, Math.min(300, remaining)))),
-        stopped.promise.then(() => false)
-      ])
+      const healthProbe = withOwnedProcessEnvironment(
+        options.env,
+        () => options.probe(runtime, Math.max(1, Math.min(300, remaining)))
+      )
+      const alive = await Promise.race([healthProbe, stopped.promise.then(() => false)])
       if (aborted || options.signal.aborted || Date.now() >= options.deadline || now() >= retryDeadline) return false
       const afterProbe = options.readOwnedRuntime(options.home)
       if (!matchesExpectedRuntime(afterProbe) || !hasLiveProcessIdentity()) return false
