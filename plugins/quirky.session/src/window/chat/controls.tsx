@@ -1,0 +1,182 @@
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import type { AgentCapabilities, Capability, Session, UiPluginContext } from '@quirky/protocol'
+import { AgentIcon, Badge, Button, ControlIcon, IconButton, SelectField } from '@quirky/ui'
+
+type Choice = { value: string; label: string }
+type ModelOption = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null }
+export type AgentModel = { id: string; label: string; options: ModelOption[] }
+
+/** The part of `quirky.agents/options` the composer reads; null models mean the list could not be loaded. */
+export type AgentOptions = { supported: boolean; models: AgentModel[]; unlistedOptions: ModelOption[] }
+
+/** What the user has picked in the composer; null means the agent's own default. */
+export type Picks = { model: string | null; effort: string | null; mode: string | null; plan: boolean }
+
+export const NO_PICKS: Picks = { model: null, effort: null, mode: null, plan: false }
+
+const LOADING = 'Loading capabilities'
+
+/** The hover text for a control that `capability` turns off, or undefined when it is on. */
+export function reasonOf(capability: Capability | AgentCapabilities['permissionModes'] | undefined): string | undefined {
+  if (capability === undefined) return LOADING
+  return capability.ok ? undefined : capability.reason
+}
+
+/** Loads the model catalog for `agent`; null until it arrives and when the agents plugin is missing. */
+export function useAgentOptions(context: UiPluginContext, agent: string): AgentOptions | null {
+  const [options, setOptions] = useState<AgentOptions | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    setOptions(null)
+    context
+      .call('quirky.agents/options', { agent })
+      .then((loaded) => {
+        if (cancelled) return
+        const info = loaded as Partial<AgentOptions> | undefined
+        setOptions({ supported: info?.supported !== false, models: info?.models ?? [], unlistedOptions: info?.unlistedOptions ?? [] })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [context, agent])
+  return options
+}
+
+const effortChoices = (options: AgentOptions, model: string | null): Choice[] => {
+  const known = options.models.find((entry) => entry.id === model)
+  const effort = (known?.options ?? options.unlistedOptions).find((option) => option.id === 'effort')
+  return Array.isArray(effort?.choices) ? effort.choices : []
+}
+
+/** The model and effort the session was launched with, as the starting picks. */
+export function launchPicks(session: Session): Pick<Picks, 'model' | 'effort'> {
+  const launched = session.launchSettings?.options
+  const model = launched?.model?.value
+  const effort = launched?.effort?.value
+  return { model: typeof model === 'string' ? model : null, effort: typeof effort === 'string' ? effort : null }
+}
+
+const bar = { display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: 'var(--ui-space-8)', minWidth: 0 } satisfies CSSProperties
+const chip = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-4)' } satisfies CSSProperties
+const hidden = { display: 'none' } satisfies CSSProperties
+
+/** The agent a session runs; fixed because an agent cannot change once its session exists. */
+export function AgentChip({ session }: { session: Session }) {
+  return (
+    <span style={chip} aria-label="Agent" title="The agent is fixed for this session">
+      <Badge>
+        <span style={chip}>
+          <AgentIcon id={session.agent} />
+          {session.agent}
+        </span>
+      </Badge>
+    </span>
+  )
+}
+
+/**
+ * Whether `file` can be attached as an image: the absolute path comes from the shell (`File.path`) or,
+ * for a native drop, from the window; a file with no known path is refused.
+ */
+export async function absolutePathOf(context: UiPluginContext, file: File): Promise<string | null> {
+  const direct = (file as File & { path?: unknown }).path
+  if (typeof direct === 'string' && direct.startsWith('/')) return direct
+  const dropped = await context.nativeDropPaths([file]).catch(() => null)
+  return dropped?.[0] ?? null
+}
+
+export type ControlsProps = {
+  context: UiPluginContext
+  session: Session
+  capabilities: AgentCapabilities | null
+  options: AgentOptions | null
+  picks: Picks
+  onPicks: (picks: Picks) => void
+  onAttach: (files: File[]) => void
+}
+
+/** The composer's agent chip, model and effort pickers, permission mode, plan toggle and attach button. */
+export function Controls({ session, capabilities, options, picks, onPicks, onAttach }: ControlsProps) {
+  const fileInput = useRef<HTMLInputElement>(null)
+  const launched = launchPicks(session)
+  const model = picks.model ?? launched.model ?? options?.models[0]?.id ?? null
+  const choices = options ? effortChoices(options, model) : []
+  const effort = picks.effort ?? launched.effort ?? choices[0]?.value ?? ''
+  const modes = capabilities?.permissionModes
+  const mode = picks.mode ?? (modes?.ok ? modes.modes[0] : undefined) ?? ''
+
+  const modelReason = options === null ? 'Models unavailable' : options.supported ? undefined : 'This agent takes no model setting'
+  const effortReason = reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined)
+  const modeReason = reasonOf(modes)
+  const planReason = reasonOf(capabilities?.planMode)
+  const imagesReason = reasonOf(capabilities?.images)
+
+  const modelList = options?.models ?? []
+  const unlisted = model !== null && !modelList.some((entry) => entry.id === model)
+
+  return (
+    <div style={bar}>
+      <AgentChip session={session} />
+      <SelectField
+        label="Model"
+        value={model ?? ''}
+        disabled={modelReason !== undefined}
+        title={modelReason}
+        onChange={(event) => onPicks({ ...picks, model: event.target.value, effort: null })}
+      >
+        {unlisted && <option value={model}>{model}</option>}
+        {modelList.map((entry) => (
+          <option key={entry.id} value={entry.id}>{entry.label}</option>
+        ))}
+      </SelectField>
+      <SelectField
+        label="Effort"
+        value={effort}
+        disabled={effortReason !== undefined}
+        title={effortReason}
+        onChange={(event) => onPicks({ ...picks, effort: event.target.value })}
+      >
+        {choices.map((choice) => (
+          <option key={choice.value} value={choice.value}>{choice.label}</option>
+        ))}
+      </SelectField>
+      <SelectField
+        label="Permission mode"
+        value={mode}
+        disabled={modeReason !== undefined}
+        title={modeReason}
+        onChange={(event) => onPicks({ ...picks, mode: event.target.value })}
+      >
+        {modes?.ok && modes.modes.map((name) => (
+          <option key={name} value={name}>{name}</option>
+        ))}
+      </SelectField>
+      <Button
+        aria-pressed={picks.plan}
+        disabled={planReason !== undefined}
+        title={planReason}
+        onClick={() => onPicks({ ...picks, plan: !picks.plan })}
+      >
+        Plan mode
+      </Button>
+      <IconButton label="Attach images" disabled={imagesReason !== undefined} title={imagesReason} onClick={() => fileInput.current?.click()}>
+        <ControlIcon name="plus" />
+      </IconButton>
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*"
+        multiple
+        style={hidden}
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(event) => {
+          const files = [...(event.target.files ?? [])]
+          event.target.value = ''
+          if (files.length > 0) onAttach(files)
+        }}
+      />
+    </div>
+  )
+}
