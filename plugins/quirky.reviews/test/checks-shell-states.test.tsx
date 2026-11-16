@@ -671,7 +671,7 @@ for (const fixture of [
 ] as const) {
   test(`Checks renders one shared error and retains conflict data for ${fixture.label}`, async () => {
     const state = reviewsState()
-    state.checks.review = { ...review, mergeable: fixture.mergeable, mergeStateStatus: fixture.mergeStateStatus }
+    state.checks.review = { ...state.checks.review!, mergeable: fixture.mergeable, mergeStateStatus: fixture.mergeStateStatus }
     state.checks.conflicts = {
       status: 'unavailable',
       message: fixture.message,
@@ -728,7 +728,7 @@ for (const fixture of [
 
 test('Checks keeps conflict loading in NoticeLine rather than error styling', async () => {
   const state = reviewsState()
-  state.checks.review = { ...review, mergeable: 'CONFLICTING' }
+  state.checks.review = { ...state.checks.review!, mergeable: 'CONFLICTING' }
   state.checks.conflicts = { status: 'loading' }
   const harness = makeContext()
   harness.methods.set('quirky.reviews/state', () => state)
@@ -744,7 +744,7 @@ test('Checks keeps conflict loading in NoticeLine rather than error styling', as
 
 test('Checks keeps ready preview advice and paths as loaded content', async () => {
   const state = reviewsState()
-  state.checks.review = { ...review, mergeable: 'CONFLICTING' }
+  state.checks.review = { ...state.checks.review!, mergeable: 'CONFLICTING' }
   state.checks.conflicts = {
     status: 'ready', available: true, conflicting: false,
     files: [{ path: 'provider.ts' }], localFiles: [{ path: 'local.ts' }],
