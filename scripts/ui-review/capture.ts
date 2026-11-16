@@ -1,22 +1,31 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { chromium, type Browser, type BrowserServer, type Page } from 'playwright'
+import { chromium, type Browser, type BrowserServer, type Locator, type Page } from 'playwright'
 import { type UiModel, type UiSlotEntry, type UiToolEntry, type ThemeInfo } from '@quirky/protocol'
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope } from '../test-support/process-scope'
 import {
+  closeCaptureTerminalFixture,
   createCaptureTerminalFixture,
+  createLoopFixture,
   createIsolatedRuntimeEnvironment,
+  createTranscriptFixture,
   openFixtureEditorBuffer,
   prepareCaptureFixtureHome,
   registerCaptureFixtures,
   seedWorktreeStatuses,
   type CaptureTerminalFixture,
   type EditorFixtureBuffer,
+  type FixtureRpcClient,
+  type LoopFixture,
   type PreparedCaptureFixtureHome,
-  type RegisteredCaptureFixtures
+  type RegisteredCaptureFixtures,
+  type TranscriptFixture
 } from './fixtures'
+import { CHECKS_FIXTURE_BRANCH } from './tasks-fixture'
+import { createRemoteFixtures, type RemoteFixtures } from './remote-fixtures'
+import { captureBrowserExecutable } from './browser'
 import {
   CAPTURE_SCHEMA_VERSION,
   THEMES,
@@ -53,15 +62,36 @@ const CAPTURE_ROOT = 'captures'
 const CAPTURE_PROGRESS_FILE = 'capture-progress.json'
 const SHELL_TARGETS: ReadonlySet<string> = new Set(['host:shell', 'host:scoped', 'host:popups'])
 export type CaptureCell = { targetId: string; theme: CaptureTheme }
+export const OVERLAY_OPEN_MS = 15_000
+const OVERLAY_TRIGGER_NAMES = new WeakMap<Promise<unknown>, string>()
 
-type RuntimeClient = {
-  callAny(method: string, params?: Record<string, unknown>, options?: { timeoutMs?: number }): Promise<unknown>
-  close(): void
+function namedOverlayTrigger(command: string, trigger: Promise<unknown>): Promise<unknown> {
+  OVERLAY_TRIGGER_NAMES.set(trigger, command)
+  return trigger
 }
+
+const CELL_TERMINAL_TARGETS: ReadonlySet<string> = new Set([
+  'view:quirky.accounts/session-accessory',
+  'overlay:quirky.accounts/switch-dialog',
+  'overlay:quirky.handoff/dialog'
+])
+const REMOTE_TARGETS: ReadonlySet<string> = new Set([
+  'view:quirky.orchestration/remote-worker-output',
+  'view:quirky.worktree/remote'
+])
+const TERMINAL_SURFACE_PLUGINS: ReadonlySet<string> = new Set([
+  'quirky.terminal',
+  'quirky.session',
+  'quirky.session-info',
+  'quirky.agent-status',
+  'quirky.terminal-dock'
+])
+
+type RuntimeClient = FixtureRpcClient & { close(): void }
 
 type RendererTheme = ThemeInfo & { plugin: string | null }
 
-type CaptureRuntime = {
+export type CaptureRuntime = {
   options: CaptureOptions
   outputDir: string
   client: RuntimeClient
@@ -72,12 +102,17 @@ type CaptureRuntime = {
   fixtures: RegisteredCaptureFixtures
   editorBuffer: EditorFixtureBuffer | null
   terminalFixture: CaptureTerminalFixture | null
+  cellTerminalFixture: CaptureTerminalFixture | null
+  transcriptFixture: TranscriptFixture | null
+  loopFixture: LoopFixture | null
+  remoteFixtures: RemoteFixtures | null
   structuredSessionId: string | null
   pendingUiCommand: Promise<unknown> | null
   scene: SceneState
   manifest: CaptureManifest
   secrets: string[]
   pageErrors: string[]
+  fixtureInputErrors: ReadonlyMap<string, string>
 }
 class CaptureRuntimeError extends Error {}
 
@@ -85,7 +120,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function sanitizedError(error: unknown, secrets: string[]): string {
+export function sanitizedError(error: unknown, secrets: string[]): string {
   let message = errorMessage(error)
   for (const secret of secrets) {
     if (secret.length === 0) continue
@@ -97,7 +132,7 @@ function sanitizedError(error: unknown, secrets: string[]): string {
     .replace(/\b((?:rpc|hook)?token)\s*[:=]\s*([^\s,;}\]]+)/gi, '$1=<redacted>')
   return message.slice(0, 2_000)
 }
-function registerPathSecret(path: string, secrets: string[]): void {
+export function registerPathSecret(path: string, secrets: string[]): void {
   const aliases = [path]
   try { aliases.push(realpathSync(path)) } catch {}
   for (const alias of aliases) {
@@ -119,7 +154,7 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw abortError(signal)
 }
 
-function bounded<T>(promise: Promise<T>, timeoutMs: number, signal: AbortSignal | undefined, label: string): Promise<T> {
+export function bounded<T>(promise: Promise<T>, timeoutMs: number, signal: AbortSignal | undefined, label: string): Promise<T> {
   throwIfAborted(signal)
   const { promise: boundedPromise, resolve, reject } = Promise.withResolvers<T>()
   let settled = false
@@ -275,7 +310,7 @@ function outputTail(stream: ReadableStream<Uint8Array>): () => string {
   return () => text
 }
 
-async function waitForRuntime(home: string, child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>, timeoutMs: number, signal?: AbortSignal): Promise<RuntimeInfo> {
+export async function waitForRuntime(home: string, child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>, timeoutMs: number, signal?: AbortSignal): Promise<RuntimeInfo> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     throwIfAborted(signal)
@@ -287,8 +322,8 @@ async function waitForRuntime(home: string, child: Bun.Subprocess<'ignore', 'pip
   throw new Error(`daemon did not become ready within ${timeoutMs}ms`)
 }
 
-async function rpc(
-  client: RuntimeClient,
+export async function rpc(
+  client: FixtureRpcClient,
   method: string,
   params: Record<string, unknown>,
   timeoutMs: number,
@@ -400,8 +435,33 @@ async function waitForRendererModel(runtime: CaptureRuntime): Promise<void> {
   await runtime.page.locator('.tool-shell__stripe').first().waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
 }
 
+async function openLocalWorktreeContext(
+  runtime: CaptureRuntime,
+  worktree = runtime.fixtures.primaryWorktree
+): Promise<void> {
+  const view = runtime.model.views.find((candidate) => candidate.id === 'view:quirky.session/worktree')
+  if (!view) throw new Error('the local session worktree view is unavailable for fixture preparation')
+  const usePrimarySession = worktree.id === runtime.fixtures.primaryWorktree.id
+  const target: CaptureTarget = { id: view.id, plugin: view.plugin, title: view.title, kind: 'view' }
+  const input = fixtureViewInput(
+    { ...runtime.fixtures, primaryWorktree: worktree },
+    target,
+    runtime.editorBuffer,
+    usePrimarySession ? runtime.terminalFixture : null,
+    runtime.structuredSessionId,
+    {
+      transcript: runtime.transcriptFixture,
+      loop: runtime.loopFixture,
+      remote: runtime.remoteFixtures,
+      cellTerminal: usePrimarySession ? runtime.cellTerminalFixture : null
+    }
+  )
+  await rpc(runtime.client, 'ui.view.open', { id: view.id, input }, runtime.options.timeoutMs, runtime.options.signal)
+  await inspectSurface(runtime, target)
+}
+
 async function prepareAccountsStaleSession(runtime: CaptureRuntime, provider: 'claude' | 'codex'): Promise<void> {
-  const terminal = runtime.terminalFixture
+  const terminal = runtime.cellTerminalFixture ?? runtime.terminalFixture
   if (!terminal) throw new Error(`a terminal fixture is required to prepare the ${provider} account session`)
   const { primaryWorktree } = runtime.fixtures
   const { timeoutMs, signal } = runtime.options
@@ -494,10 +554,24 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
   const orchestrationSetupSurface = runtime.page.locator('aside[aria-label="Enable orchestration"]')
   const hadFloating = await floatingPanel.count() > 0 || await orchestrationSetupSurface.count() > 0
   const composer = runtime.page.locator('.tasks-composer')
+  const composerDialog = '[data-plugin-overlay="overlay:quirky.tasks/workspace-composer"] .ui-dialog-backdrop'
+  const quickOpen = runtime.page.locator('.qe-quick-open')
+  const quickOpenDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.editor/quick-open"] .ui-dialog-backdrop')
+  const hadQuickOpen = await quickOpen.count() > 0
   const hadComposer = await composer.count() > 0
   const handoffDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.handoff/dialog"] [role="dialog"]')
   const loopsDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.loops/dialogs"] [role="dialog"]')
 
+  if (hadQuickOpen) {
+    if (await quickOpen.isVisible()) {
+      const cancel = quickOpenDialog.getByRole('button', { name: 'Cancel', exact: true })
+      const close = quickOpenDialog.getByRole('button', { name: 'Close dialog', exact: true })
+      const dismiss = await cancel.count() > 0 ? cancel : close
+      if (await dismiss.count() > 0) await dismiss.click({ timeout: runtime.options.timeoutMs })
+    }
+    await bounded(quickOpen.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }),
+      runtime.options.timeoutMs, runtime.options.signal, 'close Editor quick-open')
+  }
   await bounded(runtime.page.keyboard.press('Escape'), runtime.options.timeoutMs, runtime.options.signal, 'close renderer overlay')
   if (hadFeedback) {
     await rpc(runtime.client, 'setting.set', { id: 'setting:quirky.feedback/active', value: false }, runtime.options.timeoutMs, runtime.options.signal)
@@ -519,11 +593,14 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
     await bounded(accountSwitchDialog.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Accounts switch dialog')
   }
   if (hadComposer) {
-    const state = record(await rpc(runtime.client, 'quirky.tasks/workspaceComposerState', {}, runtime.options.timeoutMs, runtime.options.signal))
-    if (typeof state.requestId === 'string' && state.requestId.length > 0) {
-      await rpc(runtime.client, 'quirky.tasks/workspaceComposerCancel', { requestId: state.requestId }, runtime.options.timeoutMs, runtime.options.signal)
-      await bounded(composer.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Tasks workspace composer')
-    }
+    // escape may already be unmounting the dialog; inspect and dismiss in one renderer turn.
+    await runtime.page.evaluate((selector) => {
+      const dialog = document.querySelector(selector)
+      const cancel = dialog?.querySelector<HTMLButtonElement>('.tasks-composer__actions button')
+      if (cancel && !cancel.disabled) cancel.click()
+    }, composerDialog)
+    await bounded(runtime.page.locator(composerDialog).waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }),
+      runtime.options.timeoutMs, runtime.options.signal, 'close Tasks workspace composer')
   }
   if (hadFloating) {
     await rpc(runtime.client, 'quirky.terminal/setFloating', { open: false }, runtime.options.timeoutMs, runtime.options.signal)
@@ -559,7 +636,13 @@ export function fixtureViewInput(
   target: CaptureTarget,
   editorBuffer: EditorFixtureBuffer | null,
   terminalFixture: CaptureTerminalFixture | null,
-  structuredSessionId: string | null = null
+  structuredSessionId: string | null = null,
+  extra?: {
+    transcript?: TranscriptFixture | null
+    loop?: LoopFixture | null
+    remote?: RemoteFixtures | null
+    cellTerminal?: CaptureTerminalFixture | null
+  }
 ): Record<string, unknown> {
   const worktree = fixtures.primaryWorktree
   const input: Record<string, unknown> = {
@@ -569,6 +652,17 @@ export function fixtureViewInput(
     repo: fixtures.repo.id,
     repoId: fixtures.repo.id
   }
+  if (target.id === 'view:quirky.orchestration/remote-worker-output') {
+    if (!extra?.remote) throw new Error('remote fixtures are required for the remote worker output view')
+    return { dispatchId: extra.remote.dispatchId }
+  }
+  if (target.id === 'view:quirky.reviews/create') {
+    const readyWorktree = fixtures.worktrees.find((candidate) => candidate.name === 'ui-review-ready')
+    if (!readyWorktree) throw new Error('the Reviews create fixture worktree ui-review-ready is unavailable')
+    input.worktree = readyWorktree.id
+    input.worktreeId = readyWorktree.id
+    input.workspace = readyWorktree.id
+  }
   if (target.plugin === 'quirky.git' && target.id.endsWith('/diff')) {
     input.mode = 'review'
   }
@@ -577,19 +671,32 @@ export function fixtureViewInput(
     input.tabId = editorBuffer.tabId
     input.mode = editorBuffer.mode
   }
-  if (terminalFixture && (
+  const activeTerminal = extra?.cellTerminal ?? terminalFixture
+  if (activeTerminal && (
     ['quirky.terminal', 'quirky.session-info', 'quirky.terminal-dock', 'quirky.accounts'].includes(target.plugin ?? '') ||
     target.id === 'view:quirky.session/worktree'
   )) {
-    input.session = terminalFixture.sessionId
-    input.sessionId = terminalFixture.sessionId
-    input.tabId = terminalFixture.tabId
-    input.pane = terminalFixture.paneId
-    input.paneId = terminalFixture.paneId
+    input.session = activeTerminal.sessionId
+    input.sessionId = activeTerminal.sessionId
+    input.tabId = activeTerminal.tabId
+    input.pane = activeTerminal.paneId
+    input.paneId = activeTerminal.paneId
   }
   if (target.id === 'view:quirky.session/structured') {
     if (!structuredSessionId) throw new Error('a structured session fixture is required for the structured view')
     input.session = structuredSessionId
+  }
+  if (target.id === 'view:quirky.session-info/transcript') {
+    if (!extra?.transcript) throw new Error('a transcript fixture is required for the transcript view')
+    input.session = extra.transcript.sessionId
+  }
+  if (target.id === 'view:quirky.loops/loop') {
+    if (!extra?.loop) throw new Error('a loop fixture is required for the Loops view')
+    input.loopId = extra.loop.loopId
+  }
+  if (target.id === 'view:quirky.worktree/remote') {
+    if (!extra?.remote) throw new Error('remote fixtures are required for the remote workspace view')
+    input.workspace = extra.remote.mirrorId
   }
   return input
 }
@@ -611,6 +718,47 @@ async function openWorktreeContext(runtime: CaptureRuntime): Promise<void> {
   }, runtime.options.timeoutMs, runtime.options.signal)
   await inspectSurface(runtime, { id: editorView.id, plugin: editorView.plugin, title: editorView.title, kind: 'view' })
 }
+async function visibleDialogNames(page: Page): Promise<string[]> {
+  const backdrops = page.locator('.overlay-layer .ui-dialog-backdrop:visible')
+  if (await backdrops.count() === 0) return []
+  const names = (await backdrops.locator('.ui-dialog__title').allTextContents())
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0)
+  return names.length > 0 ? names : ['dialog']
+}
+
+export async function waitForOverlay(
+  runtime: Pick<CaptureRuntime, 'page' | 'options'>,
+  locator: Locator,
+  label: string,
+  trigger?: Promise<unknown>
+): Promise<void> {
+  const timeoutMs = runtime.options.overlayOpenMs ?? OVERLAY_OPEN_MS
+  const timeoutError = Symbol('overlay timeout')
+  const { promise: timeout, reject: rejectTimeout } = Promise.withResolvers<never>()
+  const timer = setTimeout(() => rejectTimeout(timeoutError), timeoutMs)
+  const visible = locator.waitFor({ state: 'visible', timeout: timeoutMs + 5 })
+  const pending = [visible, timeout]
+  if (trigger) {
+    const { promise: refused, reject } = Promise.withResolvers<never>()
+    void trigger.catch((error) => reject(new Error(
+      `trigger ${OVERLAY_TRIGGER_NAMES.get(trigger) ?? label} was refused: ${errorMessage(error)}`
+    )))
+    pending.push(refused)
+  }
+  try {
+    await bounded(Promise.race(pending), timeoutMs + 10, runtime.options.signal, label)
+  } catch (error) {
+    if (error === timeoutError) {
+      const names = await visibleDialogNames(runtime.page)
+      throw new Error(`${label} did not draw within ${timeoutMs}ms; visible dialogs: ${names.join(', ') || 'none'}`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 
 async function openUnsavedCloseOverlay(runtime: CaptureRuntime): Promise<void> {
   const buffer = runtime.editorBuffer
@@ -624,16 +772,13 @@ async function openUnsavedCloseOverlay(runtime: CaptureRuntime): Promise<void> {
   }, runtime.options.timeoutMs, runtime.options.signal))
   if (draft.dirty !== true || typeof draft.contentRevision !== 'number') throw new Error('the editor fixture draft did not become dirty')
   buffer.contentRevision = draft.contentRevision
-  const pending = runtime.client.callAny('ui.command.run', {
+  const pending = namedOverlayTrigger('command:quirky.editor/close', rpc(runtime.client, 'ui.command.run', {
     id: 'command:quirky.editor/close',
     args: { bufferId: buffer.id, tabId: buffer.tabId }
-  }, { timeoutMs: runtime.options.timeoutMs })
+  }, runtime.options.timeoutMs, runtime.options.signal))
   runtime.pendingUiCommand = pending
   void pending.catch(() => undefined)
-  await runtime.page.getByRole('dialog', { name: 'Unsaved Changes', exact: true }).waitFor({
-    state: 'visible',
-    timeout: runtime.options.timeoutMs
-  })
+  await waitForOverlay(runtime, runtime.page.getByRole('dialog', { name: 'Unsaved Changes', exact: true }), 'Unsaved Changes', pending)
 }
 
 async function resolveUnsavedCloseOverlay(runtime: CaptureRuntime): Promise<void> {
@@ -688,9 +833,9 @@ async function openPanel(runtime: CaptureRuntime, target: CaptureTarget): Promis
 }
 
 export async function ensureHandoffTerminalContext(
-  runtime: Pick<CaptureRuntime, 'terminalFixture' | 'options' | 'client'>
+  runtime: Pick<CaptureRuntime, 'terminalFixture' | 'cellTerminalFixture' | 'options' | 'client'>
 ): Promise<void> {
-  const terminal = runtime.terminalFixture
+  const terminal = runtime.cellTerminalFixture ?? runtime.terminalFixture
   if (!terminal) throw new Error('a terminal fixture is required to capture the Handoff dialog')
   const { timeoutMs, signal } = runtime.options
   const deadline = Date.now() + timeoutMs
@@ -759,8 +904,16 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
       }
       throw new Error(`unsupported host target ${target.id}`)
     case 'view': {
-      if (target.id === 'view:quirky.accounts/session-accessory') await prepareAccountsStaleSession(runtime, 'codex')
-      const input = fixtureViewInput(runtime.fixtures, target, runtime.editorBuffer, runtime.terminalFixture, runtime.structuredSessionId)
+      if (target.id === 'view:quirky.accounts/session-accessory') {
+        await openLocalWorktreeContext(runtime)
+        await prepareAccountsStaleSession(runtime, 'codex')
+      }
+      const input = fixtureViewInput(runtime.fixtures, target, runtime.editorBuffer, runtime.terminalFixture, runtime.structuredSessionId, {
+        transcript: runtime.transcriptFixture,
+        loop: runtime.loopFixture,
+        remote: runtime.remoteFixtures,
+        cellTerminal: runtime.cellTerminalFixture
+      })
       if (target.id === 'view:quirky.browser/page') {
         const pane = record(await rpc(runtime.client, 'quirky.browser/paneOpen', {
           worktree: runtime.fixtures.primaryWorktree.id,
@@ -786,62 +939,117 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
     }
     case 'overlay':
       if (target.id === 'overlay:quirky.accounts/switch-dialog') {
+        await openLocalWorktreeContext(runtime)
         await prepareAccountsStaleSession(runtime, 'claude')
-        await runtime.page.locator('[data-plugin-overlay="overlay:quirky.accounts/switch-dialog"] [role="dialog"]')
-          .waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+        await waitForOverlay(
+          runtime,
+          runtime.page.locator('[data-plugin-overlay="overlay:quirky.accounts/switch-dialog"] [role="dialog"]'),
+          'Accounts switch dialog'
+        )
       } else if (target.id === 'overlay:quirky.editor/quick-open') {
         await openWorktreeContext(runtime)
-        await rpc(runtime.client, 'ui.command.run', { id: 'command:quirky.editor/quick-open' }, runtime.options.timeoutMs, runtime.options.signal)
-        await runtime.page.locator('.qe-quick-open').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
-        await runtime.page.getByLabel('Go to file').fill('app.ts', { timeout: runtime.options.timeoutMs })
+        const trigger = namedOverlayTrigger('command:quirky.editor/quick-open', rpc(
+          runtime.client,
+          'ui.command.run',
+          { id: 'command:quirky.editor/quick-open' },
+          runtime.options.timeoutMs,
+          runtime.options.signal
+        ))
+        await waitForOverlay(runtime, runtime.page.locator('.qe-quick-open'), 'Editor quick-open', trigger)
+        await runtime.page.getByRole('textbox', { name: 'Go to file', exact: true }).fill('app.ts', { timeout: runtime.options.timeoutMs })
         await runtime.page.getByRole('option').filter({ hasText: 'src/app.ts' }).waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
       } else if (target.id === 'overlay:quirky.editor/close') {
         await openUnsavedCloseOverlay(runtime)
       } else if (target.id === 'overlay:quirky.feedback/mode') {
-        await rpc(runtime.client, 'ui.command.run', { id: 'command:quirky.feedback/toggle' }, runtime.options.timeoutMs, runtime.options.signal)
-        await runtime.page.locator('[data-quirky-feedback]:not([data-feedback-banner])')
-          .waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+        const trigger = namedOverlayTrigger('command:quirky.feedback/toggle', rpc(
+          runtime.client,
+          'ui.command.run',
+          { id: 'command:quirky.feedback/toggle' },
+          runtime.options.timeoutMs,
+          runtime.options.signal
+        ))
+        await waitForOverlay(
+          runtime,
+          runtime.page.locator('[data-quirky-feedback]:not([data-feedback-banner])'),
+          'Feedback mode',
+          trigger
+        )
       } else if (target.id === 'overlay:quirky.handoff/dialog') {
         await ensureHandoffTerminalContext(runtime)
-        await rpc(runtime.client, 'ui.command.run', {
+        const terminal = runtime.cellTerminalFixture ?? runtime.terminalFixture
+        if (!terminal) throw new Error('a terminal fixture is required to capture the Handoff dialog')
+        const trigger = namedOverlayTrigger('command:quirky.handoff/open', rpc(runtime.client, 'ui.command.run', {
           id: 'command:quirky.handoff/open',
-          args: { session: runtime.terminalFixture!.sessionId }
-        }, runtime.options.timeoutMs, runtime.options.signal)
-        await runtime.page.locator('[data-plugin-overlay="overlay:quirky.handoff/dialog"] [role="dialog"]')
-          .waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+          args: { session: terminal.sessionId }
+        }, runtime.options.timeoutMs, runtime.options.signal))
+        await waitForOverlay(
+          runtime,
+          runtime.page.locator('[data-plugin-overlay="overlay:quirky.handoff/dialog"] [role="dialog"]'),
+          'Handoff dialog',
+          trigger
+        )
       } else if (target.id === 'overlay:quirky.loops/dialogs') {
-        await rpc(runtime.client, 'ui.command.run', {
+        const trigger = namedOverlayTrigger('command:quirky.loops/new', rpc(runtime.client, 'ui.command.run', {
           id: 'command:quirky.loops/new',
           args: { workspace: runtime.fixtures.primaryWorktree.id }
-        }, runtime.options.timeoutMs, runtime.options.signal)
+        }, runtime.options.timeoutMs, runtime.options.signal))
         const dialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.loops/dialogs"] [role="dialog"]')
-        await dialog.waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+        await waitForOverlay(runtime, dialog, 'Loops dialog', trigger)
         await dialog.getByLabel('Prompt', { exact: true }).fill('Review the current workspace and summarize the next useful task.')
         await dialog.getByText('Enter a prompt to start the loop.', { exact: true })
           .waitFor({ state: 'detached', timeout: runtime.options.timeoutMs })
       } else if (target.id === 'overlay:quirky.orchestration/floating-setup') {
-        await rpc(runtime.client, 'quirky.terminal/setFloating', { open: true }, runtime.options.timeoutMs, runtime.options.signal)
-        await runtime.page.locator('[data-plugin-overlay="overlay:quirky.orchestration/floating-setup"]')
-          .locator('aside[aria-label="Enable orchestration"]').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+        const trigger = namedOverlayTrigger('quirky.terminal/setFloating', rpc(
+          runtime.client,
+          'quirky.terminal/setFloating',
+          { open: true },
+          runtime.options.timeoutMs,
+          runtime.options.signal
+        ))
+        await waitForOverlay(
+          runtime,
+          runtime.page.locator('[data-plugin-overlay="overlay:quirky.orchestration/floating-setup"]')
+            .locator('aside[aria-label="Enable orchestration"]'),
+          'Orchestration setup',
+          trigger
+        )
       } else if (target.id === 'overlay:quirky.tasks/workspace-composer') {
-        await rpc(runtime.client, 'quirky.tasks/workspace', {
+        const trigger = namedOverlayTrigger('quirky.tasks/workspace', rpc(runtime.client, 'quirky.tasks/workspace', {
           target: {
             worktree: runtime.fixtures.primaryWorktree.id,
             kind: 'issue',
             number: runtime.fixtures.tasks.issue.number
           },
           action: 'start'
-        }, runtime.options.timeoutMs, runtime.options.signal)
-        await runtime.page.locator('.tasks-composer').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+        }, runtime.options.timeoutMs, runtime.options.signal))
+        await waitForOverlay(runtime, runtime.page.locator('.tasks-composer'), 'Tasks workspace composer', trigger)
       } else if (target.id === 'overlay:quirky.terminal/floating') {
-        await rpc(runtime.client, 'quirky.terminal/setFloating', { open: true }, runtime.options.timeoutMs, runtime.options.signal)
-        await runtime.page.locator('[data-floating-panel]').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs })
+        const trigger = namedOverlayTrigger('quirky.terminal/setFloating', rpc(
+          runtime.client,
+          'quirky.terminal/setFloating',
+          { open: true },
+          runtime.options.timeoutMs,
+          runtime.options.signal
+        ))
+        await waitForOverlay(runtime, runtime.page.locator('[data-floating-panel]'), 'Terminal floating panel', trigger)
       }
       return
     case 'sidebar-section':
     case 'activity-item':
     case 'status-bar':
-      if (target.plugin === 'quirky.editor' || target.plugin === 'quirky.git') await openWorktreeContext(runtime)
+      if (target.id === 'status-bar:quirky.reviews/checks') {
+        const worktree = runtime.fixtures.worktrees.find((entry) =>
+          entry.repoId === runtime.fixtures.repo.id && entry.name === CHECKS_FIXTURE_BRANCH)
+        if (!worktree) throw new Error('the Reviews checks fixture worktree is unavailable')
+        await openLocalWorktreeContext(runtime, worktree)
+        const refreshed = record(await rpc(runtime.client, 'quirky.reviews/checksRefresh',
+          { worktree: worktree.id, force: true }, runtime.options.timeoutMs, runtime.options.signal))
+        if (refreshed.ok !== true) throw new Error(`Reviews checks fixture refresh failed: ${String(refreshed.error ?? refreshed.kind ?? 'unknown')}`)
+      } else if (target.id === 'status-bar:quirky.git/ahead-behind') {
+        await openLocalWorktreeContext(runtime)
+      } else if (target.plugin === 'quirky.editor' || target.plugin === 'quirky.git') {
+        await openWorktreeContext(runtime)
+      }
       await openSurfaceTool(runtime, target)
       return
   }
@@ -923,33 +1131,48 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
   await bounded(root.waitFor({ state: 'attached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, `slot ${target.id} mount`)
   if (await root.count() !== 1) throw new Error(`slot ${target.id} did not mount in the renderer DOM`)
   const readinessTimeout = Math.min(target.kind === 'overlay' ? 1_500 : 10_000, runtime.options.timeoutMs)
-  await bounded(runtime.page.waitForFunction((slotSelector) => {
-    const node = document.querySelector(slotSelector)
-    if (!node) return false
-    const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
-    const element = body ?? node
-    const style = getComputedStyle(element)
-    const rect = element.getBoundingClientRect()
-    const ownVisible = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
-    const visibleChild = [...element.querySelectorAll('*')].some((child) => {
-      const childStyle = getComputedStyle(child)
-      const childRect = child.getBoundingClientRect()
-      return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
+  try {
+    await bounded(runtime.page.waitForFunction((slotSelector) => {
+      const node = document.querySelector(slotSelector)
+      if (!node) return false
+      const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
+      const element = body ?? node
+      const style = getComputedStyle(element)
+      const rect = element.getBoundingClientRect()
+      const ownVisible = style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+      const visibleChild = [...element.querySelectorAll('*')].some((child) => {
+        const childStyle = getComputedStyle(child)
+        const childRect = child.getBoundingClientRect()
+        return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
+      })
+      if (!ownVisible && !visibleChild) return false
+      if (node.querySelector('[aria-busy=\"true\"], [role=\"progressbar\"]')) return false
+      const loadingLeaf = [...element.querySelectorAll('*')].some((child) => {
+        if (child.children.length > 0 || !/^loading(?:\b|…)/i.test((child.textContent ?? '').trim())) return false
+        const childStyle = getComputedStyle(child)
+        const childRect = child.getBoundingClientRect()
+        return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
+      })
+      if (loadingLeaf) return false
+      if (node.querySelector('[role=\"alert\"], .plugin-slot-error')) return true
+      const text = (element.textContent ?? '').trim()
+      if (/^loading\b/i.test(text)) return false
+      return text.length > 0 || visibleChild
+    }, mountSelector, { timeout: readinessTimeout }), readinessTimeout, runtime.options.signal, `slot ${target.id} content`)
+  } catch (error) {
+    const timeoutMessage = `slot ${target.id} content exceeded ${readinessTimeout}ms`
+    if (runtime.options.signal?.aborted ||
+      (!errorMessage(error).includes(timeoutMessage) && !/Timeout.*exceeded/i.test(errorMessage(error)))) throw error
+    const details = await root.evaluate((node) => {
+      const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
+      const element = body ?? node
+      return {
+        text: (element.textContent ?? '').trim(),
+        busy: node.querySelector('[aria-busy=\"true\"], [role=\"progressbar\"]') !== null
+      }
     })
-    if (!ownVisible && !visibleChild) return false
-    if (node.querySelector('[aria-busy=\"true\"], [role=\"progressbar\"]')) return false
-    const loadingLeaf = [...element.querySelectorAll('*')].some((child) => {
-      if (child.children.length > 0 || !/^loading(?:\b|…)/i.test((child.textContent ?? '').trim())) return false
-      const childStyle = getComputedStyle(child)
-      const childRect = child.getBoundingClientRect()
-      return childStyle.display !== 'none' && childStyle.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0
-    })
-    if (loadingLeaf) return false
-    if (node.querySelector('[role=\"alert\"], .plugin-slot-error')) return true
-    const text = (element.textContent ?? '').trim()
-    if (/^loading\b/i.test(text)) return false
-    return text.length > 0 || visibleChild
-  }, mountSelector, { timeout: readinessTimeout }), readinessTimeout, runtime.options.signal, `slot ${target.id} content`)
+    throw new Error(`${timeoutMessage} (busy: ${details.busy}, text: ${JSON.stringify(details.text.slice(0, 120))})`)
+  }
   const details = await root.evaluate((node) => {
     const body = node.classList.contains('plugin-slot') ? node.querySelector('.plugin-slot-body') : node
     const element = body ?? node
@@ -973,6 +1196,15 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
   if (!details.visible) throw new Error(`slot ${target.id} is hidden or has zero size`)
   if (!details.content) throw new Error(`slot ${target.id} is empty`)
   if (details.busy || /^loading\b/i.test(details.text)) throw new Error(`slot ${target.id} is still loading`)
+  if (target.id === 'view:quirky.orchestration/remote-worker-output') {
+    await bounded(runtime.page.waitForFunction((readoutSelector) =>
+      document.querySelector(readoutSelector)?.textContent?.includes('Ready.') === true,
+    `${selector} pre.ui-readout`, { timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'remote worker output readiness')
+  }
+  if (target.id === 'view:quirky.worktree/remote' &&
+    (!details.text.includes('Connected') || !details.text.includes('Branch') || !details.text.includes('remote-review'))) {
+    throw new Error('remote workspace did not show Connected and the remote-review branch')
+  }
 }
 
 function capturePath(outputDir: string, cell: CaptureCell): string {
@@ -1140,11 +1372,153 @@ function failedCell(cell: CaptureCell, references: GoldenReferences, error: stri
   return { ...cell, image: null, reference: referenceFor(references, cell.targetId, cell.theme), status: 'failed', error }
 }
 
+export function fillBlockedCells(
+  cells: CaptureCell[],
+  blockedCell: CaptureCell,
+  references: GoldenReferences,
+  results: Map<string, CaptureEvidence>,
+  blocker: string
+): void {
+  const blockedIndex = cells.findIndex((cell) => cell.targetId === blockedCell.targetId && cell.theme === blockedCell.theme)
+  if (blockedIndex < 0) return
+  for (let index = blockedIndex + 1; index < cells.length; index += 1) {
+    const cell = cells[index]
+    const key = `${cell.targetId}\0${cell.theme}`
+    if (!results.has(key)) results.set(key, failedCell(cell, references, `not attempted: renderer blocked by ${blocker}`))
+  }
+}
+
+export async function isolateCell(
+  runtime: CaptureRuntime,
+  target: CaptureTarget,
+  theme: CaptureTheme,
+  failed: boolean
+): Promise<{ ready: true } | { ready: false; blocker: string }> {
+  const cell = `${target.id} (${theme})`
+  const recordCleanupFailure = (error: unknown) => {
+    runtime.manifest.failures.push(`${cell} cleanup: ${sanitizedError(error, runtime.secrets)}`)
+  }
+  try {
+    await closeCurrentSurface(runtime)
+  } catch (error) {
+    recordCleanupFailure(error)
+  }
+  const terminal = runtime.cellTerminalFixture
+  if (terminal) {
+    try {
+      await closeCaptureTerminalFixture(runtime.client, terminal, runtime.options)
+    } catch (error) {
+      recordCleanupFailure(error)
+    } finally {
+      runtime.cellTerminalFixture = null
+    }
+  }
+
+  let dialogs: string[]
+  try {
+    dialogs = await visibleDialogNames(runtime.page)
+  } catch (error) {
+    recordCleanupFailure(error)
+    return { ready: false, blocker: `${cell}: renderer state could not be inspected` }
+  }
+  if (!failed && dialogs.length > 0) runtime.manifest.failures.push(`${cell} left a dialog open: ${dialogs.join(', ')}`)
+  if (!failed && dialogs.length === 0) return { ready: true }
+
+  const reloadAndVerify = async (): Promise<boolean> => {
+    try {
+      await bounded(runtime.page.reload({ waitUntil: 'domcontentloaded', timeout: runtime.options.timeoutMs }),
+        runtime.options.timeoutMs, runtime.options.signal, 'renderer reload')
+      await waitForUiWindow(runtime)
+      const state = record(await rpc(runtime.client, 'ui.state', {}, runtime.options.timeoutMs, runtime.options.signal))
+      const windows = Array.isArray(state.windows) ? state.windows : []
+      if (windows.length !== 1) throw new Error(`renderer reported ${windows.length} windows after reload`)
+      await runtime.page.locator('.tool-shell__stripe').first().waitFor({
+        state: 'visible',
+        timeout: runtime.options.timeoutMs
+      })
+      await verifyThemeBeforeCapture(runtime, runtime.themes[theme])
+      return true
+    } catch (error) {
+      recordCleanupFailure(new Error(`renderer reload was not ready: ${sanitizedError(error, runtime.secrets)}`))
+      return false
+    }
+  }
+
+  if (!await reloadAndVerify()) return { ready: false, blocker: `${cell}: renderer reload was not ready` }
+  try {
+    dialogs = await visibleDialogNames(runtime.page)
+  } catch (error) {
+    recordCleanupFailure(error)
+    return { ready: false, blocker: `${cell}: renderer state could not be inspected after reload` }
+  }
+  if (dialogs.length === 0) return { ready: true }
+
+  try {
+    await closeCurrentSurface(runtime)
+  } catch (error) {
+    recordCleanupFailure(error)
+  }
+  if (!await reloadAndVerify()) return { ready: false, blocker: `${cell}: renderer reload was not ready` }
+  try {
+    dialogs = await visibleDialogNames(runtime.page)
+  } catch (error) {
+    recordCleanupFailure(error)
+    return { ready: false, blocker: `${cell}: renderer state could not be inspected after reload` }
+  }
+  if (dialogs.length > 0) {
+    runtime.manifest.failures.push(`${cell} left a dialog that survived two renderer reloads: ${dialogs.join(', ')}`)
+    return { ready: false, blocker: `${cell}: ${dialogs.join(', ')}` }
+  }
+  return { ready: true }
+}
+
+export async function captureTargetCell(
+  runtime: CaptureRuntime,
+  target: CaptureTarget,
+  theme: CaptureTheme
+): Promise<{
+  capture: CaptureEvidence
+  isolation: { ready: true } | { ready: false; blocker: string }
+}> {
+  const cell = { targetId: target.id, theme }
+  runtime.cellTerminalFixture = null
+  let terminalFailure: string | null = null
+  if (CELL_TERMINAL_TARGETS.has(target.id)) {
+    try {
+      runtime.cellTerminalFixture = await createCaptureTerminalFixture(
+        runtime.client,
+        runtime.fixtures,
+        runtime.options,
+        target.title
+      )
+    } catch (error) {
+      terminalFailure = `terminal fixture input: ${sanitizedError(error, runtime.secrets)}`
+      runtime.manifest.failures.push(terminalFailure)
+    }
+  }
+
+  const fixtureFailure = terminalFailure ?? runtime.fixtureInputErrors.get(target.id)
+  let capture: CaptureEvidence
+  if (fixtureFailure) {
+    capture = failedCell(cell, runtime.references, fixtureFailure)
+  } else {
+    try {
+      capture = await captureOne(runtime, target, theme)
+    } catch (error) {
+      await isolateCell(runtime, target, theme, true)
+      throw error
+    }
+  }
+  const isolation = await isolateCell(runtime, target, theme, capture.status === 'failed')
+  return { capture, isolation }
+}
+
 async function closeOwnedRuntime(
   scope: ProcessScope,
   client: RuntimeClient | undefined,
   browser: Browser | undefined,
   server: BrowserServer | undefined,
+  remote: Pick<RemoteFixtures, 'stop'> | undefined,
   fixtures: Pick<PreparedCaptureFixtureHome, 'cleanup'> | undefined,
   signal: AbortSignal | undefined
 ): Promise<string[]> {
@@ -1156,6 +1530,9 @@ async function closeOwnedRuntime(
   }
   if (browser) {
     try { await bounded(browser.close(), 2_000, undefined, 'browser close') } catch (error) { failures.push(`browser close: ${errorMessage(error)}`) }
+  }
+  if (remote) {
+    try { failures.push(...await remote.stop()) } catch (error) { failures.push(`remote fixture cleanup: ${errorMessage(error)}`) }
   }
   if (client) {
     if (!signal?.aborted) {
@@ -1181,7 +1558,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
   const { repoRoot, outputDir } = validateOptions(options)
   const selectedThemes = options.themes ?? THEMES
   const references = loadGoldenReferences(repoRoot)
-  const executable = resolve(options.browserExecutable ?? chromium.executablePath())
+  const executable = resolve(options.browserExecutable ?? captureBrowserExecutable())
   assertBrowserExecutable(executable)
 
   const scope = createProcessScope()
@@ -1191,6 +1568,9 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
   let fixtures: RegisteredCaptureFixtures | undefined
   let editorBuffer: EditorFixtureBuffer | null = null
   let terminalFixture: CaptureTerminalFixture | null = null
+  let transcriptFixture: TranscriptFixture | null = null
+  let loopFixture: LoopFixture | null = null
+  let remoteFixtures: RemoteFixtures | null = null
   let structuredSessionId: string | null = null
   let daemon: Bun.Subprocess<'ignore', 'pipe', 'pipe'> | undefined
   let daemonOutput = () => ''
@@ -1201,6 +1581,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
   let manifest: CaptureManifest | undefined
   let cells: CaptureCell[] = []
   const results = new Map<string, CaptureEvidence>()
+  const fixtureInputErrors = new Map<string, string>()
   let progressInitialized = false
   let progressEnabled = true
   let thrown: unknown
@@ -1237,6 +1618,14 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
         manifest.failures.push(`${capture.targetId} (${capture.theme}): ${capture.error ?? 'capture failed'}`)
       }
     }
+  }
+
+  const recordFixtureInputFailure = (name: string, affectedTargets: CaptureTarget[], error: unknown) => {
+    if (!manifest) return
+    const message = `${name} fixture input: ${sanitizedError(error, secrets)}`
+    manifest.failures.push(message)
+    for (const target of affectedTargets) fixtureInputErrors.set(target.id, message)
+    persistProgress()
   }
 
   try {
@@ -1320,16 +1709,59 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
         persistProgress()
       }
     }
-    const terminalSurfacePlugins = ['quirky.terminal', 'quirky.session', 'quirky.session-info', 'quirky.agent-status', 'quirky.terminal-dock', 'quirky.accounts', 'quirky.handoff']
-    const needsTerminalFixture = targets.some((target) =>
-      target.id === 'view:quirky.session/worktree' || terminalSurfacePlugins.includes(target.plugin ?? '')
+    const terminalTargets = targets.filter((target) =>
+      !CELL_TERMINAL_TARGETS.has(target.id) &&
+      target.id !== 'view:quirky.session-info/transcript' &&
+      (target.id === 'view:quirky.session/worktree' || TERMINAL_SURFACE_PLUGINS.has(target.plugin ?? ''))
     )
-    if (needsTerminalFixture) {
+    if (terminalTargets.length > 0) {
       try {
-        terminalFixture = await createCaptureTerminalFixture(activeClient, activeFixtures, { timeoutMs: options.timeoutMs, signal: options.signal })
+        terminalFixture = await createCaptureTerminalFixture(activeClient, activeFixtures, {
+          timeoutMs: options.timeoutMs,
+          signal: options.signal
+        })
       } catch (error) {
-        manifest.failures.push(`terminal fixture input: ${sanitizedError(error, secrets)}`)
-        persistProgress()
+        recordFixtureInputFailure('terminal', terminalTargets, error)
+      }
+    }
+
+    const transcriptTargets = targets.filter((target) => target.id === 'view:quirky.session-info/transcript')
+    if (transcriptTargets.length > 0) {
+      try {
+        transcriptFixture = await createTranscriptFixture(activeClient, activeFixtures, {
+          timeoutMs: options.timeoutMs,
+          signal: options.signal
+        })
+      } catch (error) {
+        recordFixtureInputFailure('transcript', transcriptTargets, error)
+      }
+    }
+
+    const loopTargets = targets.filter((target) => target.id === 'view:quirky.loops/loop')
+    if (loopTargets.length > 0) {
+      try {
+        loopFixture = await createLoopFixture(activeClient, activeFixtures, {
+          timeoutMs: options.timeoutMs,
+          signal: options.signal
+        })
+      } catch (error) {
+        recordFixtureInputFailure('loop', loopTargets, error)
+      }
+    }
+
+    const remoteTargets = targets.filter((target) => REMOTE_TARGETS.has(target.id))
+    if (remoteTargets.length > 0) {
+      try {
+        remoteFixtures = await createRemoteFixtures(scope, scope.home, activeClient, env, {
+          timeoutMs: options.timeoutMs,
+          signal: options.signal,
+          repoRoot,
+          assets,
+          secrets,
+          fixtures: activeFixtures
+        })
+      } catch (error) {
+        recordFixtureInputFailure('remote', remoteTargets, error)
       }
     }
 
@@ -1393,12 +1825,17 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       fixtures: activeFixtures,
       editorBuffer,
       terminalFixture,
+      cellTerminalFixture: null,
+      transcriptFixture,
+      loopFixture,
+      remoteFixtures,
       structuredSessionId,
       pendingUiCommand: null,
       scene: newSceneState(),
       manifest,
       secrets,
-      pageErrors
+      pageErrors,
+      fixtureInputErrors
     }
     await verifyRuntimeAssets(assets, assetSnapshot, model, {
       port: runtime.port,
@@ -1427,7 +1864,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       syncProgress()
     }
 
-    for (const theme of selectedThemes) {
+    captureThemes: for (const theme of selectedThemes) {
       if (options.signal?.aborted) {
         markAborted()
         break
@@ -1448,9 +1885,14 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
         }
         const cell = { targetId: target.id, theme }
         const key = `${cell.targetId}\0${cell.theme}`
-        const result = await captureOne(captureRuntime, target, theme)
-        results.set(key, result)
+        const result = await captureTargetCell(captureRuntime, target, theme)
+        results.set(key, result.capture)
         syncProgress()
+        if (!result.isolation.ready) {
+          fillBlockedCells(cells, cell, references, results, result.isolation.blocker)
+          syncProgress()
+          break captureThemes
+        }
       }
       if (options.signal?.aborted) break
     }
@@ -1477,7 +1919,7 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       const output = `${daemonErrors()}\\n${daemonOutput()}`.trim()
       if (output.length > 0) thrown = new Error(`${sanitizedError(thrown, secrets)}; daemon: ${sanitizedError(output, secrets)}`)
     }
-    const cleanupFailures = await closeOwnedRuntime(scope, client, browser, browserServer, fixtures ?? prepared, options.signal)
+    const cleanupFailures = await closeOwnedRuntime(scope, client, browser, browserServer, remoteFixtures ?? undefined, fixtures ?? prepared, options.signal)
     if (cleanupFailures.length > 0) {
       const details = cleanupFailures.map((failure) => sanitizedError(failure, secrets))
       if (manifest) manifest.failures.push(...details)
