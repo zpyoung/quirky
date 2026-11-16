@@ -217,9 +217,42 @@ const UNSAFE_PATTERN_MESSAGES: Record<UnsafePatternShape, string> = {
   'too-many-quantifiers': `pattern must have at most ${MAX_PATTERN_QUANTIFIERS} variable quantifiers; it can hang the regex engine`
 }
 
-const FORMAT_PATTERNS: Record<'email' | 'url', RegExp> = {
+export const FORMAT_PATTERNS: Record<'email' | 'url', RegExp> = {
   email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   url: /^[a-z][a-z0-9+.-]*:\/\/\S+$/i
+}
+
+/**
+ * The reason `raw` breaks the text question's pattern or format, else undefined. Mirrors
+ * quirky.ask's parseTextAnswerValue without its literal prefilter; plugins do not import each other.
+ */
+export function textAnswerError(question: { pattern?: unknown; format?: unknown }, raw: string): string | undefined {
+  if (typeof question.pattern === 'string') {
+    if (raw.length > MAX_PATTERN_TEST_LENGTH) return `must be at most ${MAX_PATTERN_TEST_LENGTH} characters`
+    let regex: RegExp
+    try {
+      regex = new RegExp(question.pattern)
+    } catch {
+      return 'does not match the required pattern'
+    }
+    if (!regex.test(raw)) return 'does not match the required pattern'
+  }
+  if ((question.format === 'email' || question.format === 'url') && !FORMAT_PATTERNS[question.format].test(raw)) return `is not a valid ${question.format}`
+  return undefined
+}
+
+/** The text field question with id `name` in the spec, if there is one. */
+export function findTextQuestion(node: ViewNode, name: string): Record<string, unknown> | undefined {
+  const question = node.type === 'field' ? node.props?.question : undefined
+  if (typeof question === 'object' && question !== null) {
+    const found = question as Record<string, unknown>
+    if (found.id === name && (found.type === 'text' || found.type === undefined)) return found
+  }
+  for (const child of node.children ?? []) {
+    const hit = findTextQuestion(child, name)
+    if (hit) return hit
+  }
+  return undefined
 }
 
 const FENCED_CODE = /^(\s{0,3})(?=(?:`{3}|~{3})[^\n]*\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?(\n\s{0,3}\2[`~]*\s*(?=\n|$)|$)/gm

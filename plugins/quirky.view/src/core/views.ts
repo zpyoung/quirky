@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto'
 import {
   ACTION_NAME_PATTERN,
   MAX_TITLE_LENGTH,
+  findTextQuestion,
   formatViewErrors,
+  textAnswerError,
   validateViewSpec,
   type ViewAction,
   type ViewPlacement,
@@ -174,6 +176,14 @@ export class ViewService {
     if (typeof source !== 'string' || source === '' || source.length > MAX_SOURCE_LENGTH) throw this.deps.invalidParams(`source must be a string of 1 to ${MAX_SOURCE_LENGTH} characters`)
     if (data !== undefined && (!isPlainObject(data) || JSON.stringify(data).length > MAX_ACTION_DATA_BYTES)) {
       throw this.deps.invalidParams(`data must be an object of at most ${MAX_ACTION_DATA_BYTES} bytes`)
+    }
+    if (source === 'field') {
+      const question = findTextQuestion(record.spec.root, name)
+      const value = isPlainObject(data) ? data.value : undefined
+      if (question && typeof value === 'string') {
+        const problem = textAnswerError(question, value)
+        if (problem) throw this.deps.invalidParams(`value ${problem}`)
+      }
     }
     const action: ViewAction = {
       name,
