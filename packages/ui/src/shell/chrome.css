@@ -396,6 +396,74 @@ button.ui-status-bar-item:focus-visible {
   overflow: auto;
 }
 
+.shell-main-header > .ui-icon-button {
+  background: var(--ui-transparent);
+  border: 0;
+}
+
+.shell-palette {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-8);
+  min-width: 0;
+}
+
+.shell-palette__search {
+  align-items: center;
+  background: var(--ui-selected);
+  border-radius: var(--ui-radius-control);
+  display: flex;
+  gap: var(--ui-space-8);
+  padding: var(--ui-space-4) var(--ui-space-8);
+  padding-inline-end: calc(var(--ui-space-8) + var(--ui-icon-size) + var(--ui-space-8));
+}
+
+.shell-palette__search > .ui-text-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shell-palette .ui-text-field__label {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: var(--ui-border-width);
+  margin: calc(-1 * var(--ui-border-width));
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: var(--ui-border-width);
+}
+
+.shell-palette .ui-text-field__input {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+}
+
+.shell-palette .ui-option-list {
+  background: var(--ui-transparent);
+  border: 0;
+  max-height: 60vh;
+  padding: 0;
+}
+
+.shell-palette .ui-list-row {
+  border: 0;
+}
+
+.shell-palette .ui-list-row--selected {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+
+.shell-palette .ui-list-row--selected:hover:not([aria-disabled="true"]) {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+
+.shell-palette .ui-list-row--selected .ui-list-row__description {
+  color: inherit;
+}
+
 .shell-palette-list {
   display: grid;
   gap: var(--ui-space-4);
