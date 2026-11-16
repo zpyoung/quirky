@@ -14,7 +14,8 @@ const defaultLimits = {
   maxZombies: 0,
   maxEventsPer5s: 30,
   maxStallMs: 1000,
-  maxUnanswered: 0
+  maxUnanswered: 0,
+  maxWindowRequestsPerMinute: null,
 }
 
 function makeTempDir(): string {
@@ -186,8 +187,31 @@ const validLimits = [
   ['--max-zombies', '2', 'maxZombies', 2],
   ['--max-events-per-5s', '45', 'maxEventsPer5s', 45],
   ['--max-stall-ms', '1500', 'maxStallMs', 1500],
-  ['--max-unanswered', '3', 'maxUnanswered', 3]
+  ['--max-unanswered', '3', 'maxUnanswered', 3],
+  ['--max-window-requests-per-minute', '3000', 'maxWindowRequestsPerMinute', 3000],
 ] as const
+
+for (const value of ['0', '-1', '1.5', 'abc']) {
+  test(`rejects ${value} for --max-window-requests-per-minute with the exact constraint`, () => {
+    const out = makeTempDir()
+    let caught: unknown
+    try {
+      parseArguments(['--out', out, '--max-window-requests-per-minute', value])
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(UsageError)
+    expect(caught).toMatchObject({
+      message: '--max-window-requests-per-minute must be a whole positive number',
+    })
+  })
+}
+
+test('defaults the per-window request budget to report-only', () => {
+  expect(parseConfig(['--out', makeTempDir()]).limits.maxWindowRequestsPerMinute).toBeNull()
+})
+
 
 for (const [flag, value, field, expected] of validLimits) {
   test(`parses ${flag}`, () => {

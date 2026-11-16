@@ -1,7 +1,16 @@
 import { expect, test } from 'bun:test'
-import type { EventRecord, PanelRefreshRecord, ProcessRow, Sample, SoakConfig, SoakReport, WindowBeat, WorkerBeat } from './contracts'
+import type {
+  EventRecord, PanelRefreshRecord, PhaseRecord, ProcessRow, Sample, SoakConfig, SoakReport,
+  SwitchRecord, TaskInteractionRecord, WindowBeat, WorkerBeat,
+} from './contracts'
+import { daySchedule } from './day.ts'
 import type { SoakEvidence } from './verdict'
-import { countDaemonLog, isPanelRefreshRequest, judge, windowAlive } from './verdict'
+import { countDaemonLog, isPanelRefreshRequest, judge, panelOfRequest, windowAlive } from './verdict'
+type EvidenceFixture = SoakEvidence & {
+  switches: SwitchRecord[]
+  phases: PhaseRecord[]
+  taskInteractions: TaskInteractionRecord[]
+}
 
 type ConfigOverrides = {
   minutes?: number
@@ -23,6 +32,7 @@ function config(overrides: ConfigOverrides = {}): SoakConfig {
       maxEventsPer5s: 30,
       maxStallMs: 1000,
       maxUnanswered: 0,
+      maxWindowRequestsPerMinute: null,
       ...overrides.limits,
     },
     ...(overrides.fault === undefined ? {} : { fault: overrides.fault }),
@@ -49,19 +59,89 @@ function panelRefresh(index: number, worktree: string, at: number, method = 'qui
   return { at, index, worktree, method }
 }
 
-function evidence(overrides: Partial<SoakEvidence> = {}): SoakEvidence {
-  const windowBeats = overrides.windowBeats ?? []
+function evidence(overrides: Partial<SoakEvidence> = {}): EvidenceFixture {
+  const durationSeconds = overrides.durationSeconds ?? 1800
+  const windowBeats = overrides.windowBeats
+    ?? Array.from({ length: 3 }, (_, index) => windowBeat(`worktree-${index}`))
+  const windows = windowBeats.map((beat, index) => ({ index, worktree: beat.worktree }))
+  const dayWorktrees = [...new Set(windows.map((window) => window.worktree))]
+  if (dayWorktrees.length === 0) dayWorktrees.push('worktree-0')
+  const defaultDay = { enabled: true, windows, worktrees: dayWorktrees }
+  const day = Object.hasOwn(overrides, 'day') ? overrides.day : defaultDay
+  const scheduleInputs = day ?? defaultDay
+  const schedule = daySchedule({
+    seconds: durationSeconds,
+    windows: scheduleInputs.windows,
+    worktrees: scheduleInputs.worktrees,
+  })
+  const currentWorktrees = new Map(scheduleInputs.windows.map((window) => [window.index, window.worktree]))
+  const switches = schedule.flatMap((action) => {
+    if (action.kind !== 'switch') return []
+    const from = currentWorktrees.get(action.index) ?? ''
+    currentWorktrees.set(action.index, action.to)
+    return [{
+      at: action.at,
+      seq: action.seq,
+      index: action.index,
+      from,
+      requested: action.to,
+      settled: action.to,
+      proof: { at: action.at, method: 'quirky.git/status', worktree: action.to },
+      ok: true,
+      followMs: 0,
+      error: null,
+    }]
+  })
+  const phases = schedule.flatMap((action) => action.kind === 'phase' ? [{
+    at: action.at,
+    seq: action.seq,
+    phase: action.phase,
+    ok: true,
+    applyMs: 0,
+    missing: [],
+    error: null,
+  }] : [])
+
+  const taskInteractions = schedule.flatMap((action) => action.kind === 'task' ? [{
+    kind: 'task' as const,
+    at: action.at,
+    seq: action.seq,
+    index: action.index,
+    method: 'quirky.tasks/preferences',
+    ok: true,
+    proof: { at: action.at, method: 'quirky.tasks/state' },
+    error: null,
+  }] : [])
+  const panelRefreshes = overrides.panelRefreshes ?? healthyPanelRefreshes(windowBeats)
+  const panelRequests = overrides.panelRequests ?? panelRefreshes.flatMap((record) => {
+    const panel = panelOfRequest(record.method, {})
+    return panel === null ? [] : [{ at: record.at, index: record.index, panel }]
+  })
   return {
-    durationSeconds: 1800,
-    windows: 2,
+    durationSeconds,
+    windows: overrides.windows ?? windowBeats.length,
     windowBeats,
     samples: [],
     events: [],
     probes: [],
     workers: healthyWorkers(),
     daemonExited: false,
-    panelRefreshes: healthyPanelRefreshes(windowBeats),
+    panelRefreshes,
+    windowRequestSeconds: windowBeats.map(() => []),
+    panelRequests,
+    gitProbes: [{
+      at: 0,
+      ms: 10,
+      ownLagMs: 0,
+      timedOut: false,
+      failed: false,
+      worktree: dayWorktrees[0]!,
+    }],
+    day,
     ...overrides,
+    switches: overrides.switches ?? switches,
+    phases: overrides.phases ?? phases,
+    taskInteractions: overrides.taskInteractions ?? taskInteractions,
   }
 }
 
@@ -739,10 +819,15 @@ test('window scenario 21: age 30 is alive but stale, absent and non-finite ages 
   })
 })
 
-test('empty window evidence passes with zero expected windows', () => {
-  const result = judge(evidence(), config())
+test('empty window evidence does not require day rotation', () => {
+  const result = judge(
+    evidence({ windows: 0, windowBeats: [], day: undefined, switches: [], phases: [] }),
+    config({ windows: 0 }),
+  )
 
   expect(result.checks.windows).toEqual({ ok: true, expected: 0, alive: 0, lost: [] })
+  expect(result.checks.day).toMatchObject({ ok: true, enabled: false, expectedSwitches: 0, expectedPhases: 0 })
+  expect(result.qualifies).toBe(false)
 })
 
 test('window scenario 23: qualification keeps using the alive-window evidence count', () => {
@@ -999,6 +1084,10 @@ test('refresh scenario 1: rejects seventeen refreshes shared across two windows 
       { index: 0, worktree: 'a', total: 9, peakPer5s: 9 },
       { index: 1, worktree: 'b', total: 8, peakPer5s: 8 },
     ],
+    byPanel: [
+      { index: 0, panel: 'changes', total: 9, peakPer5s: 9 },
+      { index: 1, panel: 'changes', total: 8, peakPer5s: 8 },
+    ],
   })
   expect(result.checks.events).toMatchObject({ ok: true, peakPer5s: 17 })
   expect(result.verdict).toBe('fail')
@@ -1104,7 +1193,7 @@ test('refresh scenario 6: missing coverage fails, while empty window evidence ha
   const empty = judge(evidence({ windows: 0, windowBeats: [], panelRefreshes: [] }), config({ windows: 0 }))
   expect(empty.checks.refreshes).toEqual({
     ok: true, total: 0, limitPer5s: 8, peakPer5s: 0, peakAt: null,
-    peakWindow: null, peakWorktree: null, missingWindows: [], byWindow: [],
+    peakWindow: null, peakWorktree: null, missingWindows: [], byWindow: [], byPanel: [],
   })
   expect(empty.qualifies).toBe(false)
 
@@ -1145,4 +1234,453 @@ test('refresh diagnostics sort by stable index and missing worktree name', () =>
 
   expect(check.missingWindows).toEqual(['a', 'z'])
   expect(check.byWindow.map(({ index }) => index)).toEqual([0, 1])
+})
+test('scenario 5: schedules staggered switches and phases with their own grace periods', () => {
+  expect(daySchedule({
+    seconds: 300,
+    windows: [{ index: 0, worktree: 'a' }, { index: 1, worktree: 'c' }],
+    worktrees: ['a', 'b', 'c', 'd'],
+  })).toEqual([
+    { at: 15, kind: 'task', seq: 0, index: 0 },
+    { at: 20, kind: 'task', seq: 0, index: 1 },
+    { at: 60, kind: 'switch', seq: 0, index: 0, to: 'b' },
+    { at: 90, kind: 'switch', seq: 0, index: 1, to: 'd' },
+    { at: 120, kind: 'phase', seq: 1, phase: 1 },
+    { at: 120, kind: 'switch', seq: 1, index: 0, to: 'c' },
+    { at: 150, kind: 'switch', seq: 1, index: 1, to: 'a' },
+    { at: 180, kind: 'switch', seq: 2, index: 0, to: 'd' },
+    { at: 210, kind: 'switch', seq: 2, index: 1, to: 'b' },
+    { at: 240, kind: 'phase', seq: 2, phase: 0 },
+    { at: 240, kind: 'switch', seq: 3, index: 0, to: 'a' },
+    { at: 270, kind: 'switch', seq: 3, index: 1, to: 'c' },
+  ])
+})
+
+test('panelOfRequest classifies every named panel and rejects non-refresh variants', () => {
+  expect([
+    panelOfRequest('quirky.git/status', null),
+    panelOfRequest('quirky.reviews/checksRefresh', { force: true }),
+    panelOfRequest('quirky.reviews/state', { worktree: 'wt-a' }),
+    panelOfRequest('quirky.editor/explorer', { action: 'list' }),
+    panelOfRequest('quirky.editor/explorer', { action: 'refresh' }),
+    panelOfRequest('quirky.tasks/state', null),
+    panelOfRequest('quirky.tasks/prepare', null),
+    panelOfRequest('quirky.session-info/get', null),
+    panelOfRequest('soak.faults/feedbackRefresh', null),
+  ]).toEqual(['changes', 'checks', 'checks', 'explorer', 'explorer', 'tasks', 'tasks', 'session-info', 'feedback'])
+  expect(panelOfRequest('quirky.reviews/checksRefresh', { force: 1 })).toBeNull()
+  expect(panelOfRequest('quirky.reviews/state', { worktree: 1 })).toBeNull()
+  expect(panelOfRequest('quirky.editor/explorer', { action: 'open' })).toBeNull()
+  expect(panelOfRequest('quirky.worktree/list', {})).toBeNull()
+})
+
+test('scenario 14: refresh limits are independent per panel and pass at eight', () => {
+  const windowBeats = [windowBeat('a'), windowBeat('b')]
+  const requests = (count: number) => Array.from({ length: count }, (_, index) => ({
+    at: index * 0.5,
+    index: 1,
+    panel: 'explorer' as const,
+  }))
+  const panelRequests = [
+    { at: 0, index: 0, panel: 'changes' as const },
+    { at: 0, index: 1, panel: 'changes' as const },
+    ...requests(9),
+  ]
+  const over = judge(evidence({ windowBeats, panelRequests }), config({ windows: 2 }))
+  const atLimit = judge(evidence({
+    windowBeats,
+    panelRequests: [...panelRequests.slice(0, 2), ...requests(8)],
+  }), config({ windows: 2 }))
+
+  expect(over.checks.refreshes.ok).toBe(false)
+  expect(over.checks.refreshes.byPanel).toContainEqual({
+    index: 1, panel: 'explorer', total: 9, peakPer5s: 9,
+  })
+  expect(atLimit.checks.refreshes).toMatchObject({
+    ok: true,
+    byPanel: [
+      { index: 0, panel: 'changes', total: 1, peakPer5s: 1 },
+      { index: 1, panel: 'changes', total: 1, peakPer5s: 1 },
+      { index: 1, panel: 'explorer', total: 8, peakPer5s: 8 },
+    ],
+  })
+})
+
+test('scenario 16: reports rolling per-window request peaks and gates only a configured budget', () => {
+  const counts = Array.from({ length: 2 }, () => Array(70).fill(0) as number[])
+  for (let second = 10; second < 70; second += 1) counts[0]![second] = 50
+  counts[0]![10] = 51
+  for (let second = 10; second < 70; second += 1) counts[1]![second] = second < 30 ? 9 : 8
+  const windowBeats = [windowBeat('a'), windowBeat('b')]
+  const run = (limit: number | null) => judge(
+    evidence({ windowBeats, windowRequestSeconds: counts }),
+    config({ windows: 2, limits: { maxWindowRequestsPerMinute: limit } }),
+  )
+  const reportOnly = run(null)
+  expect(reportOnly.checks.requests).toMatchObject({
+    ok: true,
+    limitPerMinute: null,
+    peakPerMinute: 3001,
+    peakAt: 10,
+    peakWindow: 0,
+    byWindow: [
+      { index: 0, total: 3001, peakPerMinute: 3001, peakAt: 10 },
+      { index: 1, total: 500, peakPerMinute: 500, peakAt: 10 },
+    ],
+  })
+  expect(run(3000).checks.requests.ok).toBe(false)
+  expect(run(3001).checks.requests.ok).toBe(true)
+  expect(run(3001).disqualified).toEqual([])
+})
+
+test('scenario 20: judges git stalls, failures and host-busy rates independently', () => {
+  const gitProbe = (ms: number, ownLagMs = 0, failed = false, timedOut = false) => ({
+    at: 1, ms, ownLagMs, timedOut, failed, worktree: 'w1',
+  })
+  const over = judge(evidence({ gitProbes: [gitProbe(1001)] }), config())
+  const boundary = judge(evidence({ gitProbes: [gitProbe(1000)] }), config())
+  const loopLagBoundary = judge(evidence({ gitProbes: [gitProbe(1001, 500)] }), config())
+  const hostBusy = judge(evidence({ gitProbes: [gitProbe(1001, 501)] }), config())
+  const timedOut = judge(evidence({ gitProbes: [gitProbe(1000, 0, false, true)] }), config())
+  const failed = judge(evidence({ gitProbes: [gitProbe(3, 0, true)] }), config())
+  expect(over.checks.stalls).toMatchObject({
+    ok: false,
+    git: {
+      probes: 1, stalls: 1, failed: 0, p50Ms: 1001, p95Ms: 1001, maxMs: 1001,
+      worst: [{ at: 1, ms: 1001, worktree: 'w1' }],
+      byWorktree: [{ worktree: 'w1', probes: 1, maxMs: 1001 }],
+    },
+  })
+  expect(boundary.checks.stalls).toMatchObject({ ok: true, git: { stalls: 0 } })
+  expect(loopLagBoundary.checks.stalls.git).toMatchObject({ stalls: 1, hostBusy: 0 })
+  expect(hostBusy.checks.stalls.git).toMatchObject({ stalls: 0, hostBusy: 1 })
+  expect(timedOut.checks.stalls).toMatchObject({ ok: false, git: { stalls: 1 } })
+  expect(failed.checks.stalls).toMatchObject({ ok: false, git: { failed: 1 } })
+
+  const probes = (total: number) => [
+    gitProbe(1001, 501),
+    ...Array.from({ length: total - 1 }, (_, index) => gitProbe(index + 1)),
+  ]
+  const exact = judge(evidence({ gitProbes: probes(20) }), config())
+  const overFivePercent = judge(evidence({ gitProbes: probes(19) }), config())
+  expect(exact.disqualified).toEqual([])
+  expect(overFivePercent.disqualified).toContain('host too busy to judge git stalls: 1 of 19 probes')
+})
+
+test('scenario 6: verifies every scheduled day identity and caps all five diagnostics with counts', () => {
+  const complete = evidence()
+  const check = judge(complete, config()).checks.day
+  expect(check).toMatchObject({
+    ok: true, enabled: true, expectedSwitches: 87, expectedPhases: 14, expectedTaskInteractions: 3,
+    switches: 87, phases: 14, taskInteractions: 3,
+    counts: { missing: 0, duplicates: 0, unscheduled: 0, wrongTarget: 0, failed: 0 },
+  })
+
+  const switches = [
+    ...complete.switches.slice(12, 24),
+    ...complete.switches.slice(24, 36).map((record) => ({ ...record, requested: 'wrong-target' })),
+    ...complete.switches.slice(36),
+    ...complete.switches.slice(12, 24),
+    ...Array.from({ length: 12 }, (_, index) => ({
+      ...complete.switches[0]!,
+      seq: 1000 + index,
+      requested: 'unscheduled-target',
+    })),
+  ]
+  const phases = complete.phases.map((record, index) => index < 12 ? { ...record, ok: false } : record)
+  const capped = judge(evidence({ switches, phases }), config()).checks.day
+  expect(capped.counts).toEqual({
+    missing: 12, duplicates: 12, unscheduled: 12, wrongTarget: 12, failed: 12,
+  })
+  expect(capped.missing).toHaveLength(10)
+  expect(capped.duplicates).toHaveLength(10)
+  expect(capped.unscheduled).toHaveLength(10)
+  expect(capped.wrongTarget).toHaveLength(10)
+  expect(capped.failed).toHaveLength(10)
+})
+
+test('day verdict reports a missing task interaction identity', () => {
+  const complete = evidence()
+  const check = judge(evidence({
+    taskInteractions: complete.taskInteractions.slice(1),
+  }), config()).checks.day
+
+  expect(check).toMatchObject({
+    ok: false,
+    expectedTaskInteractions: 3,
+    taskInteractions: 2,
+    missing: ['task:0:0'],
+    counts: { missing: 1 },
+  })
+})
+
+test('day verdict detects duplicate task interaction identities', () => {
+  const complete = evidence()
+  const first = complete.taskInteractions[0]!
+  const check = judge(evidence({
+    taskInteractions: [...complete.taskInteractions, first],
+  }), config()).checks.day
+
+  expect(check).toMatchObject({
+    ok: false,
+    taskInteractions: 4,
+    missing: [],
+    duplicates: ['task:0:0'],
+    counts: { duplicates: 1 },
+  })
+})
+
+test('day verdict detects failed task interactions', () => {
+  const complete = evidence()
+  const check = judge(evidence({
+    taskInteractions: complete.taskInteractions.map((record, index) => index === 0
+      ? { ...record, ok: false }
+      : record),
+  }), config()).checks.day
+
+  expect(check).toMatchObject({
+    ok: false,
+    failed: ['task:0:0'],
+    counts: { failed: 1 },
+  })
+})
+
+test('day verdict detects unscheduled task interaction identities', () => {
+  const complete = evidence()
+  const first = complete.taskInteractions[0]!
+  const check = judge(evidence({
+    taskInteractions: [...complete.taskInteractions, { ...first, seq: 1 }],
+  }), config()).checks.day
+
+  expect(check).toMatchObject({
+    ok: false,
+    unscheduled: ['task:0:1'],
+    counts: { unscheduled: 1 },
+  })
+})
+
+test('task method is diagnostic rather than part of task identity', () => {
+  const complete = evidence()
+  const first = complete.taskInteractions[0]!
+  const check = judge(evidence({
+    taskInteractions: [
+      { ...first, method: 'quirky.tasks/state' },
+      ...complete.taskInteractions.slice(1),
+    ],
+  }), config()).checks.day
+
+  expect(check).toMatchObject({ ok: true, missing: [], unscheduled: [], wrongTarget: [] })
+})
+
+test('scenario 6: completed actions outside the truncated grace window remain scheduled', () => {
+  const complete = evidence({ durationSeconds: 70 })
+  const day = complete.day!
+  const fullSchedule = daySchedule({
+    seconds: 30 * 60,
+    windows: day.windows,
+    worktrees: day.worktrees,
+  })
+  const action = fullSchedule.find((candidate) => candidate.kind === 'switch')
+  if (!action || action.kind !== 'switch') throw new Error('expected a scheduled switch')
+  const record: SwitchRecord = {
+    at: action.at,
+    seq: action.seq,
+    index: action.index,
+    from: day.windows.find((window) => window.index === action.index)!.worktree,
+    requested: action.to,
+    settled: action.to,
+    proof: { at: action.at, method: 'quirky.git/status', worktree: action.to },
+    ok: true,
+    followMs: 4,
+    error: null,
+  }
+  const valid = judge(evidence({
+    durationSeconds: 70,
+    switches: [record],
+    phases: [],
+  }), config())
+  const wrongTarget = judge(evidence({
+    durationSeconds: 70,
+    switches: [{ ...record, requested: 'wrong-target' }],
+    phases: [],
+  }), config())
+
+  expect(valid.checks.day).toMatchObject({
+    expectedSwitches: 0, switches: 1, missing: [], unscheduled: [], wrongTarget: [],
+  })
+  expect(wrongTarget.checks.day.wrongTarget).toEqual(['switch:0:0'])
+})
+
+test('scenario 6: reports omitted phases, duplicate identities, unscheduled records and wrong targets', () => {
+  const complete = evidence()
+  const noPhases = judge(evidence({ phases: [] }), config()).checks.day
+  expect(noPhases).toMatchObject({
+    ok: false, expectedPhases: 14, phases: 0, counts: { missing: 14 },
+  })
+  expect(noPhases.missing).toHaveLength(10)
+
+  const firstSwitch = complete.switches[0]!
+  const duplicates = judge(evidence({
+    switches: Array.from({ length: 29 }, () => firstSwitch),
+    phases: [],
+  }), config()).checks.day
+  expect(duplicates.duplicates).toEqual(['switch:0:0'])
+  expect(duplicates.counts.duplicates).toBe(1)
+
+  const completePlusDuplicate = judge(evidence({
+    switches: [...complete.switches, firstSwitch],
+  }), config()).checks.day
+  expect(completePlusDuplicate).toMatchObject({ missing: [], duplicates: ['switch:0:0'] })
+
+  const unscheduled = judge(evidence({
+    switches: [...complete.switches, { ...firstSwitch, seq: 1000 }],
+  }), config()).checks.day
+  expect(unscheduled.unscheduled).toEqual(['switch:0:1000'])
+
+  const wrongSwitchTarget = judge(evidence({
+    switches: [{ ...firstSwitch, requested: 'wrong-target' }, ...complete.switches.slice(1)],
+  }), config()).checks.day
+  const wrongPhase = judge(evidence({
+    phases: [{ ...complete.phases[0]!, phase: 0 }, ...complete.phases.slice(1)],
+  }), config()).checks.day
+  expect(wrongSwitchTarget.ok).toBe(false)
+  expect(wrongSwitchTarget.wrongTarget).toEqual(['switch:0:0'])
+  expect(wrongPhase.ok).toBe(false)
+  expect(wrongPhase.wrongTarget).toEqual(['phase:1'])
+})
+
+test('scenario 6: disabled and absent day instrumentation fail normal runs', () => {
+  const complete = evidence()
+  const disabled = judge(evidence({
+    day: { ...complete.day!, enabled: false },
+    switches: [],
+    phases: [],
+  }), config())
+  expect(disabled.checks.day).toMatchObject({ ok: false, enabled: false })
+  expect(disabled.disqualified).toContain('day rotation did not run')
+
+  const { day: _day, ...withoutDay } = complete
+  const absent = judge(withoutDay as SoakEvidence, config())
+  expect(absent.checks.day.ok).toBe(false)
+  expect(absent.disqualified).toContain('missing instrumentation: day')
+})
+
+test('scenario 11: a day drain error fails the stop identity', () => {
+  const result = judge(evidence({ dayDrainError: 'active action did not drain' }), config())
+  expect(result.checks.day.failed).toContain('stop')
+  expect(result.checks.day.counts.failed).toBe(1)
+  expect(result.checks.day.ok).toBe(false)
+})
+
+test('scenario 12: fault runs do not disqualify disabled day instrumentation', () => {
+  const complete = evidence()
+  const disabled = evidence({
+    day: { ...complete.day!, enabled: false },
+    switches: [],
+    phases: [],
+  })
+  const result = judge(disabled, config({ fault: 'storm' }))
+  expect(result.checks.day).toMatchObject({ ok: true, enabled: false })
+  expect(result.disqualified).toEqual(['fault injected: storm'])
+})
+
+test('scenario 13: absent git probes disqualify a normal run', () => {
+  const { gitProbes: _gitProbes, ...absent } = evidence()
+  expect(judge(absent as SoakEvidence, config()).disqualified)
+    .toContain('missing instrumentation: gitProbes')
+})
+
+test('scenario 13: empty git probes disqualify a normal run', () => {
+  expect(judge(evidence({ gitProbes: [] }), config()).disqualified)
+    .toContain('missing instrumentation: gitProbes')
+})
+
+test('scenario 13: a missing window record disqualifies a normal run', () => {
+  const complete = evidence()
+  const result = judge(evidence({
+    windowBeats: [windowBeat('a'), windowBeat('b')],
+    windowRequestSeconds: complete.windowRequestSeconds,
+    day: complete.day,
+  }), config())
+  expect(result.disqualified).toEqual(['window records missing: 2 of 3'])
+})
+
+test('scenario 13: absent per-window request buckets disqualify a normal run', () => {
+  expect(judge(evidence({ windowRequestSeconds: undefined }), config()).disqualified)
+    .toContain('missing instrumentation: windowRequestSeconds')
+})
+
+test('scenario 13: a wrong per-window request bucket count disqualifies a normal run', () => {
+  expect(judge(evidence({ windowRequestSeconds: [[], []] }), config()).disqualified)
+    .toContain('missing instrumentation: windowRequestSeconds')
+})
+
+test('scenario 13: absent panel request records disqualify a normal run', () => {
+  expect(judge(evidence({ panelRequests: undefined }), config()).disqualified)
+    .toContain('missing instrumentation: panelRequests')
+})
+
+test('scenario 13: absent day inputs disqualify a normal run', () => {
+  expect(judge(evidence({ day: undefined }), config()).disqualified)
+    .toContain('missing instrumentation: day')
+})
+
+test('scenario 13: disabled day rotation disqualifies a normal run', () => {
+  const complete = evidence()
+  expect(judge(evidence({ day: { ...complete.day!, enabled: false } }), config()).disqualified)
+    .toContain('day rotation did not run')
+})
+
+test('scenario 13: day inputs need exactly the configured window indexes', () => {
+  const complete = evidence()
+  expect(judge(evidence({
+    day: { ...complete.day!, windows: complete.day!.windows.slice(1) },
+  }), config()).disqualified).toContain('day schedule inputs do not match the windows')
+})
+
+test('scenario 13: day window indexes must be integers', () => {
+  const windowBeats = [windowBeat('a'), windowBeat('b')]
+  const complete = evidence({ windows: 2, windowBeats })
+  const day = {
+    ...complete.day!,
+    windows: [
+      { index: 0.5, worktree: 'a' },
+      { index: 1.5, worktree: 'b' },
+    ],
+  }
+  const result = judge(
+    evidence({ windows: 2, windowBeats, day }),
+    config({ windows: 2 }),
+  )
+
+  expect(result.disqualified).toEqual(['day schedule inputs do not match the windows'])
+})
+
+test('scenario 13: day inputs need a non-empty worktree list', () => {
+  const complete = evidence()
+  expect(judge(evidence({
+    day: { ...complete.day!, worktrees: [] },
+  }), config()).disqualified).toContain('day schedule inputs do not match the windows')
+})
+
+test('scenario 13: every starting worktree must be in the schedule worktree list', () => {
+  const complete = evidence()
+  expect(judge(evidence({
+    day: { ...complete.day!, worktrees: ['not-a-starting-worktree'] },
+  }), config()).disqualified).toContain('day schedule inputs do not match the windows')
+})
+
+test('scenario 13 instrumentation disqualifications are suppressed for fault runs', () => {
+  const { day: _day, ...withoutDay } = evidence({
+    gitProbes: [],
+    windowRequestSeconds: undefined,
+    panelRequests: undefined,
+  })
+  const result = judge(withoutDay as SoakEvidence, config({ fault: 'storm' }))
+  expect(result.disqualified).toEqual(['fault injected: storm'])
+})
+
+test('scenario 17: request budget loosening is harmless while the default is report-only', () => {
+  const result = judge(evidence(), config({ limits: { maxWindowRequestsPerMinute: 3000 } }))
+  expect(result.disqualified).toEqual([])
 })

@@ -2,7 +2,7 @@ import { existsSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium, type Browser, type BrowserServer, type Page } from 'playwright'
 import type { FixtureWorktree } from '../ui-review/fixtures.ts'
-import type { WindowRecord, WindowRequestObservation } from './contracts.ts'
+import type { SwitchRecord, WindowRecord, WindowRequestObservation } from './contracts.ts'
 import type { SoakWorld } from './world.ts'
 
 export type WindowStartupObservation = {
@@ -18,10 +18,20 @@ export type WindowStartupObservation = {
   failedRequests?: Array<{ path: string; message: string }>
 }
 
+type RequestFrame = { at: number; method: string; params: unknown }
+
+type WindowAttribution = { settled: string; target: string | null }
+
+const REQUEST_RING_CAPACITY = 2_000
+const RECONCILE_MS = 5_000
 type WindowMetrics = {
   closed: boolean
   crashed: boolean
   requests: Map<string, number>
+  requestRing: (RequestFrame | undefined)[]
+  requestCount: number
+  nextRequestSlot: number
+  requestListeners: Set<(request: RequestFrame) => void>
   sockets: number
   lastRequestAt: number | null
   pageErrors: number
@@ -31,7 +41,7 @@ type WindowMetrics = {
 
 type OpenWindow = {
   index: number
-  worktree: string
+  attribution: WindowAttribution
   connId: number
   page: Page
   metrics: WindowMetrics
@@ -45,8 +55,12 @@ export type SoakWindows = {
   browserPid: number
   finish(): Promise<{ records: WindowRecord[]; requests: { method: string; total: number }[] }>
   liveness?(): WindowLiveness[]
+  navigate?(index: number, worktreeId: string, options: { signal: AbortSignal; followTimeoutMs: number }): Promise<Omit<SwitchRecord, 'at' | 'seq'>>
+  waitForRequest?(index: number, matches: (method: string, params: unknown) => boolean,
+    options: { since: number; timeoutMs: number; signal: AbortSignal }): Promise<{ at: number; method: string; params: unknown } | null>
   stop(): Promise<void>
 }
+
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -213,7 +227,7 @@ export function attachMetrics(
   home: string,
   observer?: {
     index: number
-    worktree: string
+    worktree: string | ((method: string, params: unknown) => string)
     onRequest: (request: WindowRequestObservation) => void
   },
 ): void {
@@ -235,15 +249,29 @@ export function attachMetrics(
       metrics.requests.set(method, (metrics.requests.get(method) ?? 0) + 1)
       allRequests.set(method, (allRequests.get(method) ?? 0) + 1)
       metrics.lastRequestAt = Date.now()
-      observer?.onRequest({
+      const frame: RequestFrame = {
         at: performance.now(),
-        index: observer.index,
-        worktree: observer.worktree,
         method,
-        params: requestRecord.params,
-      })
+        params: requestRecord.params
+      }
+      metrics.requestRing[metrics.nextRequestSlot] = frame
+      metrics.nextRequestSlot = (metrics.nextRequestSlot + 1) % REQUEST_RING_CAPACITY
+      metrics.requestCount = Math.min(REQUEST_RING_CAPACITY, metrics.requestCount + 1)
+      for (const listener of metrics.requestListeners) listener(frame)
+      if (observer) {
+        observer.onRequest({
+          at: frame.at,
+          index: observer.index,
+          worktree: typeof observer.worktree === 'function'
+            ? observer.worktree(method, frame.params)
+            : observer.worktree,
+          method,
+          params: frame.params
+        })
+      }
     })
   })
+
   page.on('pageerror', (error) => {
     metrics.pageErrors++
     if (metrics.pageErrorExamples.length < 5) {
@@ -252,6 +280,67 @@ export function attachMetrics(
   })
   page.on('crash', () => { metrics.crashed = true })
   page.on('close', () => { metrics.closed = true })
+}
+
+function normalizedWorktree(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  return value.startsWith('id:') ? value.slice(3) : value
+}
+
+function worktreeFromParams(params: unknown): string | null {
+  if (params === null || typeof params !== 'object' || Array.isArray(params)) return null
+  return normalizedWorktree((params as Record<string, unknown>).worktree)
+}
+
+function findRequest(
+  metrics: WindowMetrics,
+  matches: (method: string, params: unknown) => boolean,
+  since: number
+): RequestFrame | null {
+  const first = (metrics.nextRequestSlot - metrics.requestCount + REQUEST_RING_CAPACITY) % REQUEST_RING_CAPACITY
+  for (let offset = 0; offset < metrics.requestCount; offset++) {
+    const request = metrics.requestRing[(first + offset) % REQUEST_RING_CAPACITY]
+    if (request && request.at >= since && matches(request.method, request.params)) return request
+  }
+  return null
+}
+
+function waitForWindowRequest(
+  metrics: WindowMetrics,
+  matches: (method: string, params: unknown) => boolean,
+  options: { since: number; timeoutMs: number; signal: AbortSignal }
+): Promise<RequestFrame | null> {
+  if (options.signal.aborted) return Promise.reject(interrupted())
+  const buffered = findRequest(metrics, matches, options.since)
+  if (buffered) return Promise.resolve(buffered)
+
+  const { promise, resolve, reject } = Promise.withResolvers<RequestFrame | null>()
+  let settled = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const finish = (error?: Error, request?: RequestFrame | null): void => {
+    if (settled) return
+    settled = true
+    clearTimeout(timer)
+    options.signal.removeEventListener('abort', abort)
+    metrics.requestListeners.delete(onRequest)
+    if (error) reject(error)
+    else resolve(request ?? null)
+  }
+  const abort = (): void => finish(interrupted())
+  const onRequest = (request: RequestFrame): void => {
+    if (request.at < options.since) return
+    try {
+      if (matches(request.method, request.params)) finish(undefined, request)
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+
+  metrics.requestListeners.add(onRequest)
+  options.signal.addEventListener('abort', abort, { once: true })
+  timer = setTimeout(() => finish(), Math.max(0, options.timeoutMs))
+  if (options.signal.aborted) abort()
+  return promise
 }
 
 async function closeBounded(close: () => Promise<unknown>): Promise<void> {
@@ -267,8 +356,9 @@ async function closeBounded(close: () => Promise<unknown>): Promise<void> {
   }
 }
 
-async function currentWindowWorktree(world: SoakWorld, connId: number): Promise<string | null> {
-  const value = await world.control.callAny('ui.window.state', { connId }, { timeoutMs: 5_000 })
+async function currentWindowWorktree(world: SoakWorld, connId: number, timeoutMs = RECONCILE_MS): Promise<string | null> {
+  const task = world.control.callAny('ui.window.state', { connId }, { timeoutMs })
+  const value = await waitWithAbort(task, timeoutMs, new AbortController().signal, 'ui.window.state')
   const state = asRecord(value, 'ui.window.state')
   const layout = asRecord(state.layout, 'ui.window.state layout')
   return typeof layout.worktree === 'string' ? layout.worktree : null
@@ -457,22 +547,31 @@ export async function openWindows(options: {
         closed: false,
         crashed: false,
         requests: new Map(),
+        requestRing: new Array(REQUEST_RING_CAPACITY),
+        requestCount: 0,
+        nextRequestSlot: 0,
+        requestListeners: new Set(),
         sockets: 0,
         lastRequestAt: null,
         pageErrors: 0,
         pageErrorExamples: [],
         failedRequests: []
       }
+      const attribution: WindowAttribution = { settled: worktree, target: null }
       const statusRequests = new Map<string, number>()
       currentMetrics = metrics
       attachMetrics(page, metrics, requests, world.home, {
         index,
-        worktree,
+        worktree: (_method, params) => {
+          const requestedWorktree = worktreeFromParams(params)
+          return attribution.target !== null && requestedWorktree === attribution.target
+            ? attribution.target
+            : attribution.settled
+        },
         onRequest: (request) => {
-          const params = request.params
-          if (request.method === 'quirky.git/status' && params !== null && typeof params === 'object' && !Array.isArray(params)) {
-            const requestedWorktree = (params as Record<string, unknown>).worktree
-            if (typeof requestedWorktree === 'string') {
+          if (request.method === 'quirky.git/status') {
+            const requestedWorktree = worktreeFromParams(request.params)
+            if (requestedWorktree !== null) {
               statusRequests.set(requestedWorktree, (statusRequests.get(requestedWorktree) ?? 0) + 1)
             }
           }
@@ -512,7 +611,7 @@ export async function openWindows(options: {
         signal,
         '.shell-workspace visibility'
       )
-      sessions.push({ index, worktree, connId, page, metrics, statusRequests })
+      sessions.push({ index, attribution, connId, page, metrics, statusRequests })
     }
 
     failureIndex = 0
@@ -527,7 +626,7 @@ export async function openWindows(options: {
     for (const session of sessions) {
       failureIndex = session.index
       currentIndex = session.index
-      currentWorktree = session.worktree
+      currentWorktree = session.attribution.settled
       currentConnId = session.connId
       currentMetrics = session.metrics
       throwIfAborted(signal)
@@ -592,43 +691,152 @@ export async function openWindows(options: {
         return sessions.map((session): WindowLiveness => ({
           index: session.index,
           connId: session.connId,
-          worktree: session.worktree,
+          worktree: session.attribution.settled,
           open: isOpen(session)
         }))
       },
-      async finish() {
-        let currentWorktrees = new Set<string>()
-        try {
-          const state = await world.control.callAny('ui.state', {}, { timeoutMs: 5_000 })
-          const ids = connectionIds(state)
-          const visible = await Promise.all(ids.map(async (connId) => {
-            try {
-              return await currentWindowWorktree(world, connId)
-            } catch {
-              return null
-            }
-          }))
-          currentWorktrees = new Set(visible.filter((worktree): worktree is string => worktree !== null))
-        } catch {
-          currentWorktrees = new Set()
+      waitForRequest(index, matches, requestOptions) {
+        const session = sessions.find((candidate) => candidate.index === index)
+        if (!session) return Promise.reject(new Error(`window ${index} does not exist`))
+        return waitForWindowRequest(session.metrics, matches, requestOptions)
+      },
+      async navigate(index, worktreeId, navigationOptions) {
+        const session = sessions.find((candidate) => candidate.index === index)
+        if (!session) throw new Error(`window ${index} does not exist`)
+        if (navigationOptions.signal.aborted) throw interrupted()
+
+        const since = performance.now()
+        const deadline = since + navigationOptions.followTimeoutMs
+        const previous = session.attribution.settled
+        session.attribution.target = worktreeId
+        const reconcile = async (): Promise<boolean> => {
+          try {
+            const worktree = await currentWindowWorktree(world, session.connId, RECONCILE_MS)
+            if (worktree !== null) session.attribution.settled = worktree
+            return worktree !== null
+          } catch {
+            return false
+          } finally {
+            session.attribution.target = null
+          }
+        }
+        const failedRecord = (error: string): Omit<SwitchRecord, 'at' | 'seq'> => ({
+          index,
+          from: previous,
+          requested: worktreeId,
+          settled: session.attribution.settled,
+          proof: null,
+          ok: false,
+          followMs: null,
+          error
+        })
+
+        const failedFollow = async (): Promise<Omit<SwitchRecord, 'at' | 'seq'>> => {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const message = `did not request status for ${worktreeId} within ${navigationOptions.followTimeoutMs}ms`
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
         }
 
-        const now = Date.now()
-        const records = sessions.map((session): WindowRecord => {
-          const open = isOpen(session)
-          return {
-            index: session.index,
-            worktree: session.worktree,
-            connId: session.connId,
-            open,
-            shown: currentWorktrees.has(session.worktree),
-            lastRequestAgeSeconds: session.metrics.lastRequestAt === null ? null : Math.max(0, (now - session.metrics.lastRequestAt) / 1000),
-            requests: totalRequests(session.metrics),
-            sockets: session.metrics.sockets,
-            pageErrors: session.metrics.pageErrors,
-            pageErrorExamples: session.metrics.pageErrorExamples.slice(0, 5)
+        let result: Record<string, unknown>
+        try {
+          const timeoutMs = Math.max(0, deadline - performance.now())
+          const task = world.control.callAny('quirky.worktree/navigate', {
+            worktree: `id:${worktreeId}`,
+            window: session.connId
+          }, { timeoutMs })
+          result = asRecord(await waitWithAbort(
+            task,
+            timeoutMs,
+            navigationOptions.signal,
+            'quirky.worktree/navigate'
+          ), 'quirky.worktree/navigate')
+        } catch (error) {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const errorText = errorMessage(error)
+          const timedOut = errorText.startsWith('quirky.worktree/navigate timed out after ')
+            || /^RPC call timed out after \d+(?:\.\d+)? ms$/.test(errorText)
+          const message = timedOut
+            ? `quirky.worktree/navigate timed out after ${navigationOptions.followTimeoutMs}ms`
+            : errorText
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
+        }
+
+        if (performance.now() > deadline) {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const message = `quirky.worktree/navigate timed out after ${navigationOptions.followTimeoutMs}ms`
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
+        }
+
+        if (result.worktreeId !== worktreeId) {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const message = `navigation selected ${String(result.worktreeId)}, expected ${worktreeId}`
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
+        }
+
+        session.attribution.settled = worktreeId
+        session.attribution.target = null
+        let proof: RequestFrame | null
+        try {
+          proof = await waitForWindowRequest(session.metrics, (method, params) =>
+            method === 'quirky.git/status' && worktreeFromParams(params) === worktreeId, {
+            since,
+            timeoutMs: Math.max(0, deadline - performance.now()),
+            signal: navigationOptions.signal
+          })
+        } catch (error) {
+          if (navigationOptions.signal.aborted) {
+            await reconcile()
+            throw interrupted()
           }
-        })
+          throw error
+        }
+        if (navigationOptions.signal.aborted) {
+          await reconcile()
+          throw interrupted()
+        }
+        if (proof === null || proof.at > deadline) return await failedFollow()
+        const observedWorktree = worktreeFromParams(proof.params)
+        if (observedWorktree === null) return await failedFollow()
+        return {
+          index,
+          from: previous,
+          requested: worktreeId,
+          settled: session.attribution.settled,
+          proof: { at: proof.at, method: proof.method, worktree: observedWorktree },
+          ok: true,
+          followMs: proof.at - since,
+          error: null
+        }
+      },
+      async finish() {
+        const daemonWindows = await Promise.all(sessions.map(async (session) => {
+          try {
+            const worktree = await currentWindowWorktree(world, session.connId)
+            return {
+              worktree: worktree ?? session.attribution.settled,
+              shown: worktree !== null && worktree === session.attribution.settled
+            }
+          } catch {
+            return { worktree: session.attribution.settled, shown: false }
+          }
+        }))
+        const now = Date.now()
+        const records = sessions.map((session, index): WindowRecord => ({
+          index: session.index,
+          worktree: daemonWindows[index]!.worktree,
+          connId: session.connId,
+          open: isOpen(session),
+          shown: daemonWindows[index]!.shown,
+          lastRequestAgeSeconds: session.metrics.lastRequestAt === null ? null : Math.max(0, (now - session.metrics.lastRequestAt) / 1000),
+          requests: totalRequests(session.metrics),
+          sockets: session.metrics.sockets,
+          pageErrors: session.metrics.pageErrors,
+          pageErrorExamples: session.metrics.pageErrorExamples.slice(0, 5)
+        }))
         const topRequests = [...requests.entries()]
           .sort((left, right) => right[1] - left[1])
           .slice(0, 15)

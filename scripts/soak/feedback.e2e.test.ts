@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { main } from '../soak.ts'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures.ts'
 import type { SoakReport } from './contracts.ts'
+import { daySchedule } from './day.ts'
 import { chromiumPath } from './windows.ts'
 
 const executable = chromiumPath()
@@ -134,3 +135,55 @@ mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
     rmSync(root, { recursive: true, force: true })
   }
 }, 240_000)
+
+test.skipIf(executable === null)('records every scheduled phase, switch, panel and git probe in a three-minute rotated run', async () => {
+  const out = mkdtempSync(join(tmpdir(), 'quirky-soak-rotated-'))
+  const before = sourceOutputs()
+  try {
+    const code = await main(['--windows', '2', '--minutes', '3', '--out', out])
+    expect([0, 1]).toContain(code)
+    const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
+    expect(report.disqualified).toEqual(['ran 3 minutes, needs 30'])
+    expect(report.day?.enabled).toBe(true)
+    expect(report.checks.day).toMatchObject({
+      ok: true, expectedPhases: 1, expectedSwitches: 4, expectedTaskInteractions: 2, taskInteractions: 2,
+      missing: [], duplicates: [], unscheduled: [], wrongTarget: [], failed: []
+    })
+    for (const phase of report.phases) expect(phase).toMatchObject({ ok: true, missing: [] })
+    for (const record of report.switches) {
+      expect(record.ok).toBe(true)
+      expect(record.settled).toBe(record.requested)
+      expect(record.proof?.worktree).toBe(record.requested)
+    }
+    expect(report.taskInteractions).toHaveLength(2)
+    for (const record of report.taskInteractions) {
+      expect(record).toMatchObject({ kind: 'task', seq: 0, method: 'quirky.tasks/preferences', ok: true, error: null })
+      expect(record.proof?.method).toBe('quirky.tasks/state')
+    }
+    const expected = daySchedule({ seconds: 180, windows: report.day!.windows, worktrees: report.day!.worktrees })
+    expect(report.switches.map(({ index, seq, requested }) => ({ index, seq, to: requested }))).toEqual(
+      expected.filter((action) => action.kind === 'switch').map(({ index, seq, to }) => ({ index, seq, to }))
+    )
+    expect(report.taskInteractions.map(({ index, seq }) => ({ index, seq }))).toEqual(
+      expected.filter((action) => action.kind === 'task').map(({ index, seq }) => ({ index, seq }))
+    )
+    for (const index of [0, 1]) {
+      for (const panel of ['changes', 'checks', 'explorer', 'tasks']) {
+        expect(report.checks.refreshes.byPanel.find((row) => row.index === index && row.panel === panel)?.total).toBeGreaterThan(0)
+      }
+    }
+    for (const worktree of report.day!.worktrees) {
+      expect(report.checks.stalls.git.byWorktree.find((row) => row.worktree === worktree)?.probes).toBeGreaterThanOrEqual(1)
+    }
+    expect(report.checks.requests.byWindow).toHaveLength(2)
+    for (const row of report.checks.requests.byWindow) expect(row.peakPerMinute).toBeGreaterThan(0)
+    expect(report.config.limits.maxWindowRequestsPerMinute).toBeNull()
+    console.log(`rotated soak: ${JSON.stringify({
+      stalls: report.checks.stalls.ok, refreshes: report.checks.refreshes.ok, requests: report.checks.requests.ok,
+      gitProbes: report.checks.stalls.git.probes, taskInteractions: report.checks.day.taskInteractions
+    })}`)
+  } finally {
+    expect(sourceOutputs()).toEqual(before)
+    rmSync(out, { recursive: true, force: true })
+  }
+}, 420_000)
