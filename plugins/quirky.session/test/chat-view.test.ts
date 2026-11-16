@@ -317,6 +317,27 @@ describe('the chat view', () => {
 })
 
 describe('the cards', () => {
+  test('a file change inside the worktree shows its relative path and one outside stays absolute', async () => {
+    await mountChat({
+      session: { cwd: '/work/repo' },
+      messages: [
+        user(1, 'go'),
+        msg(2, { kind: 'file-change', callId: 'c1', path: '/work/repo/src/a.ts', state: 'done' }),
+        msg(3, { kind: 'file-change', callId: 'c2', path: '/work/repo-other/b.ts', state: 'done' })
+      ]
+    })
+    expect(byLabel('Edited src/a.ts')!.textContent).toContain('src/a.ts')
+    expect(byLabel('Edited src/a.ts')!.textContent).not.toContain('/work/repo')
+    expect(byLabel('Edited /work/repo-other/b.ts')).not.toBeNull()
+  })
+
+  test('the chat header shows the full session title', async () => {
+    await mountChat({ session: { title: 'Claude 2' } })
+    const heading = host!.querySelector('h2')!
+    expect(heading.textContent).toBe('Claude 2')
+    expect(heading.style.textTransform).toBe('')
+  })
+
   test('a file change shows its path and line counts, and running until its call returns', async () => {
     await mountChat({
       messages: [
@@ -660,6 +681,16 @@ describe('the agent picker', () => {
     return created
   }
   const card = (name: string) => [...host!.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.querySelector('strong')?.textContent === name)!
+
+  test('titles itself only when the host does not', async () => {
+    await mountPicker()
+    expect(host!.querySelector('h3')?.textContent).toBe('New chat')
+    await act(async () => root!.unmount())
+    document.body.innerHTML = ''
+    await mountPicker({}, { heading: false })
+    expect(host!.querySelector('h3')).toBeNull()
+    expect(byLabel('New chat')).not.toBeNull()
+  })
 
   test('shows the four agents with their default model and why one is not ready', async () => {
     await mountPicker()

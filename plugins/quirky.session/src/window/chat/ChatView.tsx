@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { RpcErrorCode, type AgentCapabilities, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
-import { EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'
+import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import { rememberShowAllEvents, SHOW_ALL_EVENTS_COMMAND, showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
 import { Composer } from './Composer'
@@ -44,7 +44,24 @@ const pane = {
   minWidth: 0,
   borderInlineStart: 'var(--ui-border-width) solid var(--ui-border)'
 } satisfies CSSProperties
-const headerInset = { paddingInline: 'var(--ui-space-8)' } satisfies CSSProperties
+const header = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 'var(--ui-space-8)',
+  minHeight: 'var(--ui-row-single)',
+  paddingInline: 'var(--ui-space-8)'
+} satisfies CSSProperties
+const heading = {
+  margin: 0,
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  color: 'var(--ui-text)',
+  fontSize: 'var(--ui-font-label)',
+  fontWeight: 700
+} satisfies CSSProperties
 
 /** Whether `element` is scrolled to its end, give or take a few lines. */
 export function atBottom(element: Pick<HTMLElement, 'scrollHeight' | 'scrollTop' | 'clientHeight'>): boolean {
@@ -199,25 +216,22 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
 
   return (
     <div style={layout}>
-      <SectionHeader
-        title={session.title}
-        style={headerInset}
-        actions={
-          <label className="ui-checkbox-label" htmlFor={showAllId}>
-            <input
-              id={showAllId}
-              type="checkbox"
-              checked={showAll}
-              onChange={(event) => {
-                const enabled = event.target.checked
-                rememberShowAllEvents(session, enabled)
-                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })
-              }}
-            />
-            <span>Show all events</span>
-          </label>
-        }
-      />
+      <header style={header}>
+        <h2 style={heading}>{session.title}</h2>
+        <label className="ui-checkbox-label" htmlFor={showAllId}>
+          <input
+            id={showAllId}
+            type="checkbox"
+            checked={showAll}
+            onChange={(event) => {
+              const enabled = event.target.checked
+              rememberShowAllEvents(session, enabled)
+              void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })
+            }}
+          />
+          <span>Show all events</span>
+        </label>
+      </header>
       <div style={body}>
         <div
           ref={scrollRef}

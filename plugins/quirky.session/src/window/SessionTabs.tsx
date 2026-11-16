@@ -125,6 +125,7 @@ export function SessionTabs({ context, store, sessions, active }: Props) {
       {choosing && (
         <Dialog open title="New chat" onClose={() => setChoosing(false)}>
           <AgentPicker
+            heading={false}
             context={context}
             worktree={store.report().worktree}
             onCreated={(created) => {

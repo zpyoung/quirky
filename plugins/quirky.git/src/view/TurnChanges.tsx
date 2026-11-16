@@ -176,6 +176,7 @@ export function TurnChanges({ context, input }: { context: UiPluginContext; inpu
           <SendMenu
             context={context}
             worktree={worktree}
+            inline
             ariaLabel={noteLabel}
             scopes={[{ id: 'all', label: 'All unsent notes', notes, params: { scope: 'all' } }]}
           >
