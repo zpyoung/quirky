@@ -1,11 +1,11 @@
-import { accessSync, chmodSync, constants, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { accessSync, chmodSync, constants, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, type Dirent } from 'node:fs'
 import { delimiter, join, resolve } from 'node:path'
 import { checkSchemaDeclaration, validateValue, type Schema } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { daemonStatus } from './daemon-status'
 import { resolveHelperBinary } from '../../plugins/quirky.browser/src/runtime/native'
 import { createProcessScope, type ProcessScope } from '../test-support/process-scope'
-import { stageBuiltinPlugins, startWorld, type SoakWorld } from '../soak/world'
+import { stageBuiltinPlugins, startWorld, type DaemonRestart, type RestartOptions, type SoakWorld } from '../soak/world'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { startBrowserFixture, type BrowserFixture } from './browser-fixture'
 export { daemonStatus }
@@ -19,6 +19,14 @@ const EARLY_WORK_DEADLINE_MS = 20_000
 
 export type BrowserArguments = { json: boolean; help: boolean }
 export type CliReceipt = { argv: string[]; result: unknown; exitCode: number; stderrTail: string }
+export type BrowserChromeIdentity = { pid: number; started: string }
+export type BrowserOrphanChrome = BrowserChromeIdentity & { ppid: number; profileId: string }
+export type BrowserRestartReceipt = DaemonRestart & {
+  previousPid: number
+  daemonPid: number
+  oldChromeTree?: readonly BrowserChromeIdentity[]
+  orphanChromeAfterKill?: readonly BrowserOrphanChrome[]
+}
 export type BrowserCleanup = { ok: boolean; error?: string; evidence?: Record<string, unknown> }
 export type BrowserWorld = {
   home: string
@@ -29,7 +37,8 @@ export type BrowserWorld = {
   readonly daemonPid: number
   readonly daemonExited?: Promise<number>
   cli(argv: string[], options?: { allowFailure?: boolean; timeoutMs?: number }): Promise<CliReceipt>
-  restartDaemon?(signal?: AbortSignal): Promise<{ previousPid: number; daemonPid: number; spawnedAt: number }>
+  restartDaemon?(signal?: AbortSignal, options?: RestartOptions): Promise<BrowserRestartReceipt>
+  chromeProcessesGone?(identities: readonly BrowserChromeIdentity[]): Promise<boolean>
   track?(pid: number): void
   cleanup(): Promise<BrowserCleanup>
   processEvidence(): Promise<Record<string, unknown>>
@@ -135,6 +144,7 @@ function installedChrome(): string | undefined {
   const candidates = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/opt/google/chrome/chrome',
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
     '/usr/bin/chromium',
@@ -448,6 +458,90 @@ function sameProcess(left: ProcessIdentity, right: ProcessIdentity | undefined):
   return !!right && left.pid === right.pid && left.started === right.started &&
     (left.command === right.command || (left.ppid === right.ppid && left.pgid === right.pgid))
 }
+type ChromeRootIdentity = { profileId: string; identity: ProcessIdentity }
+
+function hasExactUserDataDirectory(command: string, path: string): boolean {
+  const options = [...command.matchAll(/(^|\s)--user-data-dir(?==|\s)/g)]
+  if (options.length !== 1) return false
+  const option = options[0]!
+  let valueStart = option.index! + option[1]!.length + '--user-data-dir'.length
+  if (command[valueStart] === '=') valueStart++
+  else while (/\s/.test(command[valueStart] ?? '')) valueStart++
+  if (!command.startsWith(path, valueStart)) return false
+  const boundary = command[valueStart + path.length]
+  return boundary === undefined || /\s/.test(boundary)
+}
+
+function chromeProfileRoots(home: string, snapshot: Map<number, ProcessIdentity>): ChromeRootIdentity[] {
+  const profilesDirectory = join(home, 'plugin-data', 'quirky.browser', 'profiles')
+  let profiles: Dirent[]
+  let canonicalProfilesDirectory: string
+  try {
+    profiles = readdirSync(profilesDirectory, { withFileTypes: true })
+    canonicalProfilesDirectory = realpathSync(profilesDirectory)
+  } catch {
+    return []
+  }
+  const roots: ChromeRootIdentity[] = []
+  for (const entry of profiles) {
+    if (!entry.isDirectory()) continue
+    const rawUserDataDir = join(profilesDirectory, entry.name, 'chrome-profile')
+    const canonicalUserDataDir = join(canonicalProfilesDirectory, entry.name, 'chrome-profile')
+    for (const identity of snapshot.values()) {
+      const command = identity.command.toLowerCase()
+      if (!command.includes('chrome') || !command.includes('--headless') ||
+        /(?:^|\s)--type(?:=|\s)/.test(command) ||
+        (!hasExactUserDataDirectory(identity.command, rawUserDataDir) &&
+          !hasExactUserDataDirectory(identity.command, canonicalUserDataDir))) continue
+      roots.push({ profileId: entry.name, identity })
+    }
+  }
+  return roots.sort((left, right) =>
+    left.profileId.localeCompare(right.profileId) || left.identity.pid - right.identity.pid
+  )
+}
+
+function captureChromeTree(
+  snapshot: Map<number, ProcessIdentity>,
+  roots: readonly ChromeRootIdentity[]
+): BrowserChromeIdentity[] {
+  const identities = new Map<number, BrowserChromeIdentity>()
+  for (const root of roots) {
+    identities.set(root.identity.pid, { pid: root.identity.pid, started: root.identity.started })
+    for (const child of descendants(snapshot, root.identity.pid)) {
+      identities.set(child.pid, { pid: child.pid, started: child.started })
+    }
+  }
+  return [...identities.values()].sort((left, right) => left.pid - right.pid)
+}
+
+function observeChromeOrphans(
+  roots: readonly ChromeRootIdentity[],
+  snapshot: Map<number, ProcessIdentity>
+): BrowserOrphanChrome[] {
+  const observed: BrowserOrphanChrome[] = []
+  for (const root of roots) {
+    const current = snapshot.get(root.identity.pid)
+    if (current?.started !== root.identity.started || current.ppid !== 1) continue
+    observed.push({
+      pid: root.identity.pid,
+      started: root.identity.started,
+      ppid: 1,
+      profileId: root.profileId
+    })
+  }
+  return observed
+}
+
+export function areChromeProcessesGone(
+  identities: readonly BrowserChromeIdentity[],
+  snapshot: ReadonlyMap<number, BrowserChromeIdentity>
+): boolean {
+  for (const identity of identities) {
+    if (snapshot.get(identity.pid)?.started === identity.started) return false
+  }
+  return true
+}
 
 export type ShimLogState = { empty: boolean; bytes: Record<string, number>; orcaLog: string; securityLog: string }
 
@@ -658,34 +752,68 @@ function withinDeadline<T>(operation: Promise<T>, signal: AbortSignal | undefine
 }
 
 
-async function waitForDaemon(
+export type DaemonReadinessDependencies = {
+  readRuntime(home: string): RuntimeInfo | null
+  probe(runtime: RuntimeInfo, timeoutMs: number): Promise<boolean>
+  now(): number
+  sleep(milliseconds: number): Promise<void>
+}
+
+export async function waitForDaemon(
   home: string,
   daemon: Pick<PipeChild, 'pid' | 'exited' | 'kill'> & { exitCode?: number | null },
   deadline: number,
   signal?: AbortSignal,
-  diagnostics?: () => string
+  diagnostics?: () => string,
+  dependencies: Partial<DaemonReadinessDependencies> = {}
 ): Promise<void> {
-  const readinessDeadline = Math.min(deadline, Date.now() + OPERATION_TIMEOUT_MS)
-  while (Date.now() < readinessDeadline) {
-    ensureWorkTime(signal, readinessDeadline)
-    if (daemon.exitCode !== undefined && daemon.exitCode !== null) {
-      const output = diagnostics?.() ?? ''
-      throw new BrowserFailure(
-        'daemon-exited',
-        `daemon exited with code ${daemon.exitCode} before readiness`,
-        output || undefined
-      )
-    }
-    const runtime = readRuntime(home)
-    if (runtime) {
-      if (runtime.pid !== daemon.pid) throw new BrowserFailure('daemon-start-failed', 'runtime.json belongs to a different daemon identity')
-      if (await isDaemonAlive(runtime, Math.max(1, Math.min(300, readinessDeadline - Date.now())))) {
-        ensureWorkTime(signal, readinessDeadline)
-        return
+  const now = dependencies.now ?? Date.now
+  const read = dependencies.readRuntime ?? readRuntime
+  const probe = dependencies.probe ?? isDaemonAlive
+  const sleep = dependencies.sleep ?? Bun.sleep
+  const readinessDeadline = Math.min(deadline, now() + OPERATION_TIMEOUT_MS)
+  let exitedCode: number | undefined
+  const exited = daemon.exited.then((code) => {
+    exitedCode = code
+    return { kind: 'exit' as const, code }
+  })
+  const throwIfExited = () => {
+    const code = daemon.exitCode ?? exitedCode
+    if (code === undefined || code === null) return
+    const output = diagnostics?.() ?? ''
+    throw new BrowserFailure('daemon-exited', `daemon exited with code ${code} before readiness`, output || undefined)
+  }
+  while (now() < readinessDeadline) {
+    const aborted = stopError(signal)
+    if (aborted) throw aborted
+    throwIfExited()
+    const runtime = read(home)
+    if (runtime?.pid === daemon.pid) {
+      const healthy = await probe(runtime, Math.max(1, Math.min(300, readinessDeadline - now())))
+      const abortedAfterProbe = stopError(signal)
+      if (abortedAfterProbe) throw abortedAfterProbe
+      throwIfExited()
+      if (healthy && now() < readinessDeadline) {
+        const confirmed = read(home)
+        const abortedAfterRead = stopError(signal)
+        if (abortedAfterRead) throw abortedAfterRead
+        throwIfExited()
+        if (confirmed?.pid === daemon.pid) return
       }
     }
-    await Bun.sleep(Math.max(1, Math.min(50, readinessDeadline - Date.now())))
+    const remaining = readinessDeadline - now()
+    if (remaining <= 0) break
+    const outcome = await Promise.race([
+      exited,
+      sleep(Math.max(1, Math.min(50, remaining))).then(() => ({ kind: 'sleep' as const }))
+    ])
+    if (outcome.kind === 'exit') {
+      const output = diagnostics?.() ?? ''
+      throw new BrowserFailure('daemon-exited', `daemon exited with code ${outcome.code} before readiness`, output || undefined)
+    }
   }
+  const aborted = stopError(signal)
+  if (aborted) throw aborted
   const output = diagnostics?.() ?? ''
   throw new BrowserFailure(
     'daemon-readiness-timeout',
@@ -693,6 +821,49 @@ async function waitForDaemon(
     output || undefined
   )
 }
+type BrowserRestartDependencies = {
+  deadline: number
+  processEvidence(): Promise<Record<string, unknown>>
+  snapshot(): Map<number, ProcessIdentity>
+}
+
+export async function restartBrowserDaemon(
+  soakWorld: SoakWorld,
+  signal: AbortSignal | undefined,
+  options: RestartOptions,
+  dependencies: BrowserRestartDependencies
+): Promise<BrowserRestartReceipt> {
+  ensureWorkTime(signal, dependencies.deadline)
+  const previousPid = soakWorld.daemonPid
+  await dependencies.processEvidence()
+  const before = dependencies.snapshot()
+  const roots = chromeProfileRoots(soakWorld.home, before)
+  const oldChromeTree = captureChromeTree(before, roots)
+  let spawnCount = 0
+  let orphanChromeAfterKill: BrowserOrphanChrome[] = []
+  const restarted = await withinDeadline(
+    soakWorld.restartDaemon(signal, () => {
+      spawnCount++
+      if (spawnCount > 1) throw new BrowserFailure('daemon-start-failed', 'daemon restart reported multiple replacement spawns')
+      orphanChromeAfterKill = observeChromeOrphans(roots, dependencies.snapshot())
+    }, options),
+    signal,
+    dependencies.deadline
+  )
+  if (spawnCount !== 1) throw new BrowserFailure('daemon-start-failed', 'daemon restart did not report its replacement spawn')
+  const daemonPid = soakWorld.daemonPid
+  await dependencies.processEvidence()
+  if (daemonPid === previousPid) throw new BrowserFailure('daemon-start-failed', 'daemon restart did not replace the owned daemon')
+  return {
+    previousPid,
+    daemonPid,
+    spawnedAt: restarted.spawnedAt,
+    killSignal: restarted.killSignal,
+    oldChromeTree,
+    orphanChromeAfterKill
+  }
+}
+
 
 async function waitForChild(child: PipeChild, timeoutMs: number, signal?: AbortSignal, workDeadline?: number): Promise<number> {
   const deadline = Math.min(Date.now() + timeoutMs, workDeadline ?? Number.POSITIVE_INFINITY)
@@ -1059,17 +1230,18 @@ export async function startBrowserWorld(options: {
       get daemonPid() { return currentDaemon!.pid },
       get daemonExited() { return currentDaemon?.exited },
       cli,
-      restartDaemon: async (signal) => {
-        const restartSignal = signal ?? options.signal
-        ensureWorkTime(restartSignal, deadline)
-        const previousPid = soakWorld!.daemonPid
-        await cleanupTools.processEvidence()
-        const restarted = await withinDeadline(soakWorld!.restartDaemon(restartSignal), restartSignal, deadline)
-        const daemonPid = soakWorld!.daemonPid
-        await cleanupTools.processEvidence()
-        if (daemonPid === previousPid) throw new BrowserFailure('daemon-start-failed', 'daemon restart did not replace the owned daemon')
-        return { previousPid, daemonPid, spawnedAt: restarted.spawnedAt }
-      },
+      restartDaemon: (signal, restartOptions = {}) => restartBrowserDaemon(
+        soakWorld!,
+        signal ?? options.signal,
+        restartOptions,
+        {
+          deadline,
+          processEvidence: cleanupTools.processEvidence,
+          snapshot: () => processSnapshot({ ...env, ...scope.env, HOME: home, QUIRKY_HOME: home })
+        }
+      ),
+      chromeProcessesGone: async (identities) =>
+        areChromeProcessesGone(identities, processSnapshot({ ...env, ...scope.env, HOME: home, QUIRKY_HOME: home })),
       track: (pid) => {
         soakWorld!.track(pid)
         const snapshot = processSnapshot({ ...env, ...scope.env, HOME: home, QUIRKY_HOME: home })
