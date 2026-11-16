@@ -59,6 +59,41 @@ test('malformed child reports include exit status, stdout bytes and tail, and st
   expect(message).toContain(`stderr: ${diagnostic}`)
 }, 25_000)
 
+test('CLI flushes a large report after Node stdout initialization under pipe backpressure', async () => {
+  const scope = createProcessScope()
+  const report: BrowserParityReport = {
+    schemaVersion: 1, scope: 'goal-10-browser', ok: true, parityComplete: true, rows: [],
+    cleanup: { ok: true, evidence: { payload: 'report-🦊'.repeat(131_072) } }, elapsedMs: 0
+  }
+  const source = `
+    import { mock } from 'bun:test';
+    const report = {
+      schemaVersion: 1, scope: 'goal-10-browser', ok: true, parityComplete: true, rows: [],
+      cleanup: { ok: true, evidence: { payload: 'report-🦊'.repeat(131_072) } }, elapsedMs: 0
+    };
+    mock.module('./scripts/parity/browser-run', () => ({ runBrowserParity: async () => report }));
+    // Load the entry point only after replacing the browser operation.
+    const { main } = await import('./scripts/parity/browser');
+    void process.stdout;
+    process.exitCode = await main(['--json']);
+  `
+  const env = createIsolatedRuntimeEnvironment(scope.home, { repoRoot: root })
+  const child = scope.spawn([process.execPath, '-e', source], {
+    cwd: root, env, stdout: 'pipe', stderr: 'pipe', timeout: 10_000
+  })
+  try {
+    // Hold the real OS pipe unread; fake time cannot create kernel backpressure.
+    await Bun.sleep(250)
+    const [output, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited
+    ])
+    expect({ code, stderr }).toEqual({ code: 0, stderr: '' })
+    expect(Buffer.byteLength(output)).toBe(Buffer.byteLength(JSON.stringify(report)) + 1)
+    expect(JSON.parse(output)).toEqual(report)
+    expect(output.endsWith('\n')).toBe(true)
+  } finally { await scope.cleanup() }
+}, 20_000)
+
 test('one isolated real CLI run records every browser command and removes its process identities', async () => {
   const { code, report, stderr } = await childRun([process.execPath, 'scripts/parity/browser.ts', '--json'], 490_000)
   expect({ code, error: report.error, failed: report.rows.filter(row => row.status === 'failed'), stderr }).toEqual({ code: 0, error: undefined, failed: [], stderr })
