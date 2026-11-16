@@ -84,6 +84,13 @@ function parseNumber(value: string): number {
   return parsed
 }
 
+function parseUid(value: string): number {
+  if (!/^(?:\d+|-[1-9]\d*)$/.test(value)) throw inspectionError()
+  const uid = Number(value)
+  if (!Number.isInteger(uid) || uid < -2_147_483_648 || uid > 4_294_967_295) throw inspectionError()
+  return uid < 0 ? uid + 4_294_967_296 : uid
+}
+
 function parseProcessTable(text: string): ProcessMetadata[] {
   const rows: ProcessMetadata[] = []
   const seen = new Set<number>()
@@ -94,7 +101,7 @@ function parseProcessTable(text: string): ProcessMetadata[] {
     const pid = parseNumber(fields[0]!)
     const ppid = parseNumber(fields[1]!)
     const pgid = parseNumber(fields[2]!)
-    const uid = parseNumber(fields[3]!)
+    const uid = parseUid(fields[3]!)
     const started = fields.slice(4, 9).join(' ')
     const command = fields.slice(9).join(' ').trim()
     if (pid <= 0 || !started || !command || seen.has(pid)) throw inspectionError()

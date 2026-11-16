@@ -112,8 +112,8 @@ function fakeAccess(
   return createChromeProcessAccess(fakeProcess(output), { ...overrides, platform })
 }
 
-function expectInspectionFailure(operation: Promise<unknown>): Promise<void> {
-  return expect(operation).rejects.toThrow()
+async function expectInspectionFailure(operation: Promise<unknown>): Promise<void> {
+  await expect(operation).rejects.toThrow()
 }
 
 test('decodes macOS argc and executable padding without treating environment as argv', async () => {
@@ -386,6 +386,13 @@ test('accepts Linux kernel tasks with process group zero alongside Chrome', asyn
   )
 
   expect((await access.snapshot()).map(({ pid }) => pid)).toEqual([240])
+})
+
+test('accepts signed Darwin system UIDs without losing their unsigned ownership identity', async () => {
+  const access = fakeAccess('darwin', `${processRow(2, 1, 2, -2, 'system-task')}${processRow(240, 1, 240, -2)}`, {
+    readMacProcessArgs: () => macProcessArgs([CHROME, '--headless=new'])
+  })
+  expect((await access.snapshot()).map(({ pid, uid }) => ({ pid, uid }))).toEqual([{ pid: 240, uid: 4_294_967_294 }])
 })
 
 test('classifies Darwin EINVAL only after a trusted ps recheck confirms the PID is absent', async () => {
