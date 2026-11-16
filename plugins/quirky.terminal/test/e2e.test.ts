@@ -197,7 +197,7 @@ scenario('SC-3: the ready marker never shows', async () => {
     await waitFor(`${shell} ready`, async () => (await h.hostRow(session.id))?.shellState === 'ready')
     const name = basename(h.repo)
     await waitFor(`${shell} prompt in the snapshot`, async () => (await h.ok(['terminal', 'snapshot', session.id])).includes(name) || undefined)
-    await h.run(session.id, 'seq 1 60')
+    await h.run(session.id, "printf 'host777 bootid=5777cfcc\\n'; seq 1 60")
     await waitFor(`${shell} prompt in the log`, () => sessionLogText(h.home, session.id).includes(name) || undefined)
 
     const snapshot = JSON.stringify(await h.call('quirky.terminal/snapshot', { session: session.id }))
@@ -213,8 +213,10 @@ scenario('SC-3: the ready marker never shows', async () => {
     expect(snapshot, `${shell} snapshot`).toContain(name)
     expect(history, `${shell} history`).toContain('seq 1 60')
     expect(replay, `${shell} replay`).toContain(name)
+    expect(logged, `${shell} log`).toContain('host777 bootid=5777cfcc')
     for (const [what, content] of [['snapshot', snapshot], ['history', history], ['replay', replay], ['log', logged]] as const) {
-      expect(content, `${shell} ${what}`).not.toContain('777')
+      expect(content, `${shell} ${what}`).not.toContain('\x1b]777')
+      expect(content, `${shell} ${what}`).not.toContain('\\u001b]777')
       expect(content, `${shell} ${what}`).not.toContain('quirky-shell-ready')
     }
     await h.cleanup()
