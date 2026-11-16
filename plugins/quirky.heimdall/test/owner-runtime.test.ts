@@ -809,7 +809,6 @@ describe('owner runtime journal and conversation', () => {
     expect(fixture.controller.inspect(fixture.enrollment.watcherId).sessionId).toBe(firstSession)
   })
 
-
   test('owner config changes release the old conversation before issuing a fresh snapshot-bound turn', async () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:config-change'))
@@ -1253,7 +1252,6 @@ describe('owner runtime journal and conversation', () => {
     }
   })
 
-
   test('unknown or malformed keyed release results remain uncertain and block replacement owners', async () => {
     for (const stopReply of [
       { stopped: [], unknown: ['unrecognized-owner-session'] },
@@ -1303,6 +1301,30 @@ describe('owner runtime journal and conversation', () => {
       await tick
     }
   })
+
+  test('shutdown stops journaled owner sessions after restart without an in-memory inventory', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:shutdown-from-journal'))
+    const ownerSessionId = fixture.calls.creates[0]!.session
+    const journal = fixture.store.journal(fixture.enrollment.watcherId)
+    expect(journal).toContainEqual(expect.objectContaining({
+      kind: 'owner-session',
+      sessionId: ownerSessionId,
+      agent: 'claude'
+    }))
+    const unrelatedSessionId = await fixture.createIndependentSession()
+    const restarted = fixture.restart()
+
+    await restarted.shutdown()
+
+    expect(fixture.engines[1]?.calls.stops).toEqual([
+      { kind: 'structured', session: ownerSessionId }
+    ])
+    expect(fixture.engines[1]?.calls.stops).not.toContainEqual({
+      kind: 'structured', session: unrelatedSessionId
+    })
+  })
+
   test('shutdown removes issued reports and fences later work', async () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:shutdown'))

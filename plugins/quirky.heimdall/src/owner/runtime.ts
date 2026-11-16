@@ -996,7 +996,6 @@ export function createOwnerController(host: OwnerRuntimeHost): OwnerController {
     return session
   }
 
-
   function persistReturnedSession(watcherId: string, state: OwnerRuntimeState, raw: unknown): Session {
     ensureWatcherOpen(watcherId)
     const sessionId = returnedSessionId(raw)
