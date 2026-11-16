@@ -754,8 +754,13 @@ export async function openWindows(options: {
         } catch (error) {
           const readable = await reconcile()
           if (navigationOptions.signal.aborted) throw interrupted()
-          const message = `${errorMessage(error)}${readable ? '' : '; window state unreadable'}`
-          return failedRecord(message)
+          const errorText = errorMessage(error)
+          const timedOut = errorText.startsWith('quirky.worktree/navigate timed out after ')
+            || /^RPC call timed out after \d+(?:\.\d+)? ms$/.test(errorText)
+          const message = timedOut
+            ? `quirky.worktree/navigate timed out after ${navigationOptions.followTimeoutMs}ms`
+            : errorText
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
         }
 
         if (performance.now() > deadline) {

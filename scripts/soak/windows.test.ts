@@ -256,13 +256,23 @@ const virtualTimeout = (callback, ms, args) => {
   }))
   return timer
 }
-const startVirtualClock = () => {
+const startVirtualClock = (fractionalElapsed = false) => {
   followNow = nativePerformanceNow()
-  Object.defineProperty(performance, 'now', { configurable: true, value: () => followNow })
+  let nowCalls = 0
+  Object.defineProperty(performance, 'now', {
+    configurable: true,
+    value: () => {
+      nowCalls++
+      if (fractionalElapsed && nowCalls === 2) followNow += 0.25
+      return followNow
+    }
+  })
   virtualTime = true
 }
 globalThis.setTimeout = (callback, ms, ...args) => {
-  if ((virtualTime && [1, 5, 20].includes(ms)) || (fastReconcileTimeout && ms === 5000)) {
+  if ((virtualTime && ([1, 5, 20].includes(ms)
+    || ['switch-timeout-fractional', 'switch-timeout-fractional-rpc'].includes(scenario)))
+    || (fastReconcileTimeout && ms === 5000)) {
     return virtualTimeout(callback, ms, args)
   }
   if (ms === 100) {
@@ -277,6 +287,12 @@ globalThis.clearTimeout = (timer) => {
     return
   }
   return nativeClearTimeout(timer)
+}
+const flushLateResponseHandlers = async () => {
+  await Promise.resolve()
+  const { promise, resolve } = Promise.withResolvers()
+  nativeSetTimeout(resolve, 0)
+  await promise
 }
 const world = {
   home: process.env.QUIRKY_HOME,
@@ -298,11 +314,14 @@ const world = {
     if (scenario === 'track-failure' || scenario === 'late-launch-track-failure') throw new Error('owned browser tracking failed')
   },
   control: {
-    async callAny(method, params) {
+    async callAny(method, params, options) {
       current.rpcCalls.push(method)
       if (method === 'ui.state') return { windows: current.connectionIds.map((connId) => ({ connId })) }
       if (method === 'ui.window.state') {
         current.stateReads++
+        if (scenario === 'finish-state-rejection' && current.stateReads > 1) {
+          throw new Error('window state unavailable')
+        }
         if (scenario === 'abort-reconcile-read' && current.stateReads > 1) {
           const deferred = Promise.withResolvers()
           current.reconciliationStarted.resolve()
@@ -337,6 +356,12 @@ const world = {
           return deferred.promise
         }
         if (current.navigationCalls > 1 && scenario === 'abort-reconcile-read') throw new Error('navigation rejected')
+        if (current.navigationCalls > 1 && scenario === 'switch-timeout-fractional-rpc') {
+          return Promise.reject(new Error('RPC call timed out after ' + options.timeoutMs + ' ms'))
+        }
+        if (current.navigationCalls > 1 && scenario === 'switch-timeout-fractional') {
+          return Promise.withResolvers().promise
+        }
         if (current.navigationCalls > 1 && ['switch-mismatch', 'switch-unreadable'].includes(scenario)) {
           current.selected.set(connId, 'wt-c')
           return { worktreeId: 'wt-c' }
@@ -347,7 +372,9 @@ const world = {
           || scenario.startsWith('abort-') || scenario.startsWith('wait-') || scenario.startsWith('finish-'))) {
           sendStatus(page, worktree)
         }
-        if (current.navigationCalls > 1 && scenario === 'switch-proof') sendStatus(page, \`id:\${worktree}\`)
+        if (current.navigationCalls > 1 && ['switch-proof', 'finish-state-rejection'].includes(scenario)) {
+          sendStatus(page, 'id:' + worktree)
+        }
         if (current.navigationCalls > 1 && scenario === 'switch-wrong-proof') sendStatus(page, 'wrong-worktree')
         if (scenario === 'wrong-worktree') sendStatus(page, 'another-worktree')
         return { worktreeId: worktree }
@@ -378,6 +405,8 @@ const capture = async () => {
     let livenessAfterDisconnect
     let livenessAfterCrash
     let livenessAfterPageClose
+    let livenessAfterLateResponse
+    let reconciliationStateReads
     let livenessWasSynchronous
     let livenessRpcCalls
     let switchRecord
@@ -414,8 +443,10 @@ const capture = async () => {
       })
     }
     if (scenario === 'switch-proof' || scenario === 'switch-mismatch' || scenario === 'switch-unreadable'
-      || scenario === 'switch-wrong-proof' || scenario === 'switch-no-proof' || scenario === 'switch-no-proof-unreadable') {
-      startVirtualClock()
+      || scenario === 'switch-wrong-proof' || scenario === 'switch-no-proof' || scenario === 'switch-no-proof-unreadable'
+      || ['switch-timeout-fractional', 'switch-timeout-fractional-rpc'].includes(scenario)
+      || scenario === 'finish-state-rejection') {
+      startVirtualClock(['switch-timeout-fractional', 'switch-timeout-fractional-rpc'].includes(scenario))
       switchRecord = await windows.navigate(0, 'wt-b', {
         signal: new AbortController().signal,
         followTimeoutMs: 20
@@ -423,15 +454,20 @@ const capture = async () => {
       windows.pages[0].sendStatus('wt-a')
     }
     if (scenario === 'abort-nav') {
+      const stateReadsBeforeAction = current.stateReads
       const signal = new AbortController()
       const pending = windows.navigate(0, 'wt-b', { signal: signal.signal, followTimeoutMs: 1000 })
       await current.navigationStarted.promise
       signal.abort()
       actionError = await pending.then(() => null, (error) => error.message)
       current.resolveNavigate?.({ worktreeId: 'wt-b' })
+      await flushLateResponseHandlers()
+      livenessAfterLateResponse = windows.liveness()
+      reconciliationStateReads = current.stateReads - stateReadsBeforeAction
       windows.pages[0].sendStatus('wt-a')
     }
     if (scenario === 'abort-reconcile-read') {
+      const stateReadsBeforeAction = current.stateReads
       fastReconcileTimeout = true
       startVirtualClock()
       const signal = new AbortController()
@@ -440,6 +476,9 @@ const capture = async () => {
       signal.abort()
       actionError = await pending.then(() => null, (error) => error.message)
       current.resolveState?.({ layout: { worktree: 'wt-c' } })
+      await flushLateResponseHandlers()
+      livenessAfterLateResponse = windows.liveness()
+      reconciliationStateReads = current.stateReads - stateReadsBeforeAction
       windows.pages[0].sendStatus('wt-a')
     }
     if (scenario === 'finish-mismatch') windows.pages[0].sendStatus('ready')
@@ -480,6 +519,8 @@ const capture = async () => {
       livenessAfterDisconnect,
       livenessAfterCrash,
       livenessAfterPageClose,
+      livenessAfterLateResponse,
+      reconciliationStateReads,
       livenessWasSynchronous,
       livenessRpcCalls,
       finishRpcCalls,
@@ -571,6 +612,8 @@ type RecordingWindowRun = {
   livenessAfterDisconnect?: WindowLiveness[]
   livenessAfterCrash?: WindowLiveness[]
   livenessAfterPageClose?: WindowLiveness[]
+  livenessAfterLateResponse?: WindowLiveness[]
+  reconciliationStateReads?: number
   livenessWasSynchronous?: boolean
   livenessRpcCalls?: string[]
   finishRpcCalls?: string[]
@@ -706,16 +749,42 @@ test('keeps failed follow and navigation attribution aligned with daemon readbac
   expect(unreadable.requests.at(-1)?.worktree).toBe('ready')
 })
 
-test('drops late navigate and reconciliation responses after abort settles', async () => {
+test('drops a late navigate response after abort settles', async () => {
   const navigation = await runRecordingWindowScenario('abort-nav')
   expect(navigation.resolved).toBe(true)
   expect(navigation.actionError).toContain('soak setup was interrupted')
+  expect(navigation.livenessAfterLateResponse).toEqual([
+    { index: 0, connId: 41, worktree: 'wt-c', open: true }
+  ])
+  expect(navigation.reconciliationStateReads).toBe(1)
   expect(navigation.requests.at(-1)?.worktree).toBe('wt-c')
+})
 
+test('drops a late reconciliation read after abort settles', async () => {
   const reconciliation = await runRecordingWindowScenario('abort-reconcile-read')
   expect(reconciliation.resolved).toBe(true)
   expect(reconciliation.actionError).toContain('soak setup was interrupted')
+  expect(reconciliation.livenessAfterLateResponse).toEqual([
+    { index: 0, connId: 41, worktree: 'ready', open: true }
+  ])
+  expect(reconciliation.reconciliationStateReads).toBe(1)
   expect(reconciliation.requests.at(-1)?.worktree).toBe('ready')
+})
+
+test('normalizes navigate timeout diagnostics after fractional elapsed time', async () => {
+  const watchdog = await runRecordingWindowScenario('switch-timeout-fractional')
+  expect(watchdog.resolved, watchdog.error ?? 'window scenario failed').toBe(true)
+  expect(watchdog.switchRecord).toMatchObject({
+    settled: 'ready',
+    error: 'quirky.worktree/navigate timed out after 20ms'
+  })
+
+  const rpc = await runRecordingWindowScenario('switch-timeout-fractional-rpc')
+  expect(rpc.resolved, rpc.error ?? 'window scenario failed').toBe(true)
+  expect(rpc.switchRecord).toMatchObject({
+    settled: 'ready',
+    error: 'quirky.worktree/navigate timed out after 20ms'
+  })
 })
 
 test('finish reports each window state from the daemon rather than the starting worktree', async () => {
@@ -724,6 +793,18 @@ test('finish reports each window state from the daemon rather than the starting 
   expect(result.resolved).toBe(true)
   expect(result.finished?.records[0]).toMatchObject({
     worktree: 'daemon-worktree',
+    shown: false
+  })
+  expect(result.finishRpcCalls).toEqual(['ui.window.state'])
+})
+
+test('finish reports the settled worktree and shown false when daemon readback rejects', async () => {
+  const result = await runRecordingWindowScenario('finish-state-rejection')
+
+  expect(result.resolved, result.error ?? 'window scenario failed').toBe(true)
+  expect(result.switchRecord?.settled).toBe('wt-b')
+  expect(result.finished?.records[0]).toMatchObject({
+    worktree: 'wt-b',
     shown: false
   })
   expect(result.finishRpcCalls).toEqual(['ui.window.state'])
