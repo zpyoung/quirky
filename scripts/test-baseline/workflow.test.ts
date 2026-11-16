@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { discover, macosOnly } from '../suite'
 import { createProcessScope } from '../test-support/process-scope'
 
@@ -135,7 +135,7 @@ describe('sandboxed Linux browser acceptance', () => {
   test('bounds a sandboxed headless document smoke and cleans up its process group and private roots', () => {
     const script = prepare()?.run ?? ''
     for (const required of [
-      'timeout --signal=TERM --kill-after=5s 20s',
+      '--signal=TERM', '--kill-after=5s', '20s', '60s',
       '--headless', '--dump-dom', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
       'mktemp -d', 'HOME="$root/home"', 'XDG_CONFIG_HOME="$root/config"', 'XDG_CACHE_HOME="$root/cache"',
       '--user-data-dir="$root/profile"', 'quirky-linux-chrome', 'grep -q',
@@ -154,91 +154,417 @@ describe('sandboxed Linux browser acceptance', () => {
     expect(script.match(/sudo sysctl[^\n]*/g)).toEqual(['sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0'])
   })
 
-  for (const [mode, expectedExit] of [
-    ['slow-version', 0],
-    ['missing-browser', 1],
-    ['version-failure', 7],
-    ['smoke-failure', 9],
-    ['missing-marker', 1],
-  ] as const) {
-    test(`Chrome preparation handles ${mode} without weakening acceptance`, async () => {
-      const root = mkdtempSync(join(tmpdir(), 'quirky-chrome-preparation-'))
-      const bin = join(root, 'bin')
-      const runnerTemp = join(root, 'runner-temp')
-      const home = join(root, 'home')
-      const chrome = join(bin, 'chrome')
-      const scope = createProcessScope()
-      try {
-        for (const directory of [bin, runnerTemp, home]) mkdirSync(directory)
-        const timeout = join(bin, 'timeout')
-        // bash subprocess deadlines cannot be advanced with fake timers
-        writeFileSync(timeout, `#!${process.execPath}
+  type SmokeResult = { exit: number; result: 'ok' | 'timeout' | 'chrome-exit' | 'missing-marker' }
+  type FixtureTrace =
+    | { type: 'timeout'; requested: string; signal: string; killAfter: string; command: string[]; pid: number; shellPid: number }
+    | { type: 'chrome'; phase: 'version'; executable: string; home: string; pid: number }
+    | {
+        type: 'chrome'
+        phase: 'smoke'
+        executable: string
+        pid: number
+        root: string
+        home: string
+        config: string
+        cache: string
+        profile: string
+        previousRootRemoved: boolean
+        previousProcessGone: boolean
+        descendantPid?: number
+        previousDescendantGone: boolean
+      }
+
+  const runPreparation = async (
+    mode: string,
+    expected: { code: number; version: number | null; attempts: readonly SmokeResult[]; signal?: 'SIGTERM' | 'SIGINT'; lingering?: boolean },
+  ) => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-chrome-preparation-')))
+    const bin = join(root, 'bin')
+    const runnerTemp = join(root, 'runner-temp')
+    const home = join(root, 'home')
+    const tracePath = join(root, 'trace.jsonl')
+    const chrome = join(bin, 'chrome')
+    const executionTrace = join(root, 'execution.log')
+    const scope = createProcessScope()
+    try {
+      for (const directory of [bin, runnerTemp, home]) mkdirSync(directory)
+      writeFileSync(tracePath, '')
+      // The YAML shell and its timeout stand-in run outside Bun's fake-timer clock.
+      const timeout = join(bin, 'timeout')
+      const deadline = join(root, 'deadline.ts')
+      writeFileSync(deadline, `#!${process.execPath}
 const args = process.argv.slice(2)
-while (args[0]?.startsWith('--')) args.shift()
-const seconds = Number(args.shift()?.replace(/s$/, ''))
+let signal = ''
+let killAfter = ''
+while (args[0]?.startsWith('--')) {
+  const option = args.shift()
+  if (option.startsWith('--signal=')) signal = option.slice('--signal='.length)
+  if (option.startsWith('--kill-after=')) killAfter = option.slice('--kill-after='.length)
+}
+const requested = args.shift()
+const tracePath = process.env.CHROME_PREPARATION_TRACE
+const event = { type: 'timeout', requested, signal, killAfter, command: args, pid: Number(process.env.CHROME_TIMEOUT_PID), shellPid: Number(process.env.CHROME_SHELL_PID) }
+require('node:fs').appendFileSync(tracePath, JSON.stringify(event) + '\\n')
+if (process.env.CHROME_RECORD_ONLY === '1') process.exit(0)
+const seconds = Number(requested?.replace(/s$/, ''))
 if (!Number.isFinite(seconds) || seconds <= 0) process.exit(2)
 const child = Bun.spawn(args, { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })
 let expired = false
-const timer = setTimeout(() => { expired = true; child.kill('SIGKILL') }, seconds * 1000)
+let killTimer
+const timer = setTimeout(() => {
+  expired = true
+  child.kill('SIGTERM')
+  killTimer = setTimeout(() => child.kill('SIGKILL'), 50)
+}, seconds * 50)
 const code = await child.exited
 clearTimeout(timer)
+if (killTimer) clearTimeout(killTimer)
 process.exit(expired ? 124 : code)
 `)
-        writeFileSync(chrome, `#!${process.execPath}
+      writeFileSync(timeout, `#!/bin/bash
+export CHROME_TIMEOUT_PID=$$ CHROME_SHELL_PID=$PPID
+${process.platform === 'linux' ? `
+CHROME_RECORD_ONLY=1 "${process.execPath}" "${deadline}" "$@"
+while [[ "$1" == --* ]]; do shift; done
+seconds="\${1%s}"
+shift
+exec /usr/bin/timeout --signal=TERM --kill-after=0.1s "$(awk "BEGIN {print $seconds / 20}")s" "$@"
+` : `
+exec python3 -c 'import os,sys; os.setpgid(0,0); os.execv(sys.argv[1],sys.argv[1:])' "${process.execPath}" "${deadline}" "$@"
+`}`)
+      writeFileSync(chrome, `#!${process.execPath}
 const mode = process.env.CHROME_PREPARATION_CASE
+const tracePath = process.env.CHROME_PREPARATION_TRACE
+async function appendEvent(event) {
+  require('node:fs').appendFileSync(tracePath, JSON.stringify(event) + '\\n')
+}
 if (process.argv.includes('--version')) {
-  if (mode === 'slow-version') await Bun.sleep(6000)
+  await appendEvent({ type: 'chrome', phase: 'version', executable: process.argv[1], home: process.env.HOME, pid: process.pid })
+  if (mode === 'slow-version') await Bun.sleep(6 * 50)
   if (mode === 'version-failure') process.exit(7)
   console.log('Owned Chrome stand-in')
 } else {
-  if (mode === 'smoke-failure') process.exit(9)
-  console.log(mode === 'missing-marker' ? '<p>wrong document</p>' : '<p>quirky-linux-chrome</p>')
+  const previousEvents = (await Bun.file(tracePath).text()).trim().split('\\n').filter(Boolean).map(JSON.parse)
+  const previousSmokes = previousEvents.filter(event => event.type === 'chrome' && event.phase === 'smoke')
+  const attempt = previousSmokes.length + 1
+  const home = process.env.HOME
+  const root = home.slice(0, home.lastIndexOf('/'))
+  const profileArg = process.argv.find(argument => argument.startsWith('--user-data-dir='))
+  const previous = previousSmokes.at(-1)
+  const processGone = pid => {
+    if (!pid) return true
+    const state = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)]).stdout.toString().trim()
+    return !state || state.startsWith('Z')
+  }
+  let descendantPid
+  if (process.platform === 'linux' && process.env.CHROME_LINGERING === '1') {
+    const descendant = Bun.spawn([process.execPath, '-e', 'process.on("SIGTERM", () => {}); console.log("ready"); setInterval(() => {}, 1000)'], {
+      stdin: 'ignore', stdout: 'pipe', stderr: 'inherit',
+    })
+    const ready = descendant.stdout.getReader()
+    await ready.read()
+    await ready.cancel()
+    descendant.unref()
+    descendantPid = descendant.pid
+  }
+  let previousProcessGone = true
+  if (previous) {
+    try {
+      process.kill(previous.pid, 0)
+      previousProcessGone = false
+    } catch (error) {
+      previousProcessGone = error.code !== 'EPERM'
+    }
+  }
+  await appendEvent({
+    type: 'chrome',
+    phase: 'smoke',
+    executable: process.argv[1],
+    pid: process.pid,
+    root,
+    home,
+    config: process.env.XDG_CONFIG_HOME,
+    cache: process.env.XDG_CACHE_HOME,
+    profile: profileArg?.slice('--user-data-dir='.length),
+    previousRootRemoved: previous ? !require('node:fs').existsSync(previous.root) : true,
+    previousProcessGone,
+    descendantPid,
+    previousDescendantGone: !previous || processGone(previous.descendantPid),
+  })
+  if (mode === 'slow-start') {
+    await Bun.sleep(25 * 50)
+    console.log('<p>quirky-linux-chrome</p>')
+  } else if ((mode === 'timeout-recovery' || mode === 'cancellation') && attempt === 1) {
+    console.log('<p>quirky-linux-chrome from stale attempt</p>')
+    process.stderr.write('timeout diagnostic 1\\n')
+    await Bun.sleep(10_000)
+  } else if (mode === 'timeout-all' || mode === 'cancellation') {
+    process.stderr.write('timeout diagnostic ' + attempt + '\\n')
+    await Bun.sleep(10_000)
+  } else if (mode === 'smoke-failure') {
+    process.stderr.write('owned failure ' + attempt + '\\n')
+    process.exit(9)
+  } else if (mode === 'exit-137') {
+    process.stderr.write('owned failure ' + attempt + '\\n')
+    process.exit(137)
+  } else if (mode === 'missing-marker' || (mode === 'marker-recovery' && attempt === 1)) {
+    console.log('<p>wrong document</p>')
+  } else {
+    console.log('<p>quirky-linux-chrome</p>')
+  }
 }
 `)
-        const sudo = join(bin, 'sudo')
-        writeFileSync(sudo, '#!/bin/sh\nprintf "unexpected sudo invocation\\n" >&2\nexit 91\n')
-        for (const executable of [timeout, chrome, sudo]) chmodSync(executable, 0o700)
-        const candidate = mode === 'missing-browser' ? join(root, 'missing-chrome') : chrome
-        const script = prepare()!.run!
-          .replace(/\/usr\/bin\/(?:google-chrome(?:-stable)?|chromium(?:-browser)?)/g, candidate)
-          .replace('/proc/sys/kernel/apparmor_restrict_unprivileged_userns', join(root, 'absent-restriction'))
-        const child = scope.spawn(['bash', '-c', script], {
-          env: {
-            ...process.env,
-            ...scope.env,
-            PATH: `${bin}:${process.env.PATH ?? ''}`,
-            HOME: home,
-            QUIRKY_HOME: home,
-            RUNNER_TEMP: runnerTemp,
-            CHROME_PREPARATION_CASE: mode,
-            BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0',
-          },
-          stdin: 'ignore',
-          stdout: 'pipe',
-          stderr: 'pipe',
-        })
-        const [code, stdout, stderr] = await Promise.all([
-          child.exited,
-          new Response(child.stdout).text(),
-          new Response(child.stderr).text(),
-        ])
-        expect({ code, stderr }).toEqual({ code: expectedExit, stderr: mode === 'missing-browser' ? 'No installed Chrome or Chromium executable found\n' : '' })
-        if (mode !== 'missing-browser') {
-          expect(stdout).toMatch(new RegExp(`Chrome version probe: \\d+s \\(exit ${mode === 'version-failure' ? 7 : 0}\\)`))
+      const sudo = join(bin, 'sudo')
+      writeFileSync(sudo, '#!/bin/sh\nprintf "unexpected sudo invocation\\n" >&2\nexit 91\n')
+      for (const executable of [timeout, chrome, sudo]) chmodSync(executable, 0o700)
+      const candidate = mode === 'missing-browser' ? join(root, 'missing-chrome') : chrome
+      const script = prepare()!.run!
+        .replace(/\/usr\/bin\/(?:google-chrome(?:-stable)?|chromium(?:-browser)?)/g, candidate)
+        .replace('/proc/sys/kernel/apparmor_restrict_unprivileged_userns', join(root, 'absent-restriction'))
+      const harness = 'bash -x -c "$1" 2>"$CHROME_EXECUTION_TRACE"; status=$?; if [ "$status" -eq 0 ]; then printf "SHARD_SENTINEL\\n"; fi; exit "$status"'
+      const child = scope.spawn(['bash', '-c', harness, 'workflow-step-then-shard', script], {
+        env: {
+          ...process.env,
+          ...scope.env,
+          PATH: `${bin}:${process.env.PATH ?? ''}`,
+          HOME: home,
+          QUIRKY_HOME: home,
+          XDG_CONFIG_HOME: home,
+          XDG_CACHE_HOME: home,
+          XDG_DATA_HOME: home,
+          RUNNER_TEMP: runnerTemp,
+          CHROME_PREPARATION_CASE: mode,
+          CHROME_PREPARATION_TRACE: tracePath,
+          CHROME_EXECUTION_TRACE: executionTrace,
+          CHROME_LINGERING: expected.lingering ? '1' : '0',
+          BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0',
+        },
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      const output = Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      const { promise: watchdogExpired, reject: rejectWatchdog } = Promise.withResolvers<never>()
+      // Bound the real Bash child; fake timers do not control this subprocess.
+      const watchdog = setTimeout(() => {
+        child.kill('SIGKILL')
+        rejectWatchdog(new Error('Chrome preparation fixture exceeded 20 seconds'))
+      }, 20_000)
+      // Poll subprocess readiness, not elapsed time: Bash/GNU timeout cannot use Bun fake timers.
+      const cancellation = expected.signal ? (async () => {
+        while (true) {
+          const events = (await Bun.file(tracePath).text()).trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as FixtureTrace)
+          if (events.filter(event => event.type === 'chrome' && event.phase === 'smoke').length === 2) {
+            const deadline = events.filter((event): event is Extract<FixtureTrace, { type: 'timeout' }> => event.type === 'timeout').at(-1)!
+            process.kill(deadline.shellPid, expected.signal)
+            return
+          }
+          if (child.exitCode !== null) throw new Error('Preparation exited before cancellation reached its second smoke')
+          await Bun.sleep(10)
         }
-        if (mode === 'slow-version' || mode === 'smoke-failure' || mode === 'missing-marker') {
-          expect(stdout).toMatch(new RegExp(`Chrome sandbox smoke: \\d+s \\(exit ${mode === 'smoke-failure' ? 9 : 0}\\)`))
-        }
-        expect(readdirSync(runnerTemp)).toEqual([])
-      } finally {
-        try {
-          await scope.cleanup()
-        } finally {
-          rmSync(root, { recursive: true, force: true })
+      })() : Promise.resolve()
+      const [[code, stdout, shellStderr]] = await Promise.race([Promise.all([output, cancellation]), watchdogExpired]).finally(() => clearTimeout(watchdog))
+      const execution = await Bun.file(executionTrace).text()
+      const stderr = shellStderr + execution.split('\n').filter(line => !/^\++ /.test(line)).join('\n')
+      const trace = (await Bun.file(tracePath).text()).trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as FixtureTrace)
+      const timeoutCalls = trace.filter((event): event is Extract<FixtureTrace, { type: 'timeout' }> => event.type === 'timeout')
+      const chromeCalls = trace.filter((event): event is Extract<FixtureTrace, { type: 'chrome' }> => event.type === 'chrome')
+      const versions = chromeCalls.filter((event): event is Extract<FixtureTrace, { type: 'chrome'; phase: 'version' }> => event.phase === 'version')
+      const smokes = chromeCalls.filter((event): event is Extract<FixtureTrace, { type: 'chrome'; phase: 'smoke' }> => event.phase === 'smoke')
+      expect(code).toBe(expected.code)
+      expect(stderr).not.toContain('unexpected sudo invocation')
+      expect(versions).toHaveLength(expected.version === null ? 0 : 1)
+      expect(versions.every(event => event.executable === chrome && !relative(root, event.home).startsWith('..'))).toBe(true)
+      expect(smokes).toHaveLength(expected.attempts.length)
+      expect(smokes.every(event => event.executable === chrome)).toBe(true)
+      expect(timeoutCalls.map(event => ({
+        requested: event.requested,
+        signal: event.signal,
+        killAfter: event.killAfter,
+        phase: event.command.includes('--version') ? 'version' : 'smoke',
+      }))).toEqual([
+        ...(expected.version === null ? [] : [{ requested: '20s', signal: 'TERM', killAfter: '5s', phase: 'version' }]),
+        ...expected.attempts.map(() => ({ requested: '60s', signal: 'TERM', killAfter: '5s', phase: 'smoke' })),
+      ])
+      expect(timeoutCalls.every(event => event.command.includes(chrome))).toBe(true)
+      const versionLines = stdout.match(/^Chrome version probe: \d+s \(exit \d+\)$/gm) ?? []
+      expect(versionLines).toHaveLength(expected.version === null ? 0 : 1)
+      if (expected.version !== null) expect(versionLines[0]).toContain(`(exit ${expected.version})`)
+      const attemptLines = stdout.match(/^Chrome sandbox smoke attempt \d+\/3: \d+s \(exit \d+, result (?:ok|timeout|chrome-exit|missing-marker)\)$/gm) ?? []
+      expect(attemptLines).toHaveLength(expected.attempts.length)
+      expected.attempts.forEach((attempt, index) => {
+        expect(attemptLines[index]?.startsWith(`Chrome sandbox smoke attempt ${index + 1}/3: `)).toBe(true)
+        expect(attemptLines[index]?.endsWith(` (exit ${attempt.exit}, result ${attempt.result})`)).toBe(true)
+      })
+      const totalLines = stdout.match(/^Chrome sandbox smoke total: \d+s \(\d+ attempts, exit \d+\)$/gm) ?? []
+      expect(totalLines).toHaveLength(expected.attempts.length ? 1 : 0)
+      if (expected.attempts.length) {
+        expect(totalLines[0]).toContain(`(${expected.attempts.length} attempts, exit ${expected.code})`)
+      }
+      expect(stdout.match(/^SHARD_SENTINEL$/gm) ?? []).toHaveLength(expected.code === 0 ? 1 : 0)
+      const privatePaths = smokes.flatMap(event => [event.home, event.config, event.cache, event.profile])
+      expect(new Set(smokes.map(event => event.root)).size).toBe(smokes.length)
+      expect(new Set(privatePaths).size).toBe(smokes.length * 4)
+      for (const event of smokes) {
+        expect(event.root.startsWith(`${runnerTemp}/`)).toBe(true)
+        expect(event.home).toBe(join(event.root, 'home'))
+        expect(event.config).toBe(join(event.root, 'config'))
+        expect(event.cache).toBe(join(event.root, 'cache'))
+        expect(event.profile).toBe(join(event.root, 'profile'))
+        expect(!relative(event.root, event.home).startsWith('..')).toBe(true)
+        expect(existsSync(event.root)).toBe(false)
+      }
+      smokes.slice(1).forEach(event => {
+        expect(event.previousRootRemoved).toBe(true)
+        expect(event.previousProcessGone).toBe(true)
+        expect(event.previousDescendantGone).toBe(true)
+      })
+      for (const event of smokes) {
+        if (event.descendantPid) {
+          const state = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(event.descendantPid)]).stdout.toString().trim()
+          expect(!state || state.startsWith('Z')).toBe(true)
         }
       }
+      let activePid = ''
+      for (const line of execution.split('\n')) {
+        const assigned = line.match(/^\+ smoke_pid=(\d*)$/)
+        if (assigned) activePid = assigned[1]!
+        const signalled = line.match(/^\+ kill -(?:TERM|KILL|0) -- -(\d+)$/)
+        if (signalled) {
+          expect(activePid).not.toBe('')
+          expect(signalled[1]).toBe(activePid)
+        }
+      }
+      expect(readdirSync(runnerTemp)).toEqual([])
+      return { code, stdout, stderr, trace, smokes }
+    } finally {
+      try {
+        await scope.cleanup()
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
+    }
+  }
+
+  test('keeps the version deadline at 20 seconds and lets a logical 25-second first start finish within 60 seconds', async () => {
+    const result = await runPreparation('slow-start', {
+      code: 0,
+      version: 0,
+      attempts: [{ exit: 0, result: 'ok' }],
+    })
+    expect(result.smokes).toHaveLength(1)
+    expect(result.stderr).toBe('')
+  }, 30_000)
+
+  test('retries a timeout in a fresh root without allowing stale DOM output to qualify the retry', async () => {
+    const result = await runPreparation('timeout-recovery', {
+      code: 0,
+      version: 0,
+      attempts: [{ exit: 124, result: 'timeout' }, { exit: 0, result: 'ok' }],
+    })
+    expect(result.stderr).toContain('Chrome sandbox smoke attempt 1/3')
+    expect(result.stderr).toContain('timeout diagnostic 1')
+    expect(result.smokes[0]!.root).not.toBe(result.smokes[1]!.root)
+    expect(result.smokes[1]!.previousRootRemoved).toBe(true)
+    expect(result.smokes[1]!.previousProcessGone).toBe(true)
+  }, 30_000)
+
+  test('retries an exit-zero smoke whose own document is missing the marker', async () => {
+    const result = await runPreparation('marker-recovery', {
+      code: 0,
+      version: 0,
+      attempts: [{ exit: 1, result: 'missing-marker' }, { exit: 0, result: 'ok' }],
+    })
+    expect(result.stderr).toContain('Chrome sandbox smoke attempt 1/3: expected quirky-linux-chrome marker missing')
+  }, 30_000)
+
+  test('stops after three timeouts and preserves their attempt-attributed diagnostics', async () => {
+    const result = await runPreparation('timeout-all', {
+      code: 124,
+      version: 0,
+      attempts: Array.from({ length: 3 }, () => ({ exit: 124, result: 'timeout' as const })),
+    })
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      expect(result.stderr).toContain(`Chrome sandbox smoke attempt ${attempt}/3`)
+      expect(result.stderr).toContain(`timeout diagnostic ${attempt}`)
+    }
+  }, 30_000)
+
+  test('retries nonzero Chrome exits and returns the final failure with all diagnostics', async () => {
+    const result = await runPreparation('smoke-failure', {
+      code: 9,
+      version: 0,
+      attempts: Array.from({ length: 3 }, () => ({ exit: 9, result: 'chrome-exit' as const })),
+    })
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      expect(result.stderr).toContain(`Chrome sandbox smoke attempt ${attempt}/3`)
+      expect(result.stderr).toContain(`owned failure ${attempt}`)
+    }
+  }, 30_000)
+
+  test('fails closed after three successful exits without the marker and reports every missing marker', async () => {
+    const result = await runPreparation('missing-marker', {
+      code: 1,
+      version: 0,
+      attempts: Array.from({ length: 3 }, () => ({ exit: 1, result: 'missing-marker' as const })),
+    })
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      expect(result.stderr).toContain(`Chrome sandbox smoke attempt ${attempt}/3: expected quirky-linux-chrome marker missing`)
+    }
+  }, 30_000)
+
+  test('preserves 137 after exhausting timeout-classified smoke exits', async () => {
+    const result = await runPreparation('exit-137', {
+      code: 137,
+      version: 0,
+      attempts: Array.from({ length: 3 }, () => ({ exit: 137, result: 'timeout' as const })),
+    })
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      expect(result.stderr).toContain(`Chrome sandbox smoke attempt ${attempt}/3`)
+      expect(result.stderr).toContain(`owned failure ${attempt}`)
+    }
+  }, 30_000)
+
+  for (const [mode, expected] of [
+    ['slow-version', { code: 0, version: 0, attempts: [{ exit: 0, result: 'ok' }] }],
+    ['missing-browser', { code: 1, version: null, attempts: [] }],
+    ['version-failure', { code: 7, version: 7, attempts: [] }],
+  ] as const) {
+    test(`preserves the ${mode} browser-discovery compatibility case`, async () => {
+      const result = await runPreparation(mode, expected)
+      if (mode === 'missing-browser') {
+        expect(result.stderr).toBe('No installed Chrome or Chromium executable found\n')
+      } else {
+        expect(result.stderr).toBe('')
+      }
+      if (mode === 'slow-version') expect(result.stdout).toContain('SHARD_SENTINEL')
     }, 30_000)
   }
+
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    test(`cancels the second smoke with ${signal} without retrying or leaving owned processes`, async () => {
+      await runPreparation('cancellation', {
+        code: signal === 'SIGTERM' ? 143 : 130,
+        version: 0,
+        attempts: [{ exit: 124, result: 'timeout' }, { exit: signal === 'SIGTERM' ? 143 : 130, result: 'chrome-exit' }],
+        signal,
+        lingering: process.platform === 'linux',
+      })
+    }, 30_000)
+  }
+
+  test.skipIf(process.platform !== 'linux')('reaps TERM-ignoring descendants before retry and after a successful smoke', async () => {
+    await runPreparation('timeout-recovery', {
+      code: 0,
+      version: 0,
+      attempts: [{ exit: 124, result: 'timeout' }, { exit: 0, result: 'ok' }],
+      lingering: true,
+    })
+  }, 30_000)
 })
 
 describe('Linux test coverage routing', () => {
