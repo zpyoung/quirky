@@ -472,6 +472,20 @@
   color: var(--ui-text);
 }
 
+.ui-tabs--underline .ui-tabs__tab {
+  background: var(--ui-transparent);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--ui-muted);
+}
+
+.ui-tabs--underline .ui-tabs__tab[aria-selected="true"] {
+  background: var(--ui-surface);
+  box-shadow: inset 0 calc(var(--ui-border-width) * -2) 0 var(--ui-accent);
+  color: var(--ui-text);
+}
+
 .ui-tabs__tab:focus-visible {
   outline-offset: calc(-1 * var(--ui-focus-width));
 }
@@ -721,6 +735,36 @@
   justify-content: center;
   line-height: 1;
   padding: var(--ui-space-4);
+}
+
+.ui-dialog-backdrop--top::before {
+  opacity: 0;
+}
+
+.ui-dialog-backdrop--top .ui-dialog {
+  box-shadow: 0 var(--ui-space-8) var(--ui-space-24) var(--ui-shadow);
+}
+
+.ui-dialog-backdrop--top .ui-dialog__header {
+  inset-block-start: var(--ui-space-8);
+  inset-inline-end: var(--ui-space-8);
+  position: absolute;
+}
+
+.ui-dialog-backdrop--top .ui-dialog__title {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: var(--ui-border-width);
+  margin: calc(-1 * var(--ui-border-width));
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: var(--ui-border-width);
+}
+
+.ui-dialog-backdrop--top .ui-dialog__close {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
 }
 
 .ui-dialog__body {
