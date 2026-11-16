@@ -339,10 +339,51 @@ for (const variant of ['pi', 'omp'] as const) {
       await setup.runner.start(setup.session, undefined)
       const transport = setup.fake.last()
       transport.replies.set('prompt', () => ({ success: false, error: 'No model selected' }))
-      await setup.runner.send(setup.session.id, 'hi')
+      await expect(setup.runner.send(setup.session.id, 'hi')).rejects.toThrow('No model selected')
       expect(setup.ofKind('error')).toEqual([{ kind: 'error', reason: 'protocol', stderrTail: ['No model selected'], resumable: true }])
       expect(setup.ofKind('turn-end')).toMatchObject([{ state: 'failed' }])
       expect(setup.statuses.at(-1)).toBe('done')
+    })
+
+    test('a steer the agent rejects rejects send once and records one error item', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' })
+      transport.replies.set('steer', () => ({ success: false, error: 'cannot steer' }))
+      await expect(setup.runner.send(setup.session.id, 'more')).rejects.toThrow('cannot steer')
+      expect(setup.ofKind('error')).toHaveLength(1)
+    })
+
+    test('a transport write failure rejects send so the caller can restore the queued message', async () => {
+      const transport = await begin(null)
+      transport.failWrites.set('prompt', new Error('pi message exceeds the frame limit'))
+      await expect(setup.runner.send(setup.session.id, 'big')).rejects.toThrow('exceeds the frame limit')
+      expect(setup.ofKind('error')).toHaveLength(1)
+    })
+
+    test('a cancelled dialog settles the wait, sends nothing for it and returns the status to working', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-c', method: 'confirm', title: 'Go?' })
+      await until(() => setup.asks.length === 1)
+      expect(setup.statuses.at(-1)).toBe('waiting')
+      transport.emit({ type: 'extension_ui_request', id: 'ui-x', method: 'cancel', targetId: 'ui-c' })
+      await until(() => setup.statuses.at(-1) === 'working')
+      setup.asks[0]!.resolve(setup.answered('ask_c', { decision: { value: 'allow', source: 'option' } }))
+      await Bun.sleep(10)
+      expect(transport.commands('extension_ui_response')).toEqual([])
+    })
+
+    test('an exit while the provider session is being stored fails the start and closes the child', async () => {
+      setup = makeSetup(variant)
+      const context: StructuredContext = {
+        ...setup.context,
+        setProviderSession: async () => {
+          setup.fake.last().exit(1, ['died early'])
+        }
+      }
+      const runner = createPiRunner(context, variant, { transport: setup.fake.factory })
+      await expect(runner.start(setup.session, 'hello')).rejects.toThrow('died early')
+      expect(setup.fake.last().commands('prompt')).toEqual([])
+      await expect(runner.send(setup.session.id, 'again')).rejects.toThrow('not running')
     })
 
     test('stop aborts, closes the child, stops open calls and ends the turn as stopped', async () => {
@@ -476,6 +517,43 @@ describe('pi stdio transport', () => {
       expect(events).toEqual([{ type: 'ready', note: 'a b' }])
       await expect(rpc.request('boom')).rejects.toThrow('exited with code 3')
       expect(exits).toMatchObject([{ code: 3, stderrTail: ['one', 'two'] }])
+      await rpc.close()
+      await processRunner.dispose()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+  test('an outgoing frame carrying an image at the structured cap is sent whole', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pi-rpc-big-'))
+    try {
+      const script = join(dir, 'agent.ts')
+      writeFileSync(
+        script,
+        `
+        let input = ''
+        process.stdin.on('data', (chunk) => {
+          input += chunk
+          for (;;) {
+            const newline = input.indexOf('\\n')
+            if (newline < 0) break
+            const line = input.slice(0, newline)
+            input = input.slice(newline + 1)
+            const command = JSON.parse(line)
+            process.stdout.write(JSON.stringify({ id: command.id, type: 'response', command: command.type, success: true, data: { bytes: command.images[0].data.length } }) + '\\n')
+          }
+        })
+        `
+      )
+      const processRunner = createProcessRunner({ owner: 'pi-rpc-big-test' })
+      const rpc = new PiRpc(
+        { executable: process.execPath, args: [script], cwd: dir, env: process.env },
+        { event: () => {}, exit: () => {} },
+        processRunner,
+        spawnPiTransport
+      )
+      const data = Buffer.alloc(3 * 1024 * 1024 + 4096, 1).toString('base64')
+      expect(await rpc.request('prompt', { message: 'look', images: [{ type: 'image', data, mimeType: 'image/png' }] }, 60_000)).toEqual({ bytes: data.length })
+      await expect(rpc.request('prompt', { message: 'x', images: [{ data: 'a'.repeat(40 * 1024 * 1024) }] })).rejects.toThrow('frame limit')
       await rpc.close()
       await processRunner.dispose()
     } finally {

@@ -1,6 +1,7 @@
 import { TextDecoder } from 'node:util'
 import type { ProcessSpawner, SpawnedProcess } from '@quirky/protocol'
 import { stderrLines } from './items'
+import { MAX_IMAGE_BYTES } from './queue'
 
 /** The two agents that speak pi's line-delimited JSON RPC; omp is a pi fork with its own additions. */
 export type PiVariant = 'pi' | 'omp'
@@ -38,6 +39,8 @@ export class PiRpcError extends Error {
 }
 
 const MAX_FRAME_BYTES = 4 * 1024 * 1024
+// one image at the structured cap after base64, plus room for the message text and JSON framing
+const MAX_WRITE_BYTES = Math.ceil(MAX_IMAGE_BYTES / 3) * 4 + 4 * 1024 * 1024
 const STDERR_TAIL_BYTES = 16 * 1024 * 3
 const STDOUT_DRAIN_MS = 250
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
@@ -98,7 +101,7 @@ class ChildTransport implements PiTransport {
   write(frame: PiFrame): void {
     if (this.closing || this.isExited) throw new Error('pi connection is closed')
     const line = JSON.stringify(frame)
-    if (Buffer.byteLength(line) > MAX_FRAME_BYTES) throw new Error('pi message exceeds the frame limit')
+    if (Buffer.byteLength(line) > MAX_WRITE_BYTES) throw new Error('pi message exceeds the frame limit')
     void this.handle.write(`${line}\n`)
   }
 
