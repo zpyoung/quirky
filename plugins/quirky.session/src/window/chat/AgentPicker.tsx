@@ -1,8 +1,9 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
-import { Button } from '@quirky/ui'
+import { Button, NoticeLine } from '@quirky/ui'
 import type { AgentListing } from '../menuEntries'
 import { NO_PICKS, type Picks } from './controls'
+import { createChat } from './createChat'
 
 /** The four agents a chat can run, in the order the picker shows them. */
 const CHAT_AGENTS = [
@@ -88,34 +89,26 @@ export function AgentPicker({
   context,
   worktree,
   picks = NO_PICKS,
-  onCreated
+  onCreated,
+  onError
 }: {
   context: UiPluginContext
   worktree: string
   picks?: Picks
   onCreated: (session: Session) => void
+  /** Receives a failed create's message instead of the default toast. */
+  onError?: (message: string) => void
 }) {
   const cards = useCards(context)
   const [starting, setStarting] = useState<string | null>(null)
 
   const start = async (agent: string) => {
-    const options = {
-      ...(picks.effort === null ? {} : { effort: picks.effort }),
-      ...(picks.mode === null ? {} : { mode: picks.mode }),
-      ...(picks.plan ? { plan: true } : {})
-    }
     setStarting(agent)
     try {
-      const created = (await context.call('quirky.structured/create', {
-        agent,
-        worktree,
-        deferStart: true,
-        ...(picks.model === null ? {} : { model: picks.model }),
-        ...(Object.keys(options).length === 0 ? {} : { options })
-      })) as Session
-      onCreated(created)
+      onCreated(await createChat(context, agent, worktree, picks))
     } catch (error) {
-      context.toast('Could not start chat', messageOf(error))
+      if (onError) onError(messageOf(error))
+      else context.toast('Could not start chat', messageOf(error))
     } finally {
       setStarting(null)
     }
@@ -125,6 +118,7 @@ export function AgentPicker({
     <section style={layout} aria-label="New chat">
       <h3 style={title}>New chat</h3>
       <p style={lead}>Pick an agent. It works in this worktree, and you can switch to its terminal anytime.</p>
+      {cards === null && <NoticeLine><span role="status">Loading agents…</span></NoticeLine>}
       <div style={grid} role="group" aria-label="Agents">
         {(cards ?? []).map(({ id, label, readiness }) => (
           <Button
