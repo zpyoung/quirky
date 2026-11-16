@@ -30,7 +30,7 @@ function tempDir(): string {
 const modeOf = (path: string) => statSync(path).mode & 0o777
 
 describe('readDaemonHealth', () => {
-  let server: { port: number; stop(closeActiveConnections?: boolean): Promise<void> }
+  let server: Bun.Server<undefined>
   let responseStatus = 200
   let responseBody = ''
   let neverRespond = false
@@ -60,7 +60,7 @@ describe('readDaemonHealth', () => {
 
   const info = (): RuntimeInfo => ({
     pid: 4242,
-    port: server.port,
+    port: server.port!,
     token: 'rpc-token',
     hookToken: 'hook-token',
     daemonVersion: 'test',
