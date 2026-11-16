@@ -20,6 +20,7 @@ import { approvalOutcome, approvalSpec, nativeQuestionPlan } from './native-ques
 import { MAX_IMAGE_BYTES } from './queue'
 import {
   PiRpc,
+  MAX_WRITE_BYTES,
   PiRpcError,
   describeExit,
   piLaunchArgs,
@@ -29,7 +30,7 @@ import {
   type PiTransportFactory,
   type PiVariant
 } from './pi-rpc'
-import type { StructuredContext, StructuredRunner, StructuredSendOptions, StructuredStartOptions } from './runner'
+import type { StructuredContext, StructuredRunner, StructuredSendOptions, StructuredSettings, StructuredStartOptions } from './runner'
 
 export type PiRunnerDeps = {
   /** Replaces the child process; tests inject a scripted fake. */
@@ -92,6 +93,7 @@ type Running = {
   dialogCancels: Map<string, () => void>
   exit?: PiExit
   deniedReasons: string[]
+  settings: StructuredSettings
 }
 
 type Starting = { stopped: boolean; run?: Running }
@@ -198,6 +200,35 @@ class PiRunner implements StructuredRunner {
     await this.submit(run, message, options)
   }
 
+  async configure(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended || !run.ready) throw new Error('session is not running')
+    if (settings.model !== undefined) {
+      const { provider, modelId } = await this.resolveModel(run, settings.model)
+      await run.rpc.request('set_model', { provider, modelId }, SEND_TIMEOUT_MS)
+      run.settings = { ...run.settings, model: settings.model }
+    }
+    // after the model: pi clamps a level the new model does not support
+    if (settings.effort !== undefined) {
+      await run.rpc.request('set_thinking_level', { level: settings.effort }, SEND_TIMEOUT_MS)
+      run.settings = { ...run.settings, effort: settings.effort }
+    }
+    return { ...run.settings }
+  }
+
+  /** Splits `provider/model-id`; a bare id is looked up among the agent's available models. */
+  private async resolveModel(run: Running, model: string): Promise<{ provider: string; modelId: string }> {
+    const slash = model.indexOf('/')
+    if (slash > 0) return { provider: model.slice(0, slash), modelId: model.slice(slash + 1) }
+    const data = record(await run.rpc.request('get_available_models', {}, SEND_TIMEOUT_MS))
+    const matches = (Array.isArray(data?.models) ? data.models : []).flatMap((entry) => {
+      const found = record(entry)
+      return text(found?.id) === model && text(found?.provider) !== '' ? [{ provider: text(found?.provider), modelId: model }] : []
+    })
+    if (matches.length !== 1) throw new Error(`${this.variant} has no single model named ${model}; use provider/model`)
+    return matches[0]!
+  }
+
   async interrupt(sessionId: string): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended || !run.ready || !run.working) return
@@ -248,7 +279,11 @@ class PiRunner implements StructuredRunner {
       stream: new ProseStream(),
       pendingDialogs: 0,
       dialogCancels: new Map(),
-      deniedReasons: []
+      deniedReasons: [],
+      settings: {
+        ...(typeof options.model === 'string' ? { model: options.model } : {}),
+        ...(typeof options.effort === 'string' ? { effort: options.effort } : {})
+      }
     }
     run.rpc = new PiRpc(
       {
@@ -307,6 +342,13 @@ class PiRunner implements StructuredRunner {
   private async submit(run: Running, message: string, options: StructuredSendOptions): Promise<void> {
     const images = options.images !== undefined && options.images.length > 0 ? await Promise.all(options.images.map(encodeImage)) : []
     if (run.stopped || run.ended) throw new Error('session is not running')
+    const encodedBytes = images.reduce((sum, image) => sum + image.data.length, 0) + Buffer.byteLength(message) + 4096
+    if (encodedBytes > MAX_WRITE_BYTES) {
+      const mib = (bytes: number) => Math.ceil(bytes / (1024 * 1024))
+      const reason = `These images are too large to send together to ${this.variant} (${mib(encodedBytes)} MiB, limit ${Math.floor(MAX_WRITE_BYTES / (1024 * 1024))} MiB). Send fewer or smaller images.`
+      this.context.appendMessage({ sessionId: run.sessionId, role: 'system', text: reason, item: errorItem('protocol', [reason], false) })
+      throw new Error(reason)
+    }
     this.context.appendMessage({
       sessionId: run.sessionId,
       role: 'user',

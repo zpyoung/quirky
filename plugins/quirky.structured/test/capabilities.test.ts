@@ -27,7 +27,7 @@ describe('capabilities values', () => {
     expect([codex.steer, codex.model, codex.images, codex.effort, codex.approveForSession, codex.resume].every((c) => c.ok)).toBe(true)
   })
 
-  test('pi and omp lack plan mode, permission modes and session approval', () => {
+  test('pi and omp change model and effort live but lack plan mode, permission modes and session approval', () => {
     for (const agent of ['pi', 'omp'] as const) {
       const found = capabilitiesFor(agent)!
       expect(found.agent).toBe(agent)
@@ -35,9 +35,7 @@ describe('capabilities values', () => {
         expect(capability.ok).toBe(false)
         expect((capability as { reason: string }).reason).toContain(agent)
       }
-      expect([found.steer, found.images, found.resume].every((c) => c.ok)).toBe(true)
-      expect(found.model).toEqual({ ok: false, reason: 'Set when the chat starts' })
-      expect(found.effort).toEqual({ ok: false, reason: 'Set when the chat starts' })
+      expect([found.steer, found.images, found.resume, found.model, found.effort].every((c) => c.ok)).toBe(true)
     }
     expect((capabilitiesFor('pi')!.planMode as { reason: string }).reason).toBe('pi has no plan mode')
   })

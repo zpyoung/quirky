@@ -40,7 +40,7 @@ export class PiRpcError extends Error {
 
 const MAX_FRAME_BYTES = 4 * 1024 * 1024
 // one image at the structured cap after base64, plus room for the message text and JSON framing
-const MAX_WRITE_BYTES = Math.ceil(MAX_IMAGE_BYTES / 3) * 4 + 4 * 1024 * 1024
+export const MAX_WRITE_BYTES = Math.ceil(MAX_IMAGE_BYTES / 3) * 4 + 4 * 1024 * 1024
 const STDERR_TAIL_BYTES = 16 * 1024 * 3
 const STDOUT_DRAIN_MS = 250
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
