@@ -1,5 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { TextDecoder } from 'node:util'
+import type { ProcessSpawner, SpawnedProcess } from '@quirky/protocol'
 import { stderrLines } from './items'
 
 /** The two agents that speak pi's line-delimited JSON RPC; omp is a pi fork with its own additions. */
@@ -24,7 +24,7 @@ export interface PiTransport {
   readonly stderrTail: string[]
 }
 
-export type PiTransportFactory = (spec: PiTransportSpec, handlers: PiTransportHandlers) => PiTransport
+export type PiTransportFactory = (spec: PiTransportSpec, handlers: PiTransportHandlers, process: ProcessSpawner) => PiTransport
 
 /** A command the agent answered with `success: false`, or that could not be answered at all. */
 export class PiRpcError extends Error {
@@ -38,7 +38,8 @@ export class PiRpcError extends Error {
 }
 
 const MAX_FRAME_BYTES = 4 * 1024 * 1024
-const STDERR_TAIL_CHARS = 16 * 1024
+const STDERR_TAIL_BYTES = 16 * 1024 * 3
+const STDOUT_DRAIN_MS = 250
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000
 const STDIN_GRACE_MS = 500
 const TERM_GRACE_MS = 2_000
@@ -52,62 +53,53 @@ export function piLaunchArgs(variant: PiVariant, options: { model?: string; effo
   return args
 }
 
-/** Starts the agent as a child process and reads its stdout as LF-delimited JSON frames. */
-export function spawnPiTransport(spec: PiTransportSpec, handlers: PiTransportHandlers): PiTransport {
-  return new ChildTransport(spec, handlers)
+/** Starts the agent through the shared process runner and reads its stdout as LF-delimited JSON frames. */
+export function spawnPiTransport(spec: PiTransportSpec, handlers: PiTransportHandlers, process: ProcessSpawner): PiTransport {
+  return new ChildTransport(spec, handlers, process)
 }
 
 class ChildTransport implements PiTransport {
-  private readonly child: ChildProcessWithoutNullStreams
+  private readonly handle: SpawnedProcess
   private readonly decoder = new TextDecoder('utf-8', { fatal: true })
-  private readonly stderrDecoder = new TextDecoder()
   private readonly exited = Promise.withResolvers<void>()
   private buffer = ''
-  private stderr = ''
+  private startError = ''
   private closing = false
   private isExited = false
   private reported = false
 
   constructor(
     spec: PiTransportSpec,
-    private readonly handlers: PiTransportHandlers
+    private readonly handlers: PiTransportHandlers,
+    process: ProcessSpawner
   ) {
-    this.child = spawn(spec.executable, spec.args, {
+    this.handle = process.spawn([spec.executable, ...spec.args], {
+      timeoutMs: null,
       cwd: spec.cwd,
       env: spec.env,
-      stdio: 'pipe',
-      detached: process.platform !== 'win32'
+      stdin: 'pipe',
+      stderrTailBytes: STDERR_TAIL_BYTES,
+      killGraceMs: TERM_GRACE_MS
     })
-    this.child.stdout.on('data', (chunk: Buffer) => this.readStdout(chunk))
-    this.child.stderr.on('data', (chunk: Buffer) => {
-      this.stderr += this.stderrDecoder.decode(chunk, { stream: true })
-      if (this.stderr.length > STDERR_TAIL_CHARS) this.stderr = this.stderr.slice(-STDERR_TAIL_CHARS)
-    })
-    this.child.stdout.on('error', () => {})
-    this.child.stderr.on('error', () => {})
-    this.child.stdin.on('error', () => {})
-    this.child.once('error', (error) => {
-      this.stderr += `\ncould not start ${spec.executable}: ${error.message}`
+    const stdoutDone = this.readStdout()
+    void this.handle.exited.then(async (exit) => {
+      if (exit.spawnError) this.startError = `\ncould not start ${spec.executable}: ${exit.spawnError.message}`
+      await Promise.race([stdoutDone, new Promise((resolve) => setTimeout(resolve, STDOUT_DRAIN_MS))])
       this.isExited = true
-      this.report({ code: null, signal: null })
-      this.exited.resolve()
-    })
-    this.child.once('close', (code, signal) => {
-      this.isExited = true
-      this.report({ code, signal })
+      this.report({ code: exit.exitCode, signal: exit.signal })
       this.exited.resolve()
     })
   }
 
   get stderrTail(): string[] {
-    return stderrLines(this.stderr)
+    return stderrLines(this.handle.stderrTail() + this.startError)
   }
 
   write(frame: PiFrame): void {
     if (this.closing || this.isExited) throw new Error('pi connection is closed')
     const line = JSON.stringify(frame)
     if (Buffer.byteLength(line) > MAX_FRAME_BYTES) throw new Error('pi message exceeds the frame limit')
-    this.child.stdin.write(`${line}\n`)
+    void this.handle.write(`${line}\n`)
   }
 
   async close(): Promise<void> {
@@ -116,21 +108,29 @@ class ChildTransport implements PiTransport {
       return
     }
     this.closing = true
-    try {
-      this.child.stdin.end()
-    } catch {
-      // the close event reports a child that is already gone
-    }
+    void this.handle.closeInput()
     await this.waitForExit(STDIN_GRACE_MS)
     if (this.isExited) return
-    this.signalGroup('SIGTERM')
-    await this.waitForExit(TERM_GRACE_MS)
-    if (this.isExited) return
-    this.signalGroup('SIGKILL')
+    await this.handle.stop({ graceMs: TERM_GRACE_MS })
     await this.waitForExit(TERM_GRACE_MS)
   }
 
-  private readStdout(chunk: Buffer): void {
+  private async readStdout(): Promise<void> {
+    const reader = this.handle.stdout.getReader()
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) return
+        this.readChunk(value)
+      }
+    } catch {
+      // a stalled or failed pipe surfaces through the exit report
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
+  private readChunk(chunk: Uint8Array): void {
     if (this.closing || this.reported) return
     try {
       this.buffer += this.decoder.decode(chunk, { stream: true })
@@ -160,7 +160,7 @@ class ChildTransport implements PiTransport {
 
   private protocolFailure(message: string): void {
     this.report({ code: null, signal: null, protocolError: message })
-    this.signalGroup('SIGTERM')
+    void this.handle.stop()
   }
 
   private report(exit: Omit<PiExit, 'stderrTail'>): void {
@@ -170,21 +170,6 @@ class ChildTransport implements PiTransport {
       this.handlers.exit({ ...exit, stderrTail: this.stderrTail })
     } catch {
       // the runner owns failures in its own exit handling
-    }
-  }
-
-  private signalGroup(signal: NodeJS.Signals): void {
-    const pid = this.child.pid
-    if (pid === undefined) return
-    try {
-      if (process.platform === 'win32') this.child.kill(signal)
-      else process.kill(-pid, signal)
-    } catch {
-      try {
-        this.child.kill(signal)
-      } catch {
-        // the process is already gone
-      }
     }
   }
 
@@ -225,12 +210,17 @@ export class PiRpc {
   constructor(
     spec: PiTransportSpec,
     private readonly handlers: PiRpcHandlers,
+    process: ProcessSpawner,
     factory: PiTransportFactory = spawnPiTransport
   ) {
-    this.transport = factory(spec, {
-      frame: (frame) => this.receive(frame),
-      exit: (exit) => this.end(exit)
-    })
+    this.transport = factory(
+      spec,
+      {
+        frame: (frame) => this.receive(frame),
+        exit: (exit) => this.end(exit)
+      },
+      process
+    )
   }
 
   get stderrTail(): string[] {

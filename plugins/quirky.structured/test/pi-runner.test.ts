@@ -2,7 +2,8 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { AskEnvelope, AskSpec, ChatItem, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import type { AskEnvelope, AskSpec, ChatItem, ProcessSpawner, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
+import { createProcessRunner } from '../../../packages/process/src/api'
 import { PiRpc, piLaunchArgs, spawnPiTransport, type PiVariant } from '../pi-rpc'
 import { createPiRunner } from '../pi-runner'
 import type { NewStructuredMessage, StructuredContext } from '../runner'
@@ -15,6 +16,12 @@ async function until(check: () => boolean) {
 
 type AskWaiter = { spec: AskSpec; sessionId: string; options?: { nativeQuestion?: boolean }; resolve(envelope: AskEnvelope): void }
 
+const noSpawn: ProcessSpawner = {
+  spawn() {
+    throw new Error('the scripted transport must not spawn a process')
+  }
+}
+
 function makeSetup(variant: PiVariant) {
   const messages: StructuredMessage[] = []
   const statuses: SessionStatus[] = []
@@ -22,6 +29,7 @@ function makeSetup(variant: PiVariant) {
   const providerSessions: { sessionId: string; id: string; transcriptPath?: string | null }[] = []
   const resolved: PiVariant[] = []
   const context: StructuredContext = {
+    process: noSpawn,
     appendMessage(message: NewStructuredMessage) {
       const stored: StructuredMessage = {
         sessionId: message.sessionId,
@@ -423,9 +431,11 @@ describe('pi stdio transport', () => {
       )
       const events: Record<string, unknown>[] = []
       const exits: unknown[] = []
+      const processRunner = createProcessRunner({ owner: 'pi-rpc-test' })
       const rpc = new PiRpc(
         { executable: process.execPath, args: [script], cwd: dir, env: process.env },
         { event: (frame) => events.push(frame), exit: (exit) => exits.push(exit) },
+        processRunner,
         spawnPiTransport
       )
       expect(await rpc.request('echo', { value: 7 })).toEqual({ echoed: 7 })
@@ -434,6 +444,7 @@ describe('pi stdio transport', () => {
       await expect(rpc.request('boom')).rejects.toThrow('exited with code 3')
       expect(exits).toMatchObject([{ code: 3, stderrTail: ['one', 'two'] }])
       await rpc.close()
+      await processRunner.dispose()
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
