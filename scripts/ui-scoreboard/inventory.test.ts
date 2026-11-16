@@ -628,7 +628,7 @@ describe('collectInventory', () => {
       toolId,
       renderedTargetId: `${bodyKind}:${plugin}/${body}`,
       plugin,
-      reason: 'tool-navigation-alias'
+      reason: 'tool-navigation-alias' as const
     })).sort((left, right) => left.declarationId.localeCompare(right.declarationId))
 
     expect(inventory.failures).toEqual([])

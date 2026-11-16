@@ -464,3 +464,67 @@ test('timed-out reviewers and all their owned children are terminated', async ()
   }
   rmSync(childPidFile)
 })
+function contributionManifest(): CaptureManifest {
+  const input = manifest('view:sample/page')
+  const body = input.targets[0]!
+  const declaration = {
+    id: 'sidebar-section:sample/navigation',
+    plugin: 'sample',
+    title: 'Navigation',
+    kind: 'sidebar-section'
+  }
+  input.targets[0] = { ...body, kind: 'view' }
+  Object.assign(input, {
+    contributionInventory: {
+      declaredTargets: [declaration, input.targets[0]],
+      toolAliases: [{
+        declaration,
+        toolId: declaration.id,
+        renderedTarget: input.targets[0],
+        reason: 'tool-navigation-alias'
+      }]
+    },
+    activatedVisibilitySettings: ['setting:sample/navigation-enabled']
+  })
+  return input
+}
+
+test('reviews only real capture targets and accepts valid contribution metadata', async () => {
+  const input = contributionManifest()
+  const report = await reviewManifest(input, options())
+
+  expect(report.status).toBe('passed')
+  expect(report.captures.map((capture) => capture.targetId)).toEqual(['view:sample/page', 'view:sample/page'])
+  expect(report.captures.map((capture) => capture.theme)).toEqual(['dark', 'light'])
+})
+
+test('malformed optional contribution metadata is rejected before reviewer execution', async () => {
+  const malformed = [
+    (input: CaptureManifest) => {
+      const metadata = input as CaptureManifest & { contributionInventory: { toolAliases: Array<{ reason: string }> } }
+      Object.assign(metadata.contributionInventory.toolAliases[0]!, { reason: 'sidebar-equivalent' })
+    },
+    (input: CaptureManifest) => {
+      const metadata = input as CaptureManifest & { contributionInventory: Record<string, unknown> }
+      metadata.contributionInventory.untrustedExclusions = ['view:sample/page']
+    },
+    (input: CaptureManifest) => {
+      const metadata = input as CaptureManifest & { activatedVisibilitySettings: string[] }
+      metadata.activatedVisibilitySettings = ['setting:z', 'setting:a']
+    },
+    (input: CaptureManifest) => {
+      const metadata = input as CaptureManifest & { activatedVisibilitySettings: string[] }
+      metadata.activatedVisibilitySettings = ['setting:a', 'setting:a']
+    }
+  ]
+
+  for (const mutate of malformed) {
+    const input = contributionManifest()
+    mutate(input)
+    const report = await reviewManifest(input, options())
+    expect(report.status).toBe('error')
+    expect(report.captures).toHaveLength(0)
+    expect(report.failures.join(' ')).toMatch(/contribution|inventory|visibility|metadata/i)
+    expect(existsSync(reviewStartedFile)).toBe(false)
+  }
+})

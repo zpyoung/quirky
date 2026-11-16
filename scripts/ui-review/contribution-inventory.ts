@@ -147,6 +147,7 @@ function validateAliasGraph(edges: Array<{ declarationId: string; renderedId: st
   }
 }
 
+/** Rejects malformed declaration and alias evidence before it can waive required captures. */
 export function validateContributionInventory(
   inventory: unknown,
   targets: readonly CaptureTarget[]
@@ -263,6 +264,7 @@ export function validateContributionInventory(
   }
 }
 
+/** Separates exhaustive declarations from the module-backed bodies production tools mount. */
 export function projectCaptureInventory(model: UiModel): {
   targets: CaptureTarget[]
   contributionInventory: ContributionInventory
@@ -373,6 +375,7 @@ function projectedTargetsFromInventory(inventory: unknown): CaptureTarget[] {
     isRecord(target) && typeof target.id === 'string' && !aliasIds.has(target.id))
 }
 
+/** Keeps selected bodies and their non-mounted navigation declarations together in evidence. */
 export function scopeCaptureInventory(
   inventory: ContributionInventory,
   selectedTargets: readonly CaptureTarget[]
@@ -438,6 +441,7 @@ function validateVisibilityDeclarations(model: unknown, ids: string[]): void {
   }
 }
 
+/** Activates only declared visibility gates and returns the refreshed private capture model. */
 export async function enableCaptureVisibilitySettings(
   initialModel: UiModel,
   call: (method: string, params: Record<string, unknown>) => Promise<unknown>

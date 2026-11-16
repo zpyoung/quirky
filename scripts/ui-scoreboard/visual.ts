@@ -13,8 +13,10 @@ import {
   type ImageEvidence,
   type ReviewReport,
   type ReviewedCapture,
-  type VisualAssessment
+  type VisualAssessment,
+  type ContributionInventory
 } from '../ui-review/contracts'
+import { scopeCaptureInventory, validateContributionInventory } from '../ui-review/contribution-inventory'
 import { CAPTURE_TIMEOUT_MS, DEFAULT_THRESHOLD, REVIEW_TIMEOUT_MS } from '../ui-review/arguments'
 import type { Evidence, Inventory, VisualCell, VisualDependencies, VisualOptions, VisualResult } from './contracts'
 import { collectInventory } from './inventory'
@@ -77,16 +79,45 @@ function validTarget(value: unknown): value is CaptureTarget {
     (value.plugin === null || typeof value.plugin === 'string') && typeof value.title === 'string' &&
     TARGET_KINDS.includes(value.kind as typeof TARGET_KINDS[number])
 }
+function validContributionTarget(value: unknown): value is CaptureTarget {
+  if (!isRecord(value)) return false
+  const keys = ['id', 'plugin', 'title', 'kind']
+  return Object.keys(value).length === keys.length &&
+    keys.every((key) => Object.hasOwn(value, key)) && validTarget(value)
+}
+
+function validContributionInventoryShape(value: unknown): value is ContributionInventory {
+  if (!isRecord(value) || Object.keys(value).length !== 2 ||
+      !Object.hasOwn(value, 'declaredTargets') || !Object.hasOwn(value, 'toolAliases') ||
+      !Array.isArray(value.declaredTargets) || !Array.isArray(value.toolAliases)) return false
+  return value.declaredTargets.every(validContributionTarget) && value.toolAliases.every((alias) =>
+    isRecord(alias) && Object.keys(alias).length === 4 &&
+    ['declaration', 'toolId', 'renderedTarget', 'reason'].every((key) => Object.hasOwn(alias, key)) &&
+    validContributionTarget(alias.declaration) && validContributionTarget(alias.renderedTarget) &&
+    typeof alias.toolId === 'string' && alias.toolId.trim().length > 0 && alias.reason === 'tool-navigation-alias'
+  )
+}
+
+function validActivatedVisibilitySettings(value: unknown): boolean {
+  if (!Array.isArray(value) || value.some((setting) =>
+    typeof setting !== 'string' || setting.trim().length === 0 || !setting.startsWith('setting:')
+  )) return false
+  return value.every((setting, index) => index === 0 || value[index - 1] < setting)
+}
+
 
 function validManifest(value: unknown): value is CaptureManifest {
-  return isRecord(value) && value.schemaVersion === CAPTURE_SCHEMA_VERSION &&
-    typeof value.createdAt === 'string' && typeof value.commit === 'string' &&
-    value.surface === 'desktop-renderer' && (value.scope === 'full' || value.scope === 'filtered') &&
-    Array.isArray(value.selectors) && value.selectors.every((selector) => typeof selector === 'string') &&
-    Array.isArray(value.targets) && value.targets.every(validTarget) &&
-    Array.isArray(value.captures) && Array.isArray(value.failures) &&
-    value.failures.every((failure) => typeof failure === 'string')
+  if (!isRecord(value) || value.schemaVersion !== CAPTURE_SCHEMA_VERSION ||
+      typeof value.createdAt !== 'string' || typeof value.commit !== 'string' ||
+      value.surface !== 'desktop-renderer' || (value.scope !== 'full' && value.scope !== 'filtered') ||
+      !Array.isArray(value.selectors) || !value.selectors.every((selector) => typeof selector === 'string') ||
+      !Array.isArray(value.targets) || !value.targets.every(validTarget) ||
+      !Array.isArray(value.captures) || !Array.isArray(value.failures) ||
+      !value.failures.every((failure) => typeof failure === 'string')) return false
+  return (!Object.hasOwn(value, 'contributionInventory') || validContributionInventoryShape(value.contributionInventory)) &&
+    (!Object.hasOwn(value, 'activatedVisibilitySettings') || validActivatedVisibilitySettings(value.activatedVisibilitySettings))
 }
+
 
 function imageEvidence(value: unknown): value is ImageEvidence {
   return isRecord(value) && typeof value.path === 'string' && typeof value.sha256 === 'string'
@@ -166,6 +197,73 @@ function fullTargets(inventory: Inventory, manifest: CaptureManifest): { targets
   for (const [id, target] of runtimeTargets) if (!targets.has(id)) targets.set(id, target)
   return { targets: [...targets.values()].sort((left, right) => left.id.localeCompare(right.id)), sourceTargets, invalid }
 }
+function targetIdentity(target: CaptureTarget): Pick<CaptureTarget, 'id' | 'plugin' | 'kind'> {
+  return { id: target.id, plugin: target.plugin, kind: target.kind }
+}
+
+function comparableContributionInventory(inventory: ContributionInventory): string {
+  const declaredTargets = inventory.declaredTargets.map(targetIdentity).sort((left, right) =>
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0
+  )
+  const toolAliases = inventory.toolAliases.map((alias) => ({
+    declaration: targetIdentity(alias.declaration),
+    toolId: alias.toolId,
+    renderedTarget: targetIdentity(alias.renderedTarget),
+    reason: alias.reason
+  })).sort((left, right) =>
+    left.declaration.id < right.declaration.id ? -1 : left.declaration.id > right.declaration.id ? 1 : 0
+  )
+  return JSON.stringify({ declaredTargets, toolAliases })
+}
+
+function reconcileContributionInventory(
+  inventory: Inventory,
+  selectedTargets: CaptureTarget[],
+  manifest: CaptureManifest
+): string[] {
+  const source = inventory.contributionInventory
+  const runtime = manifest.contributionInventory
+  if (source === undefined && runtime === undefined) return []
+  if (source === undefined || runtime === undefined) {
+    return ['Source and runtime contribution metadata must both be present; legacy manifests cannot waive source aliases.']
+  }
+
+  try {
+    validateContributionInventory(source, inventory.targets)
+  } catch (error) {
+    return [`Source contribution inventory is invalid: ${message(error)}`]
+  }
+  try {
+    validateContributionInventory(runtime, manifest.targets)
+  } catch (error) {
+    return [`Runtime contribution inventory is invalid: ${message(error)}`]
+  }
+
+  let expected: ContributionInventory
+  try {
+    expected = scopeCaptureInventory(source, selectedTargets)
+  } catch (error) {
+    return [`Could not scope source contribution inventory: ${message(error)}`]
+  }
+  if (comparableContributionInventory(expected) !== comparableContributionInventory(runtime)) {
+    const ids = new Set([
+      ...expected.declaredTargets.map((target) => target.id),
+      ...runtime.declaredTargets.map((target) => target.id),
+      ...expected.toolAliases.flatMap((alias) => [alias.declaration.id, alias.renderedTarget.id, alias.toolId]),
+      ...runtime.toolAliases.flatMap((alias) => [alias.declaration.id, alias.renderedTarget.id, alias.toolId])
+    ])
+    return [`Source and runtime contribution inventory differs for ${[...ids].sort().join(', ')}.`]
+  }
+
+  const aliasIds = new Set(runtime.toolAliases.map((alias) => alias.declaration.id))
+  for (const capture of manifest.captures) {
+    if (isRecord(capture) && typeof capture.targetId === 'string' && aliasIds.has(capture.targetId)) {
+      return [`Capture evidence contains a screenshot row for non-mounted alias ${capture.targetId}.`]
+    }
+  }
+  return []
+}
+
 
 function appendManifestFailures(result: VisualResult, failures: string[]): void {
   for (const failure of failures) result.failures.push(evidence('capture-failure', failure))
@@ -326,7 +424,17 @@ function mapReviewReport(
 }
 
 function filteredManifest(manifest: CaptureManifest, target: CaptureTarget, captures: CaptureEvidence[]): CaptureManifest {
-  return { ...manifest, scope: 'filtered', selectors: [target.id], targets: [target], captures, failures: [] }
+  const runtimeTarget = manifest.targets.find((candidate) => candidate.id === target.id) ?? target
+  const contributionInventory = manifest.contributionInventory
+  return {
+    ...manifest,
+    ...(contributionInventory === undefined ? {} : { contributionInventory: scopeCaptureInventory(contributionInventory, [runtimeTarget]) }),
+    scope: 'filtered',
+    selectors: [target.id],
+    targets: [runtimeTarget],
+    captures,
+    failures: []
+  }
 }
 
 function markSourceChanged(result: VisualResult, reason: string): void {
@@ -427,6 +535,17 @@ export async function measureVisuals(inventory: Inventory, options: VisualOption
         result.operationalError = true
         setAllFailure(cells, result.targets, 'capture-commit-mismatch', detail)
       } else {
+        const contributionFailures = reconcileContributionInventory(inventory, measurementInventory.targets, captured)
+        for (const detail of contributionFailures) result.failures.push(evidence('contribution-inventory', detail))
+        if (contributionFailures.length > 0) {
+          result.operationalError = true
+          setAllFailure(cells, result.targets, 'contribution-inventory', contributionFailures.join(' '))
+        }
+        const inventoryEvidenceValid = contributionFailures.length === 0 && targets.invalid.size === 0
+        if (targets.invalid.size > 0) {
+          setAllFailure(cells, result.targets, 'target-ownership', 'Capture target ownership does not match the source inventory.')
+        }
+
         const manifestTargets = new Set(captured.targets.map((target) => target.id))
         const { rows, malformed } = captureRows(captured)
         for (const detail of malformed) {
@@ -445,6 +564,7 @@ export async function measureVisuals(inventory: Inventory, options: VisualOption
 
         const eligible: Array<{ target: CaptureTarget; captures: CaptureEvidence[] }> = []
         for (const target of result.targets) {
+          if (!inventoryEvidenceValid) continue
           const ownershipError = targets.invalid.get(target.id)
           const sourceTarget = targets.sourceTargets.has(target.id)
           if (ownershipError) continue
