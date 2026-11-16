@@ -1,5 +1,5 @@
 import * as ts from 'typescript'
-import type { CheckResult, Evidence, Inventory, RatchetResult, StaticCheckId, StaticRatchet } from './contracts'
+import type { Evidence, Inventory, RatchetResult, StaticCheckId, StaticRatchet } from './contracts'
 import { checkHostTokens, checkPlugin, sharedTokenEvidence } from './tokens'
 
 const staticChecks: Record<StaticCheckId, true> = {
@@ -94,14 +94,6 @@ function validateEnrollment(inventory: Inventory, enrollment: unknown): Validati
   return { errors, entries }
 }
 
-function checkFor(inventory: Inventory, pluginId: string, checkId: StaticCheckId): CheckResult | undefined {
-  if (pluginId === 'host') {
-    const hostCheck = checkHostTokens(inventory)
-    return hostCheck.id === checkId ? hostCheck : undefined
-  }
-  return checkPlugin(inventory, pluginId).find((check) => check.id === checkId)
-}
-
 /** Returns exit 2 for invalid inventory/enrollment, 1 for failed enrolled checks, otherwise 0. */
 export function checkRatchet(inventory: Inventory, enrollment: StaticRatchet): RatchetResult {
   const failures = [...inventory.failures]
@@ -111,8 +103,9 @@ export function checkRatchet(inventory: Inventory, enrollment: StaticRatchet): R
 
   const regressions: Evidence[] = []
   for (const [pluginId, checks] of entries) {
+    const results = pluginId === 'host' ? [checkHostTokens(inventory)] : checkPlugin(inventory, pluginId)
     for (const checkId of checks) {
-      const result = checkFor(inventory, pluginId, checkId)
+      const result = results.find((check) => check.id === checkId)
       if (!result) {
         regressions.push(configError('unavailable-ratchet-check', `Ratchet check ${pluginId}/${checkId} is unavailable`))
         continue
