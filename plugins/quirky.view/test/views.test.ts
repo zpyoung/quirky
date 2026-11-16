@@ -217,6 +217,16 @@ describe('wait and action', () => {
     expect(h.sends).toEqual([])
   })
 
+  test('a field action whose text breaks the declared pattern or format is refused', async () => {
+    const h = start()
+    const question = { id: 'email', type: 'text', question: 'Email?', pattern: '^[^ ]+@example\\.com$', format: 'email' }
+    const { viewId } = await h.call('open', { spec: { title: 'Ask', root: { type: 'field', props: { question } } } })
+    const bad = await rejection(h.call('action', { viewId, name: 'email', source: 'field', data: { value: 'not an email' } }, windowCaller))
+    expect(bad.code).toBe(RpcErrorCode.InvalidParams)
+    expect(h.sends).toEqual([])
+    expect(await h.call('action', { viewId, name: 'email', source: 'field', data: { value: 'a@example.com' } }, windowCaller)).toEqual({ delivered: 'message' })
+  })
+
   test('every wait parked on the view gets the action', async () => {
     const h = start()
     const { viewId } = await h.call('open', { spec: spec() })

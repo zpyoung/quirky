@@ -64,6 +64,8 @@ type Props = {
   agent?: string
   /** Draws the card's own border; the pane already has a frame. */
   framed?: boolean
+  /** True inside the Views pane, where a pane view shows its content. */
+  inPane?: boolean
 }
 
 /**
@@ -71,7 +73,7 @@ type Props = {
  * the transcript and the Views pane. Buttons and fields send actions to the agent, and a markdown
  * link asks before it opens.
  */
-export function ViewCard({ context, record, agent, framed = true }: Props) {
+export function ViewCard({ context, record, agent, framed = true, inPane = false }: Props) {
   const { viewId } = record
   const [link, setLink] = useState<string | null>(null)
   const [moving, setMoving] = useState(false)
@@ -117,6 +119,17 @@ export function ViewCard({ context, record, agent, framed = true }: Props) {
 
   if (record.closed) {
     return <p data-view-record={viewId} role="status" style={RECORD}>{record.title} closed</p>
+  }
+
+  if (record.placement === 'pane' && !inPane) {
+    return (
+      <div data-view-record={viewId} role="status" style={{ ...ROW, justifyContent: 'space-between', ...RECORD }}>
+        <span>{record.title} is in the Views pane</span>
+        <div style={ROW}>
+          <Button disabled={moving} onClick={() => void move()}>Move inline</Button>
+        </div>
+      </div>
+    )
   }
 
   const updated = updatedLabel(record)

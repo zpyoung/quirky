@@ -63,7 +63,7 @@ export function ViewsPane({ context, session }: { context: UiPluginContext; sess
         </IconButton>
       }
     >
-      <ViewCard key={active.viewId} context={context} record={active} agent={agent} framed={false} />
+      <ViewCard key={active.viewId} context={context} record={active} agent={agent} framed={false} inPane />
     </ToolPanelFrame>
   )
 }

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Button, TextArea, TextField } from '@quirky/ui'
+import { textAnswerError } from '../core/catalog'
 import { asItems, asNumber, asString, isRecord, oneOf, type Props } from './props'
 import { useRuntime } from './runtime'
 import { COLUMN, MUTED, ROW } from './styles'
@@ -59,7 +60,7 @@ function answerOf(question: Props, type: string, draft: Draft): string | string[
       return value
     }
     default:
-      return draft.text.trim() === '' ? undefined : draft.text
+      return draft.text.trim() === '' || textAnswerError(question, draft.text) !== undefined ? undefined : draft.text
   }
 }
 
@@ -78,6 +79,7 @@ export function Field({ props }: { props: Props }) {
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
   const answer = answerOf(question, type, draft)
+  const textError = type === 'text' && draft.text.trim() !== '' ? textAnswerError(question, draft.text) : undefined
 
   const change = (next: Partial<Draft>) => {
     setSent(false)
@@ -128,9 +130,9 @@ export function Field({ props }: { props: Props }) {
       <TextField type="number" step={question.integer === true ? '1' : 'any'} min={asNumber(question.min)} max={asNumber(question.max)} label={prompt} aria-label={prompt} value={draft.text} onChange={(event) => change({ text: event.target.value })} />
     )
   } else if (question.multiline === true) {
-    control = <TextArea rows={3} label={prompt} aria-label={prompt} value={draft.text} onChange={(event) => change({ text: event.target.value })} />
+    control = <TextArea rows={3} label={prompt} aria-label={prompt} error={textError === undefined ? undefined : `This ${textError}`} value={draft.text} onChange={(event) => change({ text: event.target.value })} />
   } else {
-    control = <TextField label={prompt} aria-label={prompt} value={draft.text} onChange={(event) => change({ text: event.target.value })} />
+    control = <TextField label={prompt} aria-label={prompt} error={textError === undefined ? undefined : `This ${textError}`} value={draft.text} onChange={(event) => change({ text: event.target.value })} />
   }
 
   return (

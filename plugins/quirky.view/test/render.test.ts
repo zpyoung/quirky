@@ -228,6 +228,48 @@ describe('the view card', () => {
     expect(element.querySelector('[data-view-node]')).toBeNull()
   })
 
+  test('a pane view shows a one-line record in the transcript, not its content', async () => {
+    const fake = start([record(markdownSpec('PANE ONLY CONTENT'), { placement: 'pane' })])
+    const { element, click } = await mountCard(fake)
+    expect(text(element)).toContain('Notes is in the Views pane')
+    expect(text(element)).not.toContain('PANE ONLY CONTENT')
+    expect(element.querySelector('[data-view-node]')).toBeNull()
+    await click(buttonLabelled(element, 'Move inline'))
+    expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'inline' }])
+  })
+
+  test('the transcript follows the placement when the view moves inline', async () => {
+    const records = [record(markdownSpec('PANE ONLY CONTENT'), { placement: 'pane' })]
+    const fake = start(records)
+    const { element } = await mountCard(fake)
+    records[0] = { ...records[0]!, placement: 'inline' }
+    await fake.emit({ type: 'quirky.view/changed', data: { viewId: 'view_1', sessionId: 's1' } })
+    expect(text(element)).toContain('PANE ONLY CONTENT')
+  })
+
+  test('a text field rejects a value that breaks its pattern or format and sends a valid one', async () => {
+    const question = { id: 'email', type: 'text', question: 'Email?', pattern: '^[^ ]+@example\\.com$', format: 'email' }
+    const fake = start([record({ title: 'Ask', root: { type: 'field', props: { question } } as never })])
+    const { element, click } = await mountCard(fake)
+    const input = element.querySelector('input') as HTMLInputElement
+    const type = (target: HTMLInputElement, value: string) =>
+      act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(target, value)
+        target.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+
+    await type(input, 'not an email')
+    expect(element.querySelector('[role="alert"]')).not.toBeNull()
+    expect(buttonLabelled(element, 'Send').disabled).toBe(true)
+    await click(buttonLabelled(element, 'Send'))
+    expect(fake.callsTo('quirky.view/action')).toEqual([])
+
+    await type(input, 'a@example.com')
+    expect(element.querySelector('[role="alert"]')).toBeNull()
+    await click(buttonLabelled(element, 'Send'))
+    expect(fake.callsTo('quirky.view/action').map((call) => call.params)).toEqual([{ viewId: 'view_1', name: 'email', source: 'field', data: { value: 'a@example.com' } }])
+  })
+
   test('renders nothing for an input without a view ID', async () => {
     const fake = start([])
     mounted = await mountView(fake, RENDER, {})
