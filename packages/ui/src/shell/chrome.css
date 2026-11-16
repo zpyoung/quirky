@@ -448,6 +448,7 @@ button.ui-status-bar-item:focus-visible {
 
 .shell-palette .ui-list-row {
   border: 0;
+  padding-block: var(--ui-space-6);
 }
 
 .shell-palette .ui-list-row--selected {
