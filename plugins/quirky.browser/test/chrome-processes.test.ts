@@ -40,9 +40,10 @@ function processRow(
   ppid = 1,
   pgid = pid,
   uid = 501,
-  command = 'Google Chrome'
+  command = 'Google Chrome',
+  state = 'S'
 ): string {
-  return `${pid} ${ppid} ${pgid} ${uid} ${STARTED} ${command}\n`
+  return `${pid} ${ppid} ${pgid} ${uid} ${state} ${STARTED} ${command}\n`
 }
 
 function runResult(
@@ -535,4 +536,50 @@ test('truncates the original executable bytes before Unicode case normalization'
     readLinuxExecutable: () => executablePath
   })
   expect((await access.snapshot())[0]?.executable).toBe(executablePath)
+})
+
+test('waits for an exiting Chrome identity to disappear without reading unavailable arguments', async () => {
+  for (const [platform, state] of [['darwin', '?Es'], ['darwin', 'Z'], ['linux', 'Z']]) {
+    let reads = 0
+    const tables = [processRow(240, 1, 240, 501, 'Google Chrome', state), '']
+    const access = createChromeProcessAccess(fakeProcess(() => tables.shift() ?? ''), {
+      platform,
+      readMacProcessArgs() { reads++; throw new Error('exited') },
+      readLinuxProcessArgs() { reads++; throw new Error('exited') },
+      readLinuxExecutable: () => CHROME
+    })
+    expect(await access.inspect(240)).toBeNull()
+    expect(reads).toBe(0)
+    expect(tables).toEqual([])
+  }
+})
+
+test('waits through Darwin exit after a native argv read races termination', async () => {
+  const tables = [
+    processRow(),
+    processRow(240, 1, 240, 501, 'Google Chrome', '?Es'),
+    ''
+  ]
+  const access = createChromeProcessAccess(fakeProcess(() => tables.shift() ?? ''), {
+    platform: 'darwin',
+    readMacProcessArgs() { throw Object.assign(new Error('terminating'), { code: 'EINVAL' }) }
+  })
+  expect(await access.inspect(240)).toBeNull()
+  expect(tables).toEqual([])
+})
+
+test('keeps exit-state waiting inside the shared inspection budget', async () => {
+  let elapsed = 0
+  let reads = 0
+  const access = createChromeProcessAccess(fakeProcess(() => {
+    elapsed += 1_000
+    return processRow(240, 1, 240, 501, 'Google Chrome', '?Es')
+  }), {
+    platform: 'darwin',
+    now: () => elapsed,
+    readMacProcessArgs() { reads++; throw new Error('still exiting') }
+  })
+  await expectInspectionFailure(access.inspect(240))
+  expect(elapsed).toBe(2_000)
+  expect(reads).toBe(0)
 })

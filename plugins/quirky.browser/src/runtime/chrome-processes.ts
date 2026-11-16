@@ -29,14 +29,14 @@ export type ChromeProcessAccessOptions = {
   resolvedExecutablePath?: string
 }
 
-type ProcessMetadata = Omit<ChromeProcessIdentity, 'executable' | 'argv'> & { command: string }
+type ProcessMetadata = Omit<ChromeProcessIdentity, 'executable' | 'argv'> & { command: string; state: string }
 type NativePointer = Pointer | null
 
 const MAX_PROCESS_TABLE_BYTES = 4 * 1024 * 1024
 const MAX_NATIVE_ARGV_BYTES = 1024 * 1024
 const INSPECTION_BUDGET_MS = 2_000
 const DARWIN_MAXCOMLEN = 16
-const PS_FIELDS = 'pid=,ppid=,pgid=,uid=,lstart=,comm='
+const PS_FIELDS = 'pid=,ppid=,pgid=,uid=,stat=,lstart=,comm='
 const UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
 const CHROME_COMMANDS = new Set([
   'google chrome',
@@ -98,16 +98,17 @@ function parseProcessTable(text: string): ProcessMetadata[] {
   for (const line of text.split('\n')) {
     if (!line.trim()) continue
     const fields = line.trim().split(/\s+/)
-    if (fields.length < 10) throw inspectionError()
+    if (fields.length < 11) throw inspectionError()
     const pid = parseNumber(fields[0]!)
     const ppid = parseNumber(fields[1]!)
     const pgid = parseNumber(fields[2]!)
     const uid = parseUid(fields[3]!)
-    const started = fields.slice(4, 9).join(' ')
-    const command = fields.slice(9).join(' ').trim()
+    const state = fields[4]!
+    const started = fields.slice(5, 10).join(' ')
+    const command = fields.slice(10).join(' ').trim()
     if (pid <= 0 || !started || !command || seen.has(pid)) throw inspectionError()
     seen.add(pid)
-    rows.push({ pid, ppid, pgid, uid, started, command })
+    rows.push({ pid, ppid, pgid, uid, started, command, state })
   }
   return rows
 }
@@ -297,11 +298,19 @@ export function createChromeProcessAccess(
     return parseProcessTable(text)
   }
 
-  async function isMissingMacPid(pid: number, deadline: number): Promise<boolean> {
-    const rows = await readTable(pid, deadline)
-    if (rows.length === 0) return true
-    if (rows.length !== 1 || rows[0]?.pid !== pid) throw inspectionError()
-    return false
+  function isExiting(state: string): boolean {
+    return state.startsWith('Z') || state.startsWith('X') || (platform === 'darwin' && state.includes('E'))
+  }
+
+  async function confirmProcessExit(pid: number, deadline: number): Promise<boolean> {
+    while (true) {
+      const rows = await readTable(pid, deadline)
+      if (rows.length === 0) return true
+      const current = rows[0]
+      if (rows.length !== 1 || !current || current.pid !== pid) throw inspectionError()
+      if (!isExiting(current.state)) return false
+      await Bun.sleep(Math.max(1, Math.min(10, deadline - now())))
+    }
   }
 
   function readNativeArgs(pid: number): { executable: string; argv: string[] } | null {
@@ -328,6 +337,10 @@ export function createChromeProcessAccess(
 
   async function readIdentity(metadata: ProcessMetadata, deadline: number): Promise<ChromeProcessIdentity | null> {
     ensureTime(deadline)
+    if (isExiting(metadata.state)) {
+      if (await confirmProcessExit(metadata.pid, deadline)) return null
+      throw inspectionError()
+    }
     try {
       const native = readNativeArgs(metadata.pid)
       if (native === null) {
@@ -349,8 +362,7 @@ export function createChromeProcessAccess(
         ensureTime(deadline)
         return null
       }
-      if (platform === 'darwin' && isInvalidArgument(error) &&
-        await isMissingMacPid(metadata.pid, deadline)) {
+      if (await confirmProcessExit(metadata.pid, deadline)) {
         ensureTime(deadline)
         return null
       }
@@ -391,7 +403,7 @@ export function createChromeProcessAccess(
             return null
           }
           if (platform === 'darwin' && isInvalidArgument(error) &&
-            await isMissingMacPid(pid, deadline)) {
+            await confirmProcessExit(pid, deadline)) {
             ensureTime(deadline)
             return null
           }
