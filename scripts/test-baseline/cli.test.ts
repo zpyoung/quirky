@@ -135,6 +135,10 @@ function attempt(tests: Record<string, 'pass' | 'fail' | 'skip'> = {}, file = 'a
   }
 }
 
+function attemptWithResults(tests: Attempt['tests']): Attempt {
+  return { exitCode: 0, fileError: null, tests }
+}
+
 function fileResult(file: string, first: Attempt, rerun?: Attempt, platform: 'linux' | 'macos' = 'linux'): FileResult {
   return { file, platform, durationMs: 100, first, ...(rerun ? { rerun } : {}) }
 }
@@ -162,9 +166,10 @@ function writePlan(dir: string, plan: Plan, baseline?: Baseline) {
 const reportOf = (args: string[]) => args.find((arg) => arg.startsWith('--reporter-outfile='))!.slice('--reporter-outfile='.length)
 
 type Calls = { files: string[]; active: number; maxActive: number }
+type FakeStatus = 'pass' | 'fail' | 'skip'
 
 /** A fake `bun test`: each file's attempts are consumed in order, the last one repeating. */
-function fakeRun(script: Record<string, Record<string, 'pass' | 'fail'>[]>, calls: Calls = { files: [], active: 0, maxActive: 0 }): Run {
+function fakeRun(script: Record<string, Record<string, FakeStatus>[]>, calls: Calls = { files: [], active: 0, maxActive: 0 }): Run {
   const used: Record<string, number> = {}
   return async (_cwd, args) => {
     const file = args.find((arg) => !arg.startsWith('-'))!.replace(/^\.\//, '')
@@ -175,9 +180,12 @@ function fakeRun(script: Record<string, Record<string, 'pass' | 'fail'>[]>, call
     calls.files.push(file)
     calls.active++
     calls.maxActive = Math.max(calls.maxActive, calls.active)
-    await Bun.sleep(15)
+    await Promise.resolve()
     calls.active--
-    const cases = Object.entries(tests).map(([name, s]) => (s === 'fail' ? `<testcase name="${name}" classname=""><failure message="x" /></testcase>` : `<testcase name="${name}" classname="" />`))
+    const cases = Object.entries(tests).map(([name, status]) => {
+      const body = status === 'fail' ? '<failure message="x" />' : status === 'skip' ? '<skipped />' : ''
+      return `<testcase name="${name}" classname="">${body}</testcase>`
+    })
     writeFileSync(reportOf(args), `<testsuites><testsuite name="${file}">${cases.join('')}</testsuite></testsuites>`)
     return { code: Object.values(tests).includes('fail') ? 1 : 0, output: '', timedOut: false }
   }
@@ -730,6 +738,189 @@ describe('verdict', () => {
     expect(verdict?.runBroken).toBe(true)
     expect(verdict?.ok).toBe(false)
   })
+
+  describe('Linux daemon skip coverage', () => {
+    const daemonFile = 'packages/daemon/test/index-preload.browser.test.ts'
+    const daemonName = 'modulepreload assertion'
+    const daemonKey = (file = daemonFile, classname = '', name = daemonName) => [file, classname, name].join('\0')
+    const daemonPlan = (over: Partial<Plan> = {}) => planOf({
+      selection: { mode: 'all', files: [daemonFile], reasons: [] },
+      linuxShards: [[daemonFile]],
+      ...over,
+    })
+    const skippedDaemon = (file = daemonFile, classname = '', name = daemonName) =>
+      fileResult(file, attemptWithResults([{ key: daemonKey(file, classname, name), status: 'skipped' }]))
+    const writeSkipMap = (cwd: string, contents: string) => put(cwd, 'scripts/test-baseline/daemon-linux-skips.json', contents)
+
+    test('rejects a Linux daemon skip on every event with or without a baseline entry', async () => {
+      for (const event of ['pull_request', 'push', 'workflow_dispatch']) {
+        for (const hasBaseline of [false, true]) {
+          const skippedKey = daemonKey()
+          const baseline = hasBaseline ? baselineOf(sha(1), { [skippedKey]: 'skipped' }) : undefined
+          const plan = daemonPlan({
+            event,
+            ...(baseline ? { baseline: { commit: baseline.commit, createdAt: baseline.createdAt } } : {}),
+          })
+          const staged = stage(plan, { 'linux-0.json': [skippedDaemon()] }, baseline)
+          const cwd = dirOf('cwd')
+          const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+          expect(code).toBe(1)
+          expect(verdict?.ok).toBe(false)
+          expect(verdict?.runBroken).toBe(true)
+          expect(err.join('')).toContain(daemonFile)
+          expect(err.join('')).toContain(daemonName)
+          expect(readFileSync(join(staged.outDir, 'comment.md'), 'utf8')).toContain('The run itself broke')
+          expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+        }
+      }
+    })
+
+    test('applies the Linux skip policy to every daemon test file', async () => {
+      const file = 'packages/daemon/test/other-daemon.test.ts'
+      const staged = stage(daemonPlan({
+        selection: { mode: 'all', files: [file], reasons: [] },
+        linuxShards: [[file]],
+      }), { 'linux-0.json': [skippedDaemon(file)] })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(file)
+      expect(err.join('')).toContain(daemonName)
+    })
+
+    const daemonCoverageCases: [string, FileResult[], string][] = [
+      ['the first attempt', [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), attempt({ [daemonName]: 'pass' }, daemonFile))], daemonName],
+      ['the rerun attempt', [fileResult(daemonFile, attempt({ [daemonName]: 'pass' }, daemonFile), attempt({ [daemonName]: 'skip' }, daemonFile))], daemonName],
+      ['after 1,001 passing entries', [fileResult(daemonFile, attemptWithResults([
+        ...Array.from({ length: 1001 }, (_, index) => ({ key: daemonKey(daemonFile, '', `passing ${index}`), status: 'passed' as const })),
+        { key: daemonKey(daemonFile, '', 'late skipped test'), status: 'skipped' as const },
+      ]))], 'late skipped test'],
+      ['an earlier duplicate file result', [
+        skippedDaemon(),
+        fileResult(daemonFile, attempt({ [daemonName]: 'pass' }, daemonFile)),
+      ], daemonName],
+    ]
+    test.each(daemonCoverageCases)('%s cannot hide a skipped daemon test', async (_name, results, expectedName) => {
+      const staged = stage(daemonPlan(), { 'linux-0.json': results })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(daemonFile)
+      expect(err.join('')).toContain(expectedName)
+    })
+
+    test('rejects a daemon file assigned to Linux but reported as macOS', async () => {
+      const staged = stage(daemonPlan(), {
+        'macos.json': [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), undefined, 'macos')],
+      })
+      const { code, verdict, err } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain(daemonFile)
+    })
+
+    test('leaves genuine macOS daemon skips and non-daemon Linux skips under existing policy', async () => {
+      const macos = stage(daemonPlan({
+        selection: { mode: 'all', files: [daemonFile], reasons: [] },
+        linuxShards: [],
+        macos: [daemonFile],
+      }), { 'macos.json': [fileResult(daemonFile, attempt({ [daemonName]: 'skip' }, daemonFile), undefined, 'macos')] })
+      const macosResult = await verdictOf(macos)
+      expect(macosResult.code).toBe(0)
+      expect(macosResult.verdict?.runBroken).toBe(false)
+
+      const uiFile = 'packages/ui/test/a.test.ts'
+      const nonDaemon = stage(daemonPlan({
+        selection: { mode: 'all', files: [uiFile], reasons: [] },
+        linuxShards: [[uiFile]],
+      }), { 'linux-0.json': [fileResult(uiFile, attempt({ 'still skipped': 'skip' }, uiFile))] })
+      const uiResult = await verdictOf(nonDaemon)
+      expect(uiResult.code).toBe(0)
+      expect(uiResult.verdict?.runBroken).toBe(false)
+    })
+
+    test('keeps a missing selected daemon file incomplete rather than a skip violation', async () => {
+      const staged = stage(daemonPlan())
+      const { code, verdict } = await verdictOf(staged)
+      expect(code).toBe(1)
+      expect(verdict?.incomplete).toEqual([daemonFile])
+      expect(verdict?.runBroken).toBe(false)
+    })
+
+    test('accepts and reports an exact full JUnit key with its readable reason', async () => {
+      const classname = 'index preload > module requests'
+      const name = 'uses the preload map#2'
+      const exactKey = daemonKey(daemonFile, classname, name)
+      const reason = 'fixture-only platform limitation'
+      const staged = stage(daemonPlan(), {
+        'linux-0.json': [skippedDaemon(daemonFile, classname, name)],
+      })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, JSON.stringify({ [exactKey]: reason }))
+      const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(0)
+      expect(verdict?.runBroken).toBe(false)
+      expect(err.join('')).toContain('index preload > module requests')
+      expect(err.join('')).toContain(name)
+      expect(err.join('')).toContain(reason)
+    })
+
+    test.each([
+      ['a different key', daemonKey(daemonFile, 'another class')],
+      ['a wildcard-like key', daemonKey(daemonFile, '', '*')],
+      ['a sibling file key', daemonKey('packages/daemon/test/sibling.test.ts')],
+    ])('%s does not excuse the skipped test', async (_name, configuredKey) => {
+      const staged = stage(daemonPlan(), { 'linux-0.json': [skippedDaemon()] })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, JSON.stringify({ [configuredKey]: 'fixture-only platform limitation' }))
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+    })
+    const invalidMaps: [string, string][] = [
+      ['malformed JSON', '{'],
+      ['a non-object', '[]'],
+      ['an empty reason', JSON.stringify({ [daemonKey()]: '' })],
+      ['a whitespace reason', JSON.stringify({ [daemonKey()]: ' \t\n ' })],
+      ['a non-string reason', JSON.stringify({ [daemonKey()]: 42 })],
+    ]
+    test.each(invalidMaps)('a %s exception map breaks the verdict without publishing a baseline', async (_name, contents) => {
+      const staged = stage(daemonPlan({
+        event: 'push',
+        selection: { mode: 'all', files: [daemonFile], reasons: [] },
+      }), { 'linux-0.json': [skippedDaemon()] })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, contents)
+      const { code, verdict, err } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(err.join('')).toContain('daemon-linux-skips.json')
+      expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+    })
+
+    test('keeps a skipped JUnit result through run-shard and rejects it in verdict', async () => {
+      const cwd = dirOf('cwd')
+      const planDir = dirOf('plan')
+      const plan = daemonPlan()
+      writePlan(planDir, plan)
+      const resultsDir = dirOf('results')
+      const resultPath = join(resultsDir, 'linux-0.json')
+      const runContext = harness(cwd, {
+        run: fakeRun({ [daemonFile]: [{ [daemonName]: 'skip' }] }),
+      })
+      expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', resultPath], runContext.ctx)).toBe(0)
+      const results = readJson<FileResult[]>(resultPath)
+      expect(results[0].first.tests).toEqual([{ key: daemonKey(), status: 'skipped' }])
+      expect(results[0].rerun).toBeUndefined()
+
+      const staged = { planDir, inDir: resultsDir, outDir: dirOf('out') }
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(readJson<FileResult[]>(resultPath)[0].first.tests[0].status).toBe('skipped')
+    })
+  })
+
 
   test('every fileError the runner can produce is accepted', async () => {
     const errors: FileError[] = [null, 'timeout', 'no-report', 'exit-mismatch']
