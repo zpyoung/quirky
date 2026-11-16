@@ -235,6 +235,33 @@ describe('quote-bound source audit', () => {
     expect(codes(fixture(fullSource, invalid), 'empty')).toContain('render-not-accepted')
   })
 
+  test('accepts a quote-bound NoticeLine directly controlled by an error condition', () => {
+    const importLine = "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+    const notice = '<NoticeLine>Could not load all sources.</NoticeLine>'
+    const coverage = fullCoverage()
+    coverage.states[2]!.render = { component: 'NoticeLine', element: ref(notice), import: ref(importLine) }
+    const content = fullSource.replace(sharedImport, importLine).replace(error, notice)
+    expect(cell(fixture(content, coverage), 'error').status).toBe('pass')
+  })
+
+  test('rejects a real NoticeLine element for an empty state', () => {
+    const importLine = "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+    const notice = '<NoticeLine>No items yet.</NoticeLine>'
+    const coverage = fullCoverage()
+    coverage.states[1]!.render = { component: 'NoticeLine', element: ref(notice), import: ref(importLine) }
+    const content = fullSource.replace(sharedImport, importLine).replace(empty, notice)
+    expect(codes(fixture(content, coverage), 'empty')).toContain('render-not-accepted')
+  })
+
+  test('rejects an unrelated nearby NoticeLine as the error witness', () => {
+    const importLine = "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
+    const notice = '<NoticeLine>Could not load all sources.</NoticeLine>'
+    const coverage = fullCoverage()
+    coverage.states[2]!.render = { component: 'NoticeLine', element: ref(notice), import: ref(importLine) }
+    const content = fullSource.replace(sharedImport, importLine) + `\nconst unrelated = ${notice}`
+    expect(codes(fixture(content, coverage), 'error')).toContain('render-not-linked')
+  })
+
   test.each(['function EmptyState() { return null }', 'const EmptyState = () => null', 'function Other(EmptyState: unknown) { return null }'])('rejects local shared-component shadow %s', (binding) => {
     expect(codes(fixture(`${fullSource}\n${binding}`), 'loading')).toContain('render-binding-shadowed')
   })

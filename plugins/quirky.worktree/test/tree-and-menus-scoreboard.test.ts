@@ -119,7 +119,7 @@ test('Menu and WorktreeBoard callback producers are explicitly forwarded', () =>
   expect(coverage.notState.some((entry) => entry.site.file === BOARD && entry.anchor === 'candidate.icon ?')).toBe(true)
 })
 
-test('Tree automation facts and optional sections remain advisory content', () => {
+test('Tree automation availability distinguishes positive metadata from missing sources', () => {
   const treeForwards = coverage.actions.filter((entry) =>
     entry.site.file === TREE && 'notAction' in entry && entry.notAction === 'forwarded')
   expect(treeForwards.some((entry) => entry.anchor === 'onToggleAutomationDetails')).toBe(true)
@@ -129,11 +129,17 @@ test('Tree automation facts and optional sections remain advisory content', () =
   for (const anchor of [
     "definitionStatus === 'available' &&",
     "runHistoryStatus === 'available' &&",
+  ]) {
+    expect(coverage.notState.some((entry) => entry.site.file === TREE && entry.anchor === anchor)).toBe(true)
+  }
+  for (const anchor of [
     "definitionStatus === 'missing' &&",
     "runHistoryStatus === 'missing' &&",
     "(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') &&",
   ]) {
-    expect(coverage.notState.some((entry) => entry.site.file === TREE && entry.anchor === anchor)).toBe(true)
+    expect(coverage.states.some((entry) =>
+      entry.site.file === TREE && entry.state === 'error' && entry.anchor === anchor && entry.render.component === 'NoticeLine')).toBe(true)
+    expect(coverage.notState.some((entry) => entry.site.file === TREE && entry.anchor === anchor)).toBe(false)
   }
   expect(coverage.notState.some((entry) => entry.site.file === TREE && entry.anchor === 'role=\"status\"')).toBe(true)
   expect(coverage.notState.some((entry) =>
