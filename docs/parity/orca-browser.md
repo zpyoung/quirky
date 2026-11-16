@@ -2,9 +2,13 @@
 
 This table owns the browser command inventory, including browser identity, interception, and the browser meaning of `open-url`. The [Orca CLI parity table](./orca-cli.md) and [Orca feature table](./orca-features.md) provide the broader routing context.
 
+Headless Chrome discovery prefers the native executable (`/opt/google/chrome/chrome` on Linux) before launcher wrappers such as `/usr/bin/google-chrome`. Linux wrappers can `exec` that binary while preserving a wrapper path in `argv[0]`; choosing the binary keeps owned-process recovery's `/proc/<pid>/exe` identity check exact without weakening its safety proof.
+
 The inventory is frozen from the read-only Orca agent-context schema: schema version 1 reported 322 commands, of which these 80 browser commands were selected on 2026-11-12. The [capture](../../scripts/parity/browser-orca.json) retains each command’s words, usage, flags, summary, and remaining schema fields. Discovery ran only `orca agent-context --json`; no Orca browser/page command ran. CI reads this capture and never invokes Orca.
 
 Each primary command has one row and a distinct check ID. The five `wait-*` subordinate rows split the wait conditions into independently executable checks and each has its own check ID. `covered` names executable behavioral coverage, not a historical pass; no run result is asserted here. Every row is covered or excluded. An excluded row gives the reason it is left out of the scripted run, and its Check cell is none. Chrome clipboard rows do not claim macOS pasteboard access.
+
+The inventory contains 94 rows and 90 executable checks: the 80 captured commands plus 14 additional rows, four of which are excluded.
 
 The Quirky equivalent shows its actual CLI words, all command flags declared in the current plugin manifest, and the public method or methods. The translation is intentionally visible for `browser identity get|set` and `tab profile set`.
 
@@ -103,3 +107,4 @@ The Quirky equivalent shows its actual CLI words, all command flags declared in 
 | browser-identity-set-activation-after-restart | goal-10: browser-identity-set-activation-after-restart | CLI `quirky browser identity set`; flags: `--mode`, `--reset`; methods: `quirky.browser/identitySet` | check:browser-identity-set-activation-after-restart | covered: Identity mode staged before daemon restart becomes active on the restarted daemon with zero security shim invocations. |
 | worktree-watch-page | goal-10: worktree-watch-page | CLI `quirky browser pane open`; flags: `--worktree`, `--group`, `--url`, `--page`, `--mode`, `--profile`; methods: `quirky.browser/paneOpen` | check:worktree-watch-page | covered: A browser Watch pane in a worktree renders the live screencast of the page and reflects CLI-driven DOM mutations in sampled canvas pixels. |
 | daemon-restart-profile | goal-10: daemon-restart-profile | CLI `quirky browser tab list`; flags: `--worktree`, `--show-profile`; methods: `quirky.browser/tabList`, `quirky.browser/profileList` | check:daemon-restart-profile | covered: Browser tabs, profiles, Watch pane state, localStorage, and persistent cookies survive a daemon restart without re-seeding while keeping worktree B isolated. |
+| daemon-hard-kill-profile | goal-10: daemon-hard-kill-profile | CLI `quirky browser tab list`; flags: `--worktree`, `--show-profile`; methods: `quirky.browser/tabList`, `quirky.browser/profileList` | check:daemon-hard-kill-profile | covered: Browser tabs, profiles, Watch pane state, localStorage, and persistent cookies survive a SIGKILL daemon restart without re-seeding while keeping worktree B isolated; the check records both orphan profile roots and confirms their old Chrome trees are gone before cleanup. |

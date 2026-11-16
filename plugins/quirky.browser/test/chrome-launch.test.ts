@@ -17,6 +17,7 @@ let nextRunnerId = 0
 const DEFAULT_CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/opt/google/chrome/chrome',
   '/usr/bin/google-chrome',
   '/usr/bin/google-chrome-stable',
   '/usr/bin/chromium',
@@ -117,6 +118,7 @@ async function launchChrome(
 ): Promise<void> {
   const dependencies: BrowserDependencies = {
     ...browserDependencies(BROWSER_ROOT, runner),
+    chromeProcesses: { async snapshot() { return [] }, async inspect() { return null }, signal() {} },
     ...(chromePath === undefined ? {} : { chromePath }),
     spawn(command) {
       commands.push([...command])
@@ -173,7 +175,7 @@ test('startChrome discovers Linux candidates in order and skips missing or non-e
       const commands: string[][] = []
       const stops: StopOptions[] = []
       await withChromeProbes(LINUX_CHROME_CANDIDATES, LINUX_CHROME_CANDIDATES, () => launchChrome(profileRoot, runner, undefined, commands, stops))
-      expect(commands[0]?.[0]).toBe('/usr/bin/google-chrome')
+      expect(commands[0]?.[0]).toBe('/opt/google/chrome/chrome')
     })
 
     await withFixture(async (profileRoot, runner) => {
@@ -184,7 +186,7 @@ test('startChrome discovers Linux candidates in order and skips missing or non-e
         [LINUX_CHROME_CANDIDATES[1]!],
         () => launchChrome(profileRoot, runner, undefined, commands, stops)
       )
-      expect(commands[0]?.[0]).toBe('/usr/bin/google-chrome-stable')
+      expect(commands[0]?.[0]).toBe(LINUX_CHROME_CANDIDATES[1])
     })
   })
 })
@@ -329,6 +331,7 @@ test('Chrome uses a recording launcher and stops its owned sleep child', async (
     const processSpawn = createBrowserSpawn(runner)
     const dependencies: BrowserDependencies = {
       ...browserDependencies(BROWSER_ROOT, runner),
+      chromeProcesses: { async snapshot() { return [] }, async inspect() { return null }, signal() {} },
       chromePath: process.execPath,
       spawn(command, options) {
         launched.push([...command])
@@ -360,6 +363,7 @@ test('startChrome rejects a null pid immediately without stopping the inactive c
     }, stops)
     const dependencies: BrowserDependencies = {
       ...browserDependencies(BROWSER_ROOT, runner),
+      chromeProcesses: { async snapshot() { return [] }, async inspect() { return null }, signal() {} },
       chromePath: process.execPath,
       spawn: () => inactive
     }
@@ -375,6 +379,7 @@ test('startChrome maps synchronous spawn failures without stopping a child', asy
     const dependencies: BrowserDependencies = {
       ...browserDependencies(BROWSER_ROOT, runner),
       chromePath: process.execPath,
+      chromeProcesses: { async snapshot() { return [] }, async inspect() { return null }, signal() {} },
       spawn() {
         throw new Error('ENOENT')
       }

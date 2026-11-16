@@ -92,6 +92,24 @@ test('pane, restart, and identity rows are covered with manifest-resolved CLI me
   }
 })
 
+test('hard-kill restart is a covered registry row between clean restart and identity activation', () => {
+  const rows = readBrowserTable()
+  const hardKill = rows.find(row => row.id === 'daemon-hard-kill-profile')
+  expect(hardKill).toMatchObject({
+    id: 'daemon-hard-kill-profile',
+    equivalent: 'CLI `quirky browser tab list`; flags: `--worktree`, `--show-profile`; methods: `quirky.browser/tabList`, `quirky.browser/profileList`',
+    check: 'daemon-hard-kill-profile',
+    deferred: false,
+    disposition: 'covered'
+  })
+
+  const ids = browserChecks.map(check => check.id)
+  expect(ids.filter(id => id === 'daemon-hard-kill-profile')).toHaveLength(1)
+  expect(ids.indexOf('daemon-restart-profile')).toBeLessThan(ids.indexOf('daemon-hard-kill-profile'))
+  expect(ids.indexOf('daemon-hard-kill-profile')).toBeLessThan(ids.indexOf('browser-identity-set-activation-after-restart'))
+  expect(() => validateBrowserTable(rows, ids)).not.toThrow()
+})
+
 test('an executable registry must match the table declared check IDs exactly', () => {
   const rows = readBrowserTable()
   const registered = rows.flatMap((row) => row.check ? [row.check] : [])
@@ -108,7 +126,7 @@ test('wait subordinate rows have distinct checks and reuse the primary CLI metad
   const ids = ['wait-selector', 'wait-text', 'wait-js', 'wait-url', 'wait-load']
   const subordinates = ids.map((id) => rows.find((row) => row.id === id))
 
-  expect(rows).toHaveLength(93)
+  expect(rows).toHaveLength(94)
   expect(subordinates.map((row) => row?.check)).toEqual(ids)
   expect(subordinates.map((row) => row?.equivalent)).toEqual(ids.map(() => primary?.equivalent))
   expect(subordinates.map((row) => row?.disposition)).toEqual(ids.map(() => 'covered'))
@@ -129,7 +147,7 @@ test('compiled browser checks implement every declared executable row exactly on
 
 test('browser inventory covers every equivalent and names the four exclusions', () => {
   const rows = readBrowserTable()
-  expect(rows).toHaveLength(93)
+  expect(rows).toHaveLength(94)
   expect(rows.filter(row => row.disposition === 'gap' || row.deferred)).toEqual([])
   expect(rows.filter(row => row.disposition === 'excluded').map(row => row.id).sort()).toEqual([
     'exec-unrestricted', 'native-profile-clear', 'native-profile-persistence', 'tab-profile-create-imported'

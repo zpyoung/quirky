@@ -4153,7 +4153,7 @@
       {
         "id": "hostingDiagnose",
         "readOnly": true,
-        "description": "read canonical GitHub CLI readiness and required scopes",
+        "description": "read canonical hosting provider authentication diagnostics and required scopes",
         "params": {
           "type": "object",
           "properties": {
@@ -4170,7 +4170,20 @@
         "result": {
           "type": "object",
           "properties": {
+            "provider": {
+              "type": "string",
+              "enum": ["github", "gitlab"]
+            },
             "ghAvailable": {
+              "type": "boolean"
+            },
+            "tokenSource": {
+              "description": "env, glab, or null."
+            },
+            "glabAvailable": {
+              "description": "Boolean or null."
+            },
+            "tokenRejected": {
               "type": "boolean"
             },
             "activeAccount": {
@@ -4189,10 +4202,7 @@
                   },
                   "source": {
                     "type": "string",
-                    "enum": [
-                      "keyring",
-                      "env"
-                    ]
+                    "enum": ["keyring", "env", "glab"]
                   },
                   "active": {
                     "type": "boolean"
@@ -4207,13 +4217,7 @@
                     }
                   }
                 },
-                "required": [
-                  "host",
-                  "user",
-                  "source",
-                  "active",
-                  "scopes"
-                ],
+                "required": ["host", "user", "source", "active", "scopes"],
                 "additionalProperties": false
               }
             },
@@ -4242,15 +4246,7 @@
               "type": "boolean"
             }
           },
-          "required": [
-            "ghAvailable",
-            "accounts",
-            "envTokenInProcess",
-            "missingScopes",
-            "requiredScopes",
-            "hasKeyringFallback",
-            "requiredHostAuthenticated"
-          ],
+          "required": ["accounts", "envTokenInProcess", "missingScopes", "requiredScopes", "hasKeyringFallback", "requiredHostAuthenticated"],
           "additionalProperties": false
         }
       },
@@ -4292,7 +4288,8 @@
                     "type": "string",
                     "enum": [
                       "keyring",
-                      "env"
+                      "env",
+                      "glab"
                     ]
                   },
                   "active": {
@@ -5563,7 +5560,7 @@
       {
         "id": "hosting-diagnose",
         "method": "hostingDiagnose",
-        "summary": "read canonical GitHub CLI readiness and required scopes"
+        "summary": "read canonical hosting provider authentication diagnostics and required scopes"
       },
       {
         "id": "hosting-accounts",

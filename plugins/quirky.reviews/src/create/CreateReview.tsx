@@ -18,6 +18,36 @@ function selectedWorktree(props: ReviewsSurfaceProps): string | null {
   const worktree = props.context.getLayout().worktree
   return typeof worktree === 'string' && worktree.trim() !== '' ? worktree : null
 }
+type CreationProvider = 'github' | 'gitlab' | null
+
+function creationProvider(eligibility: unknown): CreationProvider {
+  if (!isRecord(eligibility) || !Object.hasOwn(eligibility, 'provider')) return 'github'
+  return eligibility.provider === 'github' || eligibility.provider === 'gitlab' ? eligibility.provider : null
+}
+
+function creationCopy(provider: CreationProvider) {
+  const noun = provider === 'gitlab' ? 'merge request' : provider === 'github' ? 'pull request' : 'hosted review'
+  const title = provider === 'gitlab' ? 'Create merge request' : provider === 'github' ? 'Create pull request' : 'Create review'
+  const shortName = provider === 'gitlab' ? 'MR' : provider === 'github' ? 'PR' : 'review'
+  const resultName = provider === 'gitlab' ? 'Merge request' : provider === 'github' ? 'Pull request' : 'Review'
+  return {
+    noun,
+    title,
+    shortName,
+    resultName,
+    resultCreated: `${resultName} created.`,
+    resultAlreadyExists: `${resultName} already exists.`,
+    generateLabel: provider === 'gitlab' ? 'Generate MR details with AI'
+      : provider === 'github' ? 'Generate PR details with AI' : 'Generate review details with AI',
+    stopLabel: provider === 'gitlab' ? 'Stop generating merge-request details'
+      : provider === 'github' ? 'Stop generating pull-request details' : 'Stop generating review details',
+    stackUnavailable: provider === 'gitlab'
+      ? 'Stacked merge requests are unavailable for GitLab repositories.'
+      : provider === 'github'
+        ? 'Stacked pull requests are available only for supported GitHub.com repositories.'
+        : 'Stack support is unavailable for this hosting provider.'
+  }
+}
 
 type CreationControlAction =
   | 'submit'
@@ -66,6 +96,7 @@ function creationControlActions(
 ): Array<{ action: CreationControlAction; enabled: boolean }> {
   const { creation } = state
   const eligibility = creation.eligibility
+  const provider = creationProvider(eligibility)
   const blockers = eligibility && Array.isArray(eligibility.blockers) ? eligibility.blockers : []
   const firstBlocker = blockers.find(isRecord)
   const blockerReason = firstBlocker && typeof firstBlocker.reason === 'string' ? firstBlocker.reason : null
@@ -82,7 +113,7 @@ function creationControlActions(
   return [
     {
       action: 'submit',
-      enabled: state.currentTarget && !busyEditing &&
+      enabled: provider !== null && state.currentTarget && !busyEditing &&
         state.title.trim() !== '' && state.base.trim() !== '' && baseAvailable && !baseIsHead &&
         !eligibilityStale && (eligibility?.eligible === true || needsPush)
     },
@@ -93,7 +124,7 @@ function creationControlActions(
     },
     ...(resultAvailable ? [{
       action: 'open-result' as const,
-      enabled: state.currentTarget && !busyEditing && !busy.openResult && !busy.refresh
+      enabled: provider !== null && state.currentTarget && !busyEditing && !busy.openResult && !busy.refresh
     }] : []),
     {
       action: 'generate',
@@ -109,7 +140,7 @@ function creationControlActions(
     },
     {
       action: 'stack-set',
-      enabled: state.worktree !== null && state.currentTarget && !busyEditing &&
+      enabled: provider === 'github' && state.worktree !== null && state.currentTarget && !busyEditing &&
         state.stackSupported && state.stackParentNumber !== null && !busy.stack
     }
   ]
@@ -135,10 +166,12 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   const currentTarget = controlWorktree !== null && creation.worktree === controlWorktree
   const identity = controlWorktree ?? ''
   const eligibility = creation.eligibility
+  const provider = creationProvider(eligibility)
+  const copy = creationCopy(provider)
   const headIdentity = eligibility && typeof eligibility.headOid === 'string' && eligibility.headOid.trim() !== ''
     ? eligibility.headOid
     : creation.head || null
-  const sessionIdentity = JSON.stringify([controlWorktree, creation.generation, headIdentity, creation.head])
+  const sessionIdentity = JSON.stringify([controlWorktree, creation.generation, provider, headIdentity, creation.head])
   const controlTarget = JSON.stringify([CREATE_VIEW, 'creation', controlWorktree, null, null, controlWorktree ? headIdentity : null, null])
   const targetGuard = useTargetGuard(sessionIdentity)
   const targetEpoch = useRef({ identity: sessionIdentity, value: 0 })
@@ -382,6 +415,10 @@ export function CreateReview(props: ReviewsSurfaceProps) {
 
   const submit = async (isCurrent: () => boolean) => {
     if (!worktree || !isCurrent() || submitLock.current?.isCurrent()) return
+    if (creationProvider(latestCreation.current.eligibility) === null) {
+      setLocalError('A supported hosting provider could not be confirmed.')
+      return
+    }
     const operation = { identity: sessionIdentity, isCurrent }
     submitLock.current = operation
     publishActionSignature.current()
@@ -568,27 +605,30 @@ export function CreateReview(props: ReviewsSurfaceProps) {
     : null
   const confirmedAt = eligibility && typeof eligibility.confirmedAt === 'number' ? eligibility.confirmedAt : Number.NaN
   const eligibilityStale = !Number.isFinite(confirmedAt) || Date.now() - confirmedAt > 5 * 60_000
-  const canSubmit = currentTarget && !creation.loading && !creation.submitting && !generationRunning && !saving &&
+  const canSubmit = provider !== null && currentTarget && !creation.loading && !creation.submitting && !generationRunning && !saving &&
     !submitLock.current?.isCurrent() && !titleMissing && !baseMissing && baseAvailable && !baseIsHead &&
     !eligibilityStale && (eligibility?.eligible === true || needsPush)
-  const disabledReason = generationRunning ? 'Wait for AI generation to finish.'
-    : titleMissing ? 'Enter a pull request title.'
-      : baseMissing ? 'Choose a base branch.'
-        : !baseAvailable ? 'Choose a base branch from the remote refs.'
-          : baseIsHead ? 'Base branch must differ from the head branch.'
-            : eligibilityStale ? 'Eligibility confirmation expired. Refresh this worktree before submitting.'
-              : blockerMessage && !needsPush ? blockerMessage
-                : !eligibility ? 'Confirm eligibility for this worktree before creating a pull request.'
-                  : null
+  const disabledReason = provider === null ? 'A supported hosting provider could not be confirmed.'
+    : generationRunning ? 'Wait for AI generation to finish.'
+      : titleMissing ? `Enter a ${copy.noun} title.`
+        : baseMissing ? 'Choose a base branch.'
+          : !baseAvailable ? 'Choose a base branch from the remote refs.'
+            : baseIsHead ? 'Base branch must differ from the head branch.'
+              : eligibilityStale ? 'Eligibility confirmation expired. Refresh this worktree before submitting.'
+                : blockerMessage && !needsPush ? blockerMessage
+                  : !eligibility ? `Confirm eligibility for this worktree before creating a ${copy.noun}.`
+                    : null
   const stackParentNumber = eligibility && Number.isSafeInteger(eligibility.stackParentNumber) ? Number(eligibility.stackParentNumber) : null
-  const stackSupported = eligibility?.stackSupported === true
-  const stackEnabled = eligibility?.stackEnabled === true && stackParentNumber !== null
+  const stackSupported = provider === 'github' && eligibility?.stackSupported === true
+  const stackEnabled = provider === 'github' && eligibility?.stackEnabled === true && stackParentNumber !== null
   const result = isRecord(creation.result) ? creation.result : null
   const resultReview = result && isRecord(result.review) ? result.review : null
   const resultUrl = resultReview ? safeHttpUrl(resultReview.url) : null
   const resultNumber = resultReview && Number.isSafeInteger(resultReview.number) ? Number(resultReview.number) : null
   const fieldError = titleField.error ?? bodyField.error ?? baseField.error ?? draftField.error ?? templateField.error
-  const partialError = result?.status === 'partial' ? 'Pull request created; stack registration was incomplete.' : null
+  const partialError = result?.status === 'partial'
+    ? provider === 'gitlab' ? 'Merge request created; follow-up setup was incomplete.' : 'Pull request created; stack registration was incomplete.'
+    : null
   const stateErrors = [creation.error, localError, fieldError, partialError && creation.error !== partialError ? partialError : null]
     .filter((message): message is string => typeof message === 'string' && message !== '')
 
@@ -731,34 +771,38 @@ export function CreateReview(props: ReviewsSurfaceProps) {
   }
 
   if (!worktree) {
-    return <section className="ui-stack" aria-label="Create pull request" {...controlMetadata}>
-      <SectionHeader title="Create pull request" />
-      <EmptyState message="Select a Git worktree before creating a pull request." />
+    return <section className="ui-stack" aria-label={copy.title} {...controlMetadata}>
+      <SectionHeader title={copy.title} />
+      {provider === 'gitlab'
+        ? <EmptyState message="Select a Git worktree before creating a merge request." />
+        : provider === 'github'
+          ? <EmptyState message="Select a Git worktree before creating a pull request." />
+          : <EmptyState message="Select a Git worktree before creating a hosted review." />}
     </section>
   }
 
   if (!currentTarget || creation.loading) {
     const confirming = creation.loading || confirmationPending
     const confirmationError = localError ?? creation.error ?? (!confirming ? 'The current worktree and branch could not be confirmed.' : null)
-    return <section className="ui-stack" aria-label="Create pull request" aria-busy={confirming} {...controlMetadata}>
-      <SectionHeader title="Create pull request" />
+    return <section className="ui-stack" aria-label={copy.title} aria-busy={confirming} {...controlMetadata}>
+      <SectionHeader title={copy.title} />
       {confirmationError
         ? <InlineError message={confirmationError} action={!currentTarget ? { label: 'Retry confirmation', onAction: () => requestCreationControl('refresh-eligibility') } : undefined} />
         : <div role="status" aria-live="polite"><NoticeLine>Confirming this worktree and its current branch…</NoticeLine></div>}
     </section>
   }
 
-  return <main className="ui-stack" aria-label="Create pull request" aria-busy={creation.submitting || generationRunning || saving || stackSaving} {...controlMetadata}>
+  return <main className="ui-stack" aria-label={copy.title} aria-busy={creation.submitting || generationRunning || saving || stackSaving} {...controlMetadata}>
     <header className="ui-stack">
-      <SectionHeader title="Create pull request" />
+      <SectionHeader title={copy.title} />
       <p>Worktree <strong>{worktree}</strong> · <code>{creation.head || 'No current branch'}</code></p>
     </header>
 
     {stateErrors.map((message) => <InlineError key={message} message={message} />)}
     {stackLookupError && <InlineError message={`Stack capability could not be confirmed: ${stackLookupError}`} />}
     {resultReview && <section className="ui-stack" aria-live="polite">
-      <strong>{result?.status === 'already_exists' ? 'Pull request already exists.' : 'Pull request created.'}</strong>
-      <p>{resultNumber === null ? 'The review identity could not be shown.' : `Pull request #${resultNumber}`}{resultUrl ? ` · ${resultUrl}` : ''}</p>
+      <strong>{result?.status === 'already_exists' ? copy.resultAlreadyExists : copy.resultCreated}</strong>
+      <p>{resultNumber === null ? 'The review identity could not be shown.' : `${copy.resultName} #${resultNumber}`}{resultUrl ? ` · ${resultUrl}` : ''}</p>
       <Button variant="primary" disabled={!isControlEnabled('open-result')} onClick={() => requestCreationControl('open-result')}>Open review</Button>
     </section>}
 
@@ -822,24 +866,31 @@ export function CreateReview(props: ReviewsSurfaceProps) {
             setLocalError(null)
           }} />
         </FormRow>
-        <FormRow label="Use repository pull-request template when the description is empty" htmlFor="review-use-template" error={templateField.error ?? undefined}>
-          <input id="review-use-template" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={useTemplate} onChange={(event) => {
-            templateField.edit(event.target.checked)
-            setLocalError(null)
-          }} />
-        </FormRow>
+        {provider === 'gitlab'
+          ? <FormRow label="Use repository merge-request template when the description is empty" htmlFor="review-use-template" error={templateField.error ?? undefined}>
+            <input id="review-use-template" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={useTemplate} onChange={(event) => {
+              templateField.edit(event.target.checked)
+              setLocalError(null)
+            }} />
+          </FormRow>
+          : <FormRow label="Use repository pull-request template when the description is empty" htmlFor="review-use-template" error={templateField.error ?? undefined}>
+            <input id="review-use-template" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={useTemplate} onChange={(event) => {
+              templateField.edit(event.target.checked)
+              setLocalError(null)
+            }} />
+          </FormRow>}
         {stackSupported && stackParentNumber !== null && <FormRow label={`Create pull request in stack with #${stackParentNumber}`} htmlFor="review-create-stack">
           <input id="review-create-stack" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={stackEnabled} disabled={!isControlEnabled('stack-set')} onChange={(event) => requestCreationControl('stack-set', { enabled: event.target.checked })} />
         </FormRow>}
-        {!stackSupported && <small>Stacked pull requests are available only for supported GitHub.com repositories.</small>}
+        {!stackSupported && <small>{copy.stackUnavailable}</small>}
       </fieldset>
 
       <div className="ui-cluster">
-        <Button disabled={!isControlEnabled('generate')} onClick={() => requestCreationControl('generate')}>{generationRunning ? 'Generating…' : 'Generate PR details with AI'}</Button>
-        {generationRunning && <Button variant="destructive" aria-label="Stop generating pull-request details" disabled={!isControlEnabled('stop-generation')} onClick={() => requestCreationControl('stop-generation')}>Stop</Button>}
+        <Button disabled={!isControlEnabled('generate')} onClick={() => requestCreationControl('generate')}>{generationRunning ? 'Generating…' : copy.generateLabel}</Button>
+        {generationRunning && <Button variant="destructive" aria-label={copy.stopLabel} disabled={!isControlEnabled('stop-generation')} onClick={() => requestCreationControl('stop-generation')}>Stop</Button>}
         <Button disabled={!isControlEnabled('refresh-eligibility')} onClick={() => requestCreationControl('refresh-eligibility')}>Refresh eligibility</Button>
         <Button variant="primary" type="submit" disabled={!canSubmit || !isControlEnabled('submit')} title={disabledReason ?? undefined}>
-          {creation.submitting || saving ? 'Creating…' : stackEnabled ? `${draft ? 'Create draft' : 'Create'} PR in stack` : needsPush ? 'Push & Create PR' : 'Create PR'}
+          {creation.submitting || saving ? 'Creating…' : stackEnabled ? `${draft ? 'Create draft' : 'Create'} PR in stack` : needsPush ? `Push & Create ${copy.shortName}` : `Create ${copy.shortName}`}
         </Button>
       </div>
       {disabledReason && <p className="ui-text-muted" role="status">{disabledReason}</p>}

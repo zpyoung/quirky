@@ -26,8 +26,9 @@ type StartWorldOptions = {
   workers?: boolean
 }
 
+export type RestartOptions = { killSignal?: 'SIGTERM' | 'SIGKILL' }
 export type DaemonSpawn = { spawnedAt: number; pid: number }
-export type DaemonRestart = { spawnedAt: number }
+export type DaemonRestart = { spawnedAt: number; killSignal: 'SIGTERM' | 'SIGKILL' }
 
 export type SoakWorld = {
   home: string
@@ -40,7 +41,7 @@ export type SoakWorld = {
   workers: Worker[]
   env: Record<string, string>
   preserveSessions(sessionIds: readonly string[]): void
-  restartDaemon(signal?: AbortSignal, onSpawn?: (spawn: DaemonSpawn) => void): Promise<DaemonRestart>
+  restartDaemon(signal?: AbortSignal, onSpawn?: (spawn: DaemonSpawn) => void, options?: RestartOptions): Promise<DaemonRestart>
   track(pid: number): void
   stop(): Promise<void>
 }
@@ -457,7 +458,11 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
       preservedSessions = ids
     }
 
-    const restartDaemon = async (signal?: AbortSignal, onSpawn?: (spawn: DaemonSpawn) => void): Promise<DaemonRestart> => {
+    const restartDaemon = async (
+      signal?: AbortSignal,
+      onSpawn?: (spawn: DaemonSpawn) => void,
+      options: RestartOptions = {}
+    ): Promise<DaemonRestart> => {
       throwIfAborted(signal)
       const oldProcess = daemonProcess
       const oldControl = control
@@ -465,7 +470,8 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
       await assertSessionsAlive(oldControl, preservedSessions, signal)
       closeClient(oldControl)
       control = undefined
-      oldProcess.kill('SIGTERM')
+      const killSignal = options.killSignal ?? 'SIGTERM'
+      oldProcess.kill(killSignal)
       await (dependencies.waitForShutdown ?? waitForDaemonShutdown)(oldProcess, signal)
 
       const replacement = await spawnDaemon(signal, onSpawn)
@@ -479,7 +485,7 @@ export async function startWorld(options: StartWorldOptions, dependencies: Start
       daemonPid = replacement.runtime.pid
       control = replacement.control
       ptyHost.update(asRecord(replacement.status.ptyHost).pid)
-      return { spawnedAt: replacement.spawnedAt }
+      return { spawnedAt: replacement.spawnedAt, killSignal }
     }
 
     throwIfAborted(options.signal)

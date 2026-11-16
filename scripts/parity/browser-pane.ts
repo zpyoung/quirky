@@ -41,6 +41,13 @@ export type WatchAndRestartOutcome = {
     cookiesB?: readonly { name: string; value: string }[]
     identityAfterRestart?: { mode?: string; active?: string; restartRequired?: boolean }
   }
+  hardKill?: {
+    killSignal?: 'SIGTERM' | 'SIGKILL'
+    orphanChromeAfterKill?: readonly OrphanChromeRoot[]
+    flushWaitMs?: number
+    firstBrowserCommandExitCode?: number
+    oldChromeGone?: boolean
+  }
   shimLogs?: { empty: boolean; bytes: Record<string, number>; orcaLog: string; securityLog: string }
 }
 
@@ -48,12 +55,15 @@ type PageCssSize = { width: number; height: number }
 type RendererOptions = { launchServer?: typeof chromium.launchServer; signal?: AbortSignal; deadline?: number }
 type WatchState = { mode: string; active: string; restartRequired: boolean }
 type PaneTab = { id: string; worktreeId: string; mode: string; page: string; profileId: string }
+type OrphanChromeRoot = { pid: number; started: string; ppid: number; profileId: string }
+type ChromeTreeIdentity = { pid: number; started: string }
 type WatchSampleCheck = (sample: WatchPixelSample) => boolean
 
 const CLOSE_TIMEOUT_MS = 2_500
 const RENDERER_STARTUP_MS = 30_000
 const SAMPLE_POLL_MS = 80
 const SAMPLE_WINDOW_MS = 15_000
+const OLD_CHROME_TREE_DISAPPEARANCE_MS = 5_000
 
 function deadlineFailure(signal: AbortSignal | undefined, message: string): BrowserFailure {
   const reason = signal?.reason
@@ -328,6 +338,32 @@ export function isGreenSample(sample: WatchPixelSample): boolean {
   return sample.g > 180 && sample.r < 80 && sample.b < 80
 }
 
+function isOrphanChromeRoots(value: unknown, profileA?: string, profileB?: string): value is readonly OrphanChromeRoot[] {
+  if (!Array.isArray(value) || value.length !== 2 || !profileA || !profileB || profileA === profileB) return false
+  const profiles = new Set<string>()
+  for (const root of value) {
+    if (!root || typeof root !== 'object' || Array.isArray(root) ||
+      !('pid' in root) || typeof root.pid !== 'number' || !Number.isSafeInteger(root.pid) || root.pid <= 0 ||
+      !('started' in root) || typeof root.started !== 'string' || !root.started ||
+      !('ppid' in root) || root.ppid !== 1 ||
+      !('profileId' in root) || typeof root.profileId !== 'string' || !root.profileId) return false
+    profiles.add(root.profileId)
+  }
+  return profiles.size === 2 && profiles.has(profileA) && profiles.has(profileB)
+}
+
+function isChromeTree(value: unknown, roots: readonly OrphanChromeRoot[]): value is readonly ChromeTreeIdentity[] {
+  if (!Array.isArray(value) || value.length < roots.length) return false
+  const identities = new Set<string>()
+  for (const identity of value) {
+    if (!identity || typeof identity !== 'object' || Array.isArray(identity) ||
+      !('pid' in identity) || typeof identity.pid !== 'number' || !Number.isSafeInteger(identity.pid) || identity.pid <= 0 ||
+      !('started' in identity) || typeof identity.started !== 'string' || !identity.started) return false
+    identities.add(`${identity.pid}:${identity.started}`)
+  }
+  return roots.every(root => identities.has(`${root.pid}:${root.started}`))
+}
+
 export function verifyWatchAndRestartOutcome(outcome: WatchAndRestartOutcome): void {
   if (outcome.watch) {
     const { beforeSample, afterSample } = outcome.watch
@@ -343,6 +379,19 @@ export function verifyWatchAndRestartOutcome(outcome: WatchAndRestartOutcome): v
       restart.localStorageB !== null || !Array.isArray(restart.cookiesB) || restart.cookiesB.some(cookie => cookie.name === 'restart') ||
       restart.identityAfterRestart?.active !== 'native') {
       throw new BrowserFailure('restart-lost-profile', 'Browser profile, daemon, or worktree-isolation state did not survive restart')
+    }
+  }
+  if (outcome.hardKill) {
+    const hardKill = outcome.hardKill
+    const restart = outcome.restart
+    const roots = hardKill.orphanChromeAfterKill
+    const profileA = restart?.profileA
+    const profileB = restart?.profileB
+    const validRoots = isOrphanChromeRoots(roots, profileA, profileB)
+    if (hardKill.killSignal !== 'SIGKILL' || !validRoots ||
+      typeof hardKill.flushWaitMs !== 'number' || !Number.isFinite(hardKill.flushWaitMs) || hardKill.flushWaitMs < 40_000 ||
+      hardKill.firstBrowserCommandExitCode !== 0 || hardKill.oldChromeGone !== true) {
+      throw new BrowserFailure('restart-lost-profile', 'Hard-kill browser, data, or Chrome process continuity was not proven')
     }
   }
   if (outcome.shimLogs && (!outcome.shimLogs.empty || outcome.shimLogs.orcaLog !== '' || outcome.shimLogs.securityLog !== '')) {
@@ -550,6 +599,36 @@ async function activateNativeIdentity(c: CheckContext): Promise<{ identity: Watc
   return { identity, userAgent }
 }
 
+async function waitForCookieFlushAllowance(c: Pick<CheckContext, 'signal' | 'deadline'>): Promise<number> {
+  const started = performance.now()
+  const target = started + 40_000
+  while (true) {
+    const remaining = target - performance.now()
+    if (remaining <= 0) break
+    await awaitOperation(
+      () => Bun.sleep(Math.min(Math.ceil(remaining), 250)),
+      c.deadline,
+      c.signal,
+      'Persistent cookie flush wait was interrupted'
+    )
+  }
+  return Math.ceil(performance.now() - started)
+}
+
+async function waitForChromeTreeGone(
+  isGone: () => Promise<boolean>,
+  c: Pick<CheckContext, 'signal' | 'deadline'>
+): Promise<boolean> {
+  const deadline = Math.min(c.deadline, Date.now() + OLD_CHROME_TREE_DISAPPEARANCE_MS)
+  while (Date.now() < deadline) {
+    if (await awaitOperation(isGone, deadline, c.signal, 'Old Chrome process identity check was interrupted')) return true
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await awaitOperation(() => Bun.sleep(Math.min(100, remaining)), deadline, c.signal, 'Old Chrome process identity check was interrupted')
+  }
+  return false
+}
+
 export const paneChecks: BrowserCheck[] = [
   {
     id: 'worktree-watch-page',
@@ -704,6 +783,256 @@ export const paneChecks: BrowserCheck[] = [
       } finally {
         await renderer.close()
         if (c.state.watchRenderer === renderer) delete c.state.watchRenderer
+      }
+    }
+  },
+  {
+    id: 'daemon-hard-kill-profile',
+    async run(c) {
+      await ensurePaneTargets(c)
+      const pageA = c.state.pageA
+      const pageB = c.state.pageB
+      const profileA = c.state.profileA
+      const profileB = c.state.profileB
+      if (typeof pageA !== 'string' || !pageA || typeof pageB !== 'string' || !pageB ||
+        typeof profileA !== 'string' || !profileA || typeof profileB !== 'string' || !profileB) {
+        throw new BrowserFailure('restart-lost-profile', 'Hard-kill pane targets were not established')
+      }
+      const watchUrl = `${c.world.fixture.origin}/watch-page`
+      await c.call('viewport', { width: 800, height: 600, scale: 1, mobile: false }, pageA)
+      await c.call('goto', { url: watchUrl }, pageA)
+      await c.call('goto', { url: watchUrl }, pageB)
+
+      let renderer: WatchRenderer | undefined
+      try {
+        renderer = await openWatchRenderer(c.world, { signal: c.signal, deadline: c.deadline })
+        c.state.watchRenderer = renderer
+        await renderer.connectToDaemon(c.world.home)
+        await openWorktreeA(c)
+
+        const storedPaneTabId = c.state.paneTabId
+        let paneTabId = typeof storedPaneTabId === 'string' ? storedPaneTabId : ''
+        if (typeof paneTabId !== 'string' || !paneTabId) {
+          const opened = await c.call<PaneTab>('pane open', { mode: 'watch' }, pageA)
+          if (!opened.id || opened.page !== pageA || opened.profileId !== profileA || opened.mode !== 'watch') {
+            throw new BrowserFailure('restart-lost-profile', 'Hard-kill Watch pane was not bound to page A')
+          }
+          paneTabId = opened.id
+          c.state.paneTabId = opened.id
+        }
+
+        const paneStateBefore = await c.call<{ tabs: PaneTab[]; active: string | null }>(
+          'pane state', { worktree: `id:${c.world.worktreeA}` }, ''
+        )
+        const paneBinding = (state: { tabs: PaneTab[]; active: string | null }) => ({
+          active: state.active,
+          tabs: state.tabs.filter(tab => tab.id === paneTabId).map(({ id, worktreeId, page, profileId, mode }) => ({
+            id, worktreeId, page, profileId, mode
+          }))
+        })
+        const paneBindingBefore = paneBinding(paneStateBefore)
+        const paneTabBefore = paneBindingBefore.tabs[0]
+        if (paneBindingBefore.active !== paneTabId || !paneTabBefore ||
+          paneTabBefore.page !== pageA || paneTabBefore.profileId !== profileA ||
+          paneTabBefore.mode !== 'watch') {
+          throw new BrowserFailure('restart-lost-profile', 'Hard-kill Watch pane identity was not established before restart')
+        }
+
+        const tabsBefore = await c.call<{ tabs: Array<{ browserPageId: string; worktreeId: string; profileId: string }> }>(
+          'tab list', { worktree: 'all' }, ''
+        )
+        const tabBindings = (tabs: typeof tabsBefore.tabs) => tabs
+          .filter(tab => tab.browserPageId === pageA || tab.browserPageId === pageB)
+          .map(({ browserPageId, worktreeId, profileId }) => ({ browserPageId, worktreeId, profileId }))
+          .sort((left, right) => left.browserPageId.localeCompare(right.browserPageId))
+        const tabBindingsBefore = tabBindings(tabsBefore.tabs)
+        if (tabBindingsBefore.length !== 2 ||
+          !tabBindingsBefore.some(tab => tab.browserPageId === pageA && tab.worktreeId === c.world.worktreeA && tab.profileId === profileA) ||
+          !tabBindingsBefore.some(tab => tab.browserPageId === pageB && tab.worktreeId === c.world.worktreeB && tab.profileId === profileB)) {
+          throw new BrowserFailure('restart-lost-profile', 'Parity A and B tab identities were not established before hard kill')
+        }
+
+        const profilesBefore = await c.call<{ profiles: Array<{ id: string; label: string }> }>('tab profile list', {}, '')
+        const profileBindings = (profiles: typeof profilesBefore.profiles) => profiles
+          .filter(profile => profile.id === profileA || profile.id === profileB)
+          .map(({ id, label }) => ({ id, label }))
+          .sort((left, right) => left.id.localeCompare(right.id))
+        const profileBindingsBefore = profileBindings(profilesBefore.profiles)
+        if (profileBindingsBefore.length !== 2 ||
+          !profileBindingsBefore.some(profile => profile.id === profileA && profile.label === 'Parity A') ||
+          !profileBindingsBefore.some(profile => profile.id === profileB && profile.label === 'Parity B')) {
+          throw new BrowserFailure('restart-lost-profile', 'Parity A and B profile identities were not established before hard kill')
+        }
+
+        const identityBeforeKill = await c.call<WatchState>('identity set', { mode: 'native' }, '')
+        if (identityBeforeKill.mode !== 'native' || (identityBeforeKill.active !== 'clean' && identityBeforeKill.active !== 'native')) {
+          throw new BrowserFailure('restart-lost-profile', 'Native browser identity could not be staged before hard kill')
+        }
+        c.state.identityNeedsRestore = true
+
+        await c.call('storage local set', { key: 'restart', value: 'local-restart' }, pageA)
+        await c.call('cookie set', {
+          name: 'restart',
+          value: 'cookie-restart',
+          url: c.world.fixture.origin,
+          path: '/',
+          expires: Math.floor(Date.now() / 1000) + 3600
+        }, pageA)
+        const flushWaitMs = await waitForCookieFlushAllowance(c)
+        if (flushWaitMs < 40_000) throw new BrowserFailure('restart-lost-profile', 'Persistent cookie flush allowance ended too early')
+
+        const previousPid = c.world.daemonPid
+        if (!c.world.restartDaemon) throw new BrowserFailure('restart-lost-profile', 'Browser world does not support daemon restart')
+        const restarted = await c.world.restartDaemon(c.signal, { killSignal: 'SIGKILL' })
+        const daemonPid = c.world.daemonPid
+        if (restarted.killSignal !== 'SIGKILL' || restarted.previousPid !== previousPid ||
+          restarted.daemonPid !== daemonPid || restarted.daemonPid === previousPid) {
+          throw new BrowserFailure('restart-lost-profile', 'Browser daemon did not complete the requested SIGKILL restart')
+        }
+
+        const orphanChromeAfterKill = restarted.orphanChromeAfterKill
+        if (!isOrphanChromeRoots(orphanChromeAfterKill, profileA, profileB)) {
+          throw new BrowserFailure('restart-lost-profile', 'Hard-kill receipt did not observe both profile Chrome roots orphaned under PID 1')
+        }
+        const oldChromeTree = restarted.oldChromeTree
+        if (!isChromeTree(oldChromeTree, orphanChromeAfterKill) || !c.world.chromeProcessesGone) {
+          throw new BrowserFailure('restart-lost-profile', 'Hard-kill receipt did not retain the old Chrome process identities')
+        }
+
+        const firstGotoA = await c.probe('goto', { url: watchUrl }, pageA)
+        if (firstGotoA.exitCode !== 0) throw new BrowserFailure('restart-lost-profile', 'First post-hard-kill goto for Parity A failed', firstGotoA.stderrTail)
+        const firstGotoB = await c.probe('goto', { url: watchUrl }, pageB)
+        if (firstGotoB.exitCode !== 0) throw new BrowserFailure('restart-lost-profile', 'First post-hard-kill goto for Parity B failed', firstGotoB.stderrTail)
+
+        const oldChromeGone = await waitForChromeTreeGone(
+          () => c.world.chromeProcessesGone!(oldChromeTree),
+          c
+        )
+        if (!oldChromeGone) throw new BrowserFailure('restart-lost-profile', 'Old Chrome roots or descendants survived the first post-hard-kill browser operations')
+
+        const runtimeAfter = readRuntime(c.world.home)
+        if (!runtimeAfter || runtimeAfter.pid !== daemonPid) {
+          throw new BrowserFailure('restart-lost-profile', 'SIGKILL replacement daemon runtime is unavailable')
+        }
+        const connected = await renderer.connectToDaemon(c.world.home)
+        c.equal(connected.port, runtimeAfter.port, 'Watch renderer did not connect to the SIGKILL replacement daemon')
+        await openWorktreeA(c)
+
+        const tabsAfter = await c.call<{ tabs: typeof tabsBefore.tabs }>('tab list', { worktree: 'all' }, '')
+        const tabBindingsAfter = tabBindings(tabsAfter.tabs)
+        c.equal(tabBindingsAfter, tabBindingsBefore, 'Tab IDs, profiles, or worktree associations changed across hard kill')
+        const profilesAfter = await c.call<{ profiles: typeof profilesBefore.profiles }>('tab profile list', {}, '')
+        const profileBindingsAfter = profileBindings(profilesAfter.profiles)
+        c.equal(profileBindingsAfter, profileBindingsBefore, 'Profile IDs or labels changed across hard kill')
+
+        const paneStateAfter = await c.call<{ tabs: PaneTab[]; active: string | null }>(
+          'pane state', { worktree: `id:${c.world.worktreeA}` }, ''
+        )
+        const paneBindingAfter = paneBinding(paneStateAfter)
+        c.equal(paneBindingAfter, paneBindingBefore, 'Watch pane ID, page, profile, or mode changed across hard kill')
+
+        const paneTabAfter = paneBindingAfter.tabs[0]
+        if (!paneTabAfter) throw new BrowserFailure('restart-lost-profile', 'Persisted Watch pane binding is missing')
+        const pageCssSize = await c.observe<PageCssSize>('({ width: window.innerWidth, height: window.innerHeight })', pageA)
+        await waitForWatchImage(renderer.page, paneTabId, c)
+        const beforeSample = await waitForWatchSample(renderer.page, paneTabId, pageCssSize, isRedSample, 'red Watch marker after hard kill', c)
+        const worktreeBMarkerBefore = await c.observe<string | null>(
+          'document.querySelector("#watch-marker")?.getAttribute("data-state") ?? null', pageB
+        )
+        c.equal(worktreeBMarkerBefore, 'red', 'worktree B marker was not red after hard kill')
+
+        const localA = await c.call<{ key: string; value: string | null }>('storage local get', { key: 'restart' }, pageA)
+        const cookiesA = await c.call<{ cookies: Array<{ name: string; value: string }> }>(
+          'cookie get', { url: c.world.fixture.origin }, pageA
+        )
+        const cookieA = cookiesA.cookies.find(cookie => cookie.name === 'restart')?.value ?? null
+        const localB = await c.call<{ key: string; value: string | null }>('storage local get', { key: 'restart' }, pageB)
+        const cookiesB = await c.call<{ cookies: Array<{ name: string; value: string }> }>(
+          'cookie get', { url: c.world.fixture.origin }, pageB
+        )
+        const cookieCountB = cookiesB.cookies.filter(cookie => cookie.name === 'restart').length
+
+        const identityAfterRestart = await c.call<WatchState>('identity get', {}, '')
+        if (identityAfterRestart.mode !== 'native' || identityAfterRestart.active !== 'native' || identityAfterRestart.restartRequired) {
+          throw new BrowserFailure('restart-lost-profile', 'Native browser identity did not survive the hard-kill restart')
+        }
+        const userAgentAfterRestart = await c.observe<string>('navigator.userAgent', pageA)
+        assertUserAgent(c, userAgentAfterRestart, 'native')
+        await c.call('click', { element: '#watch-marker' }, pageA)
+        const afterClick = await c.observe<{ title: string; state: string | null }>(
+          '({ title: document.title, state: document.querySelector("#watch-marker")?.getAttribute("data-state") ?? null })',
+          pageA
+        )
+        c.equal(afterClick, { title: 'CLI changed', state: 'green' }, 'CLI click did not change page A after hard kill')
+        const worktreeBMarkerAfter = await c.observe<string | null>(
+          'document.querySelector("#watch-marker")?.getAttribute("data-state") ?? null', pageB
+        )
+        c.equal(worktreeBMarkerAfter, 'red', 'CLI click in worktree A changed worktree B marker after hard kill')
+        const afterSample = await waitForWatchSample(renderer.page, paneTabId, pageCssSize,
+          sample => isGreenSample(sample) && sample.digest !== beforeSample.digest,
+          'new green Watch frame after hard kill', c)
+        await waitForRendererAddress(renderer, watchUrl, c)
+
+        const restartOutcome = {
+          previousPid,
+          daemonPid,
+          pageA,
+          pageB,
+          profileA,
+          profileB,
+          localStorageA: localA.value,
+          cookieA,
+          localStorageB: localB.value,
+          cookiesB: cookiesB.cookies,
+          identityAfterRestart
+        }
+        const hardKillOutcome = {
+          killSignal: restarted.killSignal,
+          orphanChromeAfterKill,
+          flushWaitMs,
+          firstBrowserCommandExitCode: firstGotoA.exitCode,
+          oldChromeGone
+        }
+        const shimLogs = readShimLogs(c.world.home)
+        verifyWatchAndRestartOutcome({
+          watch: { beforeSample, afterSample },
+          restart: restartOutcome,
+          hardKill: hardKillOutcome,
+          shimLogs
+        })
+        c.assert(shimLogs.orcaLog === '' && shimLogs.securityLog === '', 'hard-kill browser parity invoked an Orca or security shim')
+        return {
+          ...restartOutcome,
+          cookieA: cookieA ?? null,
+          cookieCountB,
+          killSignal: restarted.killSignal,
+          orphanChromeAfterKill,
+          flushWaitMs,
+          firstBrowserCommandExitCode: firstGotoA.exitCode,
+          firstBrowserCommandExitCodeB: firstGotoB.exitCode,
+          oldChromeGone,
+          oldChromeTreeCount: oldChromeTree.length,
+          tabBindingsBefore,
+          tabBindingsAfter,
+          profileBindingsBefore,
+          profileBindingsAfter,
+          paneBindingBefore,
+          paneBindingAfter,
+          paneTabId: paneTabAfter.id,
+          worktreeBMarkerBefore,
+          worktreeBMarkerAfter,
+          beforeSample,
+          afterSample,
+          userAgentAfterRestart,
+          shimLogsEmpty: shimLogs.empty,
+          orcaLog: shimLogs.orcaLog,
+          securityLog: shimLogs.securityLog
+        }
+      } finally {
+        if (renderer) {
+          await renderer.close()
+          if (c.state.watchRenderer === renderer) delete c.state.watchRenderer
+        }
       }
     }
   },
