@@ -248,6 +248,7 @@ describe('commenting and sending', () => {
 
     const send = q<HTMLButtonElement>(element, 'button[aria-label="Send 2 notes to agent"]')!
     expect(text(send)).toBe('Send 2 notes to agent ▾')
+    expect(send.classList.contains('ui-icon-button')).toBe(false)
     await click(send)
     const menu = q(document.body, '[role="menu"]')!
     const target = qa<HTMLButtonElement>(menu, '[role="menuitem"]').find((item) => text(item).startsWith('Claude'))!

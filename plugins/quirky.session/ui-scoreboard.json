@@ -303,7 +303,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+          "quote": "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -323,7 +323,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+          "quote": "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -343,7 +343,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+          "quote": "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -363,7 +363,7 @@
         },
         "import": {
           "file": "plugins/quirky.session/src/window/chat/ChatView.tsx",
-          "quote": "import { EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'"
+          "quote": "import { EmptyState, InlineError, NoticeLine } from '@quirky/ui'"
         }
       }
     },
@@ -766,6 +766,14 @@
       },
       "anchor": "readiness.ready ?",
       "reason": "Shows the agent's default model when it can start, otherwise why it cannot; both come from the agent catalog."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+        "quote": "{heading && <h3 style={title}>New chat</h3>}"
+      },
+      "anchor": "heading &&",
+      "reason": "Drops the picker's own title when a dialog already titles it; it is layout, not a read state."
     },
     {
       "site": {

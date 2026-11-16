@@ -67,7 +67,7 @@ function BlockView({
     case 'activity':
       return <Activity calls={block.calls} />
     case 'file-change':
-      return <FileChange item={block.item} />
+      return <FileChange item={block.item} root={session.cwd} />
     case 'tests':
       return <TestResults item={block.item} />
     case 'steps':

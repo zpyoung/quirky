@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { ContextMenu, IconButton, StatusDot } from '@quirky/ui'
+import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react'
+import { Button, ContextMenu, IconButton, StatusDot } from '@quirky/ui'
 import type { ContextMenuItem, UiStatus } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { NoteTarget } from '../daemon/targets'
@@ -103,6 +103,18 @@ type Props = {
   children?: ReactNode
   /** Opens in answer to `postSendRequest`; enable on one instance per window. */
   respondToRequest?: boolean
+  /** Renders a labelled button that sizes to its text, for hosts without the panel's icon-button overrides. */
+  inline?: boolean
+}
+
+type TriggerProps = ComponentProps<typeof IconButton>
+
+function InlineTrigger({ label, children, title, disabled, onClick, 'aria-haspopup': haspopup }: TriggerProps) {
+  return (
+    <Button aria-label={label} aria-haspopup={haspopup} title={title} disabled={disabled} onClick={onClick}>
+      {children}
+    </Button>
+  )
 }
 
 /**
@@ -110,7 +122,8 @@ type Props = {
  * left out of every scope, so the trigger reads "Sending…" while all of them are on their way
  * and "All notes sent" when none are left. Sending toasts its progress and its failure.
  */
-export function SendMenu({ context, worktree, scopes, ariaLabel, children, respondToRequest }: Props) {
+export function SendMenu({ context, worktree, scopes, ariaLabel, children, respondToRequest, inline }: Props) {
+  const Trigger = inline ? InlineTrigger : IconButton
   useSyncExternalStore(subscribe, () => heldVersion)
   const pending = useSyncExternalStore(subscribe, NO_REQUEST)
   const anchor = useRef<HTMLSpanElement>(null)
@@ -168,7 +181,7 @@ export function SendMenu({ context, worktree, scopes, ariaLabel, children, respo
   return (
     <>
       <span ref={anchor}>
-        <IconButton
+        <Trigger
           label={ariaLabel ?? 'Send notes to an agent'}
           aria-haspopup="menu"
           title={deliverable ? 'Send notes to an agent' : idle}
@@ -176,7 +189,7 @@ export function SendMenu({ context, worktree, scopes, ariaLabel, children, respo
           onClick={() => void show()}
         >
           {children ?? '➤'}
-        </IconButton>
+        </Trigger>
       </span>
       {menu && <ContextMenu x={menu.x} y={menu.y} label="Send notes" items={entries(menu.targets)} onClose={() => setMenu(null)} />}
     </>

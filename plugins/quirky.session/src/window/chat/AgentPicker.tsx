@@ -90,7 +90,8 @@ export function AgentPicker({
   worktree,
   picks = NO_PICKS,
   onCreated,
-  onError
+  onError,
+  heading = true
 }: {
   context: UiPluginContext
   worktree: string
@@ -98,6 +99,8 @@ export function AgentPicker({
   onCreated: (session: Session) => void
   /** Receives a failed create's message instead of the default toast. */
   onError?: (message: string) => void
+  /** False when the host already titles the picker, such as a dialog. */
+  heading?: boolean
 }) {
   const cards = useCards(context)
   const [starting, setStarting] = useState<string | null>(null)
@@ -116,7 +119,7 @@ export function AgentPicker({
 
   return (
     <section style={layout} aria-label="New chat">
-      <h3 style={title}>New chat</h3>
+      {heading && <h3 style={title}>New chat</h3>}
       <p style={lead}>Pick an agent. It works in this worktree, and you can switch to its terminal anytime.</p>
       {cards === null && <NoticeLine><span role="status">Loading agents…</span></NoticeLine>}
       <div style={grid} role="group" aria-label="Agents">

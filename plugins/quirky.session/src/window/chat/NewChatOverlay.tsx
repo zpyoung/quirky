@@ -19,6 +19,7 @@ export function NewChatOverlay({ context }: { context: UiPluginContext }) {
       )}
       {created === null && (
         <AgentPicker
+          heading={false}
           key={dialog.id}
           context={context}
           worktree={dialog.workspace}
