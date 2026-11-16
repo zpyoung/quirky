@@ -1,0 +1,46 @@
+{
+  "title": "Bundle size by route",
+  "root": {
+    "type": "stack",
+    "children": [
+      {
+        "type": "columns",
+        "children": [
+          { "type": "stat", "props": { "label": "Total (gzip)", "value": "412 KB" } },
+          { "type": "stat", "props": { "label": "vs main", "value": "+38 KB", "tone": "bad" } },
+          { "type": "stat", "props": { "label": "Largest route", "value": "/settings" } }
+        ]
+      },
+      {
+        "type": "bar-chart",
+        "props": {
+          "unit": "KB",
+          "series": [
+            { "label": "/settings", "value": 96 },
+            { "label": "/dashboard", "value": 71 },
+            { "label": "/webhooks", "value": 44 },
+            { "label": "/login", "value": 18 }
+          ]
+        }
+      },
+      {
+        "type": "table",
+        "props": {
+          "columns": ["New in /settings", "Size", "Added"],
+          "rows": [
+            ["date-fns-tz", "21 KB", "Nov 12"],
+            ["zxcvbn", "14 KB", "Nov 13"],
+            ["@headlessui/react", "3 KB", "Nov 14"]
+          ]
+        }
+      },
+      {
+        "type": "columns",
+        "children": [
+          { "type": "button", "props": { "label": "Lazy-load zxcvbn", "action": "lazy-load-zxcvbn", "variant": "primary" } },
+          { "type": "button", "props": { "label": "Replace date-fns-tz", "action": "replace-date-fns-tz", "variant": "ghost" } }
+        ]
+      }
+    ]
+  }
+}
