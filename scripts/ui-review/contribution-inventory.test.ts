@@ -159,6 +159,9 @@ describe('projected contribution inventory', () => {
   test('reconciles five sidebar navigation aliases while keeping declarations and independently mounted activity items', () => {
     const { targets, contributionInventory } = projectCaptureInventory(fivePairModel())
     const aliasIds = fiveMappings.map(([declarationId]) => declarationId).sort()
+    const expectedMappings = fiveMappings
+      .map(([declarationId, toolId, renderedTargetId]) => ({ declarationId, toolId, renderedTargetId }))
+      .sort((left, right) => left.declarationId < right.declarationId ? -1 : left.declarationId > right.declarationId ? 1 : 0)
 
     expect(aliasIds.every((id) => !targets.some((target) => target.id === id))).toBe(true)
     expect(contributionInventory.toolAliases.map(({ declaration }) => declaration.id)).toEqual(aliasIds)
@@ -172,6 +175,11 @@ describe('projected contribution inventory', () => {
     expect(targets.map(({ id }) => id)).toContain('sidebar-section:acme.extras/ordinary')
     expect(targets.map(({ id }) => id)).toContain('activity-item:acme.extras/activity')
     expect(targets.map(({ id }) => id)).toContain('panel:acme.extras/activity-body')
+    expect(contributionInventory.toolAliases.map(({ declaration, toolId, renderedTarget }) => ({
+      declarationId: declaration.id,
+      toolId,
+      renderedTargetId: renderedTarget.id
+    }))).toEqual(expectedMappings)
     expect(contributionInventory.toolAliases).toEqual(contributionInventory.toolAliases.map((alias) => ({
       declaration: alias.declaration,
       toolId: alias.toolId,
@@ -211,6 +219,11 @@ describe('contribution inventory validation and scope', () => {
   function validInventory() {
     return projectCaptureInventory(aliasModel())
   }
+  function replaceTarget(targets: CaptureTarget[], id: string, replacement: CaptureTarget): void {
+    const index = targets.findIndex((target) => target.id === id)
+    if (index < 0) throw new Error(`missing target fixture: ${id}`)
+    targets[index] = replacement
+  }
 
   test('validates a complete declaration partition and scopes exact bodies with their aliases', () => {
     const { targets, contributionInventory } = validInventory()
@@ -234,36 +247,62 @@ describe('contribution inventory validation and scope', () => {
   })
 
   test.each([
-    ['missing metadata', (inventory: ContributionInventory) => { delete (inventory as unknown as Record<string, unknown>).toolAliases }],
-    ['duplicate declarations', (inventory: ContributionInventory) => { inventory.declaredTargets.push({ ...inventory.declaredTargets[0] }) }],
-    ['duplicate alias records', (inventory: ContributionInventory) => { inventory.toolAliases.push({ ...inventory.toolAliases[0] }) }],
-    ['forged ordinary alias', (inventory: ContributionInventory) => { inventory.toolAliases[0].declaration.kind = 'activity-item' }],
-    ['wrong body kind', (inventory: ContributionInventory) => { inventory.toolAliases[0].renderedTarget.kind = 'sidebar-section' }],
-    ['different logical owner', (inventory: ContributionInventory) => { inventory.toolAliases[0].renderedTarget.plugin = 'another.owner' }],
-    ['self alias', (inventory: ContributionInventory) => { inventory.toolAliases[0].renderedTarget = { ...inventory.toolAliases[0].declaration } }],
-    ['chain', (inventory: ContributionInventory) => {
+    ['missing metadata', (inventory: ContributionInventory, _targets: CaptureTarget[]) => { delete (inventory as unknown as Record<string, unknown>).toolAliases }, 'metadata must contain only declaredTargets and toolAliases'],
+    ['duplicate declarations', (inventory: ContributionInventory, _targets: CaptureTarget[]) => {
+      const declaration = inventory.declaredTargets[0]
+      inventory.declaredTargets.splice(1, 0, { ...declaration })
+    }, 'duplicate declared target ID'],
+    ['duplicate alias records', (inventory: ContributionInventory, _targets: CaptureTarget[]) => { inventory.toolAliases.push({ ...inventory.toolAliases[0] }) }, 'duplicate alias declaration'],
+    ['forged ordinary alias', (inventory: ContributionInventory, targets: CaptureTarget[]) => {
+      const previous = inventory.toolAliases[0].declaration
+      const replacement = captureTarget('activity-item:acme.owner/navigation', 'activity-item')
+      inventory.toolAliases[0].declaration = replacement
+      replaceTarget(inventory.declaredTargets, previous.id, replacement)
+      inventory.declaredTargets.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+      targets.push(replacement)
+    }, 'invalid alias declaration or rendered body kind'],
+    ['wrong body kind', (inventory: ContributionInventory, targets: CaptureTarget[]) => {
+      const previous = inventory.toolAliases[0].renderedTarget
+      const replacement = captureTarget('sidebar-section:acme.owner/page', 'sidebar-section')
+      inventory.toolAliases[0].renderedTarget = replacement
+      replaceTarget(inventory.declaredTargets, previous.id, replacement)
+      inventory.declaredTargets.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
+      replaceTarget(targets, previous.id, replacement)
+    }, 'invalid alias declaration or rendered body kind'],
+    ['different tool owner', (inventory: ContributionInventory, _targets: CaptureTarget[]) => {
+      inventory.toolAliases[0].toolId = 'sidebar-section:another.owner/navigation'
+    }, 'alias ownership does not match its tool and rendered body'],
+    ['self alias', (inventory: ContributionInventory, _targets: CaptureTarget[]) => { inventory.toolAliases[0].renderedTarget = { ...inventory.toolAliases[0].declaration } }, 'self-alias cycle'],
+    ['chain', (inventory: ContributionInventory, _targets: CaptureTarget[]) => {
       inventory.toolAliases.push({
         ...inventory.toolAliases[0],
         declaration: { ...inventory.toolAliases[0].declaration, id: 'sidebar-section:acme.owner/second' },
         renderedTarget: { ...inventory.toolAliases[0].declaration }
       })
-    }],
-    ['cycle', (inventory: ContributionInventory) => {
+    }, 'alias chain maps through another declaration'],
+    ['cycle', (inventory: ContributionInventory, _targets: CaptureTarget[]) => {
       const first = inventory.toolAliases[0]
       const secondDeclaration = { ...first.declaration, id: 'sidebar-section:acme.owner/second' }
       inventory.toolAliases = [
         { ...first, renderedTarget: secondDeclaration },
         { ...first, declaration: secondDeclaration, renderedTarget: first.declaration }
       ]
-    }],
-    ['alias extra fields', (inventory: ContributionInventory) => { (inventory.toolAliases[0] as unknown as Record<string, unknown>).score = 90 }],
-    ['incomplete declaration partition', (inventory: ContributionInventory) => { inventory.declaredTargets.pop() }]
-  ])('rejects %s inventory evidence', (_name, mutate) => {
+    }, 'cyclic alias mapping'],
+    ['alias extra fields', (inventory: ContributionInventory, _targets: CaptureTarget[]) => { (inventory.toolAliases[0] as unknown as Record<string, unknown>).score = 90 }, 'malformed tool alias 0'],
+    ['incomplete declaration partition', (_inventory: ContributionInventory, targets: CaptureTarget[]) => {
+      const index = targets.findIndex(({ id }) => id === 'host:shell')
+      if (index < 0) throw new Error('missing host target fixture')
+      targets.splice(index, 1)
+    }, 'declaration is missing from the target partition']
+  ])('rejects %s inventory evidence', (_name, mutate, expectedReason) => {
     const { targets, contributionInventory } = validInventory()
     const changed = structuredClone(contributionInventory) as ContributionInventory
-    if (typeof mutate === 'function') mutate(changed)
+    mutate(changed, targets)
 
-    expect(() => validateContributionInventory(changed, targets)).toThrow(/inventory|alias|ownership|partition|cycle|chain|self|kind|target/i)
+    const escapedReason = expectedReason.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    expect(() => validateContributionInventory(changed, targets)).toThrow(
+      new RegExp(`^invalid-contribution-inventory: ${escapedReason}(?: \\(|$)`)
+    )
   })
 
   test('rejects duplicate and runtime-only projected targets', () => {
@@ -278,8 +317,13 @@ describe('contribution inventory validation and scope', () => {
 describe('capture visibility gates', () => {
   test('sets only declared visibility booleans, verifies effective values, then refetches the model', async () => {
     const ids = ['setting:quirky.agent-status/dashboard-enabled', 'setting:acme.plugin/other-gate']
+    const unrelatedId = 'setting:acme.plugin/unrelated-enabled'
     const initial = visibleModel([...ids].reverse())
     const refreshed = visibleModel([...ids].reverse())
+    const unrelatedSetting = setting(unrelatedId) as UiModel['settings'][number]
+    initial.settings.push(unrelatedSetting)
+    refreshed.settings.push({ ...unrelatedSetting })
+    addSlot(refreshed, 'sidebar-section:quirky.agent-status/dashboard')
     const calls: Array<{ method: string; params: Record<string, unknown> }> = []
     const result = await enableCaptureVisibilitySettings(initial, async (method, params) => {
       calls.push({ method, params })
@@ -293,6 +337,12 @@ describe('capture visibility gates', () => {
       { method: 'setting.set', params: { id: 'setting:quirky.agent-status/dashboard-enabled', value: true } },
       { method: 'ui.contributions', params: {} }
     ])
+    expect(initial.visibilitySettings).not.toContain(unrelatedId)
+    expect(refreshed.visibilitySettings).not.toContain(unrelatedId)
+    expect(initial.settings.find(({ id }) => id === unrelatedId)).toMatchObject({ type: 'boolean', default: false })
+    expect(refreshed.settings.find(({ id }) => id === unrelatedId)).toMatchObject({ type: 'boolean', default: false })
+    expect(result.model).toBe(refreshed)
+    expect(discoverCaptureTargets(result.model).map(({ id }) => id)).toContain('sidebar-section:quirky.agent-status/dashboard')
     expect(result).toEqual({ model: refreshed, activatedVisibilitySettings: [...ids].sort() })
   })
 

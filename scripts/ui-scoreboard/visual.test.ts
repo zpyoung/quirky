@@ -627,52 +627,52 @@ describe('visual scoreboard measurement', () => {
   })
 
   type ContributionMutation = (source: Inventory, manifest: CaptureManifest, body: CaptureTarget, declaration: CaptureTarget) => void
-  const contributionMutations: Array<[string, ContributionMutation]> = [
-    ['missing a declared target', (source: Inventory, manifest: CaptureManifest) => {
+  const contributionMutations: Array<[string, string, ContributionMutation]> = [
+    ['missing a declared target', 'contribution-inventory', (source: Inventory, manifest: CaptureManifest) => {
       const omitted = source.targets.find((target) => target.id === 'sidebar-section:quirky.agent-status/dashboard')!
       manifest.targets = manifest.targets.filter((target) => target.id !== omitted.id)
       manifest.captures = manifest.captures.filter((capture) => capture.targetId !== omitted.id)
     }],
-    ['deleting the runtime alias record', (_source: Inventory, manifest: CaptureManifest) => {
+    ['deleting the runtime alias record', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
       ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases = []
     }],
-    ['deleting the source alias record', (source: Inventory) => {
+    ['deleting the source alias record', 'contribution-inventory', (source: Inventory) => {
       ;(source as Inventory & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases = []
     }],
-    ['omitting runtime metadata from a legacy capture when source aliases exist', (_source: Inventory, manifest: CaptureManifest) => {
+    ['omitting runtime metadata from a legacy capture when source aliases exist', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
       delete (manifest as CaptureManifest & { contributionInventory?: TestContributionInventory }).contributionInventory
     }],
-    ['forging an alias for an ordinary target', (_source: Inventory, manifest: CaptureManifest, body: CaptureTarget) => {
+    ['forging an alias for an ordinary target', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest, body: CaptureTarget) => {
       ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases.push({
         declaration: body, toolId: body.id, renderedTarget: body, reason: 'tool-navigation-alias'
       })
     }],
-    ['changing the alias body', (_source: Inventory, manifest: CaptureManifest) => {
+    ['changing the alias body', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
       ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!.renderedTarget.id = 'view:acme.ui/unknown'
     }],
-    ['changing the tool ID', (_source: Inventory, manifest: CaptureManifest) => {
+    ['changing the tool ID', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
       ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!.toolId = 'panel:acme.ui/forged'
     }],
-    ['changing the alias owner', (_source: Inventory, manifest: CaptureManifest) => {
+    ['changing the alias owner', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
       ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!.renderedTarget.plugin = 'acme.other'
     }],
-    ['changing the declaration kind', (_source: Inventory, manifest: CaptureManifest) => {
+    ['changing the declaration kind', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
       ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!.declaration.kind = 'activity-item'
     }],
-    ['duplicating an alias record', (_source: Inventory, manifest: CaptureManifest) => {
+    ['duplicating an alias record', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
       const aliases = (manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases
       aliases.push(structuredClone(aliases[0]!))
     }],
-    ['creating a self-alias', (_source: Inventory, manifest: CaptureManifest) => {
+    ['creating a self-alias', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
       const alias = (manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!
       alias.renderedTarget = structuredClone(alias.declaration)
     }],
-    ['adding a capture row for an alias declaration', (_source: Inventory, manifest: CaptureManifest, _body: CaptureTarget, declaration: CaptureTarget) => {
+    ['adding a capture row for an alias declaration', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest, _body: CaptureTarget, declaration: CaptureTarget) => {
       const capture = manifest.captures[0]!
       manifest.captures.push({ ...capture, targetId: declaration.id, theme: 'dark' })
     }]
   ]
-  test.each(contributionMutations)('rejects contribution mutation: %s', async (_description, mutate) => {
+  test.each(contributionMutations)('rejects contribution mutation: %s', async (_description, expectedCode, mutate) => {
     const { source, body, declaration } = projectedInventory(true)
     const manifest = projectedManifest(source)
     mutate(source, manifest, body, declaration)
@@ -686,10 +686,32 @@ describe('visual scoreboard measurement', () => {
     })
 
     expect(result.operationalError).toBe(true)
-    expect(result.failures.some((failure) =>
-      failure.code === 'contribution-inventory' || failure.code === 'target-ownership' || failure.code === 'invalid-capture-cell'
-    )).toBe(true)
+    expect(result.failures.some((failure) => failure.code === expectedCode)).toBe(true)
     expect(reviewCalls).toBe(0)
+  })
+
+  test('duplicate cells fail with contribution metadata while other projected targets remain reviewable', async () => {
+    const { source, body } = projectedInventory()
+    const manifest = projectedManifest(source)
+    const duplicate = manifest.captures.find((capture) => capture.targetId === body.id && capture.theme === 'dark')!
+    manifest.captures.push({ ...duplicate })
+    const reviewedTargets: string[] = []
+
+    const result = await measureVisuals(source, options(), {
+      capture: async () => manifest,
+      review: async (filtered) => {
+        reviewedTargets.push(filtered.targets[0]!.id)
+        return reviewReport(filtered)
+      }
+    })
+
+    expect(manifest.contributionInventory!.toolAliases).toHaveLength(5)
+    expect(result.failures).toEqual([])
+    expect(result.operationalError).toBe(false)
+    expect(cell(result, body.id, 'dark')).toMatchObject({ status: 'fail', code: 'duplicate-cell', score: null })
+    expect(cell(result, body.id, 'light')).toMatchObject({ status: 'fail', code: 'review-not-completed', score: null })
+    expect(reviewedTargets.sort()).toEqual(source.targets.filter((target) => target.id !== body.id).map((target) => target.id).sort())
+    expect(result.cells.filter((visual) => visual.targetId !== body.id).every((visual) => visual.status === 'pass')).toBe(true)
   })
 
   test('runtime-only contributions remain ownership failures and are never reviewed', async () => {
