@@ -8,6 +8,9 @@ export class KittyFlags {
   get flags(): number {
     return this.stack.at(-1) ?? 0
   }
+  reset(): void {
+    this.stack.length = 0
+  }
 
   push(flags: number): void {
     this.stack.push(flags)
@@ -22,12 +25,13 @@ export class KittyFlags {
     const current = this.flags
     const next = mode === 2 ? current | flags : mode === 3 ? current & ~flags : flags
     if (this.stack.length === 0) this.stack.push(next)
-    else this.stack[this.stack.length - 1] = next
+    else this.stack.splice(this.stack.length - 1, 1, next)
   }
 }
 
 type CsiParser = {
   registerCsiHandler(id: { prefix?: string; final: string }, callback: (params: (number | number[])[]) => boolean): { dispose(): void }
+  registerEscHandler?(id: { intermediates?: string; final: string }, callback: () => boolean): { dispose(): void }
 }
 
 /** Follows the keyboard protocol sequences the program writes to `parser`. */
@@ -52,5 +56,10 @@ export function trackKittyFlags(parser: CsiParser): { kitty: KittyFlags; dispose
       return true
     })
   ]
+  const esc = parser.registerEscHandler?.({ final: 'c' }, () => {
+    kitty.reset()
+    return false
+  })
+  if (esc) handlers.push(esc)
   return { kitty, dispose: () => handlers.forEach((handler) => handler.dispose()) }
 }

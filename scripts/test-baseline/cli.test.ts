@@ -3,6 +3,8 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { bunTestFile } from '../suite'
+import { BUDGETS, METRICS, type SpeedReport } from '../speed/contracts'
+import { runCi } from '../speed/ci'
 import { type Context, runCli } from './cli'
 import type { Attempt, Baseline, FileError, FileResult, GhRunner, Plan, Selection, TestStatus, Verdict } from './types'
 
@@ -534,6 +536,68 @@ describe('run-shard', () => {
     expect(calls.files.filter((f) => f === 'm1.test.ts')).toHaveLength(2)
   })
 
+  test('run-shard applies test-alone entries to both macOS and Linux jobs', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const linuxFiles = ['linux-a.test.ts', 'linux-alone.test.ts', 'linux-b.test.ts', 'linux-c.test.ts']
+    const macosFiles = ['macos-a.test.ts', 'macos-alone.test.ts', 'macos-b.test.ts']
+    writePlan(planDir, planOf({ linuxShards: [linuxFiles], macos: macosFiles }))
+    put(cwd, 'scripts/test-alone.txt', [
+      '# Files that need an uncontended first attempt.',
+      'linux-alone.test.ts fails beside other files',
+      'macos-alone.test.ts fails beside other files',
+      'not-in-this-job.test.ts ignored when absent'
+    ].join('\n'))
+
+    const linuxCalls: Calls = { files: [], active: 0, maxActive: 0 }
+    const linuxHarness = harness(cwd, {
+      run: fakeRun(Object.fromEntries(linuxFiles.map((file) => [file, [{ ok: 'pass' as const }]])), linuxCalls)
+    })
+    const linuxOut = join(dirOf('out'), 'linux.json')
+    expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', linuxOut], linuxHarness.ctx)).toBe(0)
+    expect(linuxCalls.files).toEqual(['linux-alone.test.ts', 'linux-a.test.ts', 'linux-b.test.ts', 'linux-c.test.ts'])
+    expect(readJson<FileResult[]>(linuxOut).map((result) => result.file)).toEqual(linuxFiles)
+    expect(linuxHarness.err).toEqual(['::group::linux-alone.test.ts passed alone\n\n::endgroup::\n'])
+
+    const macosCalls: Calls = { files: [], active: 0, maxActive: 0 }
+    const macosHarness = harness(cwd, {
+      run: fakeRun(Object.fromEntries(macosFiles.map((file) => [file, [{ ok: 'pass' as const }]])), macosCalls)
+    })
+    const macosOut = join(dirOf('out'), 'macos.json')
+    expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', macosOut], macosHarness.ctx)).toBe(0)
+    expect(macosCalls.files).toEqual(['macos-alone.test.ts', 'macos-a.test.ts', 'macos-b.test.ts'])
+    expect(readJson<FileResult[]>(macosOut).map((result) => result.file)).toEqual(macosFiles)
+    expect(macosHarness.err).toEqual(['::group::macos-alone.test.ts passed alone\n\n::endgroup::\n'])
+  })
+
+  test('a missing or empty test-alone list leaves a macOS shard unchanged', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const files = ['m1.test.ts', 'm2.test.ts', 'm3.test.ts', 'm4.test.ts']
+    writePlan(planDir, planOf({ macos: files }))
+    const listPath = join(cwd, 'scripts/test-alone.txt')
+
+    for (const contents of [undefined, '']) {
+      if (contents === undefined) {
+        if (existsSync(listPath)) rmSync(listPath)
+      } else {
+        put(cwd, 'scripts/test-alone.txt', contents)
+      }
+      const calls: Calls = { files: [], active: 0, maxActive: 0 }
+      const { ctx, err } = harness(cwd, {
+        run: fakeRun(Object.fromEntries(files.map((file) => [file, [{ ok: 'pass' as const }]])), calls)
+      })
+      const out = join(dirOf('out'), `macos-${contents === undefined ? 'missing' : 'empty'}.json`)
+
+      expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', out], ctx)).toBe(0)
+      expect(calls.files).toEqual(files)
+      expect(calls.maxActive).toBe(3)
+      expect(readJson<FileResult[]>(out).map((result) => result.file)).toEqual(files)
+      expect(err).toEqual([])
+    }
+  })
+
+
   test('a shard index outside the plan is an argument error', async () => {
     const planDir = dirOf('plan')
     writePlan(planDir, planOf())
@@ -800,6 +864,86 @@ describe('verdict', () => {
   })
 })
 
+describe('advisory speed evidence', () => {
+  for (const fails of [false, true]) {
+    for (const evidence of ['missing', 'malformed', 'failed', 'cancelled']) {
+      test(`${evidence} speed does not change ${fails ? 'failing' : 'passing'} unit verdict`, async () => {
+        const planDir = dirOf('plan')
+        const inDir = dirOf('results')
+        const outDir = dirOf('out')
+        const speed = dirOf('speed')
+        writePlan(planDir, planOf())
+        writeFileSync(join(inDir, 'linux.json'), JSON.stringify([fileResult('a.test.ts', attempt({ check: fails ? 'fail' : 'pass' }))]))
+        if (evidence === 'malformed') writeFileSync(join(speed, 'report.json'), '{')
+        if (evidence === 'failed' || evidence === 'cancelled') writeFileSync(join(speed, 'comparison.json'), JSON.stringify({ status: 'error', reason: evidence }))
+        const h = harness(dirOf('cwd'))
+        const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], h.ctx)
+        expect(code).toBe(fails ? 1 : 0)
+        const verdict = readJson<Verdict>(join(outDir, 'verdict.json'))
+        expect(verdict.runBroken).toBe(false)
+        const comment = readFileSync(join(outDir, 'comment.md'), 'utf8')
+        expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
+        expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
+        expect(comment).toContain('not measured:')
+      })
+    }
+  }
+  for (const fails of [false, true]) {
+    test(`a paired speed regression remains advisory with ${fails ? 'failing' : 'passing'} units`, async () => {
+      const planDir = dirOf('plan')
+      const inDir = dirOf('results')
+      const outDir = dirOf('out')
+      const speed = dirOf('speed')
+      writePlan(planDir, planOf({ head: sha(8) }))
+      writeFileSync(join(inDir, 'linux.json'), JSON.stringify([fileResult('a.test.ts', attempt({ check: fails ? 'fail' : 'pass' }))]))
+      const current: SpeedReport = {
+        version: 1, commit: sha(9), runId: '123', createdAt: NOW.toISOString(), status: 'complete', qualified: true,
+        profile: { workloadVersion: 1, worktrees: 10, terminals: 20, diffAddedLines: 5000, renderer: 'dom', viewport: { width: 1400, height: 880 }, startup: 'daemon-restart-persistent-pty-fresh-context', floodChunkBytes: 65536, floodIntervalMs: 16, runner: 'macos-15', os: 'darwin', arch: 'arm64', cpuModel: 'CPU', cpuCount: 4, bun: '1.4.0', chromium: 'test', imageVersion: 'test' },
+        metrics: Object.fromEntries(METRICS.map(metric => [metric, { samplesMs: Array(20).fill(50.001), medianMs: 50.001, budgetMs: BUDGETS[metric], budgetMiss: 50.001 > BUDGETS[metric] }])) as SpeedReport['metrics'],
+        failures: [], cleanup: 'complete', evidence: { samples: 'samples.jsonl', diagnostics: ['diagnostics/echo.json'], misses: 'misses.json' },
+      }
+      const pair = {
+        version: 1,
+        runId: current.runId,
+        createdAt: current.createdAt,
+        status: 'complete',
+        qualified: true,
+        head: { commit: current.commit },
+        base: { commit: sha(1), basis: 'merge-base' },
+        metrics: Object.fromEntries(METRICS.map(metric => {
+          const pairs = metric === 'startup' || metric === 'diff' ? 20 : 60
+          return [metric, { headSamplesMs: Array(pairs).fill(52), baseSamplesMs: Array(pairs).fill(40) }]
+        })),
+        failures: [],
+        evidence: { samples: 'pair-samples.jsonl' },
+      }
+      const finding = 'Observed echo acknowledgement delay in the diagnostic trial.'
+      const miss = {
+        metric: 'echo', budgetMs: BUDGETS.echo, medianMs: 50.001, commit: current.commit, runId: current.runId,
+        samples: current.evidence.samples, diagnostics: ['diagnostics/echo.json'], finding,
+      }
+      writeFileSync(join(speed, 'report.json'), JSON.stringify(current))
+      writeFileSync(join(speed, 'pair.json'), JSON.stringify(pair))
+      writeFileSync(join(speed, 'misses.json'), JSON.stringify([miss]))
+      expect(await runCi([
+        'compare', '--current', join(speed, 'report.json'), '--pair', join(speed, 'pair.json'),
+        '--out', speed, '--head', current.commit,
+      ], { cwd: dirOf('ci-cwd'), err: () => {} })).toBe(0)
+      expect(existsSync(join(speed, 'baseline.json'))).toBe(false)
+
+      const code = await runCli(['verdict', '--plan', planDir, '--in', inDir, '--out', outDir, '--jobs-ok', 'true', '--speed', speed], harness(dirOf('cwd'), { env: { SPEED_HEAD: sha(9) } }).ctx)
+      expect(code).toBe(fails ? 1 : 0)
+      expect(readJson<Verdict>(join(outDir, 'verdict.json')).runBroken).toBe(false)
+      const comment = readFileSync(join(outDir, 'comment.md'), 'utf8')
+      expect(comment.startsWith('<!-- test-baseline-verdict -->')).toBe(true)
+      expect(comment.match(/^### Speed$/gm)).toHaveLength(1)
+      expect(comment).toContain('REGRESSION')
+      expect(comment).toContain(finding)
+      expect(comment).toContain(fails ? '## Tests failed' : '## Tests passed')
+    })
+  }
+})
+
 describe('verdict without bun install', () => {
   const HERE = import.meta.dir
   const staticImports = (source: string) =>
@@ -807,8 +951,8 @@ describe('verdict without bun install', () => {
 
   test('cli.ts statically imports only node built-ins and dependency-free modules', () => {
     const specs = staticImports(readFileSync(join(HERE, 'cli.ts'), 'utf8'))
-    const allowed = new Set(['./baseline', './compare', './issues', './report', './select', './shards'])
-    for (const spec of specs) expect(spec.startsWith('node:') || allowed.has(spec)).toBe(true)
+    const allowed: Record<string, true> = { './baseline': true, './compare': true, './issues': true, './report': true, './select': true, './shards': true, '../speed/ci': true }
+    for (const spec of specs) expect(spec.startsWith('node:') || allowed[spec] === true).toBe(true)
     expect(specs).not.toContain('./runner')
     expect(specs).not.toContain('./graph')
     expect(specs.some((spec) => spec.includes('suite'))).toBe(false)
@@ -827,6 +971,9 @@ describe('verdict without bun install', () => {
     const lib = join(dirOf('lib'), 'scripts', 'test-baseline')
     mkdirSync(lib, { recursive: true })
     for (const name of ['cli', 'baseline', 'compare', 'issues', 'report', 'select', 'shards', 'types']) copyFileSync(join(HERE, `${name}.ts`), join(lib, `${name}.ts`))
+    const speedLib = join(lib, '..', 'speed')
+    mkdirSync(speedLib)
+    for (const name of ['ci', 'contracts', 'report']) copyFileSync(join(HERE, '..', 'speed', `${name}.ts`), join(speedLib, `${name}.ts`))
     const planDir = dirOf('plan')
     const inDir = dirOf('in')
     const outDir = join(dirOf('o'), 'verdict')

@@ -1,0 +1,331 @@
+{
+ "feature": "Worktrees",
+ "failures": [
+  "view:quirky.worktree/environments: light 76 below 85",
+  "sidebar-section:quirky.worktree/worktrees: dark 74 below 85; light 46 below 85; light 46 below before 74",
+  "sidebar-section:quirky.worktree/remote-workspaces: dark 73 below 85",
+  "g7 Put a worktree to sleep, then wake it: Sleep dims the row and Wake restores it on screen, but the harness got no OBSERVED act (Sleep UNSETTLED, Wake NO_EFFECT), so the replay can't prove it",
+  "g12 Put worktrees from two different projects into one group: The cross-project section was created and filled on screen, but every Move to section act returned UNSETTLED (running-terminal spinners), so the replay can't prove it"
+ ],
+ "goals": [
+  {
+   "id": "g1",
+   "title": "Create a new worktree in a project",
+   "tag": "fixture",
+   "before": "img/current/05-worktree-created.png",
+   "after": "img/after/05-worktree-created.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g2",
+   "title": "Switch to another worktree and see it open in the center",
+   "tag": "fixture",
+   "before": "img/current/06-switch-worktree-hover-actions.png",
+   "after": "img/after/06-switch-worktree-hover-actions.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g3",
+   "title": "Rename a worktree",
+   "tag": "fixture",
+   "before": "img/current/09-renamed-display-name.png",
+   "after": "img/after/09-renamed-display-name.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g4",
+   "title": "Pin a worktree, then unpin it",
+   "tag": "fixture",
+   "before": "img/current/10-pinned-section.png",
+   "after": "img/after/10-pinned-section.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g5",
+   "title": "Group the list by status and sort it by name",
+   "tag": "fixture",
+   "before": "img/current/14-group-by-status-sort-name.png",
+   "after": "img/after/14-group-by-status-sort-name.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g6",
+   "title": "Move a worktree to a different status",
+   "tag": "fixture",
+   "before": "img/current/16-moved-to-in-review.png",
+   "after": "img/after/16-moved-to-in-review.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g7",
+   "title": "Put a worktree to sleep, then wake it",
+   "tag": "fixture",
+   "before": "img/current/17-sleeping-row.png",
+   "after": "img/after/17-sleeping-row.png",
+   "result": "failed",
+   "reason": "Sleep dims the row and Wake restores it on screen, but the harness got no OBSERVED act (Sleep UNSETTLED, Wake NO_EFFECT), so the replay can't prove it"
+  },
+  {
+   "id": "g8",
+   "title": "Nest one worktree under another as its parent",
+   "tag": "fixture",
+   "before": "img/current/19-nested-child-worktree.png",
+   "after": "img/after/19-nested-child-worktree.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g9",
+   "title": "Delete a worktree",
+   "tag": "fixture",
+   "before": "img/current/21-after-delete.png",
+   "after": "img/after/21-after-delete.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g10",
+   "title": "Add a second project",
+   "tag": "fixture",
+   "before": "img/current/23-project-added-inbox-service.png",
+   "after": "img/after/23-project-added-inbox-service.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g11",
+   "title": "Review cleanup suggestions for archived worktrees",
+   "tag": "fixture",
+   "before": "img/current/26-review-cleanup-dialog.png",
+   "after": "img/after/26-review-cleanup-dialog.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g12",
+   "title": "Put worktrees from two different projects into one group",
+   "tag": "fixture",
+   "before": "img/current/31-cross-project-group.png",
+   "after": "img/after/31-cross-project-group.png",
+   "result": "failed",
+   "reason": "The cross-project section was created and filled on screen, but every Move to section act returned UNSETTLED (running-terminal spinners), so the replay can't prove it"
+  },
+  {
+   "id": "g13",
+   "title": "Tag two worktrees and filter the list to that tag",
+   "tag": "fixture",
+   "before": "img/current/35-command-palette-no-tag.png",
+   "after": "img/after/36-filtered-to-tag.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g14",
+   "title": "Group the list by tag",
+   "tag": "fixture",
+   "before": "img/current/13-workspace-options-expanded.png",
+   "after": "img/after/37-grouped-by-tag.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g15",
+   "title": "Save the current grouping and filters as a view, switch to it, then go back to all worktrees",
+   "tag": "fixture",
+   "before": "img/current/38-command-palette-no-saved-views.png",
+   "after": "img/after/38-saved-view-active.png",
+   "result": "replayed"
+  },
+  {
+   "id": "g16",
+   "title": "See a remote workspace and the VM environments list",
+   "tag": "real-app",
+   "before": "img/current/92-real-app-vm-environments-empty.png",
+   "after": "img/after/92-real-app-vm-environments.png",
+   "result": "replayed"
+  }
+ ],
+ "gate": {
+  "passed": false,
+  "floor": 85,
+  "rows": [
+   {
+    "id": "view:quirky.worktree/environments",
+    "before": {
+     "dark": 78,
+     "light": 64
+    },
+    "after": {
+     "dark": 87,
+     "light": 76
+    },
+    "result": "fails",
+    "reasons": [
+     "light 76 below 85"
+    ]
+   },
+   {
+    "id": "sidebar-section:quirky.worktree/worktrees",
+    "before": {
+     "dark": 73,
+     "light": 74
+    },
+    "after": {
+     "dark": 74,
+     "light": 46
+    },
+    "result": "fails",
+    "reasons": [
+     "dark 74 below 85",
+     "light 46 below 85",
+     "light 46 below before 74"
+    ]
+   },
+   {
+    "id": "sidebar-section:quirky.worktree/remote-workspaces",
+    "before": {
+     "dark": 72,
+     "light": 74
+    },
+    "after": {
+     "dark": 73,
+     "light": 89
+    },
+    "result": "fails",
+    "reasons": [
+     "dark 73 below 85"
+    ]
+   }
+  ]
+ },
+ "capabilities": [
+  {
+   "name": "Create worktree (Smart, GitHub, Branch, Name; Base; Agent; Advanced; Create more)",
+   "decision": "kept"
+  },
+  {
+   "name": "Select worktree",
+   "decision": "kept"
+  },
+  {
+   "name": "Rename display name, notes, linked references",
+   "decision": "moved",
+   "where": "the name is renamed inline; notes and links go to row `\u2026` \u203a More \u203a Details\u2026"
+  },
+  {
+   "name": "Archive",
+   "decision": "moved",
+   "where": "row `\u2026` \u203a More \u203a Archive"
+  },
+  {
+   "name": "Move to status",
+   "decision": "kept"
+  },
+  {
+   "name": "Open in Terminal or Changes",
+   "decision": "kept"
+  },
+  {
+   "name": "Copy path, copy worktree name",
+   "decision": "moved",
+   "where": "row `\u2026` \u203a Copy"
+  },
+  {
+   "name": "Pin, unpin",
+   "decision": "moved",
+   "where": "row `\u2026` \u203a More \u203a Pin or Unpin; a pinned worktree shows once"
+  },
+  {
+   "name": "Mark unread",
+   "decision": "moved",
+   "where": "row `\u2026` \u203a More"
+  },
+  {
+   "name": "Set parent worktree, remove from parent",
+   "decision": "moved",
+   "where": "row `\u2026` \u203a More; the child count sits on the parent row instead of its own line"
+  },
+  {
+   "name": "Sleep, wake",
+   "decision": "kept"
+  },
+  {
+   "name": "Delete with confirmation",
+   "decision": "kept"
+  },
+  {
+   "name": "Project groups (create, add worktree, move project, rename, delete, collapse, open ledger)",
+   "decision": "moved",
+   "where": "sections: section `+` creates one, Move to section or drag adds, and section `\u2026` renames, deletes and opens the ledger"
+  },
+  {
+   "name": "Add project (path or Browse)",
+   "decision": "moved",
+   "where": "header `\u2026` \u203a Add project, plus the empty state; the command stays"
+  },
+  {
+   "name": "Project settings, remove project, open ledger",
+   "decision": "kept"
+  },
+  {
+   "name": "Manual project order",
+   "decision": "moved",
+   "where": "project `\u2026` \u203a Move up and Move down, when Display \u203a Project order is Manual"
+  },
+  {
+   "name": "Group by Project, Status, Pull request, None",
+   "decision": "moved",
+   "where": "Display \u203a Group by, which adds Section and project, and Tag"
+  },
+  {
+   "name": "Sort by Recent, Agent activity, Name, Project, Manual",
+   "decision": "moved",
+   "where": "Display \u203a Sort by"
+  },
+  {
+   "name": "Project order Manual or Recent activity",
+   "decision": "moved",
+   "where": "Display \u203a Project order"
+  },
+  {
+   "name": "Compact cards; show properties",
+   "decision": "cut",
+   "reason": "rows are always one line, with one right-side fact chosen in Display, and the other properties are in the hover card"
+  },
+  {
+   "name": "Show sleeping; hide CLI-created, other desktop clients, default branch, detached HEAD, archived; external worktrees default; per-project visibility",
+   "decision": "moved",
+   "where": "Show asleep to Display; the hide toggles to Filter \u203a Hide; per-project visibility to Filter \u203a Projects; the external worktrees default stays in Settings"
+  },
+  {
+   "name": "Reveal filtered worktrees",
+   "decision": "moved",
+   "where": "the filter line (\"2 hidden: archived \u00b7 Show\")"
+  },
+  {
+   "name": "Review cleanup (select, ignore, restore ignored, refresh preview, delete selected)",
+   "decision": "moved",
+   "where": "header `\u2026` and the footer line; every action kept"
+  },
+  {
+   "name": "Activity window; hide merged or closed reviews, passing checks, automation-created; clear filters",
+   "decision": "moved",
+   "where": "Filter \u203a Activity, Filter \u203a Hide and Clear filters"
+  },
+  {
+   "name": "Workspace board; edit workspace statuses",
+   "decision": "moved",
+   "where": "header `\u2026`"
+  },
+  {
+   "name": "Navigation history and index shortcuts",
+   "decision": "kept"
+  },
+  {
+   "name": "Remote workspaces: saved owner runtime, register host",
+   "decision": "kept"
+  },
+  {
+   "name": "VM environments: create from a recipe, refresh lifecycle, backend diagnostics, recorded list",
+   "decision": "kept"
+  },
+  {
+   "name": "Settings: worktrees folder, nest by project, branch prefix, confirm before deleting",
+   "decision": "kept"
+  }
+ ]
+}

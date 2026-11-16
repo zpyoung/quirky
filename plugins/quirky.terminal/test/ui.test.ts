@@ -55,6 +55,7 @@ async function openPanel(sessions: Row[], extra: Record<string, (params: Record<
   live = sessions
   reports = []
   fake = fakeContext({
+    'ui.contributions': () => ({ menuItems: [], keybindings: [] }),
     'quirky.terminal/sessions': () => ({ sessions: live }),
     'quirky.terminal/kill': (params) => {
       live = live.filter((entry) => entry.sessionId !== params.session)

@@ -16,7 +16,7 @@ const loginAUrl = 'https://auth.openai.com/oauth/authorize?login=a'
 const loginBUrl = 'https://auth.openai.com/oauth/authorize?login=b'
 
 type RecordedCall = { method: string; params?: Record<string, unknown> }
-type OpenerResult = { resolve(value: unknown): void; reject(error: unknown): void }
+type DeferredResult = { resolve(value: unknown): void; reject(error: unknown): void }
 
 let container: HTMLElement
 let root: Root
@@ -24,7 +24,8 @@ let context: UiPluginContext
 let listeners: ((event: QuirkyEvent) => void | Promise<void>)[]
 let calls: RecordedCall[]
 let toasts: unknown[][]
-let openers: OpenerResult[]
+let openers: DeferredResult[]
+let cancellations: DeferredResult[]
 let listedState: unknown
 let store: AccountsUiStore
 
@@ -62,8 +63,12 @@ function makeContext(): UiPluginContext {
         return deferred.promise
       }
       if (method === 'quirky.accounts/cancelLogin') {
-        listedState = accountState(3, 'codex-b', 'Account B', null, null)
-        return { ok: true }
+        const deferred = Promise.withResolvers<unknown>()
+        cancellations.push({ resolve: deferred.resolve, reject: deferred.reject })
+        return deferred.promise.then((result) => {
+          listedState = accountState(3, 'codex-b', 'Account B', null, null)
+          return result
+        })
       }
       return undefined
     },
@@ -108,6 +113,7 @@ beforeEach(() => {
   listeners = []
   calls = []
   toasts = []
+  cancellations = []
   openers = []
   listedState = accountState(1, 'codex-a', 'Account A', 'login-a', loginAUrl)
   container = document.createElement('div')
@@ -120,6 +126,9 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => {
     for (const opener of openers) opener.resolve({ ok: true })
+    for (const cancellation of cancellations) cancellation.resolve({ ok: true })
+    await Promise.resolve()
+    await Promise.resolve()
     store.stop()
     root.unmount()
     await Promise.resolve()
@@ -135,6 +144,7 @@ test('Codex Open uses the rendered URL and a late refusal leaves the current log
   await settle()
 
   await act(async () => { buttonByText('Open').click() })
+  expect([...container.querySelectorAll('.ui-notice-line')].some((notice) => notice.textContent?.includes('Opening…'))).toBe(true)
   expect(calls.filter((call) => call.method === 'quirky.terminal/openExternal').map((call) => call.params)).toEqual([{ target: loginAUrl }])
 
   listedState = accountState(2, 'codex-b', 'Account B', 'login-b', loginBUrl)
@@ -149,6 +159,7 @@ test('Codex Open uses the rendered URL and a late refusal leaves the current log
   expect(calls.filter((call) => call.method === 'quirky.terminal/openExternal').map((call) => call.params)).toEqual([
     { target: loginAUrl }, { target: loginBUrl }
   ])
+  expect([...container.querySelectorAll('.ui-notice-line')].some((notice) => notice.textContent?.includes('Opening…'))).toBe(true)
 
   await act(async () => {
     openers[0]!.reject(new Error('system browser refused invocation'))
@@ -156,10 +167,31 @@ test('Codex Open uses the rendered URL and a late refusal leaves the current log
     await Promise.resolve()
   })
   expect(container.textContent).not.toContain('system browser refused invocation')
+  expect(container.querySelector('.ui-inline-error')).toBeNull()
   expect(buttonByText('Cancel').disabled).toBe(false)
   expect(container.querySelector('[aria-label="Select Codex account Account B"]')?.getAttribute('disabled')).not.toBeNull()
+  await act(async () => {
+    openers[1]!.reject(new Error('current browser refused invocation'))
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(container.querySelector('.ui-inline-error')?.textContent?.trim()).toBe(
+    'Could not open the sign-in link. Try again or use Copy link to open it in your browser.'
+  )
+  expect(container.textContent).not.toContain('current browser refused invocation')
+  expect(buttonByText('Cancel').disabled).toBe(false)
 
   await act(async () => { buttonByText('Cancel').click() })
   await settle()
+  expect([...container.querySelectorAll('.ui-notice-line')].some((notice) => notice.textContent?.includes('Cancelling…'))).toBe(true)
+  expect(buttonByText('Cancelling…').disabled).toBe(true)
+
+  await act(async () => {
+    cancellations[0]!.resolve({ ok: true })
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  await settle()
+
   expect(calls.find((call) => call.method === 'quirky.accounts/cancelLogin')?.params).toEqual({ id: 'login-b' })
 })

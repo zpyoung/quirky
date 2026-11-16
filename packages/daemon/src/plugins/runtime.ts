@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { createProcessRunner, type OwnedProcessRunner } from '@quirky/process'
 import {
   isReservedLaunchEnv,
   KERNEL_METHOD_SCHEMAS,
@@ -27,10 +28,13 @@ import { runLaunchHooks, type LaunchAdditions } from './launch-hooks'
 import { inspectPlugin, renderInspection, type PluginInstallDeps } from './install'
 import { LayoutService } from './layout'
 import { createPtyApi } from './pty-api'
+import { RunningHandlers } from './running'
 import { Scheduler } from './scheduler'
 import { openPluginStore, pluginDataDir } from './stores'
+import { describeSqliteRecovery } from '../sqlite'
 import { FileResourceRegistry } from '../file-resources'
 import { UiService } from './ui-service'
+import { UnansweredHandlers, type UnansweredOptions } from './unanswered'
 
 export type PluginRuntimeOptions = {
   home: string
@@ -42,6 +46,8 @@ export type PluginRuntimeOptions = {
   launchHookTimeoutMs: number
   /** Longest a job timer sleeps before re-checking the clock. */
   schedulerRecheckMs?: number
+  /** Window for coalesced plugin events; defaults to 250 ms and can be set by tests. */
+  eventCoalesceMs?: number
   /** Login shell that agents run under; reported by `context.launch.shell`. */
   shell: string
   /** PATH of the user's interactive shell for `context.launch.commandArgv`; omitted or undefined keeps the login shell's PATH. */
@@ -59,6 +65,7 @@ type LaunchInput = Omit<LaunchHookInput, 'env' | 'args' | 'jsonArgs'>
 
 export type PluginRuntime = {
   extension: ContextExtension
+  ui: UiService
   fileResources: FileResourceRegistry
   dispatcher: Dispatcher
   events: PluginEvents
@@ -82,9 +89,19 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntime {
   const { home, plugins, core, store, log, launchHookTimeoutMs } = options
 
-  const events = new PluginEvents(plugins, (event) => core.broadcast(event), log)
+  const events = new PluginEvents(plugins, (event) => core.broadcast(event), log, { coalesceMs: options.eventCoalesceMs })
   const hostPower = options.hostPower ?? new HostPowerService(log, null)
-  const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs })
+  const warnings: UnansweredOptions = {
+    warn(pluginId, message) {
+      if (plugins.list().find((plugin) => plugin.id === pluginId)?.diagnostics.some((item) => item.message === message)) return
+      log(`${pluginId}: ${message}`)
+      plugins.addWarning(pluginId, message)
+    },
+    unwarn: (pluginId, message) => plugins.removeWarning(pluginId, message)
+  }
+  const unanswered = new UnansweredHandlers(warnings)
+  const running = new RunningHandlers({ ...warnings, log })
+  const scheduler = new Scheduler({ plugins, store, log, recheckMs: options.schedulerRecheckMs, unanswered })
   const distros = new DistroService({
     home,
     store,
@@ -126,6 +143,8 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     fillConfirm(KERNEL_METHOD_SCHEMAS[method].destructive.confirm, params)
   const dispatcher = new Dispatcher(handlers, plugins, log, {
     store,
+    unanswered,
+    running,
     resolveSessionAuthority: (conn) => options.sessionAuthority.resolveForConnection(conn),
     kernelDescribers: {
       'plugin.install': async (params) =>
@@ -139,6 +158,7 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
   const admittedByPlugin = new Map<string, Set<() => void>>()
   const openedStores = new Map<string, OpenedStore>()
   const ptyApis = new Map<string, { revoke(): void }>()
+  const processRunners = new Map<string, OwnedProcessRunner>()
   const fileResources = new FileResourceRegistry()
 
   const buildEnv = (input: {
@@ -170,8 +190,11 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       let opened: OpenedStore | undefined
       const ptyApi = createPtyApi(core.pty, id, log, options.sessionAuthority)
       ptyApis.set(id, ptyApi)
+      const processRunner = createProcessRunner({ owner: id })
+      processRunners.set(id, processRunner)
 
       return {
+        process: Object.freeze({ run: processRunner.run, spawn: processRunner.spawn }),
         clients: {
           accept: (clientOptions: Parameters<PluginContext['clients']['accept']>[0]) => {
             guard()
@@ -330,9 +353,9 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             return prepareLaunch(input)
           }
         },
-        emit(event, data) {
+        emit(event, data, options) {
           guard()
-          const emitted = events.emit(id, event, data)
+          const emitted = events.emit(id, event, data, options)
           if (
             id === 'quirky.worktree' &&
             (event === 'changed' || event === 'event:quirky.worktree/changed') &&
@@ -372,7 +395,14 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
             return opened.store
           }
           // the handle stays usable inside deactivate; extension.revoke closes it afterwards
-          const created = openPluginStore({ home, pluginId: id, migrations, isActive: () => true, newerVersion: options?.newerVersion })
+          const created = openPluginStore({
+            home,
+            pluginId: id,
+            migrations,
+            isActive: () => true,
+            newerVersion: options?.newerVersion,
+            onRecover: (recovery) => warn(id, describeSqliteRecovery(recovery))
+          })
           opened = { ...created, migrations: migrations.length }
           openedStores.set(id, opened)
           return opened.store
@@ -395,20 +425,29 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
       }
     },
     async revoke(pluginId) {
-      hostPower.revoke(pluginId)
-      const admitted = admittedByPlugin.get(pluginId)
-      if (admitted !== undefined) {
-        for (const revoke of [...admitted]) revoke()
+      const stopping = processRunners.get(pluginId)?.dispose()
+      processRunners.delete(pluginId)
+      try {
+        hostPower.revoke(pluginId)
+        const admitted = admittedByPlugin.get(pluginId)
+        if (admitted !== undefined) {
+          for (const revoke of [...admitted]) revoke()
+        }
+        await fileResources.revokePlugin(pluginId)
+        events.removeAll(pluginId)
+        options.sessionAuthority.releasePlugin(pluginId)
+        scheduler.revokePlugin(pluginId)
+        ptyApis.get(pluginId)?.revoke()
+        ptyApis.delete(pluginId)
+      } finally {
+        try {
+          await stopping
+        } finally {
+          const opened = openedStores.get(pluginId)
+          openedStores.delete(pluginId)
+          opened?.close()
+        }
       }
-      await fileResources.revokePlugin(pluginId)
-      events.removeAll(pluginId)
-      options.sessionAuthority.releasePlugin(pluginId)
-      scheduler.revokePlugin(pluginId)
-      ptyApis.get(pluginId)?.revoke()
-      ptyApis.delete(pluginId)
-      const opened = openedStores.get(pluginId)
-      openedStores.delete(pluginId)
-      opened?.close()
     }
   }
 
@@ -426,5 +465,5 @@ export function createPluginRuntime(options: PluginRuntimeOptions): PluginRuntim
     }
   }
 
-  return { extension, dispatcher, events, hostPower, scheduler, layout, distros, fileResources, prepareLaunch }
+  return { extension, dispatcher, events, hostPower, scheduler, layout, distros, ui, fileResources, prepareLaunch }
 }

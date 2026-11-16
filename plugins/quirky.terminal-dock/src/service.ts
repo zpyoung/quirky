@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { realpathSync, statSync, unlinkSync } from 'node:fs'
 import { isAbsolute, relative, sep } from 'node:path'
 import type { MethodHandler, PluginCaller, PluginContext, PtyFact, PtySessionInfo, Session } from '@quirky/protocol'
+import { PaneAnnouncer } from './announcer'
+import { PassScheduler } from './passes'
 import { acquireAttachment } from './attachments'
 import { pickItems } from './pickers'
 import type { ProviderBridge } from './providers'
@@ -176,6 +178,8 @@ function optionNotice(value: unknown): string | null {
 /** Internal integration-fixture hooks; absent from normal plugin activation. */
 export type DockServiceTestHooks = {
   beforeSubmit?(signal: AbortSignal): Promise<void>
+  /** Counts actual passes for the daemon storm fixture. */
+  reconciled?(): void
 }
 
 /** Daemon-authoritative dock records and per-terminal acknowledged send queues. */
@@ -208,6 +212,8 @@ export class DockService {
   private recoveryPending = true
   private stopped = false
   private wasEnabled = false
+  private readonly passes: PassScheduler
+  private readonly announcer: PaneAnnouncer<DockState>
 
   constructor(
     private readonly context: PluginContext,
@@ -215,6 +221,14 @@ export class DockService {
     private readonly bridge: ProviderBridge,
     private readonly testHooks: DockServiceTestHooks = {}
   ) {
+    this.passes = new PassScheduler(() => this.reconcilePass(), 25, () => this.context.log('terminal dock background reconciliation failed'))
+    this.announcer = new PaneAnnouncer({
+      read: async (pane) => {
+        const binding = await this.resolveBinding({ pane })
+        return this.stateForBinding(binding, false)
+      },
+      emit: (pane, state) => this.context.emit('changed', { pane, state })
+    })
     this.methods = {
       get: (params) => this.get(params),
       list: () => this.list(),
@@ -252,6 +266,8 @@ export class DockService {
   shutdown(): void {
     if (this.stopped) return
     this.stopped = true
+    this.passes.stop()
+    this.announcer.stop()
     for (const unsubscribe of this.subscriptions) unsubscribe()
     for (const operation of this.sendOperations.values()) operation.controller.abort()
     for (const queue of this.queues.values()) {
@@ -293,6 +309,7 @@ export class DockService {
       if (enabledNow === this.wasEnabled) return
       this.wasEnabled = enabledNow
       if (!enabledNow) {
+        this.passes.cancel()
         this.recoveryPending = true
         this.clearAllPassthrough()
         this.cancelForFeatureOff()
@@ -324,7 +341,7 @@ export class DockService {
       event.type === 'quirky.terminal/layout' || event.type === 'quirky.terminal/floating' ||
       event.type === 'quirky.agent-status/changed'
     ) {
-      if (this.enabled()) await this.reconcileAll()
+      if (this.enabled()) this.passes.request()
     }
   }
   private observeHookReceived(sessionId: string, agent: string, detail: Record<string, unknown>): void {
@@ -404,7 +421,7 @@ export class DockService {
         this.rememberManualCandidate(sessionId, agent)
         this.clearConfirmedExit(sessionId)
       }
-      if (this.enabled()) this.background(() => this.reconcileAll())
+      if (this.enabled()) this.passes.request()
       return
     }
     if (fact.kind === 'command-finished') {
@@ -412,7 +429,7 @@ export class DockService {
       if (!agent || this.confirmedExits.has(sessionId)) return
       if (this.manualAgents.has(sessionId)) {
         this.markConfirmedExit(sessionId)
-        if (this.enabled()) this.background(() => this.reconcileAll())
+        if (this.enabled()) this.passes.request()
       } else {
         this.background(async () => {
           const session = await this.readCanonicalSession(sessionId)
@@ -441,7 +458,7 @@ export class DockService {
         this.rememberFreshEvidence(sessionId, app, 'program-app')
         if (appAgent) this.rememberManualCandidate(sessionId, appAgent)
       }
-      if (this.enabled()) this.background(() => this.reconcileAll())
+      if (this.enabled()) this.passes.request()
     }
   }
   private async refreshCatalog(force = false): Promise<void> {
@@ -868,8 +885,13 @@ export class DockService {
     await this.deleteOwnedUploads(removedUploads)
   }
 
-  private async reconcileAll(): Promise<void> {
+  private reconcileAll(): Promise<void> {
+    return this.passes.now()
+  }
+
+  private async reconcilePass(): Promise<void> {
     if (!this.enabled() || this.stopped) return
+    this.testHooks.reconciled?.()
     await this.ensureRecovered()
     let sessions: Session[]
     try {
@@ -936,6 +958,7 @@ export class DockService {
         if (reports.size === 0) this.reports.delete(connection)
       }
     }
+    this.announcer.retain(retained)
     for (const pane of retained) this.announce(pane)
   }
 
@@ -1692,7 +1715,7 @@ export class DockService {
   private publishQueued(operation: Operation): void {
     const record = this.store.get(operation.pane) ?? defaultDockRecord(operation.pane, operation.session, operation.binding.tab)
     const state = this.stateFrom(operation.binding, record, { noTerminal: false, reason: null }, null)
-    this.context.emit('changed', { pane: operation.pane, state })
+    this.announcer.publishNow(operation.pane, state)
   }
 
   private queueFor(session: string): SessionQueue {
@@ -2116,19 +2139,9 @@ export class DockService {
   }
 
 
-  private async announceState(pane: string): Promise<void> {
-    if (this.stopped || pane.length === 0) return
-    try {
-      const binding = await this.resolveBinding({ pane })
-      const state = await this.stateForBinding(binding, false)
-      this.context.emit('changed', { pane, state })
-    } catch {
-      // A pane may leave the workspace while a state event is being published.
-    }
-  }
 
   private announce(pane: string): void {
-    void this.announceState(pane)
+    this.announcer.announce(pane)
   }
 
   private announceAllMounted(): void {

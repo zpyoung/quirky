@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { Menu } from '@quirky/ui'
 import type { MenuItem } from '@quirky/ui'
@@ -13,17 +13,12 @@ export function NewSessionMenu({ context, onPick, onChat }: Props) {
   const root = useRef<HTMLDivElement>(null)
   const latest = useRef(0)
 
-  const choose = useCallback((entry: MenuEntry) => {
-    if (entry.kind === 'manage') context.openView(AGENTS_VIEW_ID)
-    else if (entry.kind === 'chat') onChat()
-    else onPick(entry.request)
-  }, [context, onPick, onChat])
-
-  const items = useMemo<MenuItem[]>(() => entries.map((entry, index) => ({
-    id: `${entry.kind}-${index}-${entry.label}`,
-    label: entry.label,
-    onAction: () => choose(entry)
-  })), [choose, entries])
+  const items = useMemo<MenuItem[]>(() => entries.map((entry, index) => {
+    const item = { id: `${entry.kind}-${index}-${entry.label}`, label: entry.label }
+    if (entry.kind === 'manage') return { ...item, onAction: () => context.openView(AGENTS_VIEW_ID) }
+    if (entry.kind === 'chat') return { ...item, onAction: onChat }
+    return { ...item, onAction: () => onPick(entry.request) }
+  }), [context, entries, onPick, onChat])
 
   useEffect(() => {
     const trigger = root.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')

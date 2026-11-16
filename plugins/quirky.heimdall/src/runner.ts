@@ -9,6 +9,7 @@ import type {
   ExecuteContext,
   ExecuteResult,
   GateVerdict,
+  HandoffResult,
   JournalAppend,
   JournalEntry,
   Json,
@@ -36,6 +37,7 @@ import { isCoordinatorSeatLostError } from './worker-evidence'
 import { createWorkspaceLease, WORKSPACE_LEASE_RENEWAL_MS, WorkspaceLeaseLostError } from './lease'
 import type { WorkspaceKind, WorkspaceLeaseAuthority, WorkspaceLeaseClaim } from './lease'
 import { shadowJudgment } from './judgment'
+import { orchestrationRequestIdForAttemptFingerprint } from './orchestration'
 import { terminalizeRemovedEnrollment, workspaceKindForEnrollment } from './workspace-lifecycle'
 
 const MAX_ACTIONS_PER_TICK = 32
@@ -118,14 +120,6 @@ function latestEscalation(journal: JournalEntry[], escalationId: string): Journa
 
 function budgetWithPolicy(enrollment: Enrollment, journal: JournalEntry[], nowMs: number): BudgetUsage {
   return budgetUsage(journal, nowMs, enrollment.budget)
-}
-
-function workerRequestId(fingerprint: string): string {
-  const digest = createHash('sha256').update(`heimdall-dispatch-v1\0${fingerprint}`).digest()
-  digest[6] = ((digest[6] ?? 0) & 0x0f) | 0x80
-  digest[8] = ((digest[8] ?? 0) & 0x3f) | 0x80
-  const hex = digest.subarray(0, 16).toString('hex')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 export function createRunner(options: RunnerOptions): Runner & { withControl<T>(operation: () => Promise<T>, drain?: boolean): Promise<T> } {
@@ -834,18 +828,55 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     park(current, 'coordinator-seat-lost', detail, version)
   }
 
-  function approvalEscalation(action: KernelAction, detail: string | undefined, version: number): void {
-    const scope = {
+  function approvalScopeForAction(action: KernelAction) {
+    return {
       actionKind: action.kind,
       contentIdentity: action.contentIdentity,
       evidenceKey: action.evidenceKey,
       ...(typeof action.preparedCommitSha === 'string' ? { preparedCommitSha: action.preparedCommitSha } : {})
     }
-    const escalationId = `approval:${hash(JSON.stringify(scope))}`
+  }
+
+  function approvalScopeHash(action: KernelAction): string {
+    return hash(JSON.stringify(approvalScopeForAction(action)))
+  }
+
+  function resolveSupersededApprovalEscalations(activeScopeHash: string | null, version: number): void {
+    const activeEscalationId = activeScopeHash === null ? null : `approval:${activeScopeHash}`
+    const latestById = new Map<string, JournalEntry>()
+    for (const entry of store.journal(watcherId)) {
+      if (entry.kind === 'escalation' && typeof entry.escalationId === 'string') {
+        latestById.set(entry.escalationId, entry)
+      }
+    }
+    for (const [escalationId, entry] of latestById) {
+      if (
+        entry.escalationKind !== 'awaiting-approval' ||
+        entry.status !== 'open' ||
+        escalationId === activeEscalationId
+      ) continue
+      const { seq: _seq, eventId: _eventId, watcherId: _watcherId, atMs: _atMs, ...fields } = entry
+      appendEntry({
+        ...fields,
+        kind: 'escalation',
+        class: 'fact',
+        origin: 'owner',
+        resolved: true,
+        eventId: `approval-escalation-superseded:${watcherId}:${hash(escalationId)}:${entry.seq}`,
+        status: 'resolved',
+        reason: 'superseded'
+      }, version, { idempotent: true })
+    }
+  }
+
+  function approvalEscalation(action: KernelAction, detail: string | undefined, version: number): void {
+    const scope = approvalScopeForAction(action)
+    const scopeHash = approvalScopeHash(action)
+    const escalationId = `approval:${scopeHash}`
     const journal = store.journal(watcherId)
     const previous = latestEscalation(journal, escalationId)
     const foldCount = typeof previous?.foldCount === 'number' ? previous.foldCount + 1 : 1
-    const eventId = `approval-escalation:${watcherId}:${hash(JSON.stringify(scope))}:${foldCount}`
+    const eventId = `approval-escalation:${watcherId}:${scopeHash}:${foldCount}`
     if (latestByEventId(journal, eventId)) return
     appendEntry({
       kind: 'escalation',
@@ -959,6 +990,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     const atMs = now()
     const next = { ...latest, enabled: false, terminalAtMs: atMs, haltReason: result.reason }
     store.transaction(() => {
+      resolveSupersededApprovalEscalations(null, version)
       store.save(next)
       appendEntry({
         kind: 'terminal',
@@ -982,6 +1014,86 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       atMs,
       budget: budgetWithPolicy(next, store.journal(watcherId), atMs)
     }
+  }
+
+  async function commitHandoffStop(
+    current: Enrollment,
+    result: Extract<StopResult, { kind: 'terminal' }>,
+    trace: TickTrace,
+    version: number
+  ): Promise<{ summary: TerminalSummary; successor: Enrollment } | null> {
+    const parkRefusal = (reason: string, detail: string): null => {
+      const latest = store.get(watcherId)
+      if (latest && latest.terminalAtMs === null && latest.enabled && !latest.paused &&
+        latest.haltReason !== 'operator-disarmed' && !store.readOnly &&
+        isTickCurrent(version) && controlPendingCount === 0) {
+        const parkReason = `handoff-refused:${reason}` as ParkReason
+        const parkDetail = `${parkReason}: ${detail}`
+        park(latest, parkReason, parkDetail, version)
+        trace.decision = { action: null, reason: parkReason, detail: parkDetail }
+        trace.exitPath = 'parked'
+      } else {
+        trace.exitPath = 'not-current'
+      }
+      return null
+    }
+    if (!options.handoff) return parkRefusal('service-unavailable', 'kernel handoff service is unavailable')
+    const source = store.get(watcherId)
+    if (!source || source.terminalAtMs !== null) return parkRefusal('source-not-current', 'source watcher is no longer active')
+    if (source.watcherId !== current.watcherId || source.commandRevision !== current.commandRevision) {
+      return parkRefusal('stale-command-revision', 'source command revision changed before handoff')
+    }
+    if (hasUnresolvedAttempts(store.journal(watcherId)) || hasRunningWorkers(store.journal(watcherId))) {
+      trace.decision = { action: null, reason: 'stop-predicate-deferred', detail: `${result.state}: ${result.reason}` }
+      trace.exitPath = 'gate-held'
+      updateStatus('held', 'stop-predicate-deferred', `${result.state}: ${result.reason}`)
+      return null
+    }
+    const guard = (): string | null => {
+      if (!isTickCurrent(version)) return 'source tick or control revision changed'
+      if (controlPendingCount > 0) return 'source control operation is pending'
+      if (store.readOnly) return 'Heimdall store is read-only'
+      const latest = store.get(watcherId)
+      if (!latest) return 'source watcher was removed'
+      if (latest.terminalAtMs !== null) return 'source watcher is already terminal'
+      if (latest.commandRevision !== source.commandRevision) return 'source command revision changed'
+      if (!latest.enabled || latest.paused || latest.haltReason === 'operator-disarmed') {
+        return 'source watcher is paused, disabled, or disarmed'
+      }
+      try {
+        assertWorkspaceLease(version)
+      } catch (error) {
+        return `workspace lease is not current: ${errorText(error)}`
+      }
+      return null
+    }
+    const initialFailure = guard()
+    if (initialFailure) return parkRefusal('source-fenced', initialFailure)
+    let handoffResult: HandoffResult
+    try {
+      handoffResult = await options.handoff(
+        { watcherId: source.watcherId, commandRevision: source.commandRevision },
+        result,
+        guard
+      )
+    } catch (error) {
+      return parkRefusal('service-error', errorText(error))
+    }
+    if (handoffResult.kind === 'refused') return parkRefusal(handoffResult.reason, handoffResult.detail)
+
+    
+    enrollment = store.get(watcherId)
+    trace.exitPath = 'lifecycle-terminal'
+    trace.decision = { action: null, reason: handoffResult.summary.reason, detail: handoffResult.summary.state }
+    updateStatus('terminal', handoffResult.summary.state, handoffResult.summary.reason)
+    if (options.owner?.onTerminal) {
+      try {
+        await options.owner.onTerminal(watcherId)
+      } catch (error) {
+        options.context.log(`Owner terminal cleanup failed after handoff ${watcherId}: ${errorText(error)}`)
+      }
+    }
+    return { summary: handoffResult.summary, successor: handoffResult.enrollment }
   }
 
   function updateLiveContact(snapshot: Snapshot): void {
@@ -1367,6 +1479,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
     let actionCompleted = false
     let failed = false
     let terminalSummary: TerminalSummary | null = null
+    let handoffSuccessor: Enrollment | null = null
     let stopPredicateFired = false
     let stopDeviation: Deviation | undefined
     let ownerProposal: KernelAction | undefined
@@ -1502,7 +1615,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
       let stopResult = await evaluateStop(kind, snapshot, current, version)
       if (!isCurrent(version)) { trace.exitPath = 'suspended'; return }
       if (stopResult?.kind === 'terminal') {
-        if (hasUnresolvedAttempts(journal)) {
+        if (hasUnresolvedAttempts(journal) || hasRunningWorkers(journal)) {
           stopPredicateFired = true
           trace.decision = { action: null, reason: 'stop-predicate-deferred', detail: `${stopResult.state}: ${stopResult.reason}` }
           trace.exitPath = 'gate-held'
@@ -1510,12 +1623,18 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           gateHeld = true
           updateStatus('held', 'stop-predicate-deferred', `${stopResult.state}: ${stopResult.reason}`)
         } else {
-          if (options.owner?.onTerminal && controlPendingCount === 0) {
+          if (!stopResult.handoff && options.owner?.onTerminal && controlPendingCount === 0) {
             assertWorkspaceLease(version)
             await options.owner.onTerminal(watcherId)
           }
-          terminalSummary = saveTerminal(current, stopResult, trace, version)
-          if (!terminalSummary) trace.exitPath = 'not-current'
+          if (stopResult.handoff) {
+            const handoff = await commitHandoffStop(current, stopResult, trace, version)
+            terminalSummary = handoff?.summary ?? null
+            handoffSuccessor = handoff?.successor ?? null
+          } else {
+            terminalSummary = saveTerminal(current, stopResult, trace, version)
+          }
+          if (!terminalSummary && trace.exitPath !== 'parked' && trace.exitPath !== 'gate-held') trace.exitPath = 'not-current'
           return
         }
       } else if (stopResult?.kind === 'park') {
@@ -1578,6 +1697,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         const decision: Decision = ownerProposal ? { action: ownerProposal } : await kind.decide(snapshot, journal, current)
         ownerProposal = undefined
         if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
+        if (!ownerAction) {
+          resolveSupersededApprovalEscalations(
+            decision.action ? approvalScopeHash(decision.action) : null,
+            version
+          )
+        }
         trace.decision = decision
         recordConsidered(trace, decision.considered)
         if (!decision.action) {
@@ -1633,6 +1758,12 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             freshDecision = await kind.decide(freshSnapshot, store.journal(watcherId), store.get(watcherId) ?? gateState.enrollment)
           }
           if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
+          if (!ownerAction) {
+            resolveSupersededApprovalEscalations(
+              freshDecision.action ? approvalScopeHash(freshDecision.action) : null,
+              version
+            )
+          }
           if (!freshDecision.action || actionFingerprint(freshDecision.action) !== fingerprint || freshSnapshot.freshness !== 'live') {
             abandon(selectedAction, 'workspace-moved', 'Cached external decision did not survive a live redecision.', version)
             trace.decision = freshDecision
@@ -1716,7 +1847,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
           }
           workerRequestValue = request
           workerPromise = (async () => {
-            const requestId = workerRequestId(fingerprint)
+            const requestId = orchestrationRequestIdForAttemptFingerprint(watcherId, fingerprint)
             const commit = commitGate(selectedAction, snapshot as Snapshot, stopPredicateFired, version, attemptId)
             if (!commit || commit.verdict.verdict !== 'allow') {
               const reason = commit?.verdict.verdict === 'allow' ? 'runner-stopped' : commit?.verdict.reason ?? 'runner-stopped'
@@ -1939,7 +2070,7 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         if (!isCurrent(version)) { trace.exitPath = 'suspended'; break }
         journal = store.journal(watcherId)
         if (stopResult?.kind === 'terminal') {
-          if (hasUnresolvedAttempts(journal)) {
+          if (hasUnresolvedAttempts(journal) || hasRunningWorkers(journal)) {
             stopPredicateFired = true
             trace.decision = { action: null, reason: 'stop-predicate-deferred', detail: `${stopResult.state}: ${stopResult.reason}` }
             consecutiveGateHolds += 1
@@ -1947,11 +2078,18 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
             updateStatus('held', 'stop-predicate-deferred', `${stopResult.state}: ${stopResult.reason}`)
             break
           }
-          if (options.owner?.onTerminal && controlPendingCount === 0) {
+          if (!stopResult.handoff && options.owner?.onTerminal && controlPendingCount === 0) {
             assertWorkspaceLease(version)
             await options.owner.onTerminal(watcherId)
           }
-          terminalSummary = saveTerminal(current, stopResult, trace, version)
+          if (stopResult.handoff) {
+            const handoff = await commitHandoffStop(current, stopResult, trace, version)
+            terminalSummary = handoff?.summary ?? null
+            handoffSuccessor = handoff?.successor ?? null
+          } else {
+            terminalSummary = saveTerminal(current, stopResult, trace, version)
+          }
+          if (!terminalSummary && trace.exitPath !== 'parked' && trace.exitPath !== 'gate-held') trace.exitPath = 'not-current'
           break
         }
         if (stopResult?.kind === 'park') {
@@ -2075,6 +2213,13 @@ export function createRunner(options: RunnerOptions): Runner & { withControl<T>(
         clearBudgetTimer()
         clearLeaseRenewal()
         statusValue = { ...statusValue, state: 'terminal', nextPulseAtMs: null }
+        if (handoffSuccessor) {
+          try {
+            options.onHandoffCommitted?.(handoffSuccessor)
+          } catch (error) {
+            options.context.log(`Could not start handoff successor ${handoffSuccessor.watcherId}: ${errorText(error)}`)
+          }
+        }
       } else if (isCurrent(version) && canSchedule(currentNow, journalNow) && scheduledDelay !== null) {
         schedule(scheduledDelay)
       } else {

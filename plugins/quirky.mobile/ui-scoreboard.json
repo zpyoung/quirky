@@ -1,0 +1,1246 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "sidebar-section:quirky.mobile/mobile": {
+      "loading": {
+        "applicable": false,
+        "reason": "The sidebar button renders before state arrives.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.mobile/src/ui.tsx",
+            "quote": "const hidden = mobile.state?.showMobileButton === false"
+          }
+        ]
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "The sidebar contributes one fixed Mobile button, not a data list.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.mobile/src/ui.tsx",
+            "quote": "<Button aria-label=\"Mobile\" onClick={() => void open()}>"
+          }
+        ]
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.mobile/page": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.mobile/settings": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "surface": "sidebar-section:quirky.mobile/mobile",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/ui.tsx",
+        "quote": "context.toast('Could not update Mobile onboarding', message, { kind: 'error' })"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.mobile/src/ui.tsx",
+          "quote": "context.toast('Could not update Mobile onboarding', message, { kind: 'error' })"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "if (mobile.loading && mobile.state === null)"
+      },
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "<NoticeLine>Loading Mobile…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "import { Badge, Button, InlineError, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "if (mobile.state === null)"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "<InlineError\n          message={`Unable to load Mobile settings: ${mobile.error ?? 'The daemon returned no state.'}`}\n          action={{ label: 'Try again', onAction: () => void mobile.refresh() }}\n        />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "import { Badge, Button, InlineError, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "mobile.error && <InlineError"
+      },
+      "anchor": "mobile.error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "<InlineError message={`Could not refresh Mobile state: ${mobile.error}`} />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "import { Badge, Button, InlineError, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "actionError && <InlineError"
+      },
+      "anchor": "actionError &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "<InlineError message={actionError} />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "import { Badge, Button, InlineError, NoticeLine, SectionHeader, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/settings",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "if (mobile.loading && mobile.state === null)"
+      },
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "<NoticeLine>Loading Mobile settings…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "if (mobile.state === null)"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "<InlineError\n          message={`Unable to load Mobile settings: ${mobile.error ?? 'The daemon returned no state.'}`}\n          action={{ label: 'Try again', onAction: () => void mobile.refresh() }}\n        />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "mobile.error && <InlineError"
+      },
+      "anchor": "mobile.error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "<InlineError message={`Could not refresh Mobile state: ${mobile.error}`} />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "actionError && <InlineError"
+      },
+      "anchor": "actionError &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "<InlineError message={actionError} />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "interfaces.length === 0 && uniqueCustom.length === 0 &&"
+      },
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+          "quote": "<EmptyState message=\"No reachable address is available yet. Connect to Wi-Fi or Tailscale, or add an address manually.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+          "quote": "import { Button, EmptyState, InlineError, SelectField, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "error && <InlineError message={error} />"
+      },
+      "anchor": "error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+          "quote": "<InlineError message={error} />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+          "quote": "import { Button, EmptyState, InlineError, SelectField, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "unavailable && <InlineError"
+      },
+      "anchor": "unavailable &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "<InlineError message={unavailable.guidance} />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "import { Button, Dialog, InlineError, NoticeLine, TextField, ToolPanelFrame, uiTokens } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "available.qrDataUrl ?"
+      },
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "<InlineError message=\"This pairing code couldn’t be rendered as a QR code. Copy it into Quirky Mobile instead.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "import { Button, Dialog, InlineError, NoticeLine, TextField, ToolPanelFrame, uiTokens } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "copyError && <InlineError"
+      },
+      "anchor": "copyError &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "<InlineError message={copyError} />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "import { Button, Dialog, InlineError, NoticeLine, TextField, ToolPanelFrame, uiTokens } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/page",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "available && busy && <NoticeLine"
+      },
+      "anchor": "available && busy &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "<NoticeLine>Generating…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "import { Button, Dialog, InlineError, NoticeLine, TextField, ToolPanelFrame, uiTokens } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/settings",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+        "quote": "devices.length === 0 ?"
+      },
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+          "quote": "<EmptyState message=\"No devices paired yet.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.mobile/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+        "quote": "error && <InlineError message={error} />"
+      },
+      "anchor": "error &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+          "quote": "<InlineError message={error} />"
+        },
+        "import": {
+          "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+          "quote": "import { Button, EmptyState, InlineError, ListRow, ToolPanelFrame } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/ui.tsx",
+        "quote": "if (hidden)"
+      },
+      "reason": "Sidebar visibility is configuration, not an asynchronous view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/ui.tsx",
+        "quote": "!onboardingSeen &&"
+      },
+      "reason": "Try it is an onboarding badge on an always-available button."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+        "quote": "busyDevice === device.deviceId ?"
+      },
+      "reason": "Busy text labels the revoke action; it is not a view loading state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+        "quote": "{notice && <p className=\"ui-text-muted\" role=\"status\">{notice}</p>}"
+      },
+      "anchor": "notice &&",
+      "reason": "A completed revoke is success feedback, not loading, empty or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+        "quote": "{notice && <p className=\"ui-text-muted\" role=\"status\">{notice}</p>}"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "A completed revoke is success feedback, not loading, empty or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "<p role=\"status\"><Badge tone=\"needs-you\">Unavailable</Badge>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Static platform/channel availability guidance is product information, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "mobile.state.showMobileButton ?"
+      },
+      "reason": "The button label describes its sidebar configuration action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "currentStage === 'intro' &&"
+      },
+      "reason": "Wizard stage selects content rather than loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "currentStage === 'install' &&"
+      },
+      "reason": "Wizard stage selects content rather than loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "currentStage === 'pair' &&"
+      },
+      "reason": "Wizard stage selects content rather than loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "currentStage === 'paired' &&"
+      },
+      "reason": "Wizard stage selects content rather than loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "mobile.state.devices.length > 0 ? 'Open Quirky Mobile"
+      },
+      "reason": "The paired-stage instructions describe the next action, not an asynchronous state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "index === 0 ?"
+      },
+      "reason": "Recommendation text identifies the first network option."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "customAddresses.length > 0 && selectedAddress && customAddresses.includes(selectedAddress) &&"
+      },
+      "reason": "Remove is available only for a selected custom-address draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "full && <p"
+      },
+      "anchor": "full &&",
+      "reason": "The configured address limit is input guidance, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "offer?.qrDataUrl &&"
+      },
+      "reason": "The enlarged preview only repeats an existing QR image."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "{available && ("
+      },
+      "anchor": "available &&",
+      "reason": "Available pairing details are view content."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "{copyNotice && <p className=\"ui-text-muted\" role=\"status\">{copyNotice}</p>}"
+      },
+      "anchor": "copyNotice &&",
+      "reason": "A completed copy is success feedback, not loading, empty or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "{copyNotice && <p className=\"ui-text-muted\" role=\"status\">{copyNotice}</p>}"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "A completed copy is success feedback, not loading, empty or error."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "{!available && ("
+      },
+      "anchor": "!available &&",
+      "reason": "Generate is an action available before a pairing offer exists."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "busy ? 'Generating…'"
+      },
+      "reason": "Busy text labels the generate action; the shared notice carries loading state."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/ui.tsx",
+        "quote": "onClick={() => void open()}"
+      },
+      "route": {
+        "target": "view:quirky.mobile/page",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/ui.tsx",
+          "quote": "context.openView(MOBILE_PAGE_ID, showIntro ? { stage: 'intro' } : undefined)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/ui.tsx",
+            "quote": "const open = async () => {\n    const showIntro = !onboardingSeen\n    if (showIntro) {\n      try {\n        await mobile.configure({ onboardingSeen: true })\n      } catch (error) {\n        const message = error instanceof Error ? error.message : String(error)\n        context.toast('Could not update Mobile onboarding', message, { kind: 'error' })\n      }\n    }\n    context.openView(MOBILE_PAGE_ID, showIntro ? { stage: 'intro' } : undefined)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+        "quote": "onClick={() => void revoke(device)}"
+      },
+      "route": {
+        "target": "quirky.mobile/revoke",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/revoke', { deviceId })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/DeviceList.tsx",
+            "quote": "const revoke = async (device: MobileDevice) => {\n    setBusyDevice(device.deviceId)\n    setNotice(null)\n    setError(null)\n    try {\n      await revokeMobileDevice(context, device.deviceId)\n      setNotice('Device revoked.')\n      try {\n        await onChanged()\n      } catch (reason) {\n        const message = reason instanceof Error ? reason.message : String(reason)\n        setNotice(null)\n        setError(`Device revoked, but the paired-device list could not refresh: ${message}`)\n      }\n    } catch (reason) {\n      const message = reason instanceof Error ? reason.message : String(reason)\n      setNotice(null)\n      setError(`Failed to revoke device: ${message}`)\n    } finally {\n      setBusyDevice(null)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export async function revokeMobileDevice(context: UiPluginContext, deviceId: string): Promise<void> {\n  const result = (await context.call('quirky.mobile/revoke', { deviceId })) as { revoked: boolean }\n  if (!result.revoked) throw new Error('Device is no longer paired.')\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onAction: () => void mobile.refresh()"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.mobile/state",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/state', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async refresh() {\n      try {\n        const next = await getMobileState(context)\n        if (alive.current) {\n          setState(next ?? null)\n          setError(null)\n        }\n      } catch (reason) {\n        if (alive.current) setError(messageOf(reason))\n      } finally {\n        if (alive.current) setLoading(false)\n      }\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function getMobileState(context: UiPluginContext): Promise<MobileState> {\n  return context.call('quirky.mobile/state', {}) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onGenerate={generate}"
+      },
+      "route": {
+        "target": "quirky.mobile/pair",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/pair', {\n    ...(address === undefined ? {} : { address }),\n    ...(rotate ? { rotate: true } : {})\n  })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const generate = async (rotate: boolean) => {\n    const currentState = mobile.state\n    if (currentState === null) return\n    setBusy(true)\n    setActionError(null)\n    setOfferVisible(false)\n    setOffer(null)\n    try {\n      const devices = await mobile.refreshDevices()\n      if (!rotate) setBaselineCount(devices.length)\n      const address = selectedAddress || currentState.interfaces[0]?.address || currentState.customAddresses[0]\n      const result = await createPairing(context, address, rotate)\n      setOffer(result)\n      setOfferVisible(result.available)\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function createPairing(context: UiPluginContext, address?: string, rotate = false): Promise<MobilePairingResult> {\n  return context.call('quirky.mobile/pair', {\n    ...(address === undefined ? {} : { address }),\n    ...(rotate ? { rotate: true } : {})\n  }) as Promise<MobilePairingResult>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onChanged={async () => { await mobile.refreshDevices() }}"
+      },
+      "route": {
+        "target": "quirky.mobile/devices",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/devices', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async refreshDevices() {\n      const devices = await getMobileDevices(context)\n      if (alive.current) setState((current) => (current ? { ...current, devices } : current))\n      return devices\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function getMobileDevices(context: UiPluginContext): Promise<MobileDevice[]> {\n  return context.call('quirky.mobile/devices', {}) as Promise<MobileDevice[]>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onAction: () => void mobile.refresh()"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.mobile/state",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/state', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async refresh() {\n      try {\n        const next = await getMobileState(context)\n        if (alive.current) {\n          setState(next ?? null)\n          setError(null)\n        }\n      } catch (reason) {\n        if (alive.current) setError(messageOf(reason))\n      } finally {\n        if (alive.current) setLoading(false)\n      }\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function getMobileState(context: UiPluginContext): Promise<MobileState> {\n  return context.call('quirky.mobile/state', {}) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onGenerate={generate}"
+      },
+      "route": {
+        "target": "quirky.mobile/pair",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/pair', {\n    ...(address === undefined ? {} : { address }),\n    ...(rotate ? { rotate: true } : {})\n  })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+            "quote": "const generate = async (rotate: boolean) => {\n    const currentState = mobile.state\n    if (!currentState) return\n    setBusy(true)\n    setActionError(null)\n    setOfferVisible(false)\n    setOffer(null)\n    try {\n      await mobile.refreshDevices()\n      const address = selectedAddress || currentState.interfaces[0]?.address || currentState.customAddresses[0]\n      const result = await createPairing(context, address, rotate)\n      setOffer(result)\n      setOfferVisible(result.available)\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function createPairing(context: UiPluginContext, address?: string, rotate = false): Promise<MobilePairingResult> {\n  return context.call('quirky.mobile/pair', {\n    ...(address === undefined ? {} : { address }),\n    ...(rotate ? { rotate: true } : {})\n  }) as Promise<MobilePairingResult>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onChanged={async () => { await mobile.refreshDevices() }}"
+      },
+      "route": {
+        "target": "quirky.mobile/devices",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/devices', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async refreshDevices() {\n      const devices = await getMobileDevices(context)\n      if (alive.current) setState((current) => (current ? { ...current, devices } : current))\n      return devices\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function getMobileDevices(context: UiPluginContext): Promise<MobileDevice[]> {\n  return context.call('quirky.mobile/devices', {}) as Promise<MobileDevice[]>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onClick={openSettings}>Settings</Button>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "view:quirky.mobile/settings",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "context.openView(MOBILE_SETTINGS_ID)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const openSettings = () => context.openView(MOBILE_SETTINGS_ID)"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onClick={openSettings}>Configure in Settings"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "view:quirky.mobile/settings",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+          "quote": "context.openView(MOBILE_SETTINGS_ID)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const openSettings = () => context.openView(MOBILE_SETTINGS_ID)"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onClick={() => void updateSidebar()}"
+      },
+      "route": {
+        "target": "quirky.mobile/configure",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/configure', changes)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const updateSidebar = async () => {\n    if (!mobile.state) return\n    try {\n      await mobile.configure({ showMobileButton: !mobile.state.showMobileButton })\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async configure(changes: MobileConfigure) {\n      const next = await configureMobile(context, changes)\n      if (alive.current) {\n        setState(next)\n        setError(null)\n      }\n      return next\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function configureMobile(context: UiPluginContext, changes: MobileConfigure): Promise<MobileState> {\n  return context.call('quirky.mobile/configure', changes) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onClick={() => void saveOnboardingSeen()}"
+      },
+      "route": {
+        "target": "quirky.mobile/configure",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/configure', changes)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const saveOnboardingSeen = async () => {\n    setStage('install')\n    try {\n      await mobile.configure({ onboardingSeen: true })\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async configure(changes: MobileConfigure) {\n      const next = await configureMobile(context, changes)\n      if (alive.current) {\n        setState(next)\n        setError(null)\n      }\n      return next\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function configureMobile(context: UiPluginContext, changes: MobileConfigure): Promise<MobileState> {\n  return context.call('quirky.mobile/configure', changes) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onContinue={startPairing}"
+      },
+      "route": {
+        "target": "quirky.mobile/pair",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/pair', {\n    ...(address === undefined ? {} : { address }),\n    ...(rotate ? { rotate: true } : {})\n  })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const startPairing = () => {\n    autoGenerated.current = true\n    setStage('pair')\n    void generate(false)\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const generate = async (rotate: boolean) => {\n    const currentState = mobile.state\n    if (currentState === null) return\n    setBusy(true)\n    setActionError(null)\n    setOfferVisible(false)\n    setOffer(null)\n    try {\n      const devices = await mobile.refreshDevices()\n      if (!rotate) setBaselineCount(devices.length)\n      const address = selectedAddress || currentState.interfaces[0]?.address || currentState.customAddresses[0]\n      const result = await createPairing(context, address, rotate)\n      setOffer(result)\n      setOfferVisible(result.available)\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function createPairing(context: UiPluginContext, address?: string, rotate = false): Promise<MobilePairingResult> {\n  return context.call('quirky.mobile/pair', {\n    ...(address === undefined ? {} : { address }),\n    ...(rotate ? { rotate: true } : {})\n  }) as Promise<MobilePairingResult>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onClick={startPairing}>Pair another device"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.mobile/pair",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/pair', {\n    ...(address === undefined ? {} : { address }),\n    ...(rotate ? { rotate: true } : {})\n  })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const startPairing = () => {\n    autoGenerated.current = true\n    setStage('pair')\n    void generate(false)\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+            "quote": "const generate = async (rotate: boolean) => {\n    const currentState = mobile.state\n    if (currentState === null) return\n    setBusy(true)\n    setActionError(null)\n    setOfferVisible(false)\n    setOffer(null)\n    try {\n      const devices = await mobile.refreshDevices()\n      if (!rotate) setBaselineCount(devices.length)\n      const address = selectedAddress || currentState.interfaces[0]?.address || currentState.customAddresses[0]\n      const result = await createPairing(context, address, rotate)\n      setOffer(result)\n      setOfferVisible(result.available)\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    } finally {\n      setBusy(false)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function createPairing(context: UiPluginContext, address?: string, rotate = false): Promise<MobilePairingResult> {\n  return context.call('quirky.mobile/pair', {\n    ...(address === undefined ? {} : { address }),\n    ...(rotate ? { rotate: true } : {})\n  }) as Promise<MobilePairingResult>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onClick={() => context.openView(MOBILE_PAGE_ID)}"
+      },
+      "route": {
+        "target": "view:quirky.mobile/page",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+          "quote": "context.openView(MOBILE_PAGE_ID)"
+        },
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onClick={() => void saveMachineName()}"
+      },
+      "route": {
+        "target": "quirky.mobile/configure",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/configure', changes)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+            "quote": "const saveMachineName = async () => {\n    try {\n      await mobile.configure({ machineName })\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async configure(changes: MobileConfigure) {\n      const next = await configureMobile(context, changes)\n      if (alive.current) {\n        setState(next)\n        setError(null)\n      }\n      return next\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function configureMobile(context: UiPluginContext, changes: MobileConfigure): Promise<MobileState> {\n  return context.call('quirky.mobile/configure', changes) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onChange={(event) => void toggleSidebar(event.target.checked)}"
+      },
+      "route": {
+        "target": "quirky.mobile/configure",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/configure', changes)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+            "quote": "const toggleSidebar = async (showMobileButton: boolean) => {\n    try {\n      await mobile.configure({ showMobileButton })\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async configure(changes: MobileConfigure) {\n      const next = await configureMobile(context, changes)\n      if (alive.current) {\n        setState(next)\n        setError(null)\n      }\n      return next\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function configureMobile(context: UiPluginContext, changes: MobileConfigure): Promise<MobileState> {\n  return context.call('quirky.mobile/configure', changes) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onChange={(event) => void changeAutoRestore(event.target.value)}"
+      },
+      "route": {
+        "target": "quirky.mobile/configure",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/configure', changes)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+            "quote": "const changeAutoRestore = async (value: string) => {\n    const autoRestoreFitMs = value === 'keep' ? null : Number(value)\n    try {\n      await mobile.configure({ autoRestoreFitMs })\n      setActionError(null)\n    } catch (error) {\n      setActionError(messageOf(error))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async configure(changes: MobileConfigure) {\n      const next = await configureMobile(context, changes)\n      if (alive.current) {\n        setState(next)\n        setError(null)\n      }\n      return next\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function configureMobile(context: UiPluginContext, changes: MobileConfigure): Promise<MobileState> {\n  return context.call('quirky.mobile/configure', changes) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "onClick={() => void refresh()}"
+      },
+      "route": {
+        "target": "quirky.mobile/interfaces",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/interfaces', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+            "quote": "const refresh = async () => {\n    try {\n      const nextInterfaces = await mobile.refreshInterfaces()\n      if (!nextInterfaces.some((item) => item.address === selectedAddress) && !customAddresses.includes(selectedAddress)) {\n        onAddressChange(nextInterfaces[0]?.address ?? customAddresses[0] ?? '')\n      }\n      setError(null)\n    } catch (reason) {\n      setError(messageOf(reason))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async refreshInterfaces() {\n      const interfaces = await getMobileInterfaces(context)\n      if (alive.current) setState((current) => (current ? { ...current, interfaces } : current))\n      return interfaces\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function getMobileInterfaces(context: UiPluginContext): Promise<MobileNetworkInterface[]> {\n  return context.call('quirky.mobile/interfaces', {}) as Promise<MobileNetworkInterface[]>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "onClick={() => void remove()}"
+      },
+      "route": {
+        "target": "quirky.mobile/configure",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/configure', changes)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+            "quote": "const remove = async () => {\n    try {\n      const next = await mobile.configure({\n        customAddresses: customAddresses.filter((address) => address !== selectedAddress)\n      })\n      onAddressChange(next.interfaces[0]?.address ?? next.customAddresses[0] ?? '')\n      setError(null)\n    } catch (reason) {\n      setError(messageOf(reason))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async configure(changes: MobileConfigure) {\n      const next = await configureMobile(context, changes)\n      if (alive.current) {\n        setState(next)\n        setError(null)\n      }\n      return next\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function configureMobile(context: UiPluginContext, changes: MobileConfigure): Promise<MobileState> {\n  return context.call('quirky.mobile/configure', changes) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "onClick={() => void add()}"
+      },
+      "route": {
+        "target": "quirky.mobile/configure",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/api.ts",
+          "quote": "context.call('quirky.mobile/configure', changes)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+            "quote": "const add = async () => {\n    const address = draft.trim()\n    const current = customAddresses\n    if (!address || busy || full) return\n    if (current.includes(address)) {\n      onAddressChange(address)\n      setDraft('')\n      setError(null)\n      return\n    }\n    try {\n      const next = await mobile.configure({ customAddresses: [...current, address] })\n      if (!next.customAddresses.includes(address)) throw new Error('The address was not saved.')\n      onAddressChange(address)\n      setDraft('')\n      setError(null)\n    } catch (reason) {\n      setError(messageOf(reason))\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/useMobileState.ts",
+            "quote": "async configure(changes: MobileConfigure) {\n      const next = await configureMobile(context, changes)\n      if (alive.current) {\n        setState(next)\n        setError(null)\n      }\n      return next\n    }"
+          },
+          {
+            "file": "plugins/quirky.mobile/src/window/api.ts",
+            "quote": "export function configureMobile(context: UiPluginContext, changes: MobileConfigure): Promise<MobileState> {\n  return context.call('quirky.mobile/configure', changes) as Promise<MobileState>\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onClick={() => void copy()}"
+      },
+      "route": {
+        "target": "command:quirky.mobile/copy-pairing-code",
+        "invoke": {
+          "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+          "quote": "context.executeCommand(COPY_PAIRING_CODE_COMMAND, { pairingUrl: available.pairingUrl }, { activateOwner: false })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+            "quote": "const copy = async () => {\n    if (!available) return\n    setCopyNotice(null)\n    setCopyError(null)\n    try {\n      await context.executeCommand(COPY_PAIRING_CODE_COMMAND, { pairingUrl: available.pairingUrl }, { activateOwner: false })\n      setCopyNotice('Pairing code copied.')\n    } catch (reason) {\n      const message = reason instanceof Error ? reason.message : String(reason)\n      setCopyError(`Copy failed: ${message}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onPlatformChange={setPlatform}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onChannelChange={setChannel}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onBack={() => setStage('intro')}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onBack={() => setStage('install')}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onAddressChange={(address) => { setActionError(null); setSelectedAddress(address) }}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onChange={(event) => setMachineName(event.target.value)}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobileSettings.tsx",
+        "quote": "onAddressChange={(address) => { setActionError(null); setSelectedAddress(address) }}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "onChange={(event) => setDraft(event.target.value)}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onEnlarge={() => setEnlarged(true)}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onClose={() => setEnlarged(false)}"
+      },
+      "transient": "draft",
+      "reason": "Changes only local draft input or wizard/preview visibility."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onFocus={(event) => event.currentTarget.select()}"
+      },
+      "transient": "caret",
+      "reason": "Selecting the readonly code only changes text selection."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onClick={() => onPlatformChange(choice)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onClick={() => onChannelChange(choice)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "onClick={onContinue}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "<Button onClick={onBack}>Back</Button>\n          <Button variant=\"primary\""
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/MobilePage.tsx",
+        "quote": "<div className=\"ui-cluster\"><Button onClick={onBack}>Back</Button></div>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/NetworkPicker.tsx",
+        "quote": "onChange={(event) => onAddressChange(event.target.value)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onClick={onEnlarge}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onClose={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onClick={onClose}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onClick={() => onGenerate(true)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.mobile/src/window/PairingPanel.tsx",
+        "quote": "onClick={() => onGenerate(false)}"
+      },
+      "notAction": "forwarded",
+      "reason": "Forwards the parent-owned action or draft change without adding behavior."
+    }
+  ]
+}

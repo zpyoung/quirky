@@ -6,6 +6,8 @@ export type MobilePairInput = { address?: string; rotate?: boolean }
 export type OwnerPairInput = { name: string; confirm: true; address?: string }
 export type OwnerRevokeInput = { grantId: string; confirm: true }
 export type MobileOpenInput = { settings: boolean }
+export type ResetPairingInput = { confirm: true }
+
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype
@@ -113,4 +115,10 @@ export function ownerRevokeInput(value: unknown): OwnerRevokeInput {
     throw new Error('ownerRevoke requires a UUID grantId and confirm: true')
   }
   return { grantId: value.grantId, confirm: true }
+}
+export function resetPairingInput(value: unknown): ResetPairingInput {
+  if (!isObject(value) || Reflect.ownKeys(value).length !== 1 || !Object.hasOwn(value, 'confirm') || value.confirm !== true) {
+    throw new Error('resetPairing requires confirm: true')
+  }
+  return { confirm: true }
 }

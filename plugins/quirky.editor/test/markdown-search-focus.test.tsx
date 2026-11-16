@@ -6,6 +6,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import type { ComponentType } from 'react'
 import type { EditorSurfaceBuffer, SurfaceProps } from '../src/types'
 import { searchMarkdown, type SearchMatch } from '../src/markdown/source'
+import { createEditorUiControlReportScope, EditorUiControlProvider } from '../src/window/uiControl'
 
 type Mode = 'preview' | 'rich'
 type PreviewSearchResponse = { total: number; matches: SearchMatch[] }
@@ -22,7 +23,9 @@ type MountedSurface = {
 const MODES: Mode[] = ['preview', 'rich']
 let createRoot: (container: HTMLElement) => Root
 let MarkdownSurface: ComponentType<SurfaceProps>
+let deactivateUi: (() => void) | undefined
 let surfaces: MountedSurface[]
+const activatedHandlers = new Map<string, (args?: unknown) => unknown>()
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -30,8 +33,24 @@ beforeAll(async () => {
   // React DOM and TipTap capture browser APIs during initialization, so import them after Happy DOM is registered.
   ;({ createRoot } = await import('react-dom/client'))
   ;({ MarkdownSurface } = await import('../src/markdown/MarkdownSurface'))
+  // UI activation imports React DOM, so load it only after Happy DOM is registered.
+  const ui = await import('../src/ui')
+  deactivateUi = ui.deactivate
+  ui.activate({
+    pluginId: 'quirky.editor',
+    call: async () => ({}),
+    provide(id: string, handler: unknown) {
+      if (typeof handler !== 'function') throw new Error(`Expected handler for ${id}`)
+      activatedHandlers.set(id, handler as (args?: unknown) => unknown)
+    },
+    subscribe: () => () => {},
+    getSetting: () => 300,
+    getLayout: () => ({}),
+    toast: () => {}
+  } as unknown as UiPluginContext)
 })
 afterAll(async () => {
+  deactivateUi?.()
   await GlobalRegistrator.unregister()
 })
 beforeEach(() => { surfaces = [] })
@@ -99,7 +118,18 @@ async function renderSurface(
     if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [] }
     return {}
   }
-  const context = { pluginId: 'quirky.editor', call: onAction } as unknown as UiPluginContext
+  const context = {
+    pluginId: 'quirky.editor',
+    async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.command.run') {
+        const handler = activatedHandlers.get(String(params.id))
+        if (!handler) throw new Error(`Missing activated command handler: ${String(params.id)}`)
+        return { result: await handler(params.args) }
+      }
+      return onAction(method, params)
+    }
+  } as unknown as UiPluginContext
   const props: SurfaceProps = {
     context,
     buffer: makeBuffer(mode, content),
@@ -115,7 +145,8 @@ async function renderSurface(
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
-  await act(async () => root.render(<MarkdownSurface {...props} />))
+  const scope = createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document', context })
+  await act(async () => root.render(<EditorUiControlProvider scope={scope}><MarkdownSurface {...props} /></EditorUiControlProvider>))
   let unmounted = false
   const surface: MountedSurface = {
     element,
@@ -124,6 +155,7 @@ async function renderSurface(
       if (unmounted) return
       unmounted = true
       await act(async () => root.unmount())
+      scope.dispose()
     }
   }
   surfaces.push(surface)

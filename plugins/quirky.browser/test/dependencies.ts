@@ -1,6 +1,15 @@
-import type { BrowserDependencies } from '../src/runtime/dependencies'
+import type { BrowserChild, BrowserDependencies, BrowserSpawn, BrowserSpawnOptions } from '../src/runtime/dependencies'
 
-export type BrowserTestOverrides = Partial<BrowserDependencies> & Pick<BrowserDependencies, 'runtimeRoot'>
+export type BrowserTestSpawn = (
+  command: string[],
+  options: BrowserSpawnOptions,
+  defaultSpawn: BrowserSpawn
+) => BrowserChild
+
+export type BrowserTestOverrides = Omit<Partial<BrowserDependencies>, 'spawn'> &
+  Pick<BrowserDependencies, 'runtimeRoot'> & {
+    spawn?: BrowserTestSpawn
+  }
 
 const overridesByHome = new Map<string, BrowserTestOverrides>()
 

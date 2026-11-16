@@ -2,20 +2,38 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { budgetFrom, evaluateForAgent, Matcher } from '../src/rules/matcher'
+import { budgetFrom, evaluateForAgent, Matcher, type MatcherOptions } from '../src/rules/matcher'
 import { RuleSources, TIMED_OUT_REASON } from '../src/rules/sources'
 import type { Origin, Rule, RuleFile } from '../src/rules/types'
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
+import type { ProcessSpawner, SpawnedProcess } from '@quirky/protocol'
 
 const origin: Origin = { kind: 'built-in', path: '/rules/fake.json' }
 const slowRule: Rule = { id: 'slow', state: 'working', region: 'screen', all: [{ regex: 'a+a+a+a+$' }] }
 const busy: Rule = { id: 'busy', state: 'working', region: 'screen', all: [{ regex: 'esc to interrupt' }] }
 const poison = [`${'a'.repeat(30_000)}!`]
 
+const runners: OwnedProcessRunner[] = []
+let nextRunner = 0
+
+function makeRunner(): OwnedProcessRunner {
+  const runner = createProcessRunner({ owner: `agent-status-matcher-test-${++nextRunner}` })
+  runners.push(runner)
+  return runner
+}
+
+function makeMatcher(options: MatcherOptions = {}): Matcher {
+  return new Matcher(makeRunner(), options)
+}
+
 let matcher: Matcher
 beforeAll(() => {
-  matcher = new Matcher()
+  matcher = makeMatcher()
 })
-afterAll(() => matcher.dispose())
+afterAll(async () => {
+  matcher.dispose()
+  await Promise.all(runners.splice(0).map(runner => runner.dispose()))
+})
 
 describe('matcher budget', () => {
   test('the budget is 250 ms, scaled by a positive QUIRKY_TEST_AGENT_STATUS_TIME_SCALE', () => {
@@ -66,7 +84,7 @@ describe('matcher process', () => {
   }, 10_000)
 
   test('a request still queued when its deadline passes expires without running', async () => {
-    const queue = new Matcher({ env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.4' } })
+    const queue = makeMatcher({ env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.4' } })
     try {
       const file: RuleFile = { agent: 'fake', rules: [slowRule] }
       const slow = [0, 1, 2, 3].map(() => queue.evaluate(file, { title: '', lines: poison, quietForMs: null }, origin))
@@ -89,7 +107,7 @@ describe('matcher process', () => {
   })
 
   test('a time scale shortens the budget', async () => {
-    const quick = new Matcher({ env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.2' } })
+    const quick = makeMatcher({ env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.2' } })
     try {
       const started = performance.now()
       expect(await quick.matchLines('a+a+a+a+$', false, poison)).toEqual({ timedOut: true })
@@ -100,33 +118,40 @@ describe('matcher process', () => {
   }, 10_000)
 
   test('after dispose every call reports the matcher unavailable', async () => {
-    const gone = new Matcher()
+    const gone = makeMatcher()
     expect(await gone.matchLines('a', false, ['a'])).toMatchObject({ line: 'a' })
     gone.dispose()
     const result = await gone.matchLines('a', false, ['a'])
     expect(result).toHaveProperty('unavailable')
   })
 
-  test('disposing while the process is starting kills it and answers every request unavailable', async () => {
-    const gone = new Matcher()
+  test('disposing during startup stops the owned process and answers every request unavailable', async () => {
+    const runner = makeRunner()
+    const { promise: spawned, resolve: didSpawn } = Promise.withResolvers<void>()
+    let child: SpawnedProcess | undefined
+    const spawner: ProcessSpawner = {
+      spawn(command, options) {
+        const handle = runner.spawn(command, options)
+        child = handle
+        didSpawn()
+        return handle
+      }
+    }
+    const gone = new Matcher(spawner)
     const first = gone.matchLines('a', false, ['a'])
     const second = gone.matchLines('a', false, ['a'])
-    await Bun.sleep(1)
-    const internals = gone as unknown as { spawning: { exited: Promise<number>; killed: boolean } | null; child: unknown }
-    const starting = internals.spawning
-    expect(starting).not.toBeNull()
+    await spawned
+    expect(runner.live()).toHaveLength(1)
     gone.dispose()
     expect(await first).toEqual({ unavailable: 'the matcher was shut down' })
     expect(await second).toEqual({ unavailable: 'the matcher was shut down' })
     expect(await gone.matchLines('a', false, ['a'])).toEqual({ unavailable: 'the matcher was shut down' })
-    await starting!.exited
-    expect(starting!.killed).toBe(true)
-    expect(internals.child).toBeNull()
-    expect(internals.spawning).toBeNull()
+    await child!.exited
+    expect(runner.live()).toEqual([])
   })
 
   test('a matcher that cannot start reports why and gives no verdict', async () => {
-    const broken = new Matcher({ command: ['/nonexistent/binary-for-test'] })
+    const broken = makeMatcher({ command: ['/nonexistent/binary-for-test'] })
     try {
       const result = await broken.evaluate({ agent: 'fake', rules: [busy] }, { title: '', lines: ['esc to interrupt'], quietForMs: null }, origin)
       expect(result).toHaveProperty('unavailable')
@@ -205,7 +230,7 @@ describe('slow rule sources', () => {
 
   test('an unavailable matcher is reported with the source it could not run', async () => {
     const sources = new RuleSources({ userDir: join(root, 'user'), builtinDir: join(root, 'builtin'), contributions: async () => [], log: () => {} })
-    const broken = new Matcher({ command: ['/nonexistent/binary-for-test'] })
+    const broken = makeMatcher({ command: ['/nonexistent/binary-for-test'] })
     try {
       const result = await evaluateForAgent(sources, broken, 'fake', { title: '', lines: [], quietForMs: null })
       expect(result.verdict).toBeNull()

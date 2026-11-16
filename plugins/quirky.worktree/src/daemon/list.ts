@@ -9,6 +9,7 @@ import { readStockOptions } from './options'
 import { projectPreference } from './project'
 import { forgetWorktreeOrigins, insertRow, metadataOf, rowOf, type WorktreeRow } from './store'
 import { isOwnedPreparedRegistration } from './prepared'
+import { tagIdsOf } from './tags'
 
 /** What the join needs from the plugin: the store, group lookup, identity source and in-flight removes. */
 export type ListEnv = {
@@ -19,12 +20,24 @@ export type ListEnv = {
   identitySource?: DirectoryIdentitySource
   /** IDs whose remove is in flight in this daemon. */
   removing: ReadonlySet<string>
+  /** Owner-qualified keys preserve ambiguity when several projects list the same workspace. */
+  listed: Map<string, Facts>
+  /** Prevents reads started under old project registrations from repopulating remembered facts. */
+  catalog: { generation: number }
 }
 
 /** The `repoId` of a workspace that belongs to a group's parent folder rather than a project. */
 export const groupRepoId = (groupId: string): string => `group:${groupId}`
 
 type Facts = Pick<Worktree, 'id' | 'repoId' | 'path' | 'branch' | 'head' | 'isMain' | 'kind' | 'groupId'>
+
+function rememberListing(env: ListEnv, repoId: string, facts: Map<string, Facts>, generation: number): void {
+  if (generation !== env.catalog.generation) return
+  for (const [id, cached] of env.listed) {
+    if (cached.repoId === repoId) env.listed.delete(id)
+  }
+  for (const [id, fact] of facts) env.listed.set(`${repoId}:${id}`, fact)
+}
 
 /** A folder's birth time in whole milliseconds, or null when it can't be read. */
 export function birthtimeOf(path: string): number | null {
@@ -33,6 +46,20 @@ export function birthtimeOf(path: string): number | null {
   } catch {
     return null
   }
+}
+
+function folderReplaced(row: WorktreeRow, birthtime: number | null, instanceId: string | null): boolean {
+  return (row.birthtime !== null && birthtime !== null && row.birthtime !== birthtime) ||
+    (instanceId !== null && row.instance_id !== '' && !row.instance_id.startsWith('unverified:') && row.instance_id !== instanceId)
+}
+
+/** Whether a stored row still names its original folder; reads identity without changing the row. */
+export function folderStateOf(row: WorktreeRow, path: string | null, identitySource: DirectoryIdentitySource): 'same' | 'replaced' | 'missing' {
+  if (path === null) return 'missing'
+  const identity = identitySource.stat(path)
+  const birthtime = identity === null ? birthtimeOf(path) : Math.round(identity.birthtimeMs)
+  if (birthtime === null) return 'missing'
+  return folderReplaced(row, birthtime, identity === null ? null : instanceIdFor(identity)) ? 'replaced' : 'same'
 }
 
 /**
@@ -57,6 +84,7 @@ export function joinMetadata(facts: Facts, row: WorktreeRow, removing: boolean, 
     externalVisibility,
     externalVisible: !isExternalWorktree || externalVisibility === 'show',
     externalInboxSuppressed: preference.externalInboxSuppressed,
+    tagIds: tagIdsOf(store, row.id),
     removing
   }
 }
@@ -79,12 +107,10 @@ function rowForFolder(env: ListEnv, repoId: string, kind: 'git' | 'folder', path
   const instanceId = identity === null ? null : instanceIdFor(identity)
   const birthtime = identity === null ? birthtimeOf(path) : Math.round(identity.birthtimeMs)
   let row = rowOf(env.store, id)
-  const differentBirthtime = row && row.birthtime !== null && birthtime !== null && row.birthtime !== birthtime
-  const differentInstance =
-    row && instanceId !== null && row.instance_id !== '' && !row.instance_id.startsWith('unverified:') && row.instance_id !== instanceId
-  if (row && (differentBirthtime || differentInstance || row.repo_id !== repoId)) {
+  const differentFolder = row !== null && folderReplaced(row, birthtime, instanceId)
+  if (row && (differentFolder || row.repo_id !== repoId)) {
     // a row of a removed and re-added project is the same case: its metadata must not carry over
-    if (differentBirthtime || differentInstance) env.log(`discarded the metadata of ${id}: ${path} is a different folder than the one it was recorded for`)
+    if (differentFolder) env.log(`discarded the metadata of ${id}: ${path} is a different folder than the one it was recorded for`)
     forgetWorktreeOrigins(env.store, id)
     env.store.run('DELETE FROM worktrees WHERE id = ?', id)
     row = null
@@ -111,6 +137,7 @@ function rowForFolder(env: ListEnv, repoId: string, kind: 'git' | 'folder', path
  * `prune: false` skips that removal for callers that only need the IDs.
  */
 async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise<WorktreeControl[]> {
+  const generation = env.catalog.generation
   const registrations = await gitApi().listRegistrations(repo.path)
   const registered = new Set(registrations.map((registration) => worktreeIdForPath(registration.path)))
   const preparations = new Set<string>()
@@ -119,7 +146,8 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
       preparations.add(worktreeIdForPath(registration.path))
     }
   }
-  return env.store.transaction(() => {
+  const listed = new Map<string, Facts>()
+  const worktrees = env.store.transaction(() => {
     const result: WorktreeControl[] = []
     for (const registration of registrations) {
       if (registration.prunable || !registration.exists) continue
@@ -137,6 +165,7 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
         kind: 'git',
         groupId: null
       }
+      listed.set(id, facts)
       result.push(joinMetadata(facts, row, env.removing.has(id), env.store))
     }
     if (prune) {
@@ -148,25 +177,33 @@ async function listGitProject(env: ListEnv, repo: Repo, prune: boolean): Promise
     }
     return result.sort(compare)
   })
+  rememberListing(env, repo.id, listed, generation)
+  return worktrees
 }
 
 /** A folder project's workspaces: the synthesised primary plus its folder-workspace rows. */
 function listFolderProject(env: ListEnv, repo: Repo): WorktreeControl[] {
-  return env.store.transaction(() => {
+  const listed = new Map<string, Facts>()
+  const worktrees = env.store.transaction(() => {
     const path = resolveRealPath(repo.path)
     const primaryId = worktreeIdForPath(repo.path)
     const primary = rowForFolder(env, repo.id, 'folder', path, primaryId, repo.addedAt)
+    const primaryFacts: Facts = { id: primaryId, repoId: repo.id, path, branch: null, head: '', isMain: true, kind: 'folder', groupId: null }
+    listed.set(primaryId, primaryFacts)
     const result = [
-      joinMetadata({ id: primaryId, repoId: repo.id, path, branch: null, head: '', isMain: true, kind: 'folder', groupId: null }, primary, env.removing.has(primaryId), env.store)
+      joinMetadata(primaryFacts, primary, env.removing.has(primaryId), env.store)
     ]
     for (const row of env.store.all<WorktreeRow>("SELECT * FROM worktrees WHERE repo_id = ? AND kind = 'folder' AND id != ?", repo.id, primaryId)) {
       const rowPath = row.path ?? path
       const metadata = rowForFolder(env, repo.id, 'folder', rowPath, row.id, row.created_at ?? repo.addedAt)
       const facts: Facts = { id: row.id, repoId: repo.id, path: rowPath, branch: null, head: '', isMain: false, kind: 'folder', groupId: null }
+      listed.set(row.id, facts)
       result.push(joinMetadata(facts, metadata, env.removing.has(row.id), env.store))
     }
     return result.sort(compare)
   })
+  rememberListing(env, repo.id, listed, env.catalog.generation)
+  return worktrees
 }
 
 /**
@@ -179,14 +216,18 @@ export async function listProject(env: ListEnv, repo: Repo, options: { prune?: b
 
 /** The folder workspaces on a group's parent folder. */
 export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] {
+  const repoId = groupRepoId(group.id)
+  const listed = new Map<string, Facts>()
   const rows = env.store.all<WorktreeRow>('SELECT * FROM worktrees WHERE group_id = ?', group.id)
-  return env.store.transaction(() =>
+  const worktrees = env.store.transaction(() =>
     rows
       .map((row) => {
         const path = row.path ?? group.parentPath ?? ''
         const metadata = rowForFolder(env, row.repo_id, 'folder', path, row.id, row.created_at ?? Date.now())
+        const facts: Facts = { id: row.id, repoId, path, branch: null, head: '', isMain: false, kind: 'folder', groupId: group.id }
+        listed.set(row.id, facts)
         return joinMetadata(
-          { id: row.id, repoId: groupRepoId(group.id), path, branch: null, head: '', isMain: false, kind: 'folder', groupId: group.id },
+          facts,
           metadata,
           env.removing.has(row.id),
           env.store
@@ -194,6 +235,48 @@ export function listGroup(env: ListEnv, group: ProjectGroup): WorktreeControl[] 
       })
       .sort(compare)
   )
+  rememberListing(env, repoId, listed, env.catalog.generation)
+  return worktrees
+}
+
+/** An unambiguous workspace from completed listings, if its row and folder still exist; never runs git. */
+export function knownWorktree(env: ListEnv, id: string): WorktreeControl | null {
+  let facts: Facts | undefined
+  for (const candidate of env.listed.values()) {
+    if (candidate.id !== id) continue
+    if (facts) return null
+    facts = candidate
+  }
+  if (!facts) return null
+  const row = rowOf(env.store, id)
+  if (!row) return null
+  try {
+    if (!statSync(facts.path).isDirectory()) return null
+  } catch {
+    return null
+  }
+  return joinMetadata(facts, row, env.removing.has(id), env.store)
+}
+
+/** The workspace from its recorded owner, or null when a miss, ambiguity or failure needs the full search; never throws. */
+export async function findOwned(env: ListEnv, repos: Repo[], id: string): Promise<WorktreeControl | null> {
+  try {
+    const row = rowOf(env.store, id)
+    if (!row) return null
+    if (row.group_id) {
+      const group = (await env.groups()).find((candidate) => candidate.id === row.group_id)
+      return group ? listGroup(env, group).find((worktree) => worktree.id === id) ?? null : null
+    }
+    const repo = repos.find((candidate) => candidate.id === row.repo_id)
+    if (!repo) return null
+    const worktrees = await listProject(env, repo)
+    if (repos.some((other) => other.id !== repo.id && worktrees.some((worktree) => worktree.id === worktreeIdForPath(other.path)))) {
+      return null
+    }
+    return worktrees.find((worktree) => worktree.id === id) ?? null
+  } catch {
+    return null
+  }
 }
 
 /** Every project's workspaces, then every group's; a project git can't list is logged and left out. */

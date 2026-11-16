@@ -1,10 +1,15 @@
+import { Buffer } from 'node:buffer'
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
+import { inspect } from 'node:util'
 import {
   base64ToBytes,
   encodePtyData,
   encodePtyJson,
+  negotiatePtyVersion,
+  ptyVersionRejection,
+  PTY_PROTOCOL_MIN_VERSION,
   PTY_PROTOCOL_VERSION,
   PtyFrameDecoder,
   type PtyEvent,
@@ -17,8 +22,12 @@ import { SocketWriter } from './writer'
 
 export type PtyServerOptions = Partial<Omit<SessionManagerOptions, 'home'>> & {
   home: string
-  /** Called after a `shutdown` request has been answered and the server has stopped. */
-  onShutdown?: () => void
+  /** Called after a `shutdown` request has been answered and `stop()` has settled; defined on rejection. */
+  onShutdown?: (error?: unknown) => void
+  /** Bounds encoded output queued or held for each session; defaults to 4 MiB. */
+  maxSessionQueuedBytes?: number
+  /** Bounds all encoded output queued or held for each connection; defaults to 32 MiB. */
+  maxConnectionQueuedBytes?: number
 }
 
 export type PtyServer = {
@@ -29,14 +38,21 @@ export type PtyServer = {
   stop(): Promise<void>
 }
 
+type HeldOutput = { frames: Uint8Array[]; bytes: number; lagged: boolean; cancelled: boolean }
+
 type Connection = {
   socket: Bun.Socket<Connection>
   writer: SocketWriter
   decoder: PtyFrameDecoder
   sink: DataSink
-  /** Output of sessions whose subscribe response has not been sent yet; it follows the response. */
-  holding: Map<string, Uint8Array[]>
+  /** Output held until the matching subscribe response has been sent. */
+  holding: Map<string, HeldOutput>
+  pendingHolds: Map<string, Set<HeldOutput>>
+  heldBytes: number
+  subscribed: Set<string>
+  protocolVersion: number | null
   authenticated: boolean
+  sessionLagged: boolean
   closed: boolean
 }
 
@@ -45,7 +61,7 @@ type Connection = {
  * the pid to `pty.pid`; the caller is responsible for ensuring no other host owns the home.
  */
 export function startPtyServer(options: PtyServerOptions): PtyServer {
-  const { home } = options
+  const { home, maxSessionQueuedBytes = 4_194_304, maxConnectionQueuedBytes = 33_554_432 } = options
   const socketPath = resolveSocketPath(home, 'pty.sock')
   mkdirSync(home, { recursive: true, mode: 0o700 })
 
@@ -59,13 +75,21 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     logMaxBytes: options.logMaxBytes,
     tailBytes: options.tailBytes,
     checkpointIntervalMs: options.checkpointIntervalMs,
-    shellReadyTimeoutMs: options.shellReadyTimeoutMs
+    shellReadyTimeoutMs: options.shellReadyTimeoutMs,
+    processRunner: options.processRunner,
+    shutdownDrainMs: options.shutdownDrainMs,
+    storedIndex: options.storedIndex
   })
   const connections = new Set<Connection>()
 
-  const send = (conn: Connection, message: unknown) => {
+  const sendFrame = (conn: Connection, frame: Uint8Array, tag?: string) => {
     if (conn.closed) return
-    if (!conn.writer.send(encodePtyJson(message))) conn.socket.end()
+    if (conn.heldBytes + conn.writer.queuedBytes + frame.byteLength > maxConnectionQueuedBytes ||
+        !conn.writer.send(frame, tag)) severConnection(conn)
+  }
+
+  const send = (conn: Connection, message: unknown) => {
+    if (!conn.closed) sendFrame(conn, encodePtyJson(message))
   }
 
   const broadcast = (event: PtyEvent) => {
@@ -80,15 +104,39 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
       open(socket) {
         const conn: Connection = {
           socket,
-          writer: new SocketWriter(socket),
+          writer: new SocketWriter(socket, maxConnectionQueuedBytes),
           decoder: new PtyFrameDecoder(),
+          protocolVersion: null,
           authenticated: false,
+          sessionLagged: false,
           closed: false,
           holding: new Map(),
+          pendingHolds: new Map(),
+          heldBytes: 0,
+          subscribed: new Set(),
           sink: (sessionId, bytes) => {
+            if (conn.closed || !conn.subscribed.has(sessionId)) return
+            const frameLength = 6 + Buffer.byteLength(sessionId, 'utf8') + bytes.byteLength
+            if (conn.heldBytes + conn.writer.queuedBytes + frameLength > maxConnectionQueuedBytes) {
+              severConnection(conn)
+              return
+            }
+
             const held = conn.holding.get(sessionId)
-            if (held) held.push(bytes.slice())
-            else if (!conn.writer.send(encodePtyData(sessionId, bytes))) conn.socket.end()
+            const sessionQueuedBytes = (held?.bytes ?? 0) + conn.writer.remainingForTag(sessionId)
+            if (sessionQueuedBytes + frameLength > maxSessionQueuedBytes) {
+              lagSession(conn, sessionId)
+              return
+            }
+
+            const frame = encodePtyData(sessionId, bytes)
+            if (!held) {
+              sendFrame(conn, frame, sessionId)
+            } else {
+              held.frames.push(frame)
+              held.bytes += frame.byteLength
+              conn.heldBytes += frame.byteLength
+            }
           }
         }
         socket.data = conn
@@ -98,6 +146,7 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         const conn = socket.data
         try {
           for (const frame of conn.decoder.push(chunk)) {
+            if (conn.closed) break
             if (frame.kind === 'data') {
               if (!conn.authenticated) throw new Error('hello required')
               manager.write(frame.sessionId, frame.bytes)
@@ -129,6 +178,85 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     conn.closed = true
     connections.delete(conn)
     manager.dropSink(conn.sink)
+    for (const holds of conn.pendingHolds.values()) {
+      for (const held of holds) {
+        held.cancelled = true
+        held.frames.length = 0
+        held.bytes = 0
+      }
+    }
+    conn.pendingHolds.clear()
+    conn.holding.clear()
+    conn.subscribed.clear()
+    conn.heldBytes = 0
+    conn.writer.clear()
+  }
+
+  function severConnection(conn: Connection) {
+    if (conn.closed) return
+    dropConnection(conn)
+    conn.socket.end()
+  }
+
+  function clearHolding(conn: Connection, sessionId: string, cancelled = true) {
+    const held = conn.holding.get(sessionId)
+    if (!held) return
+    if (cancelled) held.cancelled = true
+    conn.holding.delete(sessionId)
+    conn.heldBytes -= held.bytes
+    held.frames.length = 0
+    held.bytes = 0
+  }
+  function cancelSubscribeAttempts(conn: Connection, sessionId: string) {
+    const attempts = conn.pendingHolds.get(sessionId)
+    if (!attempts) return
+    for (const held of attempts) {
+      held.cancelled = true
+      held.frames.length = 0
+      held.bytes = 0
+    }
+    conn.pendingHolds.delete(sessionId)
+  }
+
+  function forgetSubscribeAttempt(conn: Connection, sessionId: string, held: HeldOutput) {
+    const attempts = conn.pendingHolds.get(sessionId)
+    if (!attempts) return
+    attempts.delete(held)
+    if (attempts.size === 0) conn.pendingHolds.delete(sessionId)
+  }
+
+  function purgeSessionFrames(conn: Connection, sessionId: string) {
+    clearHolding(conn, sessionId)
+    cancelSubscribeAttempts(conn, sessionId)
+    conn.subscribed.delete(sessionId)
+    conn.writer.dropTag(sessionId)
+  }
+
+  function purgeSession(sessionId: string, unsubscribe = true) {
+    for (const conn of connections) {
+      if (unsubscribe) manager.unsubscribe(sessionId, conn.sink)
+      purgeSessionFrames(conn, sessionId)
+    }
+  }
+
+  function lagSession(conn: Connection, sessionId: string) {
+    if (conn.closed) return
+    if (!conn.sessionLagged) {
+      severConnection(conn)
+      return
+    }
+
+    conn.subscribed.delete(sessionId)
+    manager.unsubscribe(sessionId, conn.sink)
+    const held = conn.holding.get(sessionId)
+    if (held) {
+      conn.heldBytes -= held.bytes
+      held.frames.length = 0
+      held.bytes = 0
+      held.lagged = true
+    }
+    conn.writer.dropTag(sessionId)
+    if (!held) send(conn, { type: 'lagged', sessionId })
   }
 
   function handleMessage(conn: Connection, message: unknown) {
@@ -159,14 +287,14 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     }
 
     if (!conn.authenticated) {
-      const rejection = authenticate(request)
+      const rejection = authenticate(conn, request)
       if (rejection) {
         fail(new Error(rejection))
         conn.writer.endAfterFlush()
         return
       }
       conn.authenticated = true
-      reply({ version: PTY_PROTOCOL_VERSION, pid: process.pid } satisfies PtyResults['hello'])
+      reply({ version: conn.protocolVersion!, pid: process.pid } satisfies PtyResults['hello'])
       return
     }
 
@@ -179,19 +307,23 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     }
   }
 
-  function authenticate(request: PtyRequest): string | null {
+  function authenticate(conn: Connection, request: PtyRequest): string | null {
     if (request.type !== 'hello') return 'hello required before any other request'
     if (request.token !== token) return 'invalid token'
-    if (request.version !== PTY_PROTOCOL_VERSION) {
-      return `unsupported protocol version ${request.version}, host speaks ${PTY_PROTOCOL_VERSION}`
-    }
+    const version = negotiatePtyVersion(request, {
+      min: PTY_PROTOCOL_MIN_VERSION,
+      max: PTY_PROTOCOL_VERSION
+    })
+    if (version === null) return ptyVersionRejection(request.version, PTY_PROTOCOL_VERSION)
+    conn.protocolVersion = version
+    conn.sessionLagged = request.sessionLagged === true
     return null
   }
 
   function dispatch(conn: Connection, request: PtyRequest): unknown {
     switch (request.type) {
       case 'hello':
-        return { version: PTY_PROTOCOL_VERSION, pid: process.pid }
+        return { version: conn.protocolVersion!, pid: process.pid }
       case 'create':
         return manager.create(request)
       case 'writeAccepted':
@@ -200,19 +332,28 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         manager.resize(request.sessionId, request.cols, request.rows)
         return {}
       case 'kill':
-        manager.kill(request.sessionId, request.signal, request.reason)
-        return {}
+        return manager.kill(request.sessionId, request.signal, request.reason).then(() => {
+          if (!request.signal || request.signal === 'SIGTERM' || request.signal === 'TERM' ||
+              request.signal === 'SIGKILL' || request.signal === 'KILL' || request.reason === 'killed') {
+            purgeSession(request.sessionId)
+          }
+          return {}
+        })
       case 'stopWithHistory':
+        purgeSession(request.sessionId)
         return manager.stopWithHistory(request.sessionId).then(() => ({}))
       case 'forget':
-        manager.forget(request.sessionId)
-        return {}
+        return manager.forget(request.sessionId).then(() => {
+          purgeSession(request.sessionId, false)
+          return {}
+        })
       case 'list':
         return manager.list()
       case 'subscribe':
         return subscribe(conn, request)
       case 'unsubscribe':
         manager.unsubscribe(request.sessionId, conn.sink)
+        purgeSessionFrames(conn, request.sessionId)
         return {}
       case 'read':
         return manager.read(request.sessionId, request.lines, request.unwrap === true)
@@ -227,8 +368,14 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
       case 'shutdown':
         return manager.shutdown().then(() => {
           void conn.writer.flushed().then(async () => {
-            await stop()
-            options.onShutdown?.()
+            try {
+              await stop()
+              options.onShutdown?.()
+            } catch (error) {
+              const shutdownError = error ?? new Error('unknown shutdown error')
+              if (options.onShutdown) options.onShutdown(shutdownError)
+              else process.stderr.write(`[quirky-pty] shutdown failed: ${inspect(shutdownError)}\n`)
+            }
           })
           return {}
         })
@@ -237,25 +384,64 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     }
   }
 
+  function finishSubscribe(conn: Connection, sessionId: string, held: HeldOutput) {
+    forgetSubscribeAttempt(conn, sessionId, held)
+    if (conn.closed || held.cancelled) {
+      if (!conn.subscribed.has(sessionId)) {
+        try {
+          manager.unsubscribe(sessionId, conn.sink)
+        } catch {}
+      }
+      return
+    }
+    const isCurrent = conn.holding.get(sessionId) === held
+    if (!isCurrent) return
+    if (held.lagged) {
+      conn.holding.delete(sessionId)
+      send(conn, { type: 'lagged', sessionId })
+      return
+    }
+    conn.holding.delete(sessionId)
+    for (const frame of held.frames) {
+      if (conn.closed) break
+      held.bytes -= frame.byteLength
+      conn.heldBytes -= frame.byteLength
+      sendFrame(conn, frame, sessionId)
+    }
+    held.frames.length = 0
+    held.bytes = 0
+  }
+
   /**
    * Output can start flowing as soon as the manager registers the sink, which is before the response
    * is built. It is held back here so the first DATA frame follows the response.
    */
   function subscribe(conn: Connection, request: Extract<PtyRequest, { type: 'subscribe' }>): Promise<unknown> {
     const { sessionId } = request
-    const held: Uint8Array[] = []
+    const wasSubscribed = conn.subscribed.has(sessionId)
+    clearHolding(conn, sessionId, false)
+    const held: HeldOutput = { frames: [], bytes: 0, lagged: false, cancelled: false }
     conn.holding.set(sessionId, held)
+    const attempts = conn.pendingHolds.get(sessionId) ?? new Set<HeldOutput>()
+    attempts.add(held)
+    conn.pendingHolds.set(sessionId, attempts)
+    conn.subscribed.add(sessionId)
     return manager.subscribe(sessionId, conn.sink, { mode: request.mode, historyLines: request.historyLines }).then(
       (result) => {
-        // the reply is sent in a microtask after this returns; a timer runs after it
-        setTimeout(() => {
-          conn.holding.delete(sessionId)
-          for (const bytes of held) conn.sink(sessionId, bytes)
-        }, 0)
+        // The reply is sent in a microtask before this timer runs.
+        setTimeout(() => finishSubscribe(conn, sessionId, held), 0)
         return result
       },
       (error) => {
-        conn.holding.delete(sessionId)
+        if (held.lagged && !held.cancelled && conn.holding.get(sessionId) === held) {
+          setTimeout(() => finishSubscribe(conn, sessionId, held), 0)
+        } else {
+          if (conn.holding.get(sessionId) === held) {
+            clearHolding(conn, sessionId)
+            if (!wasSubscribed) conn.subscribed.delete(sessionId)
+          }
+          forgetSubscribeAttempt(conn, sessionId, held)
+        }
         throw error
       }
     )
@@ -266,10 +452,19 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
     stopping ??= (async () => {
       stopExitEvents()
       stopFactEvents()
-      await manager.shutdown()
-      listener.stop(true)
-      rmSync(socketPath, { force: true })
-      if (readPid(join(home, 'pty.pid')) === process.pid) rmSync(join(home, 'pty.pid'), { force: true })
+      try {
+        await manager.shutdown()
+      } finally {
+        try {
+          listener.stop(true)
+        } finally {
+          try {
+            if (readPid(join(home, 'pty.pid')) === process.pid) rmSync(join(home, 'pty.pid'), { force: true })
+          } finally {
+            rmSync(socketPath, { force: true })
+          }
+        }
+      }
     })()
     return stopping
   }

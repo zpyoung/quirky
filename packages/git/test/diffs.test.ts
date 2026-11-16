@@ -12,7 +12,9 @@ import {
   MAX_RENDER_LINES_PER_SIDE,
   contentHash,
   diffSource,
-  saveWorkingFile
+  saveWorkingFile,
+  stagedPatch,
+  workingPatch
 } from '../src/diffs'
 
 const fixture = isolateGitConfig()
@@ -207,6 +209,19 @@ describe('diffSource kinds', () => {
     expect(disk).toMatchObject({ kind: 'binary', modified: '' })
     expect(disk.modifiedHash).toBe(contentHash(big))
   })
+
+  test('staged and working patches are omitted past the 10 MiB output cap', async () => {
+    const dir = makeRepo(fixture.scratch(), { 'large.txt': 'small\n' })
+    const big = Buffer.alloc(MAX_BLOB_BYTES + 1, 0x61)
+    writeFileSync(join(dir, 'large.txt'), big)
+    git(dir, 'add', 'large.txt')
+
+    expect(await stagedPatch(dir)).toEqual({ patch: '', omitted: true })
+
+    git(dir, 'reset', '-q', 'HEAD', '--', 'large.txt')
+    expect(await workingPatch(dir)).toEqual({ patch: '', omitted: true })
+  })
+
 
   test('SC-56: 130,000 changed lines is text with empty bodies and a too-large marker', async () => {
     const lines = (tag: string) => Array.from({ length: 130_000 }, (_, i) => `${tag}${i % 10}\n`).join('')

@@ -1,0 +1,361 @@
+{
+  "id": "quirky.navigation",
+  "apiVersion": "1.15.0",
+  "name": "Navigation",
+  "version": "0.1.0",
+  "description": "Find definitions and references in worktree files on disk.",
+  "main": "main.ts",
+  "activation": "lazy",
+  "dependencies": [
+    "quirky.worktree"
+  ],
+  "cliAliases": [
+    "nav"
+  ],
+  "contributes": {
+    "method": [
+      {
+        "id": "definition",
+        "description": "Find the definition at a 1-based UTF-16 position.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "column": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "path",
+            "line",
+            "column"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            },
+            "language": {
+              "type": "string"
+            },
+            "locations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "relativePath": {
+                    "description": "Worktree-relative path string, or null outside the worktree."
+                  },
+                  "line": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "column": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "endLine": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "endColumn": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "preview": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "relativePath",
+                  "line",
+                  "column",
+                  "endLine",
+                  "endColumn",
+                  "preview"
+                ]
+              }
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "worktreeId",
+            "language",
+            "locations",
+            "truncated"
+          ]
+        }
+      },
+      {
+        "id": "references",
+        "description": "Find references, including declarations, at a 1-based UTF-16 position.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "line": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "column": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "path",
+            "line",
+            "column"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktreeId": {
+              "type": "string"
+            },
+            "language": {
+              "type": "string"
+            },
+            "locations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "relativePath": {
+                    "description": "Worktree-relative path string, or null outside the worktree."
+                  },
+                  "line": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "column": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "endLine": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "endColumn": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "preview": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "relativePath",
+                  "line",
+                  "column",
+                  "endLine",
+                  "endColumn",
+                  "preview"
+                ]
+              }
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "worktreeId",
+            "language",
+            "locations",
+            "truncated"
+          ]
+        }
+      },
+      {
+        "id": "status",
+        "description": "List running language servers and resource limits.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "servers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "worktreeId": {
+                    "type": "string"
+                  },
+                  "worktreePath": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "pid": {
+                    "description": "Process ID integer, or null when unavailable."
+                  },
+                  "runtime": {
+                    "type": "string"
+                  },
+                  "serverPath": {
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "type": "number"
+                  },
+                  "lastUsedAt": {
+                    "type": "number"
+                  },
+                  "requests": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "inFlight": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "worktreeId",
+                  "worktreePath",
+                  "language",
+                  "pid",
+                  "runtime",
+                  "serverPath",
+                  "startedAt",
+                  "lastUsedAt",
+                  "requests",
+                  "inFlight"
+                ]
+              }
+            },
+            "limits": {
+              "type": "object",
+              "description": "Maps language names to nonnegative integer server limits.",
+              "additionalProperties": true
+            },
+            "idleMs": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "servers",
+            "limits",
+            "idleMs"
+          ]
+        }
+      },
+      {
+        "id": "stop",
+        "description": "Stop all servers, or those matching a worktree and language.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "language": {
+              "type": "string"
+            }
+          },
+          "required": []
+        },
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "stopped": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "stopped"
+          ]
+        }
+      }
+    ],
+    "cli-command": [
+      {
+        "id": "definition",
+        "words": "definition",
+        "summary": "find a symbol definition",
+        "method": "definition",
+        "positionals": [
+          {
+            "name": "path",
+            "description": "worktree-relative or absolute file path",
+            "required": true
+          }
+        ]
+      },
+      {
+        "id": "references",
+        "words": "references",
+        "summary": "find symbol references",
+        "method": "references",
+        "positionals": [
+          {
+            "name": "path",
+            "description": "worktree-relative or absolute file path",
+            "required": true
+          }
+        ]
+      },
+      {
+        "id": "status",
+        "words": "status",
+        "summary": "show navigation servers",
+        "method": "status"
+      },
+      {
+        "id": "stop",
+        "words": "stop",
+        "summary": "stop navigation servers",
+        "method": "stop"
+      }
+    ]
+  }
+}

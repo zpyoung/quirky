@@ -1,7 +1,7 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { RpcErrorCode, type AgentCapabilities, type Session, type StructuredMessage, type UiPluginContext } from '@quirky/protocol'
-import { EmptyState, SectionHeader } from '@quirky/ui'
-import { rememberShowAllEvents, showAllEventsFor } from '../model'
+import { EmptyState, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'
+import { rememberShowAllEvents, SHOW_ALL_EVENTS_COMMAND, showAllEventsFor, subscribeShowAllEvents } from '../model'
 import { mergeMessages } from '../transcript'
 import { Composer } from './Composer'
 import { Embedded } from './Embedded'
@@ -9,6 +9,9 @@ import { groupTurns } from './turns'
 import { TurnView, VIEW_PANE_VIEW } from './Turn'
 
 const NO_MESSAGES: StructuredMessage[] = []
+type MessagePhase = { status: 'loading' } | { status: 'ready' } | { status: 'off' } | { status: 'failed'; message: string }
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 /** How far from the end the transcript may be scrolled and still follow new content. */
 const BOTTOM_SLACK = 24
@@ -112,8 +115,12 @@ function useCapabilities(context: UiPluginContext, agent: string): AgentCapabili
  */
 export function ChatView({ context, session }: { context: UiPluginContext; session: Session }) {
   const [stored, setStored] = useState<StructuredMessage[]>(NO_MESSAGES)
-  const [off, setOff] = useState(false)
-  const [showAll, setShowAll] = useState(() => showAllEventsFor(session))
+  const [phase, setPhase] = useState<MessagePhase>({ status: 'loading' })
+  const showAll = useSyncExternalStore(
+    subscribeShowAllEvents,
+    () => showAllEventsFor(session),
+    () => showAllEventsFor(session)
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const following = useRef(true)
   const showAllId = useId()
@@ -122,33 +129,49 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
   const turns = useMemo(() => groupTurns(stored, { showAll }), [stored, showAll])
   const working = session.status === 'working' || session.status === 'waiting'
 
+  const latest = useRef(0)
+  const cancelled = useRef(false)
+  const loadedOnce = useRef(false)
+  const add = (incoming: StructuredMessage[]) => setStored((current) => mergeMessages(current, incoming))
+
+  // the daemon answers MethodNotFound while quirky.structured is off, so each load re-derives `off`
+  function load(): void {
+    const attempt = ++latest.current
+    if (!loadedOnce.current) setPhase({ status: 'loading' })
+    context
+      .call('quirky.structured/messages', { session: session.id })
+      .then((loaded) => {
+        if (cancelled.current || attempt !== latest.current) return
+        loadedOnce.current = true
+        setPhase({ status: 'ready' })
+        add(loaded as StructuredMessage[])
+      })
+      .catch((error: { code?: unknown }) => {
+        if (cancelled.current || attempt !== latest.current) return
+        if (error?.code === RpcErrorCode.MethodNotFound) {
+          loadedOnce.current = false
+          setPhase({ status: 'off' })
+        } else if (!loadedOnce.current) {
+          setPhase({ status: 'failed', message: messageOf(error) })
+        }
+      })
+  }
+
   useEffect(() => {
-    let cancelled = false
-    let latest = 0
-    const add = (incoming: StructuredMessage[]) => setStored((current) => mergeMessages(current, incoming))
-    // the daemon answers MethodNotFound while quirky.structured is off, so each load re-derives `off`
-    const load = () => {
-      const attempt = ++latest
-      context
-        .call('quirky.structured/messages', { session: session.id })
-        .then((loaded) => {
-          if (cancelled || attempt !== latest) return
-          setOff(false)
-          add(loaded as StructuredMessage[])
-        })
-        .catch((error: { code?: unknown }) => {
-          if (!cancelled && attempt === latest && error?.code === RpcErrorCode.MethodNotFound) setOff(true)
-        })
-    }
+    cancelled.current = false
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'plugin.changed') {
         load()
         return
       }
-      if (cancelled) return
+      if (cancelled.current) return
       if (event.type === 'quirky.structured/message') {
         const message = (event.data as { message?: StructuredMessage } | undefined)?.message
-        if (message && message.sessionId === session.id) add([message])
+        if (message && message.sessionId === session.id) {
+          loadedOnce.current = true
+          setPhase({ status: 'ready' })
+          add([message])
+        }
         return
       }
       if (event.type === 'quirky.structured/settled') {
@@ -160,7 +183,8 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     })
     load()
     return () => {
-      cancelled = true
+      cancelled.current = true
+      latest.current++
       unsubscribe()
       unsubscribeConnection()
     }
@@ -171,7 +195,7 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
     if (element && following.current) element.scrollTop = element.scrollHeight
   }, [turns])
 
-  if (off) return <EmptyState message="Structured sessions are off" />
+  if (phase.status === 'off') return <EmptyState message="Structured sessions are off" />
 
   return (
     <div style={layout}>
@@ -186,8 +210,8 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
               checked={showAll}
               onChange={(event) => {
                 const enabled = event.target.checked
-                setShowAll(enabled)
                 rememberShowAllEvents(session, enabled)
+                void context.executeCommand(SHOW_ALL_EVENTS_COMMAND, { session: session.id, enabled }, { activateOwner: false })
               }}
             />
             <span>Show all events</span>
@@ -206,7 +230,11 @@ export function ChatView({ context, session }: { context: UiPluginContext; sessi
           }}
         >
           <div style={column}>
-            {turns.length === 0 && <EmptyState message="No messages yet." />}
+            {phase.status === 'loading' && turns.length === 0 && <NoticeLine>Loading messages…</NoticeLine>}
+            {phase.status === 'failed' && (
+              <InlineError message={`Could not load messages: ${phase.message}`} action={{ label: 'Retry', onAction: load }} />
+            )}
+            {phase.status === 'ready' && turns.length === 0 && <EmptyState message="No messages yet." />}
             {turns.map((turn, index) => (
               <TurnView key={turn.key} context={context} session={session} capabilities={capabilities} data={turn} index={index} />
             ))}

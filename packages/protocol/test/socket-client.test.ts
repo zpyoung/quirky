@@ -49,6 +49,72 @@ function fakeDaemon(handler: Handler) {
   return { path, seen, sockets }
 }
 
+/** A Unix peer that records accepted clients but deliberately never answers hello. */
+function silentDaemon() {
+  const dir = mkdtempSync(join(tmpdir(), 'qsc-silent-'))
+  const path = join(dir, 'd.sock')
+  const sockets = new Set<Bun.Socket<{ buffer: string }>>()
+  const helloSeen = Promise.withResolvers<void>()
+  let accepted = 0
+  let closed = 0
+  const closeWaiters = new Map<number, () => void>()
+  const listener = Bun.listen<{ buffer: string }>({
+    unix: path,
+    socket: {
+      open(socket) {
+        socket.data = { buffer: '' }
+        sockets.add(socket)
+        accepted++
+      },
+      data(socket, chunk) {
+        socket.data.buffer += Buffer.from(chunk).toString('utf8')
+        let newline = socket.data.buffer.indexOf('\n')
+        while (newline !== -1) {
+          const line = socket.data.buffer.slice(0, newline)
+          socket.data.buffer = socket.data.buffer.slice(newline + 1)
+          if (JSON.parse(line).method === 'client.hello') helloSeen.resolve()
+          newline = socket.data.buffer.indexOf('\n')
+        }
+      },
+      close(socket) {
+        sockets.delete(socket)
+        closed++
+        closeWaiters.get(closed)?.()
+      }
+    }
+  })
+  cleanups.push(() => {
+    listener.stop(true)
+    for (const socket of sockets) socket.terminate()
+    rmSync(dir, { recursive: true, force: true })
+  })
+  return {
+    path,
+    sockets,
+    helloSeen: helloSeen.promise,
+    accepted: () => accepted,
+    waitForCloses(count: number): Promise<void> {
+      if (closed >= count) return Promise.resolve()
+      return new Promise((resolve) => closeWaiters.set(count, resolve))
+    }
+  }
+}
+
+async function waitWithin<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs}ms`)), timeoutMs)
+      })
+    ])
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+  }
+}
+
+
 const ok = (id: number, result: unknown) => ({ jsonrpc: '2.0', id, result })
 
 const helloOk: Handler = (request, reply) => {
@@ -188,6 +254,52 @@ describe('QuirkyClient.connectSocket', () => {
     client.close()
   })
 
+
+  test('an already-aborted signal rejects without opening a Unix socket', async () => {
+    const daemon = silentDaemon()
+    const controller = new AbortController()
+    controller.abort()
+    const connecting = QuirkyClient.connectSocket(daemon.path, { role: 'cli' }, { signal: controller.signal })
+    const outcome = await Promise.race([
+      connecting.then((client) => { client.close(); return 'resolved' as const }, () => 'rejected' as const),
+      Bun.sleep(250).then(() => 'pending' as const)
+    ])
+    expect(outcome).toBe('rejected')
+    expect(daemon.accepted()).toBe(0)
+  })
+
+  test('aborting during hello closes the raw socket while the silent peer stays alive', async () => {
+    const daemon = silentDaemon()
+    const controller = new AbortController()
+    const connecting = QuirkyClient.connectSocket(daemon.path, { role: 'cli' }, { signal: controller.signal })
+    await waitWithin(daemon.helloSeen, 1_000)
+    controller.abort()
+    const outcome = await Promise.race([
+      connecting.then((client) => { client.close(); return 'resolved' as const }, () => 'rejected' as const),
+      Bun.sleep(250).then(() => 'pending' as const)
+    ])
+    expect(outcome).toBe('rejected')
+    await waitWithin(daemon.waitForCloses(1), 1_000)
+    expect(daemon.sockets.size).toBe(0)
+
+    const probe = await Bun.connect<undefined>({ unix: daemon.path, socket: { data() {} } })
+    probe.end()
+    await waitWithin(daemon.waitForCloses(2), 1_000)
+    expect(daemon.accepted()).toBe(2)
+    expect(daemon.sockets.size).toBe(0)
+  })
+
+  test('aborting after hello completion does not close the established client', async () => {
+    const daemon = fakeDaemon((request, reply, socket) => {
+      helloOk(request, reply, socket)
+      if (request.method === 'echo') reply(ok(request.id, request.params))
+    })
+    const controller = new AbortController()
+    const client = await QuirkyClient.connectSocket(daemon.path, { role: 'cli' }, { signal: controller.signal })
+    controller.abort()
+    expect(await client.callAny('echo', { alive: true })).toEqual({ alive: true })
+    client.close()
+  })
 
   test('connecting to a path with no listener fails with a message naming the path', async () => {
     const error = await QuirkyClient.connectSocket('/tmp/qsc-nonexistent.sock', { role: 'cli' }).catch((e) => e)

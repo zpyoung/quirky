@@ -5,8 +5,20 @@ export const NATIVE_BROWSER_PARTITION_RE = /^persist:quirky-browser-(?:default|p
 /** Localhost worktree labels are `<label>.quirky.localhost`; native panes send this domain to the label proxy. */
 export const NATIVE_BROWSER_LABEL_DOMAIN = 'quirky.localhost'
 
-/** Electrobun rules: block all URLs, then allow only human-browser protocols. */
-export const NATIVE_BROWSER_NAVIGATION_RULES = ['^*', 'https://*', 'http://*', 'file://*', 'about:blank'] as const
+/**
+ * Electrobun rules: block all URLs, then allow only human-browser protocols. Pages may also render
+ * srcdoc, data: and blob: iframes; `frame:` rules never allow a top-level navigation.
+ */
+export const NATIVE_BROWSER_NAVIGATION_RULES = [
+  '^*',
+  'https://*',
+  'http://*',
+  'file://*',
+  'about:blank',
+  'frame:about:srcdoc',
+  'frame:data:*',
+  'frame:blob:*'
+] as const
 
 /** The custom scheme isolated workspace-document previews are served over; never a browsing URL. */
 export const NATIVE_BROWSER_PREVIEW_SCHEME = 'quirky-preview'

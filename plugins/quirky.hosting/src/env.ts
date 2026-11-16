@@ -1,14 +1,15 @@
 import { createHash } from 'node:crypto'
-import { execFile } from 'node:child_process'
-import { isAbsolute } from 'node:path'
-import { promisify } from 'node:util'
+import { readFile, stat } from 'node:fs/promises'
+import { isAbsolute, join, resolve as resolvePath } from 'node:path'
 import type { PluginCaller, PluginContext, PluginErrorKind, Worktree } from '@quirky/protocol'
 import { isHost, type AuthAccount } from './auth-inventory'
 import { isRecord } from './data'
 import { parseRemoteIdentity, resolveTrustedIdentity } from './identity-remote'
 import { createRuntimeRunner, type RateLimitSnapshot, type RuntimeRunner } from './runtime-runner'
 
-const execFileAsync = promisify(execFile)
+const REMOTE_URL_TTL_MS = 5_000
+const REMOTE_URL_CACHE_LIMIT = 256
+
 export type IssueSourcePreference = 'auto' | 'origin' | 'upstream'
 function isPreference(value: unknown): value is IssueSourcePreference {
   return value === 'auto' || value === 'origin' || value === 'upstream'
@@ -45,6 +46,7 @@ export type HostingEnv = {
   context: PluginContext
   resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope>
   resolveWorktree(selector: string, caller: PluginCaller): Promise<Worktree>
+  resolveWorktrees(selectors: readonly string[], caller: PluginCaller): Promise<Worktree[]>
   run(scope: Scope, args: string[], options?: RunOptions): Promise<string>
   json(scope: Scope, args: string[], options?: RunOptions): Promise<unknown>
   rest(scope: Scope, path: string, method?: string, fields?: Record<string, unknown>, options?: RunOptions): Promise<unknown>
@@ -70,6 +72,9 @@ export type HostingEnv = {
 type CacheEntry = { value: unknown; expiresAt: number; generation: number; scopeGeneration: number }
 type PendingEntry = { promise: Promise<unknown>; generation: number; scopeGeneration: number }
 
+type RemoteUrlEntry = { value: string | null; stamp: string; expiresAt: number }
+type RemoteUrlPending = { promise: Promise<string | null>; stamp: string }
+
 export function createEnv(context: PluginContext): HostingEnv {
   const store = context.openStore([
     `CREATE TABLE IF NOT EXISTS hosting_preferences (
@@ -82,6 +87,8 @@ export function createEnv(context: PluginContext): HostingEnv {
   const cacheValues = new Map<string, CacheEntry>()
   const cacheInflight = new Map<string, PendingEntry>()
   const scopeGenerations = new Map<string, number>()
+  const remoteUrlValues = new Map<string, RemoteUrlEntry>()
+  const remoteUrlInflight = new Map<string, RemoteUrlPending>()
   const disposeCallbacks = new Set<() => void>()
   const invalidateCallbacks = new Set<(scope: Scope) => void>()
   let generation = 0
@@ -151,6 +158,49 @@ export function createEnv(context: PluginContext): HostingEnv {
     return rawWorktree
   }
 
+  async function resolveWorktrees(selectors: readonly string[], caller: PluginCaller): Promise<Worktree[]> {
+    if (disposed) throw reasoned('conflict', 'plugin_inactive', 'The GitHub hosting plugin is shutting down.')
+    if (selectors.some((selector) => typeof selector !== 'string' || selector.length === 0 || selector.length > 4096)) {
+      throw invalid('invalid_worktree_selector', 'The worktree selector is invalid.')
+    }
+    let idCandidateCount = 0
+    const ids = selectors.map((selector) => {
+      const text = selector.trim()
+      let id: string | undefined
+      if (text.startsWith('id:')) {
+        const value = text.slice(3)
+        if (value.length > 0) id = value
+      } else if (text !== 'current' && text !== 'active' && !/^(name|branch|path):/u.test(text)) {
+        id = text
+      }
+      if (id !== undefined) idCandidateCount += 1
+      return id
+    })
+    const byId = new Map<string, Worktree>()
+    const duplicateIds = new Set<string>()
+    if (idCandidateCount > 1) {
+      let worktrees: unknown
+      try {
+        worktrees = await context.call('quirky.worktree/list')
+      } catch {
+        worktrees = undefined
+      }
+      if (Array.isArray(worktrees)) {
+        for (const worktree of worktrees) {
+          if (!isWorktree(worktree)) continue
+          if (byId.has(worktree.id)) duplicateIds.add(worktree.id)
+          else byId.set(worktree.id, worktree)
+        }
+      }
+    }
+    const resolved: Worktree[] = []
+    for (let index = 0; index < selectors.length; index++) {
+      const id = ids[index]
+      resolved.push((id === undefined || duplicateIds.has(id) ? undefined : byId.get(id)) ?? await resolveWorktree(selectors[index]!, caller))
+    }
+    return resolved
+  }
+
   async function resolve(params: Record<string, unknown>, caller: PluginCaller): Promise<Scope> {
     if (disposed) throw reasoned('conflict', 'plugin_inactive', 'The GitHub hosting plugin is shutting down.')
     const requestedSelector = params.worktree
@@ -167,7 +217,7 @@ export function createEnv(context: PluginContext): HostingEnv {
     const parsedOrigin = parseRemoteIdentity(originUrl)
     if (!parsedOrigin) throw invalid('unsupported_provider', 'The origin remote is not a supported GitHub repository URL.')
     const provisional = provisionalScope(rawWorktree, parsedOrigin.identity, stored)
-    const origin = await resolveTrustedIdentity(parsedOrigin, async () => runtime.authAccounts(provisional))
+    const origin = await resolveTrustedIdentity(context.process, parsedOrigin, async () => runtime.authAccounts(provisional))
     if (!origin) throw invalid('unsupported_provider', 'The origin remote is not GitHub.com or a host authenticated by gh.')
 
     const upstreamUrl = await remoteUrl(rawWorktree, 'upstream')
@@ -176,7 +226,7 @@ export function createEnv(context: PluginContext): HostingEnv {
       const parsedUpstream = parseRemoteIdentity(upstreamUrl)
       if (parsedUpstream) {
         const upstreamScope = provisionalScope(rawWorktree, parsedUpstream.identity, stored)
-        upstream = await resolveTrustedIdentity(parsedUpstream, async () => runtime.authAccounts(upstreamScope))
+        upstream = await resolveTrustedIdentity(context.process, parsedUpstream, async () => runtime.authAccounts(upstreamScope))
       }
     }
 
@@ -211,14 +261,15 @@ export function createEnv(context: PluginContext): HostingEnv {
       throw invalid('invalid_git_args', 'The local Git request is invalid.')
     }
     try {
-      const result = await execFileAsync('git', args, {
+      const result = await context.process.run(['git', ...args], {
         cwd: worktree.path,
-        timeout: 30_000,
-        maxBuffer: 2 * 1024 * 1024,
-        encoding: 'utf8',
-        windowsHide: true
+        timeoutMs: 30_000,
+        maxOutputBytes: 2 * 1024 * 1024
       })
-      return result.stdout
+      if (result.exitCode !== 0 || result.signal !== null || result.stopped !== undefined || result.spawnError !== undefined) {
+        throw new Error('Git runner failed')
+      }
+      return result.stdoutText
     } catch {
       throw reasoned('conflict', 'git_failed', 'The local Git query failed.')
     }
@@ -226,6 +277,54 @@ export function createEnv(context: PluginContext): HostingEnv {
 
   async function git(scope: Scope, args: string[]): Promise<string> {
     return gitWorktree(scope.worktree, args)
+  }
+
+  /**
+   * Resolves `git remote get-url <remote>` for a worktree, or null when the remote is missing or
+   * the lookup fails. Results are reused until the repository's git config changes or a short TTL
+   * elapses, and are never cached when the config file cannot be located.
+   */
+  async function remoteUrl(worktree: Worktree, remote: 'origin' | 'upstream'): Promise<string | null> {
+    const stamp = await configStamp(worktree.path)
+    if (stamp === null) return spawnRemoteUrl(worktree, remote)
+    const key = `${worktree.path}\0${remote}`
+    const cached = remoteUrlValues.get(key)
+    if (cached && cached.stamp === stamp && cached.expiresAt > Date.now()) return cached.value
+    const pending = remoteUrlInflight.get(key)
+    if (pending && pending.stamp === stamp) return pending.promise
+    const promise = spawnRemoteUrl(worktree, remote)
+      .then((value) => {
+        if (!disposed) {
+          remoteUrlValues.delete(key)
+          remoteUrlValues.set(key, { value, stamp, expiresAt: Date.now() + REMOTE_URL_TTL_MS })
+          while (remoteUrlValues.size > REMOTE_URL_CACHE_LIMIT) {
+            const oldest = remoteUrlValues.keys().next().value
+            if (oldest === undefined) break
+            remoteUrlValues.delete(oldest)
+          }
+        }
+        return value
+      })
+      .finally(() => {
+        if (remoteUrlInflight.get(key)?.promise === promise) remoteUrlInflight.delete(key)
+      })
+    remoteUrlInflight.set(key, { promise, stamp })
+    return promise
+  }
+
+  async function spawnRemoteUrl(worktree: Worktree, remote: 'origin' | 'upstream'): Promise<string | null> {
+    try {
+      const result = await context.process.run(['git', 'remote', 'get-url', remote], {
+        cwd: worktree.path,
+        timeoutMs: 30_000,
+        maxOutputBytes: 64 * 1024
+      })
+      if (result.exitCode !== 0 || result.signal !== null || result.stopped !== undefined || result.spawnError !== undefined) return null
+      const value = result.stdoutText.trim()
+      return value.length > 0 ? value : null
+    } catch {
+      return null
+    }
   }
 
   async function remoteUrls(worktree: Worktree): Promise<{ origin: string | null; upstream: string | null }> {
@@ -316,11 +415,14 @@ export function createEnv(context: PluginContext): HostingEnv {
     cacheValues.clear()
     cacheInflight.clear()
     scopeGenerations.clear()
+    remoteUrlValues.clear()
+    remoteUrlInflight.clear()
   }
 
   return {
     context,
     resolveWorktree,
+    resolveWorktrees,
     resolve,
     run: runtime.run,
     json: runtime.json,
@@ -388,18 +490,34 @@ function provisionalScope(worktree: Worktree, identity: Identity, configuration:
   }
 }
 
-async function remoteUrl(worktree: Worktree, remote: 'origin' | 'upstream'): Promise<string | null> {
+async function readRepositoryConfigPath(worktreePath: string): Promise<string | null> {
   try {
-    const result = await execFileAsync('git', ['remote', 'get-url', remote], {
-      cwd: worktree.path,
-      timeout: 30_000,
-      maxBuffer: 64 * 1024,
-      encoding: 'utf8',
-      windowsHide: true
-    })
-    const output = result.stdout
-    const value = output.trim()
-    return value.length > 0 ? value : null
+    const dotGit = join(worktreePath, '.git')
+    let gitDir = dotGit
+    if (!(await stat(dotGit)).isDirectory()) {
+      const match = /^gitdir:\s*(.+?)\s*$/m.exec(await readFile(dotGit, 'utf8'))
+      if (!match?.[1]) return null
+      gitDir = resolvePath(worktreePath, match[1])
+    }
+    let commonDir = gitDir
+    try {
+      const common = (await readFile(join(gitDir, 'commondir'), 'utf8')).trim()
+      if (common.length > 0) commonDir = resolvePath(gitDir, common)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return null
+    }
+    return join(commonDir, 'config')
+  } catch {
+    return null
+  }
+}
+
+async function configStamp(worktreePath: string): Promise<string | null> {
+  const configPath = await readRepositoryConfigPath(worktreePath)
+  if (configPath === null) return null
+  try {
+    const info = await stat(configPath, { bigint: true })
+    return `${info.mtimeNs}:${info.ctimeNs}:${info.size}:${info.ino}`
   } catch {
     return null
   }

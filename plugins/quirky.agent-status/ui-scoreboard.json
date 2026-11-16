@@ -1,0 +1,1052 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "sidebar-section:quirky.agent-status/activity": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "sidebar-section:quirky.agent-status/dashboard": {
+      "loading": {
+        "applicable": false,
+        "reason": "The setting-gated navigation launcher renders immediately; counts only decorate its button and omit a zero badge.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "export function DashboardNavigation({ context }: { context: UiPluginContext }) {\n  const readEnabled = () => {\n    try {\n      return context.getSetting('dashboard-enabled') === true\n    } catch {\n      return false\n    }\n  }\n  const [enabled, setEnabled] = useState(readEnabled)\n  const [attention, setAttention] = useState(0)\n  const [working, setWorking] = useState(0)\n\n  useEffect(() => {\n    const refresh = async () => {\n      if (!enabled) {\n        setAttention(0)\n        setWorking(0)\n        return\n      }\n      try {\n        const snapshot = await context.call('quirky.agent-status/dashboard', {}) as DashboardSnapshot\n        setAttention(snapshot.cards.filter((card) => card.bucket === 'attention').length)\n        setWorking(snapshot.cards.filter((card) => card.bucket === 'working').length)\n      } catch (error) {\n        context.log(`could not load Dashboard count: ${error instanceof Error ? error.message : String(error)}`)\n      }\n    }\n    const unsubscribe = context.subscribe((event) => {\n      if (event.type === 'setting.changed' && event.id === `setting:${PLUGIN_ID}/dashboard-enabled`) {\n        setEnabled(event.value === true)\n      }\n      if (activityChanged(event) || event.type === 'quirky.worktree/changed' || event.type === 'quirky.hosting/reviewCacheChanged') {\n        void refresh()\n      }\n    })\n    const unsubscribeConnection = context.onConnection((status) => {\n      if (status === 'connected') void refresh()\n    })\n    void refresh()\n    return () => {\n      unsubscribe()\n      unsubscribeConnection()\n    }\n  }, [context, enabled])\n\n  const toggleDashboard = () => {\n    const layoutView = context.getLayout().view\n    const input = layoutView?.id === VIEW_ID ? dashboardViewInput(layoutView.input) : {}\n    void context.executeCommand(TOGGLE_COMMAND, input).catch((cause: unknown) => {\n      context.toast('Could not toggle Agent Dashboard', cause instanceof Error ? cause.message : String(cause))\n    })\n  }\n\n  if (!enabled) return null\n  const total = attention + working\n  return (\n    <Button\n      className=\"ui-cluster\"\n      style={{ width: '100%', justifyContent: 'flex-start' }}\n      aria-label={total > 0 ? `Agent Dashboard, ${attention} need you and ${working} working` : 'Agent Dashboard'}\n      onClick={toggleDashboard}\n    >\n      <StatusDot status={attention > 0 ? 'needs-you' : working > 0 ? 'working' : 'idle'} />\n      <span>Agent Dashboard</span>\n      {total > 0 ? <Badge tone={attention > 0 ? 'needs-you' : 'working'}>{total}</Badge> : null}\n    </Button>\n  )\n}"
+          }
+        ]
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "The setting-gated navigation launcher renders immediately; counts only decorate its button and omit a zero badge.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "export function DashboardNavigation({ context }: { context: UiPluginContext }) {\n  const readEnabled = () => {\n    try {\n      return context.getSetting('dashboard-enabled') === true\n    } catch {\n      return false\n    }\n  }\n  const [enabled, setEnabled] = useState(readEnabled)\n  const [attention, setAttention] = useState(0)\n  const [working, setWorking] = useState(0)\n\n  useEffect(() => {\n    const refresh = async () => {\n      if (!enabled) {\n        setAttention(0)\n        setWorking(0)\n        return\n      }\n      try {\n        const snapshot = await context.call('quirky.agent-status/dashboard', {}) as DashboardSnapshot\n        setAttention(snapshot.cards.filter((card) => card.bucket === 'attention').length)\n        setWorking(snapshot.cards.filter((card) => card.bucket === 'working').length)\n      } catch (error) {\n        context.log(`could not load Dashboard count: ${error instanceof Error ? error.message : String(error)}`)\n      }\n    }\n    const unsubscribe = context.subscribe((event) => {\n      if (event.type === 'setting.changed' && event.id === `setting:${PLUGIN_ID}/dashboard-enabled`) {\n        setEnabled(event.value === true)\n      }\n      if (activityChanged(event) || event.type === 'quirky.worktree/changed' || event.type === 'quirky.hosting/reviewCacheChanged') {\n        void refresh()\n      }\n    })\n    const unsubscribeConnection = context.onConnection((status) => {\n      if (status === 'connected') void refresh()\n    })\n    void refresh()\n    return () => {\n      unsubscribe()\n      unsubscribeConnection()\n    }\n  }, [context, enabled])\n\n  const toggleDashboard = () => {\n    const layoutView = context.getLayout().view\n    const input = layoutView?.id === VIEW_ID ? dashboardViewInput(layoutView.input) : {}\n    void context.executeCommand(TOGGLE_COMMAND, input).catch((cause: unknown) => {\n      context.toast('Could not toggle Agent Dashboard', cause instanceof Error ? cause.message : String(cause))\n    })\n  }\n\n  if (!enabled) return null\n  const total = attention + working\n  return (\n    <Button\n      className=\"ui-cluster\"\n      style={{ width: '100%', justifyContent: 'flex-start' }}\n      aria-label={total > 0 ? `Agent Dashboard, ${attention} need you and ${working} working` : 'Agent Dashboard'}\n      onClick={toggleDashboard}\n    >\n      <StatusDot status={attention > 0 ? 'needs-you' : working > 0 ? 'working' : 'idle'} />\n      <span>Agent Dashboard</span>\n      {total > 0 ? <Badge tone={attention > 0 ? 'needs-you' : 'working'}>{total}</Badge> : null}\n    </Button>\n  )\n}"
+          }
+        ]
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.agent-status/activity": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    },
+    "view:quirky.agent-status/dashboard": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": true
+      },
+      "error": {
+        "applicable": true
+      }
+    }
+  },
+  "states": [
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "snapshot.error ? <InlineError message={snapshot.error} action={{ label: 'Retry', onAction: retrySidebarActivity }} /> : null"
+      },
+      "anchor": "snapshot.error ?",
+      "surface": "sidebar-section:quirky.agent-status/activity",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "<InlineError message={snapshot.error} action={{ label: 'Retry', onAction: retrySidebarActivity }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "snapshot.loading && snapshot.threads.length === 0 ? <NoticeLine>Loading Activity…</NoticeLine> : null"
+      },
+      "anchor": "snapshot.loading && snapshot.threads.length === 0 ?",
+      "surface": "sidebar-section:quirky.agent-status/activity",
+      "state": "loading",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "<NoticeLine>Loading Activity…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "!snapshot.loading && !snapshot.error && snapshot.threads.length === 0 ? (\n            <div role=\"status\">\n              <EmptyState message={hasSidebarFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />\n            </div>\n          ) : null"
+      },
+      "anchor": "!snapshot.loading && !snapshot.error && snapshot.threads.length === 0 ?",
+      "surface": "sidebar-section:quirky.agent-status/activity",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "<EmptyState message={hasSidebarFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "snapshot.error ? <InlineError message={snapshot.error} action={{ label: 'Retry', onAction: retryCenterActivity }} /> : null"
+      },
+      "anchor": "snapshot.error ?",
+      "surface": "view:quirky.agent-status/activity",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "<InlineError message={snapshot.error} action={{ label: 'Retry', onAction: retryCenterActivity }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "snapshot.loading && snapshot.threads.length === 0 ? <EmptyState message=\"Loading Activity…\" /> : null"
+      },
+      "anchor": "snapshot.loading && snapshot.threads.length === 0 ?",
+      "surface": "view:quirky.agent-status/activity",
+      "state": "loading",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "<EmptyState message=\"Loading Activity…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "!snapshot.loading && !snapshot.error && snapshot.threads.length === 0 ? (\n            <div role=\"status\">\n              <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />\n            </div>\n          ) : null"
+      },
+      "anchor": "!snapshot.loading && !snapshot.error && snapshot.threads.length === 0 ?",
+      "surface": "view:quirky.agent-status/activity",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "<EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "error ? <InlineError message={error} action={{ label: 'Retry', onAction: retryDashboard }} /> : null"
+      },
+      "anchor": "error ?",
+      "surface": "view:quirky.agent-status/dashboard",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "<InlineError message={error} action={{ label: 'Retry', onAction: retryDashboard }} />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, SectionHeader, StatusDot, TextField, ToolPanelActions, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "loading && snapshot === null ? <EmptyState message=\"Loading Agent Dashboard…\" /> : null"
+      },
+      "anchor": "loading && snapshot === null ?",
+      "surface": "view:quirky.agent-status/dashboard",
+      "state": "loading",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "<EmptyState message=\"Loading Agent Dashboard…\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, SectionHeader, StatusDot, TextField, ToolPanelActions, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "!loading && !error && snapshot?.total === 0 ? (\n            <div role=\"status\">\n              <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />\n            </div>\n          ) : null"
+      },
+      "anchor": "!loading && !error && snapshot?.total === 0 ?",
+      "surface": "view:quirky.agent-status/dashboard",
+      "state": "empty",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "<EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, SectionHeader, StatusDot, TextField, ToolPanelActions, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "context.toast('Could not open Activity thread', errorMessage(cause))"
+      },
+      "anchor": "context.toast(",
+      "surface": "view:quirky.agent-status/activity",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "context.toast('Could not open Activity thread', errorMessage(cause))"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "context.toast('Could not open Dashboard thread', errorMessage(cause))"
+      },
+      "anchor": "context.toast(",
+      "surface": "view:quirky.agent-status/dashboard",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "context.toast('Could not open Dashboard thread', errorMessage(cause))"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "context.toast('Could not toggle Agent Dashboard', cause instanceof Error ? cause.message : String(cause))"
+      },
+      "anchor": "context.toast(",
+      "surface": "sidebar-section:quirky.agent-status/dashboard",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "context.toast('Could not toggle Agent Dashboard', cause instanceof Error ? cause.message : String(cause))"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "context.toast('Could not pop out the Dashboard', errorMessage(cause))"
+      },
+      "anchor": "context.toast(",
+      "surface": "view:quirky.agent-status/dashboard",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "context.toast('Could not pop out the Dashboard', errorMessage(cause))"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "<InlineError\n              key={message}\n              message={`Unavailable: ${message}`}\n              action={{ label: 'Retry', onAction: retryUnavailableDashboard }}\n            />"
+      },
+      "anchor": "<InlineError",
+      "surface": "view:quirky.agent-status/dashboard",
+      "state": "error",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "<InlineError\n              key={message}\n              message={`Unavailable: ${message}`}\n              action={{ label: 'Retry', onAction: retryUnavailableDashboard }}\n            />"
+        },
+        "import": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, SectionHeader, StatusDot, TextField, ToolPanelActions, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/activity-navigation.ts",
+        "quote": "context.toast('Activity thread opened, but could not be marked read', cause instanceof Error ? cause.message : String(cause))"
+      },
+      "anchor": "context.toast(",
+      "surface": "view:quirky.agent-status/activity",
+      "state": "error",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.agent-status/src/activity-navigation.ts",
+          "quote": "context.toast('Activity thread opened, but could not be marked read', cause instanceof Error ? cause.message : String(cause))"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "showWorktreeField ? (\n        <TextField\n          id={`${controlId}-worktree`}\n          label=\"Worktree ID\"\n          aria-label=\"Worktree ID\"\n          type=\"search\"\n          value={draftWorktree}\n          onChange={changeDraftWorktree}\n        />\n      ) : null"
+      },
+      "anchor": "showWorktreeField ?",
+      "reason": "Chooses grouping headings or filter-field layout, not query state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "snapshot.view.group !== 'none' ? <SectionHeader title={group.label} /> : null"
+      },
+      "anchor": "snapshot.view.group !== 'none' ?",
+      "reason": "Chooses grouping headings or filter-field layout, not query state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "thread.unread ? <Badge tone=\"needs-you\" label=\"Unread\">Unread</Badge> : null"
+      },
+      "anchor": "thread.unread ?",
+      "reason": "Read status decorates a populated thread and controls its read receipt action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "thread.live ? 'Available' : 'Unavailable'"
+      },
+      "anchor": "thread.live ?",
+      "reason": "Marks retained thread data as live or historical."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "thread.prompt ? <span>{thread.prompt}</span> : null"
+      },
+      "anchor": "thread.prompt ?",
+      "reason": "Optional content fields on a populated thread."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "thread.detail ? <span>{thread.detail}</span> : null"
+      },
+      "anchor": "thread.detail ?",
+      "reason": "Optional content fields on a populated thread."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "thread.unread ? 'Mark read' : 'Read'"
+      },
+      "anchor": "thread.unread ?",
+      "reason": "Read status decorates a populated thread and controls its read receipt action."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "thread.children.length > 0 ? (\n                      <Button\n                        aria-label={`${isExpanded ? 'Hide' : 'Show'} child agents for ${thread.sessionId}`}\n                        aria-expanded={isExpanded}\n                        onClick={() => toggleChildAgents(thread)}\n                      >\n                        {isExpanded ? 'Hide child agents' : `Show ${thread.children.length} child agents`}\n                      </Button>\n                    ) : null"
+      },
+      "anchor": "thread.children.length > 0 ?",
+      "reason": "Expands retained child-agent details on a populated thread."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "isExpanded ? 'Hide child agents' : `Show ${thread.children.length} child agents`"
+      },
+      "anchor": "isExpanded ?",
+      "reason": "Expands retained child-agent details on a populated thread."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "isExpanded ? (\n                    <ul style={CHILDREN_STYLE}>\n                      {thread.children.map((child) => (\n                        <li data-child-id={child.id} key={`${child.kind}:${child.id}`}>\n                          <ListRow\n                            title={child.id}\n                            description={`${child.kind} · ${child.state}`}\n                            status={child.state === 'working' ? 'working' : child.state === 'waiting' ? 'needs-you' : 'done'}\n                          />\n                        </li>\n                      ))}\n                    </ul>\n                  ) : null"
+      },
+      "anchor": "isExpanded ?",
+      "reason": "Expands retained child-agent details on a populated thread."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "<div role=\"status\">\n              <EmptyState message={hasSidebarFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />\n            </div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Live-region wrapper announces the shared empty state; it is not a separate state renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "<div role=\"status\">\n              <EmptyState message={hasFilters ? 'No Activity threads match these filters.' : 'No Activity threads yet.'} />\n            </div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Live-region wrapper announces the shared empty state; it is not a separate state renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "thread.live ? 'Available' : 'Session unavailable'"
+      },
+      "anchor": "thread.live ?",
+      "reason": "Marks retained thread data as live or historical."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "thread.prompt ? <span>{thread.prompt}</span> : null"
+      },
+      "anchor": "thread.prompt ?",
+      "reason": "Optional content fields on a populated thread."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "thread.detail ? <span>{thread.detail}</span> : null"
+      },
+      "anchor": "thread.detail ?",
+      "reason": "Optional content fields on a populated thread."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "if (!enabled) return null"
+      },
+      "anchor": "if (!enabled)",
+      "reason": "The setting controls whether the launcher exists, not query state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "total > 0 ? <Badge tone={attention > 0 ? 'needs-you' : 'working'}>{total}</Badge> : null"
+      },
+      "anchor": "total > 0 ?",
+      "reason": "Displays loaded counts, columns, or idle visibility controls, not query loading or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "snapshot && snapshot.hiddenIdle > 0 ? (\n          <IconButton label={`Show idle threads (${snapshot.hiddenIdle})`} title={`Show idle (${snapshot.hiddenIdle})`} onClick={showIdleThreads}>\n            <ControlIcon name=\"funnel\" />\n          </IconButton>\n        ) : view.showIdle === true ? (\n          <IconButton label=\"Hide idle threads\" title=\"Hide idle\" onClick={hideIdleThreads}>\n            <ControlIcon name=\"funnel\" />\n          </IconButton>\n        ) : null"
+      },
+      "anchor": "snapshot && snapshot.hiddenIdle > 0 ?",
+      "reason": "Displays loaded counts, columns, or idle visibility controls, not query loading or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "view.showIdle === true ? (\n          <IconButton label=\"Hide idle threads\" title=\"Hide idle\" onClick={hideIdleThreads}>\n            <ControlIcon name=\"funnel\" />\n          </IconButton>\n        ) : null"
+      },
+      "anchor": "view.showIdle === true ?",
+      "reason": "Displays loaded counts, columns, or idle visibility controls, not query loading or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "snapshot ? (\n          <div style={HEADER_STYLE}>\n            <Badge label=\"Dashboard total\">\n              {snapshot.total} total{snapshot.hiddenIdle > 0 ? ` · ${snapshot.hiddenIdle} idle hidden` : ''}\n            </Badge>\n          </div>\n        ) : null"
+      },
+      "anchor": "snapshot ?",
+      "reason": "Displays loaded counts, columns, or idle visibility controls, not query loading or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "snapshot.hiddenIdle > 0 ? ` · ${snapshot.hiddenIdle} idle hidden` : ''"
+      },
+      "anchor": "snapshot.hiddenIdle > 0 ?",
+      "reason": "Displays loaded counts, columns, or idle visibility controls, not query loading or failure."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "role=\"status\""
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Live-region wrapper announces the shared empty state; it is not a separate state renderer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "snapshot ? (\n            <div\n              style={{\n                ...BOARD_STYLE,\n                gridTemplateColumns: view.showIdle === true\n                  ? 'repeat(4, minmax(var(--ui-space-24), 1fr))'\n                  : 'repeat(3, minmax(var(--ui-space-24), 1fr))'\n              }}\n            >\n              {columns.map(({ bucket, label }) => (\n                <section data-dashboard-column={bucket} key={bucket} style={COLUMN_STYLE}>\n                  <SectionHeader title={label} />\n                  <ul style={CARD_LIST_STYLE}>\n                    {snapshot.cards.filter((card) => card.bucket === bucket).map((card) => (\n                      <li key={card.thread.sessionId}>\n                        <DashboardCardView context={context} thread={card.thread} bucket={card.bucket} />\n                      </li>\n                    ))}\n                  </ul>\n                </section>\n              ))}\n            </div>\n          ) : null"
+      },
+      "anchor": "snapshot ?",
+      "reason": "Displays loaded counts, columns, or idle visibility controls, not query loading or failure."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onClick={markAllRead}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agent-status/acknowledge",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "(thread) => this.context.call('quirky.agent-status/acknowledge', { session: thread.sessionId, turn: thread.turn })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async markAllRead(): Promise<void> {\n    const observed = this.snapshot.threads.filter((thread) => thread.unread)\n    try {\n      await Promise.all(observed.map((thread) => this.context.call('quirky.agent-status/acknowledge', { session: thread.sessionId, turn: thread.turn })))\n      await this.load()\n    } catch (cause) {\n      this.publish({ error: errorMessage(cause) })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onClick={clearCompleted}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agent-status/clearCompleted",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "this.context.call('quirky.agent-status/clearCompleted', worktree ? { worktree } : {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async clearCompleted(): Promise<void> {\n    const worktree = this.view.worktree?.trim()\n    try {\n      await this.context.call('quirky.agent-status/clearCompleted', worktree ? { worktree } : {})\n      await this.load()\n    } catch (cause) {\n      this.publish({ error: errorMessage(cause) })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onSubmit={applyActivityFilters}"
+      },
+      "anchor": "onSubmit",
+      "route": {
+        "target": "quirky.agent-status/activity",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "this.context.call('quirky.agent-status/activity', activityQueryInput(target))"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+            "quote": "function applyActivityFilters(event: FormEvent<HTMLFormElement>): void {\n    event.preventDefault()\n    model.updateView({ text: draftText, worktree: draftWorktree })\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "updateView(patch: Partial<ActivityViewInput>): void {\n    const next = activityViewInput({ ...this.view, ...patch })\n    this.view = next\n    this.publish({ view: next })\n    if (this.options.mode === 'center') this.context.openView('view:quirky.agent-status/activity', next)\n    void this.load(next)\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async load(nextView?: ActivityViewInput): Promise<void> {\n    const target = nextView === undefined ? this.view : activityViewInput(nextView)\n    if (!sameView(this.view, target)) {\n      this.view = target\n      this.publish({ view: target })\n    }\n    const current = ++this.generation\n    this.publish({ loading: true, error: null })\n    try {\n      const result = await this.context.call('quirky.agent-status/activity', activityQueryInput(target)) as { threads: ActivityThread[] }\n      if (current !== this.generation) return\n      this.publish({ threads: result.threads })\n    } catch (cause) {\n      if (current !== this.generation) return\n      this.publish({ error: errorMessage(cause) })\n    } finally {\n      if (current === this.generation) this.publish({ loading: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onChange={changeDraftText}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only a local filter draft; submitting Apply routes the query."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onChange={changeDraftWorktree}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only a local filter draft; submitting Apply routes the query."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onChange={toggleUnreadOnly}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "quirky.agent-status/activity",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "this.context.call('quirky.agent-status/activity', activityQueryInput(target))"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+            "quote": "function toggleUnreadOnly(event: ChangeEvent<HTMLInputElement>): void {\n    model.updateView({ text: draftText, worktree: draftWorktree, unreadOnly: event.currentTarget.checked })\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "updateView(patch: Partial<ActivityViewInput>): void {\n    const next = activityViewInput({ ...this.view, ...patch })\n    this.view = next\n    this.publish({ view: next })\n    if (this.options.mode === 'center') this.context.openView('view:quirky.agent-status/activity', next)\n    void this.load(next)\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async load(nextView?: ActivityViewInput): Promise<void> {\n    const target = nextView === undefined ? this.view : activityViewInput(nextView)\n    if (!sameView(this.view, target)) {\n      this.view = target\n      this.publish({ view: target })\n    }\n    const current = ++this.generation\n    this.publish({ loading: true, error: null })\n    try {\n      const result = await this.context.call('quirky.agent-status/activity', activityQueryInput(target)) as { threads: ActivityThread[] }\n      if (current !== this.generation) return\n      this.publish({ threads: result.threads })\n    } catch (cause) {\n      if (current !== this.generation) return\n      this.publish({ error: errorMessage(cause) })\n    } finally {\n      if (current === this.generation) this.publish({ loading: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onChange={changeActivityGroup}"
+      },
+      "anchor": "onChange",
+      "route": {
+        "target": "quirky.agent-status/activity",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "this.context.call('quirky.agent-status/activity', activityQueryInput(target))"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+            "quote": "function changeActivityGroup(event: ChangeEvent<HTMLSelectElement>): void {\n    model.updateView({ text: draftText, worktree: draftWorktree, group: event.currentTarget.value as GroupBy })\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "updateView(patch: Partial<ActivityViewInput>): void {\n    const next = activityViewInput({ ...this.view, ...patch })\n    this.view = next\n    this.publish({ view: next })\n    if (this.options.mode === 'center') this.context.openView('view:quirky.agent-status/activity', next)\n    void this.load(next)\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async load(nextView?: ActivityViewInput): Promise<void> {\n    const target = nextView === undefined ? this.view : activityViewInput(nextView)\n    if (!sameView(this.view, target)) {\n      this.view = target\n      this.publish({ view: target })\n    }\n    const current = ++this.generation\n    this.publish({ loading: true, error: null })\n    try {\n      const result = await this.context.call('quirky.agent-status/activity', activityQueryInput(target)) as { threads: ActivityThread[] }\n      if (current !== this.generation) return\n      this.publish({ threads: result.threads })\n    } catch (cause) {\n      if (current !== this.generation) return\n      this.publish({ error: errorMessage(cause) })\n    } finally {\n      if (current === this.generation) this.publish({ loading: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onAction: () => openActivityCard(thread)"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "command:quirky.agent-status/openActivityThread",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+          "quote": "context.executeCommand('command:quirky.agent-status/openActivityThread', { sessionId: thread.sessionId, worktreeId: thread.worktreeId, turn: thread.turn })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+            "quote": "function openActivityCard(thread: ActivityThread): void {\n    void context.executeCommand('command:quirky.agent-status/openActivityThread', { sessionId: thread.sessionId, worktreeId: thread.worktreeId, turn: thread.turn })\n      .catch((cause) => context.toast('Could not open Activity thread', errorMessage(cause)))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onClick={() => markActivityRead(thread)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agent-status/acknowledge",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "await this.context.call('quirky.agent-status/acknowledge', { session: thread.sessionId, turn: thread.turn })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+            "quote": "function markActivityRead(thread: ActivityThread): void {\n    void model.markRead(thread)\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async markRead(thread: ActivityThread): Promise<void> {\n    try {\n      await this.context.call('quirky.agent-status/acknowledge', { session: thread.sessionId, turn: thread.turn })\n      await this.load()\n    } catch (cause) {\n      this.publish({ error: errorMessage(cause) })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onClick={() => toggleChildAgents(thread)}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "quirky.agent-status/acknowledge",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "await this.context.call('quirky.agent-status/acknowledge', { session: thread.sessionId, turn: thread.turn })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "toggleChildAgents(thread: ActivityThread): void {\n    const expanding = this.snapshot.expanded[thread.sessionId] !== true\n    this.publish({ expanded: { ...this.snapshot.expanded, [thread.sessionId]: expanding } })\n    if (expanding && thread.unread) void this.markRead(thread)\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async markRead(thread: ActivityThread): Promise<void> {\n    try {\n      await this.context.call('quirky.agent-status/acknowledge', { session: thread.sessionId, turn: thread.turn })\n      await this.load()\n    } catch (cause) {\n      this.publish({ error: errorMessage(cause) })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onAction: retrySidebarActivity"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.agent-status/activity",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "this.context.call('quirky.agent-status/activity', activityQueryInput(target))"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+            "quote": "function retrySidebarActivity(): void {\n    void model.retry()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "retry(): Promise<void> {\n    return this.load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async load(nextView?: ActivityViewInput): Promise<void> {\n    const target = nextView === undefined ? this.view : activityViewInput(nextView)\n    if (!sameView(this.view, target)) {\n      this.view = target\n      this.publish({ view: target })\n    }\n    const current = ++this.generation\n    this.publish({ loading: true, error: null })\n    try {\n      const result = await this.context.call('quirky.agent-status/activity', activityQueryInput(target)) as { threads: ActivityThread[] }\n      if (current !== this.generation) return\n      this.publish({ threads: result.threads })\n    } catch (cause) {\n      if (current !== this.generation) return\n      this.publish({ error: errorMessage(cause) })\n    } finally {\n      if (current === this.generation) this.publish({ loading: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+        "quote": "onAction: retryCenterActivity"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.agent-status/activity",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/activity-model.ts",
+          "quote": "this.context.call('quirky.agent-status/activity', activityQueryInput(target))"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
+            "quote": "function retryCenterActivity(): void {\n    void model.retry()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "retry(): Promise<void> {\n    return this.load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/activity-model.ts",
+            "quote": "async load(nextView?: ActivityViewInput): Promise<void> {\n    const target = nextView === undefined ? this.view : activityViewInput(nextView)\n    if (!sameView(this.view, target)) {\n      this.view = target\n      this.publish({ view: target })\n    }\n    const current = ++this.generation\n    this.publish({ loading: true, error: null })\n    try {\n      const result = await this.context.call('quirky.agent-status/activity', activityQueryInput(target)) as { threads: ActivityThread[] }\n      if (current !== this.generation) return\n      this.publish({ threads: result.threads })\n    } catch (cause) {\n      if (current !== this.generation) return\n      this.publish({ error: errorMessage(cause) })\n    } finally {\n      if (current === this.generation) this.publish({ loading: false })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onAction: openDashboardCard"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "command:quirky.agent-status/openActivityThread",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "context.executeCommand(OPEN_THREAD_COMMAND, { sessionId: thread.sessionId, worktreeId: thread.worktreeId, turn: thread.turn })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "openDashboardCard = () => {\n    void context.executeCommand(OPEN_THREAD_COMMAND, { sessionId: thread.sessionId, worktreeId: thread.worktreeId, turn: thread.turn }).catch((cause: unknown) => {\n      context.toast('Could not open Dashboard thread', errorMessage(cause))\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onClick={toggleDashboard}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.agent-status/toggleDashboard",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "context.executeCommand(TOGGLE_COMMAND, input)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "toggleDashboard = () => {\n    const layoutView = context.getLayout().view\n    const input = layoutView?.id === VIEW_ID ? dashboardViewInput(layoutView.input) : {}\n    void context.executeCommand(TOGGLE_COMMAND, input).catch((cause: unknown) => {\n      context.toast('Could not toggle Agent Dashboard', cause instanceof Error ? cause.message : String(cause))\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onClick={popOutDashboard}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "command:quirky.agent-status/openDashboardWindow",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+          "quote": "context.executeCommand(OPEN_DASHBOARD_WINDOW_COMMAND, view)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "popOutDashboard = () => {\n    void context.executeCommand(OPEN_DASHBOARD_WINDOW_COMMAND, view).catch((cause: unknown) => {\n      context.toast('Could not pop out the Dashboard', errorMessage(cause))\n    })\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onClick={showIdleThreads}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "view:quirky.agent-status/dashboard",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+          "quote": "this.context.openView(DASHBOARD_VIEW_ID, next)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "showIdleThreads = () => model.updateView({ showIdle: true })"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "updateView(patch: Partial<DashboardQuery>): void {\n    const next = dashboardViewInput({ ...this.view, ...patch })\n    this.view = next\n    void this.load(next)\n    this.context.openView(DASHBOARD_VIEW_ID, next)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onClick={hideIdleThreads}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "view:quirky.agent-status/dashboard",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+          "quote": "this.context.openView(DASHBOARD_VIEW_ID, next)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "hideIdleThreads = () => model.updateView({ showIdle: false })"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "updateView(patch: Partial<DashboardQuery>): void {\n    const next = dashboardViewInput({ ...this.view, ...patch })\n    this.view = next\n    void this.load(next)\n    this.context.openView(DASHBOARD_VIEW_ID, next)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onSubmit={applyDashboardFilters}"
+      },
+      "anchor": "onSubmit",
+      "route": {
+        "target": "view:quirky.agent-status/dashboard",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+          "quote": "this.context.openView(DASHBOARD_VIEW_ID, next)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "applyDashboardFilters = (event: FormEvent<HTMLFormElement>) => {\n    event.preventDefault()\n    model.updateView({\n      text: draftText,\n      project: draftProject,\n      workspaceStatus: draftWorkspaceStatus || undefined,\n      reviewStatus: draftReviewStatus || undefined\n    })\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "updateView(patch: Partial<DashboardQuery>): void {\n    const next = dashboardViewInput({ ...this.view, ...patch })\n    this.view = next\n    void this.load(next)\n    this.context.openView(DASHBOARD_VIEW_ID, next)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftText(event.currentTarget.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only a local filter draft; submitting Apply routes the query."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onChange={(event: ChangeEvent<HTMLInputElement>) => setDraftProject(event.currentTarget.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only a local filter draft; submitting Apply routes the query."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftWorkspaceStatus(event.currentTarget.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only a local filter draft; submitting Apply routes the query."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onChange={(event: ChangeEvent<HTMLSelectElement>) => setDraftReviewStatus(event.currentTarget.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only a local filter draft; submitting Apply routes the query."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onClick={clearDashboardFilters}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "target": "view:quirky.agent-status/dashboard",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+          "quote": "this.context.openView(DASHBOARD_VIEW_ID, next)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "clearDashboardFilters = () => {\n    setDraftText('')\n    setDraftProject('')\n    setDraftWorkspaceStatus('')\n    setDraftReviewStatus('')\n    model.clearFilters()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "clearFilters(): void {\n    this.updateView({ text: undefined, project: undefined, workspaceStatus: undefined, reviewStatus: undefined })\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "updateView(patch: Partial<DashboardQuery>): void {\n    const next = dashboardViewInput({ ...this.view, ...patch })\n    this.view = next\n    void this.load(next)\n    this.context.openView(DASHBOARD_VIEW_ID, next)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onAction: retryDashboard"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.agent-status/dashboard",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+          "quote": "this.context.call('quirky.agent-status/dashboard', nextView)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "retryDashboard = () => {\n    void model.retry()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "retry(): Promise<void> {\n    return this.load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "async load(nextView: DashboardQuery = this.view): Promise<void> {\n    if (this.disposed) return\n    const sequence = ++this.requestSequence\n    this.view = nextView\n    this.publish({ view: nextView, loading: true, error: null })\n    try {\n      const snapshot = await this.context.call('quirky.agent-status/dashboard', nextView) as DashboardSnapshot\n      if (this.disposed || sequence !== this.requestSequence) return\n      this.publish({ snapshot, loading: false, error: null })\n    } catch (cause) {\n      if (this.disposed || sequence !== this.requestSequence) return\n      this.publish({ loading: false, error: errorMessage(cause) })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+        "quote": "onAction: retryUnavailableDashboard"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.agent-status/dashboard",
+        "invoke": {
+          "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+          "quote": "this.context.call('quirky.agent-status/dashboard', nextView)"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.agent-status/src/DashboardView.tsx",
+            "quote": "retryUnavailableDashboard = () => {\n    void model.retry()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "retry(): Promise<void> {\n    return this.load()\n  }"
+          },
+          {
+            "file": "plugins/quirky.agent-status/src/dashboard-model.ts",
+            "quote": "async load(nextView: DashboardQuery = this.view): Promise<void> {\n    if (this.disposed) return\n    const sequence = ++this.requestSequence\n    this.view = nextView\n    this.publish({ view: nextView, loading: true, error: null })\n    try {\n      const snapshot = await this.context.call('quirky.agent-status/dashboard', nextView) as DashboardSnapshot\n      if (this.disposed || sequence !== this.requestSequence) return\n      this.publish({ snapshot, loading: false, error: null })\n    } catch (cause) {\n      if (this.disposed || sequence !== this.requestSequence) return\n      this.publish({ loading: false, error: errorMessage(cause) })\n    }\n  }"
+          }
+        ]
+      }
+    }
+  ]
+}
+

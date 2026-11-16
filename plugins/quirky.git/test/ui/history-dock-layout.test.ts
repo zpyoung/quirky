@@ -44,6 +44,7 @@ function browserEntry(): string {
     import { createElement } from 'react'
     import { createRoot } from 'react-dom/client'
     import { HistoryDock } from ${JSON.stringify(historyDock)}
+    import { dispatchGitUiControl } from ${JSON.stringify(join(ROOT, 'plugins/quirky.git/src/ui-control.ts'))}
     import type { GitCommit, GitHistory, UiPluginContext } from ${JSON.stringify(join(ROOT, 'packages/protocol/src/index.ts'))}
 
     const subject = ${JSON.stringify(SUBJECT)}
@@ -67,15 +68,26 @@ function browserEntry(): string {
       hasMore: false
     } as GitHistory
     const calls: string[] = []
-    const context = {
-      call(method: string) {
+    const provided = new Map<string, unknown>()
+    const toasts: Array<[string, string, unknown]> = []
+    let context: UiPluginContext
+    context = {
+      provide(id: string, implementation: unknown) {
+        provided.set(id, implementation)
+      },
+      toast(title: string, body: string, options?: unknown) {
+        toasts.push([title, body, options])
+      },
+      call(method: string, params: Record<string, unknown> = {}) {
         calls.push(method)
+        if (method === 'ui.window.self') return Promise.resolve({ connId: 1 })
+        if (method === 'ui.window.command.run') return Promise.resolve({ result: dispatchGitUiControl(context, params.args) })
         if (method === 'quirky.git/history') return Promise.resolve(history)
         if (method === 'quirky.git/commitFiles') return Promise.resolve({ entries: [] })
         throw new Error('Unexpected HistoryDock method: ' + method)
       }
     } as unknown as UiPluginContext
-    const state = { opened: 0, calls }
+    const state = { opened: 0, calls, toasts }
     const testWindow = window as Window & { __historyDockState?: typeof state }
     testWindow.__historyDockState = state
 

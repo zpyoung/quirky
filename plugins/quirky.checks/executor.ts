@@ -1,6 +1,5 @@
-import { spawn } from 'node:child_process'
-import type { ChildProcess } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
+import type { ProcessSpawner, SpawnedProcess } from '@quirky/protocol'
 
 const MAX_TAIL_CHARACTERS = 4000
 const TERMINATION_GRACE_MS = 2000
@@ -83,153 +82,69 @@ function emptyResult(startedAt: number, values: Partial<CommandResult> = {}): Co
   return result
 }
 
-function signalGroup(child: ChildProcess, signal: NodeJS.Signals): void {
-  const pid = child.pid
-  if (pid === undefined) return
-  try {
-    process.kill(-pid, signal)
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return
-    try { child.kill(signal) } catch { /* best-effort fallback; close and forced pipe cleanup still bound this run */ }
-  }
-}
-
 /** Runs one shell command with bounded decoded tails and process-group cancellation. */
-export function runCommand(options: RunCommandOptions): Promise<CommandResult> {
+export async function runCommand(spawner: ProcessSpawner, options: RunCommandOptions): Promise<CommandResult> {
   const startedAt = Date.now()
-  if (options.signal?.aborted) return Promise.resolve(emptyResult(startedAt, { aborted: true }))
+  if (options.signal?.aborted) return emptyResult(startedAt, { aborted: true })
 
-  const { promise, resolve } = Promise.withResolvers<CommandResult>()
+  let child: SpawnedProcess
+  try {
+    child = spawner.spawn([options.shell ?? DEFAULT_SHELL, '-c', options.command], {
+      cwd: options.cwd,
+      timeoutMs: options.timeoutSeconds * 1000,
+      killGraceMs: TERMINATION_GRACE_MS,
+      stderr: 'pipe',
+      groupGrace: true,
+      ...(options.signal ? { signal: options.signal } : {})
+    })
+  } catch (error) {
+    return emptyResult(startedAt, { error: errorText(error) })
+  }
+
   const stdout: Tail = { value: '', truncated: false, totalCharacters: 0 }
   const stderr: Tail = { value: '', truncated: false, totalCharacters: 0 }
   const stdoutDecoder = new StringDecoder('utf8')
   const stderrDecoder = new StringDecoder('utf8')
-  let child: ChildProcess | undefined
-  let ran = false
-  let exitCode: number | null = null
-  let timedOut = false
-  let aborted = false
   let failure: string | undefined
-  let childClosed = false
-  let finished = false
-  let terminationRequested = false
-  let termSent = false
-  let killGraceComplete = false
-  let stdoutEnded = false
-  let stderrEnded = false
-  let timeoutTimer: ReturnType<typeof setTimeout> | undefined
-  let killTimer: ReturnType<typeof setTimeout> | undefined
 
-  const finish = (force = false) => {
-    if (finished || (!force && (!childClosed || (terminationRequested && !killGraceComplete)))) return
-    finished = true
-    clearTimeout(timeoutTimer)
-    clearTimeout(killTimer)
-    options.signal?.removeEventListener('abort', onAbort)
-    resolve(emptyResult(startedAt, {
-      ran,
-      exitCode,
-      timedOut,
-      aborted,
-      stdoutTail: stdout.value,
-      stderrTail: stderr.value,
-      stdoutTruncated: stdout.truncated,
-      stderrTruncated: stderr.truncated,
-      ...(failure === undefined ? {} : { error: failure })
-    }))
-  }
-
-  const killAfterGrace = () => {
-    if (!child || killTimer !== undefined || killGraceComplete) return
-    signalGroup(child, 'SIGTERM')
-    termSent = true
-    killTimer = setTimeout(() => {
-      if (child) signalGroup(child, 'SIGKILL')
-      child?.stdout?.destroy()
-      child?.stderr?.destroy()
-      killGraceComplete = true
-      finish()
-    }, TERMINATION_GRACE_MS)
-  }
-
-  const requestTermination = () => {
-    terminationRequested = true
-    if (child?.pid !== undefined && !termSent) killAfterGrace()
-  }
-
-  const onAbort = () => {
-    aborted = true
-    requestTermination()
-  }
-
-  const appendOutput = (target: Tail, decoder: StringDecoder, chunk: Buffer | string) => {
-    appendTail(target, typeof chunk === 'string' ? chunk : decoder.write(chunk))
-  }
-
-  const flushDecoder = (target: Tail, decoder: StringDecoder) => appendTail(target, decoder.end())
-
-  options.signal?.addEventListener('abort', onAbort, { once: true })
-  timeoutTimer = setTimeout(() => {
-    timedOut = true
-    requestTermination()
-  }, options.timeoutSeconds * 1000)
-
-  try {
-    child = spawn(options.shell ?? DEFAULT_SHELL, ['-c', options.command], {
-      cwd: options.cwd,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe']
-    })
-  } catch (error) {
-    failure = errorText(error)
-    finish(true)
-    return promise
-  }
-
-  child.stdout?.on('data', (chunk: Buffer | string) => appendOutput(stdout, stdoutDecoder, chunk))
-  child.stderr?.on('data', (chunk: Buffer | string) => appendOutput(stderr, stderrDecoder, chunk))
-  child.stdout?.once('end', () => {
-    if (stdoutEnded) return
-    stdoutEnded = true
-    flushDecoder(stdout, stdoutDecoder)
-  })
-  child.stderr?.once('end', () => {
-    if (stderrEnded) return
-    stderrEnded = true
-    flushDecoder(stderr, stderrDecoder)
-  })
-  child.stdout?.once('close', () => {
-    if (stdoutEnded) return
-    stdoutEnded = true
-    flushDecoder(stdout, stdoutDecoder)
-  })
-  child.stderr?.once('close', () => {
-    if (stderrEnded) return
-    stderrEnded = true
-    flushDecoder(stderr, stderrDecoder)
-  })
-  child.stdout?.on('error', (error) => { failure ??= errorText(error) })
-  child.stderr?.on('error', (error) => { failure ??= errorText(error) })
-  child.once('spawn', () => {
-    ran = true
-    if (terminationRequested && !termSent) killAfterGrace()
-  })
-  child.once('error', (error) => {
-    failure ??= errorText(error)
-    if (!ran) {
-      child.stdout?.destroy()
-      child.stderr?.destroy()
-      finish(true)
-      return
+  const readOutput = async (
+    stream: ReadableStream<Uint8Array>,
+    tail: Tail,
+    decoder: StringDecoder
+  ): Promise<void> => {
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+    try {
+      reader = stream.getReader()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        appendTail(tail, decoder.write(Buffer.from(value.buffer, value.byteOffset, value.byteLength)))
+      }
+    } catch (error) {
+      failure ??= errorText(error)
+    } finally {
+      appendTail(tail, decoder.end())
+      reader?.releaseLock()
     }
-    requestTermination()
-  })
-  child.once('close', (code) => {
-    exitCode = code
-    childClosed = true
-    finish()
-  })
+  }
 
-  if (options.signal?.aborted) onAbort()
-  return promise
+  const stdoutDone = readOutput(child.stdout, stdout, stdoutDecoder)
+  const stderrDone = readOutput(child.stderr, stderr, stderrDecoder)
+  const exit = await child.exited
+  await Promise.all([stdoutDone, stderrDone])
+
+  const error = exit.spawnError?.message
+    ?? failure
+    ?? (exit.groupSurvived ? 'process group could not be stopped' : undefined)
+  return emptyResult(startedAt, {
+    ran: child.pid !== null,
+    exitCode: exit.exitCode,
+    timedOut: exit.stopped === 'timeout',
+    aborted: exit.stopped === 'aborted',
+    stdoutTail: stdout.value,
+    stderrTail: stderr.value,
+    stdoutTruncated: stdout.truncated,
+    stderrTruncated: stderr.truncated,
+    ...(error === undefined ? {} : { error })
+  })
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import { Button } from '@quirky/ui'
 
-export type PopoverItem = { label: string; run(event: ReactMouseEvent<HTMLButtonElement>): void }
+export type PopoverItem = { label: string; onSelect(event: ReactMouseEvent<HTMLButtonElement>): void }
 
 type Props = { x: number; y: number; items: PopoverItem[]; onClose(): void }
 
@@ -32,10 +32,7 @@ export function LinkPopover({ x, y, items, onClose }: Props) {
           key={item.label}
           role="menuitem"
           className="tt-pane-link-popover__item"
-          onClick={(event) => {
-            onClose()
-            item.run(event)
-          }}
+          onClick={item.onSelect}
         >
           {item.label}
         </Button>

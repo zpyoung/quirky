@@ -617,15 +617,16 @@ export function activate(context: PluginContext): void {
   }
 
   const structuredContext: StructuredContext = {
+    process: context.process,
     appendMessage,
     setStatus,
     createAsk,
     async setProviderSession(sessionId, providerSession) {
       await persistProviderSession(sessionId, providerSession)
     },
-    resolveClaudePath: () => resolveClaudeThroughLoginShell(context.launch.shell),
-    resolveCodexPath: () => resolveCodexThroughLoginShell(context.launch.shell),
-    resolvePiPath: (variant) => resolvePiThroughLoginShell(context.launch.shell, variant)
+    resolveClaudePath: () => resolveClaudeThroughLoginShell(context.process, context.launch.shell),
+    resolveCodexPath: () => resolveCodexThroughLoginShell(context.process, context.launch.shell),
+    resolvePiPath: (variant) => resolvePiThroughLoginShell(context.process, context.launch.shell, variant)
   }
 
   const injectedRunner = testRunnerFactory()?.(structuredContext)

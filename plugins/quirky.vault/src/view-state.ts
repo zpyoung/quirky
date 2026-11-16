@@ -59,6 +59,7 @@ function validStable(value: unknown): value is StableViewState {
 export class VaultViewState {
   private stable: StableViewState
   private transient: TransientViewState = { ...DEFAULT_TRANSIENT, expandedIds: [] }
+  private revision = Date.now()
 
   constructor(private readonly store: PluginStore) {
     this.stable = this.readStable()
@@ -70,7 +71,8 @@ export class VaultViewState {
       ...this.transient,
       disabledAgents: [...this.stable.disabledAgents],
       expandedIds: [...this.transient.expandedIds],
-      scope: this.transient.scope ?? defaultScope
+      scope: this.transient.scope ?? defaultScope,
+      revision: this.revision
     }
   }
 
@@ -98,6 +100,7 @@ export class VaultViewState {
     }
     this.stable = nextStable
     this.transient = nextTransient
+    this.revision = Math.max(Date.now(), this.revision + 1)
     return this.get(defaultScope)
   }
 
@@ -110,6 +113,7 @@ export class VaultViewState {
     )
     this.stable = next
     this.transient = { ...DEFAULT_TRANSIENT, scope: defaultScope, expandedIds: [] }
+    this.revision = Math.max(Date.now(), this.revision + 1)
     return this.get(defaultScope)
   }
 

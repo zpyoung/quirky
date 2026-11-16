@@ -109,14 +109,16 @@ describe('context extension', () => {
       {
         activate: [
           'let threw = ""',
+          'let processThrew = ""',
           'try { context.emit("x") } catch (error) { threw = (error as Error).message }',
-          "record('emit threw ' + threw + ' dataDir [' + context.dataDir + '] ' + context.error('conflict', 'm').message)"
+          'try { await context.process.run(["/bin/echo", "unused"]) } catch (error) { processThrew = (error as Error).message }',
+          "record('emit threw ' + threw + ' process threw ' + processThrew + ' dataDir [' + context.dataDir + '] ' + context.error('conflict', 'm').message)"
         ].join('\n  ')
       }
     )
     t.host.load()
     await t.host.activate('acme.one')
-    expect(t.lines()).toContain('emit threw acme.one: context.emit is not available dataDir [] m')
+    expect(t.lines()).toContain('emit threw acme.one: context.emit is not available process threw acme.one: context.process is not available dataDir [] m')
     expect(t.created).toEqual([])
   })
 
@@ -344,5 +346,36 @@ describe('addWarning', () => {
     await t.host.setEnabled('acme.one', true)
     await t.host.activate('acme.one')
     expect(t.host.list()[0]!.diagnostics).toEqual([])
+  })
+})
+describe('removeWarning', () => {
+  const changes = (t: Setup) => t.events.filter((event) => event.type === 'plugin.changed').length
+
+  test('removes every warning with the message and emits once', async () => {
+    const t = setup()
+    t.installed({ id: 'acme.one' })
+    t.host.load()
+    await t.host.activate('acme.one')
+    t.host.addWarning('acme.one', 'same warning')
+    t.host.addWarning('acme.one', 'same warning')
+    const before = changes(t)
+
+    t.host.removeWarning('acme.one', 'same warning')
+
+    expect(changes(t)).toBe(before + 1)
+    expect(t.host.list()[0]!.diagnostics).not.toContainEqual({ level: 'warning', message: 'same warning' })
+  })
+
+  test('does not emit for an unknown plugin or message', async () => {
+    const t = setup()
+    t.installed({ id: 'acme.one' })
+    t.host.load()
+    await t.host.activate('acme.one')
+    const before = changes(t)
+
+    t.host.removeWarning('acme.ghost', 'unknown')
+    t.host.removeWarning('acme.one', 'unknown')
+
+    expect(changes(t)).toBe(before)
   })
 })

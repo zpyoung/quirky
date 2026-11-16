@@ -608,7 +608,7 @@ export class AgentsService {
   }
 
   private async detectInstalled(): Promise<void> {
-    const loginPath = await readLoginPath(this.context.launch.shell)
+    const loginPath = await readLoginPath(this.context.process, this.context.launch.shell)
     this.search = searchDirs({
       loginPath,
       fallbackPath: process.env.PATH ?? '',
@@ -823,6 +823,7 @@ export class AgentsService {
         }
         try {
           run = await runCodexAppServerModelProbe(
+            this.context.process,
             [executable, ...launch.tokens.slice(1), '-c', 'approval_policy=never', '-c', 'features.plugins=false', '-s', 'read-only', '-a', 'never', 'app-server'],
             declaration.timeoutMs,
             env,
@@ -840,6 +841,7 @@ export class AgentsService {
         }
         try {
           run = await runPiRpcModelProbe(
+            this.context.process,
             [executable, ...launch.tokens.slice(1), '--mode', 'rpc', '--no-session'],
             declaration.timeoutMs,
             materializeProviderEnvironment(process.env, [planned.launchEnv]),
@@ -850,7 +852,7 @@ export class AgentsService {
         }
       } else {
         try {
-          run = await runModelProbe([executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
+          run = await runModelProbe(this.context.process, [executable, ...launch.tokens.slice(1), ...declaration.args], declaration.timeoutMs)
         } catch {
           return this.discoveryFailure(entry.id, 'local', 'the provider model probe failed')
         }

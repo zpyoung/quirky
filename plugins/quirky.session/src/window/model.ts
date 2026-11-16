@@ -2,6 +2,8 @@ import { RpcErrorCode, type AgentDisplayState, type AgentKind, type QuirkyEvent,
 import { displayStatus, windowDisplay, type DisplayStatus } from './status'
 
 export const WORKTREE_VIEW_ID = 'view:quirky.session/worktree'
+export const SHOW_ALL_EVENTS_COMMAND = 'command:quirky.session/show-all-events'
+export const RUN_BADGE_COMMAND = 'command:quirky.session/run-badge'
 
 /** What the view shows to `ui.state`: the worktree's tabs and the active one. `display` and `label` are present for a tab drawn from an agent-status summary. */
 export type SessionViewReport = {
@@ -14,7 +16,9 @@ export type SessionViewReport = {
 
 export type ViewSnapshot = {
   /** `missing` when the worktree no longer resolves. */
-  status: 'loading' | 'ready' | 'missing'
+  status: 'loading' | 'ready' | 'missing' | 'failed'
+  /** The first load's error message while `status` is `failed`, else null. */
+  failure: string | null
   worktree: Pick<Worktree, 'id' | 'name' | 'path'> | null
   sessions: Session[]
   active: Session | null
@@ -22,11 +26,24 @@ export type ViewSnapshot = {
 
 const lastActiveByWorktree = new Map<string, string>()
 const showAllEventsBySession = new Map<string, string>()
+const showAllEventsListeners = new Set<() => void>()
+
+/** Subscribes to changes in the per-session Show all events memory. */
+export function subscribeShowAllEvents(listener: () => void): () => void {
+  showAllEventsListeners.add(listener)
+  return () => showAllEventsListeners.delete(listener)
+}
+
+function notifyShowAllEvents(): void {
+  for (const listener of showAllEventsListeners) listener()
+}
 
 /** Forgets remembered session choices for this window. */
 export function resetSessionMemory(): void {
   lastActiveByWorktree.clear()
+  const hadShowAllEvents = showAllEventsBySession.size > 0
   showAllEventsBySession.clear()
+  if (hadShowAllEvents) notifyShowAllEvents()
 }
 
 /** Whether the background transcript should include events hidden by default for `session`. */
@@ -36,25 +53,30 @@ export function showAllEventsFor(session: Pick<Session, 'id' | 'worktreeId'>): b
 
 /** Remembers whether the background transcript should include events hidden by default for `session`. */
 export function rememberShowAllEvents(session: Pick<Session, 'id' | 'worktreeId'>, enabled: boolean): void {
-  if (enabled) {
+  const current = showAllEventsBySession.get(session.id)
+  if (enabled && current !== session.worktreeId) {
     showAllEventsBySession.set(session.id, session.worktreeId)
-  } else if (showAllEventsBySession.get(session.id) === session.worktreeId) {
+    notifyShowAllEvents()
+  } else if (!enabled && current === session.worktreeId) {
     showAllEventsBySession.delete(session.id)
+    notifyShowAllEvents()
   }
 }
 
 /** Forgets remembered background-event visibility when a session is removed. */
 export function forgetShowAllEvents(sessionId: string): void {
-  showAllEventsBySession.delete(sessionId)
+  if (showAllEventsBySession.delete(sessionId)) notifyShowAllEvents()
 }
 
 function pruneShowAllEvents(worktreeId: string, sessions: Session[]): void {
   if (showAllEventsBySession.size === 0) return
   const sessionIds = new Set<string>()
   for (const session of sessions) sessionIds.add(session.id)
+  let changed = false
   for (const [sessionId, owner] of showAllEventsBySession) {
-    if (owner === worktreeId && !sessionIds.has(sessionId)) showAllEventsBySession.delete(sessionId)
+    if (owner === worktreeId && !sessionIds.has(sessionId)) changed = showAllEventsBySession.delete(sessionId) || changed
   }
+  if (changed) notifyShowAllEvents()
 }
 
 /**
@@ -74,7 +96,7 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
  * The view ends it with `stop()`.
  */
 export class WorktreeSessions {
-  private snapshot: ViewSnapshot = { status: 'loading', worktree: null, sessions: [], active: null }
+  private snapshot: ViewSnapshot = { status: 'loading', failure: null, worktree: null, sessions: [], active: null }
   private listeners = new Set<() => void>()
   private unsubscribes: (() => void)[] = []
   private requested: string | undefined
@@ -123,6 +145,14 @@ export class WorktreeSessions {
   }
 
   getSnapshot = (): ViewSnapshot => this.snapshot
+
+  /** Shows loading again and repeats the load after a failed first load. */
+  retry(): void {
+    if (this.stopped || this.snapshot.status !== 'failed') return
+    this.queued = []
+    this.commit({ status: 'loading', failure: null, worktree: null, sessions: [] })
+    void this.load()
+  }
 
   report(): SessionViewReport {
     const { worktree, sessions, active } = this.snapshot
@@ -212,8 +242,9 @@ export class WorktreeSessions {
       if (this.stopped) return
       const gone = (error as { code?: unknown } | null)?.code === RpcErrorCode.NotFound
       this.queued = []
-      if (gone) this.commit({ status: 'missing', worktree: null, sessions: [] })
-      else this.context.toast('Could not load sessions', messageOf(error))
+      if (gone) this.commit({ status: 'missing', failure: null, worktree: null, sessions: [] })
+      else if (this.snapshot.status === 'ready') this.context.toast('Could not load sessions', messageOf(error))
+      else this.commit({ status: 'failed', failure: messageOf(error), worktree: null, sessions: [] })
       return
     }
     if (this.stopped) return
@@ -223,6 +254,7 @@ export class WorktreeSessions {
     pruneShowAllEvents(worktree.id, loadedSessions)
     this.commit({
       status: 'ready',
+      failure: null,
       worktree: { id: worktree.id, name: worktree.name, path: worktree.path },
       sessions: loadedSessions
     })

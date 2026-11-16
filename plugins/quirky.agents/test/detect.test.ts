@@ -1,15 +1,22 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import type { ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import { detect, readLoginPath, searchDirs } from '../src/detect'
 import type { AgentEntry } from '../src/core/types'
 
 let root: string
+const ownedRunners: OwnedProcessRunner[] = []
+let nextOwner = 0
 
 beforeEach(() => {
   root = mkdtempSync('/tmp/a5d-')
 })
-afterEach(() => rmSync(root, { recursive: true, force: true }))
+afterEach(async () => {
+  await Promise.all(ownedRunners.splice(0).map((runner) => runner.dispose()))
+  rmSync(root, { recursive: true, force: true })
+})
 
 const dir = (...parts: string[]) => {
   const path = join(root, ...parts)
@@ -36,6 +43,76 @@ const entry = (id: string, over: Partial<AgentEntry> = {}): AgentEntry =>
     process: id,
     ...over
   }) as AgentEntry
+
+function runResult(stdoutText: string, overrides: Partial<RunResult> = {}): RunResult {
+  return {
+    stdout: new TextEncoder().encode(stdoutText),
+    stdoutText,
+    stderr: '',
+    exitCode: 0,
+    signal: null,
+    durationMs: 0,
+    ...overrides
+  }
+}
+
+function scriptedRunner(outcome: RunResult | Error) {
+  const calls: { argv: string[]; options?: RunOptions }[] = []
+  const runner: ProcessRunner = {
+    run: async (argv, options) => {
+      calls.push({ argv: [...argv], ...(options === undefined ? {} : { options }) })
+      if (outcome instanceof Error) throw outcome
+      return outcome
+    }
+  }
+  return { runner, calls }
+}
+
+function realRunner() {
+  const runner = createProcessRunner({ owner: `agents-detect-test-${nextOwner++}` })
+  ownedRunners.push(runner)
+  return runner
+}
+
+function processIsAlive(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function waitForProcessExit(pid: number, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const delay = Promise.withResolvers<void>()
+    setTimeout(delay.resolve, 25)
+    await delay.promise
+    if (!processIsAlive(pid)) return true
+  }
+  return !processIsAlive(pid)
+}
+
+function killProcessInFile(path: string) {
+  try {
+    process.kill(Number(readFileSync(path, 'utf8').trim()), 'SIGKILL')
+  } catch {}
+}
+
+function assertLoginPathCall(calls: { argv: string[]; options?: RunOptions }[], shell: string, timeoutMs: number) {
+  expect(calls).toEqual([
+    {
+      argv: [shell, '-l', '-c', 'printf %s "$PATH"'],
+      options: {
+        timeoutMs,
+        signal: expect.any(AbortSignal),
+        killGraceMs: 0,
+        maxOutputBytes: 1048576
+      }
+    }
+  ])
+}
 
 describe('searchDirs', () => {
   test('orders login PATH, quirky bin, then install directories with the home substituted', () => {
@@ -175,33 +252,114 @@ describe('readLoginPath', () => {
     return path
   }
 
-  test('returns the PATH the shell prints, trimmed', async () => {
+  test('passes the login-shell command to the runner with bounded options', async () => {
+    const { runner, calls } = scriptedRunner(runResult('  /one:/two\n'))
+    expect(await readLoginPath(runner, '/bin/zsh')).toBe('/one:/two')
+    assertLoginPathCall(calls, '/bin/zsh', 5000)
+  })
+
+  test('uses an explicit timeout in the runner options', async () => {
+    const { runner, calls } = scriptedRunner(runResult('/one:/two'))
+    expect(await readLoginPath(runner, '/bin/zsh', 200)).toBe('/one:/two')
+    assertLoginPathCall(calls, '/bin/zsh', 200)
+  })
+
+  const failures: { name: string; result?: RunResult; error?: Error }[] = [
+    { name: 'non-zero exit', result: runResult('/one', { exitCode: 1 }) },
+    { name: 'timeout', result: runResult('/one', { stopped: 'timeout' }) },
+    { name: 'abort', result: runResult('/one', { stopped: 'aborted' }) },
+    { name: 'output overflow', result: runResult('/one', { stopped: 'overflow' }) },
+    {
+      name: 'spawn error',
+      result: runResult('', { exitCode: null, spawnError: { code: 'ENOENT', message: 'missing shell' } })
+    },
+    { name: 'empty output', result: runResult(' \n\t ') },
+    { name: 'rejected run', error: new Error('runner disposed') }
+  ]
+
+  for (const failure of failures) {
+    test(`returns null for ${failure.name}`, async () => {
+      const { runner } = scriptedRunner(failure.error ?? failure.result!)
+      expect(await readLoginPath(runner, '/bin/zsh')).toBeNull()
+    })
+  }
+
+  test('returns the PATH when a background job is killed with its shell process group', async () => {
+    const pidFile = join(root, 'sleep.pid')
+    const shell = script('shell-bg', `sleep 30 &\nprintf '%s\\n' "$!" > '${pidFile}'\nprintf /late/bin`)
+    const runner = realRunner()
+    try {
+      expect(await readLoginPath(runner, shell, 5000)).toBe('/late/bin')
+      const pid = Number(readFileSync(pidFile, 'utf8').trim())
+      expect(Number.isInteger(pid)).toBe(true)
+      expect(await waitForProcessExit(pid, 2000)).toBe(true)
+    } finally {
+      killProcessInFile(pidFile)
+    }
+  })
+
+  test('aborts the whole call when a child in a new session keeps stdout open', async () => {
+    const pidFile = join(root, 'escaped.pid')
+    const shell = script(
+      'shell-escaped',
+      `exec perl -MPOSIX -e 'my $pid_file = $ARGV[0]; my $pid = fork(); die "fork failed" unless defined $pid; if ($pid == 0) { POSIX::setsid(); my $temp_file = "$pid_file.tmp.$$"; open my $file, ">", $temp_file or die $!; print $file "$$\\n"; close $file or die $!; rename $temp_file, $pid_file or die $!; sleep 30; exit 0; } while (!-e $pid_file) { select undef, undef, undef, 0.01; } print "/late/bin";' '${pidFile}'`
+    )
+    const real = realRunner()
+    let result: RunResult | undefined
+    const runner: ProcessRunner = {
+      run: async (argv, options) => {
+        result = await real.run(argv, options)
+        return result
+      }
+    }
+    const started = Date.now()
+    try {
+      expect(await readLoginPath(runner, shell, 1500)).toBeNull()
+      expect(Date.now() - started).toBeLessThan(4000)
+      expect(result?.stdoutText).toBe('/late/bin')
+      expect(result?.signal).toBeNull()
+    } finally {
+      killProcessInFile(pidFile)
+    }
+  })
+
+  test('ends a runner call that resolves only after its signal is aborted', async () => {
+    const runner: ProcessRunner = {
+      run: (_argv, options) => {
+        const { promise, resolve } = Promise.withResolvers<RunResult>()
+        const signal = options?.signal
+        if (!signal) return Promise.reject(new Error('missing abort signal'))
+        const abort = () => resolve(runResult('', { exitCode: null, signal: 'SIGTERM', stopped: 'aborted' }))
+        if (signal.aborted) abort()
+        else signal.addEventListener('abort', abort, { once: true })
+        return promise
+      }
+    }
+    const started = Date.now()
+    expect(await readLoginPath(runner, '/bin/zsh', 200)).toBeNull()
+    expect(Date.now() - started).toBeLessThan(1000)
+  })
+
+  test('returns the PATH the real runner reads from a shell', async () => {
     const shell = script('shell-ok', 'printf "  /one:/two\\n"')
-    expect(await readLoginPath(shell)).toBe('/one:/two')
+    expect(await readLoginPath(realRunner(), shell)).toBe('/one:/two')
   })
 
   test('passes -l -c and the printf command to the shell', async () => {
     const shell = script('shell-args', 'printf "%s|%s|%s" "$1" "$2" "$3"')
-    expect(await readLoginPath(shell)).toBe('-l|-c|printf %s "$PATH"')
+    expect(await readLoginPath(realRunner(), shell)).toBe('-l|-c|printf %s "$PATH"')
   })
 
   test('returns null for a non-zero exit, empty output, or a missing shell', async () => {
-    expect(await readLoginPath(script('shell-fail', 'printf /x; exit 3'))).toBeNull()
-    expect(await readLoginPath(script('shell-empty', 'printf ""'))).toBeNull()
-    expect(await readLoginPath(join(root, 'no-such-shell'))).toBeNull()
+    expect(await readLoginPath(realRunner(), script('shell-fail', 'printf /x; exit 3'))).toBeNull()
+    expect(await readLoginPath(realRunner(), script('shell-empty', 'printf ""'))).toBeNull()
+    expect(await readLoginPath(realRunner(), join(root, 'no-such-shell'))).toBeNull()
   })
 
   test('returns null within the timeout when the shell hangs', async () => {
     const shell = script('shell-hang', 'exec sleep 30')
     const started = Date.now()
-    expect(await readLoginPath(shell, 200)).toBeNull()
+    expect(await readLoginPath(realRunner(), shell, 200)).toBeNull()
     expect(Date.now() - started).toBeLessThan(3000)
-  })
-
-  test('returns null within the timeout when a background child keeps stdout open after the shell exits', async () => {
-    const shell = script('shell-bg', 'sleep 3 &\nprintf /late/bin')
-    const started = Date.now()
-    expect(await readLoginPath(shell, 200)).toBeNull()
-    expect(Date.now() - started).toBeLessThan(1500)
   })
 })

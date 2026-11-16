@@ -11,6 +11,60 @@ import { stubXtermFontMetrics } from '../xterm-metrics'
 type PaneModule = typeof import('../../src/window/pane/TerminalPaneView')
 type XtermModule = typeof import('@xterm/xterm')
 
+export type PaneWindowCall = { method: 'ui.window.self' | 'ui.window.command.run'; params: Record<string, unknown> }
+export type PaneWindowAdapterOptions = {
+  self?(): unknown | Promise<unknown>
+  run?(params: Record<string, unknown>, handle: TerminalPaneHandle | null): unknown | Promise<unknown>
+}
+
+async function dispatchPaneWindowCommand(params: Record<string, unknown>, handle: TerminalPaneHandle | null): Promise<unknown> {
+  if (!handle) throw new Error('no mounted terminal pane handles this command')
+  const rawArgs = params.args
+  const args = typeof rawArgs === 'object' && rawArgs !== null && !Array.isArray(rawArgs)
+    ? rawArgs as Record<string, unknown>
+    : {}
+  switch (params.id) {
+    case 'command:quirky.terminal/search': {
+      const options: { regex?: boolean; caseSensitive?: boolean } = {}
+      if (typeof args.regex === 'boolean') options.regex = args.regex
+      if (typeof args.caseSensitive === 'boolean') options.caseSensitive = args.caseSensitive
+      handle.search(typeof args.query === 'string' ? args.query : undefined, options)
+      return { ok: true }
+    }
+    case 'command:quirky.terminal/search-next':
+      handle.searchNext()
+      return { ok: true }
+    case 'command:quirky.terminal/search-previous':
+      handle.searchPrevious()
+      return { ok: true }
+    case 'command:quirky.terminal/search-close':
+      handle.searchClose()
+      return { ok: true }
+    case 'command:quirky.terminal/copy': {
+      if (typeof args.text !== 'string') throw new Error('text must be a string')
+      const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard
+      if (typeof clipboard?.writeText !== 'function') throw new Error('Clipboard access is unavailable in this window.')
+      await clipboard.writeText(args.text)
+      return { text: args.text }
+    }
+    default:
+      throw new Error(`unknown window command ${String(params.id)}`)
+  }
+}
+
+async function dispatchWindowCall(
+  method: string,
+  params: Record<string, unknown>,
+  adapter: PaneWindowAdapterOptions,
+  handle: TerminalPaneHandle | null
+): Promise<unknown> {
+  if (method === 'ui.window.self') return adapter.self ? adapter.self() : { connId: 42 }
+  if (method === 'ui.window.command.run') {
+    return adapter.run ? adapter.run(params, handle) : { result: await dispatchPaneWindowCommand(params, handle) }
+  }
+  return undefined
+}
+
 let pane: PaneModule
 let xterm: XtermModule
 let restoreOpen: (() => void) | null = null
@@ -69,15 +123,29 @@ export type MountedPane = Awaited<ReturnType<typeof mountPane>>
  * Mounts a pane for session `s1` into a fresh element with the fake daemon's handlers and
  * returns its handle, the reports it made and a way to re-render it with new props.
  */
-export async function mountPane(fake: FakeContext, over: Partial<TerminalPaneProps> = {}) {
+export async function mountPane(
+  fake: FakeContext,
+  over: Partial<TerminalPaneProps> = {},
+  windowAdapter: PaneWindowAdapterOptions = {}
+) {
   const element = document.createElement('div')
   document.body.appendChild(element)
   const root = createRoot(element)
   const handle = createRef<TerminalPaneHandle>()
   const reports: PaneReport[] = []
+  const windowCalls: PaneWindowCall[] = []
+  const originalCall = fake.context.call.bind(fake.context)
+  fake.context.call = async (method, params = {}) => {
+    if (method === 'ui.window.self' || method === 'ui.window.command.run') {
+      windowCalls.push({ method, params })
+      return dispatchWindowCall(method, params, windowAdapter, handle.current)
+    }
+    return originalCall(method, params)
+  }
   let props: TerminalPaneProps = {
     context: fake.context,
     sessionId: 's1',
+    paneId: 'pane-1',
     cwd: '/tmp/w/api',
     settings: settings(),
     active: true,
@@ -103,7 +171,14 @@ export async function mountPane(fake: FakeContext, over: Partial<TerminalPanePro
     textarea: () => term().textarea!,
     /** Resolves once xterm has parsed everything written so far. */
     flush: () => new Promise<void>((resolve) => term().write('', resolve)),
-    unmount: () => act(async () => root.unmount())
+    windowCalls,
+    unmount: async () => {
+      try {
+        await act(async () => root.unmount())
+      } finally {
+        fake.context.call = originalCall
+      }
+    }
   }
 }
 

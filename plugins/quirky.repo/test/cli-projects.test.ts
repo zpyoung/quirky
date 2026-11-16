@@ -288,7 +288,7 @@ describe('SC-61: the manifest', () => {
       cli: { commands: { words: string; plugin: string }[] }
     }
     const methods = new Map(catalog.methods.map((m) => [m.name, m]))
-    for (const name of ['list', 'add', 'clone', 'create', 'scan', 'import', 'remove', 'resolve', 'show', 'set', 'hooks', 'trustHooks', 'groupList', 'groupCreate', 'groupRename', 'groupDelete', 'groupAdd', 'groupRemove', 'groupCollapse']) {
+    for (const name of ['list', 'add', 'clone', 'create', 'scan', 'import', 'remove', 'resolve', 'show', 'set', 'hooks', 'trustHooks', 'searchRefs', 'groupList', 'groupCreate', 'groupRename', 'groupDelete', 'groupAdd', 'groupRemove', 'groupCollapse']) {
       expect(methods.get(`quirky.repo/${name}`)?.params).toBeDefined()
     }
 

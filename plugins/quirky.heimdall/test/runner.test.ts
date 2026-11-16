@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -194,6 +195,43 @@ function runnerOptions(
 
 function currentAttempt(entries: JournalEntry[]): Attempt | undefined {
   return entries.filter((entry): entry is Attempt => entry.kind === 'attempt').at(-1)
+}
+
+function legacyDispatchRequestId(fingerprint: string): string {
+  const digest = createHash('sha256').update(`heimdall-dispatch-v1\0${fingerprint}`).digest()
+  digest[6] = ((digest[6] ?? 0) & 0x0f) | 0x80
+  digest[8] = ((digest[8] ?? 0) & 0x3f) | 0x80
+  const hex = digest.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+function seedOpenEscalation(
+  stored: TestStorage,
+  escalationId: string,
+  escalationKind: string,
+  approvalScope?: Record<string, string>
+): void {
+  stored.store.append('watcher-1', {
+    kind: 'escalation',
+    class: 'fact',
+    origin: 'owner',
+    resolved: false,
+    eventId: `seed-escalation:${escalationId}`,
+    escalationId,
+    escalationKind,
+    status: 'open',
+    foldCount: 1,
+    ...(approvalScope ? { approvalScope } : {})
+  })
+}
+
+function approvalEscalationId(action: KernelAction): string {
+  const scope = {
+    actionKind: action.kind,
+    contentIdentity: action.contentIdentity,
+    evidenceKey: action.evidenceKey,
+    ...(typeof action.preparedCommitSha === 'string' ? { preparedCommitSha: action.preparedCommitSha } : {})
+  }
+  return `approval:${createHash('sha256').update(JSON.stringify(scope)).digest('hex')}`
 }
 function seedWorkerPark(
   stored: TestStorage,
@@ -468,6 +506,75 @@ describe('Heimdall runner gate and budget behavior', () => {
     }
   })
 
+  test('dispatches identical fingerprints from different watchers with distinct receipt identities', async () => {
+    const firstStorage = storage()
+    const secondStorage = storage()
+    const receipts = new Map<string, { input: string; dispatchId: string }>()
+    const accepted: { watcherId: string; requestId: string; fingerprint: string; input: string }[] = []
+    const port = orchestration({
+      dispatch: async (current, attempt, request) => {
+        const requestId = attempt.requestId
+        if (!requestId) throw new Error('runner did not persist a worker request ID')
+        const input = JSON.stringify({ watcherId: current.watcherId, request })
+        const existing = receipts.get(requestId)
+        if (existing) {
+          if (existing.input !== input) {
+            return { kind: 'refused', reason: 'request_mismatch', detail: 'request ID was reused with different input' }
+          }
+          return { kind: 'dispatched', dispatchId: existing.dispatchId }
+        }
+        const dispatchId = `dispatch-${current.watcherId}`
+        receipts.set(requestId, { input, dispatchId })
+        accepted.push({ watcherId: current.watcherId, requestId, fingerprint: attempt.fingerprint, input })
+        return { kind: 'dispatched', dispatchId }
+      }
+    })
+    const watcherKind = kind({
+      decide: () => ({ action }),
+      execute: async (_selected, context) => {
+        const result = await context.dispatchWorker({
+          spec: 'same user task',
+          worktree: context.enrollment.workspacePath
+        })
+        if (result.kind === 'dispatched') return { effect: 'landed' }
+        if (result.kind === 'refused') return { effect: 'not-landed', reason: result.reason }
+        return { effect: 'indeterminate', reason: result.detail }
+      }
+    })
+    const firstRunner = createRunner(runnerOptions(firstStorage, watcherKind, {
+      enrollment: enrollment({ watcherId: 'watcher-a' }),
+      orchestration: port
+    }))
+    const secondRunner = createRunner(runnerOptions(secondStorage, watcherKind, {
+      enrollment: enrollment({ watcherId: 'watcher-b' }),
+      orchestration: port
+    }))
+
+    try {
+      await firstRunner.pulse()
+      await secondRunner.pulse()
+
+      expect(accepted).toHaveLength(2)
+      expect(accepted.map(({ watcherId }) => watcherId)).toEqual(['watcher-a', 'watcher-b'])
+      expect(accepted.map(({ fingerprint }) => fingerprint)).toEqual([
+        actionFingerprint(action),
+        actionFingerprint(action)
+      ])
+      expect(accepted[0]?.requestId).not.toBe(accepted[1]?.requestId)
+      expect(new Set(accepted.map(({ requestId }) => requestId)).size).toBe(2)
+      expect(currentAttempt(firstStorage.store.journal('watcher-a'))).toMatchObject({
+        state: 'running', requestId: accepted[0]?.requestId, dispatchId: 'dispatch-watcher-a'
+      })
+      expect(currentAttempt(secondStorage.store.journal('watcher-b'))).toMatchObject({
+        state: 'running', requestId: accepted[1]?.requestId, dispatchId: 'dispatch-watcher-b'
+      })
+      expect(accepted[0]?.input).not.toBe(accepted[1]?.input)
+    } finally {
+      await firstRunner.shutdown(0)
+      await secondRunner.shutdown(0)
+    }
+  })
+
   test('worker billing follows confirmed contact, excludes unknown gaps, and worker_done settles and releases', async () => {
     const stored = storage()
     let nowMs = 1_000
@@ -714,7 +821,7 @@ describe('Heimdall runner gate and budget behavior', () => {
     let runShows = 0
     const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
     const fingerprint = 'fingerprint-adapter-live-identity'
-    const requestId = orchestrationRequestIdForAttemptFingerprint(fingerprint)
+    const requestId = orchestrationRequestIdForAttemptFingerprint('watcher-1', fingerprint)
     const current = enrollment({
       workspacePath: stored.workspacePath,
       workspaceKey: `local::${stored.workspacePath}`,
@@ -816,7 +923,7 @@ describe('Heimdall runner gate and budget behavior', () => {
   test('unknown worker replies replay the stable request before pending mailbox messages are acknowledged', async () => {
     const stored = storage()
     const fingerprint = 'fingerprint-replayed-worker'
-    const requestId = orchestrationRequestIdForAttemptFingerprint(fingerprint)
+    const requestId = legacyDispatchRequestId(fingerprint)
     const workerRequest: WorkerRequest = { spec: 'worker task', worktree: '/workspace' }
     const messages: WorkerMessage[] = [
       {
@@ -1378,6 +1485,88 @@ describe('Heimdall runner gate and budget behavior', () => {
       await runner.pulse()
       expect(stored.store.get('watcher-1')?.terminalAtMs).toBe(1_000)
       expect(stored.store.summary('watcher-1')).toMatchObject({ state:'complete' })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('resolves superseded approval escalations after a changed decision while preserving the active scope and unrelated escalations', async () => {
+    const stored = storage()
+    const nextAction = { ...action, evidenceKey: 'evidence-2' }
+    const activeEscalationId = approvalEscalationId(nextAction)
+    const watcherKind = kind({ decide: () => ({ action: nextAction }), pace: () => 'stopped' })
+    const options = runnerOptions(stored, watcherKind, {
+      enrollment: enrollment({ capabilities: { publish: 'gated' } })
+    })
+    seedOpenEscalation(stored, approvalEscalationId(action), 'awaiting-approval')
+    seedOpenEscalation(stored, activeEscalationId, 'awaiting-approval', {
+      actionKind: nextAction.kind,
+      contentIdentity: nextAction.contentIdentity,
+      evidenceKey: nextAction.evidenceKey
+    })
+    seedOpenEscalation(stored, 'worker-escalation:unrelated', 'worker-escalation')
+    const runner = createRunner(options)
+    try {
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      expect(journal.filter((entry) => entry.escalationId === approvalEscalationId(action)).at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'resolved', reason: 'superseded', resolved: true })
+      expect(journal.filter((entry) => entry.escalationId === activeEscalationId).at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'open', escalationKind: 'awaiting-approval' })
+      expect(journal.filter((entry) => entry.escalationId === 'worker-escalation:unrelated').at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'open', escalationKind: 'worker-escalation' })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('resolves awaiting-approval escalations after a null decision without touching unrelated escalations', async () => {
+    const stored = storage()
+    const watcherKind = kind({ decide: () => ({ action: null, reason: 'waiting' }), pace: () => 'stopped' })
+    const options = runnerOptions(stored, watcherKind)
+    seedOpenEscalation(stored, approvalEscalationId(action), 'awaiting-approval')
+    seedOpenEscalation(stored, 'worker-escalation:unrelated', 'worker-escalation')
+    const runner = createRunner(options)
+    try {
+      await runner.pulse()
+      const journal = stored.store.journal('watcher-1')
+      expect(journal.filter((entry) => entry.escalationId === approvalEscalationId(action)).at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'resolved', reason: 'superseded', resolved: true })
+      expect(journal.filter((entry) => entry.escalationId === 'worker-escalation:unrelated').at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'open', escalationKind: 'worker-escalation' })
+    } finally {
+      await runner.shutdown(0)
+    }
+  })
+
+  test('resolves awaiting-approval escalations when terminal state commits without touching unrelated escalations', async () => {
+    const stored = storage()
+    let journalBeforeTerminalRetention: JournalEntry[] = []
+    const persistTerminal = stored.store.terminal.bind(stored.store)
+    stored.store.terminal = (terminalEnrollment, summary) => {
+      journalBeforeTerminalRetention = stored.store.journal(terminalEnrollment.watcherId)
+      persistTerminal(terminalEnrollment, summary)
+    }
+    const watcherKind = kind({
+      stop: () => ({ kind: 'terminal', state: 'complete', reason: 'target reached' }),
+      pace: () => 'stopped'
+    })
+    const options = runnerOptions(stored, watcherKind)
+    seedOpenEscalation(stored, approvalEscalationId(action), 'awaiting-approval')
+    seedOpenEscalation(stored, 'worker-escalation:unrelated', 'worker-escalation')
+    const runner = createRunner(options)
+    try {
+      await runner.pulse()
+      expect(stored.store.get('watcher-1')?.terminalAtMs).toBe(1_000)
+      expect(journalBeforeTerminalRetention.filter((entry) => entry.escalationId === approvalEscalationId(action)).at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'resolved', reason: 'superseded', resolved: true })
+      expect(journalBeforeTerminalRetention.filter((entry) => entry.escalationId === 'worker-escalation:unrelated').at(-1))
+        .toMatchObject({ kind: 'escalation', status: 'open', escalationKind: 'worker-escalation' })
+      expect(stored.store.journal('watcher-1').some((entry) =>
+        entry.kind === 'escalation' &&
+        entry.escalationKind === 'awaiting-approval' &&
+        entry.status === 'open'
+      )).toBe(false)
     } finally {
       await runner.shutdown(0)
     }

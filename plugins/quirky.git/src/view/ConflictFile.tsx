@@ -3,14 +3,14 @@ import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
 import type { GitConflictKind, GitOperation, GitStatus } from '@quirky/protocol'
 import { RpcErrorCode } from '@quirky/protocol'
-import { Badge, Button, EmptyState, IconButton, SectionHeader } from '@quirky/ui'
+import { Badge, Button, EmptyState, IconButton, InlineError, NoticeLine, SectionHeader } from '@quirky/ui'
 import { editorTheme } from '@quirky/ui/editor-theme'
 
 import { conflictBlocks, conflictDecorations, type ConflictBlock } from './conflict-markers'
 import { messageOf, POLL_MS, reasonOf, useRefreshTriggers } from './data'
 import { StaleBar } from './DiffPane'
-import { ErrorNotice } from './Fallbacks'
 import { lineBreakExtension, syntaxExtensions } from './theme'
+import { requestViewControl, useViewControl, viewControlGeneration, viewTarget } from './view-control'
 import type { ModeProps } from './types'
 
 type ConflictFileResult = {
@@ -42,6 +42,8 @@ const KIND_LABEL: Record<GitConflictKind, string> = {
 }
 
 const isModifyDelete = (kind: GitConflictKind): boolean => kind === 'deleted_by_us' || kind === 'deleted_by_them'
+const noControlData = (data: Record<string, unknown> | undefined): boolean =>
+  data === undefined || Object.keys(data).length === 0
 
 /**
  * One conflicted file in an editable editor: marker lines tinted and labelled, a banner with the
@@ -51,6 +53,12 @@ const isModifyDelete = (kind: GitConflictKind): boolean => kind === 'deleted_by_
 export function ConflictFile({ context, input, settings, report, bind, close }: ModeProps) {
   const path = input.path ?? ''
   const worktree = input.worktree
+  const [controlGeneration] = useState(viewControlGeneration)
+  const controlTarget = viewTarget('conflict-file', {
+    worktree,
+    ...(input.tabId === undefined ? {} : { tabId: input.tabId }),
+    path
+  })
   const draftKey = input.tabId ? JSON.stringify([worktree, input.tabId, path]) : null
   const restored = useRef(draftKey ? drafts.get(draftKey) : undefined).current
   const [file, setFile] = useState<{ result: ConflictFileResult; revision: number } | null>(
@@ -75,6 +83,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
   const currentRef = useRef<number | null>(null)
   const blocksRef = useRef<ConflictBlock[]>([])
   const inFlight = useRef(false)
+  const reloadInFlight = useRef(false)
   const operationEndedRef = useRef(false)
   const active = useRef(true)
   useEffect(() => {
@@ -160,7 +169,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
   useEffect(() => {
     void refresh()
   }, [])
-  useRefreshTriggers(context, () => void refresh(), POLL_MS)
+  useRefreshTriggers(context, () => void refresh(), POLL_MS, worktree)
 
   const publish = (view: EditorView) => {
     const found = conflictBlocks(view.state.sliceDoc())
@@ -217,7 +226,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     } catch (e) {
       if (!active.current) return false
       if (reasonOf(e) === 'changed-on-disk') setStale(true)
-      else context.toast('Save failed', messageOf(e))
+      else context.toast('Save failed', messageOf(e), { kind: 'error' })
       return false
     }
   }
@@ -225,13 +234,17 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
   saveRef.current = save
 
   const reload = async () => {
+    if (reloadInFlight.current) return
+    reloadInFlight.current = true
     try {
       const fresh = await load()
       if (!active.current) return
       replace(fresh)
     } catch (e) {
       if (!active.current) return
-      context.toast('Reload failed', messageOf(e))
+      context.toast('Reload failed', messageOf(e), { kind: 'error' })
+    } finally {
+      reloadInFlight.current = false
     }
   }
 
@@ -249,7 +262,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
       if (!(await save(false))) return
       if (!active.current) return
       if (dirtyRef.current) {
-        context.toast('Keep file failed', 'The editor changed while the file was being saved. Try Keep file again.')
+        context.toast('Keep file failed', 'The editor changed while the file was being saved. Try Keep file again.', { kind: 'error' })
         return
       }
       const fresh = await load()
@@ -270,7 +283,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
       replace(resolved)
     } catch (e) {
       if (!active.current) return
-      context.toast('Keep file failed', messageOf(e))
+      context.toast('Keep file failed', messageOf(e), { kind: 'error' })
     } finally {
       actionInFlight.current = false
       if (active.current) setActionPending(false)
@@ -292,7 +305,7 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
     } catch (e) {
       if (!active.current) return
       if (reasonOf(e) === 'changed-on-disk') setStale(true)
-      context.toast('Accept deletion failed', messageOf(e))
+      context.toast('Accept deletion failed', messageOf(e), { kind: 'error' })
     } finally {
       actionInFlight.current = false
       if (active.current) setActionPending(false)
@@ -387,6 +400,50 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
       currentConflict
     })
   }, [stateKey, path, report])
+  const controls: string[] = ['close']
+  const canNavigate = editable && !resolved && result?.state === 'unresolved' && blocks.length > 0
+  if (canNavigate) controls.push('previous-conflict', 'next-conflict')
+  const canChooseDeletion = result?.state === 'unresolved' && kindHint === true && !operationEnded && !actionInFlight.current
+  if (result && canChooseDeletion) {
+    if (result.content !== null) controls.push('keep-file')
+    controls.push('accept-deletion')
+  }
+  if (stale) controls.push('reload')
+
+  const postControl = (action: string) => {
+    void requestViewControl(context, { target: controlTarget, generation: controlGeneration, action })
+  }
+  useViewControl(context, { target: controlTarget, generation: controlGeneration, actions: controls }, ({ action, data }) => {
+    if (!noControlData(data)) return false
+    switch (action) {
+      case 'close':
+        close()
+        return true
+      case 'previous-conflict':
+      case 'next-conflict':
+        if (!canNavigate) return false
+        step(action === 'next-conflict' ? 1 : -1)
+        return true
+      case 'keep-file': {
+        const current = fileRef.current?.result
+        if (!canChooseDeletion || !current || current.state !== 'unresolved' || !isModifyDelete(current.kind) || current.content === null || actionInFlight.current) return false
+        void keepFile()
+        return true
+      }
+      case 'accept-deletion': {
+        const current = fileRef.current?.result
+        if (!canChooseDeletion || !current || current.state !== 'unresolved' || !isModifyDelete(current.kind) || actionInFlight.current) return false
+        void acceptDeletion()
+        return true
+      }
+      case 'reload':
+        if (!stale || reloadInFlight.current) return false
+        void reload()
+        return true
+      default:
+        return false
+    }
+  })
   return (
     <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'hidden' }}>
       <SectionHeader
@@ -396,15 +453,15 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
             {editable && !resolved && (
               <>
                 <Badge label={blocks.length === 0 ? '0 conflicts' : `Conflict ${current ?? 1} of ${blocks.length}`}>{blocks.length === 0 ? '0 / 0' : `${current ?? 1} / ${blocks.length}`}</Badge>
-                <IconButton label="Previous conflict" title="Previous conflict" disabled={blocks.length === 0} onClick={() => step(-1)}>
+                <IconButton label="Previous conflict" title="Previous conflict" disabled={blocks.length === 0} onClick={() => postControl('previous-conflict')}>
                   ↑
                 </IconButton>
-                <IconButton label="Next conflict" title="Next conflict" disabled={blocks.length === 0} onClick={() => step(1)}>
+                <IconButton label="Next conflict" title="Next conflict" disabled={blocks.length === 0} onClick={() => postControl('next-conflict')}>
                   ↓
                 </IconButton>
               </>
             )}
-            <IconButton label="Close" title="Close" onClick={close}>×</IconButton>
+            <IconButton label="Close" title="Close" onClick={() => postControl('close')}>×</IconButton>
           </div>
         }
       />
@@ -422,26 +479,29 @@ export function ConflictFile({ context, input, settings, report, bind, close }: 
               <Button
                 disabled={actionPending || result.content === null}
                 title={result.content === null ? 'No working-tree file is available to keep.' : undefined}
-                onClick={() => void keepFile()}
+                onClick={() => postControl('keep-file')}
               >
                 Keep file
               </Button>
-              <Button variant="destructive" disabled={actionPending} onClick={() => void acceptDeletion()}>
+              <Button variant="destructive" disabled={actionPending} onClick={() => postControl('accept-deletion')}>
                 Accept deletion
               </Button>
             </div>
           )}
         </div>
       )}
-      {stale && <StaleBar variant="file" onReload={() => void reload()} onOverwrite={() => void save(true)} />}
-      {error !== null && file && <ErrorNotice message={error} subject="conflict file" />}
+      {stale && <StaleBar variant="file" onReload={() => postControl('reload')} onOverwrite={() => void save(true)} />}
+      {error !== null && (
+        <InlineError
+          message={`Error loading conflict file: ${error}`}
+          action={{ label: 'Retry', onAction: () => void refresh() }}
+        />
+      )}
       <div className="ui-stack" style={{ flex: 1, minHeight: 0, minWidth: 0, overflow: 'auto' }}>
-        {operationEnded && !file ? (
+        {operationEnded && !file && error === null ? (
           <EmptyState message="No working-tree file is available." />
-        ) : error !== null && !file ? (
-          <ErrorNotice message={error} subject="conflict file" />
-        ) : !file ? (
-          <p className="ui-text-muted" style={{ padding: 'var(--ui-space-8)' }}>Loading diff...</p>
+        ) : error !== null && !file ? null : !file ? (
+          <div role="status"><NoticeLine>Loading diff...</NoticeLine></div>
         ) : result?.content === null ? (
           <EmptyState message={resolved ? 'The file is not present in the working tree.' : 'No working-tree file is available to edit for this conflict.'} />
         ) : (

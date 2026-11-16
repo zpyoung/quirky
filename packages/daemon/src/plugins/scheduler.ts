@@ -2,13 +2,17 @@ import {
   DEFAULT_JOB_TIMEOUT_MS,
   MIN_JOB_INTERVAL_MS,
   parseDuration,
+  RpcErrorCode,
   type JobHandler,
   type JobInfo,
   type JobRun
 } from '@quirky/protocol'
-import { conflict, notFound } from '../errors'
+import { DaemonError, conflict, notFound } from '../errors'
 import type { Store } from '../store'
 import type { PluginHost } from './host'
+import { MAX_UNANSWERED_HANDLERS, UnansweredHandlers } from './unanswered'
+
+export const JOB_ABORT_GRACE_MS = 5_000
 
 export type SchedulerOptions = {
   plugins: Pick<PluginHost, 'contributions' | 'resolveImplementation'>
@@ -18,6 +22,8 @@ export type SchedulerOptions = {
   now?: () => number
   /** Longest a timer sleeps before re-checking the clock; defaults to 60 seconds. */
   recheckMs?: number
+  unanswered?: UnansweredHandlers
+  abortGraceMs?: number
 }
 
 const DEFAULT_RECHECK_MS = 60_000
@@ -38,7 +44,12 @@ type Active = {
   startedAt: number
   controller: AbortController
   timeoutTimer?: Timer
+  graceTimer?: Timer
   timedOut: boolean
+  timedOutAt?: number
+  handlerStarted: boolean
+  counted: boolean
+  releaseUnanswered?: () => void
   /** Outcomes of a detached run are never recorded. */
   detached: boolean
   settled: boolean
@@ -78,11 +89,15 @@ export class Scheduler {
   private readonly skipped = new Set<string>()
   private readonly now: () => number
   private readonly recheckMs: number
+  private readonly abortGraceMs: number
+  private readonly unanswered: UnansweredHandlers
   private started = false
 
   constructor(private readonly options: SchedulerOptions) {
     this.now = options.now ?? Date.now
     this.recheckMs = options.recheckMs ?? DEFAULT_RECHECK_MS
+    this.abortGraceMs = options.abortGraceMs ?? JOB_ABORT_GRACE_MS
+    this.unanswered = options.unanswered ?? new UnansweredHandlers()
   }
 
   /** Arms every effective job. Call after startup plugins have activated; a second call does nothing. */
@@ -112,7 +127,9 @@ export class Scheduler {
     return [...this.jobs.values()]
       .sort((a, b) => compare(a.id, b.id))
       .map((entry) => {
-        const unsettled = entry.running !== null || this.lingering.has(entry.id)
+        const handlers = this.unanswered.count(entry.id)
+        const blocked = handlers >= MAX_UNANSWERED_HANDLERS
+        const unsettled = entry.running !== null || this.lingering.has(entry.id) || blocked
         return {
           id: entry.id,
           plugin: entry.owner,
@@ -120,7 +137,8 @@ export class Scheduler {
           timeoutMs: entry.timeoutMs,
           state: unsettled ? ('running' as const) : ('idle' as const),
           nextRunAt: unsettled ? null : entry.due,
-          lastRun: entry.lastRun ? { ...entry.lastRun } : null
+          lastRun: entry.lastRun ? { ...entry.lastRun } : null,
+          ...(handlers > 0 ? { stalled: { handlers } } : {})
         }
       })
   }
@@ -133,6 +151,9 @@ export class Scheduler {
     this.sync()
     const entry = this.jobs.get(id)
     if (!entry) return Promise.reject(notFound(`no job ${id} is in effect`))
+    if (entry.running?.counted || this.lingering.get(id)?.counted || this.unanswered.blocked(id, entry.owner)) {
+      return Promise.reject(this.stalledError(id))
+    }
     if (entry.running || this.lingering.has(id)) return Promise.reject(conflict(`${id} is already running`))
     return this.launch(entry)
   }
@@ -158,12 +179,15 @@ export class Scheduler {
 
   private revokeRun(active: Active): void {
     const { entry } = active
+    const countUnanswered = active.handlerStarted && !active.settled && !active.counted
     this.detach(active, true, `${entry.owner} was revoked`)
     if (this.lingering.get(entry.id) === active) this.lingering.delete(entry.id)
     if (entry.running === active) {
       entry.running = null
       if (this.jobs.get(entry.id) === entry) this.schedule(entry, this.now() + entry.intervalMs)
     }
+    if (countUnanswered) this.markUnanswered(active)
+    this.unanswered.clearHandlerWarnings(entry.id)
   }
 
   /** Clears every timer and aborts running signals; outcomes that arrive later are not recorded. */
@@ -238,8 +262,9 @@ export class Scheduler {
     if (this.jobs.get(entry.id) !== entry || entry.running || entry.due === null) return
     try {
       if (this.now() < entry.due) this.schedule(entry, entry.due)
-      else if (this.lingering.has(entry.id)) entry.timer = setTimeout(() => this.wake(entry), this.recheckMs)
-      else void this.launch(entry)
+      else if (this.unanswered.blocked(entry.id, entry.owner) || this.lingering.has(entry.id)) {
+        entry.timer = setTimeout(() => this.wake(entry), this.recheckMs)
+      } else void this.launch(entry)
     } catch (error) {
       this.options.log(`job ${entry.id} could not start: ${messageOf(error)}`)
     }
@@ -260,6 +285,8 @@ export class Scheduler {
       startedAt,
       controller: new AbortController(),
       timedOut: false,
+      handlerStarted: false,
+      counted: false,
       detached: false,
       settled: false,
       resolved: false,
@@ -294,6 +321,7 @@ export class Scheduler {
       }
       if (active.controller.signal.aborted) return null
       if (typeof handler !== 'function') throw new Error(`${id} is not a function`)
+      active.handlerStarted = true
       await (handler as JobHandler)({ jobId: id, signal: active.controller.signal })
       return null
     } catch (error) {
@@ -304,13 +332,14 @@ export class Scheduler {
   private onTimeout(active: Active): void {
     active.timeoutTimer = undefined
     if (active.settled) return
+    active.timedOut = true
+    active.timedOutAt = this.now()
     active.controller.abort()
     if (active.detached) return
     const { entry } = active
-    active.timedOut = true
     const run: JobRun = {
       startedAt: active.startedAt,
-      finishedAt: this.now(),
+      finishedAt: active.timedOutAt,
       status: 'timed-out',
       error: `timed out after ${entry.timeoutMs} ms`
     }
@@ -321,14 +350,52 @@ export class Scheduler {
     }
     entry.lastRun = run
     active.resolve({ ...run })
+    if (active.handlerStarted) {
+      active.graceTimer = setTimeout(() => this.onGraceElapsed(active), this.abortGraceMs)
+    }
+  }
+
+  private onGraceElapsed(active: Active): void {
+    active.graceTimer = undefined
+    if (active.settled || !active.handlerStarted || active.counted) return
+    this.markUnanswered(active, this.stallWarning(active))
+    this.options.log(this.stallWarning(active))
+  }
+
+  private markUnanswered(active: Active, warning?: string): void {
+    if (active.settled || !active.handlerStarted || active.counted) return
+    active.counted = true
+    active.releaseUnanswered = this.unanswered.add(active.entry.id, active.entry.owner, warning)
+  }
+
+  private stallWarning(active: Active): string {
+    const { entry } = active
+    return `${entry.id} did not stop after its ${entry.timeoutMs} ms timeout and is still running; it will not run again until that run ends or ${entry.owner} is reloaded`
+  }
+
+  private stalledError(id: string): DaemonError {
+    return new DaemonError(
+      RpcErrorCode.Conflict,
+      `${id} is stalled: a run that timed out is still running`,
+      { reason: 'stalled' }
+    )
   }
 
   private onSettled(active: Active, error: string | null): void {
     active.settled = true
     if (active.timeoutTimer !== undefined) clearTimeout(active.timeoutTimer)
+    if (active.graceTimer !== undefined) clearTimeout(active.graceTimer)
+    active.timeoutTimer = undefined
+    active.graceTimer = undefined
     const { entry } = active
     if (this.lingering.get(entry.id) === active) this.lingering.delete(entry.id)
-    if (active.detached) return
+    const releaseUnanswered = active.releaseUnanswered
+    active.releaseUnanswered = undefined
+    active.counted = false
+    if (active.detached) {
+      releaseUnanswered?.()
+      return
+    }
 
     const at = this.now()
     try {
@@ -351,6 +418,10 @@ export class Scheduler {
     }
     entry.running = null
     if (this.started && this.jobs.get(entry.id) === entry) this.schedule(entry, at + entry.intervalMs)
+    if (releaseUnanswered && active.timedOut && active.timedOutAt !== undefined && at > active.timedOutAt) {
+      this.options.log(`${entry.id} ended ${at - active.timedOutAt} ms after its timeout`)
+    }
+    releaseUnanswered?.()
   }
 
   /** Ignores the run's outcome from here on; `abort` also signals the handler. */
@@ -358,7 +429,9 @@ export class Scheduler {
     active.detached = true
     if (abort) {
       if (active.timeoutTimer !== undefined) clearTimeout(active.timeoutTimer)
+      if (active.graceTimer !== undefined) clearTimeout(active.graceTimer)
       active.timeoutTimer = undefined
+      active.graceTimer = undefined
       active.controller.abort()
     }
     if (active.resolved) return
@@ -371,3 +444,4 @@ function durationOr(value: unknown, fallback: number): number {
   const parsed = typeof value === 'string' ? parseDuration(value) : null
   return parsed ?? fallback
 }
+

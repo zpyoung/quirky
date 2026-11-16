@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Badge, Button, IconButton, ReviewMark } from '@quirky/ui'
+import { useCallback, useEffect, useRef } from 'react'
+import { Badge, Button, IconButton, InlineError, NoticeLine, ReviewMark } from '@quirky/ui'
 import type { GitDiff, UiPluginContext } from '@quirky/protocol'
 
 import { useNotesBinding } from '../notes/binding'
@@ -7,7 +7,6 @@ import type { Note } from '../notes/useNotes'
 import { splitPath } from '../panel/format'
 import { isEditableCard, isTextDiff } from './data'
 import { DiffPane, type PaneHandle, type PaneState } from './DiffPane'
-import { ErrorNotice } from './Fallbacks'
 import { MarkdownPreview } from './MarkdownPreview'
 import { loadModeOf, type ReviewItem } from './review-layout'
 import type { DiffSettings } from './settings'
@@ -35,8 +34,10 @@ export type ReviewCardProps = {
   collapsed: boolean
   /** The user asked a changed card for its whole diff. */
   full: boolean
-  /** A commit scope has no review state, so the card shows no review controls. */
+  /** A scope has no review state, so the card shows no review controls. */
   scoped: boolean
+  /** The diff's modified side is on disk and may be edited or reverted. */
+  diskSide: boolean
   active: boolean
   marking: boolean
   /** The card's pane holds edits that are not saved. */
@@ -45,16 +46,19 @@ export type ReviewCardProps = {
   settings: DiffSettings
   notes: readonly Note[]
   revealNote?: string
+  preview: boolean
   register(key: string, element: HTMLElement | null): void
   onToggle(key: string): void
   onMark(item: ReviewItem): void
   onFullDiff(key: string): void
+  onPreview(key: string, preview: boolean): void
   onLoad(key: string): void
   onVisible(key: string): void
   onActivate(key: string): void
   onPaneState(key: string, state: PaneState): void
   onPaneHandle(key: string, handle: PaneHandle | null): void
   onReload(key: string): Promise<void>
+  onStaleReload(key: string): void
   /** A save or revert wrote `content` to disk; the owner updates the diff it holds without rebuilding the pane. */
   onSaved(key: string, content: string, hash: string): void
 }
@@ -62,17 +66,17 @@ export type ReviewCardProps = {
 /**
  * One file of the Review tab: a sticky header with the path, counts, notes, review mark and its
  * button over the file's diff. The diff loads when the card is told to (`onVisible`, `onLoad`).
- * Outside a commit scope the disk side of a text diff takes edits and each change can be reverted;
- * a Markdown file can be shown rendered instead of as a diff, the diff staying mounted beneath.
+ * A text diff whose modified side is on disk can be edited and reverted; staged and commit scopes
+ * are read-only. A Markdown file can be shown rendered instead of as a diff, the diff stays mounted
+ * beneath.
  */
 export function ReviewCard(props: ReviewCardProps) {
-  const { context, worktree, item, data, collapsed, full, scoped, active, marking, dirty, root, settings, notes, onToggle, onVisible } = props
+  const { context, worktree, item, data, collapsed, full, scoped, diskSide, active, marking, dirty, root, settings, notes, onToggle, onVisible } = props
   const { key } = item
   const element = useRef<HTMLElement | null>(null)
   const visible = useRef(false)
   const binding = useNotesBinding(context, worktree, notes, props.revealNote)
   const pane = useRef<PaneHandle | null>(null)
-  const [preview, setPreview] = useState(false)
 
   useEffect(() => {
     const el = element.current
@@ -105,6 +109,7 @@ export function ReviewCard(props: ReviewCardProps) {
     [props.onPaneHandle, key]
   )
   const onReload = useCallback(() => props.onReload(key), [props.onReload, key])
+  const onStaleReload = useCallback(() => props.onStaleReload(key), [props.onStaleReload, key])
   const onSaved = useCallback((content: string, hash: string) => props.onSaved(key, content, hash), [props.onSaved, key])
 
   const { name, dir } = splitPath(item.path)
@@ -112,9 +117,9 @@ export function ReviewCard(props: ReviewCardProps) {
   const mode = loadModeOf(item)
   const since = !scoped && item.mark === 'changed' && !full
   const diff = data.status === 'loaded' ? data.diff : undefined
-  const editable = diff !== undefined && isEditableCard(scoped, diff)
+  const editable = diff !== undefined && isEditableCard(diskSide, diff)
   const previewable = diff !== undefined && isMarkdown(item.path) && isTextDiff(diff) && diff.modifiedDeleted !== true
-  const previewing = previewable && preview
+  const previewing = previewable && props.preview
 
   return (
     <section
@@ -144,8 +149,8 @@ export function ReviewCard(props: ReviewCardProps) {
           <span className="git-review__edit">
             {dirty && <Badge tone="needs-you">Unsaved</Badge>}
             {previewable && (
-              <Button title={preview ? 'Show the diff' : 'Show the rendered Markdown'} onClick={() => setPreview(!preview)}>
-                {preview ? 'Source' : 'Preview'}
+              <Button title={props.preview ? 'Show the diff' : 'Show the rendered Markdown'} onClick={() => props.onPreview(key, !props.preview)}>
+                {props.preview ? 'Source' : 'Preview'}
               </Button>
             )}
           </span>
@@ -169,10 +174,7 @@ export function ReviewCard(props: ReviewCardProps) {
           </p>
         )}
         {data.status === 'error' ? (
-          <>
-            <ErrorNotice message={data.error ?? 'Unable to load diff.'} />
-            <Button onClick={() => props.onLoad(key)}>Retry</Button>
-          </>
+          <InlineError message={`Error loading diff: ${data.error ?? 'Unable to load diff.'}`} action={{ label: 'Retry', onAction: () => props.onLoad(key) }} />
         ) : data.status === 'loaded' && data.diff ? (
           <>
             <div className="git-review__pane" hidden={previewing}>
@@ -188,8 +190,9 @@ export function ReviewCard(props: ReviewCardProps) {
                 onState={onPaneState}
                 bind={onPaneHandle}
                 onSaved={onSaved}
-                revertOnDisk={!scoped}
+                revertOnDisk={diskSide}
                 onReload={onReload}
+                onStaleReload={onStaleReload}
                 onFocus={() => props.onActivate(key)}
                 notes={binding}
               />
@@ -210,7 +213,9 @@ export function ReviewCard(props: ReviewCardProps) {
             <Button onClick={() => props.onLoad(key)}>Load diff</Button>
           </section>
         ) : (
-          <p className="ui-text-muted git-review__notice">Loading diff...</p>
+          <div role="status">
+            <NoticeLine>Loading diff...</NoticeLine>
+          </div>
         )}
       </div>
     </section>

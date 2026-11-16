@@ -1,6 +1,6 @@
 {
   "id": "quirky.git",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.12.0",
   "name": "Source control",
   "version": "0.1.0",
   "description": "Branch status, diffs, staging, commits, remote operations, history and conflicts for a worktree.",
@@ -697,6 +697,10 @@
             "expected": {
               "type": "string",
               "description": "Full 40- or 64-character commit SHA the remote branch must still be at; defaults to the remote-tracking ref."
+            },
+            "expectedLocalHead": {
+              "type": "string",
+              "description": "Full 40-character commit SHA to publish; requires purpose and refuses a changed local HEAD."
             }
           }
         },
@@ -826,6 +830,7 @@
       },
       {
         "id": "sync",
+        "timeout": "30m",
         "description": "Fetches, then pulls and pushes as the branch needs; force pushes with a lease when the remote only has older copies of local commits.",
         "params": {
           "type": "object",
@@ -3188,6 +3193,8 @@
       {
         "id": "changed",
         "description": "A worktree's git state changed.",
+        "coalesce": [],
+        "worktree": "worktreeId",
         "data": {
           "type": "object",
           "properties": {
@@ -3203,6 +3210,8 @@
       {
         "id": "notesChanged",
         "description": "A worktree's diff notes changed.",
+        "coalesce": [],
+        "worktree": "worktreeId",
         "data": {
           "type": "object",
           "properties": {
@@ -3218,6 +3227,8 @@
       {
         "id": "reviewChanged",
         "description": "A worktree's review marks changed.",
+        "coalesce": [],
+        "worktree": "worktreeId",
         "data": {
           "type": "object",
           "properties": {
@@ -3290,7 +3301,7 @@
             },
             "source": {
               "type": "string",
-              "description": "Which sides to show; conflict opens the conflict file view.",
+              "description": "Staged and unstaged pick the Review's scope; other values show the whole review, while conflict opens the conflict file view.",
               "enum": [
                 "unstaged",
                 "staged",
@@ -3298,6 +3309,10 @@
                 "commit",
                 "conflict"
               ]
+            },
+            "focus": {
+              "type": "boolean",
+              "description": "Focus the Review and its worktree; defaults to true."
             },
             "area": {
               "type": "string",
@@ -3369,7 +3384,7 @@
           "properties": {
             "area": {
               "type": "string",
-              "description": "Section to show; all shows uncommitted then branch changes.",
+              "description": "Staged and unstaged pick the Review's scope; other values show the whole review.",
               "enum": [
                 "staged",
                 "unstaged",
@@ -3377,6 +3392,15 @@
                 "branch",
                 "all"
               ]
+            },
+            "focus": {
+              "type": "boolean",
+              "description": "Focus the Review or first opened editor file; defaults to true."
+            },
+            "mode": {
+              "type": "string",
+              "description": "Open changed files in the editor, show the Review, or do both.",
+              "enum": ["edit", "diff", "both"]
             },
             "worktree": {
               "type": "string",
@@ -3557,6 +3581,24 @@
       {
         "id": "ai-settings",
         "title": "Source Control AI Settings"
+      },
+      {
+        "id": "ui-control",
+        "title": "Source Control UI Control",
+        "description": "Route a semantic action to one mounted Source Control controller in this window.",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "surface": { "type": "string" },
+            "target": { "type": "string" },
+            "generation": { "type": "string" },
+            "action": { "type": "string" },
+            "data": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["surface", "target", "generation", "action"],
+          "additionalProperties": false
+        }
       }
     ],
     "keybinding": [

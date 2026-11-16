@@ -32,6 +32,7 @@ import { OrchestrationCore, type ReceiptRecord } from './core'
 import { fail } from './errors'
 import { callerSessionId, targetIdentity, verifyCaller } from './identity'
 import type { SessionIdentity, SessionPointerResult } from './runtime-contracts'
+import { CREATED_NEWEST_FIRST } from './store'
 
 const PAGE_DEFAULT = 100
 const PAGE_MAX = 100
@@ -336,7 +337,7 @@ export function runTaskMethods(
       const params = raw as unknown as DispatchShowParams
       const task = core.getTask(params.taskId)
       const latest = core.store.get<{ id: string }>(
-        `SELECT id FROM dispatches WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+        `SELECT id FROM dispatches WHERE task_id = ? ORDER BY ${CREATED_NEWEST_FIRST} LIMIT 1`,
         task.id
       )
       const dispatch = latest ? core.getDispatch(latest.id as DispatchId) : null

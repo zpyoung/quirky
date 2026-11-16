@@ -1,0 +1,431 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "view:quirky.cli/settings": {
+      "loading": { "applicable": true },
+      "empty": { "applicable": true },
+      "error": { "applicable": true }
+    }
+  },
+  "states": [
+    {
+      "surface": "view:quirky.cli/settings",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "snapshot.phase === 'loading' && <NoticeLine>Loading CLI and runtime profile status…</NoticeLine>"
+      },
+      "anchor": "snapshot.phase === 'loading' &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "<NoticeLine>Loading CLI and runtime profile status…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.cli/settings",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "snapshot.phase === 'ready' && snapshot.refreshing && <NoticeLine>Refreshing CLI and runtime status…</NoticeLine>"
+      },
+      "anchor": "snapshot.phase === 'ready' && snapshot.refreshing &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "<NoticeLine>Refreshing CLI and runtime status…</NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.cli/settings",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "launchers.length === 0 ? <EmptyState message=\"No profile launchers are installed.\" /> : ("
+      },
+      "anchor": "launchers.length === 0 ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "<EmptyState message=\"No profile launchers are installed.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.cli/settings",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "runtimes.length === 0 ? <EmptyState message=\"No paired runtimes are saved.\" /> : ("
+      },
+      "anchor": "runtimes.length === 0 ?",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "<EmptyState message=\"No paired runtimes are saved.\" />"
+        },
+        "import": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.cli/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "snapshot.loadError !== null && (\n        <InlineError\n          message={`Could not load CLI status: ${snapshot.loadError}`}\n          action={{ label: 'Retry status', onAction: refresh }}\n        />\n      )"
+      },
+      "anchor": "snapshot.loadError !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "<InlineError\n          message={`Could not load CLI status: ${snapshot.loadError}`}\n          action={{ label: 'Retry status', onAction: refresh }}\n        />"
+        },
+        "import": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.cli/settings",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "snapshot.actionError !== null && <InlineError message={snapshot.actionError} />"
+      },
+      "anchor": "snapshot.actionError !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "<InlineError message={snapshot.actionError} />"
+        },
+        "import": {
+          "file": "plugins/quirky.cli/src/ui.tsx",
+          "quote": "import { Badge, Button, EmptyState, InlineError, ListRow, NoticeLine, SectionHeader, TextField } from '@quirky/ui'"
+        }
+      }
+    }
+  ],
+  "notState": [
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "status && <pre className=\"ui-readout\" aria-label=\"External CLI command status\">{statusReadout}</pre>"
+      },
+      "anchor": "status &&",
+      "reason": "The readout presents a successful status; loading and failure are represented separately."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "status?.state === 'managed' ? 'Update managed command' : 'Install command'"
+      },
+      "anchor": "status?.state === 'managed' ?",
+      "reason": "The installed command state selects a button label, not a loading, empty or error state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "status?.state === 'managed' && (\n            <>\n              <Button disabled={actionsDisabled} onClick={revealCommand}>Reveal command</Button>\n              <Button variant=\"destructive\" disabled={actionsDisabled} onClick={uninstallCommand}>Uninstall command</Button>\n            </>\n          )"
+      },
+      "anchor": "status?.state === 'managed' &&",
+      "reason": "Managed-only command controls depend on the installed command kind, not a view state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "launchers === null ? null : launchers.length === 0 ?"
+      },
+      "anchor": "launchers === null ?",
+      "reason": "No launcher list is shown before the first successful read; loading and errors have their own evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "runtimes === null ? null : runtimes.length === 0 ?"
+      },
+      "anchor": "runtimes === null ?",
+      "reason": "No runtime list is shown before the first successful read; loading and errors have their own evidence."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "launcher.state === 'managed' && (\n                        <Button variant=\"destructive\" disabled={actionsDisabled} onClick={removeProfileLauncher}>Remove {launcher.name}</Button>\n                      )"
+      },
+      "anchor": "launcher.state === 'managed' &&",
+      "reason": "The remove control is conditional on an individual launcher's managed state, not the whole view state."
+    }
+  ],
+  "actions": [
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onClick={installCommand}"
+      },
+      "route": {
+        "target": "quirky.cli/commandInstall",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('quirky.cli/commandInstall', {\n        path: status.path,\n        profileHome: status.profileHome,\n        executablePath: target.executablePath,\n        entrypointPath: target.entrypointPath,\n        replaceForeign\n      })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const installCommand = () => {\n    void model.installCommand()\n  }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async installCommand(): Promise<boolean> {\n    const outcome = await this.runAction(async () => {\n      const { status, target } = this.currentSnapshot\n      if (!status || !target?.available || !target.executablePath || !target.entrypointPath) {\n        throw new Error('no verified CLI executable and entrypoint are available')\n      }\n      let replaceForeign = false\n      if (status.state === 'foreign') {\n        replaceForeign = await this.context.confirm({\n          title: 'Replace foreign command?',\n          body: `Replace the foreign launcher at ${status.path}?`\n        })\n        if (!replaceForeign || this.disposed) return\n      }\n      await this.context.call('quirky.cli/commandInstall', {\n        path: status.path,\n        profileHome: status.profileHome,\n        executablePath: target.executablePath,\n        entrypointPath: target.entrypointPath,\n        replaceForeign\n      })\n    })\n    return outcome.ok\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onClick={revealCommand}"
+      },
+      "route": {
+        "target": "quirky.cli/commandReveal",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('quirky.cli/commandReveal', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const revealCommand = () => {\n    void model.revealCommand()\n  }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async revealCommand(): Promise<boolean> {\n    const outcome = await this.runAction(async () => {\n      await this.context.call('quirky.cli/commandReveal', {})\n    })\n    return outcome.ok\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onClick={uninstallCommand}"
+      },
+      "route": {
+        "target": "quirky.cli/commandUninstall",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('quirky.cli/commandUninstall', { path: status.path })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const uninstallCommand = () => {\n    void model.uninstallCommand()\n  }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async uninstallCommand(): Promise<boolean> {\n    const status = this.currentSnapshot.status\n    if (status === null) return false\n    const outcome = await this.runAction(async () => {\n      await this.context.call('quirky.cli/commandUninstall', { path: status.path })\n    })\n    return outcome.ok\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onSubmit={submitProfileLauncher}"
+      },
+      "route": {
+        "target": "quirky.cli/profileLauncherInstall",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('quirky.cli/profileLauncherInstall', {\n        name: draft.name,\n        profileHome: draft.profileHome,\n        ...(draft.path ? { path: draft.path } : {}),\n        executablePath: target.executablePath,\n        entrypointPath: target.entrypointPath\n      })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const submitProfileLauncher = async (event: FormEvent<HTMLFormElement>) => {\n    event.preventDefault()\n    const created = await model.createProfileLauncher({ name: profileName, profileHome, path: profilePath })\n    if (!created) return\n    setProfileName((current) => current === profileName ? '' : current)\n    setProfilePath((current) => current === profilePath ? '' : current)\n  }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async createProfileLauncher(draft: ProfileLauncherDraft): Promise<boolean> {\n    const outcome = await this.runAction(async () => {\n      const target = this.currentSnapshot.target\n      if (!target?.available || !target.executablePath || !target.entrypointPath) {\n        throw new Error('no verified CLI executable and entrypoint are available')\n      }\n      if (!draft.name.trim() || !draft.profileHome.trim()) throw new Error('profile name and QUIRKY_HOME are required')\n      await this.context.call('quirky.cli/profileLauncherInstall', {\n        name: draft.name,\n        profileHome: draft.profileHome,\n        ...(draft.path ? { path: draft.path } : {}),\n        executablePath: target.executablePath,\n        entrypointPath: target.entrypointPath\n      })\n    })\n    return outcome.ok\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onClick={chooseProfileHome}"
+      },
+      "route": {
+        "target": "desktop.folder.pick",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('desktop.folder.pick', {\n        title: 'Choose profile QUIRKY_HOME',\n        ...(startingFolder ? { startingFolder } : {}),\n        multiple: false\n      })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const chooseProfileHome = async () => {\n    const selected = await model.pickProfileHome(profileHome)\n    if (selected !== null) setProfileHome(selected)\n  }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async pickProfileHome(startingFolder: string): Promise<string | null> {\n    const outcome = await this.runAction(async () => {\n      const result = await this.context.call('desktop.folder.pick', {\n        title: 'Choose profile QUIRKY_HOME',\n        ...(startingFolder ? { startingFolder } : {}),\n        multiple: false\n      }) as FolderPickerResult\n      return !result.cancelled && result.paths.length === 1 ? result.paths[0]! : null\n    }, false)\n    return outcome.ok ? outcome.value : null\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onClick={removeProfileLauncher}"
+      },
+      "route": {
+        "target": "quirky.cli/profileLauncherRemove",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('quirky.cli/profileLauncherRemove', { path })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const removeProfileLauncher = () => {\n                void model.removeProfileLauncher(launcher.path)\n              }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async removeProfileLauncher(path: string): Promise<boolean> {\n    const outcome = await this.runAction(async () => {\n      await this.context.call('quirky.cli/profileLauncherRemove', { path })\n    })\n    return outcome.ok\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onSubmit={submitRuntime}"
+      },
+      "route": {
+        "target": "quirky.cli/runtimeAdd",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('quirky.cli/runtimeAdd', { name: draft.name, pairingCode: draft.pairingOffer })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const submitRuntime = async (event: FormEvent<HTMLFormElement>) => {\n    event.preventDefault()\n    const saved = await model.saveRuntime({ name: runtimeName, pairingOffer })\n    if (!saved) return\n    setPairingOffer((current) => current === pairingOffer ? '' : current)\n    setRuntimeName((current) => current === runtimeName ? '' : current)\n  }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async saveRuntime(draft: RuntimeDraft): Promise<boolean> {\n    const outcome = await this.runAction(async () => {\n      if (!draft.name.trim() || !draft.pairingOffer.trim()) throw new Error('runtime name and pairing offer are required')\n      await this.context.call('quirky.cli/runtimeAdd', { name: draft.name, pairingCode: draft.pairingOffer })\n    })\n    return outcome.ok\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onClick={removeRuntime}"
+      },
+      "route": {
+        "target": "quirky.cli/runtimeRemove",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('quirky.cli/runtimeRemove', { selector: id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const removeRuntime = () => {\n                void model.removeRuntime(runtime.id)\n              }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async removeRuntime(id: string): Promise<boolean> {\n    const outcome = await this.runAction(async () => {\n      await this.context.call('quirky.cli/runtimeRemove', { selector: id })\n    })\n    return outcome.ok\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onAction: refresh"
+      },
+      "route": {
+        "target": "quirky.cli/commandStatus",
+        "invoke": {
+          "file": "plugins/quirky.cli/src/settings-model.ts",
+          "quote": "this.context.call('quirky.cli/commandStatus', {})"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.cli/src/ui.tsx",
+            "quote": "const refresh = () => {\n    void model.refresh()\n  }"
+          },
+          {
+            "file": "plugins/quirky.cli/src/settings-model.ts",
+            "quote": "async refresh(): Promise<void> {\n    if (this.disposed) return\n    const sequence = ++this.refreshSequence\n    this.updateSnapshot({\n      phase: this.currentSnapshot.status === null ? 'loading' : 'ready',\n      refreshing: true,\n      loadError: null\n    })\n\n    try {\n      const [rawStatus, rawTarget, rawLaunchers, rawRuntimes] = await Promise.all([\n        this.context.call('quirky.cli/commandStatus', {}),\n        this.context.call('quirky.cli/commandTarget', {}),\n        this.context.call('quirky.cli/profileLauncherList', {}),\n        this.context.call('quirky.cli/runtimeList', {})\n      ])\n      if (!this.isCurrentRefresh(sequence)) return\n\n      const launcherResult = rawLaunchers as { launchers: ProfileLauncherStatus[] }\n      const runtimeResult = rawRuntimes as { runtimes: PairedRuntimeSummary[] }\n      this.updateSnapshot({\n        phase: 'ready',\n        refreshing: false,\n        loadError: null,\n        status: rawStatus as InstalledCommandStatus,\n        target: rawTarget as CliTarget,\n        launchers: launcherResult.launchers,\n        runtimes: runtimeResult.runtimes\n      })\n    } catch (error) {\n      if (!this.isCurrentRefresh(sequence)) return\n      this.updateSnapshot({\n        phase: this.currentSnapshot.status === null ? 'failed' : 'ready',\n        refreshing: false,\n        loadError: this.errorMessage(error)\n      })\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onChange={(event) => setProfileName(event.currentTarget.value)}"
+      },
+      "transient": "draft",
+      "reason": "Edits only the unsent profile launcher name draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onChange={(event) => setProfileHome(event.currentTarget.value)}"
+      },
+      "transient": "draft",
+      "reason": "Edits only the unsent profile QUIRKY_HOME draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onChange={(event) => setProfilePath(event.currentTarget.value)}"
+      },
+      "transient": "draft",
+      "reason": "Edits only the unsent optional launcher path draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onChange={(event) => setRuntimeName(event.currentTarget.value)}"
+      },
+      "transient": "draft",
+      "reason": "Edits only the unsent paired runtime name draft."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.cli/src/ui.tsx",
+        "quote": "onChange={(event) => setPairingOffer(event.currentTarget.value)}"
+      },
+      "transient": "draft",
+      "reason": "Edits only the unsent paired runtime offer draft."
+    }
+  ]
+}

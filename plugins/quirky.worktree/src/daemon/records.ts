@@ -106,17 +106,28 @@ export async function linkReference(
 
 export async function unlinkReference(
   env: RecordEnv,
-  params: { worktree: string; reference: unknown },
+  params: { worktree: string; reference?: unknown; url?: unknown },
   identity: CallerIdentity
-): Promise<{ ok: true }> {
-  if (typeof params.reference !== 'string' || params.reference.trim() === '') throw env.fail('invalid-params', 'reference must be a reference ID')
+): Promise<{ ok: true; removed: boolean }> {
+  const hasReference = Object.prototype.hasOwnProperty.call(params, 'reference')
+  const hasUrl = Object.prototype.hasOwnProperty.call(params, 'url')
+  if (hasReference === hasUrl) throw env.fail('invalid-params', 'provide exactly one of reference or url')
+  if (hasReference && (typeof params.reference !== 'string' || params.reference.trim() === '')) {
+    throw env.fail('invalid-params', 'reference must be a reference ID')
+  }
+  if (hasUrl && (typeof params.url !== 'string' || params.url.length > 2_048 || !validReferenceUrl(params.url))) {
+    throw env.fail('invalid-params', 'url must be an absolute HTTP or HTTPS URL of at most 2048 characters')
+  }
   const { worktree } = await env.find(params.worktree, identity)
   const references = referencesOf(env.store, worktree.id)
-  const next = references.filter((reference) => reference.id !== params.reference)
-  if (next.length === references.length) throw env.fail('not-found', `no reference ${params.reference} is linked to this worktree`)
+  const next = references.filter((reference) => hasReference
+    ? reference.id !== params.reference
+    : reference.url !== params.url
+  )
+  if (next.length === references.length) return { ok: true, removed: false }
   env.store.run('UPDATE worktrees SET references_json = ? WHERE id = ?', JSON.stringify(next), worktree.id)
   env.changed({ repoId: worktree.repoId, worktreeId: worktree.id })
-  return { ok: true }
+  return { ok: true, removed: true }
 }
 
 export async function archiveWorktree(

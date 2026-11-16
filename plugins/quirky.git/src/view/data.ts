@@ -35,27 +35,44 @@ export function isTextDiff(diff: GitDiff): boolean {
 
 /**
  * Whether a Review card can take edits: its diff is text and its modified side is a file on disk
- * with a known hash. A commit scope shows a commit's content, which is not the disk.
+ * with a known hash. Staged and commit scopes show content that is not the disk.
  */
-export function isEditableCard(scoped: boolean, diff: GitDiff): boolean {
-  return !scoped && isTextDiff(diff) && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
+export function isEditableCard(diskSide: boolean, diff: GitDiff): boolean {
+  return diskSide && isTextDiff(diff) && diff.modifiedDeleted !== true && typeof diff.modifiedHash === 'string'
 }
 
 /**
- * Runs `refresh` on every `quirky.git/changed` event and, when `intervalMs` is given, on a timer;
- * both stop with the component. The latest `refresh` is always the one called.
+ * The ID a selector states outright: `id:<value>` or a bare `wt_` and 12 lowercase hex digits.
+ * Other selectors need daemon resolution and return null.
  */
-export function useRefreshTriggers(context: UiPluginContext, refresh: () => void, intervalMs: number | null): void {
+export function worktreeIdOf(selector: string): string | null {
+  const value = selector.trim()
+  if (value.startsWith('id:')) return value.slice(3) || null
+  return /^wt_[0-9a-f]{12}$/.test(value) ? value : null
+}
+
+/**
+ * Runs `refresh` on `quirky.git/changed` for `worktree` and, when `intervalMs` is given, on a timer;
+ * both stop with the component. Selectors that don't state an ID hear every git change.
+ * The latest `refresh` is always the one called.
+ */
+export function useRefreshTriggers(
+  context: UiPluginContext,
+  refresh: () => void,
+  intervalMs: number | null,
+  worktree: string
+): void {
   const latest = useRef(refresh)
   latest.current = refresh
   useEffect(() => {
+    const worktreeId = worktreeIdOf(worktree)
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'quirky.git/changed') latest.current()
-    })
+    }, worktreeId === null ? undefined : { worktreeId })
     const timer = intervalMs === null ? null : setInterval(() => latest.current(), intervalMs)
     return () => {
       unsubscribe()
       if (timer !== null) clearInterval(timer)
     }
-  }, [context, intervalMs])
+  }, [context, intervalMs, worktree])
 }

@@ -4,6 +4,7 @@ import { removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
 import { commands } from '../cli'
 import { STALE_AFTER_MS } from '../src/model'
 import { Matcher } from '../src/rules/matcher'
+import { createProcessRunner } from '../../../packages/process/src/api'
 import { Waits, type WaitHost } from '../src/waits'
 import { Rig } from './support'
 
@@ -467,7 +468,8 @@ describe('SC-41: a pattern that runs too long is cut off', () => {
 
 describe('an output wait queued behind slow matcher requests', () => {
   test('keeps its own timeout: four pathological requests ahead of a 10 ms wait leave it pending, quickly', async () => {
-    const matcher = new Matcher({ env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.4' } })
+    const runner = createProcessRunner({ owner: 'agent-status-wait-matcher-test' })
+    const matcher = new Matcher(runner, { env: { QUIRKY_TEST_AGENT_STATUS_TIME_SCALE: '0.4' } })
     const poison = [`${'a'.repeat(30_000)}!`]
     try {
       const host = {
@@ -494,6 +496,7 @@ describe('an output wait queued behind slow matcher requests', () => {
       await Promise.all(slow)
     } finally {
       matcher.dispose()
+      await runner.dispose()
     }
   }, 10_000)
 })

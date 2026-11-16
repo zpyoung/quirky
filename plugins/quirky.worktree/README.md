@@ -2,6 +2,34 @@
 
 Reader: people and scripts managing worktrees — Decision: choose how the sidebar presents work, sleep or wake a safe subtree, or remove reviewed idle worktrees.
 
+## Ports for each worktree
+
+Each local worktree gets a persistent block of 10 TCP ports. New worktrees receive their block
+before setup and default tabs; existing worktrees, including the primary checkout, receive one
+when their first session starts or when explicitly selected with `quirky wt ports --worktree`.
+Shells and agents receive `PORT` and `WORKTREE_PORT` (the first port) and `WORKTREE_PORT_COUNT`.
+Setup, issue-command and archive scripts also receive `CONDUCTOR_PORT`, equal to `PORT`.
+Agent-configured port variables are replaced by the block; shell rc files can still override them.
+
+The default range is 41000–48999, inclusive. Settings `portRangeStart`, `portRangeEnd` and
+`portBlockSize` control future allocations; held blocks never move when settings change or
+when a worktree's own server listens on them. Allocation chooses the lowest free block and
+checks TCP wildcard and loopback addresses for IPv4 and IPv6. Allocation failure warns
+without blocking creation or session launch.
+
+Removing a worktree or forgetting its stored row releases its block after any archive script.
+Archive scripts use an existing block and never allocate one. Scripts without a block clear
+inherited port variables. Listening processes are not stopped by releasing a block.
+Remote and VM workspaces do not receive local blocks.
+Daemons with separate homes do not coordinate: they can reserve the same ports when none
+are listening yet.
+
+```sh
+quirky wt ports
+quirky wt ports --worktree current
+quirky wt ports --json
+```
+
 ## Sidebar options
 
 Worktrees is the host-managed tool in the left-top slot by default. Add project is a folder-plus
@@ -16,6 +44,12 @@ independently clickable. Controls, menus, dialogs and both appearances use the s
 Project and worktree Actions menus take keyboard focus when opened and close on Escape, including when
 the click also activates the Worktrees panel. When opened from an Actions button, Escape restores focus
 to that button so Tab continues from there; outside clicks and action selection do not restore focus.
+
+Attention badge refreshes share one in-flight load and merge pending sources. Session and question
+events reload only their own data; hosting events reload the cached review projection. Worktree
+changes refresh each window's projection without reactivating its selection. Selection changes,
+replacement instances and reconnects still activate it. With the All activity window, session
+events do not reload the projection.
 
 Closing Rename or the Delete Workspace confirmation returns keyboard focus to that worktree's
 Actions button while its row remains visible, including after a display-name change.
@@ -54,7 +88,16 @@ Use `quirky.worktree/projectMetadata({repo})`, `setProjectMetadata({repo,identit
 
 ## References, statuses, and workspace board
 
-`linkReference({worktree,url,label?})` accepts absolute HTTP or HTTPS references, persists them independently of branch/path, and displays them as text rather than opening them. `references({worktree})` reads them and `unlinkReference({worktree,reference})` removes one by stable ID. The workspace details dialog has the same link/unlink controls and explains that links are displayed as text, not opened.
+`linkReference({worktree,url,label?})` accepts absolute HTTP or HTTPS references, persists them independently of branch/path, and displays them as text rather than opening them. `references({worktree})` reads them. `unlinkReference({worktree,reference})` or `unlinkReference({worktree,url})` removes one by stable ID or exact stored URL and returns `{ok:true,removed:boolean}`. An absent link returns `removed:false` without writing or emitting a change. The workspace details dialog keeps the same link/unlink controls.
+
+`quirky.worktree/findReferences({query,worktree?,repo?,includeArchived?,limit?})` searches stored manual, pull-request and issue links without running git, reconciling rows or fetching a hosting service. Use `quirky worktree find-reference <url-or-key>` with a full HTTP(S) URL, `owner/repo#123` or `group/project!45`. Keys search every matching host and report ambiguity. Choose `--worktree` or `--repo` to narrow; `branch:` needs git and is not supported. Archived worktrees require `--include-archived`; `--limit` defaults to 50 and accepts at most 200. Filesystem identity is checked only for returned matches, after filtering and capping.
+
+Results retain stale worktrees and explain missing or replaced folders and unregistered projects. Each worktree includes up to 20 matching links and 20 listed sessions, with totals and liveness evidence. Sessions have `linked:false`: being in a worktree does not record a session-to-reference link. Missing session or PTY evidence stays unknown, never proof that work has stopped. `--json` returns the method result unchanged. `quirky worktree unlink-reference <worktree> <reference-id-or-exact-url>` succeeds when the link is already gone and says it was not linked.
+
+The hidden `command:quirky.worktree/uiControl` command edits the open details dialog's reference
+draft with `add-reference` or `unlink-reference`, addressed by a worktree ID from `quirky worktree list`.
+It changes no stored references until Save. Cancel discards the draft, and commands cannot edit it
+while saving.
 
 `statusDefinitions({})` reads the built-ins and custom definitions; `setStatusDefinitions({statuses})` requires the four built-in IDs and refuses to remove a status that a workspace still uses. Status labels, color metadata and safe text icons persist. The board and status-group lanes use shared semantic colors rather than arbitrary stored paint. More workspace tools opens the Workspace statuses editor; `quirky worktree status-set --statuses '<json>'` uses the same API.
 
@@ -130,7 +173,7 @@ quirky worktree create --repo api --name sparse --sparse-paths '["src"]' --keep-
 quirky wt project-set api --shared-directories '[".env.local"]'
 ```
 
-Project Settings and `quirky wt project-set --shared-directories '[".env.local","config/private"]'` store per-project shared paths. The existing carry owner validates and links those ignored directories together with `EffectiveHooks.sharedDirectories`. Add Project and project Worktree Location expose the public native `desktop.folder.pick` dialog; cancellation keeps the typed draft, and shells without the picker return a conflict instead of imitating it in the browser.
+Project Settings and `quirky wt project-set --shared-directories '[".env.local","config/private"]'` store per-project shared paths. The existing carry owner validates and links those ignored directories together with `EffectiveHooks.sharedDirectories`. Add Project and project Worktree Location use the native `desktop.folder.pick` dialog in a desktop shell or the daemon-filesystem folder dialog in a browser tab ([Browser UI](../../README.md#browser-ui)); cancellation keeps the typed draft.
 
 Configured `defaultTabs` are parsed from the selected commit, validated before create, and composed through `quirky.terminal/newTab` with `activate:false`; command text shares setup trust, and exact tab colors are set through the terminal owner. A bounded pool of at most three detached, locked preparations expires after five minutes, is hidden from ordinary worktree lists only while its exact recorded lock identity is intact, and is claimed by canonical create only for an exact repo/base/owner match. VM recipes use the Lima lifecycle and guest attachment owner described below, never ordinary shell tabs. `worktree host-list` still reports authenticated federation peers, not owner-grant registrations. `quirky worktree create --on-runtime runtime:<selector> --repo <remote-repo> <name>` creates only on that saved owner runtime and returns its exact identity and result; it does not implicitly attach a local mirror or activate a remote path locally. Unknown and phone-scoped targets fail without local fallback.
 
@@ -149,6 +192,23 @@ quirky worktree remote-list --host <registered-host-id> --json
 quirky worktree remote-open <mirror-id> --window <conn-id>
 quirky worktree remote-call <mirror-id> --operation changes
 ```
+
+Remote workspace and VM row menus also have command routes. List their public IDs with
+`quirky worktree remote-list` or `quirky worktree vm-list`, then use:
+
+```sh
+quirky ui run command:quirky.worktree/uiControl --args '{"action":"open-workspace-menu","workspace":"<mirror-id>"}'
+quirky ui run command:quirky.worktree/uiControl --args '{"action":"open-vm-menu","vm":"<vm-id>"}'
+quirky ui run command:quirky.worktree/uiControl --args '{"action":"add-reference","worktree":"<worktree-id>","url":"https://example.com/task","label":"Task"}'
+```
+
+Use `close-workspace-menu`, `close-vm-menu` or `unlink-reference` to reverse those draft actions.
+Each command returns its normalized arguments and `delivered`, the number of mounted targets that
+acted. Unknown, unavailable or disabled targets return zero. UI clicks address their own window,
+including popped-out views; the CLI requires a single open window.
+
+Remote, VM, recipe and confirmation loads use shared loading and error components. Empty inventory
+appears only after a successful load, and a failed ledger retention check offers Retry.
 
 `quirky.cli/hostIdentity` issues a persisted host UUID and a fresh activation generation. `quirky.cli/runtimeCall` optionally accepts `expectedRuntime:{id,endpoint,grantId}` and `expectedHost:{hostId,generation}`. It checks the saved credential pin before connecting, then checks host identity on the same authenticated connection before forwarding. Registered workspace operations always supply both pins; a label, UI installation UUID or path cannot substitute for either.
 

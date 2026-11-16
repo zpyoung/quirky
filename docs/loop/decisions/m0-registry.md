@@ -203,6 +203,7 @@
 - **Confidence:** medium
 - **Revisit if:** startup plugins slow daemon start noticeably
 - **Source:** assumed — autonomous
+- **Revisited (g9-7):** The daemon listens and writes `runtime.json` before startup activation, while RPC waits until startup plugins settle.
 
 ## D20: Disabled IDs live in their own store table, not in Settings
 - **Question:** whether enabled state is part of `settings.get`/`settings.set`

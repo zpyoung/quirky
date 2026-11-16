@@ -6,6 +6,7 @@ import type { UiPluginContext } from '@quirky/protocol'
 import { DesignWindow, setLiveDesignPageKeys } from '../src/design-window/DesignWindow'
 import type { DesignAction } from '../src/design-window/DesignWindow'
 import type { DesignAnnotation } from '../src/design-contract'
+import { dispatchDesignControl } from '../src/ui-control'
 import { inflateSync } from 'node:zlib'
 import { startBrowserHarness, type BrowserTestHarness } from './harness'
 
@@ -373,7 +374,8 @@ test('Watch picker stores two real annotation selections with distinct IDs and r
     }
     let capturedAnnotations: unknown
     const sentAnnotations = Promise.withResolvers<void>()
-    const context = {
+    let context!: UiPluginContext
+    context = {
       call: async (method: string, params: Record<string, unknown> = {}) => {
         if (method === 'quirky.browser/designTargets') return { sessions: [sendTarget], agents: [] }
         if (method === 'quirky.browser/designSend') {
@@ -382,6 +384,10 @@ test('Watch picker stores two real annotation selections with distinct IDs and r
           return { delivery: 'unknown' }
         }
         return await h.client.callAny(method, params)
+      },
+      executeCommand: async (_id: string, args: unknown) => {
+        await Promise.resolve()
+        dispatchDesignControl(context, args)
       }
     } as unknown as UiPluginContext
     const actionRef: { current: ((action: DesignAction) => Promise<boolean>) | null } = { current: null }

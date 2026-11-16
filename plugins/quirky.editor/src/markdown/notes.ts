@@ -1,29 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { isAbsolute, relative, sep } from 'node:path'
 import type { EditorBuffer, EditorServices } from '../types'
 import type { PluginCaller, Session } from '@quirky/protocol'
 import { MARKDOWN_MAX_NOTE_BODY_BYTES, MARKDOWN_MAX_NOTES_SOURCE_BYTES, MARKDOWN_MAX_NOTE_SELECTION_BYTES, sourceLineAtOffset, splitFrontMatter, utf8Bytes } from './source'
 import { makeDiff } from '@sanity/diff-match-patch'
 import { serializeMarkdown } from './tiptap'
+import { parseNote, readMarkdownNotes, releaseSnapshots, reserveSnapshots, sameSnapshot, sortedNotes, type MarkdownReviewNote, type StoredNote } from './note-store'
 
-export type MarkdownReviewNote = {
-  id: string
-  bufferId: string
-  worktreeId: string
-  filePath: string
-  source: 'markdown'
-  selectedText?: string
-  startLine?: number
-  endLine?: number
-  lineNumber: number
-  body: string
-  createdAt: number
-  updatedAt?: number
-  sentAt?: number
-  side: 'modified'
-}
-
-type StoredNote = { id: string; buffer_id: string; payload: string }
 type Selection = { from?: number; to?: number; text?: string; startLine?: number; endLine?: number; mode?: 'source' | 'rich' }
 type NotePayload = Record<string, unknown> & { action?: string; bufferId?: string; noteId?: string; text?: string; worktree?: string; path?: string; holdId?: string; snapshots?: unknown }
 type SendResult = {
@@ -33,104 +15,11 @@ type SendResult = {
   sessionId?: string
   error?: string
 }
-type MarkdownNoteHold = { worktreeId: string; noteIds: Set<string> }
-const markdownNoteHolds = new Map<string, MarkdownNoteHold>()
-const markdownHeldNotes = new Map<string, string>()
-
-function heldNoteKey(worktreeId: string, noteId: string): string {
-  return `${worktreeId}\0${noteId}`
-}
 
 function currentContent(buffer: EditorBuffer): string {
   return buffer.draft !== null ? buffer.draft : buffer.content
 }
 
-function isMarkdownReviewNote(value: unknown): value is MarkdownReviewNote {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false
-  const note = value as Record<string, unknown>
-  const positiveInteger = (item: unknown): item is number =>
-    typeof item === 'number' && Number.isSafeInteger(item) && item >= 1
-  const optionalString = (key: string) => !(key in note) || typeof note[key] === 'string'
-  const optionalNumber = (key: string) => !(key in note) || (typeof note[key] === 'number' && Number.isFinite(note[key]))
-  const optionalLine = (key: string) => !(key in note) || positiveInteger(note[key])
-  return typeof note.id === 'string' && typeof note.bufferId === 'string' &&
-    typeof note.worktreeId === 'string' && typeof note.filePath === 'string' &&
-    note.source === 'markdown' && positiveInteger(note.lineNumber) &&
-    typeof note.body === 'string' && typeof note.createdAt === 'number' && Number.isFinite(note.createdAt) &&
-    note.side === 'modified' && optionalString('selectedText') && optionalLine('startLine') &&
-    optionalLine('endLine') && optionalNumber('updatedAt') && optionalNumber('sentAt')
-}
-
-function parseNote(host: EditorServices, row: StoredNote): MarkdownReviewNote {
-  let value: unknown
-  try {
-    value = JSON.parse(row.payload)
-  } catch {
-    throw host.context.error('conflict', 'A saved Markdown review note could not be read.')
-  }
-  if (!isMarkdownReviewNote(value) || value.id !== row.id || value.bufferId !== row.buffer_id) {
-    throw host.context.error('conflict', 'A saved Markdown review note has invalid persisted fields.')
-  }
-  return value
-}
-
-function snapshotKey(note: MarkdownReviewNote): string {
-  return JSON.stringify(Object.entries(note).sort(([left], [right]) => left.localeCompare(right)))
-}
-
-function sameSnapshot(left: MarkdownReviewNote, right: MarkdownReviewNote): boolean {
-  return snapshotKey(left) === snapshotKey(right)
-}
-
-function noteMatchesStore(host: EditorServices, snapshot: MarkdownReviewNote): boolean {
-  const row = host.store.get<StoredNote>('SELECT id, buffer_id, payload FROM editor_notes WHERE id = ?', snapshot.id)
-  if (!row || row.buffer_id !== snapshot.bufferId) return false
-  return sameSnapshot(parseNote(host, row), snapshot)
-}
-
-function reserveSnapshots(host: EditorServices, worktreeId: string, holdId: string, snapshots: MarkdownReviewNote[]) {
-  if (markdownNoteHolds.has(holdId)) throw host.context.error('conflict', 'The Markdown note hold is already active.')
-  const reservedNoteIds: string[] = []
-  const unavailableNoteIds: string[] = []
-  const noteIds = new Set<string>()
-  for (const snapshot of snapshots) {
-    if (noteIds.has(snapshot.id)) throw host.context.error('invalid-params', 'A Markdown note can appear only once in a hold.')
-    noteIds.add(snapshot.id)
-    if (snapshot.worktreeId !== worktreeId) throw host.context.error('invalid-params', 'A Markdown note snapshot belongs to another worktree.')
-    const key = heldNoteKey(worktreeId, snapshot.id)
-    if (markdownHeldNotes.has(key) || !noteMatchesStore(host, snapshot)) {
-      unavailableNoteIds.push(snapshot.id)
-      continue
-    }
-    reservedNoteIds.push(snapshot.id)
-  }
-  if (reservedNoteIds.length > 0) {
-    markdownNoteHolds.set(holdId, { worktreeId, noteIds: new Set(reservedNoteIds) })
-    for (const noteId of reservedNoteIds) markdownHeldNotes.set(heldNoteKey(worktreeId, noteId), holdId)
-  }
-  return { reservedNoteIds, unavailableNoteIds }
-}
-
-function releaseSnapshots(worktreeId: string, holdId: string): string[] {
-  const hold = markdownNoteHolds.get(holdId)
-  if (!hold || hold.worktreeId !== worktreeId) return []
-  markdownNoteHolds.delete(holdId)
-  const releasedNoteIds = [...hold.noteIds]
-  for (const noteId of releasedNoteIds) {
-    const key = heldNoteKey(worktreeId, noteId)
-    if (markdownHeldNotes.get(key) === holdId) markdownHeldNotes.delete(key)
-  }
-  return releasedNoteIds
-}
-
-function sortedNotes(notes: MarkdownReviewNote[]): MarkdownReviewNote[] {
-  return notes.sort((left, right) =>
-    left.filePath.localeCompare(right.filePath) ||
-    (left.startLine ?? left.lineNumber) - (right.startLine ?? right.lineNumber) ||
-    (left.endLine ?? left.lineNumber) - (right.endLine ?? right.lineNumber) ||
-    left.createdAt - right.createdAt
-  )
-}
 
 function noteBuffer(host: EditorServices, params: NotePayload): EditorBuffer {
   if (typeof params.bufferId !== 'string' || params.bufferId === '') throw host.context.error('invalid-params', 'bufferId is required.')
@@ -149,10 +38,9 @@ function writableBuffer(host: EditorServices, params: NotePayload): EditorBuffer
 }
 
 function readNotes(host: EditorServices, buffer: EditorBuffer): MarkdownReviewNote[] {
-  const rows = host.store.all<StoredNote>('SELECT id, buffer_id, payload FROM editor_notes')
-  return sortedNotes(rows.map((row) => parseNote(host, row)).filter((note) =>
+  return readMarkdownNotes(host, (note) =>
     note.worktreeId === buffer.worktreeId && note.filePath === buffer.relativePath
-  ))
+  )
 }
 
 function storedPayload(note: MarkdownReviewNote): string {
@@ -489,108 +377,5 @@ export function createMarkdownNotesMethod(host: EditorServices): (params: Record
       return sendNotes(host, buffer, snapshot, params)
     }
     throw host.context.error('invalid-params', 'notes action must be list, add, edit, delete, copy or send.')
-  }
-}
-type WorkspaceNoteScope = { worktreeId: string; path?: string }
-
-async function workspaceNoteScope(host: EditorServices, params: NotePayload, caller: PluginCaller): Promise<WorkspaceNoteScope> {
-  if (params.worktree !== undefined && typeof params.worktree !== 'string') {
-    throw host.context.error('invalid-params', 'worktree must be a string.')
-  }
-  const worktree = await host.resolve(params.worktree, caller)
-  if (params.path === undefined) return { worktreeId: worktree.id }
-  if (typeof params.path !== 'string' || isAbsolute(params.path)) {
-    throw host.context.error('invalid-params', 'path must be a worktree-relative path.')
-  }
-  const absolute = await host.path(worktree.id, params.path, { create: true })
-  const path = relative(worktree.path, absolute)
-  if (path === '' || path === '.' || path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path)) {
-    throw host.context.error('invalid-params', 'path must name a file inside the worktree.')
-  }
-  return { worktreeId: worktree.id, path }
-}
-
-function workspaceSnapshotList(host: EditorServices, value: unknown, scope: WorkspaceNoteScope): MarkdownReviewNote[] {
-  if (!Array.isArray(value)) throw host.context.error('invalid-params', 'snapshots must be an array of Markdown review notes.')
-  const snapshots: MarkdownReviewNote[] = []
-  const ids = new Set<string>()
-  for (const item of value) {
-    if (!isMarkdownReviewNote(item)) throw host.context.error('invalid-params', 'snapshots must contain complete persisted Markdown review notes.')
-    if (item.worktreeId !== scope.worktreeId) throw host.context.error('invalid-params', 'A Markdown note snapshot belongs to another worktree.')
-    if (scope.path !== undefined && item.filePath !== scope.path) throw host.context.error('invalid-params', 'A Markdown note snapshot is outside the requested path.')
-    if (ids.has(item.id)) throw host.context.error('invalid-params', 'A Markdown note snapshot can appear only once.')
-    ids.add(item.id)
-    snapshots.push(item)
-  }
-  return snapshots
-}
-
-function workspaceNotesFor(host: EditorServices, scope: WorkspaceNoteScope): MarkdownReviewNote[] {
-  const rows = host.store.all<StoredNote>('SELECT id, buffer_id, payload FROM editor_notes')
-  return sortedNotes(rows.map((row) => parseNote(host, row)).filter((note) =>
-    note.worktreeId === scope.worktreeId && (scope.path === undefined || note.filePath === scope.path)
-  ))
-}
-
-function settleWorkspaceSnapshots(
-  host: EditorServices,
-  scope: WorkspaceNoteScope,
-  snapshots: MarkdownReviewNote[],
-  holdId?: string
-): { deletedNoteIds: string[]; retainedNoteIds: string[] } {
-  const result = host.store.transaction(() => {
-    const deletedNoteIds: string[] = []
-    const retainedNoteIds: string[] = []
-    for (const snapshot of snapshots) {
-      const row = host.store.get<StoredNote>('SELECT id, buffer_id, payload FROM editor_notes WHERE id = ?', snapshot.id)
-      if (!row) {
-        retainedNoteIds.push(snapshot.id)
-        continue
-      }
-      const current = parseNote(host, row)
-      const key = heldNoteKey(scope.worktreeId, snapshot.id)
-      if (row.buffer_id !== snapshot.bufferId || current.worktreeId !== scope.worktreeId ||
-        (scope.path !== undefined && current.filePath !== scope.path) ||
-        !sameSnapshot(current, snapshot) ||
-        (holdId !== undefined && markdownHeldNotes.get(key) !== holdId)) {
-        retainedNoteIds.push(snapshot.id)
-        continue
-      }
-      const deletion = host.store.run(
-        'DELETE FROM editor_notes WHERE id = ? AND buffer_id = ? AND payload = ?',
-        snapshot.id,
-        snapshot.bufferId,
-        row.payload
-      )
-      if (deletion.changes > 0) deletedNoteIds.push(snapshot.id)
-      else retainedNoteIds.push(snapshot.id)
-    }
-    return { deletedNoteIds, retainedNoteIds }
-  })
-  if (result.deletedNoteIds.length > 0) host.emit()
-  return result
-}
-
-export function createWorkspaceNotesMethod(host: EditorServices): (params: Record<string, unknown>, caller: PluginCaller) => Promise<unknown> {
-  return async (rawParams, caller) => {
-    const params = rawParams as NotePayload
-    if (params.action !== 'list' && params.action !== 'reserve' && params.action !== 'release' && params.action !== 'settle') {
-      throw host.context.error('invalid-params', 'workspaceNotes action must be list, reserve, release or settle.')
-    }
-    const scope = await workspaceNoteScope(host, params, caller)
-    if (params.action === 'list') return { notes: workspaceNotesFor(host, scope) }
-    if (params.action === 'release') {
-      if (typeof params.holdId !== 'string' || params.holdId === '') throw host.context.error('invalid-params', 'holdId is required.')
-      return { releasedNoteIds: releaseSnapshots(scope.worktreeId, params.holdId) }
-    }
-    const snapshots = workspaceSnapshotList(host, params.snapshots, scope)
-    if (params.action === 'reserve') {
-      if (typeof params.holdId !== 'string' || params.holdId === '') throw host.context.error('invalid-params', 'holdId is required.')
-      return reserveSnapshots(host, scope.worktreeId, params.holdId, snapshots)
-    }
-    if (params.holdId !== undefined && (typeof params.holdId !== 'string' || params.holdId === '')) {
-      throw host.context.error('invalid-params', 'holdId must be a non-empty string.')
-    }
-    return settleWorkspaceSnapshots(host, scope, snapshots, params.holdId)
   }
 }

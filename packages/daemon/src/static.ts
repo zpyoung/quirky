@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { extname, join, normalize, sep } from 'node:path'
 
 /** File extension to content type for everything the daemon serves over HTTP. */
@@ -15,6 +15,7 @@ export const CONTENT_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
   '.txt': 'text/plain; charset=utf-8',
   '.wasm': 'application/wasm'
 }
@@ -31,7 +32,12 @@ function isFile(path: string): boolean {
  * Serves the built UI from `dir`. Paths that are not files and have no extension get
  * `index.html`, so client-side routes load the app. Returns 404 when the UI is not built.
  */
-export function serveStatic(dir: string, pathname: string, method: string): Response {
+export function serveStatic(
+  dir: string,
+  pathname: string,
+  method: string,
+  options?: { transformIndex?: (html: string) => string }
+): Response {
   if (!existsSync(dir)) return new Response('UI is not built', { status: 404 })
   let decoded: string
   try {
@@ -50,6 +56,20 @@ export function serveStatic(dir: string, pathname: string, method: string): Resp
     target = join(dir, 'index.html')
     if (!isFile(target)) return new Response('not found', { status: 404 })
   }
-  const headers = { 'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream' }
-  return new Response(method === 'HEAD' ? null : Bun.file(target), { headers })
+  const headers: Record<string, string> = { 'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream' }
+  let body: BodyInit | null = method === 'HEAD' ? null : Bun.file(target)
+  if (target === join(dir, 'index.html') && options?.transformIndex) {
+    const html = readFileSync(target, 'utf8')
+    let transformed: string
+    try {
+      transformed = options.transformIndex(html)
+    } catch {
+      transformed = html
+    }
+    if (transformed !== html) {
+      headers['cache-control'] = 'no-store'
+      body = transformed
+    }
+  }
+  return new Response(method === 'HEAD' ? null : body, { headers })
 }

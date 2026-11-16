@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
 import { Badge, Button, Dialog, IconButton, Tabs } from '@quirky/ui'
 import { AgentPicker } from './chat/AgentPicker'
-import type { WorktreeSessions } from './model'
+import { RUN_BADGE_COMMAND, type WorktreeSessions } from './model'
 import { NewSessionMenu } from './NewSessionMenu'
 import { PromptDialog, type NewSessionRequest } from './PromptDialog'
 import { sessionStatusPresentation, StatusDot, UNREAD_LABELS, UnreadBell, useNow } from './StatusDot'
@@ -103,7 +103,7 @@ export function SessionTabs({ context, store, sessions, active }: Props) {
             <div key={session.id} style={sessionControlGroup} role="group" aria-label={`Actions for ${session.title}`}>
               <span style={sessionName}>{session.title}</span>
               {Object.entries(session.badges ?? {}).map(([key, badge]) => badge.command ? (
-                <Button key={key} type="button" title={badge.tooltip} onClick={() => void context.executeCommand(badge.command!, badge.args)}>
+                <Button key={key} type="button" title={badge.tooltip} onClick={() => void context.executeCommand(RUN_BADGE_COMMAND, { session: session.id, badge: key })}>
                   {badge.label}
                 </Button>
               ) : (
@@ -137,13 +137,8 @@ export function SessionTabs({ context, store, sessions, active }: Props) {
       {pending && (
         <PromptDialog
           request={pending}
-          onClose={() => setPending(null)}
-          onSubmit={async (prompt) => {
-            const request = pending
-            if (await store.create(request.agent, prompt, request.background)) {
-              setPending((current) => current === request ? null : current)
-            }
-          }}
+          store={store}
+          onClose={() => setPending((current) => current === pending ? null : current)}
         />
       )}
     </div>

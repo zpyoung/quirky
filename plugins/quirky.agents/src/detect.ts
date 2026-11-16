@@ -1,5 +1,6 @@
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
+import type { ProcessRunner } from '@quirky/protocol'
 import type { AgentEntry } from './core/types'
 
 export type SearchDirs = { dirs: string[]; loginDirs: Set<string> }
@@ -25,43 +26,23 @@ const splitPath = (path: string) => path.split(':').filter((entry) => entry !== 
  * Asks the user's login shell for its PATH, because the daemon's own PATH is usually the narrow
  * one it was started with. Null on a failed, empty or timed-out answer; a hung shell is killed.
  */
-export async function readLoginPath(shell: string, timeoutMs = 5000): Promise<string | null> {
-  let proc: ReturnType<typeof Bun.spawn>
+export async function readLoginPath(runner: ProcessRunner, shell: string, timeoutMs = 5000): Promise<string | null> {
+  const controller = new AbortController()
+  // The local abort keeps the deadline active after the shell leader exits.
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    proc = Bun.spawn([shell, '-l', '-c', 'printf %s "$PATH"'], { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' })
+    const result = await runner.run([shell, '-l', '-c', 'printf %s "$PATH"'], {
+      timeoutMs,
+      killGraceMs: 0,
+      maxOutputBytes: 1048576,
+      signal: controller.signal
+    })
+    if (result.exitCode !== 0 || result.stopped !== undefined || result.spawnError !== undefined) return null
+    return result.stdoutText.trim() || null
   } catch {
     return null
-  }
-  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-  const chunks: Uint8Array[] = []
-  const collect = async () => {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) return
-      chunks.push(value)
-    }
-  }
-  const output = collect().then(
-    () => true,
-    () => false
-  )
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timedOut = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), timeoutMs)
-  })
-  const finished = (async () => {
-    const [code, complete] = await Promise.all([proc.exited, output])
-    return code === 0 && complete ? 'done' : 'failed'
-  })()
-  try {
-    // a background child of the shell can hold stdout open after the shell exits, so the read is bounded too
-    const outcome = await Promise.race([finished, timedOut])
-    if (outcome !== 'done') return null
-    return Buffer.concat(chunks).toString('utf8').trim() || null
   } finally {
     clearTimeout(timer)
-    proc.kill('SIGKILL')
-    reader.cancel().catch(() => {})
   }
 }
 

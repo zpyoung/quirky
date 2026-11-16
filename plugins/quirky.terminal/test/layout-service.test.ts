@@ -1132,6 +1132,16 @@ describe('describeClose fails closed', () => {
       log: () => {},
       error: (_kind: string, message: string) => Object.assign(new Error(message), { code: _kind === 'not-found' ? RpcErrorCode.NotFound : 0 }),
       pty: { list: sessions.list },
+      process: {
+        run: async () => ({
+          stdout: new Uint8Array(),
+          stdoutText: '',
+          stderr: '',
+          exitCode: 0,
+          signal: null,
+          durationMs: 0
+        })
+      },
       call: sessions.call
     }
     const service = new LayoutService(context as never, store as never, new InputTracker())

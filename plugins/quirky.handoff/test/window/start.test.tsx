@@ -12,6 +12,7 @@ import {
   rpcError,
   settle,
   teardown,
+  type Fake,
   type Handler,
   type Ui
 } from './support'
@@ -27,14 +28,25 @@ afterAll(async () => {
 })
 afterEach(() => teardown(ui))
 
+function trackCommands(fake: Fake) {
+  const calls: { id: string; args?: unknown }[] = []
+  const executeCommand = fake.context.executeCommand.bind(fake.context)
+  fake.context.executeCommand = async (id, args) => {
+    calls.push({ id, args })
+    return executeCommand(id, args)
+  }
+  return calls
+}
+
 async function opened(configure: (world: ReturnType<typeof makeWorld>) => void = () => {}, overrides: Record<string, Handler> = {}, session = 's_1') {
   const world = makeWorld()
   configure(world)
   const fake = fakeContext(daemon(world, overrides))
+  const commands = trackCommands(fake)
   const overlay = await mountOverlay(ui, fake)
   await fake.run('open', { session })
   await settle()
-  return { world, fake, overlay }
+  return { world, fake, overlay, commands }
 }
 
 const pressEscape = () =>
@@ -68,6 +80,8 @@ describe('SC-9, SC-46 and SC-47: a start that fails keeps the dialog and its fie
     expect(overlay.last().shown).toBe(true)
     expect(overlay.last().error).toBe("fatal: 'no-such-branch' is not a commit")
     expect(overlay.view.q('[role="alert"]')!.textContent).toBe("fatal: 'no-such-branch' is not a commit")
+    expect(overlay.view.q('.ui-inline-error')!.textContent).toBe("fatal: 'no-such-branch' is not a commit")
+    expect(overlay.view.q('.ui-inline-error')!.classList.contains('ui-inline-error')).toBe(true)
     expect(overlay.last().controls).toEqual(before)
     expect(overlay.last().starting).toBe(false)
   })
@@ -160,10 +174,11 @@ describe('SC-48: a successful start', () => {
     expect(fake.callsTo('draft')).toEqual([])
   })
 
-  test('SC-48: clicking Start New Session runs the start', async () => {
-    const { overlay, fake } = await opened()
+  test('SC-48: clicking Start New Session routes start and closes the dialog', async () => {
+    const { overlay, fake, commands } = await opened()
     await overlay.view.click(overlay.view.button('Start New Session'))
     await settle()
+    expect(commands.at(-1)).toEqual({ id: 'command:quirky.handoff/start', args: undefined })
     expect(fake.callsTo('start')).toHaveLength(1)
     expect(overlay.last().shown).toBe(false)
   })
@@ -171,7 +186,7 @@ describe('SC-48: a successful start', () => {
 
 describe('SC-58, SC-59 and SC-60: Cancel and Escape keep a draft', () => {
   test('SC-58: Cancel saves the controls, and reopening from the same session restores them while another session shows none', async () => {
-    const { overlay, fake } = await opened()
+    const { overlay, fake, commands } = await opened()
     await fake.run('set', { field: 'note', value: 'keep this' })
     await fake.run('set', { field: 'agent', value: 'codex' })
     await fake.run('set', { field: 'diffBodies', value: true })
@@ -179,6 +194,10 @@ describe('SC-58, SC-59 and SC-60: Cancel and Escape keep a draft', () => {
 
     await overlay.view.click(overlay.view.button('Cancel'))
     await settle()
+    expect(commands.at(-1)).toEqual({
+      id: 'command:quirky.handoff/cancel',
+      args: { via: 'button' }
+    })
     expect(overlay.last().shown).toBe(false)
     const draft = fake.callsTo('draft')[0]!.params
     expect(draft.source).toEqual({ session: 's_1' })
@@ -238,11 +257,12 @@ describe('SC-58, SC-59 and SC-60: Cancel and Escape keep a draft', () => {
   })
 
   test('SC-59: Escape with focus in the note saves the draft and closes, and the note is back on reopen', async () => {
-    const { overlay, fake } = await opened()
+    const { overlay, fake, commands } = await opened()
     const note = overlay.view.q('textarea[aria-label="Steering note"]') as HTMLTextAreaElement
     await overlay.view.type(note, 'keep this')
     note.focus()
     await pressEscape()
+    expect(commands.at(-1)).toEqual({ id: 'command:quirky.handoff/cancel', args: undefined })
     expect(overlay.last().shown).toBe(false)
     expect(fake.callsTo('draft')).toHaveLength(1)
     expect(fake.callsTo('draft')[0]!.params.draft.controls.note).toBe('keep this')
@@ -290,14 +310,22 @@ describe('SC-58, SC-59 and SC-60: Cancel and Escape keep a draft', () => {
     expect(reached).toBe(false)
   })
 
-  test('SC-59: Escape closes an open worktree list before the dialog', async () => {
-    const { overlay, fake } = await opened()
+  test('SC-59: Escape closes an open worktree list and clears search before cancelling', async () => {
+    const { overlay, fake, commands } = await opened()
     await overlay.view.click(overlay.view.q('[aria-label="Worktree"]'))
+    await overlay.view.type(overlay.view.q('input[placeholder="Search worktrees…"]') as HTMLInputElement, 'w2')
     await pressEscape()
     expect(overlay.last().shown).toBe(true)
+    expect(overlay.view.q('[role="listbox"]')).toBeNull()
+    expect(overlay.view.q('input[placeholder="Search worktrees…"]')).toBeNull()
     expect(fake.callsTo('draft')).toEqual([])
-  })
+    expect(commands).toEqual([])
 
+    await pressEscape()
+    expect(commands.at(-1)).toEqual({ id: 'command:quirky.handoff/cancel', args: undefined })
+    expect(overlay.last().shown).toBe(false)
+    expect(fake.callsTo('draft')).toHaveLength(1)
+  })
   test('SC-59: Escape while a start runs does nothing', async () => {
     let finish!: () => void
     const gate = new Promise<void>((resolve) => void (finish = resolve))
@@ -449,4 +477,16 @@ describe('a templates change elsewhere', () => {
     expect(overlay.last().controls.templateId).toBeNull()
     expect((overlay.view.q('select[aria-label="Reusable template"]') as HTMLSelectElement).options).toHaveLength(4)
   })
+})
+
+test('Start and Cancel dispatch commands, preserving an inline failure before dismissal', async () => {
+  const { world, fake, overlay } = await opened()
+  world.startError = new Error('branch locked')
+  await overlay.view.click(overlay.view.button('Start New Session'))
+  expect(fake.executions.at(-1)).toEqual({ id: 'command:quirky.handoff/start', args: undefined })
+  expect(overlay.view.q('[role="alert"].ui-inline-error')?.textContent).toBe('branch locked')
+  expect(overlay.last().shown).toBe(true)
+  await overlay.view.click(overlay.view.button('Cancel'))
+  expect(fake.executions.at(-1)).toEqual({ id: 'command:quirky.handoff/cancel', args: { via: 'button' } })
+  expect(overlay.last().shown).toBe(false)
 })

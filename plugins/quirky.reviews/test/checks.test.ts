@@ -1,9 +1,14 @@
-import type { QuirkyClient } from '@quirky/protocol'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { QuirkyClient, QuirkyEvent } from '@quirky/protocol'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { bootReviews } from './support'
 import { checksFixtureState, checksGhSource, checksReview } from './checks-fixture'
 import { createChecksPollingPolicy, installChecksPolling, type ChecksPollingRuntime, type ChecksPollingTarget } from '../src/checks/ChecksPanel'
 import type { JsonRecord } from '../src/contracts'
+import { checksMethods } from '../src/checks/methods'
+import { createReviewsEnv, newChecksEntry } from '../src/env'
 
 type ReviewsTestHost = {
   client: QuirkyClient
@@ -43,6 +48,26 @@ function setOrigin(host: Pick<ReviewsTestHost, 'repoPath'>, remote: string | nul
 function stateOf(value: unknown): Record<string, unknown> {
   const state = asRecord(value)
   return asRecord(state.checks)
+}
+
+async function addWorktree(host: ReviewsTestHost, branch: string): Promise<string> {
+  const origin = asRecord(await host.client.callAny('quirky.worktree/resolve', { selector: host.worktree }))
+  const created = asRecord(await host.client.callAny('quirky.worktree/create', {
+    repo: origin.repoId,
+    branchName: branch,
+    name: branch,
+    base: 'main',
+    noParent: true,
+    setup: 'skip',
+    activate: false
+  }))
+  const worktree = asRecord(created.worktree)
+  if (typeof worktree.id !== 'string') throw new Error('worktree was not registered')
+  return worktree.id
+}
+
+function checksFor(client: QuirkyClient, worktree?: string): Promise<Record<string, unknown>> {
+  return client.callAny('quirky.reviews/state', worktree === undefined ? {} : { worktree }).then(stateOf)
 }
 
 
@@ -190,31 +215,20 @@ describe('active-workspace checks', () => {
     })
   }, 30_000)
 
-  test('a slower old-worktree refresh cannot overwrite the newer workspace or its eligibility', async () => {
+  test('refreshing one worktree neither supersedes nor clears another, while a same-worktree supersede is stale', async () => {
     const host = await boot()
     host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')]))
     await host.call('checksLink', { worktree: host.worktree, number: 12 })
-    const origin = asRecord(await host.client.callAny('quirky.worktree/resolve', { selector: host.worktree }))
-    const created = asRecord(await host.client.callAny('quirky.worktree/create', {
-      repo: origin.repoId,
-      branchName: 'feature-next',
-      name: 'feature-next',
-      base: 'main',
-      noParent: true,
-      setup: 'skip',
-      activate: false
-    }))
-    const secondWorktree = asRecord(created.worktree)
-    if (typeof secondWorktree.id !== 'string') throw new Error('second worktree was not registered')
-    await host.call('checksLink', { worktree: secondWorktree.id, number: 13 })
+    const second = await addWorktree(host, 'feature-next')
+    await host.call('checksLink', { worktree: second, number: 13 })
     host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')], {
       delayPullNumber: 12,
       delayMs: 250
     }))
 
     const initialInvocations = host.invocations().length
-    const stale = host.call('checksRefresh', { worktree: host.worktree, force: true })
-    // The isolated daemon uses a real delayed gh child to make the old response arrive after the new one.
+    const slow = host.call('checksRefresh', { worktree: host.worktree, force: true })
+    // The isolated daemon uses a real delayed gh child so the first workspace's response lands after the second's.
     let oldLookupStarted = false
     for (let attempt = 0; attempt < 100; attempt += 1) {
       oldLookupStarted = host.invocations().slice(initialInvocations).some(({ args }) =>
@@ -223,14 +237,173 @@ describe('active-workspace checks', () => {
       await Bun.sleep(10)
     }
     expect(oldLookupStarted).toBe(true)
-    const fresh = asRecord(await host.call('checksRefresh', { worktree: secondWorktree.id, force: true }))
-    await stale
+    const fresh = asRecord(await host.call('checksRefresh', { worktree: second, force: true }))
+    const slowResult = asRecord(await slow)
 
-    const checks = stateOf(await host.call('state'))
     expect(fresh.ok).toBe(true)
-    expect(checks.worktree).toBe(secondWorktree.id)
-    expect(asRecord(checks.review)).toMatchObject({ number: 13, headRefName: 'feature-next' })
-    expect(checks.eligibility).toBeNull()
+    expect(slowResult).toMatchObject({ ok: true, kind: 'found', number: 12 })
+    expect(slowResult.stale).toBeUndefined()
+    expect(asRecord(stateOf(await host.call('state', { worktree: host.worktree })).review)).toMatchObject({ number: 12, headRefName: 'feature' })
+    const other = stateOf(await host.call('state', { worktree: second }))
+    expect(other.worktree).toBe(second)
+    expect(asRecord(other.review)).toMatchObject({ number: 13, headRefName: 'feature-next' })
+    expect(other.eligibility).toBeNull()
+
+    const superseded = host.call('checksRefresh', { worktree: host.worktree, force: true })
+    for (let attempt = 0; attempt < 100 && (stateOf(await host.call('state', { worktree: host.worktree })).loading !== true); attempt += 1) await Bun.sleep(10)
+    const newer = asRecord(await host.call('checksRefresh', { worktree: host.worktree, force: true }))
+    expect(asRecord(await superseded)).toMatchObject({ ok: false, stale: true })
+    expect(newer).toMatchObject({ ok: true, kind: 'found', number: 12 })
+  }, 60_000)
+
+  test('drafts and queued comments on one worktree survive a refresh of another', async () => {
+    const host = await boot()
+    host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')], {
+      threads: [{ id: 'PRRT_thread_12', commentId: 77, body: 'Please address this.' }]
+    }))
+    await host.call('checksLink', { worktree: host.worktree, number: 12 })
+    const second = await addWorktree(host, 'feature-next')
+    await host.call('checksLink', { worktree: second, number: 13 })
+
+    await host.call('checksSetTitleDraft', { worktree: host.worktree, number: 12, title: 'Draft on the first workspace' })
+    const generation = (await checksFor(host.client, host.worktree)).generation
+    await host.call('detailQueueComment', { surface: 'checks', worktree: host.worktree, number: 12, commentId: 'PRRT_thread_12', queued: true })
+    await host.call('detailSetCommentDraft', { surface: 'checks', worktree: host.worktree, number: 12, generation, body: 'Unsent reply', draftVersion: 1 })
+
+    await host.call('checksRefresh', { worktree: second, force: true })
+
+    expect(await checksFor(host.client, host.worktree)).toMatchObject({
+      titleDraft: 'Draft on the first workspace',
+      queuedComments: ['PRRT_thread_12'],
+      commentDraft: 'Unsent reply'
+    })
+    expect(await checksFor(host.client, second)).toMatchObject({ titleDraft: null, queuedComments: [], commentDraft: '' })
+  }, 60_000)
+
+  test('the agent dialog is projected only into its own worktree view', async () => {
+    const host = await boot()
+    host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')]))
+    await host.call('checksLink', { worktree: host.worktree, number: 12 })
+    const second = await addWorktree(host, 'feature-next')
+    await host.call('checksLink', { worktree: second, number: 13 })
+
+    await host.call('checksSetAgentDialog', { surface: 'checks', worktree: host.worktree, number: 12, action: 'fix', prompt: 'Fix the failed build check.' })
+
+    expect((await checksFor(host.client, host.worktree)).agentDialog).toMatchObject({ action: 'fix', target: { worktree: host.worktree, number: 12 } })
+    expect((await checksFor(host.client, second)).agentDialog).toBeNull()
+  }, 60_000)
+
+  test('the agent-dialog CLI resolves an omitted worktree from its caller instead of the latest Checks entry', async () => {
+    const host = await boot()
+    host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')]))
+    await host.call('checksLink', { worktree: host.worktree, number: 12 })
+    const second = await addWorktree(host, 'feature-next')
+    await host.call('checksLink', { worktree: second, number: 13 })
+
+    const result = await host.cli(['--json', 'reviews', 'checks-set-agent-dialog', '--action', 'fix', '--prompt', 'Fix the failed build check.'])
+
+    expect(result).toMatchObject({ code: 0, stderr: '' })
+    expect(JSON.parse(result.stdout)).toMatchObject({ agentDialog: { action: 'fix', target: { worktree: host.worktree, number: 12 } } })
+    expect((await checksFor(host.client, second)).agentDialog).toBeNull()
+  }, 60_000)
+
+  test('a state read without a worktree returns the most recently refreshed worktree, and a worktree with no entry reads blank', async () => {
+    const host = await boot()
+    host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')]))
+    const second = await addWorktree(host, 'feature-next')
+    await host.call('checksLink', { worktree: second, number: 13 })
+    expect(await checksFor(host.client)).toMatchObject({ worktree: second })
+    expect(await checksFor(host.client, host.worktree)).toMatchObject({ worktree: null, review: null, lookup: null })
+
+    await host.call('checksLink', { worktree: host.worktree, number: 12 })
+    expect(await checksFor(host.client)).toMatchObject({ worktree: host.worktree })
+    expect(await checksFor(host.client, second)).toMatchObject({ worktree: second })
+    expect(await checksFor(host.client)).toMatchObject({ worktree: host.worktree })
+
+    const get = asRecord(await host.client.callAny('quirky.reviews/checksGet', {}))
+    expect(asRecord(get.checks).worktree).toBe(host.worktree)
+    const named = asRecord(await host.client.callAny('quirky.reviews/checksGet', { worktree: second }))
+    expect(asRecord(named.checks)).toMatchObject({ worktree: second, review: { number: 13 } })
+  }, 60_000)
+
+  test('Checks entries are capped at 16 and evict the least recently used one', async () => {
+    const host = await boot()
+    const root = mkdtempSync(join(tmpdir(), 'reviews-lru-'))
+    try {
+      const folders: string[] = []
+      for (let index = 0; index < 17; index += 1) {
+        const path = join(root, `folder-${index}`)
+        mkdirSync(path)
+        const project = asRecord(await host.client.callAny('quirky.repo/add', { path, folder: true }))
+        const created = asRecord(await host.client.callAny('quirky.worktree/create', { repo: project.id, name: `folder-${index}` }))
+        folders.push(String(asRecord(created.worktree).id))
+      }
+      for (const id of folders.slice(0, 16)) {
+        expect(await host.call('checksRefresh', { worktree: id })).toMatchObject({ ok: true, kind: 'folder' })
+      }
+      for (const id of folders.slice(0, 16)) expect(await checksFor(host.client, id)).toMatchObject({ worktree: id })
+
+      expect(await checksFor(host.client, folders[0])).toMatchObject({ worktree: folders[0] })
+      await host.call('checksRefresh', { worktree: folders[16] })
+
+      expect(await checksFor(host.client, folders[16])).toMatchObject({ worktree: folders[16] })
+      expect(await checksFor(host.client, folders[0])).toMatchObject({ worktree: folders[0] })
+      expect(await checksFor(host.client, folders[1])).toMatchObject({ worktree: null, lookup: null })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }, 90_000)
+
+  test('two windows on different worktrees each refresh once and keep their own review', async () => {
+    const host = await boot()
+    host.writeState(checksFixtureState([checksReview(12), checksReview(13, 'feature-next')]))
+    const secondWorktree = await addWorktree(host, 'feature-next')
+    await host.call('checksLink', { worktree: host.worktree, number: 12 })
+    await host.call('checksLink', { worktree: secondWorktree, number: 13 })
+
+    const windows = await Promise.all([host.connect('ui'), host.connect('ui')])
+    const mine = [host.worktree, secondWorktree]
+    const refreshes = [0, 0]
+    const changes = [0, 0]
+    const inFlight = [false, false]
+    let running = true
+    const refreshFor = async (index: number) => {
+      refreshes[index] = (refreshes[index] ?? 0) + 1
+      await windows[index]!.callAny('quirky.reviews/checksRefresh', { worktree: mine[index], force: true })
+    }
+    const reconcile = async (index: number) => {
+      if (!running || inFlight[index]) return
+      inFlight[index] = true
+      try {
+        const checks = await checksFor(windows[index]!, mine[index])
+        if (running && checks.worktree !== mine[index]) await refreshFor(index)
+      } finally {
+        inFlight[index] = false
+      }
+    }
+    for (const [index, client] of windows.entries()) {
+      await client.callAny('events.subscribe', {})
+      client.onEvent((event: QuirkyEvent) => {
+        if (event.type !== 'quirky.reviews/changed') return
+        changes[index] = (changes[index] ?? 0) + 1
+        void reconcile(index)
+      })
+    }
+    try {
+      await Promise.all(windows.map(async (_client, index) => {
+        inFlight[index] = true
+        try { await refreshFor(index) } finally { inFlight[index] = false }
+      }))
+      await Bun.sleep(2_000)
+    } finally {
+      running = false
+      for (const client of windows) client.close()
+    }
+
+    expect(refreshes).toEqual([1, 1])
+    for (const count of changes) expect(count).toBeLessThan(30)
+    expect(asRecord(await checksFor(host.client, host.worktree)).review).toMatchObject({ number: 12 })
+    expect(asRecord(await checksFor(host.client, secondWorktree)).review).toMatchObject({ number: 13 })
   }, 60_000)
 
   test('unlink suppresses rediscovery and relink restores only the canonical review', async () => {
@@ -332,4 +505,115 @@ test('hidden and unmounted Checks polling clears candidates and never runs a hid
   connectionListener('reconnecting')
   expect(scheduled.size).toBe(0)
   expect(refreshes).toBe(0)
+})
+
+function unitEnv() {
+  const env = createReviewsEnv({ openStore: () => ({ get: () => undefined, run: () => {} }), emit: () => {}, error: (_kind: string, message: string) => new Error(message) } as never)
+  return { env, methods: checksMethods(env) }
+}
+
+describe('Checks state bounds and ordering', () => {
+  test('eviction keeps the oldest loading entry and removes the oldest completed entry', () => {
+    const { env } = unitEnv()
+    env.update((state) => { state.checksByWorktree.loading = { ...newChecksEntry('loading'), loading: true } })
+    for (let index = 0; index < 16; index += 1) {
+      const worktree = `completed-${index}`
+      env.update((state) => { state.checksByWorktree[worktree] = newChecksEntry(worktree) })
+    }
+
+    expect(env.view('loading').checks).toMatchObject({ worktree: 'loading', loading: true, error: null })
+    expect(env.view('completed-0').checks.worktree).toBeNull()
+    expect(Object.keys(env.read().checksByWorktree)).toHaveLength(16)
+  })
+
+  test('a __proto__ worktree leaves Object.prototype untouched', async () => {
+    const { env, methods } = unitEnv()
+    env.resolve = async () => { throw new Error('unknown workspace') }
+    expect(await methods.checksRefresh({ worktree: '__proto__' }, {} as never)).toMatchObject({ ok: false, error: 'unknown workspace' })
+    for (const key of ['loading', 'error', 'generation']) expect(Object.prototype.hasOwnProperty.call(Object.prototype, key)).toBe(false)
+    expect(({} as Record<string, unknown>).loading).toBeUndefined()
+    expect(env.view('__proto__').checks.worktree).toBeNull()
+  })
+
+  test('the older of two concurrent first refreshes is stale and does not overwrite the newer', async () => {
+    const { env, methods } = unitEnv()
+    const resolvers: ((value: never) => void)[] = []
+    env.resolve = () => new Promise((resolve) => { resolvers.push(resolve as never) })
+    const older = methods.checksRefresh({ worktree: 'wt_1' }, {} as never)
+    const newer = methods.checksRefresh({ worktree: 'wt_1' }, {} as never)
+    const folder = { id: 'wt_1', kind: 'folder' } as never
+    resolvers[1]!(folder)
+    expect(await newer).toMatchObject({ ok: true, kind: 'folder' })
+    const generation = env.read().checksByWorktree.wt_1!.generation
+    resolvers[0]!(folder)
+    expect(await older).toMatchObject({ ok: false, stale: true })
+    expect(env.read().checksByWorktree.wt_1!.generation).toBe(generation)
+  })
+
+  test('an older unresolved refresh stays stale after the newer one completed and its entry was evicted', async () => {
+    const { env, methods } = unitEnv()
+    let release: ((value: never) => void) | undefined
+    let first = true
+    env.resolve = async (params) => {
+      if (params.worktree === 'wt_A' && first) {
+        first = false
+        return new Promise((resolve) => { release = resolve as never })
+      }
+      return { id: String(params.worktree), kind: 'folder' } as never
+    }
+    const older = methods.checksRefresh({ worktree: 'wt_A' }, {} as never)
+    expect(await methods.checksRefresh({ worktree: 'wt_A' }, {} as never)).toMatchObject({ ok: true, kind: 'folder' })
+    for (let index = 0; index < 16; index += 1) await methods.checksRefresh({ worktree: `wt_${index}` }, {} as never)
+    expect(env.view('wt_A').checks.worktree).toBeNull()
+    release!({ id: 'wt_A', kind: 'folder' } as never)
+    expect(await older).toMatchObject({ ok: false, stale: true })
+    expect(env.view('wt_A').checks.worktree).toBeNull()
+  })
+
+  test('a recreated entry never reuses a generation held by an old in-flight refresh', async () => {
+    const { env, methods } = unitEnv()
+    const rejects: ((error: Error) => void)[] = []
+    env.resolve = async (params) => ({ id: String(params.worktree), kind: params.worktree === 'A' ? 'git' : 'folder' }) as never
+    env.call = () => new Promise((_resolve, reject) => { rejects.push(reject) })
+    const old = methods.checksRefresh({ worktree: 'A' }, {} as never)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const oldGeneration = env.view('A').checks.generation
+    expect(await methods.checksInvalidate({ worktree: 'A' }, {} as never)).toMatchObject({ invalidated: true })
+    for (let index = 0; index < 16; index += 1) await methods.checksRefresh({ worktree: `B${index}` }, {} as never)
+    expect(env.view('A').checks.worktree).toBeNull()
+    const fresh = methods.checksRefresh({ worktree: 'A' }, {} as never)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(env.view('A').checks.generation).toBeGreaterThan(oldGeneration)
+    expect(env.view('A').checks.loading).toBe(true)
+    rejects[0]!(new Error('OLD request failed'))
+    expect(await old).toMatchObject({ ok: false, stale: true })
+    expect(env.view('A').checks).toMatchObject({ loading: true, error: null })
+    rejects[1]!(new Error('new failure'))
+    expect(await fresh).toMatchObject({ ok: false, error: 'new failure', stale: false })
+  })
+
+  test('a just-completed newest entry is never evicted when every slot was loading', async () => {
+    const { env, methods } = unitEnv()
+    const pending = new Map<string, (error: Error) => void>()
+    env.resolve = async (params) => ({ id: String(params.worktree), kind: 'git' }) as never
+    env.call = (_method, params) => new Promise((_resolve, reject) => { pending.set(String(params?.worktree), reject) })
+    const tasks = Array.from({ length: 40 }, (_, index) => methods.checksRefresh({ worktree: `wt_${index}` }, {} as never))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(Object.keys(env.read().checksByWorktree).length).toBe(16)
+    const admitted = [...pending.keys()]
+    expect(admitted.length).toBe(16)
+    const busy = await Promise.all(tasks.slice(16))
+    for (let index = 0; index < busy.length; index += 1) {
+      expect(busy[index]).toEqual({
+        ok: false, worktree: `wt_${index + 16}`, error: 'Too many workspaces are refreshing. Try again shortly.', stale: false
+      })
+    }
+    const newest = admitted[admitted.length - 1]!
+    pending.get(newest)!(new Error('status failed'))
+    expect(await tasks[Number(newest.slice(3))]).toMatchObject({ ok: false, worktree: newest, stale: false })
+    expect(env.view(newest).checks.worktree).toBe(newest)
+    for (const [id, reject] of pending) if (id !== newest) reject(new Error('status failed'))
+    await Promise.all(tasks)
+    expect(Object.keys(env.read().checksByWorktree).length).toBeLessThanOrEqual(16)
+  })
 })

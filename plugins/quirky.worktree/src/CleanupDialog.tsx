@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
-import { Badge, Button, Dialog } from '@quirky/ui'
+import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
 import type { CleanupCandidate, CleanupRemovalResult, CleanupSelection } from './control-types'
 
 type Preview = { generatedAt: number; candidates: CleanupCandidate[] }
@@ -8,6 +8,14 @@ type Props = { context: UiPluginContext; onClose(): void }
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+const worktreeCount = (count: number) => `${count} worktree${count === 1 ? '' : 's'}`
+
+/** The reason a worktree is offered for cleanup, in plain words; never the raw reason code. */
+function reasonText(candidate: CleanupCandidate): string {
+  if (candidate.reason === 'idle-clean') return 'Idle for at least 30 days'
+  return candidate.eligible ? 'Archived over 7 days ago, no unpushed work' : 'Archived over 7 days ago'
 }
 
 export function CleanupDialog({ context, onClose }: Props) {
@@ -24,7 +32,7 @@ export function CleanupDialog({ context, onClose }: Props) {
     [candidates, selected]
   )
 
-  const refresh = useCallback(async () => {
+  async function refresh() {
     setLoading(true)
     try {
       const next = await context.call('quirky.worktree/cleanupPreview') as Preview
@@ -36,9 +44,9 @@ export function CleanupDialog({ context, onClose }: Props) {
     } finally {
       setLoading(false)
     }
-  }, [context])
+  }
 
-  useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => { void refresh() }, [context])
 
   const toggleSelected = (candidate: CleanupCandidate, checked: boolean) => {
     setSelected((current) => {
@@ -79,8 +87,8 @@ export function CleanupDialog({ context, onClose }: Props) {
     if (selectedCandidates.length === 0) return
     const names = selectedCandidates.map((candidate) => candidate.name).join(', ')
     const accepted = await context.confirm({
-      title: 'Delete selected worktrees?',
-      body: `This permanently removes ${names} through the normal safe worktree removal path. No force-delete or unverified-session bypass will be used.`,
+      title: `Delete ${worktreeCount(selectedCandidates.length)}?`,
+      body: `This permanently removes ${worktreeCount(selectedCandidates.length)} (${names}) through the normal safe worktree removal path. No force-delete or unverified-session bypass will be used.`,
       confirmLabel: 'Delete selected'
     })
     if (!accepted) return
@@ -98,22 +106,32 @@ export function CleanupDialog({ context, onClose }: Props) {
     }
   }
 
+  function onDialogClose() {
+    if (!busy) onClose()
+  }
+
   return (
-    <Dialog open title="Review worktree cleanup" onClose={() => { if (!busy) onClose() }} size="wide">
+    <Dialog open title="Clean up archived worktrees" onClose={onDialogClose} size="wide">
       <section className="ui-stack">
         <header>
           <p className="ui-text-muted">Inspect current blockers before permanently deleting selected local worktrees.</p>
         </header>
         <div className="ui-toolbar">
-          <Button type="button" disabled={busy || ignoredCount === 0} onClick={() => void restore()}>Restore ignored suggestions</Button>
+          <Button type="button" disabled={busy || ignoredCount === 0} onClick={() => void restore()}>Restore ignored</Button>
           <Button type="button" disabled={busy || loading} onClick={() => void refresh()}>Refresh preview</Button>
         </div>
-        {loading && <p className="ui-text-muted" role="status">Checking current worktree safety…</p>}
-        {error && <p className="ui-error-text" role="alert">{error}</p>}
-        {!loading && !error && candidates.length === 0 && <p className="ui-text-muted">No idle cleanup candidates.</p>}
+        {loading && <div role="status"><NoticeLine>Checking current worktree safety…</NoticeLine></div>}
+        {error && <InlineError message={error} />}
+        {!loading && !error && candidates.length === 0 && (
+          <div className="ui-stack">
+            <EmptyState message="Nothing to clean up" />
+            <p className="ui-text-muted">Worktrees archived for 7 days or more with nothing unpushed, or idle for 30 days or more, show up here.</p>
+          </div>
+        )}
         <ul className="ui-tree ui-stack">
           {candidates.map((candidate) => (
             <li key={candidate.worktreeId} className="ui-tree-item ui-stack">
+              <div className="worktree-cleanup-item">
               <label className="ui-checkbox-label">
                 <input
                   type="checkbox"
@@ -124,7 +142,8 @@ export function CleanupDialog({ context, onClose }: Props) {
                 />
                 <span>{candidate.name}</span>
               </label>
-              <span className="ui-text-muted">{candidate.reason === 'idle-clean' ? 'Idle for at least 30 days' : candidate.reason}</span>
+              <span className="worktree-cleanup-item__reason">{reasonText(candidate)}</span>
+              </div>
               {candidate.blockers.length > 0 && (
                 <ul className="ui-tree">
                   {candidate.blockers.map((blocker, index) => <li className="ui-tree-item" key={`${blocker.code}:${index}`}><strong>{blocker.code}</strong>: {blocker.detail}</li>)}
@@ -132,7 +151,7 @@ export function CleanupDialog({ context, onClose }: Props) {
               )}
               {candidate.ignored
                 ? <Badge>Ignored</Badge>
-                : <Button type="button" disabled={busy || loading} onClick={() => void ignore(candidate)}>Ignore {candidate.name}</Button>}
+                : <Button type="button" aria-label={`Ignore ${candidate.name}`} disabled={busy || loading} onClick={() => void ignore(candidate)}>Ignore</Button>}
             </li>
           ))}
         </ul>
@@ -140,7 +159,9 @@ export function CleanupDialog({ context, onClose }: Props) {
           <ul className="ui-tree" aria-label="Cleanup results">
             {results.map((result) => (
               <li key={result.worktreeId} className="ui-tree-item">
-                {result.removed ? `Removed ${result.worktreeId}` : `Kept ${result.worktreeId}: ${result.error ?? 'not removed'}`}
+                {result.removed
+                  ? `Removed ${result.worktreeId}`
+                  : <InlineError message={`Kept ${result.worktreeId}: ${result.error ?? 'not removed'}`} />}
               </li>
             ))}
           </ul>

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Button } from '@quirky/ui'
+import { useEffect, useRef, useState } from 'react'
+import { Button, InlineError } from '@quirky/ui'
 import type { MobileTerminalState, UiPluginContext } from '@quirky/protocol'
 
 
@@ -9,83 +9,97 @@ function messageOf(error: unknown): string {
 
 export function MobileDriverOverlay({ context, sessionId }: { context: UiPluginContext; sessionId: string }) {
   const [state, setState] = useState<MobileTerminalState | null>(null)
-  const [minimized, setMinimized] = useState(false)
+  const [readError, setReadError] = useState<string | null>(null)
+  const mounted = useRef(false)
+  const generation = useRef(0)
+  const readSequence = useRef(0)
+  const target = useRef({ context, sessionId })
+  target.current = { context, sessionId }
 
-  const refresh = useCallback(async () => {
+  const refresh = async () => {
+    if (!mounted.current || target.current.context !== context || target.current.sessionId !== sessionId) return
+    const epoch = generation.current
+    const sequence = ++readSequence.current
     try {
       const result = (await context.call('quirky.terminal/mobileState', { session: sessionId })) as { terminals: MobileTerminalState[] }
+      if (!mounted.current || epoch !== generation.current || sequence !== readSequence.current) return
       setState(result.terminals.find((terminal) => terminal.session === sessionId) ?? null)
+      setReadError(null)
     } catch (error) {
-      setState(null)
-      context.log(`could not read mobile terminal state: ${messageOf(error)}`)
+      if (!mounted.current || epoch !== generation.current || sequence !== readSequence.current) return
+      setReadError(`Could not read mobile terminal state: ${messageOf(error)}`)
+    }
+  }
+  const refreshRef = useRef(refresh)
+  refreshRef.current = refresh
+
+  useEffect(() => {
+    mounted.current = true
+    generation.current += 1
+    setState(null)
+    setReadError(null)
+    void refreshRef.current()
+    const unsubscribe = context.subscribe((event) => {
+      if (event.type === 'quirky.terminal/mobileChanged') void refreshRef.current()
+    })
+    return () => {
+      mounted.current = false
+      generation.current += 1
+      unsubscribe()
     }
   }, [context, sessionId])
 
-  useEffect(() => {
-    void refresh()
-    const unsubscribe = context.subscribe(async (event) => {
-      if (event.type === 'quirky.terminal/mobileChanged') await refresh()
-    })
-    return unsubscribe
-  }, [context, refresh])
-
-  const run = async (method: 'takeBack' | 'restoreFit', params: Record<string, unknown>) => {
+  const takeBack = async (params: { session?: string }) => {
     try {
-      await context.call(`quirky.terminal/${method}`, params)
-      await refresh()
+      await context.call('quirky.terminal/takeBack', params)
     } catch (error) {
-      const title = method === 'takeBack' ? 'Could not take back terminal' : 'Could not restore terminal size'
-      context.toast(title, messageOf(error), { kind: 'error' })
+      context.toast('Could not take back terminal', messageOf(error), { kind: 'error' })
+    } finally {
+      await refresh()
+    }
+  }
+  const restoreFit = async (params: { session?: string }) => {
+    try {
+      await context.call('quirky.terminal/restoreFit', params)
+    } catch (error) {
+      context.toast('Could not restore terminal size', messageOf(error), { kind: 'error' })
+    } finally {
       await refresh()
     }
   }
 
-  if (!state) return null
-
-  const phoneFit = state.driver === null && state.phoneFit
-  const allParams = {}
-  const sessionParams = { session: sessionId }
+  const phoneFit = state?.driver === null && state.phoneFit
   const title = phoneFit ? 'Still sized for your phone' : 'Your phone is in control'
   const description = phoneFit ? 'Your phone session ended. Restore to fit this window.' : 'Desktop typing is paused. Output keeps streaming.'
 
-  if (minimized) {
-    return (
-      <div data-mobile-driver-overlay className="terminal-mobile-driver" role="status">
-        <strong>{phoneFit ? 'Still sized for your phone' : 'Phone driving'}</strong>
-        <span className="terminal-mobile-driver__minimized-actions">
-          {phoneFit ? (
-            <Button aria-label="Restore this terminal" onClick={() => void run('restoreFit', sessionParams)}>Restore</Button>
-          ) : (
-            <Button aria-label="Take back this terminal" onClick={() => void run('takeBack', sessionParams)}>Take back</Button>
-          )}
-          <Button aria-label="Restore phone driving controls" onClick={() => setMinimized(false)}>Expand</Button>
-        </span>
-      </div>
-    )
-  }
+  if (!state && !readError) return null
 
   return (
-    <section data-mobile-driver-overlay className="terminal-mobile-driver" aria-label={title}>
-      <div className="terminal-mobile-driver__summary">
-        <div>
-          <strong>{title}</strong>
-          <p className="terminal-mobile-driver__description">{description}</p>
-        </div>
-        <Button aria-label="Minimize phone driving controls" onClick={() => setMinimized(true)}>Minimize</Button>
-      </div>
-      <div className="terminal-mobile-driver__actions">
-        {phoneFit ? (
-          <>
-            <Button aria-label="Restore this terminal" onClick={() => void run('restoreFit', sessionParams)}>Restore</Button>
-            <Button onClick={() => void run('restoreFit', allParams)}>Restore all</Button>
-          </>
-        ) : (
-          <>
-            <Button aria-label="Take back this terminal" onClick={() => void run('takeBack', sessionParams)}>Take back</Button>
-            <Button onClick={() => void run('takeBack', allParams)}>Take back all</Button>
-          </>
-        )}
-      </div>
-    </section>
+    <div className="terminal-mobile-driver" style={{ display: 'grid', gap: 'var(--ui-space-8)' }}>
+      {readError ? <InlineError message={readError} action={{ label: 'Retry', onAction: () => void refresh() }} /> : null}
+      {state ? (
+        <section data-mobile-driver-overlay aria-label={title}>
+          <div className="terminal-mobile-driver__summary">
+            <strong>{title}</strong>
+            {phoneFit ? (
+              <Button aria-label="Restore this terminal" onClick={() => void restoreFit({ session: sessionId })}>Restore</Button>
+            ) : (
+              <Button aria-label="Take back this terminal" onClick={() => void takeBack({ session: sessionId })}>Take back</Button>
+            )}
+          </div>
+          <details className="ui-disclosure" open>
+            <summary>Phone driving controls</summary>
+            <p className="terminal-mobile-driver__description">{description}</p>
+            <div className="terminal-mobile-driver__actions">
+              {phoneFit ? (
+                <Button onClick={() => void restoreFit({})}>Restore all</Button>
+              ) : (
+                <Button onClick={() => void takeBack({})}>Take back all</Button>
+              )}
+            </div>
+          </details>
+        </section>
+      ) : null}
+    </div>
   )
 }

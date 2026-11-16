@@ -1,4 +1,5 @@
 import { nativeBrowserCapabilityForWindow } from '../native-browser'
+import { UI_READ_TIMEOUT_MS } from '../connection'
 import {
   pluginApiCompatibilityError,
   DEFAULT_THEME,
@@ -6,10 +7,13 @@ import {
   chordFromKeyEvent,
   evaluateWhen,
   whenMentions,
+  type CallOptions,
   type QuirkyEvent,
+  type TerminalStreamOptions,
   type SettingInfo,
   type ToastKind,
   type ToastOptions,
+  type MountCleanup,
   type UiCommandEntry,
   type UiKeybinding,
   type UiLayout,
@@ -17,6 +21,8 @@ import {
   type UiPluginContext,
   type UiPluginModule,
   type UiSlotEntry,
+  type UiSubscribeOptions,
+  type UiExecuteCommandOptions,
   type UiState,
   type UiToolPlacement,
   type UiToolResize,
@@ -26,14 +32,15 @@ import {
   type DesktopWindowSummary
 } from '@quirky/protocol'
 import type { DesktopWindowRoute } from '../desktop-bridge'
+import { THEME_VARIABLE_NAMES } from './appearance'
 
 /** What the host needs from its surroundings; the React shell wires these to `Connection` and the browser. */
 export type HostDeps = {
-  call(method: string, params: Record<string, unknown>): Promise<unknown>
+  call(method: string, params: Record<string, unknown>, options?: CallOptions): Promise<unknown>
   onEvent(listener: (event: QuirkyEvent) => void): () => void
   importModule(url: string): Promise<unknown>
   /** Binary terminal frames for stream `streamId`; the returned function unsubscribes. */
-  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void
+  onStream(streamId: number, listener: (bytes: Uint8Array) => void, options?: TerminalStreamOptions): () => void
   /** Connection status changes as plugins see them; the returned function unsubscribes. */
   onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
   /** The shell's confirm dialog; resolves true when the person confirms. */
@@ -41,6 +48,8 @@ export type HostDeps = {
   toast(title: string, body: string, kind: ToastKind, options?: ToastOptions): void
   /** Dismisses the toast keyed `key` and runs its `onDismiss`, for the daemon's `ui.toast.dismiss`; nothing happens when none has it. */
   dismissToast?(key: string): void
+  /** Reserved daemon host operation; never looked up as a contributed plugin command. */
+  browserHostControl?(params: unknown): Promise<unknown>
   log(message: string): void
   readClipboardText?: () => Promise<string>
   /** Source paths of the window's latest native file drop; absent outside the desktop shell. */
@@ -80,6 +89,8 @@ export type HostState = {
   badges: Record<string, number>
   /** Panel ID to the tooltip its plugin gave the badge; absent means the default. */
   badgeTitles: Record<string, string>
+  /** Panel ID to the tone its plugin gave the badge. */
+  badgeTones: Record<string, 'needs-you' | 'failing'>
   /** `--<token>` to color for every theme token of the active theme. */
   themeVariables: Record<string, string>
 }
@@ -92,7 +103,7 @@ type Session = {
   readonly pluginId: string
   readonly allowed: ReadonlySet<string>
   readonly provided: Map<string, unknown>
-  readonly listeners: Set<(event: QuirkyEvent) => void | Promise<void>>
+  readonly listeners: Map<(event: QuirkyEvent) => void | Promise<void>, string | null | undefined>
   /** Undo for everything the session registered outside itself (stream, layout and connection listeners, badges). */
   readonly cleanups: Set<() => void>
   activating: boolean
@@ -124,7 +135,10 @@ type MountHandle = {
   readonly id: string
   readonly plugin: string
   readonly module: UiSlotEntry['module']
-  cleanup?: () => void
+  readonly kind: UiSlotEntry['kind'] | undefined
+  input: unknown
+  state: 'pending' | 'mounting' | 'mounted' | 'failed'
+  cleanup?: MountCleanup
   afterCleanup?: () => void
   finishRelease?: () => void
   released: boolean
@@ -137,7 +151,9 @@ type EmbeddedHandle = {
   readonly id: string
   /** The plugin that owns the view. */
   readonly plugin: string
-  cleanup?: () => void
+  input: unknown
+  state: 'pending' | 'mounted' | 'failed'
+  cleanup?: MountCleanup
   released: boolean
 }
 
@@ -149,8 +165,9 @@ class NoCommand extends Error {
   }
 }
 
-/** The routed request id the daemon uses to dismiss a toast; no plugin command can have it. */
+/** Reserved host request identities bypass contributed plugin command lookup. */
 const TOAST_DISMISS = 'ui.toast.dismiss'
+const BROWSER_HOST_CONTROL = 'ui.browserHost.control'
 
 const DEFAULT_ACTIVATION_TIMEOUT_MS = 10000
 
@@ -173,7 +190,7 @@ const TERMINAL_KEYS_FIRST = 'terminalKeysFirst'
 function themeVariablesOf(model: UiModel): Record<string, string> {
   const theme = model.themes.find((candidate) => candidate.id === model.theme.active) ?? DEFAULT_THEME
   const variables: Record<string, string> = {}
-  for (const token of THEME_TOKENS) variables[`--${token}`] = theme.colors[token] ?? DEFAULT_THEME.colors[token]
+  for (const token of THEME_TOKENS) variables[THEME_VARIABLE_NAMES[token]] = theme.colors[token] ?? DEFAULT_THEME.colors[token]
   return variables
 }
 
@@ -210,6 +227,7 @@ export class WindowPluginHost {
     openPanel: null,
     badges: {},
     badgeTitles: {},
+    badgeTones: {},
     themeVariables: {}
   }
   private readonly listeners = new Set<() => void>()
@@ -229,6 +247,7 @@ export class WindowPluginHost {
   private readonly nativeBrowser: NativeBrowserCapability
 
   private refreshChain: Promise<unknown> = Promise.resolve()
+  private queuedRefresh: Promise<void> | null = null
   /** Events are newer than any `ui.state` snapshot whose request was already in flight. */
   private layoutEventVersion = 0
   /** `setting.changed` values seen while a refresh fetches; they are newer than that refresh's snapshot. */
@@ -278,11 +297,16 @@ export class WindowPluginHost {
   /**
    * Fetches the UI model, settings and layout, then reconciles: mounted contributions that left or
    * changed owner are cleaned up, plugins that are no longer enabled are deactivated and newly
-   * enabled ones start loading in the background. Refreshes run one after another; the last one's
-   * data wins.
+   * enabled ones start loading in the background. Requests share one queued refresh.
    */
   refresh(): Promise<void> {
-    const run = this.refreshChain.then(() => this.fetchAndReconcile())
+    if (this.queuedRefresh) return this.queuedRefresh
+    let run!: Promise<void>
+    run = this.refreshChain.then(() => {
+      if (this.queuedRefresh === run) this.queuedRefresh = null
+      return this.fetchAndReconcile()
+    })
+    this.queuedRefresh = run
     this.refreshChain = run.catch(() => undefined)
     return run
   }
@@ -298,33 +322,30 @@ export class WindowPluginHost {
     element: HTMLElement,
     props?: { input?: unknown },
     options?: { deferCleanup?: boolean; afterCleanup?: () => void }
-  ): () => void {
+  ): MountCleanup {
     const entry = this.state.model ? findSlot(this.state.model, id) : undefined
-    if (!entry) {
-      this.setSlot(id, { status: 'error', message: `no contribution ${id}` })
-      let released = false
-      return () => {
-        if (released) return
-        released = true
-        const finish = () => {
-          options?.afterCleanup?.()
-          this.setSlot(id, null)
-        }
-        if (options?.deferCleanup) queueMicrotask(finish)
-        else finish()
-      }
-    }
     const handle: MountHandle = {
       id,
-      plugin: entry.plugin,
-      module: entry.module,
+      plugin: entry?.plugin ?? '',
+      module: entry?.module ?? '',
+      kind: entry?.kind,
+      input: props?.input,
+      state: entry ? 'pending' : 'failed',
       afterCleanup: options?.afterCleanup,
       released: false
     }
+    if (!entry) {
+      this.setSlot(id, { status: 'error', message: `no contribution ${id}` })
+      const unmount: MountCleanup = () => this.release(handle, options?.deferCleanup ?? false)
+      unmount.updateInput = (input) => this.updateMountInput(handle, input)
+      return unmount
+    }
     this.mounts.add(handle)
     this.setSlot(id, { status: 'loading' })
-    void this.runMount(handle, entry, element, props)
-    return () => this.release(handle, options?.deferCleanup ?? false)
+    void this.runMount(handle, entry, element)
+    const unmount: MountCleanup = () => this.release(handle, options?.deferCleanup ?? false)
+    unmount.updateInput = (input) => this.updateMountInput(handle, input)
+    return unmount
   }
 
   /**
@@ -498,12 +519,12 @@ export class WindowPluginHost {
       // A layout snapshot and its reports are for this exact live UI connection.
       const connId = this.windowConnId ?? await this.resolveWindowConnId()
       const layoutVersion = this.layoutEventVersion
-      const layout = (this.deps.call('ui.window.state', { connId }) as Promise<UiState>).then((state) => {
+      const layout = (this.deps.call('ui.window.state', { connId }, { timeoutMs: UI_READ_TIMEOUT_MS }) as Promise<UiState>).then((state) => {
         if (!this.stopped && layoutVersion === this.layoutEventVersion) this.setLayout(state.layout)
       })
       const [fetchedModel, fetchedSettings] = await Promise.all([
-        this.deps.call('ui.contributions', {}) as Promise<UiModel>,
-        this.deps.call('setting.list', {}) as Promise<SettingInfo[]>,
+        this.deps.call('ui.contributions', {}, { timeoutMs: UI_READ_TIMEOUT_MS }) as Promise<UiModel>,
+        this.deps.call('setting.list', {}, { timeoutMs: UI_READ_TIMEOUT_MS }) as Promise<SettingInfo[]>,
         layout
       ])
       model = fetchedModel
@@ -513,17 +534,24 @@ export class WindowPluginHost {
     }
     if (this.stopped) return
     const settings = snapshot.map((s) => (newer.has(s.id) ? { ...s, value: newer.get(s.id)! } : s))
-    // Tear down nested plugin roots before React sees slots whose containers are disappearing.
-    this.releaseStaleMounts(model)
-    this.commit({ model, settings, themeVariables: themeVariablesOf(model) })
+    const same = sameJson(model, this.state.model) && sameJson(settings, this.state.settings)
+    if (!same) {
+      // Tear down nested plugin roots before React sees slots whose containers are disappearing.
+      this.releaseStaleMounts(model)
+      this.commit({ model, settings, themeVariables: themeVariablesOf(model) })
+    }
     await this.reconcile(model)
   }
 
   private async reconcile(model: UiModel): Promise<void> {
-    const onPanel = ([id]: [string, unknown]) => model.panels.some((panel) => panel.id === id)
+    const onPanel = ([id]: [string, unknown]) => model.panels.some((panel) => panel.id === id) || model.sidebarSections.some((section) => section.id === id)
     const badges = Object.entries(this.state.badges).filter(onPanel)
     if (badges.length !== Object.keys(this.state.badges).length) {
-      this.commit({ badges: Object.fromEntries(badges), badgeTitles: Object.fromEntries(Object.entries(this.state.badgeTitles).filter(onPanel)) })
+      this.commit({
+        badges: Object.fromEntries(badges),
+        badgeTitles: Object.fromEntries(Object.entries(this.state.badgeTitles).filter(onPanel)),
+        badgeTones: Object.fromEntries(Object.entries(this.state.badgeTones).filter(onPanel))
+      })
     }
     for (const handle of [...this.embedded]) {
       const entry = model.views.find((view) => view.id === handle.id)
@@ -588,16 +616,15 @@ export class WindowPluginHost {
     }
   }
 
-  private async runMount(
-    handle: MountHandle,
-    entry: UiSlotEntry,
-    element: HTMLElement,
-    props?: { input?: unknown }
-  ): Promise<void> {
+  private async runMount(handle: MountHandle, entry: UiSlotEntry, element: HTMLElement): Promise<void> {
+    handle.state = 'mounting'
     try {
       await this.ensureLoaded(entry.plugin)
     } catch (error) {
-      if (!handle.released) this.setSlot(handle.id, { status: 'error', message: messageOf(error) })
+      if (!handle.released) {
+        handle.state = 'failed'
+        this.setSlot(handle.id, { status: 'error', message: messageOf(error) })
+      }
       return
     }
     if (handle.released) return
@@ -614,12 +641,12 @@ export class WindowPluginHost {
       this.sendReport(handle, state)
     }
     try {
-      cleanup = implementation(element, entry.kind === 'view' ? { input: props?.input, report } : { report })
+      cleanup = implementation(element, entry.kind === 'view' ? { input: handle.input, report } : { report })
     } catch (error) {
       if (!handle.released) this.failSlot(handle, `${entry.plugin}: ${messageOf(error)}`)
       return
     }
-    const cleanupFn = typeof cleanup === 'function' ? (cleanup as () => void) : undefined
+    const cleanupFn = typeof cleanup === 'function' ? (cleanup as MountCleanup) : undefined
     // A breach or concurrent disposal may release the handle during the mount callback.
     if (handle.released || this.runtimes.get(entry.plugin)?.session !== session) {
       if (handle.released && handle.finishRelease) handle.cleanup = cleanupFn
@@ -627,37 +654,42 @@ export class WindowPluginHost {
       return
     }
     handle.cleanup = cleanupFn
+    handle.state = 'mounted'
     this.setSlot(handle.id, { status: 'mounted' })
     // the daemon learns an overlay is mounted from a report, so one that stays silent still sends this
     if (entry.kind === 'overlay' && handle.report === undefined) report({})
   }
 
-  private async runEmbedded(handle: EmbeddedHandle, entry: UiSlotEntry, element: HTMLElement, input: unknown): Promise<void> {
+  private async runEmbedded(handle: EmbeddedHandle, entry: UiSlotEntry, element: HTMLElement): Promise<void> {
     try {
       await this.ensureLoaded(entry.plugin)
     } catch {
+      handle.state = 'failed'
       return
     }
     if (handle.released) return
     const session = this.runtimes.get(entry.plugin)?.session
     const implementation = session?.provided.get(handle.id)
     if (typeof implementation !== 'function') {
+      handle.state = 'failed'
       this.deps.log(`${entry.plugin} did not provide ${handle.id}`)
       return
     }
     let cleanup: unknown
     try {
-      cleanup = implementation(element, { input })
+      cleanup = implementation(element, { input: handle.input })
     } catch (error) {
+      handle.state = 'failed'
       if (!handle.released) this.deps.log(`${entry.plugin}: ${messageOf(error)}`)
       return
     }
-    const cleanupFn = typeof cleanup === 'function' ? (cleanup as () => void) : undefined
+    const cleanupFn = typeof cleanup === 'function' ? (cleanup as MountCleanup) : undefined
     if (handle.released || this.runtimes.get(entry.plugin)?.session !== session) {
       this.runCleanup(entry.plugin, cleanupFn)
       return
     }
     handle.cleanup = cleanupFn
+    handle.state = 'mounted'
   }
 
   private releaseEmbedded(handle: EmbeddedHandle): void {
@@ -668,7 +700,43 @@ export class WindowPluginHost {
     this.runCleanup(handle.plugin, cleanup)
   }
 
+  private updateEmbeddedInput(handle: EmbeddedHandle, input: unknown): boolean {
+    if (handle.released || handle.state === 'failed') return false
+    if (handle.state === 'pending') {
+      handle.input = input
+      return true
+    }
+    try {
+      if (handle.cleanup?.updateInput?.(input) !== true || handle.released) return false
+      handle.input = input
+      return true
+    } catch (error) {
+      this.deps.log(`${handle.plugin}: updateInput failed: ${messageOf(error)}`)
+      return false
+    }
+  }
+
+  private updateMountInput(handle: MountHandle, input: unknown): boolean {
+    if (handle.released || handle.state === 'failed' || handle.kind !== 'view') return false
+    if (handle.state === 'pending' || handle.state === 'mounting') {
+      handle.input = input
+      return true
+    }
+    if (handle.state !== 'mounted') return false
+    try {
+      const updateInput = handle.cleanup?.updateInput
+      if (typeof updateInput !== 'function' || updateInput.call(handle.cleanup, input) !== true) return false
+      if (handle.released || handle.state !== 'mounted') return false
+      handle.input = input
+      return true
+    } catch (error) {
+      this.deps.log(`${handle.plugin}: updateInput failed: ${messageOf(error)}`)
+      return false
+    }
+  }
+
   private failSlot(handle: MountHandle, message: string): void {
+    handle.state = 'failed'
     this.setSlot(handle.id, { status: 'error', message })
     this.deps.log(message.startsWith(handle.plugin) ? message : `${handle.plugin}: ${message}`)
   }
@@ -687,6 +755,7 @@ export class WindowPluginHost {
       return
     }
     handle.released = true
+    handle.state = 'failed'
     const finish = () => {
       if (handle.finishRelease !== finish) return
       handle.finishRelease = undefined
@@ -792,7 +861,7 @@ export class WindowPluginHost {
       pluginId,
       allowed: new Set(declared.provides),
       provided: new Map(),
-      listeners: new Set(),
+      listeners: new Map(),
       cleanups: new Set(),
       activating: false,
       violation: null,
@@ -927,13 +996,13 @@ export class WindowPluginHost {
       }
       this.mounts.delete(handle)
       handle.released = true
+      handle.state = 'failed'
       const cleanup = handle.cleanup
       handle.cleanup = undefined
-      try {
-        cleanup?.()
-      } catch (error) {
-        this.deps.log(`${handle.plugin}: cleanup failed: ${messageOf(error)}`)
-      }
+      this.runCleanup(handle.plugin, cleanup)
+      const afterCleanup = handle.afterCleanup
+      handle.afterCleanup = undefined
+      this.runCleanup(handle.plugin, afterCleanup)
       this.setSlot(handle.id, { status: 'error', message })
       if (handle.report) this.callQuietly('ui.report', { slot: handle.id, state: null })
     }
@@ -995,18 +1064,37 @@ export class WindowPluginHost {
         if (!this.deps.nativeDropPaths) return null
         return this.deps.nativeDropPaths(Array.from(files, (file) => file.name))
       }),
-      subscribe: live((listener: (event: QuirkyEvent) => void | Promise<void>) => {
-        session.listeners.add(listener)
+      subscribe: live((listener: (event: QuirkyEvent) => void | Promise<void>, options?: UiSubscribeOptions) => {
+        if (options !== undefined && (options === null || typeof options !== 'object')) {
+          throw new Error('subscribe: options must be an object')
+        }
+        const worktreeId = options?.worktreeId
+        if (worktreeId !== undefined && worktreeId !== null && typeof worktreeId !== 'string') {
+          throw new Error('subscribe: worktreeId must be a string or null')
+        }
+        session.listeners.set(listener, worktreeId)
         return () => {
           session.listeners.delete(listener)
         }
       }),
       getSetting: live((name: string) => this.getSetting(pluginId, name)),
-      executeCommand: live(async (id: string, args?: unknown) => {
+      executeCommand: live(async (id: string, args?: unknown, options?: UiExecuteCommandOptions) => {
+        if (options !== undefined && (options === null || typeof options !== 'object' || Array.isArray(options))) {
+          throw new Error('executeCommand: options must be an object')
+        }
+        const activateOwner = options?.activateOwner
+        if (activateOwner !== undefined && typeof activateOwner !== 'boolean') {
+          throw new Error('executeCommand: options.activateOwner must be a boolean')
+        }
         const command = this.requireCommand(id)
         const route = this.state.windowRoute
         if (route) {
-          await this.deps.call('desktop.window.runOwnerCommand', { windowId: route.windowId, id, args: args ?? {} })
+          await this.deps.call('desktop.window.runOwnerCommand', {
+            windowId: route.windowId,
+            id,
+            args: args ?? {},
+            ...(activateOwner === false ? { activateOwner: false } : {})
+          })
           return
         }
         await this.invokeCommand(command, args)
@@ -1042,8 +1130,8 @@ export class WindowPluginHost {
         this.layoutListeners.add(listener)
         return track(() => this.layoutListeners.delete(listener))
       }),
-      onStream: live((streamId: number, listener: (bytes: Uint8Array) => void) =>
-        track(this.deps.onStream(streamId, listener))
+      onStream: live((streamId: number, listener: (bytes: Uint8Array) => void, options?: TerminalStreamOptions) =>
+        track(this.deps.onStream(streamId, listener, options))
       ),
       onConnection: live((listener: (status: 'connected' | 'reconnecting') => void) =>
         track(this.deps.onConnection(listener))
@@ -1074,16 +1162,19 @@ export class WindowPluginHost {
       mountView: live((viewId: string, element: HTMLElement, input?: unknown) => {
         const entry = this.state.model?.views.find((candidate) => candidate.id === viewId)
         if (!entry) throw new Error(`no contribution ${viewId}`)
-        const handle: EmbeddedHandle = { id: viewId, plugin: entry.plugin, released: false }
+        const handle: EmbeddedHandle = { id: viewId, plugin: entry.plugin, input, state: 'pending', released: false }
         this.embedded.add(handle)
-        void this.runEmbedded(handle, entry, element, input)
-        return track(() => this.releaseEmbedded(handle))
+        void this.runEmbedded(handle, entry, element)
+        const cleanup: MountCleanup = track(() => this.releaseEmbedded(handle))
+        cleanup.updateInput = (next) => this.updateEmbeddedInput(handle, next)
+        return cleanup
       }),
-      setPanelBadge: live((panelId: string, count: number | null, title?: string) => {
-        if (this.state.model?.panels.find((panel) => panel.id === panelId)?.plugin !== pluginId) {
+      setPanelBadge: live((panelId: string, count: number | null, title?: string, tone?: 'needs-you' | 'failing') => {
+        const owner = [...(this.state.model?.panels ?? []), ...(this.state.model?.sidebarSections ?? [])].find((entry) => entry.id === panelId)?.plugin
+        if (owner !== pluginId) {
           throw new Error(`${panelId} is not a panel of ${pluginId}`)
         }
-        this.setBadge(panelId, count, title)
+        this.setBadge(panelId, count, title, tone)
         if (count !== null && !badged.has(panelId)) {
           badged.add(panelId)
           track(() => this.setBadge(panelId, null))
@@ -1140,7 +1231,7 @@ export class WindowPluginHost {
     this.deps.call(method, params).catch((error) => this.deps.log(`${method} failed: ${messageOf(error)}`))
   }
   private async resolveWindowConnId(): Promise<number> {
-    const route = await this.deps.call('ui.window.self', {}) as WindowRoute
+    const route = await this.deps.call('ui.window.self', {}, { timeoutMs: UI_READ_TIMEOUT_MS }) as WindowRoute
     if (!Number.isSafeInteger(route.connId) || route.connId < 1) {
       throw new Error('the daemon did not identify this UI connection')
     }
@@ -1221,14 +1312,17 @@ export class WindowPluginHost {
     })
   }
 
-  private setBadge(panelId: string, count: number | null, title?: string): void {
+  private setBadge(panelId: string, count: number | null, title?: string, tone: 'needs-you' | 'failing' = 'needs-you'): void {
     const { [panelId]: previous, ...rest } = this.state.badges
     const { [panelId]: previousTitle, ...restTitles } = this.state.badgeTitles
+    const { [panelId]: previousTone, ...restTones } = this.state.badgeTones
     const nextTitle = count === null ? undefined : title
-    if (previous === (count ?? undefined) && previousTitle === nextTitle) return
+    const nextTone = count === null ? undefined : tone
+    if (previous === (count ?? undefined) && previousTitle === nextTitle && previousTone === nextTone) return
     this.commit({
       badges: count === null ? rest : { ...rest, [panelId]: count },
-      badgeTitles: nextTitle === undefined ? restTitles : { ...restTitles, [panelId]: nextTitle }
+      badgeTitles: nextTitle === undefined ? restTitles : { ...restTitles, [panelId]: nextTitle },
+      badgeTones: nextTone === undefined ? restTones : { ...restTones, [panelId]: nextTone }
     })
   }
 
@@ -1268,7 +1362,15 @@ export class WindowPluginHost {
   private async answerCommand(requestId: string, id: string, args: unknown): Promise<void> {
     let reply: Record<string, unknown>
     try {
-      const result = id === TOAST_DISMISS ? this.dismissToast(args) : await this.runCommandForResult(id, args)
+      let result: unknown
+      if (id === BROWSER_HOST_CONTROL) {
+        if (!this.deps.browserHostControl) throw new Error('browser host controls are unavailable in this window')
+        result = await this.deps.browserHostControl(args)
+      } else if (id === TOAST_DISMISS) {
+        result = this.dismissToast(args)
+      } else {
+        result = await this.runCommandForResult(id, args)
+      }
       JSON.stringify(result)
       reply = { requestId, ...(result !== undefined ? { result } : {}) }
     } catch (error) {
@@ -1297,7 +1399,12 @@ export class WindowPluginHost {
     for (const runtime of this.runtimes.values()) {
       const session = runtime.session ?? runtime.pending
       if (!session) continue
-      for (const listener of [...session.listeners]) void this.notify(session, listener, event)
+      for (const [listener, worktreeId] of [...session.listeners]) {
+        if (worktreeId !== undefined && event.type.includes('/') &&
+          'worktreeId' in event && typeof event.worktreeId === 'string' &&
+          event.worktreeId !== worktreeId) continue
+        void this.notify(session, listener, event)
+      }
     }
   }
 

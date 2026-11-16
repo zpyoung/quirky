@@ -11,6 +11,8 @@ Status: Approved autonomously under LOOP.md; tech spec required (public launch c
 
 **Amendments:** 2026-10-27 — Supplemental final A1 closes the configuration-read resource boundary: settings/MCP files must resolve to regular files and contain at most 4 MiB. Symlinks to regular files remain supported. Invalid file types and oversized files produce visible settings errors or partial inspection errors instead of blocking or allocating without a bound; ordinary success flows and the SC-1–35 roster are unchanged.
 
+**Amendments:** 2026-11-14 — Panel, history and transcript loading, empty and error states use the shared UI components. Empty transcripts show “This transcript has no entries yet.” Panel and history actions use declared commands or public methods.
+
 ## Conceptual model
 Session Info inspects the agent in the focused terminal pane. The daemon joins session identity and live agent status with optional, session-correlated Claude telemetry. The UI and scripts consume the same projection. A shell pane, non-terminal view, missing pane or missing agent yields an explicit empty state rather than the last inspected agent.
 

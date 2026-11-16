@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { isRecord } from '../src/pr-data'
 import { bootHosting, type HostingTest } from './helpers'
 
+const unsupportedProviderRemote = 'https://bitbucket.org/test-owner/test-repo.git'
+
 const hosts: HostingTest[] = []
 afterEach(async () => {
   for (const host of hosts.splice(0).reverse()) await host.cleanup()
@@ -157,12 +159,24 @@ const restPull = (item) => {
   return response
 }
 const command = args[0]
+
 if (command === 'auth' && args[1] === 'status') {
-  if (state.authenticated === false) fail('You are not logged into any GitHub hosts. Run gh auth login.')
-  if (state.logoutAfterAuthStatus === true) {
-    state.authenticated = false
-    state.logoutAfterAuthStatus = false
+  state.authStatusCalls = (typeof state.authStatusCalls === 'number' ? state.authStatusCalls : 0) + 1
+  saveState(state)
+  if (state.pauseAuthStatusAt === state.authStatusCalls) {
+    state.authStatusStarted = true
     saveState(state)
+    const watcher = watch(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', { persistent: false })
+    for await (const _ of watcher) {
+      if (readState().releaseAuthStatus === true) break
+    }
+  }
+  const current = readState()
+  if (current.authenticated === false) fail('You are not logged into any GitHub hosts. Run gh auth login.')
+  if (current.logoutAfterAuthStatus === true) {
+    current.authenticated = false
+    current.logoutAfterAuthStatus = false
+    saveState(current)
   }
   out('Logged in to github.com account test-user (keyring)\n')
 } else if (command === 'auth' && args[1] === 'token') {
@@ -216,6 +230,25 @@ if (command === 'auth' && args[1] === 'status') {
           ref: { rules: { nodes: rules } }
         } } })
       }
+    } else if (query.includes('HostingPRMergeQueueEntry')) {
+      const owner = graphqlVariables.owner
+      const name = graphqlVariables.name
+      const number = Number(graphqlVariables.number)
+      if (typeof owner !== 'string' || typeof name !== 'string' || !Number.isSafeInteger(number)) {
+        fail('GitHub merge queue query omitted repository or pull request variables')
+      }
+      if (state.mergeQueueQueryFailure === true) fail('GitHub merge queue query unavailable')
+      const target = prs.find((item) => item.number === number && belongsTo(item, { owner, repo: name }))
+      if (!target) {
+        out({ data: { repository: { pullRequest: null } } })
+      } else {
+        const entries = Array.isArray(state.mergeQueueEntries) ? state.mergeQueueEntries : []
+        const position = entries.indexOf(number)
+        const mergeQueueEntry = Object.hasOwn(target, 'mergeQueueEntry')
+          ? target.mergeQueueEntry
+          : position < 0 ? null : { id: 'QUEUE_ENTRY_' + number, state: 'QUEUED', position: position + 1 }
+        out({ data: { repository: { pullRequest: { mergeQueueEntry } } } })
+      }
     } else {
       fail('Unsupported GitHub GraphQL fixture query')
     }
@@ -244,6 +277,12 @@ if (command === 'auth' && args[1] === 'status') {
           (stateFilter === 'all' || stateFilter === itemState)
       })
       out(matches.map(restPull))
+    } else if (/\/pulls\/\d+\/update-branch$/.test(endpoint)) {
+      const item = byNumber(apiNumber)
+      if (!item || !belongsTo(item, apiOwnerRepo)) fail('HTTP 404: Not Found')
+      if (method !== 'PUT') fail('Expected PUT request')
+      if (state.updateBranchFailure) fail(String(state.updateBranchFailure))
+      out({ message: 'Branch was successfully updated' })
     } else if (/\/pulls\/\d+\/merge-async(?:\/|$)/.test(endpoint)) {
       const mergeNumber = Number(endpoint.match(/\/pulls\/(\d+)\/merge-async/)?.[1])
       const item = byNumber(mergeNumber)
@@ -371,7 +410,16 @@ if (command === 'auth' && args[1] === 'status') {
     }
   }
 } else if (command === 'repo' && args[1] === 'view') {
-  out({ nameWithOwner: repo.owner + '/' + repo.repo, isFork: false, parent: null, defaultBranchRef: { name: state.defaultBranch ?? 'main' } })
+  if (state.pauseFinalRepoView === true && typeof state.authStatusCalls === 'number' && state.authStatusCalls >= 2) {
+    const watcher = watch(process.env.QUIRKY_TEST_FIXTURE_DIR ?? '', { persistent: false })
+    state.repoViewStarted = true
+    saveState(state)
+    for await (const _ of watcher) {
+      if (readState().releaseRepoView === true) break
+    }
+  }
+  const current = readState()
+  out({ nameWithOwner: repo.owner + '/' + repo.repo, isFork: false, parent: null, defaultBranchRef: { name: current.defaultBranch ?? 'main' } })
 } else if (command === 'pr' && args[1] === 'list') {
   const head = option('--head', '')
   if (head.includes(':')) fail('gh pr list --head does not support owner:branch')
@@ -528,6 +576,88 @@ function pushFeature(testHost: HostingTest): void {
   git(testHost, ['update-ref', 'refs/remotes/origin/feature', 'HEAD'])
 }
 
+
+function expectedTarget(testHost: HostingTest, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const repository = { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+  return {
+    branch: gitOutput(testHost, ['branch', '--show-current']),
+    headSha: gitOutput(testHost, ['rev-parse', 'HEAD']),
+    baseRefName: 'main',
+    repository,
+    headRepository: repository,
+    ...overrides
+  }
+}
+
+async function createDuringFinalAuthentication(
+  testHost: HostingTest,
+  params: Record<string, unknown>,
+  changeTarget: () => void | Promise<void>
+): Promise<{ pending: Promise<unknown> }> {
+  const state = recordOf(testHost.readState())
+  testHost.writeState({ ...state, pauseAuthStatusAt: 2 })
+  const abort = new AbortController()
+  const authStarted = waitForState(testHost, 'authStatusStarted', abort.signal)
+  const creating = testHost.call('create', params)
+  try {
+    const reachedAuth = await Promise.race([
+      authStarted.then(() => true),
+      creating.then(() => false, () => false)
+    ])
+    if (reachedAuth) await changeTarget()
+  } finally {
+    abort.abort()
+    const current = testHost.readState()
+    if (isRecord(current)) testHost.writeState({ ...current, releaseAuthStatus: true })
+  }
+  return { pending: creating }
+}
+
+async function createDuringFinalBaseLookup(
+  testHost: HostingTest,
+  params: Record<string, unknown>,
+  changeTarget: () => void | Promise<void>
+): Promise<{ pending: Promise<unknown>; pausedState: unknown }> {
+  const state = recordOf(testHost.readState())
+  testHost.writeState({ ...state, pauseFinalRepoView: true })
+  const abort = new AbortController()
+  const repoViewStarted = waitForState(testHost, 'repoViewStarted', abort.signal)
+  const creating = testHost.call('create', params)
+  let pausedState: unknown
+  try {
+    const outcome = await Promise.race([
+      repoViewStarted.then(() => ({ kind: 'paused' as const })),
+      creating.then(
+        (result) => ({ kind: 'settled' as const, status: 'fulfilled' as const, result }),
+        (error) => ({ kind: 'settled' as const, status: 'rejected' as const, error })
+      )
+    ])
+    if (outcome.kind === 'paused') {
+      pausedState = testHost.readState()
+      await changeTarget()
+    } else {
+      const settlement = outcome.status === 'fulfilled'
+        ? { result: outcome.result }
+        : { error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error) }
+      const invocations = testHost.invocations().map(({ args }) => args)
+      throw new Error(`Final base repo view did not pause: ${JSON.stringify({ settlement, state: testHost.readState(), invocations })}`)
+    }
+  } finally {
+    abort.abort()
+    const current = testHost.readState()
+    if (isRecord(current)) testHost.writeState({ ...current, releaseRepoView: true })
+  }
+  return { pending: creating, pausedState }
+}
+
+
+
+function prCreationMutations(testHost: HostingTest) {
+  return invocationsFor(testHost, (args) =>
+    (args[0] === 'pr' && args[1] === 'create') ||
+    (args[0] === 'api' && args.includes('POST') && args.some((argument) => /\/pulls$/u.test(argument))))
+}
+
 function advanceTrackingBranch(testHost: HostingTest): void {
   const tree = gitOutput(testHost, ['rev-parse', 'HEAD^{tree}'])
   const remoteCommit = gitOutput(testHost, ['-c', 'user.name=Hosting Test', '-c', 'user.email=hosting@example.invalid', 'commit-tree', tree, '-p', 'HEAD', '-m', 'remote advance'])
@@ -558,22 +688,43 @@ function graphqlQuery(invocation: { input: string }): string {
   return query
 }
 
-async function waitForState(testHost: HostingTest, key: string): Promise<void> {
+function mergeQueueQueries(testHost: HostingTest) {
+  return invocationsFor(testHost, (args) => args[0] === 'api' && args.includes('graphql'))
+    .filter((entry) => graphqlQuery(entry).includes('HostingPRMergeQueueEntry'))
+}
+
+async function waitForState(testHost: HostingTest, key: string, signal?: AbortSignal): Promise<void> {
   const ready = (): boolean => {
     const value = testHost.readState()
     return isRecord(value) && value[key] === true
   }
   if (ready()) return
   const watcher = watch(testHost.root, { persistent: false })
+  const iterator = watcher[Symbol.asyncIterator]()
   try {
     if (ready()) return
-    for await (const _ of watcher) {
-      if (ready()) return
+    if (!signal) {
+      while (true) {
+        const result = await iterator.next()
+        if (result.done || ready()) return
+      }
+    }
+    const { promise: aborted, resolve: abort } = Promise.withResolvers<true>()
+    signal.addEventListener('abort', () => abort(true), { once: true })
+    while (!signal.aborted) {
+      const event = await Promise.race([
+        iterator.next().then((result) => result.done ? 'closed' as const : 'changed' as const),
+        aborted
+      ])
+      if (event !== 'changed' || ready()) return
     }
   } finally {
+    await iterator.return?.()
     await watcher.return?.()
   }
 }
+
+
 
 function installLocalGitTransport(testHost: HostingTest, pushBare: string, log: string, fetchBare?: string): void {
   const realGit = Bun.which('git')
@@ -1084,11 +1235,56 @@ describe('quirky.hosting PR creation', () => {
       eligible: false, reason: 'default_branch', nextAction: 'create_new_branch'
     })
   
-    const unsupportedHost = await host(fixtureState(), { remote: 'https://gitlab.com/test-owner/test-repo.git' })
+    const unsupportedHost = await host(fixtureState(), { remote: unsupportedProviderRemote })
     expect(await unsupportedHost.call('creationEligibility', { worktree: unsupportedHost.worktree, title: 'Unsupported' })).toMatchObject({
       eligible: false, reason: 'unsupported_provider', nextAction: 'select_github_repo'
     })
     expect(invocationsFor(unsupportedHost, (args) => args[0] === 'pr')).toHaveLength(0)
+  }, 20_000)
+
+  test('GH13 unsupported-provider fixtures do not consult GitLab credentials or external HTTP', async () => {
+    const previousToken = process.env.GITLAB_TOKEN
+    const previousFetch = globalThis.fetch
+    const externalAttempts: string[] = []
+    const guardedFetch: typeof fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      const url = new URL(input instanceof Request ? input.url : String(input))
+      if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
+        externalAttempts.push(url.host)
+        throw new Error('the hosting fixture refuses external HTTP before transport')
+      }
+      return previousFetch(input, init)
+    }, {
+      preconnect() {
+        externalAttempts.push('preconnect')
+        throw new Error('the hosting fixture refuses preconnect')
+      }
+    })
+    let testHost: HostingTest | undefined
+    process.env.GITLAB_TOKEN = 'fixture-only-dummy-gitlab-token'
+    globalThis.fetch = guardedFetch
+    try {
+      testHost = await host(fixtureState(), { remote: unsupportedProviderRemote })
+      const glabLog = join(testHost.root, 'glab-isolation.jsonl')
+      writeFileSync(glabLog, '')
+      writeFileSync(join(testHost.root, 'fakebin', 'glab'), `#!/usr/bin/env bun\nimport { appendFileSync } from 'node:fs'\nappendFileSync(${JSON.stringify(glabLog)}, JSON.stringify(process.argv.slice(2)) + '\\n')\nprocess.exitCode = 1\n`, { mode: 0o755 })
+      expect(await testHost.call('creationEligibility', { title: 'Unsupported' })).toMatchObject({
+        eligible: false, reason: 'unsupported_provider', nextAction: 'select_github_repo'
+      })
+      await expect(testHost.call('create', { title: 'Must stay blocked' })).rejects.toMatchObject({
+        data: { reason: 'unsupported_provider' }
+      })
+      expect(externalAttempts).toEqual([])
+      expect(readFileSync(glabLog, 'utf8')).toBe('')
+      expect(invocationsFor(testHost, (args) => args[0] === 'pr')).toHaveLength(0)
+    } finally {
+      try {
+        await testHost?.cleanup()
+      } finally {
+        globalThis.fetch = previousFetch
+        if (previousToken === undefined) delete process.env.GITLAB_TOKEN
+        else process.env.GITLAB_TOKEN = previousToken
+      }
+    }
   }, 20_000)
 
   test('GH14 creates once with the detected D20 base, committed template body, draft flag, and temp-file cleanup', async () => {
@@ -1279,6 +1475,168 @@ describe('quirky.hosting PR creation', () => {
     await createForBase('Explicit base', 'explicit-base', 'origin/explicit-base')
   }, 20_000)
 
+  test('GH17 guards matching same-repository and fork creation while preserving unguarded callers', async () => {
+    const sameRepositoryHost = await host(fixtureState())
+    const sameRepositoryResult = recordOf(await sameRepositoryHost.call('create', {
+      title: 'Pinned same-repository review',
+      expected: expectedTarget(sameRepositoryHost)
+    }))
+    expect(sameRepositoryResult.number).toBe(1)
+    const sameRepositoryArgs = prCreationMutations(sameRepositoryHost)[0]?.args
+    expect(sameRepositoryArgs).toBeDefined()
+    expect(sameRepositoryArgs?.[sameRepositoryArgs.indexOf('--head') + 1]).toBe('feature')
+    expect(sameRepositoryArgs?.[sameRepositoryArgs.indexOf('--base') + 1]).toBe('main')
+
+    const forkHost = await host(fixtureState({ organizationOwners: ['acme'] }), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    const forkResult = recordOf(await forkHost.call('create', {
+      title: 'Pinned fork review',
+      expected: expectedTarget(forkHost, {
+        repository: { host: 'github.com', owner: 'acme', repo: 'base-project' },
+        headRepository: { host: 'github.com', owner: 'acme', repo: 'feature-fork' }
+      })
+    }))
+    expect(forkResult.number).toBe(1)
+    const forkRequest = requestBody(prCreationMutations(forkHost)[0]!)
+    expect(forkRequest).toMatchObject({ head: 'acme:feature', head_repo: 'feature-fork', base: 'main' })
+
+    const legacyHost = await host(fixtureState())
+    await legacyHost.call('create', { title: 'Unpinned legacy review' })
+    expect(prCreationMutations(legacyHost)).toHaveLength(1)
+  }, 30_000)
+
+  test('GH17 validates expected creation as a complete shape before creating', async () => {
+    const testHost = await host(fixtureState())
+    const valid = expectedTarget(testHost)
+    const handlerMalformed = [
+      { ...valid, headSha: 'a'.repeat(39) },
+      { ...valid, baseRefName: 'bad ref' },
+      { ...valid, repository: { host: 'github.com', owner: 'bad/owner', repo: 'test-repo' } }
+    ]
+    const schemaMalformed = [
+      { ...valid, headRepository: null },
+      { branch: 'feature' }
+    ]
+
+    for (const malformedExpected of handlerMalformed) {
+      const error = await rejection(testHost.call('create', { title: 'Malformed expected target', expected: malformedExpected }))
+      expect(error.code).toBe(-32602)
+      expect(reasonOf(error)).toBe('validation_error')
+    }
+    for (const malformedExpected of schemaMalformed) {
+      const error = await rejection(testHost.call('create', { title: 'Malformed expected target', expected: malformedExpected }))
+      expect(error.code).toBe(-32602)
+      expect(error.data).toBeUndefined()
+    }
+    const sha256Shape = await rejection(testHost.call('create', {
+      title: 'Full SHA-256 expected target',
+      expected: { ...valid, headSha: 'a'.repeat(64) }
+    }))
+    expect(reasonOf(sha256Shape)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
+  test('GH17 rejects a changed branch after final authentication without creating', async () => {
+    const testHost = await host(fixtureState())
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved branch',
+      expected: expectedTarget(testHost)
+    }, () => git(testHost, ['checkout', '-b', 'moved-branch']))
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
+  test('GH17 rejects a changed HEAD after final authentication without creating', async () => {
+    const testHost = await host(fixtureState())
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved HEAD',
+      expected: expectedTarget(testHost)
+    }, () => commitFeature(testHost))
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+  test('GH17 rejects a changed HEAD and branch during final base lookup for same-repository and fork creation', async () => {
+    const assertMovedTargetRejected = async (testHost: HostingTest, expected: Record<string, unknown>) => {
+      const { pending, pausedState } = await createDuringFinalBaseLookup(testHost, {
+        title: 'Moved target during base lookup',
+        expected
+      }, () => {
+        git(testHost, ['checkout', '-b', 'moved-target'])
+        commitFeature(testHost)
+      })
+      expect(pausedState).toMatchObject({ authStatusCalls: 2, authenticated: true, repoViewStarted: true })
+      expect(gitOutput(testHost, ['branch', '--show-current'])).toBe('moved-target')
+      expect(gitOutput(testHost, ['rev-parse', 'HEAD'])).not.toBe(expected.headSha)
+      const error = await rejection(pending)
+      expect(reasonOf(error)).toBe('stale-target')
+      expect(prCreationMutations(testHost)).toHaveLength(0)
+    }
+
+    const sameRepositoryHost = await host(fixtureState())
+    await assertMovedTargetRejected(sameRepositoryHost, expectedTarget(sameRepositoryHost))
+
+    const forkHost = await host(fixtureState(), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    await assertMovedTargetRejected(forkHost, expectedTarget(forkHost, {
+      repository: { host: 'github.com', owner: 'acme', repo: 'base-project' },
+      headRepository: { host: 'github.com', owner: 'acme', repo: 'feature-fork' }
+    }))
+  }, 30_000)
+
+
+  test('GH17 rejects a changed base ref after final authentication without creating', async () => {
+    const testHost = await host(fixtureState())
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved base',
+      expected: expectedTarget(testHost)
+    }, async () => {
+      await testHost.client.callAny('quirky.worktree/set', { worktree: testHost.worktree, baseRef: 'release' })
+    })
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
+  test('GH17 rejects a changed base repository after final authentication without creating', async () => {
+    const testHost = await host(fixtureState(), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved base repository',
+      expected: expectedTarget(testHost, {
+        repository: { host: 'github.com', owner: 'acme', repo: 'base-project' },
+        headRepository: { host: 'github.com', owner: 'acme', repo: 'feature-fork' }
+      })
+    }, () => git(testHost, ['remote', 'set-url', 'upstream', 'https://github.com/acme/other-base.git']))
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
+  test('GH17 rejects a changed head repository after final authentication without creating', async () => {
+    const testHost = await host(fixtureState(), {
+      remote: 'https://github.com/acme/feature-fork.git',
+      upstream: 'https://github.com/acme/base-project.git'
+    })
+    const { pending } = await createDuringFinalAuthentication(testHost, {
+      title: 'Moved head repository',
+      expected: expectedTarget(testHost, {
+        repository: { host: 'github.com', owner: 'acme', repo: 'base-project' },
+        headRepository: { host: 'github.com', owner: 'acme', repo: 'feature-fork' }
+      })
+    }, () => git(testHost, ['remote', 'set-url', 'origin', 'https://github.com/acme/other-fork.git']))
+    const error = await rejection(pending)
+    expect(reasonOf(error)).toBe('stale-target')
+    expect(prCreationMutations(testHost)).toHaveLength(0)
+  }, 20_000)
+
   test('GH15 probes malformed create output once and accepts exactly one matching review', async () => {
     const testHost = await host(fixtureState({ createResponse: 'malformed' }))
     pushFeature(testHost)
@@ -1419,6 +1777,62 @@ describe('quirky.hosting PR creation', () => {
 })
 
 describe('quirky.hosting PR mutations', () => {
+  test('GH27 updateBranch requests a merge-base update pinned to the expected head and refuses a moved head or a closed pull request before any mutation', async () => {
+    const expectedHead = 'a'.repeat(40)
+    const testHost = await host(fixtureState({ prs: [pr()] }))
+    const result = recordOf(await testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead
+    }))
+    expect(result).toEqual({ state: 'requested', number: 7, head: expectedHead })
+
+    const updateCalls = () => invocationsFor(testHost, (args) => args[0] === 'api' &&
+      args.includes('repos/test-owner/test-repo/pulls/7/update-branch'))
+    expect(updateCalls()).toHaveLength(1)
+    const updateCall = updateCalls()[0]
+    if (!updateCall) throw new Error('expected update-branch API invocation')
+    expect(updateCall.args).toContain('PUT')
+    expect(requestBody(updateCall)).toEqual({ expected_head_sha: expectedHead })
+
+    const malformedHead = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'not-a-sha'
+    }))
+    expect(reasonOf(malformedHead)).toBe('validation_error')
+    expect(updateCalls()).toHaveLength(1)
+
+    const movedHead = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead: 'c'.repeat(40)
+    }))
+    expect(reasonOf(movedHead)).toBe('head_changed')
+    expect(updateCalls()).toHaveLength(1)
+
+    testHost.writeState(fixtureState({ prs: [pr({ state: 'CLOSED' })] }))
+    const closedReview = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead
+    }))
+    expect(reasonOf(closedReview)).toBe('review_not_open')
+    expect(updateCalls()).toHaveLength(1)
+
+    testHost.writeState(fixtureState({
+      prs: [pr()],
+      updateBranchFailure: "HTTP 422: expected head sha didn't match current head ref"
+    }))
+    const beforeStaleRequest = updateCalls().length
+    const staleHead = await rejection(testHost.call('updateBranch', {
+      worktree: testHost.worktree, number: 7, expectedHead
+    }))
+    expect(reasonOf(staleHead)).toBe('head_changed')
+    expect(updateCalls()).toHaveLength(beforeStaleRequest + 1)
+
+    testHost.writeState(fixtureState({ prs: [pr()] }))
+    const beforeCliRequest = updateCalls().length
+    const cliResult = await testHost.cli([
+      '--json', 'hosting', 'update-branch', '--worktree', testHost.worktree, '--number', '7', '--expected-head', expectedHead
+    ])
+    expect(cliResult).toMatchObject({ code: 0, stderr: '' })
+    expect(JSON.parse(cliResult.stdout)).toEqual(result)
+    expect(updateCalls()).toHaveLength(beforeCliRequest + 1)
+  }, 20_000)
+
   test('GH22 all direct merge methods carry the expected-head guard and never delete or bypass protections', async () => {
     const testHost = await host(fixtureState({ prs: [pr()] }))
     for (const method of ['squash', 'merge', 'rebase']) {
@@ -1731,4 +2145,79 @@ test('PR detail exposes existing requested reviewers and reviewed state without 
   expect(detail.reviews).toEqual([{ author: 'bob', state: 'APPROVED' }])
   expect(detail.assignees).toEqual(['maintainer'])
   expect(detail.participantsTruncated).toBe(false)
+}, 20_000)
+
+test('review reads live merge queue membership on every provider lookup', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeQueueEntries: [7] }))
+  const first = recordOf(await instance.call('review', { number: 7 }))
+  expect(recordOf(first.review)).toMatchObject({
+    inMergeQueue: true,
+    mergeQueueKnown: true,
+    mergeQueueEntry: { id: 'QUEUE_ENTRY_7', state: 'QUEUED', position: 1 },
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(1)
+  const view = invocationsFor(instance, (args) => args[0] === 'pr' && args[1] === 'view')[0]
+  expect(view?.args[view.args.indexOf('--json') + 1]).not.toContain('mergeQueueEntry')
+  expect(graphqlQuery(mergeQueueQueries(instance)[0]!)).toContain('mergeQueueEntry{id state position}')
+
+  instance.writeState(fixtureState({
+    prs: [pr({ mergeQueueEntry: { id: 'QUEUE_ENTRY_7_NEXT', state: 'AWAITING_CHECKS', position: 2 } })],
+    mergeQueueRequired: true,
+    mergeQueueEntries: [],
+  }))
+  const changed = recordOf(await instance.call('review', { number: 7 }))
+  expect(recordOf(changed.review)).toMatchObject({
+    inMergeQueue: true,
+    mergeQueueKnown: true,
+    mergeQueueEntry: { id: 'QUEUE_ENTRY_7_NEXT', state: 'AWAITING_CHECKS', position: 2 },
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(2)
+
+  instance.writeState(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeQueueEntries: [] }))
+  const removed = recordOf(await instance.call('review', { number: 7 }))
+  expect(recordOf(removed.review)).toMatchObject({
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: true,
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(3)
+}, 20_000)
+
+test('merge queue lookup failure leaves membership unknown without hiding the review', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeQueueQueryFailure: true }))
+  const lookup = recordOf(await instance.call('review', { number: 7 }))
+  expect(lookup.kind).toBe('found')
+  expect(recordOf(lookup.review)).toMatchObject({
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: false,
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(1)
+}, 20_000)
+
+test('known repositories without a required merge queue skip the live queue query', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeQueueRequired: false }))
+  const lookup = recordOf(await instance.call('review', { number: 7 }))
+  expect(recordOf(lookup.review)).toMatchObject({
+    inMergeQueue: false,
+    mergeQueueEntry: null,
+    mergeQueueKnown: true,
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(0)
+}, 20_000)
+
+test('forBranch propagates the live merge queue entry', async () => {
+  const instance = await host(fixtureState({ prs: [pr()], mergeQueueRequired: true, mergeQueueEntries: [7] }))
+  const lookup = recordOf(await instance.call('forBranch', {
+    worktree: instance.worktree,
+    branch: 'feature',
+    fresh: true,
+  }))
+  expect(lookup.kind).toBe('found')
+  expect(recordOf(lookup.review)).toMatchObject({
+    inMergeQueue: true,
+    mergeQueueKnown: true,
+    mergeQueueEntry: { id: 'QUEUE_ENTRY_7', state: 'QUEUED', position: 1 },
+  })
+  expect(mergeQueueQueries(instance)).toHaveLength(1)
 }, 20_000)

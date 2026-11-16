@@ -6,18 +6,22 @@ import { insertRow, rowOf } from './store'
 import { readStatusDefinitions } from './statuses'
 import { replacementReferences } from './records'
 
+export type UnreadSource = 'notifications'
+
 /** What `set` and `show` need from the plugin: the store, error building and selector resolution. */
 export type SetEnv = {
   store: PluginStore
   fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown): Error
   /** The one workspace a selector names, with every listed workspace for reading relations. */
   find(selector: string, identity: CallerIdentity): Promise<{ worktree: Worktree; all: Worktree[] }>
+  /** A listed workspace after checking current project ownership, without running git; null takes the full lookup. */
+  known(id: string): Promise<Worktree | null>
   resolveRepo(selector: string): Promise<Repo>
   groups(): Promise<ProjectGroup[]>
   call(method: string, params: Record<string, unknown>): Promise<unknown>
   identitySource?: DirectoryIdentitySource
-  /** `unread` is present only when the change came from a `set` that asked for it. */
-  changed(data: { repoId: string; worktreeId: string; unread?: boolean }): void
+  /** `unreadSource` is present only when the change came from a set that asked for unread. */
+  changed(data: { repoId: string; worktreeId: string; unread?: boolean; unreadSource?: UnreadSource }): void
 }
 
 export type SetParams = {
@@ -27,6 +31,7 @@ export type SetParams = {
   status?: string
   pinned?: boolean
   unread?: boolean
+  unreadSource?: UnreadSource
   parent?: string
   noParent?: boolean
   baseRef?: string | null
@@ -76,6 +81,7 @@ function assertExpected(env: SetEnv, worktree: Worktree, params: SetParams): voi
  * workspace itself or one of its descendants is refused as `parent-cycle`. `baseRef` sets the
  * workspace's own compare and rebase target; null or a blank string clears it.
  * `references` replaces the manual links atomically with the other metadata; omitting it keeps them.
+ * For a metadata-only `id:` update, `branch`, `head` and `isMain` reflect the latest completed listing.
  */
 export async function setWorktree(
   env: SetEnv,
@@ -85,6 +91,12 @@ export async function setWorktree(
 ): Promise<Worktree> {
   if (params.parent !== undefined && params.noParent === true) {
     throw env.fail('invalid-params', 'parent and noParent cannot be used together')
+  }
+  if (params.unreadSource !== undefined && params.unreadSource !== 'notifications') {
+    throw env.fail('invalid-params', 'unreadSource must be "notifications"')
+  }
+  if (params.unreadSource !== undefined && typeof params.unread !== 'boolean') {
+    throw env.fail('invalid-params', 'unreadSource requires a boolean unread value')
   }
   const statuses = readStatusDefinitions(env.store)
   if (params.status !== undefined && (typeof params.status !== 'string' || !statuses.some((status) => status.id === params.status))) {
@@ -106,7 +118,18 @@ export async function setWorktree(
     throw env.fail('invalid-params', 'expectedProjectGroupId must be a group ID or null')
   }
 
-  let worktree = (await env.find(params.worktree, identity)).worktree
+  const canUseKnown = params.worktree.startsWith('id:') &&
+    params.parent === undefined &&
+    params.projectGroupId === undefined &&
+    params.expectedInstanceId === undefined &&
+    params.expectedProjectGroupId === undefined &&
+    guard === undefined
+  let worktree: Worktree
+  if (canUseKnown) {
+    worktree = (await env.known(params.worktree.slice(3))) ?? (await env.find(params.worktree, identity)).worktree
+  } else {
+    worktree = (await env.find(params.worktree, identity)).worktree
+  }
   assertExpected(env, worktree, params)
 
   const assignments: string[] = []
@@ -205,7 +228,12 @@ export async function setWorktree(
     if (assignments.length > 0) env.store.run(`UPDATE worktrees SET ${assignments.join(', ')} WHERE id = ?`, ...values, worktree.id)
     return rowOf(env.store, worktree.id)!
   })
-  env.changed({ repoId: worktree.repoId, worktreeId: worktree.id, ...(params.unread === undefined ? {} : { unread: params.unread }) })
+  env.changed({
+    repoId: worktree.repoId,
+    worktreeId: worktree.id,
+    ...(params.unread === undefined ? {} : { unread: params.unread }),
+    ...(params.unreadSource === undefined ? {} : { unreadSource: params.unreadSource })
+  })
   return joinMetadata(worktree, row, worktree.removing, env.store)
 }
 

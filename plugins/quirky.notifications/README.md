@@ -13,9 +13,13 @@ The plugin owns notification decisions, unread markers, sounds, and the status b
 
 CLI commands are `quirky notifications status`, `send --body ... [--title ...] [--session ...|--worktree ...]`, `test`, and `preview [--sound ...|--path ...] [--volume N]`.
 
+An explicit status request always reads the current worktree list. If that lookup fails or times out, it returns a Conflict error ("worktree status is temporarily unavailable") rather than an empty or stale success.
+Background badge reconciliation is separate: it does not wait for worktree discovery before delivering notifications and retains its last successful snapshot after a failed refresh. Until the first successful read, it does not publish a fabricated empty-worktree badge.
+
 ## Settings
 
 The Notifications settings view uses shared graphite form controls and semantic tokens in dark and light. Dependent controls remain disabled when notification delivery is off; the menu-bar control stays independent. Sound selection, custom-path validation and range save-on-commit behavior keep the same canonical setting IDs and policy. Rendering preferences does not create notifications or unread markers.
+The custom sound path editor can be opened with `command:quirky.notifications/edit-custom-sound` (`quirky ui run command:quirky.notifications/edit-custom-sound`).
 
 
 | Setting | Default | Effect |

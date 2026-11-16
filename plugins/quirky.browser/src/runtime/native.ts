@@ -242,10 +242,15 @@ export async function startNativeHelper(
       env,
       stdin: 'ignore',
       stdout: 'ignore',
-      stderr: 'ignore',
-      detached: true
+      stderr: 'ignore'
     })
   } catch {
+    rmSync(socketDir, { recursive: true, force: true })
+    rmSync(socketAliasRoot, { recursive: true, force: true })
+    rmSync(helperHome, { recursive: true, force: true })
+    throw fault('browser_unavailable', 'the pinned native browser helper could not be started')
+  }
+  if (child.pid === null) {
     rmSync(socketDir, { recursive: true, force: true })
     rmSync(socketAliasRoot, { recursive: true, force: true })
     rmSync(helperHome, { recursive: true, force: true })

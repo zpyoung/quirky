@@ -2,6 +2,7 @@ import type { ExitCause, PtyFact, PtyHistoryPage, PtySessionInfo, PtySnapshot, P
 import type { ClientRole, QuirkyEvent } from './rpc'
 import type { ToastAction, ToastKind } from './ui'
 import type { SessionLaunch } from './model'
+import type { ProcessRunner, ProcessSpawner } from './process'
 
 /** Where a plugin was found: shipped with Quirky, or installed by the user. */
 export type PluginSource = 'builtin' | 'installed'
@@ -63,8 +64,13 @@ export type PluginContext = {
   log(message: string): void
   /** Registers the implementation of a contribution this plugin declares; throws for any other ID. */
   provide(contributionId: string, implementation: unknown): void
-  /** Broadcasts `<pluginId>/<event>` to subscribed clients and plugins; false when it was not delivered. */
-  emit(event: string, data?: unknown): boolean
+  /**
+   * Broadcasts `<pluginId>/<event>` to subscribed clients and plugins. Returns false when the event is disabled or
+   * overridden; for an event declaring `coalesce`, true means it was sent or is held as the latest for its key.
+   * Pass `{ immediate: true }` when listeners must not miss the change: it replaces any held event for its key and
+   * sends the plugin's other held events first. Plain events are always sent immediately.
+   */
+  emit(event: string, data?: unknown, options?: { immediate?: boolean }): boolean
   /** Listens to every daemon event; the returned function unsubscribes. */
   subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
   /** Invokes a daemon or plugin method as this plugin. */
@@ -93,6 +99,13 @@ export type PluginContext = {
   readonly home: string
   /** The PTY host connection; listeners registered through it are removed when the plugin is revoked. */
   readonly pty: PluginPty
+  /**
+   * Owns this plugin's subprocesses: `run` aggregates output with a default deadline and output
+   * cap; `spawn` streams output and requires an explicit deadline (or null). Both kill the process
+   * group when this activation is disposed. Usable inside `deactivate` and the activation disposer;
+   * after disposal, `run` rejects and `spawn` throws synchronously.
+   */
+  readonly process: ProcessRunner & ProcessSpawner
   /** Synchronous native lifecycle fences; subscriptions are removed when this activation is revoked. */
   readonly hostPower: PluginHostPower
   /** Broadcasts `notify` with `desktop` defaulting to true; with no desktop client connected, runs the kernel notifier. */
@@ -196,6 +209,8 @@ export type PluginPty = {
   restartHost(): Promise<{ pid: number }>
   unsubscribe(sessionId: string): Promise<void>
   onData(listener: (sessionId: string, bytes: Uint8Array) => void): () => void
+  /** Invalidates this session's host subscription before listeners run; resubscribe to recover output. */
+  onLagged(listener: (sessionId: string) => void): () => void
   onExit(
     listener: (
       sessionId: string,
@@ -301,7 +316,10 @@ export type PluginLaunch = {
 /** A binary stream to one client connection, opened by a `connection: true` method. */
 export type ClientStream = {
   readonly streamId: number
-  send(bytes: Uint8Array): void
+  readonly lagged?: boolean
+  send(bytes: Uint8Array): boolean | void
+  lag?(): void
+  onLag?(callback: () => void): void
   onClose(callback: () => void): void
   close(): void
 }
@@ -415,10 +433,15 @@ export type JobInfo = {
   /** Null while running. */
   nextRunAt: number | null
   lastRun: JobRun | null
+  /** Present while handlers that ignored their abort hold the job back; `handlers` counts those still running. */
+  stalled?: { handlers: number }
 }
 
-/** An event a plugin emitted, named `<pluginId>/<event>`. */
-export type PluginEvent = { type: `${string}/${string}`; data: unknown }
+/**
+ * An event a plugin emitted, named `<pluginId>/<event>`. `worktreeId` is present when the event's
+ * declaration names a `worktree` key path and the payload holds a non-empty string there.
+ */
+export type PluginEvent = { type: `${string}/${string}`; data: unknown; worktreeId?: string }
 
 /** Launch env names a hook may not set: these two plus every name starting `QUIRKY_`. */
 export const RESERVED_LAUNCH_ENV = ['PATH', 'ZDOTDIR'] as const
@@ -431,6 +454,8 @@ export function isReservedLaunchEnv(name: string): boolean {
 export const MIN_JOB_INTERVAL_MS = 1000
 export const MAX_JOB_DURATION_MS = 86_400_000
 export const DEFAULT_JOB_TIMEOUT_MS = 300_000
+export const DEFAULT_READ_METHOD_TIMEOUT_MS = 300_000
+export const DEFAULT_MUTATING_METHOD_TIMEOUT_MS = 600_000
 
 const DURATION_RE = /^(\d+)(ms|s|m|h|d)$/
 const DURATION_UNIT_MS = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 } as const

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { GitHubRepositoryIdentity, GitHubWorktreeSource, WorktreePushTarget } from '@quirky/protocol'
+import type { GitHubRepositoryIdentity, GitHubWorktreeSource, ProcessRunner, RunResult, WorktreePushTarget } from '@quirky/protocol'
 import { gitApi } from '@quirky/git'
 import type { Repo } from '@quirky/protocol'
 import { worktreeIdForPath } from '../../paths'
@@ -12,6 +12,7 @@ const MAX_GIT_OUTPUT_BYTES = 64 * 1024
 const SSH_CONFIG_TIMEOUT_MS = 5_000
 
 type GitHubEnv = {
+  process: ProcessRunner
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
   fail(kind: 'invalid-params' | 'not-found' | 'conflict', message: string, data?: unknown): Error
 }
@@ -84,42 +85,33 @@ function isDotlessAlias(host: string): boolean {
   return !host.includes('.') && !host.startsWith('[') && host !== 'localhost'
 }
 
-async function remoteIdentityFromUrl(value: string): Promise<ParsedRemoteIdentity | null> {
+async function remoteIdentityFromUrl(process: ProcessRunner, value: string): Promise<ParsedRemoteIdentity | null> {
   const parsed = parseRemoteIdentity(value)
   if (!parsed) return null
   if (parsed.sshHost === null || !isDotlessAlias(parsed.sshHost)) return parsed
-  const host = await resolveSshAlias(parsed.sshHost)
+  const host = await resolveSshAlias(process, parsed.sshHost)
   return host === null ? null : { ...parsed, identity: { ...parsed.identity, host } }
 }
 
-async function resolveSshAlias(alias: string): Promise<string | null> {
-  let proc: Bun.Subprocess<'ignore', 'pipe', 'ignore'>
+async function resolveSshAlias(processRunner: ProcessRunner, alias: string): Promise<string | null> {
   try {
-    proc = Bun.spawn(['ssh', '-G', '--', alias], { env: { ...process.env }, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' })
-  } catch {
-    return null
-  }
-  let timedOut = false
-  const timer = setTimeout(() => {
-    timedOut = true
-    try {
-      proc.kill('SIGKILL')
-    } catch {
-      // the lookup process already exited
-    }
-  }, SSH_CONFIG_TIMEOUT_MS)
-  try {
-    const [output, exitCode] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
-    if (timedOut || exitCode !== 0) return null
-    const hostname = /^hostname\s+(\S+)\s*$/im.exec(output)?.[1]
+    const result = await processRunner.run(['ssh', '-G', '--', alias], {
+      env: { ...process.env },
+      timeoutMs: SSH_CONFIG_TIMEOUT_MS,
+      killGraceMs: 0,
+      maxOutputBytes: MAX_GIT_OUTPUT_BYTES,
+      outputMode: 'separate',
+      overflow: 'stop'
+    })
+    if (result.exitCode !== 0 || result.stopped || result.spawnError || result.signal !== null) return null
+    const hostname = /^hostname\s+(\S+)\s*$/im.exec(result.stdoutText)?.[1]
     if (!hostname || normalizeHost(hostname) === normalizeHost(alias)) return null
     return normalizeHost(hostname)
   } catch {
     return null
-  } finally {
-    clearTimeout(timer)
   }
 }
+
 
 function hostnameOf(value: string): string {
   const host = normalizeHost(value)
@@ -154,30 +146,12 @@ function canonicalUrl(source: GitHubWorktreeSource, scheme: 'ssh' | 'https'): st
   return url
 }
 
-async function readLimited(stream: ReadableStream<Uint8Array>): Promise<string> {
-  const reader = stream.getReader()
-  const chunks: Uint8Array[] = []
-  let size = 0
-  let truncated = false
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      const room = MAX_GIT_OUTPUT_BYTES - size
-      if (room > 0) {
-        const kept = value.length <= room ? value : value.subarray(0, room)
-        chunks.push(kept)
-        size += kept.length
-      }
-      if (value.length > room) truncated = true
-    }
-  } finally {
-    reader.releaseLock()
-  }
-  return `${Buffer.concat(chunks).toString('utf8')}${truncated ? '\n[output truncated]' : ''}`
+function textWithTruncation(result: RunResult, stream: 'stdout' | 'stderr'): string {
+  const text = stream === 'stdout' ? result.stdoutText : result.stderr
+  return `${text}${result.truncated?.[stream] ? '\n[output truncated]' : ''}`
 }
 
-async function runGit(repo: string, args: string[], options: { timeoutMs?: number; network?: boolean } = {}): Promise<GitResult> {
+async function runGit(processRunner: ProcessRunner, repo: string, args: string[], options: { timeoutMs?: number; network?: boolean } = {}): Promise<GitResult> {
   const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: '0' }
   if (options.network) {
     env.GIT_ASKPASS = ''
@@ -185,73 +159,47 @@ async function runGit(repo: string, args: string[], options: { timeoutMs?: numbe
     const configuredSsh = process.env.GIT_SSH_COMMAND ?? (await gitApi().getConfig(repo, 'core.sshCommand')) ?? process.env.GIT_SSH ?? 'ssh'
     env.GIT_SSH_COMMAND = /(?:^|\s)-o\s+BatchMode=/i.test(configuredSsh) ? configuredSsh : `${configuredSsh} -o BatchMode=yes`
   }
-  let proc: ReturnType<typeof Bun.spawn>
   try {
-    proc = Bun.spawn(['git', ...args], {
+    const result = await processRunner.run(['git', ...args], {
       cwd: repo,
       env,
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe',
-      ...({ detached: true } as object)
+      timeoutMs: options.timeoutMs ?? 30_000,
+      killGraceMs: KILL_GRACE_MS,
+      maxOutputBytes: MAX_GIT_OUTPUT_BYTES,
+      outputMode: 'separate',
+      overflow: 'truncate'
     })
+    return {
+      stdout: textWithTruncation(result, 'stdout'),
+      stderr: result.spawnError && result.stderr === '' ? result.spawnError.message : textWithTruncation(result, 'stderr'),
+      exitCode: result.stopped || result.spawnError || result.signal !== null ? null : result.exitCode,
+      timedOut: result.stopped === 'timeout'
+    }
   } catch (error) {
     return { stdout: '', stderr: error instanceof Error ? error.message : String(error), exitCode: null, timedOut: false }
   }
-  const killGroup = (signal: NodeJS.Signals) => {
-    try {
-      process.kill(-proc.pid, signal)
-    } catch {
-      try {
-        proc.kill(signal)
-      } catch {
-        // the process already exited
-      }
-    }
-  }
-  let timedOut = false
-  let hardKill: ReturnType<typeof setTimeout> | undefined
-  const timer = options.timeoutMs === undefined ? undefined : setTimeout(() => {
-    timedOut = true
-    killGroup('SIGTERM')
-    hardKill = setTimeout(() => killGroup('SIGKILL'), KILL_GRACE_MS)
-  }, options.timeoutMs)
-  try {
-    const [stdout, stderr, exitCode] = await Promise.all([
-      readLimited(proc.stdout as ReadableStream<Uint8Array>),
-      readLimited(proc.stderr as ReadableStream<Uint8Array>),
-      proc.exited
-    ])
-    return { stdout, stderr, exitCode, timedOut }
-  } finally {
-    clearTimeout(timer)
-    if (hardKill !== undefined) {
-      killGroup('SIGKILL')
-      clearTimeout(hardKill)
-    }
-  }
 }
 
-async function configValues(repo: string, key: string): Promise<string[]> {
-  const result = await runGit(repo, ['config', '--local', '--get-all', key])
+async function configValues(process: ProcessRunner, repo: string, key: string): Promise<string[]> {
+  const result = await runGit(process, repo, ['config', '--local', '--get-all', key])
   return result.exitCode === 0 ? result.stdout.replace(/\r?\n$/, '').split(/\r?\n/) : []
 }
 
-async function remoteUrls(repo: string, remote: string): Promise<RemoteUrls> {
+async function remoteUrls(process: ProcessRunner, repo: string, remote: string): Promise<RemoteUrls> {
   const [fetch, push] = await Promise.all([
-    configValues(repo, `remote.${remote}.url`),
-    configValues(repo, `remote.${remote}.pushurl`)
+    configValues(process, repo, `remote.${remote}.url`),
+    configValues(process, repo, `remote.${remote}.pushurl`)
   ])
   return { fetch, push: push.length === 0 ? fetch : push }
 }
 
 type UrlMatcher = (url: string) => Promise<boolean>
-function urlMatcherForIdentity(identity: GitHubRepositoryIdentity): UrlMatcher {
+function urlMatcherForIdentity(process: ProcessRunner, identity: GitHubRepositoryIdentity): UrlMatcher {
   const cache = new Map<string, Promise<boolean>>()
   return (url) => {
     let match = cache.get(url)
     if (!match) {
-      match = remoteIdentityFromUrl(url).then((actual) => actual !== null && identityMatchesRemote(actual, identity))
+      match = remoteIdentityFromUrl(process, url).then((actual) => actual !== null && identityMatchesRemote(actual, identity))
       cache.set(url, match)
     }
     return match
@@ -273,12 +221,12 @@ async function urlsIncludeIdentity(urls: string[], matchesUrl: UrlMatcher): Prom
   return false
 }
 
-async function matchingRemote(repo: string, identity: GitHubRepositoryIdentity, requirePushIdentity = true): Promise<{ name: string; urls: RemoteUrls } | null> {
+async function matchingRemote(process: ProcessRunner, repo: string, identity: GitHubRepositoryIdentity, requirePushIdentity = true): Promise<{ name: string; urls: RemoteUrls } | null> {
   const git = gitApi()
   const candidates: { name: string; urls: RemoteUrls }[] = []
-  const matchesUrl = urlMatcherForIdentity(identity)
+  const matchesUrl = urlMatcherForIdentity(process, identity)
   for (const name of await git.listRemotes(repo)) {
-    const urls = await remoteUrls(repo, name)
+    const urls = await remoteUrls(process, repo, name)
     if (!await urlsIncludeIdentity(urls.fetch, matchesUrl)) continue
     if (!await urlsMatchIdentity(urls.fetch, matchesUrl) || (requirePushIdentity && !await urlsMatchIdentity(urls.push, matchesUrl))) {
       throw failureForRemote(name, identity)
@@ -299,10 +247,10 @@ function remoteNameForFork(identity: GitHubRepositoryIdentity): string {
   return `pr-${owner}-${repo}`
 }
 
-async function restoreRef(repo: string, ref: string, oldHead: string | null, fetchedHead: string | null): Promise<void> {
+async function restoreRef(process: ProcessRunner, repo: string, ref: string, oldHead: string | null, fetchedHead: string | null): Promise<void> {
   if (fetchedHead === null || fetchedHead === oldHead) return
   const args = oldHead === null ? ['update-ref', '-d', ref, fetchedHead] : ['update-ref', ref, oldHead, fetchedHead]
-  const result = await runGit(repo, args)
+  const result = await runGit(process, repo, args)
   if (result.exitCode !== 0) throw new Error(`could not restore temporary GitHub tracking ref ${ref}: ${result.stderr.trim() || 'git update-ref failed'}`)
 }
 
@@ -328,7 +276,7 @@ export async function planPullRequest(env: GitHubEnv, repo: Repo, source: GitHub
     throw env.fail('invalid-params', 'The GitHub pull request contains an invalid branch name.')
   }
 
-  const baseRemote = await matchingRemote(repo.path, base.repository, false)
+  const baseRemote = await matchingRemote(env.process, repo.path, base.repository, false)
   if (!baseRemote) {
     throw failure(env, 'github-base-remote-missing', `No configured Git remote matches the pull request base repository ${base.repository.owner}/${base.repository.repo}.`, {
       repository: base.repository
@@ -341,15 +289,16 @@ export async function planPullRequest(env: GitHubEnv, repo: Repo, source: GitHub
   const oldBaseTrackingHead = await git.resolveCommit(repo.path, baseTrackingRef)
   const oldTrackingHead = await git.resolveCommit(repo.path, trackingRef)
   const fetched = await runGit(
+    env.process,
     repo.path,
     ['fetch', '--no-tags', '--no-write-fetch-head', '--', baseRemote.name, `+refs/pull/${source.item.number}/head:${trackingRef}`, `+refs/heads/${base.refName}:${baseTrackingRef}`],
     { timeoutMs: FETCH_TIMEOUT_MS, network: true }
   )
   if (fetched.exitCode !== 0 || fetched.timedOut) {
     const changedHead = await git.resolveCommit(repo.path, trackingRef)
-    await restoreRef(repo.path, trackingRef, oldTrackingHead, changedHead).catch(() => {})
+    await restoreRef(env.process, repo.path, trackingRef, oldTrackingHead, changedHead).catch(() => {})
     const changedBaseHead = await git.resolveCommit(repo.path, baseTrackingRef)
-    await restoreRef(repo.path, baseTrackingRef, oldBaseTrackingHead, changedBaseHead).catch(() => {})
+    await restoreRef(env.process, repo.path, baseTrackingRef, oldBaseTrackingHead, changedBaseHead).catch(() => {})
     throw failure(env, 'github-head-fetch-failed', `Could not fetch pull request #${source.item.number} from ${baseRemote.name}; no local or stale head was used. Check the configured remote and try again.`, {
       number: source.item.number,
       remote: baseRemote.name,
@@ -360,13 +309,13 @@ export async function planPullRequest(env: GitHubEnv, repo: Repo, source: GitHub
   const fetchedHead = await git.resolveCommit(repo.path, trackingRef)
   const fetchedBaseHead = await git.resolveCommit(repo.path, baseTrackingRef)
   if (fetchedBaseHead === null) {
-    await restoreRef(repo.path, trackingRef, oldTrackingHead, fetchedHead).catch(() => {})
-    await restoreRef(repo.path, baseTrackingRef, oldBaseTrackingHead, fetchedBaseHead).catch(() => {})
+    await restoreRef(env.process, repo.path, trackingRef, oldTrackingHead, fetchedHead).catch(() => {})
+    await restoreRef(env.process, repo.path, baseTrackingRef, oldBaseTrackingHead, fetchedBaseHead).catch(() => {})
     throw failure(env, 'github-base-fetch-failed', `Could not fetch base branch ${base.refName} from ${baseRemote.name}.`, { number: source.item.number, remote: baseRemote.name })
   }
   if (fetchedHead === null || fetchedHead.toLowerCase() !== headOid) {
-    await restoreRef(repo.path, trackingRef, oldTrackingHead, fetchedHead).catch(() => {})
-    await restoreRef(repo.path, baseTrackingRef, oldBaseTrackingHead, fetchedBaseHead).catch(() => {})
+    await restoreRef(env.process, repo.path, trackingRef, oldTrackingHead, fetchedHead).catch(() => {})
+    await restoreRef(env.process, repo.path, baseTrackingRef, oldBaseTrackingHead, fetchedBaseHead).catch(() => {})
     throw failure(env, 'github-head-moved', `Pull request #${source.item.number} head changed while it was being fetched; resolve it again and retry.`, {
       number: source.item.number,
       expectedHead: headOid,
@@ -377,14 +326,14 @@ export async function planPullRequest(env: GitHubEnv, repo: Repo, source: GitHub
   let pushTarget: WorktreePushTarget
   let pushRemoteUrl: string | null = null
   try {
-    const headRemote = await matchingRemote(repo.path, head.repository)
+    const headRemote = await matchingRemote(env.process, repo.path, head.repository)
     if (headRemote) {
       pushTarget = { remoteName: headRemote.name, branchName: head.refName, maintainerCanModify: head.maintainerCanModify }
     } else {
       const remoteName = remoteNameForFork(head.repository)
-      const configured = await remoteUrls(repo.path, remoteName)
+      const configured = await remoteUrls(env.process, repo.path, remoteName)
       if (configured.fetch.length > 0 || configured.push.length > 0) {
-        const matchesUrl = urlMatcherForIdentity(head.repository)
+        const matchesUrl = urlMatcherForIdentity(env.process, head.repository)
         const [fetchMatches, pushMatches] = await Promise.all([
           urlsMatchIdentity(configured.fetch, matchesUrl),
           urlsMatchIdentity(configured.push, matchesUrl)
@@ -396,15 +345,15 @@ export async function planPullRequest(env: GitHubEnv, repo: Repo, source: GitHub
           })
         }
       } else {
-        const originUrl = (await configValues(repo.path, 'remote.origin.url'))[0] ?? ''
+        const originUrl = (await configValues(env.process, repo.path, 'remote.origin.url'))[0] ?? ''
         const scheme = /^https:\/\//i.test(originUrl) ? 'https' : 'ssh'
         pushRemoteUrl = canonicalUrl(source, scheme)
       }
       pushTarget = { remoteName, branchName: head.refName, maintainerCanModify: head.maintainerCanModify }
     }
   } catch (error) {
-    await restoreRef(repo.path, trackingRef, oldTrackingHead, fetchedHead).catch(() => {})
-    await restoreRef(repo.path, baseTrackingRef, oldBaseTrackingHead, fetchedBaseHead).catch(() => {})
+    await restoreRef(env.process, repo.path, trackingRef, oldTrackingHead, fetchedHead).catch(() => {})
+    await restoreRef(env.process, repo.path, baseTrackingRef, oldBaseTrackingHead, fetchedBaseHead).catch(() => {})
     if (error instanceof Error && 'code' in error) throw error
     if (error instanceof Error && 'reason' in error) throw env.fail('conflict', error.message, { reason: (error as { reason?: string }).reason, remote: (error as { remote?: string }).remote })
     throw error
@@ -414,8 +363,8 @@ export async function planPullRequest(env: GitHubEnv, repo: Repo, source: GitHub
     ? { branch: head.refName, fullRef: `refs/heads/${head.refName}`, remote: null as null }
     : null
   if (existing !== null && (await git.branchHead(repo.path, head.refName))?.toLowerCase() !== headOid) {
-    await restoreRef(repo.path, trackingRef, oldTrackingHead, fetchedHead).catch(() => {})
-    await restoreRef(repo.path, baseTrackingRef, oldBaseTrackingHead, fetchedBaseHead).catch(() => {})
+    await restoreRef(env.process, repo.path, trackingRef, oldTrackingHead, fetchedHead).catch(() => {})
+    await restoreRef(env.process, repo.path, baseTrackingRef, oldBaseTrackingHead, fetchedBaseHead).catch(() => {})
     throw failure(env, 'github-branch-diverged', `Local branch ${head.refName} does not point at the current pull request head; it was left unchanged.`, {
       branch: head.refName,
       expectedHead: headOid
@@ -441,33 +390,33 @@ export async function planPullRequest(env: GitHubEnv, repo: Repo, source: GitHub
   }
 }
 
-export async function restorePullRef(repo: string, plan: PullRequestPlan): Promise<void> {
+export async function restorePullRef(process: ProcessRunner, repo: string, plan: PullRequestPlan): Promise<void> {
   await Promise.all([
-    restoreRef(repo, plan.trackingRef, plan.oldTrackingHead, plan.fetchedHead),
-    restoreRef(repo, plan.baseTrackingRef, plan.oldBaseTrackingHead, plan.fetchedBaseHead)
+    restoreRef(process, repo, plan.trackingRef, plan.oldTrackingHead, plan.fetchedHead),
+    restoreRef(process, repo, plan.baseTrackingRef, plan.oldBaseTrackingHead, plan.fetchedBaseHead)
   ])
 }
 
-export async function addPushRemote(repo: string, plan: PullRequestPlan): Promise<boolean> {
+export async function addPushRemote(process: ProcessRunner, repo: string, plan: PullRequestPlan): Promise<boolean> {
   if (plan.pushRemoteUrl === null) return false
-  const result = await runGit(repo, ['remote', 'add', plan.pushTarget.remoteName, plan.pushRemoteUrl])
+  const result = await runGit(process, repo, ['remote', 'add', plan.pushTarget.remoteName, plan.pushRemoteUrl])
   if (result.exitCode !== 0) throw new Error(`could not add Git remote ${plan.pushTarget.remoteName}: ${result.stderr.trim() || 'git remote add failed'}`)
   return true
 }
 
-export async function removePushRemote(repo: string, plan: PullRequestPlan): Promise<void> {
-  const urls = await remoteUrls(repo, plan.pushTarget.remoteName)
+export async function removePushRemote(process: ProcessRunner, repo: string, plan: PullRequestPlan): Promise<void> {
+  const urls = await remoteUrls(process, repo, plan.pushTarget.remoteName)
   if (
     urls.fetch.length !== 1 ||
     urls.fetch[0] !== plan.pushRemoteUrl ||
     urls.push.length !== 1 ||
     urls.push[0] !== plan.pushRemoteUrl
   ) return
-  const result = await runGit(repo, ['remote', 'remove', plan.pushTarget.remoteName])
+  const result = await runGit(process, repo, ['remote', 'remove', plan.pushTarget.remoteName])
   if (result.exitCode !== 0) throw new Error(`could not remove temporary remote ${plan.pushTarget.remoteName}: ${result.stderr.trim()}`)
 }
 
-export async function snapshotBranchConfig(repo: string, branch: string): Promise<Map<string, string[]>> {
+export async function snapshotBranchConfig(process: ProcessRunner, repo: string, branch: string): Promise<Map<string, string[]>> {
   const keys = [
     `branch.${branch}.base`,
     `branch.${branch}.remote`,
@@ -475,7 +424,7 @@ export async function snapshotBranchConfig(repo: string, branch: string): Promis
     `branch.${branch}.pushRemote`
   ]
   const values = new Map<string, string[]>()
-  for (const key of keys) values.set(key, await configValues(repo, key))
+  for (const key of keys) values.set(key, await configValues(process, repo, key))
   return values
 }
 
@@ -487,12 +436,12 @@ export async function configurePullBranch(repo: string, plan: PullRequestPlan): 
   await git.setLocalConfig(repo, `branch.${plan.branch}.pushRemote`, plan.pushTarget.remoteName)
 }
 
-export async function restoreBranchConfig(repo: string, snapshot: Map<string, string[]>): Promise<void> {
+export async function restoreBranchConfig(process: ProcessRunner, repo: string, snapshot: Map<string, string[]>): Promise<void> {
   for (const [key, values] of snapshot) {
-    const unset = await runGit(repo, ['config', '--local', '--unset-all', key])
+    const unset = await runGit(process, repo, ['config', '--local', '--unset-all', key])
     if (unset.exitCode !== 0 && unset.exitCode !== 5) throw new Error(`could not restore Git config ${key}: ${unset.stderr.trim()}`)
     for (const value of values) {
-      const add = await runGit(repo, ['config', '--local', '--add', key, value])
+      const add = await runGit(process, repo, ['config', '--local', '--add', key, value])
       if (add.exitCode !== 0) throw new Error(`could not restore Git config ${key}: ${add.stderr.trim()}`)
     }
   }

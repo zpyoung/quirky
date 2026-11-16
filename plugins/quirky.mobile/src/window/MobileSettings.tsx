@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Badge, Button, FormRow, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'
+import { Badge, Button, FormRow, InlineError, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame } from '@quirky/ui'
 import type { MobilePairingResult, UiPluginContext } from '@quirky/protocol'
 import { createPairing } from './api'
 import { DeviceList } from './DeviceList'
@@ -105,49 +105,17 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
     }
   }
 
-  const addAddress = async (address: string) => {
-    const current = mobile.state
-    if (!current) return
-    if (current.customAddresses.includes(address)) {
-      setSelectedAddress(address)
-      return
-    }
-    if (current.customAddresses.length >= 50) throw new Error('You can save up to 50 custom addresses.')
-    const next = await mobile.configure({ customAddresses: [...current.customAddresses, address] })
-    setSelectedAddress(address)
-    setActionError(null)
-    if (!next.customAddresses.includes(address)) throw new Error('The address was not saved.')
-  }
-
-  const removeAddress = async (address: string) => {
-    const current = mobile.state
-    if (!current) return
-    const next = await mobile.configure({ customAddresses: current.customAddresses.filter((item) => item !== address) })
-    setSelectedAddress(next.interfaces[0]?.address ?? next.customAddresses[0] ?? '')
-    setActionError(null)
-  }
-
-  const refreshInterfaces = async () => {
-    try {
-      const interfaces = await mobile.refreshInterfaces()
-      if (!interfaces.some((item) => item.address === selectedAddress) && !mobile.state?.customAddresses.includes(selectedAddress)) {
-        setSelectedAddress(interfaces[0]?.address ?? mobile.state?.customAddresses[0] ?? '')
-      }
-      setActionError(null)
-    } catch (error) {
-      setActionError(messageOf(error))
-    }
-  }
-
   if (mobile.loading && mobile.state === null) {
-    return <main className="ui-stack"><p role="status">Loading Mobile settings…</p></main>
+    return <main className="ui-stack"><NoticeLine>Loading Mobile settings…</NoticeLine></main>
   }
   if (mobile.state === null) {
     return (
       <main className="ui-stack">
         <SectionHeader title="Mobile" />
-        <p className="ui-error-text" role="alert">Unable to load Mobile settings: {mobile.error ?? 'The daemon returned no state.'}</p>
-        <div className="ui-cluster"><Button onClick={() => void mobile.refresh()}>Try again</Button></div>
+        <InlineError
+          message={`Unable to load Mobile settings: ${mobile.error ?? 'The daemon returned no state.'}`}
+          action={{ label: 'Try again', onAction: () => void mobile.refresh() }}
+        />
       </main>
     )
   }
@@ -158,8 +126,8 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
         <SectionHeader title="Mobile" actions={<Button onClick={() => context.openView(MOBILE_PAGE_ID)}>Open Mobile page</Button>} />
         <p className="ui-text-muted">Control terminals and agents from your phone.</p>
       </div>
-      {mobile.error && <p className="ui-error-text" role="alert">Could not refresh Mobile state: {mobile.error}</p>}
-      {actionError && <p className="ui-error-text" role="alert">{actionError}</p>}
+      {mobile.error && <InlineError message={`Could not refresh Mobile state: ${mobile.error}`} />}
+      {actionError && <InlineError message={actionError} />}
 
       <ToolPanelFrame title="Desktop identity">
         <div className="ui-stack">
@@ -192,16 +160,14 @@ export function MobileSettings({ context, report }: { context: UiPluginContext; 
             <p><Badge tone="needs-you">Relay unavailable</Badge> Quirky Relay isn’t available in this build. Use LAN.</p>
           </div>
           <NetworkPicker
+            mobile={mobile}
             interfaces={mobile.state.interfaces}
             customAddresses={mobile.state.customAddresses}
             selectedAddress={selectedAddress}
             busy={busy}
-            onSelect={setSelectedAddress}
-            onRefresh={refreshInterfaces}
-            onAdd={addAddress}
-            onRemove={removeAddress}
+            onAddressChange={(address) => { setActionError(null); setSelectedAddress(address) }}
           />
-          <PairingPanel offer={offer} busy={busy} error={null} buttonLabel="Generate QR code" onGenerate={generate} />
+          <PairingPanel context={context} offer={offer} busy={busy} buttonLabel="Generate QR code" onGenerate={generate} />
           <SelectField
             label="When you leave the mobile app"
             aria-label="When you leave the mobile app"

@@ -186,6 +186,103 @@ test('auxiliary routes remain daemon-readable, local to their window, and pruned
   expect(await requester.call('desktop.window.list', {})).toEqual([])
 })
 
+test('owner commands can skip activation, activate explicitly, and reject invalid activation options', async () => {
+  harness = await startHarness({ home: makeTempHome('quirky-owner-command-'), builtinPluginsDir: builtinsDir() })
+  const requester = await harness.connect('cli')
+  const shell = await harness.connect('ui')
+  await shell.call('desktop.shell.capabilities', {
+    directoryPicker: true, auxiliaryWindows: true, revealItem: true,
+    notifications: { permission: false, click: false, dismiss: false }
+  })
+  const model = await requester.call('ui.contributions', {})
+  const view = model.views[0]
+  const command = model.commands[0]
+  expect(view).toBeDefined()
+  expect(command).toBeDefined()
+
+  const openRequestEvent = waitForShellRequest(shell)
+  const openPending = requester.call('desktop.window.open', { view: view!.id })
+  const openRequest = await openRequestEvent
+  await shell.call('desktop.shell.reply', {
+    requestId: openRequest.requestId, result: { windowId: 'owned-window-7' }
+  })
+  expect(await openPending).toEqual({ windowId: 'owned-window-7' })
+
+  const auxiliary = await harness.connect('ui')
+  await auxiliary.call('desktop.shell.capabilities', {
+    directoryPicker: false, auxiliaryWindows: true, revealItem: false,
+    notifications: { permission: false, click: false, dismiss: false }
+  })
+  await auxiliary.call('desktop.window.attach', {
+    windowId: 'owned-window-7', ownerShellConnId: openRequest.ownerShell.connId
+  })
+
+  const shellRequests: Extract<QuirkyEvent, { type: 'desktop.shell.request' }>[] = []
+  const ownerCommands: Extract<QuirkyEvent, { type: 'ui.command.request' }>[] = []
+  auxiliary.onEvent((event) => {
+    if (event.type === 'desktop.shell.request') shellRequests.push(event)
+  })
+  shell.onEvent((event) => {
+    if (event.type === 'ui.command.request') ownerCommands.push(event)
+  })
+
+  const noActivationCommandEvent = waitForUiCommand(shell)
+  const timedOut = Symbol('owner command timed out')
+  const { promise: timeout, resolve: resolveTimeout } = Promise.withResolvers<symbol>()
+  // This RPC can stall waiting for native activation, so fake timers cannot complete the IPC wait.
+  const timeoutId = setTimeout(() => resolveTimeout(timedOut), 2_000)
+  const noActivationPending = auxiliary.call('desktop.window.runOwnerCommand', {
+    windowId: 'owned-window-7', id: command!.id, args: {}, activateOwner: false
+  })
+  const noActivationRequest = noActivationCommandEvent.then((event) => ({ event }))
+  const noActivationReply = noActivationPending.then((result) => ({ result }))
+  let noActivationResult: unknown
+  try {
+    const first = await Promise.race([noActivationRequest, noActivationReply, timeout])
+    if (typeof first === 'symbol') {
+      noActivationResult = timedOut
+    } else if ('event' in first) {
+      await shell.call('ui.command.reply', { requestId: first.event.requestId, result: { opened: true } })
+      const replied = await Promise.race([noActivationReply, timeout])
+      noActivationResult = typeof replied === 'symbol' ? timedOut : replied.result
+    } else {
+      noActivationResult = first.result
+    }
+  } finally {
+    clearTimeout(timeoutId)
+  }
+  expect(shellRequests).toEqual([])
+  expect(noActivationResult).toEqual({ result: { opened: true }, activated: false })
+
+  const explicitTrueCommandEvent = waitForUiCommand(shell)
+  const explicitTruePending = auxiliary.call('desktop.window.runOwnerCommand', {
+    windowId: 'owned-window-7', id: command!.id, args: {}, activateOwner: true
+  })
+  const explicitlyRouted = await explicitTrueCommandEvent
+  const activationEvent = waitForShellRequest(auxiliary)
+  await shell.call('ui.command.reply', {
+    requestId: explicitlyRouted.requestId, result: { opened: true }
+  })
+  const activationRequest = await activationEvent
+  expect(activationRequest.action).toEqual({
+    kind: 'window-activate-owner', request: { windowId: 'owned-window-7' }
+  })
+  await auxiliary.call('desktop.shell.reply', {
+    requestId: activationRequest.requestId, result: { activated: true }
+  })
+  expect(await explicitTruePending).toEqual({ result: { opened: true }, activated: true })
+  expect(shellRequests).toEqual([activationRequest])
+
+  const ownerCommandsBeforeInvalid = ownerCommands.length
+  await expect(auxiliary.call('desktop.window.runOwnerCommand', {
+    windowId: 'owned-window-7', id: command!.id, args: {}, activateOwner: 'no' as never
+  })).rejects.toMatchObject({
+    code: -32602,
+    message: 'params.activateOwner must be a boolean'
+  })
+  expect(ownerCommands).toHaveLength(ownerCommandsBeforeInvalid)
+})
+
 test('notification capabilities are false until a window reports what its SDK supports', async () => {
   harness = await startHarness({ home: makeTempHome('quirky-desktop-notify-'), builtinPluginsDir: builtinsDir() })
   const requester = await harness.connect('cli')

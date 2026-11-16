@@ -1,6 +1,6 @@
 {
   "id": "quirky.terminal",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.13.0",
   "name": "Terminal",
   "version": "0.1.0",
   "description": "Terminal input and output for sessions that run in a PTY.",
@@ -206,6 +206,33 @@
         }
       },
       {
+        "id": "resync",
+        "description": "Replaces a terminal stream with a fresh screen replay after output was lost. Repeated requests for the same connection and session are spaced by two seconds.",
+        "connection": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "streamId": { "type": "integer", "minimum": 0 },
+            "historyLines": { "type": "integer", "minimum": 0, "maximum": 10000 }
+          },
+          "required": ["streamId"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "streamId": { "type": "integer" },
+            "replay": { "type": "string" },
+            "offset": { "type": "integer" },
+            "historyCursor": { "description": "Pass to history as before; null when there is nothing older." },
+            "cols": { "type": "integer" },
+            "rows": { "type": "integer" },
+            "shellState": { "type": "string" },
+            "live": { "type": "boolean" }
+          },
+          "required": ["streamId", "replay", "offset", "historyCursor", "cols", "rows", "shellState", "live"]
+        }
+      },
+      {
         "id": "detach",
         "description": "Stops a terminal stream.",
         "connection": true,
@@ -245,6 +272,10 @@
             },
             "data": {
               "type": "string"
+            },
+            "expectedIncarnation": {
+              "type": "string",
+              "description": "When supplied, verifies this write against the live process incarnation and reports human input custody."
             }
           },
           "required": [
@@ -271,7 +302,10 @@
           "type": "object",
           "properties": {
             "session": { "type": "string" },
-            "expectedIncarnation": { "type": "string", "description": "The non-empty incarnation of the currently attached process; verified by the method." }
+            "expectedIncarnation": {
+              "type": "string",
+              "description": "The non-empty incarnation of the currently attached process; verified by the method."
+            }
           },
           "required": ["session", "expectedIncarnation"]
         },
@@ -2648,6 +2682,7 @@
       },
       {
         "id": "title",
+        "coalesce": ["sessionId"],
         "description": "A terminal's title changed.",
         "data": {
           "type": "object",
@@ -2667,6 +2702,7 @@
       },
       {
         "id": "cwd",
+        "coalesce": ["sessionId"],
         "description": "A terminal's working directory changed.",
         "data": {
           "type": "object",
@@ -4106,6 +4142,10 @@
             "pane": {
               "type": "string",
               "description": "The pane ID; default: the focused pane."
+            },
+            "text": {
+              "type": "string",
+              "description": "The text to copy to the clipboard."
             }
           }
         }
@@ -4154,6 +4194,10 @@
             },
             "caseSensitive": {
               "type": "boolean"
+            },
+            "pane": {
+              "type": "string",
+              "description": "The pane ID; default: the focused pane."
             }
           }
         }
@@ -4414,7 +4458,17 @@
       },
       {
         "id": "rename-tab",
-        "title": "Rename Active Tab"
+        "title": "Rename Active Tab",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tab": {
+              "type": "string",
+              "description": "The tab ID to rename; default: the focused tab."
+            }
+          }
+        }
       },
       {
         "id": "reopen-tab",
@@ -4452,6 +4506,7 @@
                 "tab",
                 "pane",
                 "plus",
+                "actions",
                 "quick-commands"
               ],
               "description": "Which menu to open."
@@ -4459,6 +4514,14 @@
             "target": {
               "type": "string",
               "description": "The tab, pane or group ID the menu belongs to; default: the focused one."
+            },
+            "x": {
+              "type": "number",
+              "description": "Optional pointer x-coordinate."
+            },
+            "y": {
+              "type": "number",
+              "description": "Optional pointer y-coordinate."
             }
           },
           "required": [
@@ -4468,7 +4531,17 @@
       },
       {
         "id": "close-menu",
-        "title": "Close Terminal Menu"
+        "title": "Close Terminal Menu",
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "target": {
+              "type": "string",
+              "description": "The tab, pane or group ID whose workspace menu to close; default: the focused workspace."
+            }
+          }
+        }
       },
       {
         "id": "toggle-floating",
@@ -4481,7 +4554,12 @@
       {
         "id": "minimize-floating",
         "title": "Minimize Floating Workspace Panel"
-      }
+      },
+      {"id":"quick-command-dialog","title":"Quick Command Dialog","palette":false,"args":{"type":"object","properties":{"action":{"type":"string","enum":["open","toggle-advanced","toggle-append-enter"]},"command":{"type":"string","description":"A quick command ID from quirky terminal quick-command list --all; open edits it, and without it open adds one."},"repo":{"type":"string","description":"The repo a new Project-scoped command belongs to."}},"required":["action"],"additionalProperties":false}},
+      {"id":"copy-quick-command","title":"Copy Quick Command","palette":false,"args":{"type":"object","properties":{"command":{"type":"string","description":"A quick command ID from quirky terminal quick-command list --all."}},"required":["command"],"additionalProperties":false}},
+      {"id":"run-menu-item","title":"Run Terminal Menu Item","palette":false,"args":{"type":"object","properties":{"item":{"type":"string"},"session":{"type":"string"},"worktree":{"type":"string"},"workspace":{"type":"string"},"group":{"type":"string"}},"required":["item"],"additionalProperties":false}},
+      {"id":"workspace-view-action","title":"Terminal Workspace View Action","palette":false,"args":{"type":"object","properties":{"workspace":{"type":"string"},"action":{"type":"string","enum":["open-pane-menu","close-menu","cancel-dialog","confirm-close","submit-session","activate-switcher"]},"pane":{"type":"string"},"x":{"type":"number"},"y":{"type":"number"},"kind":{"type":"string","enum":["close-running","close-pinned","new-session","switch-tabs"]},"generation":{"type":"string"},"dontAskAgain":{"type":"boolean"},"prompt":{"type":"string"},"tab":{"type":"string"}},"required":["workspace","action"],"additionalProperties":false}},
+      {"id":"workspace-menu-action","title":"Terminal Workspace Menu Action","palette":false,"args":{"type":"object","properties":{"action":{"type":"string","enum":["copy-id","choose-agent","hidden-tabs","run-group-command"]},"target":{"type":"string"},"kind":{"type":"string","enum":["tab","pane","session"]},"agent":{"type":"string"},"background":{"type":"boolean"},"open":{"type":"boolean"},"command":{"type":"string"},"args":{"type":"object","additionalProperties":true}},"required":["action","target"],"additionalProperties":false}}
     ],
     "menu-item": [
       {"id":"new-emulator","menu":"quirky.terminal/tab","title":"New Mobile Emulator","command":"new-emulator","after":"quick-commands"},

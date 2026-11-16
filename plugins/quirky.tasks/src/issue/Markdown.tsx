@@ -1,5 +1,5 @@
-import { Button, Tabs, TextField } from '@quirky/ui'
-import { useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
+import { Button, EmptyState, InlineError, Tabs, TextField } from '@quirky/ui'
+import { useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 
 export type MarkdownProps = { source: string }
 export type MarkdownComposerProps = {
@@ -173,6 +173,7 @@ export function MarkdownComposer({ value, onChange, label, placeholder, disabled
     if (textarea.current) selection.current = { start: textarea.current.selectionStart, end: textarea.current.selectionEnd }
   }
   const insertMarkdown = (text: string) => {
+    if (textarea.current && document.activeElement === textarea.current) trackSelection()
     const start = Math.min(selection.current.start, value.length)
     const end = Math.min(selection.current.end, value.length)
     onChange(value.slice(0, start) + text + value.slice(end))
@@ -193,6 +194,19 @@ export function MarkdownComposer({ value, onChange, label, placeholder, disabled
     }
     insertMarkdown(`![${markdownAlt(url)}](${url})`)
     return true
+  }
+  const onInsertImageUrl = () => {
+    if (insertImage(imageUrl)) {
+      setImageUrl('')
+      setShowImageUrl(false)
+    }
+  }
+  const onSubmitShortcut = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (onSubmit && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault()
+      event.stopPropagation()
+      onSubmit()
+    }
   }
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = Array.from(event.clipboardData.items).filter((item) => item.kind === 'file')
@@ -229,7 +243,6 @@ export function MarkdownComposer({ value, onChange, label, placeholder, disabled
         value={tab}
         onChange={(value) => { if (value === 'write' || value === 'preview') setTab(value) }}
       />
-      {tab === 'write' && <Button type="button" className="quirky-tasks-markdown-composer__image-toggle" onClick={() => { setShowImageUrl((shown) => !shown); setImageError('') }} disabled={disabled}>Insert image URL</Button>}
     </div>
     {tab === 'write'
       ? <>
@@ -242,46 +255,37 @@ export function MarkdownComposer({ value, onChange, label, placeholder, disabled
             disabled={disabled}
             rows={minRows}
             onChange={(event) => { onChange(event.currentTarget.value); trackSelection(); setInputError('') }}
-            onSelect={trackSelection}
-            onClick={trackSelection}
+            onMouseUp={trackSelection}
             onKeyUp={trackSelection}
-            onKeyDown={(event) => {
-              if (onSubmit && event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                event.preventDefault()
-                event.stopPropagation()
-                onSubmit()
-              }
-            }}
+            onBlur={trackSelection}
+            onKeyDown={onSubmitShortcut}
             onPaste={onPaste}
             onDrop={onDrop}
             onDragOver={(event) => {
               if (event.dataTransfer.files.length > 0 || safeHttpUrl(event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain'), 8192)) event.preventDefault()
             }}
           />
-          {showImageUrl && <div className="quirky-tasks-markdown-composer__image-input" role="group" aria-label="Insert image by URL">
-            <TextField
-              label="Image URL"
-              type="text"
-              inputMode="url"
-              value={imageUrl}
-              onChange={(event) => setImageUrl(event.currentTarget.value)}
-              placeholder="https://example.com/image.png"
-              maxLength={8192}
-              disabled={disabled}
-            />
-            <Button type="button" disabled={disabled || imageUrl.trim().length === 0} onClick={() => {
-              if (insertImage(imageUrl)) {
-                setImageUrl('')
-                setShowImageUrl(false)
-              }
-            }}>Insert</Button>
-          </div>}
+          {!disabled && <details className="quirky-tasks-markdown-composer__image" open={showImageUrl} onToggle={(event) => { setShowImageUrl(event.currentTarget.open); setImageError('') }}>
+            <summary className="quirky-tasks-markdown-composer__image-toggle">Insert image URL</summary>
+            <div className="quirky-tasks-markdown-composer__image-input" role="group" aria-label="Insert image by URL">
+              <TextField
+                label="Image URL"
+                type="text"
+                inputMode="url"
+                value={imageUrl}
+                onChange={(event) => setImageUrl(event.currentTarget.value)}
+                placeholder="https://example.com/image.png"
+                maxLength={8192}
+              />
+              <Button type="button" disabled={imageUrl.trim().length === 0} onClick={onInsertImageUrl}>Insert</Button>
+            </div>
+          </details>}
           <p className="quirky-tasks-markdown-composer__hint">Paste, drop, or enter an HTTP(S) image URL.</p>
-          {imageError && <p className="quirky-tasks-markdown-composer__error" role="alert">{imageError}</p>}
-          {inputError && <p className="quirky-tasks-markdown-composer__error" role="alert">{inputError}</p>}
+          {imageError && <InlineError message={imageError} />}
+          {inputError && <InlineError message={inputError} />}
         </>
       : <div className="quirky-tasks-markdown-composer__preview" role="tabpanel" aria-label={`${label} preview`}>
-          {value.trim().length === 0 ? <span className="ui-text-muted">Nothing to preview</span> : <Markdown source={value} />}
+          {value.trim().length === 0 ? <EmptyState message="Nothing to preview" /> : <Markdown source={value} />}
         </div>}
   </section>
 }

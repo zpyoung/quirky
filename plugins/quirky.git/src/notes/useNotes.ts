@@ -28,7 +28,7 @@ export function useNotes(context: UiPluginContext, worktree: string): readonly N
           : { worktree, notes: result.notes })
       } catch (error) {
         if (!alive || ticket !== newest) return
-        context.toast('Failed to load notes', error instanceof Error ? error.message : String(error))
+        context.toast('Failed to load notes', error instanceof Error ? error.message : String(error), { kind: 'error' })
       }
     }
     void read()

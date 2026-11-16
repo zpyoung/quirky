@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { RpcErrorCode } from '@quirky/protocol'
-import { conflict, DaemonError } from '../errors'
+import { conflict, DaemonError, isRefusal } from '../errors'
 import type { RequestOutcome, Store } from '../store'
 
 /** How long a recorded request or confirmation is kept. */
@@ -114,7 +114,7 @@ export class RequestLog {
     try {
       result = await work()
     } catch (error) {
-      this.write(requestId, digest, outcomeOfError(error))
+      if (!isRefusal(error)) this.write(requestId, digest, outcomeOfError(error))
       throw error
     }
     this.write(requestId, digest, { result })

@@ -1,0 +1,12 @@
+{
+  "name": "@quirky/process",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/api.ts"
+  },
+  "dependencies": {
+    "@quirky/protocol": "workspace:*"
+  }
+}

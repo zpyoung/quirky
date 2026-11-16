@@ -9,13 +9,14 @@ import {
   parseDuration,
   RESERVED_FLAG_NAMES,
 } from '@quirky/protocol'
+import { isKeyPath } from './coalesce'
 import { checkUiKindEntry, isUiKind } from './ui-kinds'
 
 type Entry = Record<string, unknown>
 
 const ALLOWED_FIELDS: Record<string, readonly string[]> = {
-  method: ['description', 'params', 'result', 'readOnly', 'destructive', 'confirm', 'describe', 'connection'],
-  event: ['description', 'data'],
+  method: ['description', 'params', 'result', 'readOnly', 'destructive', 'confirm', 'describe', 'connection', 'timeout'],
+  event: ['description', 'data', 'coalesce', 'worktree'],
   job: ['description', 'interval', 'initialDelay', 'timeout'],
   'launch-hook': ['description', 'agents'],
   'cli-command': ['description', 'words', 'summary', 'method', 'positionals', 'flags', 'methods'],
@@ -90,6 +91,24 @@ function checkFlagCollisions(label: string, params: unknown, errors: string[]): 
 
 function isRecord(value: unknown): value is Entry {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function checkEventMetadata(label: string, entry: Entry, errors: string[]): void {
+  if (entry.coalesce !== undefined) {
+    if (!Array.isArray(entry.coalesce) || entry.coalesce.length > 4) {
+      errors.push(`${label}: coalesce must be an array of at most 4 key paths`)
+    } else {
+      const paths = new Set<string>()
+      for (const [index, path] of entry.coalesce.entries()) {
+        if (!isKeyPath(path)) errors.push(`${label}: coalesce[${index}] is not a key path`)
+        else if (paths.has(path)) errors.push(`${label}: coalesce[${index}] repeats \`${path}\``)
+        else paths.add(path)
+      }
+    }
+  }
+  if (entry.worktree !== undefined && !isKeyPath(entry.worktree)) {
+    errors.push(`${label}: worktree is not a key path`)
+  }
 }
 
 function checkMethodFlags(label: string, entry: Entry, errors: string[]): void {
@@ -214,8 +233,14 @@ export function checkKindEntry(kind: string, label: string, entry: Entry, errors
     if (entry.params !== undefined && problems.length === 0) checkFlagCollisions(label, entry.params, errors)
     checkSchemaField(label, entry, 'result', {}, errors)
     checkMethodFlags(label, entry, errors)
+    if (entry.timeout !== undefined) {
+      checkDuration(label, entry, 'timeout', { min: MIN_JOB_INTERVAL_MS, message: 'must be between 1s and 24h' }, errors)
+    }
   }
-  if (kind === 'event') checkSchemaField(label, entry, 'data', {}, errors)
+  if (kind === 'event') {
+    checkSchemaField(label, entry, 'data', {}, errors)
+    checkEventMetadata(label, entry, errors)
+  }
   if (kind === 'job') {
     if (entry.interval === undefined) errors.push(`${label}: interval is required`)
     else checkDuration(label, entry, 'interval', { min: MIN_JOB_INTERVAL_MS, message: 'must be between 1s and 24h' }, errors)

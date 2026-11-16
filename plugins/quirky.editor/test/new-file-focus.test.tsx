@@ -6,9 +6,16 @@ import type { UiPluginContext } from '@quirky/protocol'
 import type { EditorBufferInfo, EditorKind, EditorMode } from '../src/types'
 import type { DocumentSurface as DocumentSurfaceComponent } from '../src/window/DocumentSurface'
 import type { ExplorerPanel as ExplorerPanelComponent } from '../src/window/ExplorerPanel'
+import type { activate as Activate, deactivate as Deactivate } from '../src/ui'
+import type {
+  createEditorUiControlReportScope as CreateEditorUiControlReportScope,
+  EditorUiControlProvider as EditorUiControlProviderComponent
+} from '../src/window/uiControl'
 
 type OpenedDocument = { bufferId: string; tabId: string }
 type EditorEvent = { type: string; id?: string }
+type WindowCommand = { connId: unknown; id: unknown; args: unknown }
+type CommandHandler = (args?: unknown) => unknown
 type Runtime = {
   buffers: EditorBufferInfo[]
   tabs: { tabId: string; bufferId: string; mode: 'edit' | 'preview' }[]
@@ -34,6 +41,7 @@ type Runtime = {
   postOpenGate: Promise<void>
   releasePostOpen(): void
   listeners: Set<(event: EditorEvent) => void>
+  windowCommands: WindowCommand[]
 }
 type Mounted = { element: HTMLElement; unmount(): Promise<void> }
 
@@ -59,6 +67,10 @@ const SETTINGS = new Map<string, unknown>([
 let createRoot: (container: HTMLElement) => Root
 let DocumentSurface: typeof DocumentSurfaceComponent
 let ExplorerPanel: typeof ExplorerPanelComponent
+let activate: typeof Activate
+let deactivate: typeof Deactivate
+let createEditorUiControlReportScope: typeof CreateEditorUiControlReportScope
+let EditorUiControlProvider: typeof EditorUiControlProviderComponent
 let mounted: Mounted[] = []
 
 beforeAll(async () => {
@@ -67,6 +79,8 @@ beforeAll(async () => {
   ;({ createRoot } = await import('react-dom/client'))
   ;({ DocumentSurface } = await import('../src/window/DocumentSurface'))
   ;({ ExplorerPanel } = await import('../src/window/ExplorerPanel'))
+  ;({ activate, deactivate } = await import('../src/ui'))
+  ;({ createEditorUiControlReportScope, EditorUiControlProvider } = await import('../src/window/uiControl'))
 })
 
 afterAll(async () => {
@@ -151,7 +165,8 @@ function makeRuntime(mountDuringOpen: boolean, deferPostOpen = false, deferOpen 
     openGate: openGate.promise,
     releaseOpen: openGate.resolve,
     stateReads: 0,
-    listeners: new Set()
+    listeners: new Set(),
+    windowCommands: []
   }
 }
 
@@ -174,9 +189,18 @@ function stateSnapshot(runtime: Runtime) {
 }
 
 function makeContext(runtime: Runtime): UiPluginContext {
+  const handlers = new Map<string, CommandHandler>()
   const context = {
     pluginId: 'quirky.editor',
     async call(method: string, params: Record<string, unknown> = {}) {
+      if (method === 'ui.window.self') return { connId: 22 }
+      if (method === 'ui.window.command.run') {
+        runtime.windowCommands.push({ connId: params.connId, id: params.id, args: params.args })
+        if (params.connId !== 22) throw new Error('The control must stay in this window.')
+        const handler = handlers.get(String(params.id))
+        if (!handler) throw new Error(`No activated handler for ${String(params.id)}.`)
+        return { result: await handler(params.args) }
+      }
       if (method === 'quirky.editor/state') return stateSnapshot(runtime)
       if (method === 'quirky.git/status') return { files: [] }
       if (method === 'quirky.editor/documentRoot') return { id: WORKTREE_ID, path: ROOT }
@@ -264,9 +288,9 @@ function makeContext(runtime: Runtime): UiPluginContext {
     nativeBrowser: {},
     nativeDropPaths: async () => null,
     readClipboardText: async () => '',
-    provide() {},
+    provide(id: string, handler: CommandHandler) { handlers.set(id, handler) },
     log() {},
-    async executeCommand() {},
+    async executeCommand() { throw new Error('Owner-window dispatch is forbidden') },
     createCommandDrag: () => 'unused-command-drag',
     consumeCommandDrag: () => null,
     cancelCommandDrag() {},
@@ -280,7 +304,23 @@ function makeContext(runtime: Runtime): UiPluginContext {
     setContext() {},
     mountView: () => () => {}
   }
-  return context as unknown as UiPluginContext
+  const uiContext = context as unknown as UiPluginContext
+  activate(uiContext)
+  return uiContext
+}
+
+function ScopedDocument({ context, input }: { context: UiPluginContext; input: OpenedDocument }) {
+  const [scope] = useState(() => {
+    const documentScope = createEditorUiControlReportScope(undefined, { surface: 'view:quirky.editor/document' })
+    documentScope.report({ mounted: true, bufferId: input.bufferId, tabId: input.tabId, mode: null })
+    return documentScope
+  })
+  useEffect(() => () => scope.dispose(), [scope])
+  return (
+    <EditorUiControlProvider scope={scope}>
+      <DocumentSurface context={context} input={input} />
+    </EditorUiControlProvider>
+  )
 }
 
 function OpenedDocumentHost({ runtime, context, opened }: {
@@ -303,7 +343,7 @@ function OpenedDocumentHost({ runtime, context, opened }: {
   return (
     <div className="qt-group qt-active" data-testid="opened-group">
       <div ref={host} className="qt-hosted-view" data-hosted-view={opened.tabId} data-testid="opened-document">
-        <DocumentSurface context={context} input={{ bufferId: opened.bufferId, tabId: opened.tabId }} />
+        <ScopedDocument key={JSON.stringify([opened.bufferId, opened.tabId])} context={context} input={opened} />
       </div>
     </div>
   )
@@ -322,7 +362,7 @@ function FocusTestApp({ runtime, context }: { runtime: Runtime; context: UiPlugi
       <ExplorerPanel context={context} />
       <div className="qt-group" data-testid="background-group">
         <div className="qt-hosted-view" data-hosted-view={BACKGROUND_TAB_ID} data-testid="background-document">
-          <DocumentSurface context={context} input={{ bufferId: BACKGROUND_BUFFER_ID, tabId: BACKGROUND_TAB_ID }} />
+          <ScopedDocument context={context} input={{ bufferId: BACKGROUND_BUFFER_ID, tabId: BACKGROUND_TAB_ID }} />
         </div>
       </div>
       {opened && <OpenedDocumentHost runtime={runtime} context={context} opened={opened} />}
@@ -354,17 +394,27 @@ async function renderApp(runtime: Runtime, context: UiPluginContext): Promise<Mo
   const element = document.createElement('div')
   document.body.append(element)
   const root = createRoot(element)
+  const scope = createEditorUiControlReportScope(undefined, { surface: 'panel:quirky.editor/explorer' })
   let unmounted = false
   const surface: Mounted = {
     element,
     async unmount() {
       if (unmounted) return
       unmounted = true
-      await act(async () => root.unmount())
+      try {
+        await act(async () => root.unmount())
+      } finally {
+        scope.dispose()
+        deactivate()
+      }
     }
   }
   mounted.push(surface)
-  await act(async () => root.render(<FocusTestApp runtime={runtime} context={context} />))
+  await act(async () => root.render(
+    <EditorUiControlProvider scope={scope}>
+      <FocusTestApp runtime={runtime} context={context} />
+    </EditorUiControlProvider>
+  ))
   await waitForUi(() => element.querySelector('button[title="New File"]'))
   await waitForUi(() => element.querySelector('[data-testid="background-document"] .cm-content[contenteditable="true"]'))
   return surface
@@ -374,6 +424,22 @@ function editableSelector(kind: EditorKind): string {
   return kind === 'markdown'
     ? '[contenteditable="true"][aria-label="Rich Markdown editor"]'
     : '.cm-content[contenteditable="true"]'
+}
+
+function expectControlActions(runtime: Runtime, expected: string[]): void {
+  const actions = runtime.windowCommands.map(({ connId, id, args }) => {
+    expect(connId).toBe(22)
+    expect(id).toBe('command:quirky.editor/ui-control')
+    if (typeof args !== 'object' || args === null ||
+      !('surface' in args) || !('target' in args) || !('generation' in args) || !('action' in args)) return 'invalid'
+    expect(args).toMatchObject({
+      surface: 'panel:quirky.editor/explorer',
+      target: `explorer:${WORKTREE_ID}`,
+      generation: expect.any(String)
+    })
+    return typeof args.action === 'string' ? args.action : 'invalid'
+  })
+  expect(actions).toEqual(expected)
 }
 
 async function createFileThroughExplorer(panel: Mounted, path: string): Promise<void> {
@@ -405,6 +471,7 @@ test.each(cases)('New File focuses the $kind editor when mountDuringOpen=$mountD
 
   await createFileThroughExplorer(panel, path)
   await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+  expectControlActions(runtime, ['new-file', 'create'])
   expect(runtime.createdPath).toBe(path)
   expect(runtime.opened).not.toBeNull()
 
@@ -478,6 +545,29 @@ test.each([
   expect(runtime.createFileCalls).toBe(1)
   expect(runtime.createdFileCount).toBe(1)
   expect(runtime.createdPath).toBe(path)
+  expectControlActions(runtime, ['new-file', 'create'])
+})
+
+test('New File Enter submits through the activated exact-window control route', async () => {
+  const runtime = makeRuntime(false)
+  const context = makeContext(runtime)
+  const panel = await renderApp(runtime, context)
+  try {
+    const newFile = panel.element.querySelector<HTMLButtonElement>('button[title="New File"]')
+    if (!newFile) throw new Error('Missing New File action')
+    await act(async () => newFile.click())
+    const input = await waitForUi(() => panel.element.querySelector<HTMLInputElement>('.qe-explorer-inline-row input'))
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'created-enter.txt')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    })
+    await waitForUi(() => runtime.createdPath === 'created-enter.txt' || false)
+    await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+    expectControlActions(runtime, ['new-file', 'create'])
+  } finally {
+    await panel.unmount()
+  }
 })
 
 test('focusing Explorer Find files cancels a pending new-file editor focus', async () => {
@@ -487,6 +577,7 @@ test('focusing Explorer Find files cancels a pending new-file editor focus', asy
 
   await createFileThroughExplorer(panel, 'created-later.txt')
   await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+  expectControlActions(runtime, ['new-file', 'create'])
   expect(runtime.openCompleted).toBe(true)
   expect(panel.element.querySelector('[data-testid="opened-document"]') === null).toBe(true)
 
@@ -517,6 +608,7 @@ test('later Find files focus wins when the editor is ready before New File finis
 
   runtime.releasePostOpen()
   await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+  expectControlActions(runtime, ['new-file', 'create'])
   expect(document.activeElement === findFiles).toBe(true)
 })
 test('programmatic background textarea focus does not cancel the new-file handoff', async () => {
@@ -535,5 +627,6 @@ test('programmatic background textarea focus does not cancel the new-file handof
 
   runtime.releasePostOpen()
   await waitForUi(() => panel.element.querySelector('.qe-explorer-inline-row') === null || false)
+  expectControlActions(runtime, ['new-file', 'create'])
   expect(document.activeElement === targetEditable).toBe(true)
 })

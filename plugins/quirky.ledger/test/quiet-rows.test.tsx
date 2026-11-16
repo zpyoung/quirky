@@ -4,11 +4,13 @@ import { readFileSync } from 'node:fs'
 import type { UiPluginContext } from '@quirky/protocol'
 import { act } from 'react'
 import type { Root, createRoot as CreateRoot } from 'react-dom/client'
+import type { LedgerControl } from '../src/ui/types'
 
 type LedgerModule = typeof import('../src/ui/LedgerApp')
+type RegisterControl = (handler: (control: LedgerControl) => Promise<void>, mode: 'page' | 'panel', instance: string) => () => void
+type TestContext = UiPluginContext & { registerControl: RegisterControl }
 let createRoot: typeof CreateRoot
 let LedgerApp: LedgerModule['LedgerApp']
-
 const nativeGlobals = [
   'fetch', 'WebSocket', 'Request', 'Response', 'Headers', 'ReadableStream', 'WritableStream', 'TransformStream', 'AbortController', 'AbortSignal',
   'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'queueMicrotask', 'MessageChannel', 'performance'
@@ -44,9 +46,18 @@ const entry = {
   origin: { workspaceId: 'wt-1' }, createdAt: '2026-10-30T00:00:00Z', updatedAt: '2026-10-30T00:00:00Z', history: []
 }
 
-function fakeContext(calls: Array<{ method: string; params: Record<string, unknown> }>): UiPluginContext {
+function fakeContext(calls: Array<{ method: string; params: Record<string, unknown> }>): TestContext {
+  const controllers = new Map<string, (control: LedgerControl) => Promise<void>>()
   const call = async (method: string, params: Record<string, unknown> = {}) => {
     calls.push({ method, params })
+    if (method === 'ui.window.self') return { connId: 19 }
+    if (method === 'ui.window.command.run') {
+      if (params.connId !== 19 || params.id !== 'command:quirky.ledger/control') throw new Error('Unexpected exact-window command route.')
+      const control = params.args as LedgerControl
+      const handler = controllers.get(control.instance ?? '')
+      if (!handler) throw new Error('The addressed ledger controller is not mounted.')
+      return handler(control)
+    }
     if (method === 'quirky.repo/list') return [{ id: 'repo-1', name: 'quirky', kind: 'git' }]
     if (method === 'quirky.repo/groupList') return []
     if (method === 'quirky.worktree/list') return [{ id: 'wt-1', repoId: 'repo-1', name: 'main', kind: 'git' }]
@@ -61,8 +72,12 @@ function fakeContext(calls: Array<{ method: string; params: Record<string, unkno
     getLayout: () => ({ worktree: 'wt-1' }),
     onLayout: () => () => {},
     subscribe: () => () => {},
-    openView: () => {}
-  } as unknown as UiPluginContext
+    openView: () => {},
+    registerControl: (handler: (control: LedgerControl) => Promise<void>, _mode: 'page' | 'panel', instance: string) => {
+      controllers.set(instance, handler)
+      return () => { controllers.delete(instance) }
+    }
+  } as unknown as TestContext
 }
 
 const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
@@ -72,7 +87,8 @@ async function mountPanel(calls: Array<{ method: string; params: Record<string, 
   document.body.append(host)
   const root = createRoot(host)
   roots.push(root)
-  await act(async () => root.render(<LedgerApp context={fakeContext(calls)} mode="panel" />))
+  const context = fakeContext(calls)
+  await act(async () => root.render(<LedgerApp context={context} mode="panel" registerControl={context.registerControl} />))
   await settle()
   await settle()
   return host
@@ -101,6 +117,10 @@ test('Review and Delete still run their actions', async () => {
   await act(async () => { row.querySelector<HTMLButtonElement>('button[aria-label="Delete BUG-1"]')!.click() })
   await settle()
   expect(document.body.querySelector('[role="dialog"], .ui-dialog')).not.toBeNull()
+  expect(calls.some((item) => item.method === 'ui.window.command.run'
+    && item.params.id === 'command:quirky.ledger/control'
+    && (item.params.args as LedgerControl).action === 'prepare'
+    && (item.params.args as LedgerControl).instance !== undefined)).toBe(true)
 })
 
 test('Edit opens the entry form', async () => {

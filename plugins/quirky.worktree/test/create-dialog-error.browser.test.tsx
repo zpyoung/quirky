@@ -26,19 +26,22 @@ const STYLESHEETS = [
   'packages/ui/src/design-system/compatibility-tokens.css',
   'packages/ui/src/design-system/tokens.css',
   'packages/ui/src/design-system/components.css',
-  'packages/ui/src/design-system/icons/icons.css'
+  'packages/ui/src/design-system/icons/icons.css',
+  'packages/ui/src/design-system/worktree-primitives.css'
 ]
-const LONG_ERROR = 'The remote workspace could not be created because the server returned a detailed diagnostic for the missing backing directory. '.repeat(120)
+const LONG_ERROR = 'The remote workspace could not be created because the server returned a detailed diagnostic for the missing backing directory. '.repeat(120) + 'f'.repeat(1200)
 
 let browser: Browser | null = null
 let browserBundle = ''
 
 function browserEntry(): string {
   const createDialogModule = join(ROOT, 'plugins/quirky.worktree/src/CreateDialog.tsx')
+  const uiControlModule = join(ROOT, 'plugins/quirky.worktree/src/ui-control.ts')
   return `
     import { createElement as h, useMemo, useRef, useState } from 'react'
     import { createRoot } from 'react-dom/client'
     import { CreateDialog } from ${JSON.stringify(createDialogModule)}
+    import { UI_CONTROL_COMMAND, dispatchUiControl } from ${JSON.stringify(uiControlModule)}
 
     const longError = ${JSON.stringify(LONG_ERROR)}
     const noHooks = { file: null, setup: null, archive: null, agentStartup: null, sharedDirectories: [], warnings: [] }
@@ -53,42 +56,52 @@ function browserEntry(): string {
       const [open, setOpen] = useState(true)
       const [repoId, setRepoId] = useState('repo-one')
       const createCalls = useRef(0)
-      const context = useMemo(() => ({
-        async call(method, params) {
-          if (method === 'ui.window.self') return { connId: 1 }
-          if (method === 'quirky.repo/show') return { settings: { defaultBase: 'main' } }
-          if (method === 'quirky.repo/hooks') return noHooks
-          if (method === 'quirky.worktree/availableHosts') return []
-          if (method === 'quirky.agents/list') return { agents: [] }
-          if (method === 'quirky.worktree/prefetchCreate') return {}
-          if (method === 'quirky.worktree/navigate') return {}
-          if (method === 'quirky.worktree/create') {
-            createCalls.current += 1
-            window.__createCallCount = createCalls.current
-            if (createCalls.current === 1) throw new Error(longError)
-            if (createCalls.current === 2) {
-              const retry = Promise.withResolvers()
-              window.__resolveRetry = () => retry.resolve({ worktree: { id: 'created', name: 'created', path: '/workspace/created' } })
-              return await retry.promise
+      const context = useMemo(() => {
+        const context = {
+          async call(method, params) {
+            if (method === 'ui.window.self') return { connId: 1 }
+            if (method === 'ui.window.command.run') {
+              if (params.id !== UI_CONTROL_COMMAND) throw new Error('unexpected command ' + String(params.id))
+              return { result: dispatchUiControl(context, params.args) }
             }
-            throw new Error('A later create attempt failed.')
-          }
-          return {}
-        },
-        getLayout: () => ({ view: null }),
-        toast(title, body) { window.__toastLog.push({ title, body }) },
-        log() {},
-        openView() {},
-        subscribe() { return () => {} },
-        onConnection() { return () => {} }
-      }), [])
+            if (method === 'quirky.repo/show') return { settings: { defaultBase: 'main' } }
+            if (method === 'quirky.repo/hooks') return noHooks
+            if (method === 'quirky.worktree/availableHosts') return { hosts: [] }
+            if (method === 'quirky.agents/list') return { agents: [] }
+            if (method === 'quirky.hosting/listWorkItems') return { items: [], partial: false }
+            if (method === 'quirky.git/branches') return { refs: [], current: 'main' }
+            if (method === 'quirky.worktree/prefetchCreate') return {}
+            if (method === 'quirky.worktree/navigate') return {}
+            if (method === 'quirky.worktree/create') {
+              createCalls.current += 1
+              window.__createCallCount = createCalls.current
+              if (createCalls.current === 1) throw new Error(longError)
+              if (createCalls.current === 2) {
+                const retry = Promise.withResolvers()
+                window.__resolveRetry = () => retry.resolve({ worktree: { id: 'created', name: 'created', path: '/workspace/created' } })
+                return await retry.promise
+              }
+              throw new Error('A later create attempt failed.')
+            }
+            return {}
+          },
+          getLayout: () => ({ view: null }),
+          toast(title, body) { window.__toastLog.push({ title, body }) },
+          log() {},
+          openView() {},
+          subscribe() { return () => {} },
+          onConnection() { return () => {} },
+          executeCommand() { throw new Error('unexpected executeCommand call') }
+        }
+        return context
+      }, [])
 
       return h('div', null,
         !open && h('button', { type: 'button', onClick: () => setOpen(true) }, 'Open workspace dialog'),
         open && h(CreateDialog, {
           context,
           repos,
-          worktrees: [],
+          worktrees: repos.map((repo) => ({ id: repo.id + '-main', repoId: repo.id, isMain: true, name: 'main', branch: 'main', path: repo.path })),
           repoId,
           onRepoChange: setRepoId,
           onClose: () => setOpen(false),
@@ -181,7 +194,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
     }
     await page.addScriptTag({ content: browserBundle })
     try {
-      await page.getByRole('dialog', { name: 'New workspace' }).waitFor({ timeout: 10_000 })
+      await page.getByRole('dialog', { name: 'New worktree' }).waitFor({ timeout: 10_000 })
     } catch (error) {
       const details = clientErrors.length > 0 ? clientErrors.join('\n') : String(error)
       throw new Error(`CreateDialog browser mount failed: ${details}`)
@@ -196,15 +209,17 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
     })
 
     const alert = page.getByRole('alert')
+    expect(await alert.count()).toBe(1)
+    expect(await alert.evaluate((element) => element.classList.contains('ui-inline-error'))).toBe(true)
     const errorText = (await alert.textContent()) ?? ''
     expect(errorText).toContain('Could not create worktree')
     expect(errorText).toContain(LONG_ERROR)
-    const failedLayout = await page.getByRole('dialog', { name: 'New workspace' }).evaluate((dialog) => {
+    const failedLayout = await page.getByRole('dialog', { name: 'New worktree' }).evaluate((dialog) => {
       const rect = (element: Element) => {
         const bounds = element.getBoundingClientRect()
         return { left: bounds.left, top: bounds.top, right: bounds.right, bottom: bounds.bottom, width: bounds.width, height: bounds.height }
       }
-      const alert = dialog.querySelector('[role="alert"]') as HTMLElement
+      const scrollRegion = dialog.querySelector('.worktree-create-error') as HTMLElement
       const close = dialog.querySelector('.ui-dialog__close') as HTMLButtonElement
       const actions = dialog.querySelector('.ui-actions') as HTMLElement
       const cancel = [...actions.querySelectorAll<HTMLButtonElement>('button')]
@@ -219,8 +234,9 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         dialog: rect(dialog),
-        alert: rect(alert),
-        alertScrolls: alert.scrollHeight > alert.clientHeight,
+        scrollRegion: rect(scrollRegion),
+        scrolls: scrollRegion.scrollHeight > scrollRegion.clientHeight,
+        wraps: scrollRegion.scrollWidth <= scrollRegion.clientWidth,
         close: rect(close),
         cancel: rect(cancel),
         create: rect(create),
@@ -233,8 +249,9 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
     expect(failedLayout.viewportHeight).toBe(720)
     expect(failedLayout.dialog.top).toBeGreaterThanOrEqual(0)
     expect(failedLayout.dialog.bottom).toBeLessThanOrEqual(failedLayout.viewportHeight)
-    expect(failedLayout.alert.height).toBeLessThanOrEqual(128)
-    expect(failedLayout.alertScrolls).toBe(true)
+    expect(failedLayout.scrollRegion.height).toBeLessThanOrEqual(128)
+    expect(failedLayout.scrolls).toBe(true)
+    expect(failedLayout.wraps).toBe(true)
     for (const target of [failedLayout.close, failedLayout.cancel, failedLayout.create]) {
       expect(target.top).toBeGreaterThanOrEqual(0)
       expect(target.bottom).toBeLessThanOrEqual(failedLayout.viewportHeight)
@@ -242,6 +259,13 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
     expect(failedLayout.closeHit).toBe(true)
     expect(failedLayout.cancelHit).toBe(true)
     expect(failedLayout.createHit).toBe(true)
+    const scrollRegion = page.locator('.worktree-create-error')
+    expect(await scrollRegion.getAttribute('tabindex')).toBe('0')
+    await scrollRegion.focus()
+    const scrollTopBefore = await scrollRegion.evaluate((element) => element.scrollTop)
+    await page.keyboard.press('End')
+    await page.waitForFunction((before) => (document.querySelector('.worktree-create-error')?.scrollTop ?? 0) > before, scrollTopBefore)
+    expect(await scrollRegion.evaluate((element) => element.scrollTop)).toBeGreaterThan(scrollTopBefore)
 
     const create = page.getByRole('button', { name: 'Create', exact: true })
     await create.click()
@@ -254,7 +278,7 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
       const submit = dialog?.querySelector<HTMLButtonElement>('button[type="submit"]')
       return dialog !== null && document.querySelector('[role="alert"]') === null && submit?.disabled === false
     })
-    expect(await page.getByRole('dialog', { name: 'New workspace' }).count()).toBe(1)
+    expect(await page.getByRole('dialog', { name: 'New worktree' }).count()).toBe(1)
     expect(await page.getByRole('alert').count()).toBe(0)
 
     await page.getByRole('button', { name: 'Create', exact: true }).click()
@@ -264,6 +288,31 @@ test.skipIf(!existsSync(chromium.executablePath()))('keeps a long create error r
     expect(await page.evaluate(() => window.__toastLog.some(({ title }) => title === 'Could not create worktree'))).toBe(false)
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     await page.waitForFunction(() => document.querySelector('[role="dialog"]') === null)
+  } finally {
+    await context.close()
+  }
+}, 60_000)
+
+test.skipIf(!existsSync(chromium.executablePath()))('announces successful empty GitHub and branch results through status regions', async () => {
+  const context = await browser!.newContext({ viewport: { width: 1280, height: 720 } })
+  const page = await context.newPage()
+  try {
+    await page.setContent(pageMarkup())
+    for (const stylesheet of STYLESHEETS) {
+      await page.addStyleTag({ content: readFileSync(join(ROOT, stylesheet), 'utf8') })
+    }
+    await page.addScriptTag({ content: browserBundle })
+    await page.getByRole('tab', { name: 'GitHub', exact: true }).click()
+    const github = page.getByRole('status').filter({ hasText: 'No GitHub issues or pull requests found.' })
+    expect((await github.innerText()).trim()).toBe('No GitHub issues or pull requests found.')
+    expect(await github.locator('.ui-empty-state').count()).toBe(1)
+
+    await page.getByRole('tab', { name: 'Branch', exact: true }).click()
+    const branches = page.getByRole('status').filter({ hasText: 'No matching branches.' })
+    expect((await branches.innerText()).trim()).toBe('No matching branches.')
+    expect(await branches.locator('.ui-empty-state').count()).toBe(1)
+    expect(await page.getByRole('alert').count()).toBe(0)
+    expect(await page.evaluate(() => window.__createCallCount)).toBe(0)
   } finally {
     await context.close()
   }

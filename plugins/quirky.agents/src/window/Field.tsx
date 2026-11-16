@@ -1,25 +1,39 @@
 import { useEffect, useId, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
 import { Button, FormRow, TextField } from '@quirky/ui'
+import type { AgentsStore } from './model'
 import { s } from './styles'
 
-/**
- * A text field that saves on Enter or blur (Cmd/Ctrl+Enter for a multi-line one). `onSave`
- * resolves with an error message to show under the field, which then keeps the typed text.
- */
+export type AgentField = 'command' | 'args' | 'env'
+
+/** Reads `KEY=VALUE` lines; a line without a name or `=` is refused with a message. */
+function parseEnv(text: string): { env: Record<string, string> } | { error: string } {
+  const entries: [string, string][] = []
+  for (const line of text.split('\n')) {
+    if (!line) continue
+    const separator = line.indexOf('=')
+    if (separator <= 0) return { error: `Invalid environment line; expected KEY=VALUE: ${line}` }
+    entries.push([line.slice(0, separator), line.slice(separator + 1)])
+  }
+  return { env: Object.fromEntries(entries) }
+}
+
+/** A text field that saves on Enter or blur (Cmd/Ctrl+Enter for a multi-line one). */
 export function Field({
   label,
   value,
   overridden,
   multiline = false,
-  onSave,
-  onReset
+  agentId,
+  field,
+  store
 }: {
   label: string
   value: string
   overridden: boolean
   multiline?: boolean
-  onSave: (text: string) => Promise<string | null>
-  onReset: () => void
+  agentId: string
+  field: AgentField
+  store: AgentsStore
 }) {
   const id = useId()
   const [draft, setDraft] = useState(value)
@@ -35,10 +49,25 @@ export function Field({
     if (saving.current || draft === value) return
     saving.current = true
     try {
-      setError(await onSave(draft))
+      if (field === 'env') {
+        const parsed = parseEnv(draft)
+        if ('error' in parsed) {
+          setError(parsed.error)
+          return
+        }
+        setError(await store.configure(agentId, parsed))
+      } else if (field === 'command') {
+        setError(await store.configure(agentId, { command: draft }))
+      } else {
+        setError(await store.configure(agentId, { args: draft }))
+      }
     } finally {
       saving.current = false
     }
+  }
+
+  const onBlur = () => {
+    void save()
   }
 
   const onChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -66,7 +95,7 @@ export function Field({
               className="ui-text-field__input"
               style={s.mono}
               onChange={onChange}
-              onBlur={() => void save()}
+              onBlur={onBlur}
               onKeyDown={onKeyDown}
             />
           </FormRow>
@@ -80,13 +109,13 @@ export function Field({
             spellCheck={false}
             style={s.mono}
             onChange={onChange}
-            onBlur={() => void save()}
+            onBlur={onBlur}
             onKeyDown={onKeyDown}
           />
         )}
       </div>
       {overridden && (
-        <Button type="button" onClick={onReset}>
+        <Button type="button" onClick={() => void store.configure(agentId, { reset: [field] })}>
           Reset
         </Button>
       )}

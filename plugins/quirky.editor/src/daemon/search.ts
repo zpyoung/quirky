@@ -1,7 +1,5 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process'
-import type { Readable } from 'node:stream'
 import { randomUUID } from 'node:crypto'
-import type { PluginCaller, PluginContext } from '@quirky/protocol'
+import type { PluginCaller, PluginContext, SpawnExit, SpawnedProcess } from '@quirky/protocol'
 import type { EditorSearchState, SearchFile } from '../types'
 import { join } from 'node:path'
 import { WorktreePaths } from './paths'
@@ -39,11 +37,9 @@ type MatchData = {
 type RunningSearch = {
   id: string
   cancelled: boolean
-  child: ChildProcessByStdio<null, Readable, Readable>
-  timer: ReturnType<typeof setTimeout>
+  handle: SpawnedProcess
   result: SearchResult
-  done: Promise<SearchResult>
-  resolve(result: SearchResult): void
+  stop(): Promise<SpawnExit>
 }
 
 export class ContentsSearch {
@@ -103,13 +99,11 @@ export class ContentsSearch {
     this.cancel(worktreeId)
     const requestId = params.requestId ?? randomUUID()
     const args = this.arguments(params, query, includePattern, excludePattern)
-    let child: ChildProcessByStdio<null, Readable, Readable>
-    try {
-      child = spawn('rg', args, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
-    } catch (error) {
-      throw this.context.error('not-found', `ripgrep (rg) is required for contents search: ${error instanceof Error ? error.message : String(error)}`)
-    }
-
+    const handle = this.context.process.spawn(['rg', ...args], {
+      timeoutMs: SEARCH_TIMEOUT_MS,
+      cwd: root,
+      stderrTailBytes: 24_576
+    })
     const result: SearchResult = {
       worktreeId,
       query,
@@ -121,35 +115,48 @@ export class ContentsSearch {
       requestId
     }
     const { promise, resolve } = Promise.withResolvers<SearchResult>()
-    let outputBytes = 0
-    let pendingLine = ''
-    let stderr = ''
-    let settled = false
     const byPath = new Map<string, SearchFile>()
     const maxResults = Math.max(1, Math.min(params.maxResults ?? SEARCH_MAX_RESULTS, SEARCH_MAX_RESULTS))
+    let stopPromise: Promise<SpawnExit> | undefined
+    let outputBytes = 0
+    let pendingLine = ''
+    let incompleteRead = false
+    let resultLimitReached = false
+    let limitReached = false
+    const running: RunningSearch = {
+      id: requestId,
+      cancelled: false,
+      handle,
+      result,
+      stop() {
+        stopPromise ??= handle.stop()
+        return stopPromise
+      }
+    }
 
-    const publish = (loading: boolean) => {
-      result.loading = loading
+    const publish = () => {
       result.files = [...byPath.values()]
-      if (this.running.get(worktreeId)?.child === child) this.states.set(worktreeId, { ...result, files: [...result.files] })
+      if (this.running.get(worktreeId) === running) this.states.set(worktreeId, { ...result, files: [...result.files] })
     }
     const finish = (error?: string) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
       result.loading = false
       result.error = error ?? null
       result.files = [...byPath.values()]
       const final = { ...result, files: [...result.files] }
-      const isCurrent = this.running.get(worktreeId)?.child === child
-      if (isCurrent) {
+      if (this.running.get(worktreeId) === running) {
         this.states.set(worktreeId, final)
         this.running.delete(worktreeId)
       }
       resolve(final)
     }
+    const stopForLimit = () => {
+      result.truncated = true
+      resultLimitReached = true
+      limitReached = true
+      void running.stop()
+    }
     const acceptLine = (raw: string) => {
-      if (raw.length === 0) return
+      if (raw.length === 0 || resultLimitReached) return
       let event: { type?: string; data?: MatchData }
       try {
         event = JSON.parse(raw) as typeof event
@@ -163,16 +170,20 @@ export class ContentsSearch {
       if (rawPath === undefined || lineText === undefined || data.line_number === undefined) return
       const relativePath = normalizeRipgrepPath(rawPath)
       if (relativePath === null) return
+      const submatches = data.submatches ?? []
+      if (result.totalMatches >= maxResults && submatches.length > 0) {
+        stopForLimit()
+        return
+      }
       const line = lineText.replace(/[\r\n]+$/, '')
       let file = byPath.get(relativePath)
       if (file === undefined) {
         file = { path: join(root, relativePath), relativePath, matches: [] }
         byPath.set(relativePath, file)
       }
-      for (const submatch of data.submatches ?? []) {
+      for (const submatch of submatches) {
         if (result.totalMatches >= maxResults) {
-          result.truncated = true
-          child.kill('SIGTERM')
+          stopForLimit()
           return
         }
         const byteStart = submatch.start ?? 0
@@ -199,46 +210,74 @@ export class ContentsSearch {
         result.totalMatches++
       }
     }
-    const timer = setTimeout(() => {
-      result.truncated = true
-      child.kill('SIGTERM')
-    }, SEARCH_TIMEOUT_MS)
-    const running: RunningSearch = { id: requestId, child, timer, result, done: promise, resolve, cancelled: false }
+
     this.running.set(worktreeId, running)
     this.states.set(worktreeId, { ...result, files: [] })
 
-    child.stdout.setEncoding('utf8')
-    child.stdout.on('data', (chunk: string) => {
-      outputBytes += Buffer.byteLength(chunk, 'utf8')
-      if (outputBytes > SEARCH_MAX_OUTPUT_BYTES) {
-        result.truncated = true
-        child.kill('SIGTERM')
-        return
+    const readStdout = async () => {
+      const reader = handle.stdout.getReader()
+      const decoder = new TextDecoder()
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            if (!limitReached) {
+              pendingLine += decoder.decode()
+              if (!resultLimitReached && pendingLine !== '') acceptLine(pendingLine)
+            }
+            publish()
+            return
+          }
+          if (limitReached) continue
+          outputBytes += value.byteLength
+          if (outputBytes > SEARCH_MAX_OUTPUT_BYTES) {
+            result.truncated = true
+            limitReached = true
+            void running.stop()
+            continue
+          }
+          pendingLine += decoder.decode(value, { stream: true })
+          let newline = pendingLine.indexOf('\n')
+          while (newline >= 0 && !limitReached) {
+            const line = pendingLine.slice(0, newline)
+            pendingLine = pendingLine.slice(newline + 1)
+            acceptLine(line)
+            newline = pendingLine.indexOf('\n')
+          }
+          publish()
+        }
+      } catch {
+        if (!running.cancelled && !limitReached) {
+          incompleteRead = true
+          result.truncated = true
+          void running.stop()
+        }
+      } finally {
+        reader.releaseLock()
       }
-      pendingLine += chunk
-      let newline = pendingLine.indexOf('\n')
-      while (newline >= 0) {
-        acceptLine(pendingLine.slice(0, newline))
-        pendingLine = pendingLine.slice(newline + 1)
-        newline = pendingLine.indexOf('\n')
-      }
-      publish(true)
-    })
-    child.stderr.setEncoding('utf8')
-    child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-8192) })
-    child.once('error', (error) => {
-      const missing = (error as NodeJS.ErrnoException).code === 'ENOENT'
-      finish(missing ? 'ripgrep (rg) is required for contents search; install ripgrep and retry' : error.message)
-    })
-    child.once('close', (code) => {
-      if (pendingLine !== '') acceptLine(pendingLine)
-      if (!running.cancelled && code !== 0 && code !== 1 && !result.truncated) {
-        const error = params.useRegex === true && /^(?:rg: )?regex parse error:/.test(stderr.trim())
+    }
+
+    const readTask = readStdout()
+    const exit = await handle.exited
+    await readTask
+
+    if (exit.stopped === 'timeout') result.truncated = true
+    let error: string | undefined
+    if (!running.cancelled && exit.stopped !== 'aborted') {
+      if (exit.spawnError !== undefined) {
+        error = exit.spawnError.code === 'ENOENT'
+          ? 'ripgrep (rg) is required for contents search; install ripgrep and retry'
+          : exit.spawnError.message
+      } else if (incompleteRead) {
+        error = 'Search results are incomplete: ripgrep output could not be read to its end'
+      } else if (exit.stopped !== 'timeout' && !result.truncated && exit.exitCode !== 0 && exit.exitCode !== 1) {
+        const stderr = handle.stderrTail().slice(-8192)
+        error = params.useRegex === true && /^(?:rg: )?regex parse error:/.test(stderr.trim())
           ? `Invalid regular expression: ${query}`
-          : stderr.trim() || `ripgrep exited with status ${code}`
-        finish(error)
-      } else finish()
-    })
+          : stderr.trim() || `ripgrep exited with status ${exit.exitCode}`
+      }
+    }
+    finish(error)
     return await promise
   }
 
@@ -246,8 +285,7 @@ export class ContentsSearch {
     const active = this.running.get(worktreeId)
     if (active === undefined || (requestId !== undefined && active.id !== requestId)) return
     active.cancelled = true
-    clearTimeout(active.timer)
-    active.child.kill('SIGTERM')
+    void active.stop()
     active.result.loading = false
     if (this.running.get(worktreeId)?.id === active.id) {
       this.states.set(worktreeId, { ...active.result, loading: false, files: [...active.result.files] })

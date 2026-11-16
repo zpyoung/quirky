@@ -1,7 +1,7 @@
 import { lstatSync, statSync } from 'node:fs'
 import type { Stats } from 'node:fs'
 import { isAbsolute } from 'node:path'
-import { RpcErrorCode, type ContributionInfo, type OwnerSessionHostRef, type OwnerSessionWorkspaceRef, type PluginCaller, type PluginContext, type Session, type SessionLaunch } from '@quirky/protocol'
+import { RpcErrorCode, type ContributionInfo, type OwnerSessionHostRef, type OwnerSessionWorkspaceRef, type PluginCaller, type PluginContext, type ProcessRunner, type Session, type SessionLaunch } from '@quirky/protocol'
 import { callVaultHost, decodePublicId, discoverVaultHosts, hostedLocal, hostedRemote, ownerLocalId, redactReason } from './hosts'
 import type { VaultHost } from './hosts'
 import type { DeleteTarget, HostedSession, OwnerResumeResult, RemoteResumeResult, VaultSession } from './types'
@@ -225,7 +225,7 @@ export class VaultActions {
         return { deleted: false, trashed, alreadyMissing: false, reason: 'scanner returned a symlink or wrong-kind Trash target' }
       }
       try {
-        await trashWithFoundation(target.path)
+        await trashWithFoundation(this.context.process, target.path)
         trashed++
       } catch (error) {
         if (trashed > 0 || alreadyMissing) await this.invalidate(source.sourceId)
@@ -711,13 +711,14 @@ export class VaultActions {
   }
 }
 
-async function trashWithFoundation(target: string): Promise<void> {
-  const child = Bun.spawn(['/usr/bin/osascript', '-l', 'JavaScript', '-e', TRASH_SCRIPT, target], {
-    stdout: 'ignore',
-    stderr: 'pipe'
+async function trashWithFoundation(runner: ProcessRunner, target: string): Promise<void> {
+  const result = await runner.run(['/usr/bin/osascript', '-l', 'JavaScript', '-e', TRASH_SCRIPT, target], {
+    timeoutMs: 86_400_000, maxOutputBytes: 65_536, overflow: 'truncate', killGraceMs: 2000
   })
-  const [exitCode, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()])
-  if (exitCode !== 0) throw new Error(stderr.trim() || `macOS Foundation Trash failed with exit ${exitCode}`)
+  if (result.spawnError) throw new Error(result.spawnError.message)
+  if (result.stopped) throw new Error(`macOS Foundation Trash stopped: ${result.stopped}`)
+  if (result.signal) throw new Error(`macOS Foundation Trash terminated by ${result.signal}`)
+  if (result.exitCode !== 0) throw new Error(result.stderr.trim() || `macOS Foundation Trash failed with exit ${result.exitCode}`)
 }
 
 function isMissing(error: unknown): boolean {

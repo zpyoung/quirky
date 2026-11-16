@@ -81,13 +81,14 @@ function browserEntry(): string {
         }
         return Promise.resolve(null)
       },
+      executeCommand() { return Promise.resolve(null) },
       subscribe() { return () => {} },
       onConnection() { return () => {} },
       toast() {},
       log() {},
       mountView() { return () => {} }
     }
-    const session = { id: 'structured-1', kind: 'structured', agent: 'claude', title: 'Claude', status: 'running', worktreeId: 'wt-main' }
+    const session = { id: 'structured-1', worktreeId: 'wt-main', kind: 'structured', agent: 'claude', title: 'Claude', status: 'running' }
 
     createRoot(document.getElementById('structured-view')!).render(
       createElement(ChatView, { context, session })

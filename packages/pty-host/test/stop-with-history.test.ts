@@ -2,7 +2,16 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { SessionManager, type CreateParams, type SessionManagerOptions } from '../src/session'
-import { onCleanup, runCleanups, scopeForHome, tempHome, trackSessionProcesses, waitFor } from './helpers'
+import {
+  heldRunner,
+  onCleanup,
+  recordProcessKillTargets,
+  runCleanups,
+  scopeForHome,
+  tempHome,
+  trackSessionProcesses,
+  waitFor
+} from './helpers'
 
 afterEach(runCleanups)
 
@@ -38,7 +47,7 @@ describe('stop with history', () => {
 
     await manager.stopWithHistory('sleep-history')
 
-    expect(manager.list().find((entry) => entry.sessionId === 'sleep-history')).toMatchObject({ state: 'restorable', alive: false })
+    expect((await manager.list()).find((entry) => entry.sessionId === 'sleep-history')).toMatchObject({ state: 'restorable', alive: false })
     expect(() => process.kill(root.pid, 0)).toThrow()
     expect(() => process.kill(childPid, 0)).toThrow()
     expect((await manager.history('sleep-history')).lines).toContain('SLEEP_HISTORY_MARKER')
@@ -64,6 +73,73 @@ describe('stop with history', () => {
     await manager.stopWithHistory('sleep-stubborn')
 
     expect(() => process.kill(childPid, 0)).toThrow()
-    expect(manager.list().find((entry) => entry.sessionId === 'sleep-stubborn')).toMatchObject({ state: 'restorable', alive: false })
+    expect((await manager.list()).find((entry) => entry.sessionId === 'sleep-stubborn')).toMatchObject({ state: 'restorable', alive: false })
+  })
+
+  test('S14: stops a job in its own process group before retaining history', async () => {
+    const home = tempHome()
+    const pidFile = join(home, 'job.pid')
+    const manager = managerFor(home)
+    const root = await manager.create(
+      createParams('sleep-job', '/tmp', `set -m; sleep 7777 & echo bg=$!; echo $! > '${pidFile}'; wait`)
+    )
+    await waitFor(() => existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8')) : null, 5000, 'job pid')
+    const jobPid = Number(readFileSync(pidFile, 'utf8'))
+
+    await manager.stopWithHistory('sleep-job')
+
+    expect(() => process.kill(root.pid, 0)).toThrow()
+    expect(() => process.kill(jobPid, 0)).toThrow()
+    expect((await manager.list()).find((session) => session.sessionId === 'sleep-job')).toMatchObject({
+      state: 'restorable',
+      exitCause: 'stopped'
+    })
+  })
+
+  test('S15: stops requested in one turn share one scan before any signal', async () => {
+    const home = tempHome()
+    const scans = heldRunner({ hold: true })
+    const kills = recordProcessKillTargets()
+    const manager = managerFor(home, { processRunner: scans.runner })
+    const jobs: Array<{ sessionId: string; rootPid: number; jobPid: number }> = []
+    for (let i = 0; i < 4; i++) {
+      const sessionId = `storm-${i}`
+      const pidFile = join(home, `${sessionId}.pid`)
+      const root = await manager.create(
+        createParams(sessionId, '/tmp', `set -m; sleep 7777 & echo bg=$!; echo $! > '${pidFile}'; wait`)
+      )
+      await waitFor(() => existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8')) : null, 5000, `${sessionId} job pid`)
+      jobs.push({ sessionId, rootPid: root.pid, jobPid: Number(readFileSync(pidFile, 'utf8')) })
+    }
+
+    const stopping = jobs.map(({ sessionId }) => manager.stopWithHistory(sessionId))
+    const allStopped = Promise.all(stopping)
+    await waitFor(() => scans.calls.length === 1 || null, 5000, 'first held stop scan')
+    expect(scans.calls).toHaveLength(1)
+    expect(scans.inFlight).toBe(1)
+    for (const job of jobs) {
+      expect(() => process.kill(job.rootPid, 0)).not.toThrow()
+      expect(() => process.kill(job.jobPid, 0)).not.toThrow()
+    }
+    expect(kills.targets.filter((target) => target.signal !== 0)).toEqual([])
+
+    const startedAt = Date.now()
+    try {
+      scans.release()
+      await allStopped
+    } finally {
+      scans.release()
+      await Promise.allSettled(stopping)
+      kills.restore()
+    }
+    const elapsedMs = Date.now() - startedAt
+
+    expect(scans.highestInFlight).toBe(1)
+    expect(scans.calls.length).toBeLessThanOrEqual(Math.ceil(elapsedMs / 50) + 8)
+    for (const job of jobs) {
+      expect(() => process.kill(job.rootPid, 0)).toThrow()
+      expect(() => process.kill(job.jobPid, 0)).toThrow()
+    }
+    expect((await manager.list()).filter((session) => session.state === 'restorable')).toHaveLength(4)
   })
 })
