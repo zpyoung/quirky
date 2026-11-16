@@ -9,9 +9,10 @@ afterEach(async () => {
 })
 
 test('disabling orchestration in one daemon leaves the other activation alive', async () => {
-  const fixtureA = await startOrchestrationFixture()
+  const logs: string[] = []
+  const fixtureA = await startOrchestrationFixture({ log: (message) => { logs.push(message) } })
   fixtures.push(fixtureA)
-  const fixtureB = await startOrchestrationFixture()
+  const fixtureB = await startOrchestrationFixture({ log: (message) => { logs.push(message) } })
   fixtures.push(fixtureB)
 
   expect(await fixtureA.setupClient.callAny('quirky.orchestration/runList', {})).toEqual({ runs: [], nextCursor: null })
@@ -21,12 +22,14 @@ test('disabling orchestration in one daemon leaves the other activation alive', 
   // Let the real one-second mail interval fire; fake time would bypass the daemon timer.
   await pause(1_500)
   expect(await fixtureB.setupClient.callAny('quirky.orchestration/runList', {})).toEqual({ runs: [], nextCursor: null })
+  expect(logs.filter((message) => message.includes('federation mail tick failed:'))).toEqual([])
 }, 60_000)
 
 test('stopping daemons newest first leaves no orphaned timer', async () => {
-  const fixtureA = await startOrchestrationFixture()
+  const logs: string[] = []
+  const fixtureA = await startOrchestrationFixture({ log: (message) => { logs.push(message) } })
   fixtures.push(fixtureA)
-  const fixtureB = await startOrchestrationFixture()
+  const fixtureB = await startOrchestrationFixture({ log: (message) => { logs.push(message) } })
   fixtures.push(fixtureB)
 
   expect(await fixtureA.setupClient.callAny('quirky.orchestration/runList', {})).toEqual({ runs: [], nextCursor: null })
@@ -35,4 +38,5 @@ test('stopping daemons newest first leaves no orphaned timer', async () => {
   const cleanup = fixtures.splice(0).reverse()
   for (const fixture of cleanup) await fixture.cleanup()
   await pause(1_500)
+  expect(logs.filter((message) => message.includes('federation mail tick failed:'))).toEqual([])
 }, 60_000)
