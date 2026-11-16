@@ -1,12 +1,13 @@
 import { ConnectionLost, type QuirkyClient } from '@quirky/protocol'
 import { connectDaemon, readRuntime } from '@quirky/protocol/node'
-import { DEFAULT_LIMITS, type EventRecord, type ProbeRecord } from './contracts'
+import { DEFAULT_LIMITS, type EventRecord, type GitProbeRecord, type ProbeRecord } from './contracts'
 
 export type Probe = {
   events: EventRecord[]
   probes: ProbeRecord[]
+  gitProbes: GitProbeRecord[]
   daemonExited(): boolean
-  /** Records a stalled in-flight attempt, then stops the probe. */
+  /** Records stalled in-flight attempts, then stops the probe. */
   finish(): void
   stop(): void
 }
@@ -23,11 +24,15 @@ export type StartProbeOptions = {
   connectTimeoutMs?: number
   probeTimeoutMs?: number
   retryDelayMs?: number
+  gitProbe?: { worktrees: readonly string[]; intervalMs?: number }
 }
 
-type ActiveAttempt = { kind: 'connect' | 'status'; beganAt: number; ownLagMs: number }
+type ActiveClockAttempt = { beganAt: number; ownLagMs: number }
+type ActiveAttempt = ActiveClockAttempt & { kind: 'connect' | 'status' }
+type ActiveGitAttempt = ActiveClockAttempt & { worktree: string }
 
 class ProbeTimeoutError extends Error {}
+
 
 
 function secondsSince(startedAt: number, now: number): number {
@@ -141,11 +146,13 @@ function pidFromStatus(value: unknown): number | null {
 export function startProbe(options: StartProbeOptions): Probe {
   const events: EventRecord[] = []
   const probes: ProbeRecord[] = []
+  const gitProbes: GitProbeRecord[] = []
   const controller = new AbortController()
   const connectTimeoutMs = options.connectTimeoutMs ?? 30_000
   const probeTimeoutMs = options.probeTimeoutMs ?? 30_000
   const retryDelayMs = options.retryDelayMs ?? 250
   const maxStallMs = options.maxStallMs ?? DEFAULT_LIMITS.maxStallMs
+  const gitProbeIntervalMs = options.gitProbe?.intervalMs ?? 1_000
   const connect = options.connect ?? ((home: string) => connectDaemon({
     home,
     role: 'cli',
@@ -160,6 +167,7 @@ export function startProbe(options: StartProbeOptions): Probe {
   let daemonLostNotified = false
   let activeClient: QuirkyClient | undefined
   let activeAttempt: ActiveAttempt | undefined
+  let activeGitAttempt: ActiveGitAttempt | undefined
   let latenessTimer: ReturnType<typeof setInterval> | undefined
   let pauseTimer: ReturnType<typeof setTimeout> | undefined
   let wakePause: (() => void) | undefined
@@ -213,13 +221,14 @@ export function startProbe(options: StartProbeOptions): Probe {
     if (!stopped) markDaemonLost()
   }
 
-  const currentOwnLagMs = (attempt: ActiveAttempt, now: number): number => {
+  const currentOwnLagMs = (attempt: ActiveClockAttempt, now: number): number => {
     return milliseconds(Math.max(attempt.ownLagMs, Math.max(0, now - nextTimerAt)))
   }
 
-  const settleAttempt = (attempt: ActiveAttempt, settledAt: number): number => {
+  const settleAttempt = (attempt: ActiveClockAttempt, settledAt: number): number => {
     const ownLagMs = currentOwnLagMs(attempt, settledAt)
     if (activeAttempt === attempt) activeAttempt = undefined
+    if (activeGitAttempt === attempt) activeGitAttempt = undefined
     return ownLagMs
   }
 
@@ -231,6 +240,25 @@ export function startProbe(options: StartProbeOptions): Probe {
       timedOut
     })
   }
+
+  const appendGitProbe = (
+    beganAt: number,
+    ms: number,
+    ownLagMs: number,
+    timedOut: boolean,
+    failed: boolean,
+    worktree: string
+  ) => {
+    gitProbes.push({
+      at: secondsSince(options.startedAt, beganAt),
+      ms: milliseconds(ms),
+      ownLagMs: milliseconds(ownLagMs),
+      timedOut,
+      failed,
+      worktree
+    })
+  }
+
 
   const pauseAfterSettle = (delayMs: number): Promise<void> => {
     if (stopped || delayMs <= 0) return Promise.resolve()
@@ -251,11 +279,29 @@ export function startProbe(options: StartProbeOptions): Probe {
     return promise
   }
 
+  const pauseGitLoop = (delayMs: number): Promise<void> => {
+    if (stopped || delayMs <= 0) return Promise.resolve()
+    const { promise, resolve } = Promise.withResolvers<void>()
+    let finished = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const finishPause = () => {
+      if (finished) return
+      finished = true
+      controller.signal.removeEventListener('abort', finishPause)
+      clearTimeout(timer)
+      resolve()
+    }
+    timer = setTimeout(finishPause, delayMs)
+    controller.signal.addEventListener('abort', finishPause, { once: true })
+    if (controller.signal.aborted) finishPause()
+    return promise
+  }
+
   const finish = () => {
     if (stopped) return
+    const now = performance.now()
     const attempt = activeAttempt
     if (attempt) {
-      const now = performance.now()
       const timeoutMs = attempt.kind === 'connect' ? connectTimeoutMs : probeTimeoutMs
       const elapsedMs = Math.min(timeoutMs, milliseconds(now - attempt.beganAt))
       if (elapsedMs > maxStallMs) {
@@ -267,12 +313,28 @@ export function startProbe(options: StartProbeOptions): Probe {
         )
       }
     }
+    const gitAttempt = activeGitAttempt
+    if (gitAttempt) {
+      const ageMs = now - gitAttempt.beganAt
+      const elapsedMs = Math.min(probeTimeoutMs, milliseconds(ageMs))
+      if (ageMs > maxStallMs) {
+        appendGitProbe(
+          gitAttempt.beganAt,
+          elapsedMs,
+          currentOwnLagMs(gitAttempt, now),
+          ageMs >= probeTimeoutMs,
+          false,
+          gitAttempt.worktree
+        )
+      }
+    }
     stop()
   }
 
   const probe: Probe = {
     events,
     probes,
+    gitProbes,
     daemonExited: () => daemonExited,
     finish,
     stop
@@ -293,6 +355,7 @@ export function startProbe(options: StartProbeOptions): Probe {
     const lateness = Math.max(0, now - nextTimerAt)
     nextTimerAt = now + 50
     if (activeAttempt && lateness > activeAttempt.ownLagMs) activeAttempt.ownLagMs = lateness
+    if (activeGitAttempt && lateness > activeGitAttempt.ownLagMs) activeGitAttempt.ownLagMs = lateness
   }, 50)
 
   const runStatusLoop = async (client: QuirkyClient): Promise<void> => {
@@ -343,6 +406,60 @@ export function startProbe(options: StartProbeOptions): Probe {
 
       if (stopped || daemonExited) return
       await pauseAfterSettle(Math.max(0, 250 - (performance.now() - settledAt)))
+    }
+  }
+
+  const runGitLoop = async (client: QuirkyClient): Promise<void> => {
+    const worktrees = options.gitProbe?.worktrees
+    if (!worktrees?.length) return
+
+    let worktreeIndex = 0
+    while (!stopped && !daemonExited) {
+      const worktree = worktrees[worktreeIndex]!
+      const beganAt = performance.now()
+      const attempt: ActiveGitAttempt = { beganAt, ownLagMs: 0, worktree }
+      activeGitAttempt = attempt
+      let failed = false
+      let failure: unknown
+      try {
+        await waitWithAbort(
+          client.callAny(
+            'quirky.git/status',
+            { worktree: `id:${worktree}` },
+            { timeoutMs: probeTimeoutMs }
+          ),
+          controller.signal,
+          probeTimeoutMs
+        )
+      } catch (error) {
+        failed = true
+        failure = error
+      }
+      const settledAt = performance.now()
+      const ownLagMs = settleAttempt(attempt, settledAt)
+      if (stopped || daemonExited) return
+      const elapsedMs = settledAt - beganAt
+
+      if (failed) {
+        if (failure instanceof ConnectionLost) {
+          markDaemonLost()
+          return
+        }
+        const rpcTimedOut = failure instanceof Error
+          && failure.message === `RPC call timed out after ${probeTimeoutMs} ms`
+        if (failure instanceof ProbeTimeoutError || elapsedMs >= probeTimeoutMs || rpcTimedOut) {
+          appendGitProbe(beganAt, probeTimeoutMs, ownLagMs, true, false, worktree)
+        } else {
+          appendGitProbe(beganAt, elapsedMs, ownLagMs, false, true, worktree)
+        }
+      } else if (elapsedMs >= probeTimeoutMs) {
+        appendGitProbe(beganAt, probeTimeoutMs, ownLagMs, true, false, worktree)
+      } else {
+        appendGitProbe(beganAt, elapsedMs, ownLagMs, false, false, worktree)
+      }
+
+      worktreeIndex = (worktreeIndex + 1) % worktrees.length
+      await pauseGitLoop(Math.max(0, beganAt + gitProbeIntervalMs - performance.now()))
     }
   }
 
@@ -416,7 +533,11 @@ export function startProbe(options: StartProbeOptions): Probe {
         onConnectionClose()
         return
       }
-      await runStatusLoop(client)
+      if (options.gitProbe?.worktrees.length) {
+        await Promise.all([runStatusLoop(client), runGitLoop(client)])
+      } else {
+        await runStatusLoop(client)
+      }
       return
     }
   }

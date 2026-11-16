@@ -5,11 +5,12 @@ import { join } from 'node:path'
 import { ConnectionLost, type QuirkyClient } from '@quirky/protocol'
 import { createPtyHostTracker } from './world'
 import { startProbe } from './probe'
-import type { EventRecord, ProbeRecord } from './contracts'
+import type { EventRecord, GitProbeRecord, ProbeRecord } from './contracts'
 
 type ProbeHandle = {
   events: EventRecord[]
   probes: ProbeRecord[]
+  gitProbes: GitProbeRecord[]
   daemonExited(): boolean
   finish(): void
   stop(): void
@@ -23,6 +24,7 @@ type Deferred<T> = {
 
 type FakeClient = QuirkyClient & {
   calls: string[]
+  rpcCalls: { method: string; params: unknown; options: unknown }[]
   closeCalls: number
   emitEvent(event: { type: string }): void
   disconnect(): void
@@ -54,6 +56,17 @@ async function drainUntil(predicate: () => boolean, rounds = 32): Promise<void> 
     await Promise.resolve()
   }
   expect(predicate()).toBe(true)
+}
+
+async function advanceProbeClock(clock: ProbeClock, target: number, quantumMs = 50): Promise<void> {
+  let current = clock.now()
+  while (current < target) {
+    const next = Math.min(target, current + quantumMs)
+    clock.jumpTo(next)
+    advanceTimersByTime(next - current)
+    current = next
+    await drainMicrotasks()
+  }
 }
 
 async function withProbeClock(
@@ -127,25 +140,33 @@ function launch(overrides: Record<string, unknown> = {}): ProbeHandle {
   return probe
 }
 
-function fakeClient(status: () => unknown = () => ({ ptyHost: { pid: 42 } }), initiallyClosed = false): FakeClient {
+function fakeClient(
+  status: () => unknown = () => ({ ptyHost: { pid: 42 } }),
+  initiallyClosed = false,
+  gitStatus: (params: unknown) => unknown = () => undefined
+): FakeClient {
   let closed = initiallyClosed
   const eventHandlers = new Set<(event: { type: string }) => void>()
   const closeHandlers = new Set<() => void>()
   const calls: string[] = []
+  const rpcCalls: FakeClient['rpcCalls'] = []
   let closeCalls = 0
   const client = {
     get isClosed() {
       return closed
     },
     calls,
+    rpcCalls,
     get closeCalls() {
       return closeCalls
     },
-    callAny(method: string): Promise<unknown> {
+    callAny(method: string, params?: unknown, options?: unknown): Promise<unknown> {
       calls.push(method)
-      if (method !== 'status.get') return Promise.resolve(undefined)
+      rpcCalls.push({ method, params, options })
       try {
-        return Promise.resolve(status())
+        if (method === 'status.get') return Promise.resolve(status())
+        if (method === 'quirky.git/status') return Promise.resolve(gitStatus(params))
+        return Promise.resolve(undefined)
       } catch (error) {
         return Promise.reject(error)
       }
@@ -1385,5 +1406,222 @@ test('finish caps stalled connections by the connection deadline and preserves h
       await drainMicrotasks()
       expectCappedResult(1)
     }
+  }, true)
+})
+
+test('runs optional git probes round-robin at a start-based interval beside status probes', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const firstGitStatus = deferred<unknown>()
+    const gitCalls: Array<{ worktree: unknown; at: number }> = []
+    const client = fakeClient(undefined, false, (params) => {
+      const worktree = (params as { worktree?: unknown } | undefined)?.worktree
+      gitCalls.push({ worktree, at: clock.now() })
+      return gitCalls.length === 1 ? firstGitStatus.promise : undefined
+    })
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      probeTimeoutMs: 10_000,
+      gitProbe: { worktrees: ['w1', 'w2', 'w3'] }
+    })
+    await drainUntil(() => gitCalls.length === 1)
+    expect(gitCalls).toEqual([{ worktree: 'id:w1', at: startedAt }])
+
+    await advanceProbeClock(clock, startedAt + 1_500)
+    firstGitStatus.resolve(undefined)
+    await drainMicrotasks()
+    expect(gitCalls).toEqual([
+      { worktree: 'id:w1', at: startedAt },
+      { worktree: 'id:w2', at: startedAt + 1_500 }
+    ])
+
+    await advanceProbeClock(clock, startedAt + 2_499)
+    expect(gitCalls).toHaveLength(2)
+    await advanceProbeClock(clock, startedAt + 2_500)
+    expect(gitCalls[2]).toEqual({ worktree: 'id:w3', at: startedAt + 2_500 })
+    await advanceProbeClock(clock, startedAt + 3_500)
+    expect(gitCalls[3]).toEqual({ worktree: 'id:w1', at: startedAt + 3_500 })
+
+    expect(probe.gitProbes).toHaveLength(4)
+    expect(probe.gitProbes.map(({ worktree }) => worktree)).toEqual(['w1', 'w2', 'w3', 'w1'])
+    expect(probe.gitProbes[0]).toMatchObject({ at: 0, ms: 1_500, timedOut: false, failed: false })
+    expect(client.rpcCalls.filter(({ method }) => method === 'quirky.git/status').map(({ params, options }) => ({
+      params,
+      options
+    }))).toEqual([
+      { params: { worktree: 'id:w1' }, options: { timeoutMs: 10_000 } },
+      { params: { worktree: 'id:w2' }, options: { timeoutMs: 10_000 } },
+      { params: { worktree: 'id:w3' }, options: { timeoutMs: 10_000 } },
+      { params: { worktree: 'id:w1' }, options: { timeoutMs: 10_000 } }
+    ])
+    expect(probe.probes.length).toBeGreaterThan(1)
+    expect(client.calls.every((method) => method === 'status.get' || method === 'quirky.git/status')).toBe(true)
+  }, true)
+})
+
+test('keeps git probes empty and status-only when the optional option is absent', async () => {
+  const client = fakeClient()
+  const probe = launch({ connect: () => Promise.resolve(client) })
+
+  await waitFor(() => client.calls.includes('status.get'))
+  expect(probe.gitProbes).toEqual([])
+  expect(client.calls).toEqual(['status.get'])
+})
+
+test('records a git RPC timeout and continues both probe loops', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const firstGitStatus = deferred<unknown>()
+    const gitCalls: unknown[] = []
+    const client = fakeClient(undefined, false, (params) => {
+      gitCalls.push(params)
+      return gitCalls.length === 1 ? firstGitStatus.promise : undefined
+    })
+    let lostCalls = 0
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      probeTimeoutMs: 40,
+      gitProbe: { worktrees: ['w1', 'w2'] },
+      onDaemonLost: () => lostCalls++
+    })
+    await drainUntil(() => gitCalls.length === 1)
+    await advanceProbeClock(clock, startedAt + 39)
+    expect(probe.gitProbes).toEqual([])
+    await advanceProbeClock(clock, startedAt + 40)
+    expect(probe.gitProbes).toEqual([{
+      at: 0,
+      ms: 40,
+      ownLagMs: 0,
+      timedOut: true,
+      failed: false,
+      worktree: 'w1'
+    }])
+    expect(probe.daemonExited()).toBe(false)
+    expect(lostCalls).toBe(0)
+
+    await advanceProbeClock(clock, startedAt + 1_000)
+    expect(gitCalls).toEqual([{ worktree: 'id:w1' }, { worktree: 'id:w2' }])
+    expect(probe.probes.length).toBeGreaterThan(1)
+    expect(probe.daemonExited()).toBe(false)
+    expect(lostCalls).toBe(0)
+  }, true)
+})
+
+test('records ordinary git RPC rejection and continues round-robin', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const gitCalls: unknown[] = []
+    const client = fakeClient(undefined, false, (params) => {
+      gitCalls.push(params)
+      if (gitCalls.length === 1) return Promise.reject(new Error('git status failed'))
+      return undefined
+    })
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      gitProbe: { worktrees: ['w1', 'w2'], intervalMs: 25 }
+    })
+    await drainUntil(() => probe.gitProbes.length === 1)
+    expect(probe.gitProbes[0]).toMatchObject({
+      at: 0,
+      ownLagMs: 0,
+      timedOut: false,
+      failed: true,
+      worktree: 'w1'
+    })
+
+    await advanceProbeClock(clock, startedAt + 24)
+    expect(gitCalls).toHaveLength(1)
+    await advanceProbeClock(clock, startedAt + 25)
+    expect(gitCalls).toEqual([{ worktree: 'id:w1' }, { worktree: 'id:w2' }])
+    expect(probe.gitProbes).toHaveLength(2)
+    expect(probe.gitProbes[1]).toMatchObject({ timedOut: false, failed: false, worktree: 'w2' })
+  }, true)
+})
+
+test('treats ConnectionLost from git status as daemon loss and stops both loops', async () => {
+  await withProbeClock(async (clock) => {
+    const client = fakeClient(undefined, false, () => Promise.reject(new ConnectionLost()))
+    let lostCalls = 0
+    const probe = launch({
+      connect: () => Promise.resolve(client),
+      gitProbe: { worktrees: ['w1'] },
+      onDaemonLost: () => lostCalls++
+    })
+    await drainUntil(() => lostCalls === 1)
+    const callsAtLoss = [...client.calls]
+    expect(probe.daemonExited()).toBe(true)
+    expect(probe.gitProbes).toEqual([])
+    expect(client.calls.filter((method) => method === 'quirky.git/status')).toHaveLength(1)
+    expect(callsAtLoss).toContain('status.get')
+
+    clock.jumpTo(clock.now() + 1_000)
+    advanceTimersByTime(1_000)
+    await drainMicrotasks()
+    expect(client.calls).toEqual(callsAtLoss)
+    expect(lostCalls).toBe(1)
+  }, true)
+})
+
+test('finish records a stalled in-flight git call while stop discards it', async () => {
+  await withProbeClock(async (clock) => {
+    for (const terminal of ['finish', 'stop'] as const) {
+      const startedAt = clock.now()
+      const gitStatus = deferred<unknown>()
+      const client = fakeClient(undefined, false, () => gitStatus.promise)
+      const probe = launch({
+        startedAt,
+        connect: () => Promise.resolve(client),
+        maxStallMs: 10,
+        probeTimeoutMs: 100,
+        gitProbe: { worktrees: ['w1'] }
+      })
+      await drainUntil(() => client.calls.includes('quirky.git/status'))
+      clock.jumpTo(startedAt + 11)
+      if (terminal === 'finish') probe.finish()
+      else probe.stop()
+      expect(probe.gitProbes).toEqual(terminal === 'finish' ? [{
+        at: 0,
+        ms: 11,
+        ownLagMs: 0,
+        timedOut: false,
+        failed: false,
+        worktree: 'w1'
+      }] : [])
+      gitStatus.resolve(undefined)
+      await drainMicrotasks()
+      expect(probe.gitProbes).toHaveLength(terminal === 'finish' ? 1 : 0)
+    }
+  }, true)
+})
+
+test('finish marks an in-flight git call timed out at its RPC deadline', async () => {
+  await withProbeClock(async (clock) => {
+    const startedAt = clock.now()
+    const gitStatus = deferred<unknown>()
+    const client = fakeClient(undefined, false, () => gitStatus.promise)
+    const probe = launch({
+      startedAt,
+      connect: () => Promise.resolve(client),
+      maxStallMs: 1,
+      probeTimeoutMs: 40,
+      gitProbe: { worktrees: ['w1'] }
+    })
+    await drainUntil(() => client.calls.includes('quirky.git/status'))
+    clock.jumpTo(startedAt + 40)
+    probe.finish()
+    expect(probe.gitProbes).toEqual([{
+      at: 0,
+      ms: 40,
+      ownLagMs: 0,
+      timedOut: true,
+      failed: false,
+      worktree: 'w1'
+    }])
+    gitStatus.resolve(undefined)
+    await drainMicrotasks()
+    expect(probe.gitProbes).toHaveLength(1)
   }, true)
 })
