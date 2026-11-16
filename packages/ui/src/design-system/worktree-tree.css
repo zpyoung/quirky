@@ -142,9 +142,13 @@
   font-size: var(--ui-font-body);
   gap: var(--ui-space-8);
   min-height: var(--ui-row-single);
-  min-width: 0;
+  min-width: calc(var(--ui-space-8) * 2 + 1ch);
   padding: 0;
   text-align: left;
+}
+
+.worktree-tree .worktree-row__main:has(.worktree-unread-dot) {
+  min-width: calc(var(--ui-space-8) * 3 + var(--ui-space-6) + 1ch);
 }
 
 .worktree-tree .worktree-row__main:focus-visible,
@@ -159,6 +163,10 @@
 
 .worktree-tree .worktree-name {
   flex: 1 1 auto;
+}
+
+.worktree-tree .worktree-name.ui-name-share {
+  min-width: max(1ch, 40%);
 }
 
 .worktree-tree .worktree.selected .worktree-name {
@@ -194,9 +202,11 @@
 .worktree-tree .worktree-trail {
   align-items: center;
   display: grid;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: end;
   margin-inline-start: var(--ui-space-4);
+  min-width: 0;
 }
 
 .worktree-tree .worktree-fact,
@@ -208,6 +218,7 @@
   color: var(--ui-muted);
   font-size: var(--ui-font-label);
   max-width: 9rem;
+  width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   transition: opacity 150ms ease-out;
@@ -224,6 +235,7 @@
 .worktree-tree .worktree:focus-within .worktree-fact,
 .worktree-tree .worktree.selected .worktree-fact {
   opacity: 0;
+  pointer-events: none;
 }
 
 .worktree-tree .worktree:hover .worktree-reveal,
