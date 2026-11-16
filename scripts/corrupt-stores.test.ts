@@ -314,7 +314,7 @@ describe('helpers', () => {
     const result = Object.assign(damageResult(), {
       mode,
       mobileListenerHosts: ['127.0.0.1', null, '127.0.0.1'],
-      mobileStateErrors: [null, 'Mobile device registry unavailable', null]
+      mobileStateErrors: [null, 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.', null]
     })
     expect(sweepFailures(result)).toEqual([])
     result.mobileListenerHosts[1] = '0.0.0.0'
@@ -322,9 +322,10 @@ describe('helpers', () => {
   })
 
   test.each([
-    ['garbage', 0, 'Mobile device registry unavailable'],
-    ['garbage', 2, 'Mobile device registry unavailable'],
-    ['healthy', 1, 'Mobile device registry unavailable'],
+    ['garbage', 0, 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'],
+    ['garbage', 2, 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'],
+    ['healthy', 1, 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'],
+    ['garbage', 1, 'Mobile device registry unavailable'],
     ['garbage', 1, 'another error'],
     ['garbage', 1, null]
   ] as const)('refuses unavailable listener for %s start %s with %s', (mode, index, error) => {
