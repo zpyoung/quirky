@@ -1,11 +1,28 @@
 import type { Handler, HostingEnv, Scope } from './env'
-import { isRecord, nonEmptyString, parseBranch, parseIdentity, parseOid, parsePositiveInteger, sameIdentity, type IdentityValue } from './pr-data'
+import { isRecord, nonEmptyString, parseBranch, parseIdentity, parseOid, parsePositiveInteger, providerReason, sameIdentity, type IdentityValue } from './pr-data'
 import type { Lookup, Review } from './pr-review'
+import { parseGitLabHosts, parseGitLabRemote, resolveGitLabScope } from './gitlab/identity'
+import type { GitLabReview, GitLabScope } from './gitlab/types'
 import { isReviewParticipants } from './review-participants'
+
+type HostingLookup = Lookup | { kind: 'found'; review: GitLabReview; fetchedAt: number }
+type GitLabLocalIdentity = {
+  branch: string | null
+  headOid: string
+  remotes: { origin: string | null; upstream: string | null }
+}
 
 export type RefreshReason = 'visible' | 'active' | 'post-push' | 'manual' | 'swr'
 type RefreshCandidate = { worktree: string; branch?: string; number?: number; headOid?: string; active?: boolean }
-type ResolvedCandidate = { candidate: RefreshCandidate; scope: Scope; key: string; budgetKey: string; ownerKey: string }
+type ResolvedCandidate = {
+  candidate: RefreshCandidate
+  scope: Scope
+  provider: 'github' | 'gitlab'
+  key: string
+  budgetKey: string
+  ownerKey: string
+  gitlabIdentity?: string
+}
 type Owner = { generation: number; candidates: Map<string, ResolvedCandidate>; removeClose: () => void }
 type RefreshEvent = {
   sequence: number
@@ -23,6 +40,8 @@ type QueueEntry = {
   key: string
   candidate: RefreshCandidate
   scope: Scope
+  provider: 'github' | 'gitlab'
+  gitlabIdentity?: string
   budgetKey: string
   owners: Set<string>
   reason: RefreshReason
@@ -34,9 +53,9 @@ type QueueEntry = {
   aliases: Set<string>
   sequence: number
 }
-type OutcomeState = { outcome: Lookup; fetchedAt: number }
+type OutcomeState = { outcome: HostingLookup; fetchedAt: number }
 type DirectOutcome =
-  | { kind: 'completed'; outcome: Lookup; stale: boolean }
+  | { kind: 'completed'; outcome: HostingLookup; stale: boolean }
   | { kind: 'paused'; pausedUntil: number; skippedReason: 'rate-limit' }
 type RetryState = { failures: number; nextTryAt: number; retryDisabledUntil?: number }
 type StartHistory = Map<string, number[]>
@@ -93,6 +112,73 @@ function budgetKey(scope: Scope): string {
   return `${scope.origin.host.toLowerCase()}|${account}`
 }
 
+function gitLabBudgetKey(scope: Scope): string {
+  return `gitlab|${scope.origin.host.toLowerCase()}|ambient`
+}
+
+async function gitLabIdentity(
+  env: HostingEnv,
+  scope: GitLabScope
+): Promise<{ scope: GitLabScope; key: string }> {
+  const worktree = { ...scope.worktree }
+  const [branchText, headText, remotes] = await Promise.all([
+    env.gitWorktree(worktree, ['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => ''),
+    env.gitWorktree(worktree, ['rev-parse', '--verify', 'HEAD']),
+    env.remoteUrls(worktree)
+  ])
+  const headOid = parseOid(headText.trim())
+  if (!headOid || remotes.origin === null) throw env.invalid('git_failed', 'The local Git identity could not be verified.')
+  const remoteIdentity = parseGitLabRemote(remotes.origin)
+  const hostSetting = env.context.getSetting('gitlabHosts') ?? 'gitlab.com'
+  const hosts = parseGitLabHosts(hostSetting)
+  if (!remoteIdentity ||
+    remoteIdentity.host.toLowerCase() !== scope.origin.host.toLowerCase() ||
+    remoteIdentity.owner.toLowerCase() !== scope.origin.owner.toLowerCase() ||
+    remoteIdentity.repo.toLowerCase() !== scope.origin.repo.toLowerCase() ||
+    !hosts.includes(remoteIdentity.host)) {
+    throw env.invalid('unsupported_provider', 'The GitLab project identity is no longer trusted.')
+  }
+  const local: GitLabLocalIdentity = {
+    branch: parseBranch(branchText.trim()) ?? null,
+    headOid,
+    remotes
+  }
+  const configuration = env.configuration(worktree)
+  const currentScope: GitLabScope = {
+    ...scope,
+    worktree,
+    remotes: { origin: remotes.origin, upstream: remotes.upstream }
+  }
+  const hostStamp = JSON.stringify(hostSetting)
+  return {
+    scope: currentScope,
+    key: JSON.stringify({
+      provider: 'gitlab',
+      worktree: {
+        id: worktree.id,
+        repoId: worktree.repoId,
+        instanceId: worktree.instanceId,
+        path: worktree.path,
+        kind: worktree.kind,
+        branch: worktree.branch
+      },
+      localBranch: local.branch,
+      headOid: local.headOid,
+      origin: scope.origin,
+      remotes: local.remotes,
+      configuration,
+      hostStamp,
+      environment: env.cacheKey(currentScope, 'refresh-gitlab-identity')
+    })
+  }
+}
+
+function gitLabCandidateKey(identity: string, candidate: RefreshCandidate): string {
+  const review = candidate.number ? `pr:${candidate.number}` : `branch:${candidate.branch?.toLowerCase() ?? ''}`
+  return `gitlab:${identity}:${review}:${candidate.headOid?.toLowerCase() ?? ''}`
+}
+
+
 function normalizedCandidate(scope: Scope, candidate: RefreshCandidate): RefreshCandidate {
   const branch = candidate.branch ?? parseBranch(scope.worktree.branch)
   return { worktree: scope.worktree.id, ...(branch ? { branch } : {}), ...(candidate.number ? { number: candidate.number } : {}),
@@ -109,14 +195,67 @@ function ownerKey(caller: Parameters<Handler>[1]): string | undefined {
   return caller.connection ? String(caller.connection.id) : undefined
 }
 
-function safeOutcome(value: unknown): Lookup | undefined {
+const GITLAB_FAILURE_MESSAGES: Record<string, string> = {
+  auth_required: 'GitLab authentication is unavailable. Set GITLAB_TOKEN or run glab auth login.',
+  permission_denied: 'GitLab denied access to the merge request.',
+  not_found: 'GitLab could not find the requested merge request.',
+  already_exists: 'A merge request already exists for this branch.',
+  validation_error: 'GitLab rejected the merge request request.',
+  rate_limited: 'GitLab API rate limit exceeded.',
+  server_error: 'GitLab is temporarily unavailable.',
+  redirect_refused: 'GitLab redirected the request; the redirect was refused.',
+  network_error: 'Could not reach GitLab.',
+  timeout: 'GitLab did not respond before the request deadline.',
+  output_limit: 'GitLab returned too much data.',
+  schema_drift: 'GitLab returned an unexpected response.',
+  upstream_unavailable: 'GitLab pull request lookup is unavailable.'
+}
+
+function gitLabFailure(error: unknown, fetchedAt: number): HostingLookup {
+  const reportedReason = providerReason(error)
+  const reason = typeof reportedReason === 'string' && Object.hasOwn(GITLAB_FAILURE_MESSAGES, reportedReason)
+    ? reportedReason
+    : 'upstream_unavailable'
+  const data = isRecord(error) && isRecord(error.data) ? error.data : undefined
+  const retryDisabledUntil = typeof data?.retryDisabledUntil === 'number' && Number.isFinite(data.retryDisabledUntil)
+    ? data.retryDisabledUntil
+    : undefined
+  const nextAutoRetryAt = typeof data?.nextAutoRetryAt === 'number' && Number.isFinite(data.nextAutoRetryAt)
+    ? data.nextAutoRetryAt
+    : undefined
+  return {
+    kind: 'unavailable',
+    reason,
+    message: GITLAB_FAILURE_MESSAGES[reason]!,
+    fetchedAt,
+    ...(retryDisabledUntil !== undefined ? { retryDisabledUntil } : {}),
+    ...(nextAutoRetryAt !== undefined ? { nextAutoRetryAt } : {})
+  }
+}
+
+function parseGitLabReviewIdentity(value: unknown): IdentityValue | undefined {
+  if (!isRecord(value) || typeof value.host !== 'string' || typeof value.owner !== 'string' || typeof value.repo !== 'string') return undefined
+  try {
+    const path = `${value.owner.split('/').map((segment) => encodeURIComponent(segment)).join('/')}/${encodeURIComponent(value.repo)}`
+    const parsed = parseGitLabRemote(`https://${value.host}/${path}`)
+    if (!parsed || parsed.host.toLowerCase() !== value.host.toLowerCase() || parsed.owner !== value.owner || parsed.repo !== value.repo) return undefined
+    return parsed
+  } catch {
+    return undefined
+  }
+}
+
+function safeOutcome(value: unknown, expectedProvider?: 'github' | 'gitlab'): HostingLookup | undefined {
   if (!isRecord(value) || typeof value.fetchedAt !== 'number' || !Number.isFinite(value.fetchedAt)) return undefined
   if (value.kind === 'no-review') return { kind: 'no-review', fetchedAt: value.fetchedAt }
   if (value.kind === 'unavailable' && typeof value.reason === 'string' && typeof value.message === 'string') {
+    const reason = expectedProvider === 'gitlab' && Object.hasOwn(GITLAB_FAILURE_MESSAGES, value.reason)
+      ? value.reason
+      : expectedProvider === 'gitlab' ? 'upstream_unavailable' : value.reason
     return {
       kind: 'unavailable',
-      reason: value.reason,
-      message: value.message,
+      reason,
+      message: expectedProvider === 'gitlab' ? GITLAB_FAILURE_MESSAGES[reason]! : value.message,
       fetchedAt: value.fetchedAt,
       ...(typeof value.retryDisabledUntil === 'number' && Number.isFinite(value.retryDisabledUntil) ? { retryDisabledUntil: value.retryDisabledUntil } : {}),
       ...(typeof value.nextAutoRetryAt === 'number' && Number.isFinite(value.nextAutoRetryAt) ? { nextAutoRetryAt: value.nextAutoRetryAt } : {})
@@ -124,7 +263,10 @@ function safeOutcome(value: unknown): Lookup | undefined {
   }
   if (value.kind !== 'found' || !isRecord(value.review)) return undefined
   const source = value.review
-  const repository = parseIdentity(source.repository)
+  const provider = source.provider === 'github' || source.provider === 'gitlab' ? source.provider : undefined
+  if (!provider || (expectedProvider !== undefined && provider !== expectedProvider)) return undefined
+  const repository = provider === 'github' ? parseIdentity(source.repository) : parseGitLabReviewIdentity(source.repository)
+  const detailedMergeStatus = provider === 'gitlab' && typeof source.detailedMergeStatus === 'string' ? source.detailedMergeStatus : undefined
   const number = parsePositiveInteger(source.number)
   const url = typeof source.url === 'string' ? source.url : undefined
   const title = typeof source.title === 'string' ? source.title : undefined
@@ -164,19 +306,22 @@ function safeOutcome(value: unknown): Lookup | undefined {
   const mergeQueueKnown = mergeQueueEntryIsValid && typeof source.mergeQueueKnown === 'boolean'
     ? source.mergeQueueKnown
     : hasMergeQueueEntry
-  if (source.provider !== 'github' || !number || !url || title === undefined || body === undefined ||
+  if (!number || !url || title === undefined || body === undefined ||
     !state || !mergeable || !checksStatus || !headRefName || !headRefOid || !baseRefName || !baseRefOid ||
     !repository || reviewDecision === undefined || mergeStateStatus === undefined ||
     mergeQueueRequired === undefined || autoMergeAllowed === undefined || mergeMetadataKnown === undefined ||
+    (provider === 'gitlab' && detailedMergeStatus === undefined) ||
     !Object.hasOwn(source, 'autoMergeRequest') || !Object.hasOwn(source, 'stack') || !Object.hasOwn(source, 'mergeMethods')) return undefined
   if (!isReviewParticipants(source)) return undefined
-  const review: Review = {
+  const review: Review | GitLabReview = {
     requestedReviewers: source.requestedReviewers,
     reviews: source.reviews,
     assignees: source.assignees,
     participantsTruncated: source.participantsTruncated,
     repository,
-    provider: 'github',
+    ...(provider === 'github'
+      ? { provider: 'github' as const }
+      : { provider: 'gitlab' as const, detailedMergeStatus: detailedMergeStatus! }),
     number,
     url,
     title,
@@ -216,10 +361,11 @@ function safeOutcome(value: unknown): Lookup | undefined {
     }
     review.headRepository = repository
   }
+  if (review.provider === 'gitlab') return { kind: 'found', review, fetchedAt: value.fetchedAt }
   return { kind: 'found', review, fetchedAt: value.fetchedAt }
 }
 
-function retryUntil(outcome: Lookup): number | undefined {
+function retryUntil(outcome: HostingLookup): number | undefined {
   return outcome.kind === 'unavailable' ? outcome.retryDisabledUntil : undefined
 }
 
@@ -231,7 +377,7 @@ function isActiveRequest(reason: RefreshReason, candidate: RefreshCandidate, pri
   return reason === 'active' || (reason === 'visible' && candidate.active === true && priority >= 80)
 }
 
-function freshness(outcome: Lookup | undefined, active: boolean): number {
+function freshness(outcome: HostingLookup | undefined, active: boolean): number {
   if (!outcome) return 0
   if (outcome.kind === 'unavailable') return 0
   if (outcome.kind === 'no-review') return active ? 60_000 : 15 * 60_000
@@ -241,7 +387,7 @@ function freshness(outcome: Lookup | undefined, active: boolean): number {
   return active ? 60_000 : 120_000
 }
 
-function resultHead(outcome: Lookup | undefined): string | undefined {
+function resultHead(outcome: HostingLookup | undefined): string | undefined {
   return outcome?.kind === 'found' ? outcome.review.headRefOid : undefined
 }
 
@@ -253,6 +399,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
   const outcomes = new Map<string, OutcomeState>()
   const retry = new Map<string, RetryState>()
   const cooldown = new Map<string, number>()
+  const budgetRetryAfter = new Map<string, number>()
   const backgroundStarts: StartHistory = new Map()
   const activeStarts: StartHistory = new Map()
   const validationBackoff = new Map<string, number>()
@@ -304,8 +451,30 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     return id
   }
 
+  const resolveGitLabCandidate = async (
+    candidate: RefreshCandidate,
+    caller: Parameters<Handler>[1]
+  ): Promise<ResolvedCandidate | undefined> => {
+    const scope = await resolveGitLabScope(env, { worktree: candidate.worktree }, caller)
+    if (!scope) return undefined
+    const identity = await gitLabIdentity(env, scope)
+    const normalized = normalizedCandidate(identity.scope, candidate)
+    if (!normalized.branch && !normalized.number) throw env.invalid('validation_error', 'A detached worktree needs an explicit branch or pull request number.')
+    return {
+      candidate: normalized,
+      scope: identity.scope,
+      provider: 'gitlab',
+      key: gitLabCandidateKey(identity.key, normalized),
+      budgetKey: gitLabBudgetKey(identity.scope),
+      ownerKey: ownerKey(caller) ?? 'local',
+      gitlabIdentity: identity.key
+    }
+  }
+
   const resolveCandidate = async (value: unknown, caller: Parameters<Handler>[1]): Promise<ResolvedCandidate> => {
     const parsed = parseCandidate(env, value)
+    const gitlab = await resolveGitLabCandidate(parsed, caller)
+    if (gitlab) return gitlab
     const scope = await env.resolve({ worktree: parsed.worktree }, caller)
     if (scope.worktree.kind !== 'git') throw env.invalid('validation_error', 'PR refresh requires a registered Git worktree.')
     const candidates = scope.candidates ?? [scope.origin]
@@ -320,13 +489,32 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     return {
       candidate: normalized,
       scope,
+      provider: 'github',
       key: candidateKey(scope, normalized),
       budgetKey: budgetKey(scope),
       ownerKey: ownerKey(caller) ?? 'local'
     }
   }
 
-  const callPR = async (resolved: ResolvedCandidate, caller: Parameters<Handler>[1]): Promise<Lookup> => {
+  const currentCandidate = async (
+    resolved: ResolvedCandidate,
+    caller: Parameters<Handler>[1]
+  ): Promise<ResolvedCandidate | undefined> => {
+    if (resolved.provider !== 'gitlab' || resolved.gitlabIdentity === undefined) return resolved
+    try {
+      const current = await resolveGitLabCandidate(resolved.candidate, caller)
+      if (!current || current.key !== resolved.key || current.gitlabIdentity !== resolved.gitlabIdentity) return undefined
+      return { ...current, ownerKey: resolved.ownerKey }
+    } catch {
+      return undefined
+    }
+  }
+
+  const callPR = async (
+    resolved: ResolvedCandidate,
+    caller: Parameters<Handler>[1],
+    reason: RefreshReason
+  ): Promise<HostingLookup> => {
     const handler = prHandlers.forBranch
     if (!handler) throw env.invalid('upstream_unavailable', 'Pull request lookup is unavailable.')
     const result = await handler({
@@ -334,39 +522,65 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
       ...(resolved.candidate.branch ? { branch: resolved.candidate.branch } : {}),
       ...(resolved.candidate.number ? { number: resolved.candidate.number } : {}),
       ...(resolved.candidate.headOid ? { headOid: resolved.candidate.headOid } : {}),
-      ...(resolved.candidate.active !== undefined ? { active: resolved.candidate.active } : {})
+      ...(resolved.candidate.active !== undefined ? { active: resolved.candidate.active } : {}),
+      ...(resolved.provider === 'gitlab' && reason === 'manual' ? { fresh: true } : {})
     }, caller)
-    const outcome = safeOutcome(result)
+    const outcome = safeOutcome(result, resolved.provider)
     if (!outcome) throw env.invalid('upstream_unavailable', 'Pull request lookup returned an invalid result.')
     return outcome
   }
 
-  const retryDelay = (key: string, outcome: Lookup): void => {
+  const retryDelay = (resolved: ResolvedCandidate, outcome: HostingLookup): void => {
+    if (resolved.provider === 'gitlab' && outcome.kind === 'unavailable' &&
+      outcome.reason === 'rate_limited' && outcome.retryDisabledUntil !== undefined) {
+      const currentUntil = budgetRetryAfter.get(resolved.budgetKey) ?? 0
+      if (outcome.retryDisabledUntil > currentUntil) {
+        budgetRetryAfter.set(resolved.budgetKey, outcome.retryDisabledUntil)
+        pruneBounded(budgetRetryAfter)
+      }
+    }
     if (outcome.kind !== 'unavailable') {
-      retry.delete(key)
+      retry.delete(resolved.key)
       return
     }
-    const now = Date.now()
-    const current = retry.get(key) ?? { failures: 0, nextTryAt: 0 }
+    const current = retry.get(resolved.key) ?? { failures: 0, nextTryAt: 0 }
     current.failures += 1
     const delay = Math.min(FAILURE_BASE_MS * 2 ** Math.min(current.failures - 1, 4), FAILURE_MAX_MS)
-    const backoffUntil = now + delay
+    const backoffUntil = Date.now() + delay
     current.nextTryAt = Math.max(backoffUntil, outcome.nextAutoRetryAt ?? 0)
     if (outcome.retryDisabledUntil !== undefined) current.retryDisabledUntil = outcome.retryDisabledUntil
-    retry.set(key, current)
+    retry.set(resolved.key, current)
     pruneBounded(retry)
   }
 
   const directRefresh = async (resolved: ResolvedCandidate, caller: Parameters<Handler>[1], reason: RefreshReason): Promise<DirectOutcome> => {
+    const superseded = (): DirectOutcome => {
+      emit({ reason, aliases: [resolved.candidate.worktree], status: 'skipped', skippedReason: 'superseded' }, resolved.scope)
+      return {
+        kind: 'completed',
+        outcome: { kind: 'unavailable', reason: 'superseded', message: 'The pull request refresh result was superseded by a repository change.', fetchedAt: Date.now() },
+        stale: true
+      }
+    }
+    const current = await currentCandidate(resolved, caller)
+    if (!current) return superseded()
+    resolved = current
+    const now = Date.now()
     const currentRetry = retry.get(resolved.key)
-    if (currentRetry?.retryDisabledUntil && currentRetry.retryDisabledUntil > Date.now()) {
+    if (currentRetry?.retryDisabledUntil && currentRetry.retryDisabledUntil > now) {
       const pausedUntil = currentRetry.retryDisabledUntil
       emit({ reason, aliases: [resolved.candidate.worktree], status: 'paused', skippedReason: 'rate-limit', pausedUntil }, resolved.scope)
       return { kind: 'paused', pausedUntil, skippedReason: 'rate-limit' }
     }
+    const sharedRetryAfter = resolved.provider === 'gitlab' ? budgetRetryAfter.get(resolved.budgetKey) : undefined
+    if (sharedRetryAfter !== undefined && sharedRetryAfter > now) {
+      emit({ reason, aliases: [resolved.candidate.worktree], status: 'paused', skippedReason: 'rate-limit', pausedUntil: sharedRetryAfter }, resolved.scope)
+      return { kind: 'paused', pausedUntil: sharedRetryAfter, skippedReason: 'rate-limit' }
+    }
+    if (sharedRetryAfter !== undefined) budgetRetryAfter.delete(resolved.budgetKey)
     const last = outcomes.get(resolved.key)
     const retryAfter = last ? retryUntil(last.outcome) : undefined
-    if (retryAfter !== undefined && retryAfter > Date.now()) {
+    if (retryAfter !== undefined && retryAfter > now) {
       emit({ reason, aliases: [resolved.candidate.worktree], status: 'paused', skippedReason: 'rate-limit', pausedUntil: retryAfter }, resolved.scope)
       return { kind: 'paused', pausedUntil: retryAfter, skippedReason: 'rate-limit' }
     }
@@ -375,33 +589,34 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     pruneBounded(cooldown)
     const cacheGeneration = env.cacheKey(resolved.scope, `refresh-generation:${resolved.key}`)
     emit({ reason, aliases: [resolved.candidate.worktree], status: 'in-flight', requestStartedAt }, resolved.scope)
-    let outcome: Lookup
+    let outcome: HostingLookup
     try {
-      outcome = await callPR(resolved, caller)
-    } catch {
-      outcome = { kind: 'unavailable', reason: 'upstream_unavailable', message: 'GitHub pull request refresh failed.', fetchedAt: Date.now() }
+      outcome = await callPR(resolved, caller, reason)
+    } catch (error) {
+      outcome = resolved.provider === 'gitlab'
+        ? gitLabFailure(error, Date.now())
+        : { kind: 'unavailable', reason: 'upstream_unavailable', message: 'GitHub pull request refresh failed.', fetchedAt: Date.now() }
     }
     if (disposed) {
       return {
         kind: 'completed',
-        outcome: { kind: 'unavailable', reason: 'plugin_inactive', message: 'The GitHub hosting plugin is shutting down.', fetchedAt: Date.now() },
+        outcome: { kind: 'unavailable', reason: 'plugin_inactive', message: 'The hosting plugin is shutting down.', fetchedAt: Date.now() },
         stale: true
       }
     }
-    if (cacheGeneration !== env.cacheKey(resolved.scope, `refresh-generation:${resolved.key}`)) {
-      emit({ reason, aliases: [resolved.candidate.worktree], status: 'skipped', skippedReason: 'superseded' }, resolved.scope)
-      return {
-        kind: 'completed',
-        outcome: { kind: 'unavailable', reason: 'superseded', message: 'The pull request refresh result was superseded by a repository change.', fetchedAt: Date.now() },
-        stale: true
-      }
+    if (resolved.provider === 'gitlab') {
+      const current = await currentCandidate(resolved, { role: 'plugin', pluginId: 'quirky.hosting' })
+      if (!current) return superseded()
+      resolved = current
     }
+    if (cacheGeneration !== env.cacheKey(resolved.scope, `refresh-generation:${resolved.key}`)) return superseded()
     const fetchedAt = Date.now()
     outcomes.set(resolved.key, { outcome, fetchedAt })
     pruneBounded(outcomes)
-    retryDelay(resolved.key, outcome)
+    retryDelay(resolved, outcome)
     if (reason === 'manual' && outcome.kind === 'found' && outcome.review.state === 'open' && outcome.review.mergeable === 'UNKNOWN' &&
-      !['CLEAN', 'BEHIND', 'BLOCKED'].includes(outcome.review.mergeStateStatus)) {
+      !['CLEAN', 'BEHIND', 'BLOCKED'].includes(outcome.review.mergeStateStatus) &&
+      (resolved.provider !== 'gitlab' || owners.has(resolved.ownerKey))) {
       const followUp = queue(resolved, 'swr', 40, resolved.ownerKey)
       followUp.bypassFreshness = true
       followUp.dueAt = Math.max(followUp.dueAt, fetchedAt + PENDING_MERGEABILITY_DELAY_MS)
@@ -419,6 +634,8 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
       key: resolved.key,
       candidate: resolved.candidate,
       scope: resolved.scope,
+      provider: resolved.provider,
+      ...(resolved.gitlabIdentity !== undefined ? { gitlabIdentity: resolved.gitlabIdentity } : {}),
       budgetKey: resolved.budgetKey,
       owners: new Set(owner ? [owner] : []),
       reason,
@@ -503,7 +720,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     const retryState = retry.get(entry.key)
     const cooldownUntil = cooldown.get(entry.key) ?? 0
     const freshUntil = freshnessTime(entry)
-    const delays = [entry.dueAt, retryState?.retryDisabledUntil ?? 0]
+    const delays = [entry.dueAt, retryState?.retryDisabledUntil ?? 0, entry.provider === 'gitlab' ? budgetRetryAfter.get(entry.budgetKey) ?? 0 : 0]
     if (entry.reason !== 'manual') delays.push(retryState?.nextTryAt ?? 0)
     if (!isImmediateReason(entry.reason)) delays.push(cooldownUntil, freshUntil ?? 0)
     const pacing = nextPacingTime(entry, now)
@@ -532,6 +749,12 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
         emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'fresh' }, entry.scope)
         continue
       }
+      if (entry.provider === 'gitlab' && entry.reason !== 'post-push' &&
+          entry.owners.size === 0 && (candidateOwners.get(entry.key)?.size ?? 0) === 0) {
+        entries.delete(entry.key)
+        emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' }, entry.scope)
+        continue
+      }
       const delay = entryDelay(entry, now)
       if (!Number.isFinite(delay)) {
         entries.delete(entry.key)
@@ -545,6 +768,14 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
       }
     }
     return best ? { nextDelay: bestDelay } : {}
+  }
+
+  function discardGitLabContinuations(entry: QueueEntry): void {
+    entries.delete(entry.key)
+    const ownerIds = new Set([...(candidateOwners.get(entry.key) ?? []), ...entry.owners])
+    candidateOwners.delete(entry.key)
+    for (const id of ownerIds) owners.get(id)?.candidates.delete(entry.key)
+    entry.owners.clear()
   }
 
   async function drain(): Promise<void> {
@@ -579,24 +810,36 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
           const resolved: ResolvedCandidate = {
             candidate: entry.candidate,
             scope: entry.scope,
+            provider: entry.provider,
+            ...(entry.gitlabIdentity !== undefined ? { gitlabIdentity: entry.gitlabIdentity } : {}),
             key: entry.key,
             budgetKey: entry.budgetKey,
             ownerKey: entry.owners.values().next().value ?? 'local'
           }
           const result = await directRefresh(resolved, { role: 'plugin', pluginId: 'quirky.hosting' }, entry.reason)
           if (disposed) continue
+          if (entry.provider === 'github' && entry.reason === 'visible' &&
+              (candidateOwners.get(entry.key)?.size ?? 0) === 0) {
+            emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' }, entry.scope)
+            continue
+          }
+          if (result.kind === 'completed' && result.stale) {
+            if (entry.provider === 'gitlab') discardGitLabContinuations(entry)
+            continue
+          }
           if (entry.reason === 'visible' && (candidateOwners.get(entry.key)?.size ?? 0) === 0) {
             emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' }, entry.scope)
             continue
           }
           if (result.kind === 'paused') {
+            if (entry.provider === 'gitlab' && entry.owners.size === 0 && (candidateOwners.get(entry.key)?.size ?? 0) === 0) continue
             entry.dueAt = result.pausedUntil
             entries.set(entry.key, entry)
             continue
           }
-          if (result.stale) continue
           const outcome = result.outcome
           if (outcome.kind === 'unavailable') {
+            if (entry.provider === 'gitlab' && entry.owners.size === 0 && (candidateOwners.get(entry.key)?.size ?? 0) === 0) continue
             const retryState = retry.get(entry.key)
             if (retryState) {
               entry.dueAt = Math.max(retryState.nextTryAt, retryState.retryDisabledUntil ?? 0)
@@ -607,7 +850,9 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
           if (entries.has(entry.key)) continue
           const visibleOwners = candidateOwners.get(entry.key)
           const shouldRepeat = entry.reason === 'visible' || entry.reason === 'swr' || (entry.reason === 'active' && entry.owners.size > 0)
-          if (!shouldRepeat || (entry.reason === 'visible' && (!visibleOwners || visibleOwners.size === 0))) continue
+          if (!shouldRepeat ||
+            (entry.provider === 'gitlab' && entry.owners.size === 0 && (visibleOwners?.size ?? 0) === 0) ||
+            (entry.reason === 'visible' && (!visibleOwners || visibleOwners.size === 0))) continue
           const interval = freshness(outcome, entry.candidate.active === true)
           if (!Number.isFinite(interval)) continue
           const next = makeEntry(resolved, entry.reason, entry.priority)
@@ -684,6 +929,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
 
     const resolved = await Promise.all(values.map((value) => resolveCandidate(parseCandidate(env, value), caller)))
     if (owners.get(ownerId) !== owner) inputError(env, 'The refresh connection has already closed.')
+    if (generation <= owner.generation) return { accepted: false, generation: owner.generation, candidates: owner.candidates.size }
     const next = new Map<string, ResolvedCandidate>()
     for (const candidate of resolved) next.set(candidate.key, candidate)
     const removedLastOwners = [...owner.candidates.keys()].filter((key) => !next.has(key) && candidateOwners.get(key)?.size === 1).length
@@ -790,6 +1036,7 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
     outcomes.clear()
     retry.clear()
     cooldown.clear()
+    budgetRetryAfter.clear()
     backgroundStarts.clear()
     activeStarts.clear()
     validationBackoff.clear()

@@ -286,6 +286,7 @@ async function startDaemonWithPower(options: DaemonOptions, hostPower: HostPower
       rpcToken,
       daemonVersion,
       uiDir,
+      startupSettled: () => gate.isOpen,
       log
     })
   let server: ReturnType<typeof listen>

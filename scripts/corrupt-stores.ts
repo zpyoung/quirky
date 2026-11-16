@@ -167,7 +167,7 @@ export function sweepFailures(result: SweepResult): string[] {
   }
   for (const [index, host] of result.mobileListenerHosts.entries()) {
     const pendingRegistry = result.mode !== 'healthy' && index === 1 && host === null &&
-      result.mobileStateErrors?.[index] === 'Mobile device registry unavailable'
+      result.mobileStateErrors?.[index] === 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'
     if (host !== '127.0.0.1' && !pendingRegistry) failures.push(`listener-host:${host}`)
   }
   if (result.mode === 'healthy') {

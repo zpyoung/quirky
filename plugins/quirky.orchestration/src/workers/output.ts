@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import * as supervision from '@quirky/supervision'
 import type { Session } from '@quirky/protocol'
 import type { DispatchId, DispatchRow, JsonValue, UtcTimestamp } from '../contracts'
 import type {
@@ -745,21 +746,30 @@ async function loadStructured(
     const metadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
     return { source: 'structured', sessionId: resource?.sessionId ?? null, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['structured_lease_unavailable'] }
   }
-  let raw: unknown
+  const engine = supervision.createSupervision(runtime.context)
+  let raw: unknown = null
+  let failureReason: 'structured_journal_invalid' | 'structured_journal_unreadable' | null = null
   try {
-    raw = await runtime.context.call('quirky.structured/messages', { session: identity.sessionId })
-  } catch {
+    raw = await engine.readMessages({ session: identity.sessionId })
+  } catch (error) {
+    failureReason = error instanceof supervision.SupervisionError && error.code === 'invalid-response'
+      ? 'structured_journal_invalid'
+      : 'structured_journal_unreadable'
+  } finally {
+    engine.dispose()
+  }
+  if (!await sameLease(runtime, dispatch, record, resource, identity)) {
+    const changedMetadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
+    return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(changedMetadata), content: '', messages: [], clipped: false, warnings: ['structured_lease_changed'] }
+  }
+  if (failureReason) {
     const metadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
-    return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['structured_journal_unreadable'] }
+    return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: [failureReason] }
   }
   const messages = parseStructuredMessages(raw, identity.sessionId)
   if (!messages) {
     const metadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
     return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['structured_journal_invalid'] }
-  }
-  if (!await sameLease(runtime, dispatch, record, resource, identity)) {
-    const changedMetadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
-    return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(changedMetadata), content: '', messages: [], clipped: false, warnings: ['structured_lease_changed'] }
   }
   const content = structuredArchiveContent(identity.sessionId, messages)
   const metadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: true })

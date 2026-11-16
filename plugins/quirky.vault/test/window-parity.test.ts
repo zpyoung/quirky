@@ -552,6 +552,51 @@ test.skipIf(process.platform !== 'darwin')(
   FEATURE_MS
 )
 
+test.skipIf(process.platform !== 'linux')(
+  'SC-19: confirmed mounted-window deletion reports the OS Trash refusal and retains the Claude row',
+  async () => {
+    const source = sourceHome()
+    const sourcePath = writeClaudeSession(source, 'confirmed-linux-refusal-session', { prompt: 'Keep this supported Claude transcript.' })
+    const originalBytes = readFileSync(sourcePath)
+    let features: Features | undefined
+    try {
+      const mounted = features = await makeFeatures(source)
+      const listing = await mounted.h.call<PublicListResult>('quirky.vault/list', { host: 'local', agents: ['claude'], unlimited: true })
+      const session = listing.sessions.find((entry) => entry.sessionId === 'confirmed-linux-refusal-session')
+      if (!session) throw new Error('The real Claude deletion fixture was not discovered.')
+      await mounted.h.call('quirky.vault/setView', { scope: 'all' })
+      await runCommand(mounted, 'command:quirky.vault/open', { agent: 'claude', sessionId: session.sessionId })
+      await reportOf<HistoryReport>(mounted, HISTORY_PANEL, 'selected supported Claude source', (state) => state.selectedId === session.id)
+
+      const document = mounted.win.document
+      await until(mounted, () => document.querySelector(`[data-vault-session-row="${session.id}"]`))
+      menuButton(document, session.id).click()
+      const menu = await until(mounted, () => document.body.querySelector<HTMLElement>(`[data-vault-actions="${session.id}"]`))
+      buttonNamed(menu, 'Delete').click()
+      const confirmation = await until(mounted, () => dialogByTitle(document, 'Delete this agent session?'))
+      buttonNamed(confirmation, 'Delete').click()
+
+      const reason = 'OS Trash is supported only on macOS'
+      const failure = await until(mounted, () => [...document.querySelectorAll<HTMLElement>('[role="alert"]')]
+        .find((alert) => alert.textContent?.includes(reason)))
+      expect(failure.textContent?.trim()).toContain(reason)
+      expect(existsSync(sourcePath)).toBe(true)
+      expect(readFileSync(sourcePath)).toEqual(originalBytes)
+      const retained = await reportOf<HistoryReport>(mounted, HISTORY_PANEL, 'source remains listed after platform refusal', (state) => !state.loading && state.visibleIds.includes(session.id))
+      expect(retained.visibleIds).toContain(session.id)
+      expect(document.body.textContent).not.toContain('Session moved to Trash')
+      expect(document.body.textContent).not.toContain('Session already missing')
+    } finally {
+      try {
+        await features?.stop()
+      } finally {
+        rmSync(source, { recursive: true, force: true })
+      }
+    }
+  },
+  FEATURE_MS
+)
+
 test(
   'SC-08: Settings reports real index counts and focuses search; connection errors expose a retry that recovers against the daemon',
   async () => {

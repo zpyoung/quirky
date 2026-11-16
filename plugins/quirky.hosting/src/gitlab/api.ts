@@ -14,6 +14,7 @@ export type GitLabResponse = {
   status: number
   json: unknown
   nextPage: number | null
+  nextPageInvalid?: boolean
   retryAfterMs: number | null
 }
 
@@ -105,6 +106,7 @@ export function createGitLabClient(
         status: response.status,
         json,
         nextPage: parseNextPage(response.headers.get('x-next-page')),
+        nextPageInvalid: hasInvalidNextPage(response.headers.get('x-next-page')),
         retryAfterMs: parseRetryAfter(response.headers.get('retry-after'))
       }
     } catch (error) {
@@ -113,6 +115,75 @@ export function createGitLabClient(
         throw gitlabError(env, 'timeout', 'The GitLab request timed out.')
       }
       throw gitlabError(env, 'network_error', 'The GitLab request could not be completed.')
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async function trace(scope: GitLabScope, jobId: number, activeToken?: string): Promise<string> {
+    if (!Number.isSafeInteger(jobId) || jobId <= 0) {
+      throw gitlabError(env, 'invalid_input', 'A positive GitLab job ID is required.')
+    }
+    const url = requestUrl(env, scope, { method: 'GET', path: `/projects/${scope.projectId}/jobs/${jobId}/trace` })
+    const credentials = activeToken === undefined ? await token(scope) : { token: activeToken, source: null, glabAvailable: null }
+    if (!credentials.token) throw gitlabError(env, 'auth_required', AUTH_REQUIRED_MESSAGE)
+
+    const headers = new Headers({ Accept: 'text/plain', Authorization: `Bearer ${credentials.token}` })
+    const controller = new AbortController()
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, READ_DEADLINE_MS)
+    try {
+      const response = await fetcher(url, {
+        method: 'GET',
+        headers,
+        redirect: 'manual',
+        signal: controller.signal
+      })
+      if (response.status === 401) {
+        invalidateGitLabToken(env.context.process, scope.origin.host)
+        void response.body?.cancel().catch(() => undefined)
+        throw gitlabError(env, 'auth_required', AUTH_REQUIRED_MESSAGE)
+      }
+      if (response.status >= 300 && response.status < 400) {
+        void response.body?.cancel().catch(() => undefined)
+        throw gitlabError(env, 'redirect_refused', 'GitLab redirected the trace request; redirects are not followed.')
+      }
+      if (response.status === 403) {
+        void response.body?.cancel().catch(() => undefined)
+        throw gitlabError(env, 'trace_permission_denied', 'GitLab denied access to this job trace.')
+      }
+      if (response.status === 404) {
+        void response.body?.cancel().catch(() => undefined)
+        throw gitlabError(env, 'trace_not_found', 'The GitLab job trace was not found.')
+      }
+      if (response.status === 429) {
+        const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'))
+        void response.body?.cancel().catch(() => undefined)
+        throw gitlabError(env, 'rate_limited', 'GitLab rate limit was reached.', retryAfterMs === null
+          ? {}
+          : { retryDisabledUntil: Date.now() + retryAfterMs })
+      }
+      if (response.status < 200 || response.status >= 300) {
+        void response.body?.cancel().catch(() => undefined)
+        throw gitlabError(env, 'trace_unavailable', 'The GitLab job trace could not be read.')
+      }
+
+      const contentLength = Number(response.headers.get('content-length'))
+      if (Number.isFinite(contentLength) && contentLength > BODY_LIMIT_BYTES) {
+        await cancelResponseBody(response)
+        throw gitlabError(env, 'trace_output_limit', 'The GitLab job trace exceeded the configured output limit.')
+      }
+      const bytes = await readTraceBody(env, response)
+      return new TextDecoder('utf-8').decode(bytes)
+    } catch (error) {
+      if (hasGitLabReason(error)) throw error
+      if (timedOut || isAbortError(error)) {
+        throw gitlabError(env, 'trace_timeout', 'The GitLab job trace request timed out.')
+      }
+      throw gitlabError(env, 'trace_unavailable', 'The GitLab job trace could not be read.')
     } finally {
       clearTimeout(timer)
     }
@@ -149,7 +220,7 @@ export function createGitLabClient(
     return { items, truncated: false }
   }
 
-  return { request, pages, token }
+  return { request, pages, token, trace }
 }
 
 export type GitLabClient = ReturnType<typeof createGitLabClient>
@@ -232,22 +303,51 @@ async function readResponseBody(env: HostingEnv, response: Response): Promise<Ui
   return bytes
 }
 
-function responseError(env: HostingEnv, response: Response): Error | null {
-  const status = response.status
-  if (status >= 200 && status < 300) return null
-  if (status === 403) return gitlabError(env, 'permission_denied', 'GitLab denied the request.')
-  if (status === 404) return gitlabError(env, 'not_found', 'The GitLab resource was not found.')
-  if (status === 409) return gitlabError(env, 'already_exists', 'A matching GitLab resource already exists.')
-  if (status === 400 || status === 422) return gitlabError(env, 'validation_error', 'GitLab rejected the requested operation.')
-  if (status === 429) {
-    const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'))
-    return gitlabError(env, 'rate_limited', 'GitLab rate limit was reached.', retryAfterMs === null
-      ? {}
-      : { retryDisabledUntil: Date.now() + retryAfterMs })
+async function readTraceBody(env: HostingEnv, response: Response): Promise<Uint8Array> {
+  if (response.body === null) return new Uint8Array()
+  const reader = response.body.getReader()
+  const chunks: Uint8Array[] = []
+  let totalBytes = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value === undefined) continue
+      totalBytes += value.byteLength
+      if (totalBytes > BODY_LIMIT_BYTES) {
+        try {
+          await reader.cancel()
+        } catch {
+          // Cancellation is best-effort after crossing the trace cap.
+        }
+        throw gitlabError(env, 'trace_output_limit', 'The GitLab job trace exceeded the configured output limit.')
+      }
+      chunks.push(value)
+    }
+  } finally {
+    reader.releaseLock()
   }
-  if (status >= 500) return gitlabError(env, 'server_error', 'GitLab reported a server error.')
-  if (status >= 400) return gitlabError(env, 'validation_error', 'GitLab rejected the requested operation.')
-  return gitlabError(env, 'server_error', 'GitLab returned an unsupported API status.')
+  const bytes = new Uint8Array(totalBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return bytes
+}
+
+async function cancelResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel()
+  } catch {
+    // A rejected trace response must not be drained or exposed to the caller.
+  }
+}
+
+function hasInvalidNextPage(value: string | null): boolean {
+  if (value === null || value.trim().length === 0) return false
+  const page = value.trim()
+  return !/^[1-9]\d*$/u.test(page) || parseNextPage(page) === null
 }
 
 function parseNextPage(value: string | null): number | null {
@@ -276,3 +376,21 @@ function hasGitLabReason(error: unknown): boolean {
 function isAbortError(error: unknown): boolean {
   return isRecord(error) && error.name === 'AbortError'
 }
+function responseError(env: HostingEnv, response: Response): Error | null {
+  const status = response.status
+  if (status >= 200 && status < 300) return null
+  if (status === 403) return gitlabError(env, 'permission_denied', 'GitLab denied the request.')
+  if (status === 404) return gitlabError(env, 'not_found', 'The GitLab resource was not found.')
+  if (status === 409) return gitlabError(env, 'already_exists', 'A matching GitLab resource already exists.')
+  if (status === 400 || status === 422) return gitlabError(env, 'validation_error', 'GitLab rejected the requested operation.')
+  if (status === 429) {
+    const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'))
+    return gitlabError(env, 'rate_limited', 'GitLab rate limit was reached.', retryAfterMs === null
+      ? {}
+      : { retryDisabledUntil: Date.now() + retryAfterMs })
+  }
+  if (status >= 500) return gitlabError(env, 'server_error', 'GitLab reported a server error.')
+  if (status >= 400) return gitlabError(env, 'validation_error', 'GitLab rejected the requested operation.')
+  return gitlabError(env, 'server_error', 'GitLab returned an unsupported API status.')
+}
+
