@@ -2,8 +2,9 @@ import { EmptyState } from '@quirky/ui'
 import { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RpcErrorCode, type MountFunction, type QuirkyEvent, type Session, type UiPluginContext } from '@quirky/protocol'
+// under `bun test`, Bun.build fails to resolve ./window/model when ./window/chat is imported before it
 import { forgetShowAllEvents, WORKTREE_VIEW_ID, WorktreeSessions } from './window/model'
-import { StructuredView } from './window/StructuredView'
+import { ChatView } from './window/chat/ChatView'
 import { WorktreeView } from './window/WorktreeView'
 
 const PLUGIN_ID = 'quirky.session'
@@ -39,7 +40,7 @@ function touches(event: QuirkyEvent, id: string): boolean {
 
 type Loaded = { status: 'loading' } | { status: 'missing' } | { status: 'ready'; session: Session }
 
-/** One structured session's transcript and input, re-read whenever the session changes or goes away. */
+/** One structured session's chat, re-read whenever the session changes or goes away. */
 function StructuredSession({ context, id }: { context: UiPluginContext; id: string | null }) {
   const [loaded, setLoaded] = useState<Loaded>(id === null ? { status: 'missing' } : { status: 'loading' })
 
@@ -74,7 +75,7 @@ function StructuredSession({ context, id }: { context: UiPluginContext; id: stri
 
   if (loaded.status === 'missing') return <EmptyState message="Session not found" />
   if (loaded.status === 'loading') return null
-  return <StructuredView context={context} session={loaded.session} />
+  return <ChatView context={context} session={loaded.session} />
 }
 
 /**

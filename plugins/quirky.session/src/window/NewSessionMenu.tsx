@@ -5,18 +5,19 @@ import type { MenuItem } from '@quirky/ui'
 import { AGENTS_VIEW_ID, loadMenuEntries, SHELL_ONLY_MENU, type MenuEntry } from './menuEntries'
 import type { NewSessionRequest } from './PromptDialog'
 
-type Props = { context: UiPluginContext; onPick: (request: NewSessionRequest) => void }
+type Props = { context: UiPluginContext; onPick: (request: NewSessionRequest) => void; onChat: () => void }
 
-/** The + menu: Shell, installed enabled agents, and the Agents settings entry. */
-export function NewSessionMenu({ context, onPick }: Props) {
+/** The + menu: Shell, Chat, installed enabled agents, and the Agents settings entry. */
+export function NewSessionMenu({ context, onPick, onChat }: Props) {
   const [entries, setEntries] = useState<MenuEntry[]>(SHELL_ONLY_MENU)
   const root = useRef<HTMLDivElement>(null)
   const latest = useRef(0)
 
   const choose = useCallback((entry: MenuEntry) => {
     if (entry.kind === 'manage') context.openView(AGENTS_VIEW_ID)
+    else if (entry.kind === 'chat') onChat()
     else onPick(entry.request)
-  }, [context, onPick])
+  }, [context, onPick, onChat])
 
   const items = useMemo<MenuItem[]>(() => entries.map((entry, index) => ({
     id: `${entry.kind}-${index}-${entry.label}`,

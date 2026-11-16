@@ -76,6 +76,8 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const toasts: { title: string; body: string }[] = []
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
   const state = { confirmAnswer: true }
+  const mounted: { viewId: string; element: HTMLElement; input: unknown; unmounted: boolean }[] = []
+  const missingViews = new Set<string>()
   const layout: UiLayout = { worktree: null, view: null, panel: null, sidebar: true, focus: null }
 
   const context: UiPluginContext = {
@@ -133,7 +135,14 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     },
     setPanelBadge() {},
     setContext() {},
-    mountView: () => () => {}
+    mountView(viewId, element, input) {
+      if (missingViews.has(viewId)) throw new Error(`no contribution ${viewId}`)
+      const record = { viewId, element, input, unmounted: false }
+      mounted.push(record)
+      return () => {
+        record.unmounted = true
+      }
+    }
   }
 
   return {
@@ -146,6 +155,10 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     streams,
     layout,
     state,
+    /** Every `mountView` call so far, with whether its cleanup has run. */
+    mounted,
+    /** View IDs whose `mountView` throws `no contribution`, as for a plugin that is off. */
+    missingViews,
     callsTo: (method: string) => calls.filter((call) => call.method === method),
     emit: (event: QuirkyEvent) => act(async () => void eventListeners.forEach((listener) => listener(event))),
     setConnection: (status: 'connected' | 'reconnecting') =>

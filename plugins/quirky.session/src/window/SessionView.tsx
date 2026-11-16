@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Session, UiPluginContext } from '@quirky/protocol'
+import { ChatView } from './chat/ChatView'
 import { ExitedBar } from './ExitedBar'
-import { StructuredView } from './StructuredView'
 import { TerminalPane } from './TerminalPane'
 
 const DEFAULT_SCROLLBACK = 2000
@@ -70,7 +70,7 @@ const sessionLayout = {
 export function SessionView({ context, themeSource, session, connected, onClose }: Props) {
   const scrollback = useScrollback(context)
   const attempt = useRestoreAttempt(session)
-  if (session.kind === 'structured') return <StructuredView context={context} session={session} />
+  if (session.kind === 'structured') return <ChatView context={context} session={session} />
 
   return (
     <div style={sessionLayout}>
