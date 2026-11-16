@@ -97,3 +97,48 @@ test('capture preserves the shared candidates and Playwright-first callback orde
     expect(visits).toEqual([bundle, ...installed].slice(0, [bundle, ...installed].indexOf(candidate) + 1))
   }
 })
+
+test('daemon browser prerequisites fail before allocating a daemon fixture', () => {
+  const root = mkdtempSync(join(tmpdir(), 'browser-prerequisite-'))
+  try {
+    const daemonTest = join(import.meta.dir, '../../packages/daemon/test/index-preload.browser.test.ts')
+    const helpers = join(import.meta.dir, '../../packages/daemon/test/helpers.ts')
+    const resolver = join(import.meta.dir, 'browser.ts')
+    const probe = `
+      import { mock } from 'bun:test'
+      const registered = []
+      let allocated = false
+      let resolved = false
+      const register = (name, callback) => registered.push(callback)
+      register.skipIf = (skip) => skip ? () => {} : register
+      mock.module('bun:test', () => ({ test: register, expect: () => {} }))
+      mock.module(${JSON.stringify(helpers)}, () => ({
+        makeTempHome: () => { allocated = true; throw new Error('fixture allocated') },
+        startHarness: () => { throw new Error('daemon started') }
+      }))
+      mock.module(${JSON.stringify(resolver)}, () => ({
+        browserExecutable: () => { resolved = true; throw new Error('No executable Chrome or Chromium: prerequisite fixture') }
+      }))
+      // Load after mocks so prerequisite failure cannot allocate a real daemon fixture.
+      await import(${JSON.stringify(daemonTest)})
+      let error = ''
+      try { await registered[0]?.() } catch (failure) { error = failure.message }
+      console.log(JSON.stringify({ allocated, resolved, error, tests: registered.length }))
+    `
+    const child = Bun.spawnSync([process.execPath, '-e', probe], {
+      cwd: join(import.meta.dir, '../..'),
+      env: { ...process.env, QUIRKY_HOME: root },
+      stdout: 'pipe',
+      stderr: 'pipe'
+    })
+    expect(child.exitCode).toBe(0)
+    expect(JSON.parse(child.stdout.toString())).toEqual({
+      allocated: false,
+      resolved: true,
+      error: 'No executable Chrome or Chromium: prerequisite fixture',
+      tests: 1
+    })
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})

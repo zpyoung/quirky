@@ -1,13 +1,13 @@
 import { expect, test } from 'bun:test'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { chromium, type Browser } from 'playwright'
+import { browserExecutable } from '../../../scripts/test-support/browser'
 import { makeTempHome, startHarness, type Harness } from './helpers'
 import { writeModulePlugin } from './plugins/fixtures'
 
-const executable = chromium.executablePath()
-
-test.skipIf(!existsSync(executable))('preloads plugin UI before dynamic import and resolves its import-map dependency', async () => {
+test('preloads plugin UI before dynamic import and resolves its import-map dependency', async () => {
+  const executable = browserExecutable()
   const home = makeTempHome('qd-index-preload-browser-')
   const uiDir = join(home, 'ui')
   mkdirSync(uiDir, { recursive: true })
