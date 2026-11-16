@@ -41,6 +41,10 @@ function metricsForTest(): Parameters<typeof attachMetrics>[1] {
     closed: false,
     crashed: false,
     requests: new Map(),
+    requestRing: new Array(2_000),
+    requestCount: 0,
+    nextRequestSlot: 0,
+    requestListeners: new Set(),
     sockets: 0,
     lastRequestAt: null,
     pageErrors: 0,
@@ -82,9 +86,16 @@ const current = {
   connectReady: Promise.withResolvers(),
   browserClosedPromise: Promise.withResolvers(),
   browserClosedCount: 0,
-  controller: undefined
+  controller: undefined,
+  navigationCalls: 0,
+  stateReads: 0,
+  resolveNavigate: undefined,
+  navigationStarted: Promise.withResolvers(),
+  resolveState: undefined,
+  reconciliationStarted: Promise.withResolvers()
 }
 
+let fastReconcileTimeout = false
 class Emitter {
   listeners = new Map()
   on(event, listener) {
@@ -124,14 +135,17 @@ function makePage() {
         }
       }
     },
-    sendStatus(worktree) {
+    sendRequest(method, params) {
       if (!socketOpened) {
         socketOpened = true
         page.emit('websocket', socket)
       }
       socket.emit('framesent', {
-        payload: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'quirky.git/status', params: { worktree } })
+        payload: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params })
       })
+    },
+    sendStatus(worktree) {
+      page.sendRequest('quirky.git/status', { worktree })
     },
     async goto(url) {
       current.pidAtNavigation = current.observations.some(({ stage, browserPid }) => stage === 'launch' && browserPid === 801)
@@ -229,6 +243,7 @@ const controller = new AbortController()
 current.controller = controller
 const nativeSetTimeout = globalThis.setTimeout
 globalThis.setTimeout = (callback, ms, ...args) => {
+  if (fastReconcileTimeout && ms === 5000) return nativeSetTimeout(callback, 0, ...args)
   if (ms === 100) {
     queueMicrotask(() => controller.abort())
     return 0
@@ -259,9 +274,17 @@ const world = {
       current.rpcCalls.push(method)
       if (method === 'ui.state') return { windows: current.connectionIds.map((connId) => ({ connId })) }
       if (method === 'ui.window.state') {
-        
-        
-        const worktree = current.selected.get(params.connId) ?? 'ready'
+        current.stateReads++
+        if (scenario === 'abort-reconcile-read' && current.stateReads > 1) {
+          const deferred = Promise.withResolvers()
+          current.reconciliationStarted.resolve()
+          current.resolveState = deferred.resolve
+          return deferred.promise
+        }
+        if (scenario === 'switch-unreadable' && current.stateReads > 1) throw new Error('window state unavailable')
+        const worktree = scenario === 'finish-mismatch' && current.stateReads > 1
+          ? 'daemon-worktree'
+          : current.selected.get(params.connId) ?? 'ready'
         return {
           layout: {
             worktree,
@@ -271,11 +294,30 @@ const world = {
         }
       }
       if (method === 'quirky.worktree/navigate') {
+        current.navigationCalls++
         const connId = params.window
         const worktree = params.worktree.replace(/^id:/, '')
-        current.selected.set(connId, worktree)
         const page = current.pagesByConn.get(connId)
+        if (current.navigationCalls > 1 && scenario === 'abort-nav') {
+          current.selected.set(connId, 'wt-c')
+          current.navigationStarted.resolve()
+          const deferred = Promise.withResolvers()
+          current.resolveNavigate = deferred.resolve
+          return deferred.promise
+        }
+        if (current.navigationCalls > 1 && scenario === 'abort-reconcile-read') throw new Error('navigation rejected')
+        if (current.navigationCalls > 1 && ['switch-mismatch', 'switch-unreadable'].includes(scenario)) {
+          current.selected.set(connId, 'wt-c')
+          return { worktreeId: 'wt-c' }
+        }
+        current.selected.set(connId, worktree)
         if (['matching-during-navigation', 'two-windows', 'liveness'].includes(scenario)) sendStatus(page, worktree)
+        if (current.navigationCalls === 1 && (scenario.startsWith('switch-')
+          || scenario.startsWith('abort-') || scenario.startsWith('wait-') || scenario.startsWith('finish-'))) {
+          sendStatus(page, worktree)
+        }
+        if (current.navigationCalls > 1 && scenario === 'switch-proof') sendStatus(page, \`id:\${worktree}\`)
+        if (current.navigationCalls > 1 && scenario === 'switch-wrong-proof') sendStatus(page, 'wrong-worktree')
         if (scenario === 'wrong-worktree') sendStatus(page, 'another-worktree')
         return { worktreeId: worktree }
       }
@@ -292,7 +334,9 @@ const capture = async () => {
       executable: '/recording/chromium',
       out: process.env.QUIRKY_OUT,
       signal: controller.signal,
-      onRequest: (request) => current.requests.push(request),
+      ...(scenario === 'wait-ring-no-observer' ? {} : {
+        onRequest: (request) => current.requests.push(request)
+      }),
       onStartup: (observation) => current.observations.push({
         ...observation,
         pageErrors: observation.pageErrors?.slice(),
@@ -305,6 +349,12 @@ const capture = async () => {
     let livenessAfterPageClose
     let livenessWasSynchronous
     let livenessRpcCalls
+    let switchRecord
+    let actionError
+    let dropped
+    let recent
+    let waited
+    let waitWrong
     if (scenario === 'liveness') {
       const rpcCallsBeforeLiveness = current.rpcCalls.length
       liveness = windows.liveness()
@@ -317,6 +367,72 @@ const capture = async () => {
       await windows.pages[1].close()
       livenessAfterPageClose = windows.liveness()
       livenessRpcCalls = current.rpcCalls.slice(rpcCallsBeforeLiveness)
+    }
+    if (scenario === 'wait-ring-no-observer') {
+      for (let index = 0; index <= 2000; index++) windows.pages[0].sendRequest(\`ring.\${index}\`, {})
+      dropped = await windows.waitForRequest(0, (method) => method === 'ring.0', {
+        since: 0,
+        timeoutMs: 1,
+        signal: new AbortController().signal
+      })
+      recent = await windows.waitForRequest(0, (method) => method === 'ring.2000', {
+        since: 0,
+        timeoutMs: 1,
+        signal: new AbortController().signal
+      })
+    }
+    if (scenario === 'switch-proof' || scenario === 'switch-mismatch' || scenario === 'switch-unreadable'
+      || scenario === 'switch-wrong-proof' || scenario === 'switch-no-proof') {
+      switchRecord = await windows.navigate(0, 'wt-b', {
+        signal: new AbortController().signal,
+        followTimeoutMs: 20
+      })
+      windows.pages[0].sendStatus('wt-a')
+    }
+    if (scenario === 'abort-nav') {
+      const signal = new AbortController()
+      const pending = windows.navigate(0, 'wt-b', { signal: signal.signal, followTimeoutMs: 1000 })
+      await current.navigationStarted.promise
+      signal.abort()
+      actionError = await pending.then(() => null, (error) => error.message)
+      current.resolveNavigate?.({ worktreeId: 'wt-b' })
+      windows.pages[0].sendStatus('wt-a')
+    }
+    if (scenario === 'abort-reconcile-read') {
+      fastReconcileTimeout = true
+      const signal = new AbortController()
+      const pending = windows.navigate(0, 'wt-b', { signal: signal.signal, followTimeoutMs: 1000 })
+      await current.reconciliationStarted.promise
+      signal.abort()
+      actionError = await pending.then(() => null, (error) => error.message)
+      current.resolveState?.({ layout: { worktree: 'wt-c' } })
+      windows.pages[0].sendStatus('wt-a')
+    }
+    if (scenario === 'finish-mismatch') windows.pages[0].sendStatus('ready')
+    if (scenario === 'wait-filter') {
+      windows.pages[0].sendStatus('wt-b')
+      dropped = await windows.waitForRequest(0, (method, params) => method === 'quirky.git/status'
+        && params?.worktree === 'wt-b', {
+        since: performance.now() + 1_000,
+        timeoutMs: 5,
+        signal: new AbortController().signal
+      })
+      const wrongWait = windows.waitForRequest(0, (method, params) => method === 'quirky.git/status'
+        && params?.worktree === 'wt-b', {
+        since: performance.now(),
+        timeoutMs: 5,
+        signal: new AbortController().signal
+      })
+      windows.pages[0].sendStatus('wt-a')
+      waitWrong = await wrongWait
+      const waiting = windows.waitForRequest(0, (method, params) => method === 'quirky.git/status'
+        && params?.worktree === 'wt-b', {
+        since: performance.now(),
+        timeoutMs: 100,
+        signal: new AbortController().signal
+      })
+      windows.pages[0].sendStatus('wt-b')
+      waited = await waiting
     }
     const rpcCallsBeforeFinish = current.rpcCalls.length
     const finished = await windows.finish()
@@ -331,7 +447,13 @@ const capture = async () => {
       livenessAfterPageClose,
       livenessWasSynchronous,
       livenessRpcCalls,
-      finishRpcCalls
+      finishRpcCalls,
+      switchRecord,
+      actionError,
+      dropped,
+      recent,
+      waited,
+      waitWrong
     }
   } catch (error) {
     return { resolved: false, error: error instanceof Error ? error.message : String(error) }
@@ -417,6 +539,21 @@ type RecordingWindowRun = {
   livenessWasSynchronous?: boolean
   livenessRpcCalls?: string[]
   finishRpcCalls?: string[]
+  switchRecord?: {
+    index: number
+    from: string
+    requested: string
+    settled: string
+    proof: { at: number; method: string; worktree: string } | null
+    ok: boolean
+    followMs: number | null
+    error: string | null
+  }
+  actionError?: string | null
+  dropped?: { at: number; method: string; params: unknown } | null
+  recent?: { at: number; method: string; params: unknown } | null
+  waited?: { at: number; method: string; params: unknown } | null
+  waitWrong?: { at: number; method: string; params: unknown } | null
   finished?: {
     records: Array<{ index: number; connId: number; worktree: string; open: boolean; shown: boolean; requests: number }>
     requests: Array<{ method: string; total: number }>
@@ -450,11 +587,98 @@ test('returns synchronous renderer liveness without RPCs and tracks page and bro
   expect(result.livenessAfterDisconnect?.map(({ open }) => open)).toEqual([false, false])
   expect(result.livenessAfterCrash?.map(({ open }) => open)).toEqual([false, true])
   expect(result.livenessAfterPageClose?.map(({ open }) => open)).toEqual([false, false])
-  expect(result.finishRpcCalls).toEqual(['ui.state', 'ui.window.state', 'ui.window.state'])
+  expect(result.finishRpcCalls).toEqual(['ui.window.state', 'ui.window.state'])
   expect(result.finished?.records).toMatchObject([
     { index: 0, connId: 41, worktree: 'wt-a', open: false, shown: true },
     { index: 1, connId: 42, worktree: 'wt-b', open: false, shown: true }
   ])
+})
+test('keeps the last 2,000 requests even without an observer and waits from ring or live traffic', async () => {
+  const ring = await runRecordingWindowScenario('wait-ring-no-observer')
+
+  expect(ring.resolved).toBe(true)
+  expect(ring.requests).toEqual([])
+  expect(ring.dropped).toBeNull()
+  expect(ring.recent).toMatchObject({ method: 'ring.2000', params: {} })
+  expect(ring.finished?.records[0]?.requests).toBe(2002)
+
+  const filtering = await runRecordingWindowScenario('wait-filter')
+  expect(filtering.resolved).toBe(true)
+  expect(filtering.dropped).toBeNull()
+  expect(filtering.waitWrong).toBeNull()
+  expect(filtering.waited).toMatchObject({ method: 'quirky.git/status', params: { worktree: 'wt-b' } })
+})
+
+test('navigates with a ring-backed proof and labels requests from the settled daemon worktree', async () => {
+  const result = await runRecordingWindowScenario('switch-proof')
+
+  expect(result.resolved).toBe(true)
+  expect(result.switchRecord).toMatchObject({
+    index: 0,
+    from: 'ready',
+    requested: 'wt-b',
+    settled: 'wt-b',
+    proof: { method: 'quirky.git/status', worktree: 'wt-b' },
+    ok: true,
+    error: null
+  })
+  expect(result.requests.slice(-2).map(({ worktree }) => worktree)).toEqual(['wt-b', 'wt-b'])
+})
+
+test('keeps failed follow and navigation attribution aligned with daemon readback', async () => {
+  const noFollow = await runRecordingWindowScenario('switch-no-proof')
+  expect(noFollow.resolved).toBe(true)
+  expect(noFollow.switchRecord).toMatchObject({
+    requested: 'wt-b',
+    settled: 'wt-b',
+    proof: null,
+    ok: false,
+    error: 'did not request status for wt-b within 20ms'
+  })
+  expect(noFollow.requests.at(-1)?.worktree).toBe('wt-b')
+
+  const wrongProof = await runRecordingWindowScenario('switch-wrong-proof')
+  expect(wrongProof.switchRecord).toMatchObject({ settled: 'wt-b', proof: null, ok: false })
+
+  const mismatch = await runRecordingWindowScenario('switch-mismatch')
+  expect(mismatch.switchRecord).toMatchObject({
+    requested: 'wt-b',
+    settled: 'wt-c',
+    proof: null,
+    ok: false,
+    error: 'navigation selected wt-c, expected wt-b'
+  })
+  expect(mismatch.requests.at(-1)?.worktree).toBe('wt-c')
+
+  const unreadable = await runRecordingWindowScenario('switch-unreadable')
+  expect(unreadable.switchRecord).toMatchObject({
+    settled: 'ready',
+    error: 'navigation selected wt-c, expected wt-b; window state unreadable'
+  })
+  expect(unreadable.requests.at(-1)?.worktree).toBe('ready')
+})
+
+test('drops late navigate and reconciliation responses after abort settles', async () => {
+  const navigation = await runRecordingWindowScenario('abort-nav')
+  expect(navigation.resolved).toBe(true)
+  expect(navigation.actionError).toContain('soak setup was interrupted')
+  expect(navigation.requests.at(-1)?.worktree).toBe('wt-c')
+
+  const reconciliation = await runRecordingWindowScenario('abort-reconcile-read')
+  expect(reconciliation.resolved).toBe(true)
+  expect(reconciliation.actionError).toContain('soak setup was interrupted')
+  expect(reconciliation.requests.at(-1)?.worktree).toBe('ready')
+})
+
+test('finish reports each window state from the daemon rather than the starting worktree', async () => {
+  const result = await runRecordingWindowScenario('finish-mismatch')
+
+  expect(result.resolved).toBe(true)
+  expect(result.finished?.records[0]).toMatchObject({
+    worktree: 'daemon-worktree',
+    shown: false
+  })
+  expect(result.finishRpcCalls).toEqual(['ui.window.state'])
 })
 
 test('requires a fresh status request for the actual worktree', async () => {
