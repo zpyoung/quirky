@@ -27,6 +27,7 @@ type AccessOverrides = {
   readMacProcessArgs?: (pid: number, maxBytes: number) => Uint8Array
   readLinuxProcessArgs?: (pid: number, maxBytes: number) => Uint8Array
   readLinuxExecutable?: (pid: number) => string
+  executablePath?: string
 }
 
 type RunOptions = { timeoutMs?: number; killGraceMs?: number; maxOutputBytes?: number }
@@ -359,4 +360,131 @@ test('reads its own native process identity on the supported host without signal
     await runner.dispose()
   }
 })
+test('preserves a leading UTF-8 BOM in native macOS and Linux arguments', async () => {
+  const macArgs = [CHROME, '\uFEFF--headless=new']
+  const mac = fakeAccess('darwin', processRow(), {
+    readMacProcessArgs: () => macProcessArgs(macArgs)
+  })
+  const linuxArgs = ['/usr/bin/chromium', '\uFEFF--headless=new']
+  const linux = fakeAccess('linux', processRow(240, 1, 240, 501, 'chromium'), {
+    readLinuxProcessArgs: () => linuxProcessArgs(linuxArgs),
+    readLinuxExecutable: () => '/usr/bin/chromium'
+  })
 
+  expect((await mac.snapshot())[0]?.argv).toEqual(macArgs)
+  expect((await linux.snapshot())[0]?.argv).toEqual(linuxArgs)
+})
+
+test('accepts Linux kernel tasks with process group zero alongside Chrome', async () => {
+  const access = fakeAccess(
+    'linux',
+    `${processRow(2, 0, 0, 0, 'kthreadd')}${processRow(240, 1, 240, 501, 'chromium')}`,
+    {
+      readLinuxProcessArgs: () => linuxProcessArgs(['/usr/bin/chromium', '--headless=new']),
+      readLinuxExecutable: () => '/usr/bin/chromium'
+    }
+  )
+
+  expect((await access.snapshot()).map(({ pid }) => pid)).toEqual([240])
+})
+
+test('classifies Darwin EINVAL only after a trusted ps recheck confirms the PID is absent', async () => {
+  const missingCalls: string[][] = []
+  const missing = createChromeProcessAccess(fakeProcess('', { exitCode: 1 }, (argv) => {
+    missingCalls.push([...argv])
+  }), {
+    platform: 'darwin',
+    readMacProcessArgs() {
+      throw Object.assign(new Error('invalid argument'), { code: 'EINVAL' })
+    }
+  })
+
+  expect(await missing.inspect(242)).toBeNull()
+  expect(missingCalls).toHaveLength(2)
+  expect(missingCalls.every(([executable]) => executable === '/bin/ps')).toBe(true)
+
+  const presentCalls: string[][] = []
+  const permissionDenied = createChromeProcessAccess(fakeProcess(processRow(), {}, (argv) => {
+    presentCalls.push([...argv])
+  }), {
+    platform: 'darwin',
+    readMacProcessArgs() {
+      throw Object.assign(new Error('invalid argument'), { code: 'EINVAL' })
+    }
+  })
+
+  await expectInspectionFailure(permissionDenied.inspect(240))
+  expect(presentCalls).toHaveLength(2)
+  expect(presentCalls.every(([executable]) => executable === '/bin/ps')).toBe(true)
+})
+
+test('uses the trusted absolute ps executable on Darwin and Linux', async () => {
+  for (const platform of ['darwin', 'linux']) {
+    let command: readonly string[] = []
+    const runner = fakeProcess(
+      processRow(240, 1, 240, 501, platform === 'linux' ? 'chromium' : 'Google Chrome'),
+      {},
+      (argv) => {
+        command = argv
+      }
+    )
+    const access = createChromeProcessAccess(runner, {
+      platform,
+      readMacProcessArgs: () => macProcessArgs([CHROME]),
+      readLinuxProcessArgs: () => linuxProcessArgs(['/usr/bin/chromium']),
+      readLinuxExecutable: () => '/usr/bin/chromium'
+    })
+
+    await access.snapshot()
+    expect(command[0]).toBe('/bin/ps')
+  }
+})
+
+test('uses the configured executable basename as an additional Chrome discovery hint', async () => {
+  const variants = [
+    {
+      executablePath: '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
+      command: 'Google Chrome Canary'
+    },
+    {
+      executablePath: '/opt/custom/renamedChrome',
+      command: '/opt/custom/renamedChrome'
+    }
+  ]
+
+  for (const variant of variants) {
+    const access = fakeAccess('darwin', processRow(240, 1, 240, 501, variant.command), {
+      executablePath: variant.executablePath,
+      readMacProcessArgs: () => macProcessArgs([variant.executablePath], {
+        executable: variant.executablePath
+      })
+    })
+
+    expect((await access.snapshot())[0]?.executable).toBe(variant.executablePath)
+  }
+})
+
+test('treats parenthesized and truncated macOS Chrome command names as candidates', async () => {
+  for (const command of ['(Google Chrome)', '(Google Chrome H)']) {
+    const access = fakeAccess('darwin', processRow(240, 1, 240, 501, command), {
+      readMacProcessArgs() {
+        throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+      }
+    })
+
+    await expectInspectionFailure(access.snapshot())
+  }
+})
+
+
+test('recognizes a configured executable truncated to Darwin MAXCOMLEN before native authorization', async () => {
+  const executablePath = '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary'
+  const access = fakeAccess('darwin', processRow(240, 1, 240, 501, '(Google Chrome Ca)'), {
+    executablePath,
+    readMacProcessArgs() {
+      throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
+    }
+  })
+
+  await expectInspectionFailure(access.snapshot())
+})
