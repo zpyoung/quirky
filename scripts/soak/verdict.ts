@@ -13,7 +13,7 @@ import type {
   PanelRefreshRecord,
   PanelRequestRecord,
   PhaseRecord,
-  ProbeRecord,
+  TaskInteractionRecord,
   ProcessRow,
   Sample,
   SoakConfig,
@@ -45,7 +45,7 @@ export type SoakEvidence = {
   gitProbes?: GitProbeRecord[]
   day?: DayInputs
   switches?: SwitchRecord[]
-  phases?: PhaseRecord[]
+  taskInteractions?: TaskInteractionRecord[]
   dayDrainError?: string | null
 }
 
@@ -595,8 +595,10 @@ function judgeDay(evidence: SoakEvidence, config: SoakConfig): SoakReport['check
       enabled: false,
       expectedSwitches: 0,
       expectedPhases: 0,
+      expectedTaskInteractions: 0,
       switches: 0,
       phases: 0,
+      taskInteractions: 0,
       missing: [],
       duplicates: [],
       unscheduled: [],
@@ -621,7 +623,12 @@ function judgeDay(evidence: SoakEvidence, config: SoakConfig): SoakReport['check
   const expected = new Map(scheduledActions.map((action) => [dayIdentity(action), action]))
   const switches = evidence.switches ?? []
   const phases = evidence.phases ?? []
-  const actual: (SwitchRecord | PhaseRecord)[] = [...switches, ...phases]
+  const taskInteractions = evidence.taskInteractions ?? []
+  const actual: (SwitchRecord | PhaseRecord | TaskInteractionRecord)[] = [
+    ...switches,
+    ...phases,
+    ...taskInteractions,
+  ]
   const identityCounts = new Map<string, number>()
   for (const record of actual) {
     const identity = dayIdentity(record)
@@ -643,7 +650,9 @@ function judgeDay(evidence: SoakEvidence, config: SoakConfig): SoakReport['check
     if (!action) return []
     const wrong = 'phase' in record
       ? action.kind !== 'phase' || action.phase !== record.phase
-      : action.kind !== 'switch' || action.to !== record.requested
+      : 'requested' in record
+        ? action.kind !== 'switch' || action.to !== record.requested
+        : action.kind !== 'task' || action.index !== record.index
     return wrong ? [identity] : []
   })))
   const failed = Array.from(new Set([
@@ -672,8 +681,10 @@ function judgeDay(evidence: SoakEvidence, config: SoakConfig): SoakReport['check
     enabled,
     expectedSwitches: expectedActions.filter((action) => action.kind === 'switch').length,
     expectedPhases: expectedActions.filter((action) => action.kind === 'phase').length,
+    expectedTaskInteractions: expectedActions.filter((action) => action.kind === 'task').length,
     switches: switches.length,
     phases: phases.length,
+    taskInteractions: taskInteractions.length,
     missing: missing.slice(0, TOP_COUNT),
     duplicates: duplicates.slice(0, TOP_COUNT),
     unscheduled: unscheduled.slice(0, TOP_COUNT),

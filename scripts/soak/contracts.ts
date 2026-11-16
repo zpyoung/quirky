@@ -20,6 +20,10 @@ export type PhaseRecord = {
   at: number; seq: number; phase: number; ok: boolean; applyMs: number
   missing: { index: number; panel: PanelKey }[]; error: string | null
 }
+export type TaskInteractionRecord = {
+  kind: 'task'; at: number; seq: number; index: number; method: string
+  ok: boolean; proof: { at: number; method: string } | null; error: string | null
+}
 
 export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback'] as const
 export type FaultKind = (typeof FAULT_KINDS)[number]
@@ -165,7 +169,8 @@ export type SoakReport = {
     }
     day: {
       ok: boolean; enabled: boolean; expectedSwitches: number; expectedPhases: number
-      switches: number; phases: number; missing: string[]; duplicates: string[]; unscheduled: string[]
+      expectedTaskInteractions: number; switches: number; phases: number; taskInteractions: number
+      missing: string[]; duplicates: string[]; unscheduled: string[]
       wrongTarget: string[]; failed: string[]; slowestFollowMs: number | null
       counts: { missing: number; duplicates: number; unscheduled: number; wrongTarget: number; failed: number }
     }
@@ -181,6 +186,7 @@ export type SoakReport = {
   gitProbes: GitProbeRecord[]
   day: DayInputs | null
   switches: SwitchRecord[]
+  taskInteractions: TaskInteractionRecord[]
   phases: PhaseRecord[]
   fault: FaultRecord | null
   daemon: { pid: number; rssKbFirst: number | null; rssKbMax: number | null; rssKbLast: number | null }

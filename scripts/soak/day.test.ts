@@ -1,6 +1,6 @@
 import { afterEach, expect, jest, spyOn, test } from 'bun:test'
 import { UI_TOOL_SLOTS, type QuirkyClient } from '@quirky/protocol'
-import { applyPhase, daySchedule, PANEL_PHASES, startDay, STOP_DRAIN_MS } from './day.ts'
+import { applyPhase, daySchedule, PANEL_PHASES, startDay, STOP_DRAIN_MS, TASK_FOLLOW_MS } from './day.ts'
 import type { SoakWindows } from './windows.ts'
 import type { SwitchRecord } from './contracts.ts'
 
@@ -191,6 +191,7 @@ test('stop caps a non-draining action and never publishes its eventual result', 
 test('the exact staggered day schedule leaves each action its own grace', () => {
   const schedule = daySchedule({ seconds: 300, windows: [{ index: 0, worktree: 'a' }, { index: 1, worktree: 'c' }], worktrees: ['a', 'b', 'c', 'd'] })
   expect(schedule).toEqual([
+    { at: 15, kind: 'task', seq: 0, index: 0 }, { at: 20, kind: 'task', seq: 0, index: 1 },
     { at: 60, kind: 'switch', seq: 0, index: 0, to: 'b' }, { at: 90, kind: 'switch', seq: 0, index: 1, to: 'd' },
     { at: 120, kind: 'phase', seq: 1, phase: 1 }, { at: 120, kind: 'switch', seq: 1, index: 0, to: 'c' },
     { at: 150, kind: 'switch', seq: 1, index: 1, to: 'a' }, { at: 180, kind: 'switch', seq: 2, index: 0, to: 'd' },
@@ -308,4 +309,134 @@ test('a failed phase readback does not skip the next remount proofs', async () =
   expect(result.phases[1]!.ok).toBe(false)
   expect(result.phases[1]!.missing).toEqual([{ index: 0, panel: 'checks' }, { index: 0, panel: 'explorer' }])
   expect(proofWaits).toBe(2)
+})
+
+function tasksFixture(mutationSucceeds = true) {
+  const f = fixture(2)
+  let preset = 'all'
+  let revision = 0
+  const methods: string[] = []
+  const patches: unknown[] = []
+  f.control.callAny = async (method, params) => {
+    methods.push(method)
+    if (method === 'quirky.tasks/preferences') {
+      patches.push(params)
+      if (mutationSucceeds && params !== null && typeof params === 'object' && 'defaultTaskViewPreset' in params
+        && typeof params.defaultTaskViewPreset === 'string') {
+        preset = params.defaultTaskViewPreset
+        revision++
+      }
+    }
+    return { revision, preferences: { defaultTaskViewPreset: preset } }
+  }
+  f.windows.waitForRequest = async (_index, matches) => {
+    expect(matches('quirky.tasks/state', {})).toBe(true)
+    expect(matches('quirky.git/status', {})).toBe(false)
+    return { at: performance.now(), method: 'quirky.tasks/state', params: {} }
+  }
+  return { ...f, methods, patches }
+}
+
+test('records a real distinct Tasks preference write and renderer follow per target window', async () => {
+  const f = tasksFixture()
+  const driver = startDay({
+    ...f, startedAt: performance.now(), signal: new AbortController().signal,
+    schedule: [{ at: 0, kind: 'task', seq: 0, index: 0 }, { at: 0, kind: 'task', seq: 0, index: 1 }]
+  })
+  await flush()
+  const result = await driver.stop()
+  expect(f.methods).toEqual([
+    'quirky.tasks/state', 'quirky.tasks/preferences', 'quirky.tasks/state',
+    'quirky.tasks/state', 'quirky.tasks/preferences', 'quirky.tasks/state'
+  ])
+  expect(f.patches).toEqual([{ defaultTaskViewPreset: 'issues' }, { defaultTaskViewPreset: 'all' }])
+  expect(result.taskInteractions.map(({ index, seq, ok, method, proof }) => ({ index, seq, ok, method, proofMethod: proof?.method }))).toEqual([
+    { index: 0, seq: 0, ok: true, method: 'quirky.tasks/preferences', proofMethod: 'quirky.tasks/state' },
+    { index: 1, seq: 0, ok: true, method: 'quirky.tasks/preferences', proofMethod: 'quirky.tasks/state' }
+  ])
+})
+
+test('does not accept a Tasks mutation whose fresh state did not change', async () => {
+  const f = tasksFixture(false)
+  const driver = startDay({
+    ...f, startedAt: performance.now(), signal: new AbortController().signal,
+    schedule: [{ at: 0, kind: 'task', seq: 0, index: 0 }]
+  })
+  await flush()
+  const result = await driver.stop()
+  expect(result.taskInteractions[0]).toMatchObject({ ok: false, proof: null, error: 'Tasks preference change was not confirmed' })
+})
+
+test('bounds missing Tasks follow proof by the single interaction deadline', async () => {
+  jest.useFakeTimers()
+  const f = tasksFixture()
+  f.windows.waitForRequest = () => Promise.withResolvers<RequestProof>().promise
+  const driver = startDay({
+    ...f, startedAt: performance.now(), signal: new AbortController().signal,
+    schedule: [{ at: 0, kind: 'task', seq: 0, index: 0 }]
+  })
+  await flush()
+  timers.advanceTimersByTime(TASK_FOLLOW_MS)
+  await flush()
+  const result = await driver.stop()
+  expect(result.taskInteractions[0]).toMatchObject({ ok: false, proof: null })
+  expect(result.taskInteractions[0]!.error).toContain('10000ms')
+})
+
+test('stop suppresses an interrupted Tasks action and drops late readback', async () => {
+  const f = tasksFixture()
+  const late = Promise.withResolvers<unknown>()
+  f.control.callAny = () => late.promise
+  const driver = startDay({
+    ...f, startedAt: performance.now(), signal: new AbortController().signal,
+    schedule: [{ at: 0, kind: 'task', seq: 0, index: 0 }]
+  })
+  await flush()
+  const result = await driver.stop()
+  expect(result.taskInteractions).toEqual([])
+  late.resolve({ revision: 1, preferences: { defaultTaskViewPreset: 'all' } })
+  await flush()
+  expect(f.patches).toEqual([])
+  expect(result.taskInteractions).toEqual([])
+})
+
+test('Tasks interactions leave their own ten-second completion grace', () => {
+  const inputs = { windows: [{ index: 0, worktree: 'a' }, { index: 1, worktree: 'b' }], worktrees: ['a', 'b'] }
+  expect(daySchedule({ ...inputs, seconds: 24 })).toEqual([])
+  expect(daySchedule({ ...inputs, seconds: 25 })).toEqual([{ at: 15, kind: 'task', seq: 0, index: 0 }])
+  expect(daySchedule({ ...inputs, seconds: 30 })).toEqual([
+    { at: 15, kind: 'task', seq: 0, index: 0 }, { at: 20, kind: 'task', seq: 0, index: 1 }
+  ])
+})
+
+test('does not count a renderer Tasks request sent before the preference mutation', async () => {
+  jest.useFakeTimers()
+  const f = tasksFixture()
+  let now = performance.now()
+  const initial = now
+  const clock = spyOn(performance, 'now').mockImplementation(() => now)
+  const call = f.control.callAny.bind(f.control)
+  let first = true
+  f.control.callAny = async (...args: Parameters<typeof call>) => {
+    const result = await call(...args)
+    if (first) {
+      first = false
+      now = initial + 100
+    }
+    return result
+  }
+  f.windows.waitForRequest = async (_index, matches, { since }) => {
+    const old = { at: initial + 50, method: 'quirky.tasks/state', params: {} }
+    return old.at >= since && matches(old.method, old.params) ? old : null
+  }
+  const driver = startDay({
+    ...f, startedAt: now, signal: new AbortController().signal,
+    schedule: [{ at: 0, kind: 'task', seq: 0, index: 0 }]
+  })
+  try {
+    await flush()
+    expect((await driver.stop()).taskInteractions[0]).toMatchObject({ ok: false, proof: null })
+  } finally {
+    clock.mockRestore()
+  }
 })

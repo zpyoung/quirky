@@ -1,12 +1,16 @@
 import { expect, test } from 'bun:test'
 import type {
   EventRecord, PanelRefreshRecord, PhaseRecord, ProcessRow, Sample, SoakConfig, SoakReport,
-  SwitchRecord, WindowBeat, WorkerBeat,
+  SwitchRecord, TaskInteractionRecord, WindowBeat, WorkerBeat,
 } from './contracts'
 import { daySchedule } from './day.ts'
 import type { SoakEvidence } from './verdict'
 import { countDaemonLog, isPanelRefreshRequest, judge, panelOfRequest, windowAlive } from './verdict'
-type EvidenceFixture = SoakEvidence & { switches: SwitchRecord[]; phases: PhaseRecord[] }
+type EvidenceFixture = SoakEvidence & {
+  switches: SwitchRecord[]
+  phases: PhaseRecord[]
+  taskInteractions: TaskInteractionRecord[]
+}
 
 type ConfigOverrides = {
   minutes?: number
@@ -97,6 +101,17 @@ function evidence(overrides: Partial<SoakEvidence> = {}): EvidenceFixture {
     missing: [],
     error: null,
   }] : [])
+
+  const taskInteractions = schedule.flatMap((action) => action.kind === 'task' ? [{
+    kind: 'task' as const,
+    at: action.at,
+    seq: action.seq,
+    index: action.index,
+    method: 'quirky.tasks/preferences',
+    ok: true,
+    proof: { at: action.at, method: 'quirky.tasks/state' },
+    error: null,
+  }] : [])
   const panelRefreshes = overrides.panelRefreshes ?? healthyPanelRefreshes(windowBeats)
   const panelRequests = overrides.panelRequests ?? panelRefreshes.flatMap((record) => {
     const panel = panelOfRequest(record.method, {})
@@ -126,6 +141,7 @@ function evidence(overrides: Partial<SoakEvidence> = {}): EvidenceFixture {
     ...overrides,
     switches: overrides.switches ?? switches,
     phases: overrides.phases ?? phases,
+    taskInteractions: overrides.taskInteractions ?? taskInteractions,
   }
 }
 
@@ -1225,6 +1241,8 @@ test('scenario 5: schedules staggered switches and phases with their own grace p
     windows: [{ index: 0, worktree: 'a' }, { index: 1, worktree: 'c' }],
     worktrees: ['a', 'b', 'c', 'd'],
   })).toEqual([
+    { at: 15, kind: 'task', seq: 0, index: 0 },
+    { at: 20, kind: 'task', seq: 0, index: 1 },
     { at: 60, kind: 'switch', seq: 0, index: 0, to: 'b' },
     { at: 90, kind: 'switch', seq: 0, index: 1, to: 'd' },
     { at: 120, kind: 'phase', seq: 1, phase: 1 },
@@ -1353,8 +1371,9 @@ test('scenario 6: verifies every scheduled day identity and caps all five diagno
   const complete = evidence()
   const check = judge(complete, config()).checks.day
   expect(check).toMatchObject({
-    ok: true, enabled: true, expectedSwitches: 87, expectedPhases: 14,
-    switches: 87, phases: 14, counts: { missing: 0, duplicates: 0, unscheduled: 0, wrongTarget: 0, failed: 0 },
+    ok: true, enabled: true, expectedSwitches: 87, expectedPhases: 14, expectedTaskInteractions: 3,
+    switches: 87, phases: 14, taskInteractions: 3,
+    counts: { missing: 0, duplicates: 0, unscheduled: 0, wrongTarget: 0, failed: 0 },
   })
 
   const switches = [
@@ -1378,6 +1397,79 @@ test('scenario 6: verifies every scheduled day identity and caps all five diagno
   expect(capped.unscheduled).toHaveLength(10)
   expect(capped.wrongTarget).toHaveLength(10)
   expect(capped.failed).toHaveLength(10)
+})
+
+test('day verdict reports a missing task interaction identity', () => {
+  const complete = evidence()
+  const check = judge(evidence({
+    taskInteractions: complete.taskInteractions.slice(1),
+  }), config()).checks.day
+
+  expect(check).toMatchObject({
+    ok: false,
+    expectedTaskInteractions: 3,
+    taskInteractions: 2,
+    missing: ['task:0:0'],
+    counts: { missing: 1 },
+  })
+})
+
+test('day verdict detects duplicate task interaction identities', () => {
+  const complete = evidence()
+  const first = complete.taskInteractions[0]!
+  const check = judge(evidence({
+    taskInteractions: [...complete.taskInteractions, first],
+  }), config()).checks.day
+
+  expect(check).toMatchObject({
+    ok: false,
+    taskInteractions: 4,
+    missing: [],
+    duplicates: ['task:0:0'],
+    counts: { duplicates: 1 },
+  })
+})
+
+test('day verdict detects failed task interactions', () => {
+  const complete = evidence()
+  const check = judge(evidence({
+    taskInteractions: complete.taskInteractions.map((record, index) => index === 0
+      ? { ...record, ok: false }
+      : record),
+  }), config()).checks.day
+
+  expect(check).toMatchObject({
+    ok: false,
+    failed: ['task:0:0'],
+    counts: { failed: 1 },
+  })
+})
+
+test('day verdict detects unscheduled task interaction identities', () => {
+  const complete = evidence()
+  const first = complete.taskInteractions[0]!
+  const check = judge(evidence({
+    taskInteractions: [...complete.taskInteractions, { ...first, seq: 1 }],
+  }), config()).checks.day
+
+  expect(check).toMatchObject({
+    ok: false,
+    unscheduled: ['task:0:1'],
+    counts: { unscheduled: 1 },
+  })
+})
+
+test('task method is diagnostic rather than part of task identity', () => {
+  const complete = evidence()
+  const first = complete.taskInteractions[0]!
+  const check = judge(evidence({
+    taskInteractions: [
+      { ...first, method: 'quirky.tasks/state' },
+      ...complete.taskInteractions.slice(1),
+    ],
+  }), config()).checks.day
+
+  expect(check).toMatchObject({ ok: true, missing: [], unscheduled: [], wrongTarget: [] })
 })
 
 test('scenario 6: completed actions outside the truncated grace window remain scheduled', () => {
