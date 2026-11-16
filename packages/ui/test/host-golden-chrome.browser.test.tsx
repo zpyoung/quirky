@@ -141,7 +141,7 @@ for (const theme of themes) {
     const page = await styledPage(theme.name, `<div class="ui-dialog-backdrop ui-dialog-backdrop--top">${dialog}</div><div class="ui-dialog-backdrop" id="center">${dialog}</div>`)
     try {
       expect(await page.locator('.ui-dialog-backdrop--top').evaluate((node) => getComputedStyle(node, '::before').opacity)).toBe('0')
-      expect(await page.locator('#center').evaluate((node) => getComputedStyle(node, '::before').opacity)).toBe('0.78')
+      expect(await page.locator('#center').evaluate((node) => getComputedStyle(node, '::before').opacity)).toBe('0.4')
       const popup = page.locator('.ui-dialog-backdrop--top')
       expect(await popup.locator('.ui-dialog').evaluate((node) => getComputedStyle(node).boxShadow)).not.toBe('none')
       const title = await popup.locator('.ui-dialog__title').evaluate((node) => {
@@ -184,8 +184,8 @@ for (const theme of themes) {
       expect(await page.locator('.ui-list-row--selected').evaluate((node) => {
         const style = getComputedStyle(node)
         const description = node.querySelector('.ui-list-row__description')!
-        return [style.backgroundColor, style.color, getComputedStyle(description).color, style.borderTopWidth]
-      })).toEqual([theme.accent, theme.rail, theme.rail, '0px'])
+        return [style.backgroundColor, style.color, getComputedStyle(description).color, style.borderTopWidth, style.paddingTop, style.paddingBottom]
+      })).toEqual([theme.accent, theme.rail, theme.rail, '0px', '6px', '6px'])
     } finally {
       await page.close()
     }
