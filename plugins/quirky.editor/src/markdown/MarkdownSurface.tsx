@@ -79,7 +79,8 @@ function useMarkdownSession(buffer: SurfaceProps['buffer'], options?: MarkdownSe
     return () => { activeRef.current = false }
   }, [])
   const isCurrent = useCallback((expected: string) => activeRef.current && scopeRef.current === expected, [])
-  return { scope, isCurrent }
+  const ownsScope = useCallback((expected: string) => scopeRef.current === expected, [])
+  return { scope, isCurrent, ownsScope }
 }
 
 function controlData(data: unknown, allowed: readonly string[], required: readonly string[] = []): data is Record<string, unknown> {
@@ -112,7 +113,7 @@ function useMarkdownControl(
       try { return { delivered: await handler(control) !== false } }
       catch (cause) {
         const error = cause instanceof Error ? cause : new Error(errorText(cause))
-        errorHandler.current(error, control.action)
+        if (mounted.current) onError(error, control.action)
         handledErrors.current.set(control.action, (handledErrors.current.get(control.action) ?? 0) + 1)
         throw error
       }
@@ -912,18 +913,23 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     const requestScope = scope
     setSearchResult(null)
     setSearchStatus('loading')
-    const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
-      action: 'search',
-      query: requestedQuery,
-      matchCase,
-      wholeWord
-    })) as { total: number; matches: { from: number; to: number; line: number; text: string }[] }
-    if (isCurrent(requestScope) && request === searchRequest.current) {
-      setSearchResult(result)
-      setSearchStatus('ready')
-      setSearchIndex(0)
+    try {
+      const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
+        action: 'search',
+        query: requestedQuery,
+        matchCase,
+        wholeWord
+      })) as { total: number; matches: { from: number; to: number; line: number; text: string }[] }
+      if (isCurrent(requestScope) && request === searchRequest.current) {
+        setSearchResult(result)
+        setSearchStatus('ready')
+        setSearchIndex(0)
+      }
+      return { opened: true, replace, query: requestedQuery, total: result.total }
+    } catch (cause) {
+      if (isCurrent(requestScope) && request === searchRequest.current) setSearchStatus('idle')
+      throw cause
     }
-    return { opened: true, replace, query: requestedQuery, total: result.total }
   }, [isCurrent, matchCase, wholeWord, props.buffer.id, props.onAction, scope, searchOpen])
   const runActiveSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>) => {
     try { return await openSearch(replace, args) }
@@ -1085,7 +1091,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const revision = useRef(buffer.contentRevision)
   const applying = useRef<MarkdownWrite | null>(null)
   const split = markdownSource(buffer)
-  const { scope, isCurrent } = useMarkdownSession(buffer, { acknowledged: revision, write: applying, parts: split })
+  const { scope, isCurrent, ownsScope } = useMarkdownSession(buffer, { acknowledged: revision, write: applying, parts: split })
   const source = sourceValue(buffer)
   const extensions = useMemo(() => [...createMarkdownExtensions(), RichSearchHighlight], [])
   const readOnly = buffer.readOnly
@@ -1478,7 +1484,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     const markdown = editor.getMarkdown()
     if (markdown === lastAcknowledged.current && pendingText.current === null) return
     const work = queue.current.then(async () => {
-      if ((!allowUnmount && !isCurrent(requestScope)) || markdown === lastAcknowledged.current) return
+      if (!(allowUnmount ? ownsScope(requestScope) : isCurrent(requestScope)) || markdown === lastAcknowledged.current) return
       applying.current = { text: markdown, prefix: split.prefix }
       try {
         const result = await onAction(MARKDOWN_METHOD, methodParams(buffer.id, {
@@ -1487,11 +1493,12 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           text: markdown,
           openAnyway
         })) as { buffer?: SurfaceProps['buffer']; changed?: boolean; sourcePreserved?: boolean }
-        if (!isCurrent(requestScope)) return
+        if (!ownsScope(requestScope)) return
         if (result.buffer) revision.current = result.buffer.contentRevision
         if (result.sourcePreserved === false) throw new Error('Rich Markdown update did not preserve its source bytes.')
         lastAcknowledged.current = markdown
         if (pendingText.current === markdown) pendingText.current = null
+        if (!isCurrent(requestScope)) return
         flushFailure.current = null
         setFlushError(null)
         setFlushErrorScope(requestScope)
@@ -1508,7 +1515,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     })
     queue.current = work.catch(() => {})
     await work
-  }, [buffer.id, editor, isCurrent, onAction, openAnyway, scope])
+  }, [buffer.id, editor, isCurrent, onAction, openAnyway, ownsScope, scope])
   flushRef.current = flush
 
   const updateBufferFromApi = useCallback((next: SurfaceProps['buffer'] | undefined) => {

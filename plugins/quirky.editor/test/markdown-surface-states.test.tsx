@@ -2891,3 +2891,83 @@ try {
     if (child.exitCode === null) { child.kill(); await child.exited }
   }
 }, 30_000)
+
+test('rejected preview search settles its pending status', async () => {
+  const surface = await renderSurface('preview', { call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return { previewAvailable: true, imageUrls: {} }
+    if (method === 'quirky.editor/markdown' && params.action === 'search') throw new Error('fixture search failed')
+    return {}
+  } })
+  await expect(surface.control('preview', 'find', { query: 'alpha' })).rejects.toThrow('fixture search failed')
+  await waitFor(() => errorMessage(surface.element, 'fixture search failed'), 'search failure')
+  expect(notice(surface.element, 'Searching preview…')).toBeNull()
+})
+
+test('final unmount flush advances revision after an in-flight apply', async () => {
+  const first = deferred<unknown>()
+  let writes = 0
+  const surface = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return { richEligible: true }
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') {
+      if (++writes === 1) return first.promise
+      return { sourcePreserved: true, buffer: { contentRevision: 3, revision: 3 } }
+    }
+    return {}
+  } })
+  const editor = await waitFor(() => surface.element.querySelector<HTMLElement>('.ProseMirror'), 'rich editor')
+  await typeRichText(editor, ' first')
+  const flushing = surface.control('rich', 'retry-flush')
+  await waitFor(() => writes === 1, 'in-flight first apply')
+  await typeRichText(editor, ' final')
+  await surface.unmount()
+  first.resolve({ sourcePreserved: true, buffer: { contentRevision: 2, revision: 2 } })
+  await flushing
+  await waitFor(() => writes === 2, 'final queued apply')
+  const applies = surface.calls.filter(call => call.method === 'quirky.editor/markdown' && call.params.action === 'apply')
+  expect(applies[1]?.params.text).toBe('alpha first final')
+  expect(applies[1]?.params.expectedRevision).toBe(2)
+})
+
+for (const mode of ['preview', 'rich'] as const) {
+  test(`${mode} old export rejection cannot enter replacement scope`, async () => {
+    const pending = deferred<unknown>()
+    const surface = await renderSurface(mode, { call: async (method, params) => {
+      if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return params.includePreview ? { previewAvailable: true, imageUrls: {} } : { richEligible: true }
+      if (method === 'quirky.editor/markdown' && params.action === 'exportPdf') return pending.promise
+      return {}
+    } })
+    await waitFor(() => surface.address(mode), 'initial mode registration')
+    const oldGeneration = surface.address(mode)!.generation
+    const result = surface.control(mode, 'export-pdf').then(value => ({value}), error => ({error}))
+    await waitFor(() => surface.calls.some(call => call.params.action === 'exportPdf'), 'pending export')
+    await surface.update({ path: '/tmp/markdown-states/new.md', relativePath: 'new.md', content: 'replacement', contentRevision: 2, revision: 2 })
+    await waitFor(() => surface.address(mode)?.generation !== oldGeneration, 'replacement mode generation')
+    await act(async () => { pending.reject(new Error('obsolete export failure')) })
+    const outcome = await result
+    expect('error' in outcome).toBe(true)
+    expect(errorMessage(surface.element, 'obsolete export failure')).toBeNull()
+  })
+}
+
+
+test('an obsolete preview search rejection cannot settle a newer pending search', async () => {
+  const older = deferred<unknown>()
+  const newer = deferred<unknown>()
+  const surface = await renderSurface('preview', { call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return { previewAvailable: true, imageUrls: {} }
+    if (method === 'quirky.editor/markdown' && params.action === 'search') return params.query === 'older' ? older.promise : newer.promise
+    return {}
+  } })
+  const first = surface.control('preview', 'find', { query: 'older' }).catch(cause => cause)
+  await waitFor(() => surface.calls.some(call => call.params.action === 'search' && call.params.query === 'older'), 'older search request')
+  const second = surface.control('preview', 'find', { query: 'newer' })
+  await waitFor(() => surface.calls.some(call => call.params.action === 'search' && call.params.query === 'newer'), 'newer search request')
+  await act(async () => { older.reject(new Error('obsolete search failure')) })
+  await first
+  expect(notice(surface.element, 'Searching preview…')).not.toBeNull()
+  expect(surface.element.querySelector<HTMLInputElement>('input[aria-label="Find in preview"]')?.value).toBe('newer')
+  await act(async () => { newer.resolve({ total: 0, matches: [] }) })
+  expect(await second).toEqual({ delivered: true })
+  expect(notice(surface.element, 'Searching preview…')).toBeNull()
+  expect(emptyState(surface.element, 'No results')).not.toBeNull()
+})
