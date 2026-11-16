@@ -513,6 +513,31 @@ describe('runtime and health', () => {
     expect(typeof health.daemonVersion).toBe('string')
   })
 
+  test('reports startup as settled when no startup phase is configured', async () => {
+    const server = startServer({
+      core: {} as Core,
+      handle: async () => {},
+      port: 0,
+      rpcToken: 'rpc-token',
+      daemonVersion: 'test',
+      uiDir: '/nonexistent',
+      pluginFile: () => null,
+      fileResources: { serve: () => new Response(null, { status: 404 }) } as unknown as FileResourceRegistry,
+      log: () => {}
+    } satisfies ServerOptions)
+    try {
+      const health = await (await fetch(`http://127.0.0.1:${server.port}/health`)).json()
+      expect(health).toMatchObject({
+        ok: true,
+        pid: process.pid,
+        daemonVersion: 'test',
+        startupSettled: true
+      })
+    } finally {
+      await server.stop(true)
+    }
+  })
+
   test('stop removes runtime.json', async () => {
     const isolated = await startHarness()
     try {

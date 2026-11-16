@@ -528,3 +528,37 @@ test('an acknowledgement tolerates a concurrently acknowledged prefix of its pul
     expect(harness.store.outboxCursor(harness.binding.id, 'to_home')).toBe(second.sequence)
   })
 })
+
+test('a failed federation mail tick is logged rather than escaping the timer', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'quirky-federation-mail-tick-'))
+  const logs: string[] = []
+  let handle: OpenedPluginStore | null = null
+  let mail: FederationMailComponent | null = null
+  try {
+    handle = openPluginStore({
+      home: root,
+      pluginId: 'quirky.orchestration',
+      migrations: federationMailMigrations,
+      isActive: () => true,
+    })
+    const store = handle.store
+    mail = createFederationMail(
+      { log: (message: string) => { logs.push(message) } } as unknown as PluginContext,
+      { store } as unknown as OrchestrationCore,
+      { bindFederation() {}, unbindFederation() {} } as unknown as OrchestrationMessages,
+      { bindings: () => { store.all('SELECT 1'); return [] } } as unknown as FederationEngine,
+    )
+    handle.close()
+    handle = null
+
+    // The regression is in the real interval callback, so fake time would bypass it.
+    const { promise, resolve } = Promise.withResolvers<void>()
+    setTimeout(resolve, 1_500)
+    await promise
+    expect(logs).toContain('federation mail tick failed: quirky.orchestration is no longer active')
+  } finally {
+    await mail?.dispose()
+    handle?.close()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
