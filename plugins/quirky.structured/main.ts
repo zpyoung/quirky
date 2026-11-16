@@ -21,6 +21,8 @@ import { resolveClaudeThroughLoginShell } from './claude-path'
 import { createClaudeRunner } from './claude-runner'
 import { resolveCodexThroughLoginShell } from './codex-path'
 import { createCodexRunner } from './codex-runner'
+import { resolvePiThroughLoginShell } from './pi-path'
+import { createPiRunner } from './pi-runner'
 import { Journal, journalMigrations } from './journal'
 import { errorItem, statusItem, stderrLines } from './items'
 import { MessageQueue, imagePathProblem } from './queue'
@@ -33,7 +35,7 @@ import type {
   StructuredStartOptions
 } from './runner'
 
-type StructuredAgent = 'claude' | 'codex'
+type StructuredAgent = 'claude' | 'codex' | 'pi' | 'omp'
 type OwnerToken = { key: string; sessionId: string | null }
 type StructuredSendResult =
   | { ok: true; queuedId?: string }
@@ -64,7 +66,7 @@ function capUtf8(text: string, maxBytes: number): string {
   return bytes.subarray(0, end).toString('utf8')
 }
 
-const AGENT_TITLES: Record<StructuredAgent, string> = { claude: 'Claude', codex: 'Codex' }
+const AGENT_TITLES: Record<StructuredAgent, string> = { claude: 'Claude', codex: 'Codex', pi: 'Pi', omp: 'OMP' }
 const MAX_PROVIDER_SESSION_ID = 512
 const INVALID_PROVIDER_ID = /[\x00-\x1f\x7f-\x9f]/
 
@@ -190,7 +192,8 @@ function structuredEnvironment(userEnv: Record<string, string | null>, prepared:
   return env
 }
 
-const isStructuredAgent = (value: unknown): value is StructuredAgent => value === 'claude' || value === 'codex'
+const isStructuredAgent = (value: unknown): value is StructuredAgent =>
+  value === 'claude' || value === 'codex' || value === 'pi' || value === 'omp'
 
 /** Tests inject one runner through this seam; production runners are selected by provider. */
 function testRunnerFactory(): StructuredRunnerFactory | undefined {
@@ -621,7 +624,8 @@ export function activate(context: PluginContext): void {
       await persistProviderSession(sessionId, providerSession)
     },
     resolveClaudePath: () => resolveClaudeThroughLoginShell(context.launch.shell),
-    resolveCodexPath: () => resolveCodexThroughLoginShell(context.launch.shell)
+    resolveCodexPath: () => resolveCodexThroughLoginShell(context.launch.shell),
+    resolvePiPath: (variant) => resolvePiThroughLoginShell(context.launch.shell, variant)
   }
 
   const injectedRunner = testRunnerFactory()?.(structuredContext)
@@ -629,7 +633,12 @@ export function activate(context: PluginContext): void {
     if (injectedRunner) return injectedRunner
     const cached = agentRunners.get(agent)
     if (cached) return cached
-    const runner = agent === 'claude' ? createClaudeRunner(structuredContext) : createCodexRunner(structuredContext)
+    const runner =
+      agent === 'claude'
+        ? createClaudeRunner(structuredContext)
+        : agent === 'codex'
+          ? createCodexRunner(structuredContext)
+          : createPiRunner(structuredContext, agent)
     agentRunners.set(agent, runner)
     return runner
   }
@@ -802,7 +811,7 @@ export function activate(context: PluginContext): void {
   const create: MethodHandler = async (params, caller) => {
     const ownerPluginId = await ownerPluginFor(caller)
     if (!isStructuredAgent(params.agent)) {
-      throw context.error('invalid-params', 'structured sessions support only the claude or codex agent')
+      throw context.error('invalid-params', 'structured sessions support only the claude, codex, pi or omp agent')
     }
     if (params.extraArgs !== undefined) {
       throw context.error('invalid-params', "Extra arguments can't be applied to a structured session.")

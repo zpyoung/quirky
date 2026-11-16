@@ -84,6 +84,9 @@ function contextFor(options: { codexPath?: string; claudePath?: string } = {}) {
     },
     async resolveCodexPath() {
       return options.codexPath ?? '/isolated/codex-fixture'
+    },
+    async resolvePiPath() {
+      return '/isolated/pi-fixture'
     }
   }
   return { context, messages, statuses }

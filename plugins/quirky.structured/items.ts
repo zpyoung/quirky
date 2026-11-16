@@ -506,3 +506,143 @@ function codexEntriesUnchecked(item: Record<string, unknown>, phase: CodexPhase,
       return phase === 'completed' ? [{ role: 'tool', text: `Codex ${type}`, data: item, item: statusItem(`Codex ${type}`) }] : []
   }
 }
+
+const PI_EDIT_TOOLS = new Set(['edit', 'write', 'multiedit', 'apply_patch', 'patch'])
+const PI_TODO_TOOLS = new Set(['todo', 'todo_write', 'todowrite'])
+
+function firstString(fields: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = fields[key]
+    if (typeof value === 'string') return value
+  }
+  return undefined
+}
+
+function piEditPath(args: Record<string, unknown>): string | undefined {
+  const direct = firstString(args, ['path', 'file_path', 'filePath', 'file'])
+  if (direct) return direct
+  const patch = typeof args.input === 'string' ? args.input : typeof args.patch === 'string' ? args.patch : ''
+  const bracketed = /^\[([^\]#\n]+)(?:#[^\]\n]*)?\]/m.exec(patch)
+  if (bracketed) return bracketed[1]
+  return /^\*\*\* (?:Update|Add|Delete) File: (.+)$/m.exec(patch)?.[1]?.trim()
+}
+
+function piEditCounts(args: Record<string, unknown>): { added?: number; removed?: number } {
+  const edits = Array.isArray(args.edits) ? args.edits : [args]
+  let added = 0
+  let removed = 0
+  let found = false
+  for (const edit of edits) {
+    const fields = record(edit)
+    if (!fields) continue
+    const next = firstString(fields, ['newText', 'new_string', 'newString', 'content'])
+    const previous = firstString(fields, ['oldText', 'old_string', 'oldString'])
+    if (next === undefined && previous === undefined) continue
+    found = true
+    added += lineCount(next)
+    removed += lineCount(previous)
+  }
+  return found ? { added, removed } : {}
+}
+
+function diffLineCounts(diff: string): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('+')) added++
+    else if (line.startsWith('-')) removed++
+  }
+  return { added, removed }
+}
+
+function resultText(result: Record<string, unknown> | null): string {
+  const content = result?.content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((part) => (typeof part === 'object' && part !== null && typeof (part as { text?: unknown }).text === 'string' ? (part as { text: string }).text : ''))
+    .filter(Boolean)
+    .join('\n')
+}
+
+function piStepState(status: unknown): 'pending' | 'active' | 'done' {
+  if (status === 'completed' || status === 'done' || status === 'abandoned') return 'done'
+  if (status === 'in_progress' || status === 'active') return 'active'
+  return 'pending'
+}
+
+function piSteps(raw: unknown): { text: string; state: 'pending' | 'active' | 'done' }[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((entry) => {
+    const fields = record(entry)
+    if (!fields) return []
+    if (Array.isArray(fields.tasks)) return piSteps(fields.tasks)
+    const text = firstString(fields, ['content', 'text', 'title', 'step'])
+    return text === undefined ? [] : [{ text, state: fields.completed === true ? ('done' as const) : piStepState(fields.status) }]
+  })
+}
+
+function piToolItem(callId: string, name: string, args: Record<string, unknown>, state: CallState, output?: string, details?: Record<string, unknown> | null): ChatItem {
+  const lower = name.toLowerCase()
+  if (PI_EDIT_TOOLS.has(lower)) {
+    const path = piEditPath(args)
+    if (path) {
+      const diff = details?.diff
+      const counts = state !== 'running' && typeof diff === 'string' ? diffLineCounts(diff) : piEditCounts(args)
+      return { kind: 'file-change', callId, path, ...counts, state }
+    }
+  }
+  const command = typeof args.command === 'string' ? args.command : ''
+  if (lower === 'bash' && command && isTestCommand(command)) {
+    return {
+      kind: 'tests',
+      callId,
+      command: oneLine(command, 400),
+      ...(output === undefined ? {} : parseTestCounts(output)),
+      state,
+      ...(output === undefined || tailOf(output) === undefined ? {} : { tail: tailOf(output) })
+    }
+  }
+  return { kind: 'activity', callId, tool: name, summary: summarizeInput(args), state, ...(output ? { detail: capped(output) } : {}) }
+}
+
+/**
+ * Normalizes a pi or omp `tool_execution_start` or `tool_execution_end` event into journal
+ * entries sharing the call's `callId`. The todo tool journals a `steps` item once it finishes.
+ * Never throws: anything unrecognized becomes a `status` item.
+ */
+export function piEntries(event: Record<string, unknown>, calls: CallTracker): ItemEntry[] {
+  try {
+    return piEntriesUnchecked(event, calls)
+  } catch {
+    const text = String(event.toolName ?? event.type ?? 'event')
+    return [{ role: 'tool', text, data: event, item: statusItem(text) }]
+  }
+}
+
+function piEntriesUnchecked(event: Record<string, unknown>, calls: CallTracker): ItemEntry[] {
+  const callId = String(event.toolCallId ?? '')
+  const name = String(event.toolName ?? 'tool')
+  const args = record(event.args) ?? {}
+  const todo = PI_TODO_TOOLS.has(name.toLowerCase())
+  if (event.type === 'tool_execution_start') {
+    calls.remember(callId, name, args)
+    if (todo) return []
+    const item = piToolItem(callId, name, args, 'running')
+    calls.track(item)
+    return [{ role: 'tool', text: `${name}: ${summarizeInput(args)}`.trim(), data: event, item }]
+  }
+  const result = record(event.result)
+  const output = resultText(result)
+  const state: CallState = event.isError === true ? 'failed' : 'done'
+  const input = calls.recall(callId)?.input ?? args
+  const details = record(result?.details)
+  if (todo) {
+    calls.track({ kind: 'activity', callId, tool: name, summary: '', state })
+    const steps = state === 'done' ? piSteps(details?.phases ?? details?.todos ?? input.phases ?? input.todos) : []
+    if (steps.length > 0) return [{ role: 'tool', text: `${name} (${steps.length} steps)`, data: event, item: { kind: 'steps', callId, steps } }]
+    return [{ role: 'tool', text: output, data: event, item: statusItem(`${name} ${state}`) }]
+  }
+  const item = piToolItem(callId, name, input, state, output, details)
+  calls.track(item)
+  return [{ role: 'tool', text: output || `${name}: ${summarizeInput(input)}`.trim(), data: event, item }]
+}

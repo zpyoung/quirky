@@ -3,7 +3,7 @@
   "apiVersion": "1.0.0",
   "name": "Structured sessions",
   "version": "0.1.0",
-  "description": "Background native Claude and Codex sessions without terminals: journaled messages and permission prompts as asks.",
+  "description": "Background native Claude, Codex, pi and omp sessions without terminals: journaled messages and permission prompts as asks.",
   "main": "main.ts",
   "activation": "lazy",
   "dependencies": ["quirky.session", "quirky.ask", "quirky.agents"],
@@ -11,7 +11,7 @@
     "method": [
       {
         "id": "create",
-        "description": "Starts a structured (no PTY) Claude or Codex conversation, optionally with model and effort picks. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
+        "description": "Starts a structured (no PTY) Claude, Codex, pi or omp conversation, optionally with model and effort picks. `deferStart` reserves a live session and lease without an initial turn; otherwise `prompt` is required. Extra arguments are refused.",
         "params": {
           "type": "object",
           "properties": {
@@ -20,7 +20,7 @@
               "type": "boolean",
               "description": "When true, prevents automatic terminal tab adoption; explicit viewing remains possible."
             },
-            "agent": { "type": "string", "enum": ["claude", "codex"], "description": "The structured provider to run." },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"], "description": "The structured provider to run." },
             "prompt": { "type": "string" },
             "deferStart": { "type": "boolean", "description": "Reserve the live structured session and lease without sending an initial turn." },
             "title": { "type": "string", "description": "Optional session title." },
@@ -94,7 +94,7 @@
       },
       {
         "id": "resume",
-        "description": "Resumes the persisted native Claude or Codex conversation into a new structured session; the optional prompt starts its first turn.",
+        "description": "Resumes the persisted native Claude, Codex, pi or omp conversation into a new structured session; the optional prompt starts its first turn.",
         "params": {
           "type": "object",
           "properties": {
@@ -110,7 +110,7 @@
           "properties": {
             "id": { "type": "string" },
             "kind": { "type": "string", "enum": ["structured"] },
-            "agent": { "type": "string", "enum": ["claude", "codex"] },
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] },
             "worktreeId": { "type": "string" },
             "cwd": { "type": "string" },
             "title": { "type": "string" },

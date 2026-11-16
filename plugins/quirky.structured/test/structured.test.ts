@@ -86,7 +86,7 @@ afterEach(async () => {
 const call = (method: string, params: Record<string, unknown> = {}) => client.callAny(method, params) as Promise<any>
 const create = (prompt = 'fix the bug') =>
   call('quirky.structured/create', { worktree: 'main', agent: 'claude', prompt }) as Promise<Session>
-type StructuredAgent = 'claude' | 'codex'
+type StructuredAgent = 'claude' | 'codex' | 'pi' | 'omp'
 type StructuredCreateOverrides = {
   model?: string
   options?: Record<string, string | boolean>
@@ -430,8 +430,19 @@ try {
     expect(runner.started).toEqual([])
   })
 
+  test('pi and omp sessions are accepted, titled by agent and started with the lease environment', async () => {
+    for (const [agent, title] of [['pi', 'Pi'], ['omp', 'OMP']] as const) {
+      const session = await createAgent(agent, 'look around')
+      expect(session).toMatchObject({ kind: 'structured', agent, title })
+      await waitFor(() => runner.started.some((entry) => entry.session.id === session.id))
+      const started = runner.started.find((entry) => entry.session.id === session.id)!
+      expect(started.prompt).toBe('look around')
+      expect((started.options as { env: Record<string, string> }).env.QUIRKY_SESSION_TOKEN).toBeTruthy()
+    }
+  })
+
   test('validates agent, worktree and session kind', async () => {
-    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'pi', prompt: 'x' }))).toMatchObject({
+    expect(await failure(call('quirky.structured/create', { worktree: 'main', agent: 'gemini', prompt: 'x' }))).toMatchObject({
       code: RpcErrorCode.InvalidParams,
     })
     expect(await failure(call('quirky.structured/create', { worktree: 'nope', agent: 'claude', prompt: 'x' }))).toMatchObject({

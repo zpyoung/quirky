@@ -65,7 +65,8 @@ function makeSetup(): Setup {
       })
     },
     resolveClaudePath: async () => '/not-used/claude',
-    resolveCodexPath: async () => fixture.executable
+    resolveCodexPath: async () => fixture.executable,
+    resolvePiPath: async () => '/not-used/pi'
   }
   const session: Session = {
     id: 's_codex',
