@@ -9,6 +9,7 @@ import {
   FILE_SEARCH_DEBOUNCE_MS,
   FILE_SEARCH_LIMIT,
   PALETTE_SCOPES,
+  PALETTE_SEARCH_LABEL,
   cycleScope,
   decodeFileId,
   entryKey,
@@ -307,7 +308,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
         ref={fieldRef}
         autoFocus
         label="Search"
-        aria-label="Search commands, tools, views, worktrees, and files"
+        aria-label={PALETTE_SEARCH_LABEL}
         placeholder="Type to search"
         value={filter}
         onChange={(event) => {

@@ -1,7 +1,7 @@
 import { beforeAll, afterAll, expect, test } from 'bun:test'
 import { accessSync, constants } from 'node:fs'
 import { chromium, type Browser } from 'playwright'
-import { openSettings } from '../../../scripts/ui-review/capture'
+import * as capture from '../../../scripts/ui-review/capture'
 
 const candidates = [
   chromium.executablePath(),
@@ -36,7 +36,7 @@ test.skipIf(!executable)('Settings opens from the Window bar when a plugin also 
       <div role="menu" hidden><button role="menuitem" onclick="document.querySelector('[role=dialog]').hidden=false">Settings</button></div>
       <div role="dialog" aria-label="Settings" hidden>Settings content</div>
     `)
-    await openSettings({ page, options: { timeoutMs: 1_000 } } as Parameters<typeof openSettings>[0])
+    await capture.openSettings({ page, options: { timeoutMs: 1_000 } } as Parameters<typeof capture.openSettings>[0])
     expect(await page.getByRole('dialog', { name: 'Settings', exact: true }).isVisible()).toBe(true)
     expect(await page.locator('body').getAttribute('data-plugin-clicked')).toBeNull()
   } finally {
@@ -76,7 +76,7 @@ test.skipIf(!executable)('rejects unavailable host Settings controls without cli
         </section>
         ${scenario.hostMenu}
       `)
-      const error = await openSettings({ page, options: { timeoutMs: 1_000 } } as Parameters<typeof openSettings>[0])
+      const error = await capture.openSettings({ page, options: { timeoutMs: 1_000 } } as Parameters<typeof capture.openSettings>[0])
         .then(() => null, (reason: unknown) => reason)
       expect(error).toBeInstanceOf(Error)
       expect((error as Error).message).toBe(scenario.expectedError)
@@ -84,5 +84,20 @@ test.skipIf(!executable)('rejects unavailable host Settings controls without cli
     } finally {
       await page.close()
     }
+  }
+})
+
+test.skipIf(!executable)('the palette probe requires its named search field inside the Command palette dialog', async () => {
+  const page = await browser.newPage()
+  try {
+    const field = '<input aria-label="Search commands, tools, views, worktrees, and files">'
+    await page.setContent(`<div role="dialog" aria-label="Command palette">${field}</div>`)
+    expect(await capture.paletteFieldMounted(page)).toBe(true)
+    await page.setContent(`${field}<div role="dialog" aria-label="Command palette"><input aria-label="Unrelated"></div>`)
+    expect(await capture.paletteFieldMounted(page)).toBe(false)
+    await page.setContent(field)
+    expect(await capture.paletteFieldMounted(page)).toBe(false)
+  } finally {
+    await page.close()
   }
 })
