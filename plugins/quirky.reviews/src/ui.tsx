@@ -65,7 +65,8 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
   const currentRead = useRef<number | null>(null)
   const cancelAutomaticRef = useRef<() => void>(() => {})
   const afterReadRef = useRef<() => void>(() => {})
-  const connectionStatus = useRef('connected')
+  const connectionPhase = useRef<'unknown' | 'connected' | 'reconnecting'>('unknown')
+  const failedRead = useRef<{ epoch: number; startedUnknown: boolean } | null>(null)
   const [layoutWorktree, setLayoutWorktree] = useState<string | null>(() => kind === 'checks' ? worktreeOf(context.getLayout()) : null)
   const layoutWorktreeRef = useRef(layoutWorktree)
   layoutWorktreeRef.current = layoutWorktree
@@ -81,17 +82,29 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
     return context.onLayout((layout) => setLayoutWorktree(worktreeOf(layout)))
   }, [context, kind])
   const readState = useCallback(async (worktree: string | null) => {
+    const startedUnknown = connectionPhase.current === 'unknown'
     const epoch = ++request.current
     currentRead.current = epoch
+    failedRead.current = null
     const tick = nextDraftTick()
     if (kind === 'checks') recordChecksStateStart(context, worktree, Date.now())
     try {
       const next = stateValue(await context.call('quirky.reviews/state', kind === 'checks' && worktree !== null ? { worktree } : undefined))
       if (epoch !== request.current) return
+      if (connectionPhase.current === 'unknown') connectionPhase.current = 'connected'
+      failedRead.current = null
       setLoaded((old) => old && next.revision < old.state.revision ? old : { state: next, snapshot: tick })
       setError(null)
     } catch (failure) {
-      if (epoch === request.current) setError(failure instanceof Error ? failure.message : 'Review state is unavailable.')
+      if (epoch === request.current) {
+        failedRead.current = { epoch, startedUnknown }
+        setError(failure instanceof Error ? failure.message : 'Review state is unavailable.')
+        if (startedUnknown && connectionPhase.current === 'connected') {
+          cancelAutomaticRef.current()
+          setLoaded(null)
+          void readState(worktree)
+        }
+      }
     } finally {
       if (epoch === request.current && currentRead.current === epoch) {
         currentRead.current = null
@@ -149,9 +162,17 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
       if (event.type === 'quirky.reviews/changed') invalidateAutomatically()
     }, options)
     const offConnection = context.onConnection((status) => {
-      const reconnected = connectionStatus.current === 'reconnecting' && status === 'connected'
-      connectionStatus.current = status
-      if (!reconnected) return
+      const previous = connectionPhase.current
+      const next = status === 'connected' ? 'connected' : 'reconnecting'
+      connectionPhase.current = next
+      const reconnected = previous === 'reconnecting' && next === 'connected'
+      const failed = failedRead.current
+      const recoveredAfterUnknownRead = previous === 'unknown'
+        && next === 'connected'
+        && failed !== null
+        && failed.epoch === request.current
+        && failed.startedUnknown
+      if (!reconnected && !recoveredAfterUnknownRead) return
       cancelAutomatic()
       setLoaded(null)
       void readState(layoutWorktreeRef.current)

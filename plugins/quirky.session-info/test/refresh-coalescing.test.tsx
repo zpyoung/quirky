@@ -566,4 +566,96 @@ describe('Session info projection refresh coalescing', () => {
     expect(panel.element.textContent).not.toContain('temporary projection failure')
     panel.unmount()
   })
+
+  for (const reconnectAt of [600, 3_000]) {
+    test(`remount after offscreen recovery at ${reconnectAt}ms retains its deadline and resumes reads`, async () => {
+      const fake = makeFake({ [GET_METHOD]: () => panelState('A') })
+      activatePlugin(fake.context)
+      const first = mountPanel(fake)
+      await settle()
+      expect(getCalls(fake)).toHaveLength(1)
+      await fake.connection('reconnecting')
+      first.unmount()
+      await fake.connection('connected')
+      await advance(reconnectAt)
+
+      const reopened = mountPanel(fake)
+      await settle()
+      if (reconnectAt < 1_500) {
+        expect(getCalls(fake)).toHaveLength(1)
+        await fake.connection('connected')
+        expect(getCalls(fake)).toHaveLength(1)
+        await advance(1_500 - reconnectAt)
+      }
+      expect(getCalls(fake)).toHaveLength(2)
+      expect(reopened.element.textContent).toContain('Model A')
+      await fake.emit(canonicalChange(null))
+      await advance(1_500)
+      expect(getCalls(fake)).toHaveLength(3)
+    })
+  }
+
+  for (const connectedBeforeFailure of [false, true]) {
+    test(`mount during outage recovers when connected arrives ${connectedBeforeFailure ? 'before' : 'after'} rejection`, async () => {
+      const initial = Promise.withResolvers<PanelState>()
+      let reads = 0
+      const fake = makeFake({ [GET_METHOD]: () => ++reads === 1 ? initial.promise : panelState('A') })
+      activatePlugin(fake.context)
+      await fake.connection('reconnecting')
+      const panel = mountPanel(fake)
+      await settle()
+      expect(getCalls(fake)).toHaveLength(1)
+      if (connectedBeforeFailure) await fake.connection('connected')
+      await act(async () => initial.reject(new Error('Not connected')))
+      if (!connectedBeforeFailure) await fake.connection('connected')
+      await settle()
+      expect(getCalls(fake)).toHaveLength(2)
+      expect(panel.element.textContent).toContain('Model A')
+      await fake.connection('connected')
+      await fake.connection('connected')
+      expect(getCalls(fake)).toHaveLength(2)
+      await fake.emit(canonicalChange(null))
+      await advance(1_499)
+      expect(getCalls(fake)).toHaveLength(2)
+      await advance(1)
+      expect(getCalls(fake)).toHaveLength(3)
+    })
+  }
+
+  test('first connected notifications share a successful pending mount read', async () => {
+    const initial = Promise.withResolvers<PanelState>()
+    const fake = makeFake({ [GET_METHOD]: () => initial.promise })
+    activatePlugin(fake.context)
+    const panel = mountPanel(fake)
+    await fake.connection('connected')
+    await fake.connection('connected')
+    expect(getCalls(fake)).toHaveLength(1)
+    await act(async () => initial.resolve(panelState('A')))
+    await settle()
+    expect(panel.element.textContent).toContain('Model A')
+    expect(getCalls(fake)).toHaveLength(1)
+  })
+})
+
+test('a failed connection recovery does not retry duplicate connected events and permits explicit Retry', async () => {
+  let reads = 0
+  const fake = makeFake({ [GET_METHOD]: () => {
+    if (++reads <= 2) throw new Error('Not connected')
+    return panelState('A')
+  } })
+  activatePlugin(fake.context)
+  const panel = mountPanel(fake)
+  await settle()
+  await fake.connection('connected')
+  expect(getCalls(fake)).toHaveLength(2)
+  expect(panel.element.textContent).toContain('Not connected')
+  await fake.connection('connected')
+  await fake.connection('connected')
+  expect(getCalls(fake)).toHaveLength(2)
+  const retry = panel.element.querySelector('.ui-inline-error__action')
+  if (!retry) throw new Error('missing projection Retry action')
+  await click(retry)
+  expect(getCalls(fake)).toHaveLength(3)
+  expect(panel.element.textContent).toContain('Model A')
+  expect(panel.element.textContent).not.toContain('Not connected')
 })

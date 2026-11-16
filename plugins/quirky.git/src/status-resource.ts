@@ -28,6 +28,7 @@ type Flight = {
   generation: number
   connectionGeneration: number
   dirtyVersion: number
+  unverifiedStart: boolean
   waiters: Set<Waiter>
 }
 type Resource = {
@@ -42,6 +43,7 @@ type Resource = {
   generation: number
   connectionGeneration: number
   connectionState: 'unknown' | 'connected' | 'reconnecting'
+  failedRead: boolean
   dirtyVersion: number
   dirty: boolean
   pendingFresh: boolean
@@ -91,6 +93,7 @@ function resourceFor(context: UiPluginContext, worktree: string): Resource {
     generation: 0,
     connectionGeneration: 0,
     connectionState: 'unknown',
+    failedRead: false,
     dirtyVersion: 0,
     dirty: false,
     pendingFresh: false,
@@ -118,8 +121,9 @@ function resourceFor(context: UiPluginContext, worktree: string): Resource {
       return
     }
     const reconnecting = resource.connectionState === 'reconnecting'
+    const failedBeforeConnection = resource.connectionState === 'unknown' && resource.failedRead
     resource.connectionState = 'connected'
-    if (reconnecting) recoverConnection(resource)
+    if (reconnecting || failedBeforeConnection) recoverConnection(resource)
   })
   return resource
 }
@@ -284,12 +288,14 @@ function dispatch(resource: Resource): void {
   }
   clearTrailingTimer(resource)
   resource.pendingFresh = false
+  resource.failedRead = false
   resource.dirty = false
   resource.snapshot = null
   const flight: Flight = {
     generation: resource.generation,
     connectionGeneration: resource.connectionGeneration,
     dirtyVersion: resource.dirtyVersion,
+    unverifiedStart: resource.connectionState === 'unknown',
     waiters: new Set()
   }
   for (const waiter of resource.pendingWaiters) {
@@ -318,6 +324,8 @@ function completeSuccess(resource: Resource, flight: Flight, status: GitStatus):
     return
   }
 
+  resource.failedRead = false
+  if (flight.unverifiedStart && resource.connectionState === 'unknown') resource.connectionState = 'connected'
   resource.snapshot = { status, receivedAt: Date.now(), connectionGeneration: resource.connectionGeneration }
   resource.dirty = resource.dirtyVersion !== flight.dirtyVersion
   notify(resource, { status, error: null })
@@ -340,7 +348,9 @@ function completeFailure(resource: Resource, flight: Flight, error: unknown): vo
   }
 
   resource.snapshot = null
+  resource.failedRead = true
   resource.dirty = resource.dirtyVersion !== flight.dirtyVersion
+  if (flight.unverifiedStart && resource.connectionState === 'connected') recoverConnection(resource)
   notify(resource, { status: null, error })
   for (const waiter of flight.waiters) rejectWaiter(waiter, error)
   if (resource.released) return

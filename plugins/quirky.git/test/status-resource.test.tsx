@@ -395,6 +395,198 @@ describe('quirky.git shared automatic status resource', () => {
       jest.useRealTimers()
     }
   })
+  test('the first connected notification immediately recovers a failed initial read once', async () => {
+    jest.useFakeTimers()
+    let mounted: MountedGitContributions | null = null
+    try {
+      const fake = fakeContext(layoutFor('initial-offline'))
+      const connections = connectionBus(fake)
+      const recovered = statusOf([entry('recovered-after-connect.ts')], {
+        branch: 'recovered-after-connect',
+        head: 'b'.repeat(40), ahead: 4, behind: 1
+      })
+      let offline = true
+      fake.on('quirky.git/status', () => {
+        if (offline) throw failure('Not connected')
+        return recovered
+      })
+      mounted = providedContributions(fake).mount()
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+
+      offline = false
+      fake.status = recovered
+      await act(async () => connections.emit('connected'))
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(2)
+      expect(mounted.statusBar.textContent).toContain('↑4 ↓1')
+      expect(fake.called('quirky.hosting/forBranch').at(-1)?.params).toEqual({
+        worktree: 'initial-offline', branch: recovered.branch, headOid: recovered.head
+      })
+
+      await act(async () => {
+        connections.emit('connected')
+        connections.emit('connected')
+      })
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(2)
+      await advance(2_999)
+      expect(statusCalls(fake)).toHaveLength(2)
+      await advance(1)
+      expect(statusCalls(fake)).toHaveLength(3)
+      expect(mounted.panel.textContent).toContain('recovered-after-connect.ts')
+    } finally {
+      mounted?.unmount()
+      jest.useRealTimers()
+    }
+  })
+
+  test('a connected event before the initial rejection recovers once after that read fails', async () => {
+    jest.useFakeTimers()
+    let probe: StatusProbeMount | null = null
+    try {
+      const fake = fakeContext(layoutFor('connected-before-rejection'))
+      const connections = connectionBus(fake)
+      const initialRead = Promise.withResolvers<unknown>()
+      const recovered = statusOf([entry('recovered-after-race.ts')], {
+        branch: 'recovered-after-race',
+        head: 'c'.repeat(40)
+      })
+      let reads = 0
+      fake.on('quirky.git/status', () => ++reads === 1 ? initialRead.promise : recovered)
+      probe = mountStatusProbe(fake, 'connected-before-rejection')
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+
+      await act(async () => {
+        connections.emit('connected')
+        connections.emit('connected')
+      })
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+
+      await act(async () => initialRead.reject(failure('Not connected')))
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(2)
+      expect(probe.current()?.status?.branch).toBe('recovered-after-race')
+
+      await act(async () => {
+        connections.emit('connected')
+        connections.emit('connected')
+      })
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(2)
+      await advance(2_999)
+      expect(statusCalls(fake)).toHaveLength(2)
+      await advance(1)
+      expect(statusCalls(fake)).toHaveLength(3)
+    } finally {
+      probe?.unmount()
+      jest.useRealTimers()
+    }
+  })
+
+  test('recovery fences a late initial result and starts a fresh cooldown', async () => {
+    jest.useFakeTimers()
+    let probe: StatusProbeMount | null = null
+    try {
+      const fake = fakeContext(layoutFor('late-initial-result'))
+      const connections = connectionBus(fake)
+      const initialRead = Promise.withResolvers<unknown>()
+      const recoveryRead = Promise.withResolvers<unknown>()
+      const recovered = statusOf([entry('recovered-before-late.ts')], {
+        branch: 'recovered-before-late',
+        head: 'd'.repeat(40)
+      })
+      const late = statusOf([entry('late-initial.ts')], {
+        branch: 'late-initial',
+        head: 'e'.repeat(40)
+      })
+      let reads = 0
+      fake.on('quirky.git/status', () => {
+        reads += 1
+        return reads === 1 ? initialRead.promise : reads === 2 ? recoveryRead.promise : recovered
+      })
+      probe = mountStatusProbe(fake, 'late-initial-result')
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+
+      await act(async () => {
+        connections.emit('reconnecting')
+        connections.emit('connected')
+      })
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(2)
+
+      await act(async () => recoveryRead.resolve(recovered))
+      await settle()
+      expect(probe.current()?.status?.branch).toBe('recovered-before-late')
+
+      await act(async () => initialRead.resolve(late))
+      await settle()
+      expect(probe.current()?.status?.branch).toBe('recovered-before-late')
+      expect(statusCalls(fake)).toHaveLength(2)
+      await advance(2_999)
+      expect(statusCalls(fake)).toHaveLength(2)
+      await advance(1)
+      expect(statusCalls(fake)).toHaveLength(3)
+    } finally {
+      probe?.unmount()
+      jest.useRealTimers()
+    }
+  })
+
+  test('offscreen notifications do not leak into a remounted resource', async () => {
+    jest.useFakeTimers()
+    let firstMount: MountedGitContributions | null = null
+    let remounted: MountedGitContributions | null = null
+    try {
+      const fake = fakeContext(layoutFor('offscreen-recovery'))
+      const connections = connectionBus(fake)
+      const recovered = statusOf([entry('recovered-after-remount.ts')], {
+        branch: 'recovered-after-remount',
+        head: 'f'.repeat(40), ahead: 7, behind: 2
+      })
+      let offline = true
+      fake.on('quirky.git/status', () => {
+        if (offline) throw failure('Not connected')
+        return recovered
+      })
+      const contributions = providedContributions(fake)
+      firstMount = contributions.mount()
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(1)
+      expect(connections.size()).toBe(1)
+
+      firstMount.unmount()
+      firstMount = null
+      expect(connections.size()).toBe(0)
+      await act(async () => connections.emit('connected'))
+      expect(statusCalls(fake)).toHaveLength(1)
+
+      remounted = contributions.mount()
+      expect(connections.size()).toBe(1)
+      await advance(3_000)
+      expect(statusCalls(fake)).toHaveLength(2)
+
+      offline = false
+      fake.status = recovered
+      await act(async () => connections.emit('connected'))
+      await settle()
+      expect(statusCalls(fake)).toHaveLength(3)
+      expect(remounted.statusBar.textContent).toContain('↑7 ↓2')
+      expect(fake.called('quirky.hosting/forBranch').at(-1)?.params).toEqual({
+        worktree: 'offscreen-recovery', branch: recovered.branch, headOid: recovered.head
+      })
+      await advance(3_000)
+      expect(statusCalls(fake)).toHaveLength(4)
+      expect(remounted.panel.textContent).toContain('recovered-after-remount.ts')
+    } finally {
+      firstMount?.unmount()
+      remounted?.unmount()
+      jest.useRealTimers()
+    }
+  })
 
   async function switchWithLateAResult(kind: 'value' | 'error'): Promise<void> {
     jest.useFakeTimers()

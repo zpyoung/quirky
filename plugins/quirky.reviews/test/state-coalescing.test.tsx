@@ -11,7 +11,10 @@ GlobalRegistrator.register()
 const WORKTREE_A = '/work/tree-a'
 const WORKTREE_B = '/work/tree-b'
 const roots: Array<() => void> = []
-const timers = jest as typeof jest & { advanceTimersByTime(milliseconds: number): void }
+const timers = jest as typeof jest & {
+  advanceTimersByTime(milliseconds: number): void
+  setSystemTime(date: Date): void
+}
 
 afterEach(async () => {
   await act(async () => {
@@ -24,6 +27,7 @@ afterEach(async () => {
 beforeEach(() => {
   document.body.innerHTML = ''
   jest.useFakeTimers()
+  timers.setSystemTime(new Date(0))
 })
 
 afterAll(() => GlobalRegistrator.unregister())
@@ -225,6 +229,92 @@ function stateCalls(fake: ReviewsTestContext) {
 function checksRefreshCalls(fake: ReviewsTestContext) {
   return fake.calls.filter(({ method }) => method === 'quirky.reviews/checksRefresh')
 }
+
+test('Checks mounted during disconnection recovers once on its first connected event and keeps the cooldown', async () => {
+  const fake = fakeContext({ holdChecksRefresh: true, state: (worktree, callNumber) => {
+    if (callNumber === 1) throw new Error('Not connected')
+    return stateFor(worktree, 'Recovered connection', callNumber)
+  } })
+  fake.connect('reconnecting')
+  const surface = await mountSurface(fake)
+  expect(stateCalls(fake)).toHaveLength(1)
+
+  await act(async () => fake.connect('connected'))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(2)
+  expect(surface.element.textContent).toContain('Recovered connection')
+
+  await act(async () => fake.connect('connected'))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(2)
+
+  await emitChanged(fake, WORKTREE_A)
+  await advanceClock(2_999)
+  expect(stateCalls(fake)).toHaveLength(2)
+  await advanceClock(1)
+  expect(stateCalls(fake)).toHaveLength(3)
+})
+
+test('a first connected event during an unknown initial read recovers when that read later fails', async () => {
+  const initial = Promise.withResolvers<ReviewsState>()
+  const fake = fakeContext({
+    state: (worktree, callNumber) => callNumber === 1
+      ? initial.promise
+      : callNumber === 2
+        ? Promise.reject(new Error('Not connected'))
+        : stateFor(worktree, 'Recovered after initial failure', callNumber)
+  })
+  const surface = await mountSurface(fake)
+  expect(stateCalls(fake)).toHaveLength(1)
+
+  await act(async () => fake.connect('connected'))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(1)
+
+  await act(async () => { initial.reject(new Error('Not connected')) })
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(2)
+  expect(surface.element.textContent).toContain('Not connected')
+
+  await act(async () => fake.connect('connected'))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(2)
+})
+
+test('a successful initial read treats duplicate connected events as no-ops', async () => {
+  const fake = fakeContext()
+  await mountSurface(fake)
+  expect(stateCalls(fake)).toHaveLength(1)
+
+  await act(async () => {
+    fake.connect('connected')
+    fake.connect('connected')
+  })
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(1)
+})
+
+test('a remount reads successfully after a connected edge was missed while unmounted', async () => {
+  const fake = fakeContext({ state: (worktree, callNumber) => {
+    if (callNumber === 1) throw new Error('Not connected')
+    return stateFor(worktree, 'Recovered after remount', callNumber)
+  } })
+  fake.connect('reconnecting')
+  const first = await mountSurface(fake)
+  expect(stateCalls(fake)).toHaveLength(1)
+  await act(async () => first.unmount())
+
+  fake.connect('connected')
+  await advanceClock(3_000)
+  const remounted = await mountSurface(fake)
+  expect(stateCalls(fake)).toHaveLength(2)
+  expect(remounted.element.textContent).toContain('Recovered after remount')
+
+  await act(async () => fake.connect('connected'))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(2)
+})
+
 
 test('ten settled scoped changes coalesce with the immediate manual completion read', async () => {
   const fake = fakeContext()

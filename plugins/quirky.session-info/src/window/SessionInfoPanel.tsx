@@ -37,7 +37,6 @@ const AUTOMATIC_REFRESH_MS = 1_500
 type ActivationClock = {
   lastStartedAt: number | null
   focusWorkspace: string | null | undefined
-  connectionStatus: 'connected' | 'reconnecting' | undefined
 }
 
 const activationClocks = new WeakMap<UiPluginContext, ActivationClock>()
@@ -45,7 +44,7 @@ const activationClocks = new WeakMap<UiPluginContext, ActivationClock>()
 function activationClock(context: UiPluginContext): ActivationClock {
   let clock = activationClocks.get(context)
   if (!clock) {
-    clock = { lastStartedAt: null, focusWorkspace: undefined, connectionStatus: undefined }
+    clock = { lastStartedAt: null, focusWorkspace: undefined }
     activationClocks.set(context, clock)
   }
   return clock
@@ -283,6 +282,10 @@ export function SessionInfoPanel({ context, report }: Props) {
   const [nextLaunchEffect, setNextLaunchEffect] = useState<string | null>(null)
   const [copied, setCopied] = useState<CopyFeedback | null>(null)
   const clock = activationClock(context)
+  const connection = useRef<{ status: 'connected' | 'reconnecting' | undefined; failed: boolean }>({
+    status: undefined,
+    failed: false
+  })
   const projectionRef = useRef<PanelState | null>(null)
   const aliveRef = useRef(true)
   const requestRef = useRef(0)
@@ -321,7 +324,7 @@ export function SessionInfoPanel({ context, report }: Props) {
 
   function flushAutomatic(): void {
     if (!aliveRef.current || !automaticDirtyRef.current || activeRequestRef.current !== null) return
-    if (clock.connectionStatus === 'reconnecting') return
+    if (connection.current.status === 'reconnecting') return
 
     const deadline = clock.lastStartedAt === null ? Date.now() : clock.lastStartedAt + AUTOMATIC_REFRESH_MS
     const delay = deadline - Date.now()
@@ -350,6 +353,8 @@ export function SessionInfoPanel({ context, report }: Props) {
     clearAutomaticTimer()
     automaticDirtyRef.current = false
     const request = ++requestRef.current
+    const unverifiedConnection = connection.current.status === undefined
+    connection.current.failed = false
     activeRequestRef.current = request
     if (clearFirst) clearForRetarget()
     setLoading(projectionRef.current === null)
@@ -358,6 +363,7 @@ export function SessionInfoPanel({ context, report }: Props) {
     try {
       const fetched = await context.call('quirky.session-info/get', {}) as PanelState
       if (!aliveRef.current || request !== requestRef.current) return
+      if (connection.current.status === undefined) connection.current.status = 'connected'
       let next = fetched
       const current = projectionRef.current
       if (current?.session !== next.session) {
@@ -376,8 +382,10 @@ export function SessionInfoPanel({ context, report }: Props) {
       setLoading(false)
     } catch (error) {
       if (!aliveRef.current || request !== requestRef.current) return
+      connection.current.failed = true
       setLoading(false)
       setLoadError(messageOf(error))
+      if (unverifiedConnection && connection.current.status === 'connected') void reload(true)
     } finally {
       if (activeRequestRef.current === request) {
         activeRequestRef.current = null
@@ -406,6 +414,8 @@ export function SessionInfoPanel({ context, report }: Props) {
 
   useEffect(() => {
     aliveRef.current = true
+    connection.current.status = undefined
+    connection.current.failed = false
     const unsubscribe = context.subscribe((event) => {
       if (event.type === 'quirky.terminal/focusContextChanged') {
         const workspace = eventWorkspace(event)
@@ -422,8 +432,9 @@ export function SessionInfoPanel({ context, report }: Props) {
       }
     })
     const disconnect = context.onConnection((status) => {
-      const reconnected = clock.connectionStatus === 'reconnecting' && status === 'connected'
-      clock.connectionStatus = status
+      const reconnected = status === 'connected' && (connection.current.status === 'reconnecting' ||
+        (connection.current.status === undefined && connection.current.failed))
+      connection.current.status = status
       if (reconnected) void reload(true)
     })
     invalidateAutomatically()
