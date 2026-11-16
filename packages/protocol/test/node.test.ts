@@ -1,9 +1,20 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { daemonEntryHash, ensureDaemon, ensureHome, openPrivateLog, readRuntime, signalDaemon, waitForDaemonExit } from '../src/node'
+import {
+  daemonEntryHash,
+  ensureDaemon,
+  ensureHome,
+  isDaemonAlive,
+  openPrivateLog,
+  readDaemonHealth,
+  readRuntime,
+  signalDaemon,
+  waitForDaemonExit,
+  type RuntimeInfo
+} from '../src/node'
 
 const dirs: string[] = []
 afterEach(() => {
@@ -17,6 +28,111 @@ function tempDir(): string {
 }
 
 const modeOf = (path: string) => statSync(path).mode & 0o777
+
+describe('readDaemonHealth', () => {
+  let server: Bun.Server<undefined>
+  let responseStatus = 200
+  let responseBody = ''
+  let neverRespond = false
+  const pendingResponses: (() => void)[] = []
+
+  beforeAll(() => {
+    server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: () => {
+        const body = responseBody
+        const status = responseStatus
+        if (neverRespond) {
+          const { promise, resolve } = Promise.withResolvers<Response>()
+          pendingResponses.push(() => resolve(new Response(body, { status })))
+          return promise
+        }
+        return new Response(body, { status })
+      }
+    })
+  })
+
+  afterAll(async () => {
+    for (const release of pendingResponses.splice(0)) release()
+    await server.stop(true)
+  })
+
+  const info = (): RuntimeInfo => ({
+    pid: 4242,
+    port: server.port!,
+    token: 'rpc-token',
+    hookToken: 'hook-token',
+    daemonVersion: 'test',
+    protocolVersion: 1,
+    startedAt: 0
+  })
+
+  function respond(body: unknown, status = 200): void {
+    responseStatus = status
+    responseBody = JSON.stringify(body)
+    neverRespond = false
+  }
+
+  async function checkHealth(runtime: RuntimeInfo | null = info(), timeoutMs = 100) {
+    const health = await readDaemonHealth(runtime, timeoutMs)
+    expect(await isDaemonAlive(runtime, timeoutMs)).toBe(health !== null)
+    return health
+  }
+
+  test('parses settled state and keeps a string daemon version', async () => {
+    respond({ ok: true, pid: 4242, daemonVersion: '1.2.3', startupSettled: false })
+    expect(await checkHealth()).toEqual({
+      pid: 4242,
+      daemonVersion: '1.2.3',
+      startupSettled: false
+    })
+  })
+
+  test('omits startupSettled when the health body has no boolean value', async () => {
+    respond({ ok: true, pid: 4242 })
+    const health = await checkHealth()
+    expect(health).toEqual({ pid: 4242 })
+    expect(health?.startupSettled).toBeUndefined()
+
+    respond({ ok: true, pid: 4242, daemonVersion: '1.2.3', startupSettled: 'yes' })
+    const invalidStartupState = await checkHealth()
+    expect(invalidStartupState).toEqual({ pid: 4242, daemonVersion: '1.2.3' })
+    expect(invalidStartupState?.startupSettled).toBeUndefined()
+  })
+
+  test('returns null when the health pid does not match', async () => {
+    respond({ ok: true, pid: 4243 })
+    expect(await checkHealth()).toBeNull()
+  })
+
+  test('returns null for an unsuccessful health response', async () => {
+    respond({ ok: true, pid: 4242 }, 503)
+    expect(await checkHealth()).toBeNull()
+  })
+
+  test('returns null for a non-JSON health response', async () => {
+    responseStatus = 200
+    responseBody = 'not json'
+    neverRespond = false
+    expect(await checkHealth()).toBeNull()
+  })
+
+  test('returns null when the health handler does not answer before timeout', async () => {
+    respond({ ok: true, pid: 4242 })
+    neverRespond = true
+    const startedAt = Date.now()
+    expect(await checkHealth(info(), 100)).toBeNull()
+    expect(Date.now() - startedAt).toBeLessThan(1000)
+    for (const release of pendingResponses.splice(0)) release()
+    neverRespond = false
+  })
+
+  test('returns null when runtime info is absent', async () => {
+    respond({ ok: true, pid: 4242 })
+    expect(await checkHealth(null)).toBeNull()
+  })
+})
 
 describe('ensureHome', () => {
   test('creates the home private', () => {
