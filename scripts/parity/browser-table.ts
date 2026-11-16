@@ -52,6 +52,7 @@ const EXPECTED_EXTRA_IDS = new Set([
   'browser-identity-set-activation-after-restart',
   'worktree-watch-page',
   'daemon-restart-profile',
+  'daemon-hard-kill-profile',
   'wait-selector',
   'wait-text',
   'wait-js',
@@ -283,7 +284,8 @@ function executableExtraValid(row: BrowserRow): boolean {
   if (
     row.id === 'browser-identity-set-activation-after-restart' ||
     row.id === 'worktree-watch-page' ||
-    row.id === 'daemon-restart-profile'
+    row.id === 'daemon-restart-profile' ||
+    row.id === 'daemon-hard-kill-profile'
   ) {
     return row.check === row.id && !row.deferred && row.disposition === 'covered'
   }
@@ -349,6 +351,7 @@ export function validateBrowserTable(rows: BrowserRow[], checkIds?: Iterable<str
     'browser-identity-set-activation-after-restart',
     'worktree-watch-page',
     'daemon-restart-profile',
+    'daemon-hard-kill-profile',
     'wait-selector',
     'wait-text',
     'wait-js',

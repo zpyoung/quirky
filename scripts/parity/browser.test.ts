@@ -8,6 +8,15 @@ import type { BrowserParityReport } from './browser-run'
 
 const root = join(import.meta.dir, '../..')
 
+
+function readPixelSample(value: unknown): { r: number; g: number; b: number; digest: string } {
+  if (!value || typeof value !== 'object' || !('r' in value) || typeof value.r !== 'number' ||
+    !('g' in value) || typeof value.g !== 'number' || !('b' in value) || typeof value.b !== 'number' ||
+    !('digest' in value) || typeof value.digest !== 'string') {
+    throw new Error('hard-kill evidence did not include a Watch pixel sample')
+  }
+  return { r: value.r, g: value.g, b: value.b, digest: value.digest }
+}
 async function childRun(command: string[], timeout: number): Promise<{ code: number; report: BrowserParityReport; stderr: string }> {
   const started = Date.now()
   const scope = createProcessScope()
@@ -145,6 +154,47 @@ test('one isolated real CLI run records every browser command and removes its pr
   const restart = report.rows.find(row => row.id === 'daemon-restart-profile')!
   expect(restart).toMatchObject({ status: 'passed', executed: true, evidence: { localStorageA: 'local-restart', cookieA: 'cookie-restart', localStorageB: null, cookieCountB: 0 } })
   expect(restart.evidence.previousPid).not.toBe(restart.evidence.daemonPid)
+
+  const hardKill = report.rows.find(row => row.id === 'daemon-hard-kill-profile')!
+  const flushWaitMs = hardKill.evidence.flushWaitMs
+  if (typeof flushWaitMs !== 'number') throw new Error('hard-kill evidence omitted its flush wait')
+  expect(flushWaitMs).toBeGreaterThanOrEqual(40_000)
+  const oldChromeTreeCount = hardKill.evidence.oldChromeTreeCount
+  if (typeof oldChromeTreeCount !== 'number') throw new Error('hard-kill evidence omitted its captured Chrome tree size')
+  expect(oldChromeTreeCount).toBeGreaterThanOrEqual(2)
+  const hardKillBefore = readPixelSample(hardKill.evidence.beforeSample)
+  const hardKillAfter = readPixelSample(hardKill.evidence.afterSample)
+  expect(hardKillBefore.r).toBeGreaterThan(180)
+  expect(hardKillBefore.g).toBeLessThan(80)
+  expect(hardKillBefore.b).toBeLessThan(80)
+  expect(hardKillAfter.g).toBeGreaterThan(180)
+  expect(hardKillAfter.r).toBeLessThan(80)
+  expect(hardKillAfter.b).toBeLessThan(80)
+  expect(hardKillAfter.digest).not.toBe(hardKillBefore.digest)
+  expect(hardKill).toMatchObject({
+    status: 'passed',
+    executed: true,
+    evidence: {
+      killSignal: 'SIGKILL',
+      firstBrowserCommandExitCode: 0,
+      firstBrowserCommandExitCodeB: 0,
+      oldChromeGone: true,
+      flushWaitMs: expect.any(Number),
+      orphanChromeAfterKill: [
+        { pid: expect.any(Number), started: expect.any(String), ppid: 1, profileId: expect.any(String) },
+        { pid: expect.any(Number), started: expect.any(String), ppid: 1, profileId: expect.any(String) }
+      ],
+      localStorageA: 'local-restart',
+      cookieA: 'cookie-restart',
+      localStorageB: null,
+      cookieCountB: 0,
+      worktreeBMarkerBefore: 'red',
+      worktreeBMarkerAfter: 'red',
+      identityAfterRestart: { mode: 'native', active: 'native', restartRequired: false },
+      beforeSample: { r: expect.any(Number), g: expect.any(Number), b: expect.any(Number), digest: expect.any(String) },
+      afterSample: { r: expect.any(Number), g: expect.any(Number), b: expect.any(Number), digest: expect.any(String) }
+    }
+  })
   const identity = report.rows.find(row => row.id === 'browser-identity-set-activation-after-restart')!
   expect(identity).toMatchObject({ status: 'passed', executed: true, evidence: { afterRestart: { mode: 'native', active: 'native', restartRequired: false } } })
   expect(identity.evidence.userAgentBeforeRestart).not.toContain('HeadlessChrome/')

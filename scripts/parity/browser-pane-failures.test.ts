@@ -22,6 +22,13 @@ type Outcome = {
     cookiesB?: readonly { name: string; value: string }[]
     identityAfterRestart?: { active?: string }
   }
+  hardKill?: {
+    killSignal: 'SIGTERM' | 'SIGKILL'
+    orphanChromeAfterKill: readonly { pid: number; started: string; ppid: number; profileId: string }[]
+    flushWaitMs: number
+    firstBrowserCommandExitCode: number
+    oldChromeGone: boolean
+  }
   shimLogs?: { empty: boolean; bytes: Record<string, number>; orcaLog: string; securityLog: string }
 }
 
@@ -43,6 +50,16 @@ function validOutcome(): Outcome {
       localStorageB: null,
       cookiesB: [],
       identityAfterRestart: { active: 'native' }
+    },
+    hardKill: {
+      killSignal: 'SIGKILL',
+      orphanChromeAfterKill: [
+        { pid: 301, started: 'old-a', ppid: 1, profileId: 'profile-a' },
+        { pid: 302, started: 'old-b', ppid: 1, profileId: 'profile-b' }
+      ],
+      flushWaitMs: 40_000,
+      firstBrowserCommandExitCode: 0,
+      oldChromeGone: true
     },
     shimLogs: { empty: true, bytes: { orca: 0, security: 0 }, orcaLog: '', securityLog: '' }
   }
@@ -340,6 +357,19 @@ for (const [condition, change] of [
   test(`restart validation rejects ${condition}`, () => {
     const outcome = validOutcome()
     outcome.restart = { ...outcome.restart, ...change }
+    expectFailure(outcome, 'restart-lost-profile')
+  })
+}
+
+for (const [condition, change] of [
+  ['a TERM receipt', (outcome: Outcome) => { outcome.hardKill!.killSignal = 'SIGTERM' }],
+  ['missing orphan roots', (outcome: Outcome) => { outcome.hardKill!.orphanChromeAfterKill = [] }],
+  ['a failed first browser command', (outcome: Outcome) => { outcome.hardKill!.firstBrowserCommandExitCode = 1 }],
+  ['a surviving old Chrome identity', (outcome: Outcome) => { outcome.hardKill!.oldChromeGone = false }]
+] as const) {
+  test(`hard-kill validation rejects ${condition}`, () => {
+    const outcome = validOutcome()
+    change(outcome)
     expectFailure(outcome, 'restart-lost-profile')
   })
 }
