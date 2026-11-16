@@ -89,7 +89,7 @@ function makeRig(fault?: Fault) {
     env: { QUIRKY_HOME: home, QUIRKY_TEST_SCOPE: 'test-scope' },
     spawn(command: string[], options: Record<string, unknown> = {}) {
       spawns.push({ command, options })
-      return command[0] === 'git' ? Bun.spawn(command, options as Bun.SpawnOptions.OptionsObject) : fakeChild
+      return fakeChild
     },
     track() {}, async cleanup() {}, killNow() {}
   } as unknown as ProcessScope
@@ -106,8 +106,9 @@ function makeRig(fault?: Fault) {
       expect(secrets).toContain(hostHome)
       return runtime
     },
-    async connectDaemon({ home: candidateHome }: { home: string }) {
+    async connectDaemon({ home: candidateHome, role }: { home: string; role: 'cli' }) {
       expect(candidateHome).toBe(hostHome)
+      expect(role).toBe('cli')
       expect(secrets).toContain(runtime.token)
       expect(secrets).toContain(runtime.hookToken)
       return hostClient

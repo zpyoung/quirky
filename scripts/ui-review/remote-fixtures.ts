@@ -14,9 +14,14 @@ import {
 import { runtimeAssetEnvironment, type RuntimeAssets } from './runtime-assets'
 
 type HostClient = FixtureRpcClient & { close(): void }
+type RemoteConnectOptions = { home: string; role: 'cli' }
 type RemoteFixtureDependencies = {
   waitForRuntime: typeof waitForRuntime
-  connectDaemon(options: Parameters<typeof connectDaemon>[0]): Promise<HostClient>
+  connectDaemon(options: RemoteConnectOptions): Promise<HostClient>
+}
+const defaultDependencies: RemoteFixtureDependencies = {
+  waitForRuntime,
+  connectDaemon: options => connectDaemon({ ...options, name: 'ui-review-host', autostart: false })
 }
 type BridgeReply = { code: number; stdout: string; stderr: string }
 
@@ -105,7 +110,7 @@ export async function createRemoteFixtures(
   client: FixtureRpcClient,
   env: Record<string, string>,
   options: FixtureOptions & { repoRoot: string; assets: RuntimeAssets; secrets: string[]; fixtures: RegisteredCaptureFixtures },
-  dependencies: RemoteFixtureDependencies = { waitForRuntime, connectDaemon }
+  dependencies: RemoteFixtureDependencies = defaultDependencies
 ): Promise<RemoteFixtures> {
   const timeoutMs = options.timeoutMs
   const secrets = options.secrets
@@ -148,7 +153,7 @@ export async function createRemoteFixtures(
     })
     const runtime = await dependencies.waitForRuntime(hostHome, daemon, timeoutMs, options.signal)
     secrets.push(runtime.token, runtime.hookToken)
-    const connecting = dependencies.connectDaemon({ home: hostHome, role: 'cli', name: 'ui-review-host', autostart: false })
+    const connecting = dependencies.connectDaemon({ home: hostHome, role: 'cli' })
     try {
       hostClient = await bounded(connecting, timeoutMs, options.signal, 'host daemon RPC connection')
     } catch (error) {
