@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { captureCells, discoverCaptureTargets, ensureHandoffTerminalContext, fixtureViewInput, hostingToolFor, openSurfaceTool, selectCaptureTargets, targetSlotSelector, waitForStateShown } from './capture'
+import { chromium, type Locator } from 'playwright'
+import { captureCells, captureTargetCell, discoverCaptureTargets, ensureHandoffTerminalContext, fillBlockedCells, fixtureViewInput, hostingToolFor, isolateCell, openSurfaceTool, selectCaptureTargets, targetSlotSelector, waitForOverlay, waitForStateShown, type CaptureRuntime } from './capture'
+import { CAPTURE_BROWSER_CANDIDATES, captureBrowserExecutable } from './browser'
 import { goldenFor } from './goldens'
-import { seedRows, type SceneRuntime } from './shell-scenes'
+import { newSceneState, seedRows, type SceneRuntime } from './shell-scenes'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { UiModel, UiSlotEntry, UiToolEntry } from '@quirky/protocol'
-import type { CaptureTarget } from './contracts'
+import type { CaptureEvidence, CaptureTarget, CaptureTheme } from './contracts'
 
 const slot = (id: string, plugin: string, title = id): UiSlotEntry => ({
   id, plugin, title, kind: id.slice(0, id.indexOf(':')) as UiSlotEntry['kind'],
@@ -159,6 +161,397 @@ function fakeRuntime(state: () => unknown) {
   return { runtime, calls }
 }
 
+type FakeCaptureRuntimeOptions = {
+  overlayOpen?: boolean
+  overlayOpenMs?: number
+  overlayFailure?: string
+  slotFailure?: string
+  slotFailureTarget?: string
+  readinessPending?: boolean
+  slotDetails?: { busy: boolean; text: string; error?: string; visible?: boolean; content?: boolean }
+  dialogs?: string[]
+  dialogsAfterReload?: string[][]
+  windows?: number
+  stripeVisible?: boolean
+  quickOpenVisible?: boolean
+  escapeClosesQuickOpen?: boolean
+  rpcFailures?: Record<string, string>
+}
+
+function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
+  const calls: Array<{ method: string; params?: Record<string, unknown> }> = []
+  const targetId = { value: '' }
+  const outputDir = mkdtempSync(join(tmpdir(), 'capture-runtime-test-'))
+  const theme: { value: CaptureTheme } = { value: 'dark' }
+  const themes = [
+    { id: 'dark', title: 'Dark', plugin: null, appearance: 'dark', colors: { bg: '#111111' } },
+    { id: 'light', title: 'Light', plugin: null, appearance: 'light', colors: { bg: '#eeeeee' } }
+  ]
+  let dialogs = [...(settings.dialogs ?? [])]
+  let quickOpenVisible = settings.quickOpenVisible ?? false
+  let reloadCount = 0
+  let terminalCount = 0
+
+  const locator = (selector = '') => {
+    const item = {
+      first: () => item,
+      locator: (child: string) => locator(`${selector} ${child}`),
+      async waitFor() {
+        if (settings.overlayFailure && selector.includes('switch-dialog')) throw new Error(settings.overlayFailure)
+        if (settings.slotFailure && selector.includes('data-plugin-slot') &&
+          (!settings.slotFailureTarget || selector.includes(settings.slotFailureTarget))) throw new Error(settings.slotFailure)
+        if (settings.stripeVisible === false && selector.includes('.tool-shell__stripe')) throw new Error('renderer stripe missing')
+        if (settings.overlayOpen === false && selector === '.never-visible') return await new Promise<void>(() => {})
+      },
+      async count() {
+        if (selector.includes('overlay:quirky.editor/quick-open')) return quickOpenVisible ? 1 : 0
+        if (selector.includes('.qe-quick-open')) return quickOpenVisible ? 1 : 0
+        if (selector.includes('.ui-dialog__title')) return dialogs.length
+        if (selector.includes('.ui-dialog-backdrop')) return dialogs.length
+        if (selector.includes('.tool-shell__stripe') || selector.includes('.shell-workspace')) return 1
+        if (selector.includes('data-plugin-slot')) return 1
+        return 0
+      },
+      async isVisible() {
+        if (selector.includes('overlay:quirky.editor/quick-open')) return quickOpenVisible
+        if (selector.includes('.qe-quick-open')) return quickOpenVisible
+        if (selector.includes('.ui-dialog-backdrop')) return dialogs.length > 0
+        return selector.includes('.tool-shell__stripe') || selector.includes('.shell-workspace')
+      },
+      async click() {
+        if (selector.includes('quick-open')) quickOpenVisible = false
+      },
+      async scrollIntoViewIfNeeded() {},
+      getByRole: (role: string, options?: { name?: string }) => locator(`${selector} [role="${role}"] ${options?.name ?? ''}`),
+      getByText: (text: string | RegExp) => locator(`${selector} ${String(text)}`),
+      filter: () => item,
+      async evaluate() {
+        const details = settings.slotDetails ?? { busy: false, text: 'fixture content', error: '', visible: true, content: true }
+        return { ...details, text: details.text, error: details.error ?? '', visible: details.visible ?? true, content: details.content ?? true }
+      },
+      async allTextContents() {
+        return selector.includes('.ui-dialog__title') ? [...dialogs] : []
+      }
+    }
+    return item
+  }
+
+  const client = {
+    async callAny(method: string, params: Record<string, unknown> = {}) {
+      calls.push({ method, params })
+      const failure = settings.rpcFailures?.[method]
+      if (failure) throw new Error(failure)
+      if (method === 'ui.state') return {
+        windows: Array.from({ length: settings.windows ?? 1 }, (_, index) => ({ id: `window-${index}` })),
+        slots: targetId.value ? [{ id: targetId.value, shown: true }] : []
+      }
+      if (method === 'ui.view.open' || method === 'ui.panel.open' || method === 'ui.tool.open') {
+        targetId.value = String(params.id ?? '')
+      }
+      if (method === 'theme.list') return { themes, chosen: theme.value, active: theme.value }
+      if (method === 'theme.set') {
+        theme.value = String(params.id) as CaptureTheme
+        return { chosen: theme.value, active: theme.value }
+      }
+      if (method === 'quirky.terminal/newTab') {
+        terminalCount += 1
+        return { session: `cell-session-${terminalCount}`, tab: `cell-tab-${terminalCount}`, pane: `cell-pane-${terminalCount}` }
+      }
+      if (method === 'quirky.accounts/list') return {
+        accounts: [{ id: `account-${String(params.provider)}`, provider: params.provider }]
+      }
+      return {}
+    },
+    close() {}
+  }
+  const page = {
+    locator,
+    getByRole: (role: string, options?: { name?: string }) => locator(`[role="${role}"] ${options?.name ?? ''}`),
+    getByLabel: (label: string) => locator(`[aria-label="${label}"]`),
+    keyboard: {
+      async press(key: string) {
+        if (key === 'Escape' && settings.escapeClosesQuickOpen !== false) quickOpenVisible = false
+      }
+    },
+    async waitForFunction() {
+      if (settings.readinessPending) return await new Promise<boolean>(() => {})
+      return true
+    },
+    async evaluate() { return theme.value === 'light' ? '#eeeeee' : '#111111' },
+    async screenshot() { return new Uint8Array([1, 2, 3, 4]) },
+    async reload() {
+      reloadCount += 1
+      if (settings.dialogsAfterReload) dialogs = [...(settings.dialogsAfterReload[reloadCount - 1] ?? dialogs)]
+    },
+    isClosed: () => false,
+    context: () => ({ browser: () => ({ isConnected: () => true }) })
+  }
+  const image = { path: '/fixture/golden.png', sha256: 'a'.repeat(64) }
+  const runtime = {
+    options: { timeoutMs: 40, overlayOpenMs: settings.overlayOpenMs ?? 30 },
+    outputDir,
+    client,
+    page,
+    model: toolModel(),
+    themes: Object.fromEntries(themes.map((entry) => [entry.appearance, entry])),
+    references: { shell: { dark: image, light: image }, plugin: { dark: image, light: image } },
+    fixtures: {
+      home: '/fixture/home',
+      repo: { id: 'repo-1' },
+      primaryWorktree: { id: 'worktree-1', path: '/fixture/project', repoId: 'repo-1', name: 'main' },
+      worktrees: [{ id: 'ready-worktree', path: '/fixture/ready', repoId: 'repo-1', name: 'ui-review-ready', isMain: false, status: 'working' }]
+    },
+    editorBuffer: null,
+    terminalFixture: { sessionId: 'shared-session', tabId: 'shared-tab', paneId: 'shared-pane' },
+    cellTerminalFixture: null,
+    structuredSessionId: null,
+    pendingUiCommand: null,
+    scene: newSceneState(),
+    manifest: { failures: [], captures: [] },
+    secrets: [],
+    pageErrors: [],
+    fixtureInputErrors: new Map()
+  } as unknown as CaptureRuntime
+  return {
+    runtime,
+    calls,
+    page,
+    reloadCount: () => reloadCount,
+    cleanup: () => rmSync(outputDir, { recursive: true, force: true })
+  }
+}
+
+test('discovers capture browsers in Playwright-first order with an actionable missing-browser error', () => {
+  const candidates = [chromium.executablePath(), ...CAPTURE_BROWSER_CANDIDATES]
+  for (const candidate of candidates) {
+    const checked: string[] = []
+    expect(captureBrowserExecutable((path) => {
+      checked.push(path)
+      return path === candidate
+    })).toBe(candidate)
+    expect(checked.at(-1)).toBe(candidate)
+  }
+  expect(() => captureBrowserExecutable(() => false)).toThrow([chromium.executablePath(), ...CAPTURE_BROWSER_CANDIDATES].join(', '))
+})
+
+test('fixture view inputs carry the selected worktree, transcript, loop, remote, and cell terminal identities', () => {
+  const fixtures = {
+    primaryWorktree: { id: 'worktree-1' },
+    repo: { id: 'repo-1' },
+    worktrees: [{ id: 'ready-worktree', name: 'ui-review-ready' }]
+  } as Parameters<typeof fixtureViewInput>[0]
+  const extra = {
+    transcript: { sessionId: 'transcript-session', transcriptPath: '/fixture/transcript.jsonl' },
+    loop: { loopId: 'loop-1' },
+    remote: { mirrorId: 'remote_mirror', dispatchId: 'ctx_fixture', stop: async () => [] },
+    cellTerminal: { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' }
+  }
+  const input = (id: string, plugin: string, extraInput = extra) => fixtureViewInput(
+    fixtures,
+    target(id, plugin, 'view'),
+    null,
+    null,
+    null,
+    extraInput
+  )
+
+  expect(input('view:quirky.reviews/create', 'quirky.reviews')).toMatchObject({ worktree: 'ready-worktree' })
+  expect(input('view:quirky.session-info/transcript', 'quirky.session-info')).toMatchObject({ session: 'transcript-session' })
+  expect(input('view:quirky.loops/loop', 'quirky.loops')).toMatchObject({ loopId: 'loop-1' })
+  expect(input('view:quirky.orchestration/remote-worker-output', 'quirky.orchestration')).toEqual({ dispatchId: 'ctx_fixture' })
+  expect(input('view:quirky.worktree/remote', 'quirky.worktree')).toMatchObject({ workspace: 'remote_mirror' })
+  expect(input('view:quirky.accounts/session-accessory', 'quirky.accounts')).toMatchObject({
+    session: 'cell-session', sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane'
+  })
+})
+
+describe('bounded overlay opening', () => {
+  test('resolves as soon as the overlay is visible without awaiting its decision promise', async () => {
+    const fake = buildFakeCaptureRuntime()
+    let resolveTrigger!: () => void
+    const trigger = new Promise<void>((resolve) => { resolveTrigger = resolve })
+    let triggerSettled = false
+    void trigger.then(() => { triggerSettled = true })
+    try {
+      await waitForOverlay(fake.runtime, fake.page.locator('.visible-overlay') as unknown as Locator, 'Editor close', trigger)
+      expect(triggerSettled).toBe(false)
+      resolveTrigger()
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('rejects promptly when the overlay trigger is refused', async () => {
+    const fake = buildFakeCaptureRuntime({ overlayOpen: false })
+    try {
+      const started = Date.now()
+      await expect(waitForOverlay(fake.runtime, fake.page.locator('.never-visible') as unknown as Locator, 'command:close', Promise.reject(new Error('permission denied'))))
+        .rejects.toThrow('trigger command:close was refused: permission denied')
+      expect(Date.now() - started).toBeLessThan(1_000)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('reports visible dialogs when the overlay clock expires', async () => {
+    const fake = buildFakeCaptureRuntime({ overlayOpen: false, overlayOpenMs: 20, dialogs: ['Unsaved Changes'] })
+    try {
+      await expect(waitForOverlay(fake.runtime, fake.page.locator('.never-visible') as unknown as Locator, 'Editor close'))
+        .rejects.toThrow('Editor close did not draw within 20ms; visible dialogs: Unsaved Changes')
+    } finally {
+      fake.cleanup()
+    }
+  })
+})
+
+describe('cell isolation', () => {
+  test('cleans the surface and cell terminal, then reloads a failed cell', async () => {
+    const fake = buildFakeCaptureRuntime()
+    fake.runtime.cellTerminalFixture = { sessionId: 'cell-session', tabId: 'cell-tab', paneId: 'cell-pane' }
+    try {
+      await expect(isolateCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark', true))
+        .resolves.toEqual({ ready: true })
+      expect(fake.calls.some((call) => call.method === 'quirky.terminal/closeTab' && call.params?.tab === 'cell-tab')).toBe(true)
+      expect(fake.reloadCount()).toBe(1)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('charges cleanup errors to the cell without changing its evidence', async () => {
+    const fake = buildFakeCaptureRuntime({ rpcFailures: { 'ui.palette.set': 'boom' } })
+    const evidence = { targetId: 'view:acme.fixture/page', theme: 'dark', image: null, reference: { path: '/golden', sha256: 'a'.repeat(64) }, status: 'failed', error: 'original' } as CaptureEvidence
+    fake.runtime.manifest.captures.push(evidence)
+    try {
+      await expect(isolateCell(fake.runtime, target(evidence.targetId, 'acme.fixture', 'view'), 'dark', false))
+        .resolves.toEqual({ ready: true })
+      expect(fake.runtime.manifest.failures).toContain('view:acme.fixture/page (dark) cleanup: boom')
+      expect(fake.runtime.manifest.captures[0]).toBe(evidence)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('reports a passed cell that leaves a dialog open and reloads it away', async () => {
+    const fake = buildFakeCaptureRuntime({ dialogs: ['Switch account'], dialogsAfterReload: [[]] })
+    try {
+      await expect(isolateCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark', false))
+        .resolves.toEqual({ ready: true })
+      expect(fake.runtime.manifest.failures).toContain('view:acme.fixture/page (dark) left a dialog open: Switch account')
+      expect(fake.reloadCount()).toBe(1)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('blocks later cells when a dialog survives two renderer reloads', async () => {
+    const fake = buildFakeCaptureRuntime({
+      dialogs: ['Unsaved Changes'],
+      dialogsAfterReload: [['Unsaved Changes'], ['Unsaved Changes']]
+    })
+    try {
+      const result = await isolateCell(fake.runtime, target('overlay:acme.editor/close', 'acme.editor', 'overlay'), 'dark', true)
+      expect(result).toEqual({ ready: false, blocker: 'overlay:acme.editor/close (dark): Unsaved Changes' })
+      expect(fake.reloadCount()).toBe(2)
+      expect(fake.runtime.manifest.failures).toContain(
+        'overlay:acme.editor/close (dark) left a dialog that survived two renderer reloads: Unsaved Changes'
+      )
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('closes the Editor quick-open dialog during cell cleanup', async () => {
+    const fake = buildFakeCaptureRuntime({ quickOpenVisible: true, escapeClosesQuickOpen: false })
+    try {
+      await isolateCell(fake.runtime, target('overlay:quirky.editor/quick-open', 'quirky.editor', 'overlay'), 'dark', false)
+      expect(await fake.page.locator('.qe-quick-open').count()).toBe(0)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('fills every later capture cell with the renderer-blocked reason', () => {
+    const cells = [
+      { targetId: 'host:shell', theme: 'dark' as const },
+      { targetId: 'host:scoped', theme: 'dark' as const },
+      { targetId: 'host:shell', theme: 'light' as const },
+      { targetId: 'host:scoped', theme: 'light' as const }
+    ]
+    const image = { path: '/fixture/golden.png', sha256: 'a'.repeat(64) }
+    const cellKey = (targetId: string, theme: CaptureTheme) => `${targetId}\u0000${theme}`
+    const references = {
+      shell: { dark: image, light: image },
+      scoped: { dark: image, light: image },
+      popups: { dark: image, light: image }
+    } as never
+    const results = new Map<string, CaptureEvidence>([[cellKey('host:shell', 'dark'), {
+      targetId: 'host:shell', theme: 'dark', image, reference: image, status: 'captured'
+    }]])
+
+    fillBlockedCells(cells, cells[0], references, results, 'host:shell (dark): Unsaved Changes')
+
+    expect(results.get(cellKey('host:scoped', 'dark'))).toMatchObject({
+      status: 'failed', error: 'not attempted: renderer blocked by host:shell (dark): Unsaved Changes'
+    })
+    expect(results.get(cellKey('host:shell', 'light'))?.status).toBe('failed')
+    expect(results.get(cellKey('host:scoped', 'light'))?.status).toBe('failed')
+  })
+})
+
+test('Accounts prepares and closes each cell with its own terminal session', async () => {
+  const fake = buildFakeCaptureRuntime({
+    slotFailure: 'slot did not mount',
+    slotFailureTarget: 'view:quirky.accounts/session-accessory',
+    overlayFailure: 'switch dialog did not draw'
+  })
+  fake.runtime.model = {
+    ...fake.runtime.model,
+    views: [{ id: 'view:quirky.session/worktree', plugin: 'quirky.session', title: 'Worktree sessions' }]
+  } as never
+  try {
+    await captureTargetCell(fake.runtime, target('view:quirky.accounts/session-accessory', 'quirky.accounts', 'view'), 'dark')
+    await captureTargetCell(fake.runtime, target('overlay:quirky.accounts/switch-dialog', 'quirky.accounts', 'overlay'), 'dark')
+
+    const sessions = fake.calls
+      .filter((call) => call.method === 'quirky.accounts/prepare')
+      .map((call) => call.params?.sessionId)
+    expect(sessions).toHaveLength(2)
+    expect(new Set(sessions).size).toBe(2)
+    expect(sessions).not.toContain(fake.runtime.terminalFixture?.sessionId)
+    const localOpens = fake.calls.filter((call) =>
+      call.method === 'ui.view.open' && call.params?.id === 'view:quirky.session/worktree'
+    )
+    const preparations = fake.calls.filter((call) => call.method === 'quirky.accounts/prepare')
+    expect(localOpens).toHaveLength(2)
+    for (let index = 0; index < sessions.length; index += 1) {
+      expect(localOpens[index].params).toMatchObject({
+        input: { worktree: 'worktree-1', session: sessions[index], sessionId: sessions[index] }
+      })
+      expect(fake.calls.indexOf(localOpens[index])).toBeLessThan(fake.calls.indexOf(preparations[index]))
+    }
+    expect(fake.calls.filter((call) => call.method === 'quirky.terminal/closeTab')).toHaveLength(2)
+  } finally {
+    fake.cleanup()
+  }
+})
+
+test('reports the slot state when content readiness times out', async () => {
+  const text = 'Loading fixture content '.repeat(8)
+  const fake = buildFakeCaptureRuntime({
+    readinessPending: true,
+    slotDetails: { busy: true, text }
+  })
+  try {
+    const result = await captureTargetCell(fake.runtime, target('view:acme.fixture/page', 'acme.fixture', 'view'), 'dark')
+    expect(result.capture.error).toBe(
+      `slot view:acme.fixture/page content exceeded 40ms (busy: true, text: "${text.slice(0, 120)}")`
+    )
+  } finally {
+    fake.cleanup()
+  }
+})
+
 describe('opening the tool that hosts a target', () => {
   test('a sidebar section is hosted by the tool that lists it as its body or an alias', () => {
     const m = toolModel()
@@ -253,7 +646,8 @@ describe('review fixtures', () => {
   test.each(['ready', 'unsupported'])('Handoff seeds scrollback with a POSIX shell whose integration is %s', async (shellState) => {
     let output: string[] = []
     const runtime = {
-      terminalFixture: { sessionId: 'shell-1', tabId: 'tab-1', paneId: 'pane-1' },
+      terminalFixture: { sessionId: 'shared-shell', tabId: 'shared-tab', paneId: 'shared-pane' },
+      cellTerminalFixture: { sessionId: 'shell-1', tabId: 'tab-1', paneId: 'pane-1' },
       options: { timeoutMs: 1_000 },
       client: {
         async callAny(method: string, params: Record<string, unknown> = {}) {
@@ -775,8 +1169,12 @@ mock.module(modulePath('scripts/ui-review/fixtures.ts'), () => ({
     }
   },
   async seedWorktreeStatuses() { current.events.push('fixtures:seed') },
+  async closeCaptureTerminalFixture() {},
   async createCaptureTerminalFixture() { return null },
-  async openFixtureEditorBuffer() { return null }
+  async createLoopFixture() { return { loopId: 'loop-fixture' } },
+  async createTranscriptFixture() { return { sessionId: 'transcript-fixture', transcriptPath: '/fixture/transcript.jsonl' } },
+  async openFixtureEditorBuffer() { return null },
+  async prepareProviderExecutables() {}
 }))
 
 mock.module(modulePath('scripts/ui-review/shell-scenes.ts'), () => ({
