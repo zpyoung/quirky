@@ -62,6 +62,10 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
   const snapshot = loaded?.snapshot
   const [error, setError] = useState<string | null>(null)
   const request = useRef(0)
+  const currentRead = useRef<number | null>(null)
+  const cancelAutomaticRef = useRef<() => void>(() => {})
+  const afterReadRef = useRef<() => void>(() => {})
+  const connectionStatus = useRef('connected')
   const [layoutWorktree, setLayoutWorktree] = useState<string | null>(() => kind === 'checks' ? worktreeOf(context.getLayout()) : null)
   const layoutWorktreeRef = useRef(layoutWorktree)
   layoutWorktreeRef.current = layoutWorktree
@@ -76,30 +80,93 @@ function Surface({ context, kind, report }: { context: UiPluginContext; kind: Su
     setLayoutWorktree(worktreeOf(context.getLayout()))
     return context.onLayout((layout) => setLayoutWorktree(worktreeOf(layout)))
   }, [context, kind])
-  const refresh = useCallback(async () => {
+  const readState = useCallback(async (worktree: string | null) => {
     const epoch = ++request.current
+    currentRead.current = epoch
+    const tick = nextDraftTick()
+    if (kind === 'checks') recordChecksStateStart(context, worktree, Date.now())
     try {
-      const worktree = layoutWorktreeRef.current
-      const tick = nextDraftTick()
       const next = stateValue(await context.call('quirky.reviews/state', kind === 'checks' && worktree !== null ? { worktree } : undefined))
       if (epoch !== request.current) return
       setLoaded((old) => old && next.revision < old.state.revision ? old : { state: next, snapshot: tick })
       setError(null)
-    } catch (failure) { if (epoch === request.current) setError(failure instanceof Error ? failure.message : 'Review state is unavailable.') }
+    } catch (failure) {
+      if (epoch === request.current) setError(failure instanceof Error ? failure.message : 'Review state is unavailable.')
+    } finally {
+      if (epoch === request.current && currentRead.current === epoch) {
+        currentRead.current = null
+        afterReadRef.current()
+      }
+    }
   }, [context, kind])
+  const refresh = useCallback(() => {
+    cancelAutomaticRef.current()
+    return readState(layoutWorktreeRef.current)
+  }, [readState])
   const refreshRef = useRef(refresh)
   refreshRef.current = refresh
   useEffect(() => {
-    void refresh()
+    let disposed = false
+    let dirty = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const targetWorktree = kind === 'checks' ? layoutWorktree : null
+    const cancelAutomatic = () => {
+      dirty = false
+      if (timer !== null) {
+        clearTimeout(timer)
+        timer = null
+      }
+    }
+    const runAutomatic = () => {
+      if (disposed || kind !== 'checks' || !dirty || timer !== null || currentRead.current !== null) return
+      const lastStart = checksStateStart(context, targetWorktree)
+      const delay = lastStart === undefined ? 0 : Math.max(0, lastStart + CHECKS_STATE_INTERVAL_MS - Date.now())
+      if (delay > 0) {
+        timer = setTimeout(() => {
+          timer = null
+          runAutomatic()
+        }, delay)
+        return
+      }
+      dirty = false
+      void readState(targetWorktree)
+    }
+    const invalidateAutomatically = () => {
+      if (kind !== 'checks') {
+        void readState(layoutWorktreeRef.current)
+        return
+      }
+      dirty = true
+      runAutomatic()
+    }
+    cancelAutomaticRef.current = cancelAutomatic
+    afterReadRef.current = runAutomatic
+    invalidateAutomatically()
     const options = kind === 'checks'
       ? (layoutWorktree === null ? undefined : { worktreeId: layoutWorktree })
       : { worktreeId: null }
-    const offEvent = context.subscribe((event) => { if (event.type === 'quirky.reviews/changed') void refresh() }, options)
+    const offEvent = context.subscribe((event) => {
+      if (event.type === 'quirky.reviews/changed') invalidateAutomatically()
+    }, options)
     const offConnection = context.onConnection((status) => {
-      if (status === 'connected') { request.current++; setLoaded(null); void refresh() }
+      const reconnected = connectionStatus.current === 'reconnecting' && status === 'connected'
+      connectionStatus.current = status
+      if (!reconnected) return
+      cancelAutomatic()
+      setLoaded(null)
+      void readState(layoutWorktreeRef.current)
     })
-    return () => { request.current++; offEvent(); offConnection() }
-  }, [context, refresh, kind, layoutWorktree])
+    return () => {
+      disposed = true
+      cancelAutomatic()
+      request.current++
+      currentRead.current = null
+      if (cancelAutomaticRef.current === cancelAutomatic) cancelAutomaticRef.current = () => {}
+      if (afterReadRef.current === runAutomatic) afterReadRef.current = () => {}
+      offEvent()
+      offConnection()
+    }
+  }, [context, kind, layoutWorktree, readState])
   useEffect(() => subscribeReviewsUiControls(context, () => setControlRevision((revision) => revision + 1)), [context])
   useEffect(() => {
     const registration = registerReviewsUiControl(context, {
@@ -200,6 +267,30 @@ function stateValue(raw: unknown): ReviewsState {
 }
 
 const CHECKS_STATUS_BAR = 'status-bar:quirky.reviews/checks'
+
+const CHECKS_STATE_INTERVAL_MS = 3_000
+const checksStateStarts = new WeakMap<UiPluginContext, Map<string | null, number>>()
+
+function checksStateStart(context: UiPluginContext, worktree: string | null, now = Date.now()): number | undefined {
+  const starts = checksStateStarts.get(context)
+  if (!starts) return undefined
+  for (const [target, startedAt] of starts) {
+    if (now - startedAt >= CHECKS_STATE_INTERVAL_MS) starts.delete(target)
+  }
+  return starts.get(worktree)
+}
+
+function recordChecksStateStart(context: UiPluginContext, worktree: string | null, startedAt: number): void {
+  let starts = checksStateStarts.get(context)
+  if (!starts) {
+    starts = new Map()
+    checksStateStarts.set(context, starts)
+  }
+  for (const [target, previousStart] of starts) {
+    if (startedAt - previousStart >= CHECKS_STATE_INTERVAL_MS) starts.delete(target)
+  }
+  starts.set(worktree, startedAt)
+}
 
 function worktreeOf(layout: { worktree?: unknown }): string | null {
   return typeof layout.worktree === 'string' && layout.worktree.trim() !== '' ? layout.worktree : null

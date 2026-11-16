@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, test } from 'bun:test'
+import { afterAll, afterEach, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act } from 'react'
 import type { QuirkyEvent, UiLayout, UiPluginContext } from '@quirky/protocol'
@@ -11,10 +11,12 @@ GlobalRegistrator.register()
 const WORKTREE_A = '/work/tree-a'
 const WORKTREE_B = '/work/tree-b'
 const roots: Array<() => void> = []
+const timers = jest as typeof jest & { advanceTimersByTime(milliseconds: number): void }
 
 afterEach(async () => {
   await act(async () => { for (const unmount of roots.splice(0)) unmount() })
   document.body.innerHTML = ''
+  jest.useRealTimers()
 })
 
 afterAll(() => GlobalRegistrator.unregister())
@@ -151,6 +153,11 @@ async function settle() {
   for (let i = 0; i < 6; i += 1) await act(async () => {})
 }
 
+async function advanceClock(milliseconds: number) {
+  await act(async () => { timers.advanceTimersByTime(milliseconds) })
+  await settle()
+}
+
 function stateCalls(fake: ReturnType<typeof fakeContext>): Call[] {
   return fake.calls.filter(({ method }) => method === 'quirky.reviews/state')
 }
@@ -167,7 +174,8 @@ function changed(worktreeId?: string): QuirkyEvent {
   } as unknown as QuirkyEvent
 }
 
-test('Checks scopes refreshes to its selected worktree and keeps connection and cleanup behavior', async () => {
+test('Checks scopes automatic reads and treats only a reconnect as a connection recovery', async () => {
+  jest.useFakeTimers()
   const fake = fakeContext(WORKTREE_A)
   const surface = await mountSurface(fake, CHECKS_PANEL)
 
@@ -180,25 +188,39 @@ test('Checks scopes refreshes to its selected worktree and keeps connection and 
 
   await act(async () => fake.emit(changed(WORKTREE_A)))
   await settle()
-  expect(stateCalls(fake).map(({ params }) => params)).toEqual([{ worktree: WORKTREE_A }, { worktree: WORKTREE_A }])
+  expect(stateCalls(fake)).toHaveLength(1)
 
   await act(async () => fake.emit(changed()))
   await settle()
-  expect(stateCalls(fake)).toHaveLength(3)
-
   await act(async () => fake.connect('connected'))
   await settle()
-  expect(stateCalls(fake)).toHaveLength(4)
+  expect(stateCalls(fake)).toHaveLength(1)
+
+  await advanceClock(3_000)
+  expect(stateCalls(fake).map(({ params }) => params)).toEqual([
+    { worktree: WORKTREE_A }, { worktree: WORKTREE_A }
+  ])
+
+  await act(async () => {
+    fake.connect('reconnecting')
+    fake.connect('connected')
+  })
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(3)
+  await act(async () => fake.connect('connected'))
+  await settle()
+  expect(stateCalls(fake)).toHaveLength(3)
 
   await surface.unmount()
   expect(fake.subscriptions.every(({ active }) => !active)).toBe(true)
   expect(fake.activeConnectionCount()).toBe(0)
   await act(async () => fake.connect('connected'))
   await settle()
-  expect(stateCalls(fake)).toHaveLength(4)
+  expect(stateCalls(fake)).toHaveLength(3)
 })
 
-test('Checks replaces its subscription and state selector when layout worktree changes', async () => {
+test('Checks replaces its scoped subscription and starts cold target reads immediately', async () => {
+  jest.useFakeTimers()
   const fake = fakeContext(WORKTREE_A)
   const surface = await mountSurface(fake, CHECKS_PANEL)
   const previous = scopedSubscriptions(fake)[0]
@@ -219,6 +241,10 @@ test('Checks replaces its subscription and state selector when layout worktree c
 
   await act(async () => fake.emit(changed(WORKTREE_B)))
   await settle()
+  expect(stateCalls(fake)).toHaveLength(2)
+  await advanceClock(2_999)
+  expect(stateCalls(fake)).toHaveLength(2)
+  await advanceClock(1)
   expect(stateCalls(fake).map(({ params }) => params)).toEqual([
     { worktree: WORKTREE_A }, { worktree: WORKTREE_B }, { worktree: WORKTREE_B }
   ])
@@ -226,7 +252,8 @@ test('Checks replaces its subscription and state selector when layout worktree c
   expect(fake.subscriptions.every(({ active }) => !active)).toBe(true)
 })
 
-test('Checks without a selection subscribes unscoped and refreshes the latest entry', async () => {
+test('Checks without a selection queues unscoped invalidations against its target clock', async () => {
+  jest.useFakeTimers()
   const fake = fakeContext(null)
   const surface = await mountSurface(fake, CHECKS_PANEL)
 
@@ -235,9 +262,12 @@ test('Checks without a selection subscribes unscoped and refreshes the latest en
 
   await act(async () => fake.emit(changed(WORKTREE_A)))
   await settle()
+  expect(stateCalls(fake)).toHaveLength(1)
+  await advanceClock(3_000)
   expect(stateCalls(fake).map(({ params }) => params)).toEqual([undefined, undefined])
   await surface.unmount()
 })
+
 
 for (const [name, view] of [
   ['review', REVIEW_VIEW],
@@ -283,6 +313,7 @@ function commentState(draft = '') {
 
 for (const eventBeforeReply of [false, true]) {
   test(eventBeforeReply ? 'S1: a state reply requested before a draft settles cannot erase typing' : 'S2: a settled draft requests fresh state without a changed event', async () => {
+    jest.useFakeTimers()
     const write = Promise.withResolvers<unknown>()
     const states: { promise: Promise<ReviewsState>; resolve(value: ReviewsState): void }[] = []
     let initial = true
@@ -307,7 +338,12 @@ for (const eventBeforeReply of [false, true]) {
       props.onChange({ currentTarget: composer, target: composer })
     })
     expect(fake.calls.filter(({ method }) => method === 'quirky.reviews/detailSetCommentDraft')).toHaveLength(1)
-    if (eventBeforeReply) await act(async () => fake.emit(changed(WORKTREE_A)))
+    if (eventBeforeReply) {
+      await advanceClock(3_000)
+      await act(async () => fake.emit(changed(WORKTREE_A)))
+      await settle()
+      expect(states).toHaveLength(1)
+    }
     const requestsBeforeReply = stateCalls(fake).length
     await act(async () => write.resolve({ applied: true }))
     await settle()
@@ -322,6 +358,7 @@ for (const eventBeforeReply of [false, true]) {
 }
 
 test('S1: snapshot stamps fence a queued state render after a draft reply', async () => {
+  jest.useFakeTimers()
   const write = Promise.withResolvers<unknown>()
   const states: { promise: Promise<ReviewsState>; resolve(value: ReviewsState): void }[] = []
   let initial = true
@@ -344,7 +381,10 @@ test('S1: snapshot stamps fence a queued state render after a draft reply', asyn
     const props = (composer as unknown as Record<string, { onChange(event: unknown): void }>)[key]!
     props.onChange({ currentTarget: composer, target: composer })
   })
+  await advanceClock(3_000)
   await act(async () => fake.emit(changed(WORKTREE_A)))
+  await settle()
+  expect(states).toHaveLength(1)
   await act(async () => {
     states[0]!.resolve(commentState('a'))
     for (let step = 0; step < 8; step++) await Promise.resolve()
