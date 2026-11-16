@@ -8,6 +8,7 @@ import { CdpTimeoutError, type CdpEvent } from '../src/runtime/cdp'
 import { BrowserRuntime, type PageCdp, type PaneWatchCallbacks, type RuntimePageState } from '../src/runtime/driver'
 import { BrowserExtraActions } from '../src/runtime/extras-actions'
 import { InterceptLedger } from '../src/runtime/intercept'
+import { nativeRequest } from '../src/runtime/native'
 
 type Command = { method: string; params: Record<string, unknown>; sessionId?: string; timeoutMs?: number }
 
@@ -15,12 +16,16 @@ function deferred<T = unknown>() {
   return Promise.withResolvers<T>()
 }
 
-type HelperServer = { close(): Promise<void> }
+type HelperServer = { barrier(): Promise<void>; close(): Promise<void> }
 async function helperServer(
   socketPath: string,
   onAction: (action: { id: string; action: string; [key: string]: unknown }) => void = () => {}
 ) {
+  const pendingRequests = new Set<Promise<void>>()
   const server = createServer((socket) => {
+    const received = deferred<void>()
+    const precedingRequests = [...pendingRequests]
+    pendingRequests.add(received.promise)
     let frame = ''
     socket.setEncoding('utf8')
     socket.on('data', (chunk) => {
@@ -28,11 +33,20 @@ async function helperServer(
       const boundary = frame.indexOf('\n')
       if (boundary < 0) return
       const request = JSON.parse(frame.slice(0, boundary)) as { id: string; action: string; [key: string]: unknown }
+      const respond = (data: Record<string, unknown>) => {
+        socket.end(`${JSON.stringify({ id: request.id, success: true, data })}\n`)
+        pendingRequests.delete(received.promise)
+        received.resolve()
+      }
+      if (request.action === 'test_barrier') {
+        void Promise.all(precedingRequests).then(() => respond({}))
+        return
+      }
       onAction(request)
       const data = request.action === 'tab_switch'
         ? { tabId: request.tabId }
         : request.action === 'tab_new' ? { tabId: 'restored-tab' } : {}
-      socket.end(`${JSON.stringify({ id: request.id, success: true, data })}\n`)
+      respond(data)
     })
   })
   const ready = deferred<void>()
@@ -40,6 +54,12 @@ async function helperServer(
   server.listen(socketPath, ready.resolve)
   await ready.promise
   return {
+    async barrier() {
+      const turn = deferred<void>()
+      setImmediate(turn.resolve)
+      await turn.promise
+      await nativeRequest(socketPath, 'test_barrier', {}, 5_000)
+    },
     async close() {
       const closed = deferred<void>()
       server.close((error) => error ? closed.reject(error) : closed.resolve())
@@ -411,6 +431,7 @@ test('concurrent close and rebind share one abort barrier before helper tab_clos
       sessionId: 'owned-session',
       timeoutMs: 5_000
     }])
+    await helper.barrier()
     expect(helperActions).toEqual([])
     expect(f.commands.filter(({ method }) => method === 'Target.closeTarget')).toEqual([])
 
