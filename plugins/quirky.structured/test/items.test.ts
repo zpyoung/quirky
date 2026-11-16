@@ -136,6 +136,14 @@ describe('closing running calls', () => {
 })
 
 describe('codexEntries', () => {
+  test('an unrecognized item type is a status item and is never tracked as a call', () => {
+    const calls = new CallTracker()
+    expect(codexEntries({ id: 'x', type: 'futureEvent' }, 'started', calls)).toEqual([])
+    const entries = codexEntries({ id: 'x', type: 'futureEvent' }, 'completed', calls)
+    expect(entries.map((entry) => entry.item)).toEqual([{ kind: 'status', text: 'Codex futureEvent' }])
+    expect(closingEntries(calls, 'stopped')).toEqual([])
+  })
+
   test('a command pairs its start and completion by id', () => {
     const calls = new CallTracker()
     const started = { id: 'c1', type: 'commandExecution', command: 'ls', status: 'inProgress' }

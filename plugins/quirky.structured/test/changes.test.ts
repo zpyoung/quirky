@@ -95,6 +95,34 @@ describe('turn changes', () => {
     expect(await items(chat, session.id, 'changes')).toEqual([])
   })
 
+  test('a follow-up waits for the previous turn\'s closing snapshot', async () => {
+    chat = await bootChat({ git: true })
+    const gate = Promise.withResolvers<void>()
+    const trees = ['s', 'e', 's2']
+    chat.git.snapshotTree = async () => {
+      const tree = trees.shift()
+      if (tree === 'e') await gate.promise
+      return { tree }
+    }
+    chat.git.treeChanges = () => ({ changes: [{ path: 'a' }] })
+    const session = await chat.create()
+    await waitFor(() => chat!.git.calls.length === 1)
+    chat.runner.finish(session.id)
+    await waitFor(() => chat!.git.calls.length === 2)
+    const followUp = chat.call('quirky.structured/send', { session: session.id, text: 'again' })
+    await Bun.sleep(100)
+    expect(chat.runner.sent).toEqual([])
+    gate.resolve()
+    await followUp
+    expect(chat.runner.sent).toHaveLength(1)
+    await waitForAsync(async () => (await items(chat!, session.id, 'changes')).length === 1)
+    expect(await items(chat, session.id, 'changes')).toEqual([
+      expect.objectContaining({ fromTree: 's', toTree: 'e' })
+    ])
+    const kinds = (await chat.messages(session.id)).map((message) => message.item?.kind ?? message.role)
+    expect(kinds.indexOf('changes')).toBeLessThan(kinds.lastIndexOf('user'))
+  })
+
   test('the queue flushes after the changes item, once the turn is recorded', async () => {
     chat = await bootChat({ git: true })
     const trees = ['s', 'e', 's2']
@@ -138,5 +166,19 @@ describe('views', () => {
     expect(first!.errors).toEqual(['root: unknown component "Treemap"'])
     expect(first!.source).toHaveLength(64 * 1024)
     expect(second).toEqual({ kind: 'view-error', title: 'Untitled view', errors: ['bad'], source: '{' })
+  })
+
+  test('the stored source is capped in UTF-8 bytes on a character boundary', async () => {
+    chat = await bootChat({ view: true })
+    const session = await chat.create()
+    chat.emitView('rejected', { sessionId: session.id, errors: ['bad'], source: '\u754c'.repeat(70_000) })
+    chat.emitView('rejected', { sessionId: session.id, errors: ['bad'], source: `a${'\u{1F600}'.repeat(40_000)}` })
+    await waitForAsync(async () => (await items(chat!, session.id, 'view-error')).length === 2)
+    const [cjk, emoji] = (await items(chat, session.id, 'view-error')) as { source: string }[]
+    expect(Buffer.byteLength(cjk!.source)).toBe(65_535)
+    expect(cjk!.source).toBe('\u754c'.repeat(21_845))
+    expect(Buffer.byteLength(emoji!.source)).toBeLessThanOrEqual(64 * 1024)
+    expect(emoji!.source).not.toContain('\uFFFD')
+    expect(emoji!.source).toBe(`a${'\u{1F600}'.repeat(16_383)}`)
   })
 })

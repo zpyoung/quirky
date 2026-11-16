@@ -497,10 +497,12 @@ function codexEntriesUnchecked(item: Record<string, unknown>, phase: CodexPhase,
       calls.track(entry)
       return [{ role: 'tool', text: `Codex ${type}`, data: item, item: entry }]
     }
-    default: {
+    case 'imageView': {
       const entry: ChatItem = { kind: 'activity', callId: id || type, tool: type, summary: '', state: phase === 'started' ? 'running' : state }
       calls.track(entry)
       return [{ role: 'tool', text: `Codex ${type}`, data: item, item: entry }]
     }
+    default:
+      return phase === 'completed' ? [{ role: 'tool', text: `Codex ${type}`, data: item, item: statusItem(`Codex ${type}`) }] : []
   }
 }

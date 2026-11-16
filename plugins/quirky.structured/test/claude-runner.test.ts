@@ -512,6 +512,24 @@ describe('chat items', () => {
     rmSync(dir, { recursive: true, force: true })
   })
 
+  test('an image path that became a FIFO is refused without blocking', async () => {
+    const query = await begin()
+    const dir = mkdtempSync(join(tmpdir(), 'claude-fifo-'))
+    const fifo = join(dir, 'a.png')
+    expect(Bun.spawnSync(['mkfifo', fifo]).exitCode).toBe(0)
+    const outcome = await Promise.race([
+      runner.send('s_1', 'look', { images: [fifo] }).then(
+        () => 'sent',
+        (error: Error) => error.message
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve('hung'), 2000))
+    ])
+    expect(outcome).toContain('is not a regular file')
+    expect(messages.filter((m) => m.item?.kind === 'user')).toHaveLength(1)
+    expect(query.written).toHaveLength(1)
+    rmSync(dir, { recursive: true, force: true })
+  })
+
   test('stopping mid-turn closes running calls as stopped, then ends the turn as stopped', async () => {
     const query = await begin()
     await run(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'sleep 9' } }, { type: 'tool_use', id: 't2', name: 'Edit', input: { file_path: '/a', old_string: 'a', new_string: 'b' } }] } })
@@ -522,6 +540,32 @@ describe('chat items', () => {
       ['file-change', 't2', 'stopped'],
       ['turn-end', undefined, 'stopped']
     ])
+  })
+
+  test('stopping a turn sent before the earlier turn finished closes its calls and ends it as stopped', async () => {
+    const query = await begin('first')
+    await runner.send('s_1', 'second')
+    await run(query, { type: 'result', subtype: 'success', result: 'first done', is_error: false })
+    await until(() => items().some((item) => item?.kind === 'turn-end'))
+    await run(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't9', name: 'Read', input: { file_path: '/a' } }] } })
+    await until(() => items().some((item) => (item as any)?.callId === 't9'))
+    await runner.stop('s_1')
+    const tail = items().slice(-2).map((item) => item && [item.kind, (item as any).callId, (item as any).state])
+    expect(tail).toEqual([
+      ['activity', 't9', 'stopped'],
+      ['turn-end', undefined, 'stopped']
+    ])
+  })
+
+  test('a result for the last open turn leaves nothing to stop', async () => {
+    const query = await begin('first')
+    await runner.send('s_1', 'second')
+    await run(query, { type: 'result', subtype: 'success', result: 'one', is_error: false })
+    await run(query, { type: 'result', subtype: 'success', result: 'two', is_error: false })
+    await until(() => items().filter((item) => item?.kind === 'turn-end').length === 2)
+    const before = messages.length
+    await runner.stop('s_1')
+    expect(messages).toHaveLength(before)
   })
 
   test('stopping an idle session adds no turn-end', async () => {
