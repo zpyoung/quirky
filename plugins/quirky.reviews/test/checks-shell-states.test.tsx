@@ -742,6 +742,25 @@ test('Checks keeps conflict loading in NoticeLine rather than error styling', as
   expect(conflicts!.querySelector('.ui-inline-error')).toBeNull()
 })
 
+test('Checks keeps ready preview advice and paths as loaded content', async () => {
+  const state = reviewsState()
+  state.checks.review = { ...review, mergeable: 'CONFLICTING' }
+  state.checks.conflicts = {
+    status: 'ready', available: true, conflicting: false,
+    files: [{ path: 'provider.ts' }], localFiles: [{ path: 'local.ts' }],
+  }
+  const harness = makeContext()
+  harness.methods.set('quirky.reviews/state', () => state)
+  const { element } = await mountSurface(harness, CHECKS_PANEL)
+  await settle()
+  const conflicts = element.querySelector<HTMLElement>('[aria-label="Merge conflicts"]')!
+  expect(conflicts.textContent).toContain('Git’s read-only preview found no conflicting paths; refresh the review metadata before merging.')
+  expect(conflicts.textContent).toContain('provider.ts')
+  expect(conflicts.textContent).toContain('local.ts')
+  expect(conflicts.querySelector('.ui-inline-error')).toBeNull()
+  expect(conflicts.querySelector('.ui-notice-line')).toBeNull()
+})
+
 function agentState(): ReviewsState {
   const state = reviewsState()
   state.checks.agentDialog = {
