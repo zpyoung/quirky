@@ -877,6 +877,18 @@ describe('verdict', () => {
       expect(code).toBe(1)
       expect(verdict?.runBroken).toBe(true)
     })
+
+    test.each(['toString', '__proto__'])('an inherited %s property cannot excuse a daemon skip', async (key) => {
+      const staged = stage(daemonPlan({ event: 'push' }), {
+        'linux-0.json': [fileResult(daemonFile, attemptWithResults([{ key, status: 'skipped' }]))],
+      })
+      const cwd = dirOf('cwd')
+      writeSkipMap(cwd, '{}')
+      const { code, verdict } = await verdictOf(staged, 'true', { cwd })
+      expect(code).toBe(1)
+      expect(verdict?.runBroken).toBe(true)
+      expect(existsSync(join(staged.outDir, 'baseline.json'))).toBe(false)
+    })
     const invalidMaps: [string, string][] = [
       ['malformed JSON', '{'],
       ['a non-object', '[]'],

@@ -403,7 +403,7 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
       if (!attempt) continue
       for (const test of attempt.tests) {
         if (test.status !== 'skipped') continue
-        const reason = daemonSkipReasons[test.key]
+        const reason = Object.hasOwn(daemonSkipReasons, test.key) ? daemonSkipReasons[test.key] : undefined
         if (reason === undefined) {
           problems.push(`unlisted Linux daemon skip: ${displayKey(test.key)}`)
         } else if (!reportedExceptions.has(test.key)) {
