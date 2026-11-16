@@ -78,6 +78,11 @@ export async function waitForAction(ctx: CliContext, viewId: string, timeoutMs?:
   }
 }
 
+/** The subcommand usage and component catalog, appended to `quirky view --help`. */
+export const help: NonNullable<CliModule['help']> = {
+  view: helpText()
+}
+
 export const commands: CliModule['commands'] = {
   /** Prints the usage and the component catalog. */
   async view(_args, ctx) {

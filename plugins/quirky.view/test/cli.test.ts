@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { CliContext } from '@quirky/protocol'
 import bundleSize from './fixtures/bundle-size.json'
 import manifest from '../quirky-plugin.json'
-import { commands, helpText, waitForAction } from '../cli'
+import { commands, help, helpText, waitForAction } from '../cli'
 import { CATALOG_TYPES, COMPONENTS, formatViewErrors, validateViewSpec } from '../src/core/catalog'
 import { agent, cleanupViews, startView, windowCaller, type ViewHarness } from './support'
 
@@ -282,5 +282,13 @@ describe('the manifest', () => {
     expect(flagsOf('view-update')).toEqual(['id', 'spec'])
     expect(flagsOf('view-close')).toEqual(['id'])
     expect(flagsOf('view-wait')).toEqual(['id', 'timeout-ms'])
+  })
+})
+
+describe('the help the CLI appends to quirky view --help', () => {
+  test('is the usage and component catalog', () => {
+    expect(Object.keys(help)).toEqual(['view'])
+    expect(help.view).toBe(helpText())
+    expect(help.view).toContain('Components')
   })
 })

@@ -72,6 +72,21 @@ export function cliContextFor(ctx: Context): CliContext {
   }
 }
 
+const commandName = (entry: ApiCliCommandEntry) => entry.id.slice(entry.id.lastIndexOf('/') + 1)
+
+/** The module's `help` text for the command; a module that is incompatible, unloadable or silent adds nothing. */
+async function moduleHelp(entry: ApiCliCommandEntry, module: string): Promise<string | undefined> {
+  if (pluginApiCompatibilityError(entry.apiVersion)) return undefined
+  try {
+    const { help } = (await import(module)) as Partial<CliModule>
+    const name = commandName(entry)
+    const text = help && Object.hasOwn(help, name) ? help[name] : undefined
+    return typeof text === 'string' && text !== '' ? text : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function runModule(entry: ApiCliCommandEntry, module: string, args: ParsedArgs, ctx: Context): Promise<void> {
   checkPositionals(entry, args)
   const compatibilityError = pluginApiCompatibilityError(entry.apiVersion)
@@ -82,7 +97,7 @@ async function runModule(entry: ApiCliCommandEntry, module: string, args: Parsed
   } catch (error) {
     throw new StderrFailure(`could not load the CLI module of ${entry.plugin}: ${error instanceof Error ? error.message : String(error)}`)
   }
-  const name = entry.id.slice(entry.id.lastIndexOf('/') + 1)
+  const name = commandName(entry)
   const handler = loaded.commands && Object.hasOwn(loaded.commands, name) ? loaded.commands[name] : undefined
   if (typeof handler !== 'function') {
     throw new StderrFailure(`the CLI module of ${entry.plugin} has no command "${name}"`)
@@ -115,6 +130,7 @@ function commandFor(entry: ApiCliCommandEntry, name: string, schemaOf: (method: 
     flags,
     methods: entry.methods,
     plugin: entry.plugin,
+    ...(entry.module !== null ? { extraHelp: () => moduleHelp(entry, entry.module as string) } : {}),
     async run(args, ctx) {
       if (entry.module !== null) return runModule(entry, entry.module, args, ctx)
       if (entry.method === null) {
