@@ -112,7 +112,6 @@ async function withEngineSpies<T>(operation: () => Promise<T>): Promise<{
   }
 }
 
-
 function clearReads(fixture: OutputFixture): void {
   fixture.screenCalls.length = 0
   fixture.historyCalls.length = 0
