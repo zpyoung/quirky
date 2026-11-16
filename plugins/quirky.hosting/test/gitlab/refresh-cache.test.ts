@@ -593,7 +593,7 @@ test('cached-reviews CLI returns the routed snapshot without touching a provider
   expect(world.glabInvocations()).toEqual([])
   expect(world.invocations()).toEqual([])
 })
-test('GitLab lookup outcomes and an explicit old-head relation stay honest in cached workspace views', async () => {
+test('GitLab lookup outcomes and a branch-inferred old-head relation stay honest in cached workspace views', async () => {
   const world = await boot()
   const head = git(world, ['rev-parse', 'HEAD'])
   const oldHead = 'd'.repeat(40)
@@ -644,8 +644,8 @@ test('GitLab lookup outcomes and an explicit old-head relation stay honest in ca
 
   world.server.failures.clear()
   world.server.mergeRequests = [mrAtHead(oldHead, { state: 'merged' })]
-  const explicitOldHead = await world.call('forBranch', { number: 5, fresh: true }) as Record<string, any>
-  expect(explicitOldHead).toMatchObject({ kind: 'found', review: { state: 'merged', headRefOid: oldHead } })
+  const inferredOldHead = await world.call('forBranch', { fresh: true, fallbackPRNumber: 5 }) as Record<string, any>
+  expect(inferredOldHead).toMatchObject({ kind: 'found', review: { state: 'merged', headRefOid: oldHead } })
   expect((await cachedReviews(world))[0]).toMatchObject({
     branch: 'feature',
     headOid: head,
@@ -915,6 +915,93 @@ test('same-timestamp older lookup cannot replace a newer leased snapshot', async
   }
 })
 
+test('a nonfresh cached GitLab observation cannot replace a newer manual-refresh snapshot', async () => {
+  const harness = await cacheHarness()
+  const worktree = harness.worktrees[0]!
+  const connection = refreshTestConnection('cached-result-after-manual-refresh')
+  try {
+    harness.server.mergeRequests = [mrAtHead(worktree.head, { head_pipeline: { status: 'failed' } })]
+    const cachedResult = await withFrozenNow(100_000, () =>
+      harness.call('forBranch', { worktree: worktree.id }) as Promise<Record<string, any>>)
+    expect(cachedResult).toMatchObject({ kind: 'found', fetchedAt: 100_000, review: { checksStatus: 'failure' } })
+
+    harness.server.mergeRequests = [mrAtHead(worktree.head, { head_pipeline: { status: 'success' } })]
+    const freshResult = await withFrozenNow(101_000, () =>
+      harness.call('refresh', { candidate: refreshCandidate(worktree), reason: 'manual' }, connection.caller) as Promise<Record<string, any>>)
+    expect(freshResult).toMatchObject({ kind: 'found', fetchedAt: 101_000, review: { checksStatus: 'success' } })
+
+    const oldCachedResult = await withFrozenNow(102_000, () =>
+      harness.call('forBranch', { worktree: worktree.id }) as Promise<Record<string, any>>)
+    expect(oldCachedResult).toMatchObject({ kind: 'found', fetchedAt: 100_000, review: { checksStatus: 'failure' } })
+    const currentSnapshot = await withFrozenNow(102_000, () => harness.cached([worktree.id]))
+    expect(currentSnapshot.workspaces[0]).toMatchObject({
+      review: { checksStatus: 'success', headRefOid: worktree.head },
+      stale: false
+    })
+  } finally {
+    connection.close()
+    await harness.cleanup()
+  }
+})
+
+test('an older cachedReviews read cannot delete a snapshot published during configuration verification', async () => {
+  const harness = await cacheHarness()
+  const worktree = harness.worktrees[0]!
+  const originalGitWorktree = harness.env.gitWorktree
+  const originalConfiguration = harness.env.configuration
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let pauseEnabled = false
+  let paused = false
+  let failConfiguration = false
+  harness.env.gitWorktree = async (target, args) => {
+    if (pauseEnabled && !paused && target.id === worktree.id && args[0] === 'symbolic-ref') {
+      paused = true
+      entered.resolve()
+      await release.promise
+    }
+    return await originalGitWorktree(target, args)
+  }
+  harness.env.configuration = (target) => {
+    if (failConfiguration) {
+      failConfiguration = false
+      throw new Error('configuration read failed')
+    }
+    return originalConfiguration(target)
+  }
+
+  try {
+    harness.server.mergeRequests = [mrAtHead(worktree.head, { head_pipeline: { status: 'failed' } })]
+    await harness.call('forBranch', { worktree: worktree.id, fresh: true })
+    pauseEnabled = true
+
+    const oldRead = harness.cached([worktree.id])
+    await entered.promise
+    harness.server.mergeRequests = [mrAtHead(worktree.head, { head_pipeline: { status: 'success' } })]
+    expect(await harness.call('forBranch', { worktree: worktree.id, fresh: true }))
+      .toMatchObject({ kind: 'found', review: { checksStatus: 'success' } })
+    failConfiguration = true
+    release.resolve()
+
+    expect(await oldRead).toMatchObject({
+      workspaces: [{
+        review: null,
+        stale: true,
+        error: 'Hosting configuration could not be verified.'
+      }]
+    })
+    expect((await harness.cached([worktree.id])).workspaces[0]).toMatchObject({
+      review: { checksStatus: 'success', headRefOid: worktree.head },
+      stale: false
+    })
+  } finally {
+    release.resolve()
+    harness.env.gitWorktree = originalGitWorktree
+    harness.env.configuration = originalConfiguration
+    await harness.cleanup()
+  }
+})
+
 test('fresh routed lookups from both methods publish cache snapshots', async () => {
   const harness = await cacheHarness()
   const worktree = harness.worktrees[0]!
@@ -1174,6 +1261,47 @@ test('manual GitLab refresh publishes a schema-valid result and lifecycle, and C
   expect(world.invocations()).toEqual([])
 }, 20_000)
 
+test('ownerless queued GitLab post-push work starts once at 2500ms and does not retry after failure', async () => {
+  await withControlledHarness(1, async (harness, clock) => {
+    const worktree = harness.worktrees[0]!
+    const connection = refreshTestConnection('ownerless-post-push')
+    const queuedAt = clock.now
+    harness.server.failures.set(`GET ${harness.projectPath}/merge_requests`, {
+      status: 500,
+      body: { message: 'fixture failure' }
+    })
+    try {
+      const queued = await harness.call('refresh', {
+        candidate: refreshCandidate(worktree),
+        reason: 'post-push'
+      }, connection.caller) as Record<string, any>
+      expect(queued).toMatchObject({ kind: 'queued', dueAt: queuedAt + 2_500 })
+      connection.close()
+
+      await clock.advanceTo(queuedAt + 2_499)
+      expect(refreshPayloads(harness).filter((event) =>
+        event.reason === 'post-push' && event.status === 'in-flight')).toHaveLength(0)
+
+      await clock.advanceTo(queuedAt + 2_500)
+      await waitForCondition(clock, () => refreshPayloads(harness).some((event) =>
+        event.reason === 'post-push' && event.status === 'in-flight'), 'the ownerless post-push refresh to start')
+      const starts = refreshPayloads(harness).filter((event) =>
+        event.reason === 'post-push' && event.status === 'in-flight')
+      expect(starts.map((event) => event.requestStartedAt)).toEqual([queuedAt + 2_500])
+      await waitForCondition(clock, () => refreshPayloads(harness).some((event) =>
+        event.reason === 'post-push' && event.outcome?.kind === 'unavailable'), 'the failed post-push refresh to finish')
+
+      await clock.advanceTo(queuedAt + 2_500 + 16 * 60_000)
+      expect(refreshPayloads(harness).filter((event) =>
+        event.reason === 'post-push' && event.status === 'in-flight')).toHaveLength(1)
+      expect(harness.server.requests.filter((request) =>
+        request.method === 'GET' && request.path === `${harness.projectPath}/merge_requests`)).toHaveLength(1)
+    } finally {
+      connection.close()
+    }
+  })
+}, 60_000)
+
 test('GitLab keeps the default GitHub-only methods refused before provider requests', async () => {
   const world = await boot()
   const requests: Record<string, Record<string, unknown>> = {
@@ -1213,22 +1341,152 @@ test('refresh refuses plugin-role callers and malformed or foreign-provider outc
     .rejects.toMatchObject({ data: { reason: 'validation_error' } })
   expect(harness.server.requests).toHaveLength(requestsBefore)
 
+  const commonRepository = { host: 'github.com', owner: 'fixture-owner', repo: 'fixture-repo' }
+  const completeOutcome = {
+    kind: 'found',
+    fetchedAt: Date.now(),
+    review: {
+      provider: 'gitlab',
+      repository: commonRepository,
+      number: 5,
+      url: 'https://github.com/fixture-owner/fixture-repo/pull/5',
+      title: 'Fixture review',
+      body: 'Fixture body',
+      updatedAt: null,
+      state: 'open',
+      headRefName: 'feature',
+      baseRefName: 'main',
+      headRefOid: worktree.head,
+      baseRefOid: 'b'.repeat(40),
+      mergeable: 'MERGEABLE',
+      checksStatus: 'success',
+      reviewDecision: 'APPROVED',
+      mergeStateStatus: 'CLEAN',
+      autoMergeRequest: null,
+      stack: null,
+      mergeMethods: {},
+      mergeQueueRequired: null,
+      inMergeQueue: false,
+      mergeQueueEntry: null,
+      mergeQueueKnown: true,
+      autoMergeAllowed: null,
+      mergeMetadataKnown: true,
+      detailedMergeStatus: 'mergeable',
+      requestedReviewers: null,
+      reviews: null,
+      assignees: null,
+      participantsTruncated: false
+    }
+  }
+  const controlConnection = refreshTestConnection('complete-gitlab-outcome')
+  try {
+    const controlMethods = refreshMethods(harness.env, {
+      forBranch: async () => completeOutcome
+    })
+    expect(await controlMethods.refresh!({ candidate, reason: 'manual' }, controlConnection.caller))
+      .toMatchObject({ kind: 'found', review: { provider: 'gitlab', repository: commonRepository } })
+  } finally {
+    controlConnection.close()
+  }
+
+  const wrongProviderOutcome = {
+    ...completeOutcome,
+    review: { ...completeOutcome.review, provider: 'github' }
+  }
   const invalidOutcomes: unknown[] = [
-    { kind: 'found', fetchedAt: Date.now(), review: { provider: 'github' } },
+    wrongProviderOutcome,
     { kind: 'found', fetchedAt: Date.now(), review: { provider: 'gitlab', repository: harness.server.project, number: 5 } }
   ]
-  for (const lookup of invalidOutcomes) {
+  for (const [index, lookup] of invalidOutcomes.entries()) {
     const methods = refreshMethods(harness.env, {
       forBranch: async () => lookup
     })
-    const connection = refreshTestConnection(`malformed-${String(invalidOutcomes.indexOf(lookup))}`)
-    const result = await methods.refresh!({ candidate, reason: 'manual' }, connection.caller) as Record<string, any>
-    expect(result.kind).toBe('unavailable')
-    expect(result.kind).not.toBe('found')
-    connection.close()
+    const connection = refreshTestConnection(`malformed-${index}`)
+    try {
+      const result = await methods.refresh!({ candidate, reason: 'manual' }, connection.caller) as Record<string, any>
+      expect(result.kind).toBe('unavailable')
+      expect(result.kind).not.toBe('found')
+      if (lookup === wrongProviderOutcome) {
+        expect(result).toMatchObject({ reason: 'upstream_unavailable' })
+      }
+    } finally {
+      connection.close()
+    }
   }
   expect(harness.server.requests).toHaveLength(requestsBefore)
 })
+
+test('a superseded visible GitHub refresh emits disconnected after its last owner closes', async () => {
+  const events: { type: string; data: unknown }[] = []
+  const disconnected = Promise.withResolvers<void>()
+  const worktree = fixtureWorktree(900, {
+    id: 'wt_github_refresh',
+    repoId: 'repo_github_refresh',
+    path: '/fixture/github-refresh',
+    instanceId: 'github-refresh-instance'
+  })
+  const repository = { host: 'github.com', owner: 'test-owner', repo: 'test-repo' }
+  const remote = 'https://github.com/test-owner/test-repo.git'
+  const scope: Scope = {
+    worktree,
+    origin: repository,
+    repository,
+    candidates: [repository],
+    issueRepository: repository,
+    issueSourcePreference: 'auto',
+    issueSourceFellBack: false,
+    remotes: { origin: remote, upstream: null }
+  }
+  let generation = 0
+  const env = {
+    context: {
+      getSetting: (name: string) => name === 'gitlabHosts' ? 'gitlab.com' : undefined,
+      emit: (type: string, data: unknown) => {
+        events.push({ type, data })
+        if (type === 'refresh' && typeof data === 'object' && data !== null &&
+            (data as Record<string, unknown>).skippedReason === 'disconnected') disconnected.resolve()
+      }
+    },
+    resolve: async () => scope,
+    resolveWorktree: async () => worktree,
+    remoteUrls: async () => ({ origin: remote, upstream: null }),
+    cacheKey: (_scope: Scope, key: string) => `${generation}:${key}`,
+    changed: (_scope: Scope) => { generation += 1 },
+    invalid: (reason: string, message: string) => Object.assign(new Error(message), { data: { reason } }),
+    onDispose: (_callback: () => void) => {}
+  } as unknown as HostingEnv
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const methods = refreshMethods(env, {
+    forBranch: async () => {
+      entered.resolve()
+      await release.promise
+      return { kind: 'no-review', fetchedAt: Date.now() }
+    }
+  })
+  const connection = refreshTestConnection('superseded-github-visible')
+  try {
+    expect(await methods.visibleRefreshCandidates!({
+      generation: 1,
+      candidates: [refreshCandidate(worktree)]
+    }, connection.caller)).toMatchObject({ accepted: true, candidates: 1 })
+    await entered.promise
+    connection.close()
+    env.changed(scope)
+    release.resolve()
+    await disconnected.promise
+
+    const skips = events
+      .filter((event) => event.type === 'refresh')
+      .map((event) => eventRecord(event.data))
+      .filter((event) => event.status === 'skipped')
+    expect(skips.map((event) => event.skippedReason)).toEqual(['superseded', 'disconnected'])
+  } finally {
+    release.resolve()
+    connection.close()
+  }
+}, 20_000)
+
 test('visible refresh ownership unions worktrees, ignores stale generations, and cleans every owner', async () => {
   await withControlledHarness(3, async (harness) => {
     const [shared, firstOnly, secondOnly] = harness.worktrees

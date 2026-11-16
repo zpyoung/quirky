@@ -749,7 +749,8 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
         emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'fresh' }, entry.scope)
         continue
       }
-      if (entry.provider === 'gitlab' && entry.owners.size === 0 && (candidateOwners.get(entry.key)?.size ?? 0) === 0) {
+      if (entry.provider === 'gitlab' && entry.reason !== 'post-push' &&
+          entry.owners.size === 0 && (candidateOwners.get(entry.key)?.size ?? 0) === 0) {
         entries.delete(entry.key)
         emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' }, entry.scope)
         continue
@@ -817,6 +818,11 @@ export function refreshMethods(env: HostingEnv, prHandlers: Record<string, Handl
           }
           const result = await directRefresh(resolved, { role: 'plugin', pluginId: 'quirky.hosting' }, entry.reason)
           if (disposed) continue
+          if (entry.provider === 'github' && entry.reason === 'visible' &&
+              (candidateOwners.get(entry.key)?.size ?? 0) === 0) {
+            emit({ reason: entry.reason, aliases: [...entry.aliases], status: 'skipped', skippedReason: 'disconnected' }, entry.scope)
+            continue
+          }
           if (result.kind === 'completed' && result.stale) {
             if (entry.provider === 'gitlab') discardGitLabContinuations(entry)
             continue

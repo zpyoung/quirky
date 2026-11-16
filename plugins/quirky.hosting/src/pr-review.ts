@@ -1022,9 +1022,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       ...(options?.sequence !== undefined ? { captureSequence: options.sequence } : {})
     }
     const previous = reviewCache.get(entry.worktreeId)
-    if (previous &&
-        (options?.sequence === undefined || previous.captureSequence === undefined) &&
-        previous.fetchedAt > result.fetchedAt) return
+    if (previous && previous.fetchedAt > result.fetchedAt) return
     staleSnapshots.delete(entry.worktreeId)
     reviewCache.delete(entry.worktreeId)
     reviewCache.set(entry.worktreeId, snapshot)
@@ -1203,13 +1201,17 @@ export function createPRLookup(env: HostingEnv): PRLookup {
     if (snapshot.expiresAt <= Date.now()) {
       return ordinaryMiss
     }
+    const discardSnapshot = (): void => {
+      if (reviewCache.get(worktree.id) !== snapshot) return
+      reviewCache.delete(worktree.id)
+      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
+    }
 
     let configuration: HostingConfiguration
     try {
       configuration = env.configuration(worktree)
     } catch {
-      reviewCache.delete(worktree.id)
-      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
+      discardSnapshot()
       return { ...ordinaryMiss, stale: true, error: 'Hosting configuration could not be verified.' }
     }
     const configMatches = snapshot.validation
@@ -1242,8 +1244,7 @@ export function createPRLookup(env: HostingEnv): PRLookup {
       }
     }
     if (!identityMatches) {
-      reviewCache.delete(worktree.id)
-      markSnapshotStale(worktree.id, snapshot.repoId, snapshot.expiresAt)
+      discardSnapshot()
       return { ...ordinaryMiss, stale: true }
     }
     return { ...snapshot.entry }
