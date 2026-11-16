@@ -3,7 +3,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { OwnerGrantStore, setOwnerGrantWriteHooksForTests } from '../src/daemon/owner-store'
-import { MobilePairingResetError, MobilePairingResetOutcome, MobilePairingResetHookPoint, MobileStore, setPairingResetHooksForTests } from '../src/daemon/storage'
+import { MobilePairingResetError, type MobilePairingResetOutcome, type MobilePairingResetCode, MobileStore, setPairingResetHooksForTests } from '../src/daemon/storage'
 
 const dataDirs: string[] = []
 const REGISTRY = 'devices.json'
@@ -40,7 +40,7 @@ function captureResetError(store: MobileStore): MobilePairingResetError {
   return caught as MobilePairingResetError
 }
 
-function expectResetError(store: MobileStore, code: string, message: string, registryReset = false): MobilePairingResetError {
+function expectResetError(store: MobileStore, code: MobilePairingResetCode, message: string, registryReset = false): MobilePairingResetError {
   const error = captureResetError(store)
   expect(error.code).toBe(code)
   expect(error.message).toBe(message)
@@ -179,7 +179,7 @@ describe('mobile pairing reset store', () => {
     expect(Object.keys(identity).sort()).toEqual(['publicKeyB64', 'secretKeyB64', 'v'])
     expect(identity.v).toBe(1)
     expect(identity.publicKeyB64).not.toBe(seeded.publicKey)
-    expect(store.publicKeyB64).toBe(identity.publicKeyB64)
+    expect(identity.publicKeyB64).toBe(store.publicKeyB64)
     expect(mode(join(dataDir, IDENTITY))).toBe(0o600)
     expect(store.authenticate(seeded.token).status).toBe('unauthorized')
     expect(readFileSync(join(dataDir, quarantinedName), 'utf8')).toBe(BROKEN)
@@ -188,7 +188,7 @@ describe('mobile pairing reset store', () => {
     const restarted = new MobileStore(dataDir)
     expect(restarted.registryAvailable).toBe(true)
     expect(restarted.identityAvailable).toBe(true)
-    expect(restarted.publicKeyB64).toBe(identity.publicKeyB64)
+    expect(identity.publicKeyB64).toBe(restarted.publicKeyB64)
   })
 
   test('forces registry, identity, and registry-copy modes to 0600 under a restrictive umask', () => {
@@ -411,7 +411,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let plantedPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'registry:beforeTempOpen') return
         plantedPath = path
         writeFileSync(path, 'occupied', { flag: 'wx', mode: 0o600 })
@@ -446,7 +446,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let tempPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'registry:tempOpened') return
         tempPath = path
         expect(existsSync(path)).toBe(true)
@@ -483,7 +483,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let tempPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'registry:tempWritten') return
         tempPath = path
         expect(readFileSync(path, 'utf8')).toBe('[]')
@@ -517,7 +517,7 @@ describe('mobile pairing reset store', () => {
     corrupt(dataDir, REGISTRY)
     const store = new MobileStore(dataDir)
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint) {
+      at(point) {
         if (point === 'registry:renamed') throw new Error('injected')
       }
     })
@@ -542,7 +542,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let plantedPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'identity:beforeTempOpen') return
         plantedPath = path
         writeFileSync(path, 'occupied', { flag: 'wx', mode: 0o600 })
@@ -579,7 +579,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let tempPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'identity:tempOpened') return
         tempPath = path
         expect(existsSync(path)).toBe(true)
@@ -617,7 +617,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let tempPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'identity:tempWritten') return
         tempPath = path
         expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ v: 1 })
@@ -653,7 +653,7 @@ describe('mobile pairing reset store', () => {
     corrupt(dataDir, IDENTITY)
     const store = new MobileStore(dataDir)
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint) {
+      at(point) {
         if (point === 'identity:renamed') throw new Error('injected')
       }
     })
@@ -676,7 +676,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let occupiedPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'copy:beforeOpen') return
         occupiedPath = path
         writeFileSync(path, 'occupied', { flag: 'wx', mode: 0o600 })
@@ -710,7 +710,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let failedPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'copy:created') return
         failedPath = path
         expect(existsSync(path)).toBe(true)
@@ -745,7 +745,7 @@ describe('mobile pairing reset store', () => {
     const store = new MobileStore(dataDir)
     let copyPath = ''
     setPairingResetHooksForTests({
-      at(point: MobilePairingResetHookPoint, path) {
+      at(point, path) {
         if (point !== 'copy:written') return
         copyPath = path
         expect(readFileSync(path, 'utf8')).toBe(seeded.registryBytes)
