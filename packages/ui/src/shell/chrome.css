@@ -404,7 +404,7 @@ button.ui-status-bar-item:focus-visible {
 .shell-palette {
   display: flex;
   flex-direction: column;
-  gap: var(--ui-space-8);
+  gap: var(--ui-space-12);
   min-width: 0;
 }
 
@@ -416,6 +416,11 @@ button.ui-status-bar-item:focus-visible {
   gap: var(--ui-space-8);
   padding: var(--ui-space-4) var(--ui-space-8);
   padding-inline-end: calc(var(--ui-space-8) + var(--ui-icon-size) + var(--ui-space-8));
+}
+
+.shell-palette__search:focus-within {
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: var(--ui-focus-offset);
 }
 
 .shell-palette__search > .ui-text-field {
@@ -437,6 +442,7 @@ button.ui-status-bar-item:focus-visible {
 .shell-palette .ui-text-field__input {
   background: var(--ui-transparent);
   border-color: var(--ui-transparent);
+  outline: none;
 }
 
 .shell-palette .ui-option-list {
@@ -492,6 +498,10 @@ button.ui-status-bar-item:focus-visible {
 .ui-dialog:has(#settings-form) .ui-dialog__close {
   background: var(--ui-transparent);
   border-color: var(--ui-transparent);
+  font-size: var(--ui-icon-size);
+  height: var(--ui-row-single);
+  padding: 0;
+  width: var(--ui-row-single);
 }
 
 #settings-form .ui-settings-group-heading > .ui-section-header__title {
@@ -515,4 +525,26 @@ button.ui-status-bar-item:focus-visible {
 #settings-form [aria-label="Plugin settings"] > .ui-stack > .ui-button:hover:not(:disabled),
 #settings-form [aria-label="Plugin settings commands"] > .ui-stack > .ui-button:hover:not(:disabled) {
   background: var(--ui-selected);
+}
+
+#settings-form .ui-form-row:has(input[type="checkbox"]) {
+  align-items: center;
+  display: grid;
+  gap: var(--ui-space-4) var(--ui-space-8);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+#settings-form .ui-form-row:has(input[type="checkbox"]) > .ui-form-row__label {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+#settings-form .ui-form-row:has(input[type="checkbox"]) > .ui-form-row__control {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+#settings-form .ui-form-row:has(input[type="checkbox"]) > .ui-help-text,
+#settings-form .ui-form-row:has(input[type="checkbox"]) > .ui-error-text {
+  grid-column: 1 / -1;
 }
