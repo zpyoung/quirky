@@ -22,7 +22,7 @@ import { createClaudeRunner } from './claude-runner'
 import { resolveCodexThroughLoginShell } from './codex-path'
 import { createCodexRunner } from './codex-runner'
 import { Journal, journalMigrations } from './journal'
-import { errorItem, stderrLines } from './items'
+import { errorItem, statusItem, stderrLines } from './items'
 import { MessageQueue, imagePathProblem } from './queue'
 import type {
   NewStructuredMessage,
@@ -53,6 +53,15 @@ type LiveSession = {
   turnOpen: boolean
   turnStart: Promise<string | null> | null
   viewIds: Set<string>
+}
+
+/** The longest prefix of `text` that fits in `maxBytes` of UTF-8, never cutting inside a character. */
+function capUtf8(text: string, maxBytes: number): string {
+  const bytes = Buffer.from(text, 'utf8')
+  if (bytes.length <= maxBytes) return text
+  let end = maxBytes
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end--
+  return bytes.subarray(0, end).toString('utf8')
 }
 
 const AGENT_TITLES: Record<StructuredAgent, string> = { claude: 'Claude', codex: 'Codex' }
@@ -330,6 +339,22 @@ export function activate(context: PluginContext): void {
     })
   }
 
+  /** The queued images that still pass validation; each one that does not is dropped with a status item. */
+  const revalidatedImages = (sessionId: string, images: string[] | undefined): string[] | undefined => {
+    if (images === undefined) return undefined
+    const kept: string[] = []
+    for (const path of images) {
+      const problem = imagePathProblem(path)
+      if (problem === null) {
+        kept.push(path)
+        continue
+      }
+      const text = `Image not sent: ${problem}`
+      appendMessage({ sessionId, role: 'system', text, item: statusItem(text) })
+    }
+    return kept.length === 0 ? undefined : kept
+  }
+
   /** Sends the oldest queued message once the session is idle; a failed send puts the message back. */
   const flushQueue = (sessionId: string): Promise<void> =>
     enqueueSend(sessionId, async () => {
@@ -343,8 +368,9 @@ export function activate(context: PluginContext): void {
       try {
         const runner = runnerBySession.get(sessionId) ?? runnerFor(entry.agent)
         entry.hasSent = true
+        const images = revalidatedImages(sessionId, next.images)
         await runner.send(sessionId, next.text, {
-          ...(next.images === undefined ? {} : { images: next.images }),
+          ...(images === undefined ? {} : { images }),
           queuedId: next.id
         })
       } catch (error) {
@@ -359,7 +385,7 @@ export function activate(context: PluginContext): void {
   const finishTurn = async (sessionId: string, entry: LiveSession, start: Promise<string | null> | null): Promise<void> => {
     if (start !== null) {
       try {
-        await appendTurnChanges(sessionId, entry, start)
+        await enqueueSend(sessionId, () => appendTurnChanges(sessionId, entry, start))
       } catch (error) {
         if (active) context.log(`could not record the changes of ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
       }
@@ -1322,8 +1348,9 @@ export function activate(context: PluginContext): void {
       try {
         const runner = runnerBySession.get(session.id) ?? runnerFor(entry.agent)
         entry.hasSent = true
+        const images = revalidatedImages(session.id, taken.message.images)
         await runner.send(session.id, taken.message.text, {
-          ...(taken.message.images === undefined ? {} : { images: taken.message.images }),
+          ...(images === undefined ? {} : { images }),
           queuedId: taken.message.id
         })
       } catch (error) {
@@ -1491,7 +1518,7 @@ export function activate(context: PluginContext): void {
     }
     const errors = Array.isArray(fields.errors) ? fields.errors.filter((error): error is string => typeof error === 'string') : []
     const title = typeof fields.title === 'string' && fields.title !== '' ? fields.title : 'Untitled view'
-    const source = typeof fields.source === 'string' ? fields.source.slice(0, 64 * 1024) : ''
+    const source = typeof fields.source === 'string' ? capUtf8(fields.source, 64 * 1024) : ''
     appendMessage({ sessionId, role: 'system', text: `View refused: ${title}`, item: { kind: 'view-error', title, errors, source } })
   }
 

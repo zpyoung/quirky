@@ -217,6 +217,44 @@ describe('images', () => {
   })
 })
 
+describe('queued images at flush time', () => {
+  let dir: string
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  test('an image replaced by a FIFO, a text file or an oversized file is dropped with a status item', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'qs-flush-'))
+    const keep = join(dir, 'keep.png')
+    const fifo = join(dir, 'fifo.png')
+    const big = join(dir, 'big.png')
+    for (const path of [keep, fifo, big]) writeFileSync(path, 'x')
+    chat = await bootChat()
+    const session = await working(chat)
+    await chat.call('quirky.structured/send', { session: session.id, text: 'later', images: [keep, fifo, big], when: 'idle' })
+    rmSync(fifo)
+    expect(Bun.spawnSync(['mkfifo', fifo]).exitCode).toBe(0)
+    truncateSync(big, 20 * 1024 * 1024 + 1)
+    chat.runner.finish(session.id)
+    await waitFor(() => chat!.runner.sent.length === 1)
+    expect(chat.runner.sent[0]!.options).toMatchObject({ images: [keep] })
+    const statuses = (await chat.messages(session.id)).flatMap((message) => (message.item?.kind === 'status' ? [message.item.text] : []))
+    expect(statuses).toEqual([`Image not sent: image ${fifo} is not a regular file`, `Image not sent: image ${big} is larger than 20 MB`])
+  })
+
+  test('a message whose images all fail is sent as text alone', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'qs-flush-'))
+    const gone = join(dir, 'gone.png')
+    writeFileSync(gone, 'x')
+    chat = await bootChat()
+    const session = await working(chat)
+    await chat.call('quirky.structured/send', { session: session.id, text: 'later', images: [gone], when: 'idle' })
+    rmSync(gone)
+    chat.runner.finish(session.id)
+    await waitFor(() => chat!.runner.sent.length === 1)
+    expect(chat.runner.sent[0]!.options?.images).toBeUndefined()
+    expect(chat.runner.sent[0]!.text).toBe('later')
+  })
+})
+
 describe('the queue store', () => {
   test('keeps order, edits, takes and restores a message to its place', () => {
     const home = mkdtempSync(join(tmpdir(), 'qs-queue-'))

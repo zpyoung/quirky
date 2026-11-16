@@ -1,5 +1,6 @@
 import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { readFileSync } from 'node:fs'
+import { constants } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { extname } from 'node:path'
 import type { AskEnvelope, Session } from '@quirky/protocol'
 import type { StructuredContext, StructuredSendOptions, StructuredStartOptions, StructuredRunner } from './runner'
@@ -16,6 +17,7 @@ import {
   userItem,
   type ItemEntry
 } from './items'
+import { MAX_IMAGE_BYTES } from './queue'
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan } from './native-questions'
 
 export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options?: Options }
@@ -84,6 +86,8 @@ type Running = {
   calls: CallTracker
   stream: ProseStream
   turnStartedAt: number | null
+  /** Prompts sent whose result has not arrived yet; a result closes one turn, not all of them. */
+  openTurns: number
 }
 
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
@@ -94,21 +98,35 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
   '.webp': 'image/webp'
 }
 
-function userMessage(text: string, providerSessionId?: string, images: string[] = []): SDKUserMessage {
-  const content =
-    images.length === 0
-      ? text
-      : [
-          { type: 'text', text },
-          ...images.map((path) => ({
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: IMAGE_MEDIA_TYPES[extname(path).toLowerCase()] ?? 'image/png',
-              data: readFileSync(path).toString('base64')
-            }
-          }))
-        ]
+type EncodedImage = { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+
+/**
+ * Reads an image for the agent without ever blocking on it: the file is opened non-blocking and
+ * checked on the open descriptor, so a path swapped for a FIFO or device since it was validated
+ * is refused instead of hanging the daemon.
+ */
+async function encodeImage(path: string): Promise<EncodedImage> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK)
+  try {
+    const stats = await handle.stat()
+    if (!stats.isFile()) throw new Error(`image ${path} is not a regular file`)
+    if (stats.size > MAX_IMAGE_BYTES) throw new Error(`image ${path} is larger than 20 MB`)
+    const data = await handle.readFile()
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: IMAGE_MEDIA_TYPES[extname(path).toLowerCase()] ?? 'image/png',
+        data: data.toString('base64')
+      }
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+function userMessage(text: string, providerSessionId?: string, images: EncodedImage[] = []): SDKUserMessage {
+  const content = images.length === 0 ? text : [{ type: 'text', text }, ...images]
   return {
     type: 'user',
     message: { role: 'user', content } as SDKUserMessage['message'],
@@ -199,6 +217,7 @@ class ClaudeRunner implements StructuredRunner {
       calls: new CallTracker(),
       stream: new ProseStream(),
       turnStartedAt: hasPrompt ? Date.now() : null,
+      openTurns: hasPrompt ? 1 : 0,
       query: query({
         prompt: input.messages,
         options: {
@@ -221,7 +240,9 @@ class ClaudeRunner implements StructuredRunner {
   async send(sessionId: string, text: string, options: StructuredSendOptions = {}): Promise<void> {
     const run = this.running.get(sessionId)
     if (!run || run.stopped || run.ended) throw new Error('session is not running')
-    const message = userMessage(text, run.providerSessionId, options.images)
+    const images = options.images !== undefined && options.images.length > 0 ? await Promise.all(options.images.map(encodeImage)) : []
+    if (run.stopped || run.ended) throw new Error('session is not running')
+    const message = userMessage(text, run.providerSessionId, images)
     this.context.appendMessage({
       sessionId,
       role: 'user',
@@ -229,6 +250,7 @@ class ClaudeRunner implements StructuredRunner {
       data: message,
       item: userItem(text, options.images, options.queuedId)
     })
+    run.openTurns++
     run.turnStartedAt ??= Date.now()
     this.context.setStatus(sessionId, 'working')
     run.input.push(message)
@@ -341,6 +363,7 @@ class ClaudeRunner implements StructuredRunner {
       item: turnEndItem(state, Date.now() - run.turnStartedAt)
     })
     run.turnStartedAt = null
+    run.openTurns = 0
     run.stream.reset()
   }
 
@@ -373,7 +396,8 @@ class ClaudeRunner implements StructuredRunner {
     const failed = msg?.type === 'result' && (msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error')))
     if (msg?.type === 'result' && run) {
       for (const entry of closingEntries(run.calls, failed ? 'failed' : 'done')) this.append(sessionId, entry)
-      run.turnStartedAt = null
+      run.openTurns = Math.max(0, run.openTurns - 1)
+      run.turnStartedAt = run.openTurns > 0 ? Date.now() : null
     }
     for (const entry of claudeEntries(msg, run?.calls ?? new CallTracker())) this.append(sessionId, entry)
     if (msg?.type !== 'result') return
