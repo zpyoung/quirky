@@ -264,6 +264,14 @@ function waitForRenderedElement(selector: string): Promise<Element> {
   return promise
 }
 
+function checkboxFor(surface: ParentNode, labelText: string): HTMLInputElement {
+  const label = [...surface.querySelectorAll<HTMLLabelElement>('.ui-checkbox')]
+    .find((entry) => entry.textContent?.trim() === labelText)
+  const checkbox = label?.querySelector<HTMLInputElement>('input[type="checkbox"]')
+  if (!checkbox) throw new Error(`Missing shared Checkbox labelled "${labelText}"`)
+  return checkbox
+}
+
 const click = (element: Element) => act(async () => void (element as HTMLElement).click())
 const typeInto = (input: HTMLInputElement, value: string) =>
   act(async () => {
@@ -481,7 +489,7 @@ test('Activity sidebar filters and groups its populated feed in place and clears
 
   await selectValue(host.querySelector<HTMLSelectElement>('select[aria-label="Group Activity by"]')!, 'worktree')
   expect([...host.querySelectorAll<HTMLElement>('[data-activity-group]')].map((group) => group.dataset.activityGroup)).toEqual(['wt2'])
-  const unread = host.querySelector<HTMLInputElement>('input[aria-label="Unread only"]')!
+  const unread = checkboxFor(host, 'Unread only')
   await act(async () => unread.click())
   expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity').at(-1)?.params).toMatchObject({ text: 'audit', unreadOnly: true })
   expect(host.querySelector('[data-session-id="s-work"]')).not.toBeNull()
@@ -546,18 +554,24 @@ test('Activity controls keep labels local when sidebar and center feeds are moun
   const cleanupCenter = await h.mount(VIEW, { group: 'status' }, centerHost)
 
   try {
-
     for (const surface of [host, centerHost]) {
       const fields = [
-        ['Search Activity', 'input[aria-label="Search Activity"]'],
-        ['Unread only', 'input[aria-label="Unread only"]'],
-        ['Group by', 'select[aria-label="Group Activity by"]']
+        ['Search Activity', surface.querySelector<HTMLInputElement>('input[aria-label="Search Activity"]')!],
+        ['Unread only', checkboxFor(surface, 'Unread only')],
+        ['Group by', surface.querySelector<HTMLSelectElement>('select[aria-label="Group Activity by"]')!]
       ] as const
-      for (const [labelText, selector] of fields) {
-        const label = [...surface.querySelectorAll<HTMLLabelElement>('label')].find((entry) => entry.textContent?.trim() === labelText)!
-        const control = surface.querySelector(selector)!
-        expect(document.getElementById(label.htmlFor) === control).toBe(true)
+      for (const [labelText, control] of fields) {
+        const labels = [...surface.querySelectorAll<HTMLLabelElement>('label')]
+          .filter((entry) => entry.textContent?.trim() === labelText)
+        expect(labels).toHaveLength(1)
+        const label = labels[0]!
+        if (label.htmlFor) {
+          expect(document.getElementById(label.htmlFor)).toBe(control)
+        } else {
+          expect(label.contains(control)).toBe(true)
+        }
       }
+      expect([...surface.querySelectorAll('[id]')].every((element) => document.getElementById(element.id) === element)).toBe(true)
     }
   } finally {
     await cleanupCenter()
@@ -594,7 +608,7 @@ test('Activity command opens the grouped center feed and center filters remain s
   expect(h.opened.at(-1)?.input).toMatchObject({ text: 'audit', group: 'worktree' })
   expect(h.opened.at(-1)?.input).not.toHaveProperty('worktree')
 
-  const unread = host.querySelector<HTMLInputElement>('input[aria-label="Unread only"]')!
+  const unread = checkboxFor(host, 'Unread only')
   await act(async () => {
     unread.click()
   })
