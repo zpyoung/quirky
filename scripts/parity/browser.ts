@@ -12,7 +12,7 @@ export async function main(args = process.argv.slice(2)): Promise<number> {
   process.on('SIGINT', stop)
   try {
     const report = await runBrowserParity({ signal: controller.signal })
-    console.log(JSON.stringify(report, null, options.json ? undefined : 2))
+    await Bun.write(Bun.stdout, `${JSON.stringify(report, null, options.json ? undefined : 2)}\n`)
     return report.ok ? 0 : 1
   } finally {
     process.off('SIGTERM', stop)

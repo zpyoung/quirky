@@ -10,6 +10,9 @@ import { NATIVE_BROWSER_LABEL_DOMAIN } from '@quirky/protocol'
  * every app bundle in the build directory. Other plain-http hosts stay blocked.
  */
 export function allowLabelHosts(buildDirectory: string): string[] {
+  if (process.platform !== 'darwin') {
+    throw new Error('Native Browser label host ATS configuration requires macOS and plutil.')
+  }
   const plists = readdirSync(buildDirectory)
     .filter((entry) => entry.endsWith('.app'))
     .map((app) => join(buildDirectory, app, 'Contents', 'Info.plist'))

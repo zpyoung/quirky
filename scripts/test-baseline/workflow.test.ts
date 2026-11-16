@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { discover, macosOnly } from '../suite'
+import { createProcessScope } from '../test-support/process-scope'
 
 type Step = { id?: string; name?: string; uses?: string; run?: string; if?: string | boolean; with?: Record<string, unknown>; env?: Record<string, string> }
 type Job = {
@@ -97,6 +101,198 @@ describe('job graph', () => {
     expect(steps('linux').indexOf(install)).toBeGreaterThan(steps('linux').indexOf(cache))
     expect(install.run).toContain('apt-get install -y --download-only zsh ripgrep')
     expect(install.run).toContain('dpkg -i')
+  })
+})
+
+describe('sandboxed Linux browser acceptance', () => {
+  const prepare = () => steps('linux').find(step => step.name === 'Prepare sandboxed Chrome')
+
+  test('prepares a real browser before any Linux shard, without changing macOS setup', () => {
+    const step = prepare()
+    expect(step).toBeDefined()
+    expect(step?.if).toBeUndefined()
+    expect((step as Step & { 'continue-on-error'?: boolean })?.['continue-on-error']).toBeUndefined()
+    expect(steps('linux').indexOf(step!)).toBeLessThan(steps('linux').findIndex(item => item.name === 'Run shard'))
+    expect(steps('macos').some(item => item.name === 'Prepare sandboxed Chrome')).toBe(false)
+  })
+
+  test('probes every supported Linux executable in order and fails when none exists', () => {
+    const script = prepare()?.run ?? ''
+    expect(script).toContain('set -euo pipefail')
+    const candidates = ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser']
+    let previous = -1
+    for (const candidate of candidates) {
+      const index = script.indexOf(candidate)
+      expect(index).toBeGreaterThan(previous)
+      previous = index
+    }
+    expect(script).toContain('[ -x "$candidate" ]')
+    expect(script).toContain('[ -z "$chrome" ]')
+    expect(script).toContain('exit 1')
+    expect(script).toContain('"$chrome" --version')
+  })
+
+  test('bounds a sandboxed headless document smoke and cleans up its process group and private roots', () => {
+    const script = prepare()?.run ?? ''
+    for (const required of [
+      'timeout --signal=TERM --kill-after=5s 20s',
+      '--headless', '--dump-dom', '--disable-background-networking', '--no-first-run', '--no-default-browser-check',
+      'mktemp -d', 'HOME="$root/home"', 'XDG_CONFIG_HOME="$root/config"', 'XDG_CACHE_HOME="$root/cache"',
+      '--user-data-dir="$root/profile"', 'quirky-linux-chrome', 'grep -q',
+      'trap cleanup EXIT', 'kill -TERM -- "-$smoke_pid"', 'kill -KILL -- "-$smoke_pid"',
+      'for attempt in {1..50}', 'wait "$smoke_pid"', 'rm -rf "$root"',
+    ]) expect(script).toContain(required)
+    expect(script).not.toMatch(/--no-sandbox|--disable-setuid-sandbox|QUIRKY_BROWSER_CHROME|apt-get|curl|wget/)
+  })
+
+  test('changes only the disposable Linux runner user-namespace restriction when enabled', () => {
+    const script = prepare()?.run ?? ''
+    expect(script).toContain('restriction=/proc/sys/kernel/apparmor_restrict_unprivileged_userns')
+    expect(script).toContain('[ -f "$restriction" ]')
+    expect(script).toContain('$(cat "$restriction")')
+    expect(script).toContain('sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0')
+    expect(script.match(/sudo sysctl[^\n]*/g)).toEqual(['sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0'])
+  })
+
+  for (const [mode, expectedExit] of [
+    ['slow-version', 0],
+    ['missing-browser', 1],
+    ['version-failure', 7],
+    ['smoke-failure', 9],
+    ['missing-marker', 1],
+  ] as const) {
+    test(`Chrome preparation handles ${mode} without weakening acceptance`, async () => {
+      const root = mkdtempSync(join(tmpdir(), 'quirky-chrome-preparation-'))
+      const bin = join(root, 'bin')
+      const runnerTemp = join(root, 'runner-temp')
+      const home = join(root, 'home')
+      const chrome = join(bin, 'chrome')
+      const scope = createProcessScope()
+      try {
+        for (const directory of [bin, runnerTemp, home]) mkdirSync(directory)
+        const timeout = join(bin, 'timeout')
+        // bash subprocess deadlines cannot be advanced with fake timers
+        writeFileSync(timeout, `#!${process.execPath}
+const args = process.argv.slice(2)
+while (args[0]?.startsWith('--')) args.shift()
+const seconds = Number(args.shift()?.replace(/s$/, ''))
+if (!Number.isFinite(seconds) || seconds <= 0) process.exit(2)
+const child = Bun.spawn(args, { stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' })
+let expired = false
+const timer = setTimeout(() => { expired = true; child.kill('SIGKILL') }, seconds * 1000)
+const code = await child.exited
+clearTimeout(timer)
+process.exit(expired ? 124 : code)
+`)
+        writeFileSync(chrome, `#!${process.execPath}
+const mode = process.env.CHROME_PREPARATION_CASE
+if (process.argv.includes('--version')) {
+  if (mode === 'slow-version') await Bun.sleep(6000)
+  if (mode === 'version-failure') process.exit(7)
+  console.log('Owned Chrome stand-in')
+} else {
+  if (mode === 'smoke-failure') process.exit(9)
+  console.log(mode === 'missing-marker' ? '<p>wrong document</p>' : '<p>quirky-linux-chrome</p>')
+}
+`)
+        const sudo = join(bin, 'sudo')
+        writeFileSync(sudo, '#!/bin/sh\nprintf "unexpected sudo invocation\\n" >&2\nexit 91\n')
+        for (const executable of [timeout, chrome, sudo]) chmodSync(executable, 0o700)
+        const candidate = mode === 'missing-browser' ? join(root, 'missing-chrome') : chrome
+        const script = prepare()!.run!
+          .replace(/\/usr\/bin\/(?:google-chrome(?:-stable)?|chromium(?:-browser)?)/g, candidate)
+          .replace('/proc/sys/kernel/apparmor_restrict_unprivileged_userns', join(root, 'absent-restriction'))
+        const child = scope.spawn(['bash', '-c', script], {
+          env: {
+            ...process.env,
+            ...scope.env,
+            PATH: `${bin}:${process.env.PATH ?? ''}`,
+            HOME: home,
+            QUIRKY_HOME: home,
+            RUNNER_TEMP: runnerTemp,
+            CHROME_PREPARATION_CASE: mode,
+            BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0',
+          },
+          stdin: 'ignore',
+          stdout: 'pipe',
+          stderr: 'pipe',
+        })
+        const [code, stdout, stderr] = await Promise.all([
+          child.exited,
+          new Response(child.stdout).text(),
+          new Response(child.stderr).text(),
+        ])
+        expect({ code, stderr }).toEqual({ code: expectedExit, stderr: mode === 'missing-browser' ? 'No installed Chrome or Chromium executable found\n' : '' })
+        if (mode !== 'missing-browser') {
+          expect(stdout).toMatch(new RegExp(`Chrome version probe: \\d+s \\(exit ${mode === 'version-failure' ? 7 : 0}\\)`))
+        }
+        if (mode === 'slow-version' || mode === 'smoke-failure' || mode === 'missing-marker') {
+          expect(stdout).toMatch(new RegExp(`Chrome sandbox smoke: \\d+s \\(exit ${mode === 'smoke-failure' ? 9 : 0}\\)`))
+        }
+        expect(readdirSync(runnerTemp)).toEqual([])
+      } finally {
+        try {
+          await scope.cleanup()
+        } finally {
+          rmSync(root, { recursive: true, force: true })
+        }
+      }
+    }, 30_000)
+  }
+})
+
+describe('Linux test coverage routing', () => {
+  const root = join(import.meta.dir, '../..')
+  const retained = [
+    'plugins/quirky.terminal/test/artifacts-api.test.ts',
+    'plugins/quirky.terminal/test/artifacts.test.ts',
+    'plugins/quirky.terminal/test/emulator.test.ts',
+    'packages/cli/test/open.e2e.test.ts',
+    'apps/desktop/test/allow-label-hosts.test.ts',
+    'scripts/parity/cli-files.test.ts',
+  ]
+  const movable = [
+    'plugins/quirky.terminal/test/e2e.test.ts',
+    'plugins/quirky.terminal/test/e2e-ui/features-pane.test.ts',
+    'plugins/quirky.editor/test/markdown.test.ts',
+    'plugins/quirky.browser/test/automation.test.ts',
+    'plugins/quirky.browser/test/wait-navigation.test.ts',
+    'plugins/quirky.browser/test/pane.test.ts',
+    'plugins/quirky.browser/test/design-runtime.test.ts',
+    'plugins/quirky.browser/test/extras-api.test.ts',
+    'plugins/quirky.browser/test/extras-automation.test.ts',
+    'plugins/quirky.browser/test/extras-cli.test.ts',
+    'plugins/quirky.browser/test/import.test.ts',
+    'plugins/quirky.browser/test/pane-address.test.ts',
+    'plugins/quirky.browser/test/pane-profile-switch.test.ts',
+    'plugins/quirky.browser/test/pane-watch-state.test.ts',
+    'plugins/quirky.mobile/test/browser-watch.test.ts',
+    'apps/mobile/test/session-tabs.test.tsx',
+    'plugins/quirky.mobile/test/page-bridge-lifecycle.test.ts',
+    'scripts/parity/browser.test.ts',
+    'scripts/parity/browser-pane.test.ts',
+  ]
+  const refusals = [
+    'scripts/linux-platform-refusals.test.ts',
+    'plugins/quirky.vault/test/actions.test.ts',
+    'plugins/quirky.vault/test/cli.test.ts',
+    'plugins/quirky.vault/test/window-parity.test.ts',
+    'plugins/quirky.worktree/test/vm-environments.test.ts',
+  ]
+
+  test('keeps only actual native-platform acceptance and the CLI-files ownership exception on macOS', () => {
+    expect([...macosOnly(join(root, 'scripts/test-on-macos.txt'))].sort()).toEqual([...retained].sort())
+  })
+
+  test('discovers every movable acceptance and refusal file without a platform or CI exclusion', () => {
+    const discovered = new Set(discover(root, []))
+    const macos = macosOnly(join(root, 'scripts/test-on-macos.txt'))
+    const excluded = macosOnly(join(root, 'scripts/test-not-on-ci.txt'))
+    for (const file of [...movable, ...refusals]) {
+      expect(discovered.has(file)).toBe(true)
+      expect(macos.has(file)).toBe(false)
+      expect(excluded.has(file)).toBe(false)
+    }
   })
 })
 
