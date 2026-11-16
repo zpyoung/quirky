@@ -324,6 +324,29 @@ describe('early listening during startup activation', () => {
     expect(times[0]!).toBeLessThanOrEqual(times[1]!)
   })
 
+  test('reports whether startup plugin activation has settled', async () => {
+    const t = blockedStartup()
+    await t.blocked()
+    const handle = await t.ready()
+    const origin = `http://127.0.0.1:${handle.port}`
+
+    expect(await (await fetch(`${origin}/health`)).json()).toEqual({
+      ok: true,
+      pid: process.pid,
+      daemonVersion: handle.runtime.daemonVersion,
+      startupSettled: false
+    })
+
+    t.unblock()
+    await t.starting
+    expect(await (await fetch(`${origin}/health`)).json()).toEqual({
+      ok: true,
+      pid: process.pid,
+      daemonVersion: handle.runtime.daemonVersion,
+      startupSettled: true
+    })
+  })
+
   test('a failed startup plugin keeps its conflict error for a waiting caller', async () => {
     const t = blockedStartup({ failing: true })
     await t.blocked()
