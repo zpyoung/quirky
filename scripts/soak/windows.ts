@@ -38,10 +38,13 @@ type OpenWindow = {
   statusRequests: Map<string, number>
 }
 
+export type WindowLiveness = Pick<WindowRecord, 'index' | 'connId' | 'worktree' | 'open'>
+
 export type SoakWindows = {
   pages: readonly Page[]
   browserPid: number
   finish(): Promise<{ records: WindowRecord[]; requests: { method: string; total: number }[] }>
+  liveness?(): WindowLiveness[]
   stop(): Promise<void>
 }
 
@@ -574,9 +577,25 @@ export async function openWindows(options: {
     const readyBrowserPid = browserPid
     if (readyBrowserPid === null) throw new Error('Chromium server did not report its process id')
 
+    const isOpen = (session: OpenWindow): boolean => {
+      try {
+        return !session.metrics.closed && !session.metrics.crashed && !session.page.isClosed() && browser?.isConnected() === true
+      } catch {
+        return false
+      }
+    }
+
     return {
       pages,
       browserPid: readyBrowserPid,
+      liveness() {
+        return sessions.map((session): WindowLiveness => ({
+          index: session.index,
+          connId: session.connId,
+          worktree: session.worktree,
+          open: isOpen(session)
+        }))
+      },
       async finish() {
         let currentWorktrees = new Set<string>()
         try {
@@ -596,12 +615,7 @@ export async function openWindows(options: {
 
         const now = Date.now()
         const records = sessions.map((session): WindowRecord => {
-          let open = false
-          try {
-            open = !session.metrics.closed && !session.metrics.crashed && !session.page.isClosed() && browser?.isConnected() === true
-          } catch {
-            open = false
-          }
+          const open = isOpen(session)
           return {
             index: session.index,
             worktree: session.worktree,

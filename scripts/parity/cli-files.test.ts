@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { isUtf8 } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -33,13 +34,31 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
   const watchdog = setTimeout(() => scope.killNow(), 370_000)
   try {
     const [stdout, stderr, code] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited])
+    console.info('cli-files timing:')
+    for (const line of stderr.split('\n').filter(line =>
+      line.startsWith('[cli-files] ') && / observed in | failed after | finished in | failed: /.test(line)).slice(-40)) {
+      let bytes = Buffer.from(line).subarray(0, 512)
+      while (bytes.length && !isUtf8(bytes)) bytes = bytes.subarray(0, bytes.length - 1)
+      console.info(bytes.toString())
+    }
     expect(code, stderr + '\n' + stdout).toBe(0)
     const report = JSON.parse(stdout)
     console.info(JSON.stringify({
       elapsedMs: report.elapsedMs,
       buildElapsedMs: report.buildElapsedMs,
-      startup: report.startup,
-      cleanup: report.cleanup,
+      startup: {
+        phase: report.startup.phase,
+        elapsedMs: report.startup.elapsedMs,
+        buildElapsedMs: report.startup.buildElapsedMs,
+        rendererElapsedMs: report.startup.rendererElapsedMs
+      },
+      cleanup: {
+        ok: report.cleanup.ok,
+        trackedIdentities: report.cleanup.evidence.trackedIdentities.length,
+        homeRemoved: report.cleanup.evidence.homeRemoved,
+        processIdentitiesGone: report.cleanup.evidence.processIdentitiesGone,
+        sentinelAlive: report.cleanup.evidence.sentinelAlive
+      },
       observationElapsedMs: Object.fromEntries(report.observations.map((entry: { id: string; evidence: { elapsedMs: number } }) => [entry.id, entry.evidence.elapsedMs]))
     }))
     expect(report.parityComplete).toBe(true)
@@ -54,6 +73,16 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
         [index, entry.connId, entry.windowWorktree]))
     expect(report.cleanup.evidence.homeRemoved).toBe(true)
     expect(report.error).toBeUndefined()
+    expect(report.timing.cliCalls).toBe(report.receipts.length)
+    expect(stderr).toMatch(/^\[cli-files\] setup finished in /m)
+    expect(stderr.match(/^\[cli-files\] .+ observed in /gm)).toHaveLength(13)
+    expect(stderr).toMatch(/^\[cli-files\] teardown finished in /m)
+    for (const key of ['setupMs', 'observationsMs', 'teardownMs', 'cliCalls', 'cliChildMs', 'harnessMs', 'domWaitMs']) {
+      expect(Number.isInteger(report.timing[key])).toBe(true)
+      expect(report.timing[key]).toBeGreaterThanOrEqual(0)
+    }
+    expect(report.timing.cliChildMs).toBe(report.receipts.reduce(
+      (sum: number, receipt: { elapsedMs: number }) => sum + receipt.elapsedMs, 0))
     expect(report.rows.map((row: { id: string }) => row.id)).toEqual(['file-diff', 'file-open', 'file-open-changed', 'file-open-render'])
     const expectedObservations: Record<string, string[]> = {
       'file-diff': [
@@ -97,13 +126,22 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
       'files-window-refusals', 'files-review-diff', 'files-review-reuse', 'files-window-routing',
       'files-review-focus-window', 'files-review-background', 'files-review-source', 'files-review-changed', 'files-changed-modes'
     ].sort())
-    const receiptById = new Map(report.receipts.map((receipt: { id: string }) => [receipt.id, receipt]))
+    const receiptById = new Map<string, { id: string; elapsedMs: number }>(
+      report.receipts.map((receipt: { id: string; elapsedMs: number }) => [receipt.id, receipt]))
     for (const observation of report.observations) {
       expect(observation.status, JSON.stringify(observation.error)).toBe('observed')
       expect(Number.isFinite(observation.evidence.elapsedMs)).toBe(true)
       expect(observation.evidence.elapsedMs).toBeGreaterThanOrEqual(0)
       expect(observation.receiptIds.length).toBeGreaterThan(0)
       for (const receiptId of observation.receiptIds) expect(receiptById.has(receiptId)).toBe(true)
+      const timing = observation.evidence.timing
+      for (const key of ['cliCalls', 'cliChildMs', 'harnessMs', 'domWaitMs']) {
+        expect(Number.isInteger(timing[key])).toBe(true)
+        expect(timing[key]).toBeGreaterThanOrEqual(0)
+      }
+      expect(timing.cliCalls).toBe(observation.receiptIds.length)
+      expect(timing.cliChildMs).toBe(observation.receiptIds.reduce(
+        (sum: number, id: string) => sum + receiptById.get(id)!.elapsedMs, 0))
       expect(observation.before).toHaveLength(2)
       expect(observation.after).toHaveLength(2)
       for (const sample of [...observation.before, ...observation.after]) {
