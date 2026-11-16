@@ -26,6 +26,7 @@ import {
 import { CHECKS_FIXTURE_BRANCH } from './tasks-fixture'
 import { createRemoteFixtures, type RemoteFixtures } from './remote-fixtures'
 import { captureBrowserExecutable } from './browser'
+import { PALETTE_SEARCH_LABEL } from '../../packages/ui/src/plugins/palette'
 import {
   CAPTURE_SCHEMA_VERSION,
   THEMES,
@@ -621,8 +622,8 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
 }
 
 /** The one place that knows how the shell exposes Settings; update it when the control moves. */
-async function openSettings(runtime: CaptureRuntime): Promise<void> {
-  const more = runtime.page.locator('button[aria-label="More"]')
+export async function openSettings(runtime: Pick<CaptureRuntime, 'page' | 'options'>): Promise<void> {
+  const more = runtime.page.locator('.window-bar').getByRole('button', { name: 'More', exact: true })
   if (await more.count() !== 1) throw new Error('host Overflow control is unavailable')
   await more.click({ timeout: runtime.options.timeoutMs })
   const settings = runtime.page.getByRole('menuitem', { name: 'Settings', exact: true })
@@ -1096,6 +1097,12 @@ export async function waitForStateShown(runtime: Pick<CaptureRuntime, 'client' |
   throw new Error(`public UI state did not show ${target.id}`)
 }
 
+/** True when the open Command palette dialog contains its search field. */
+export async function paletteFieldMounted(page: Page): Promise<boolean> {
+  return await page.getByRole('dialog', { name: 'Command palette', exact: true })
+    .getByRole('textbox', { name: PALETTE_SEARCH_LABEL, exact: true }).count() > 0
+}
+
 async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
   await waitForStateShown(runtime, target)
   if (target.id === 'view:quirky.browser/page') {
@@ -1117,7 +1124,7 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
     }))
     if (!details.visible || details.rect.width <= 0 || details.rect.height <= 0) throw new Error(`${target.id} is hidden or has zero size`)
     if (!SHELL_TARGETS.has(target.id) && details.text.length === 0) throw new Error(`${target.id} is empty`)
-    if (target.id === 'host:palette' && await runtime.page.getByLabel('Filter commands').count() === 0) {
+    if (target.id === 'host:palette' && !await paletteFieldMounted(runtime.page)) {
       throw new Error('host palette did not mount its command filter')
     }
     return

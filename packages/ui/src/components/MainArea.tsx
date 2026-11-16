@@ -62,7 +62,7 @@ export function MainArea() {
           </div>
         ) : tabs.length > 0 && viewId ? (
           <>
-            <Tabs label="Open views" items={tabItems} value={viewId} onChange={(id) => {
+            <Tabs variant="underline" label="Open views" items={tabItems} value={viewId} onChange={(id) => {
               const selected = tabs.find((tab) => tab.id === id)
               if (selected) host.openView(selected.id, selected.input)
             }} />

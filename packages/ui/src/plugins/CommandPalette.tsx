@@ -9,6 +9,7 @@ import {
   FILE_SEARCH_DEBOUNCE_MS,
   FILE_SEARCH_LIMIT,
   PALETTE_SCOPES,
+  PALETTE_SEARCH_LABEL,
   cycleScope,
   decodeFileId,
   entryKey,
@@ -303,74 +304,80 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   let position = 0
   return (
     <Dialog open title="Command palette" placement="top" onClose={onClose}>
-      <TextField
-        ref={fieldRef}
-        autoFocus
-        label="Search"
-        aria-label="Search commands, tools, views, worktrees, and files"
-        placeholder="Type to search"
-        value={filter}
-        onChange={(event) => {
-          setFilter(event.target.value)
-          setSelectedEntryKey(null)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Tab') {
-            event.preventDefault()
-            event.stopPropagation()
-            chooseScope(cycleScope(scope, event.shiftKey ? -1 : 1))
-            return
-          }
-          const next = paletteKey(event.key, current, visible.length)
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.preventDefault()
-          const selectedEntry = visible[next.selected]
-          setSelectedEntryKey(selectedEntry ? entryKey(selectedEntry) : null)
-          if (next.run && visible[next.selected]) {
-            event.preventDefault()
-            run(visible[next.selected]!)
-          }
-        }}
-      />
-      <Tabs
-        label="Search scope"
-        items={PALETTE_SCOPES}
-        value={scope}
-        onChange={(id) => {
-          chooseScope(id as PaletteScope)
-          fieldRef.current?.focus()
-        }}
-      />
-      {snapshot.errors.worktrees && <p className="ui-error-text" role="status">Worktrees unavailable: {snapshot.errors.worktrees}</p>}
-      {snapshot.worktrees === null && !snapshot.errors.worktrees && <p className="ui-text-muted" role="status">Loading worktrees…</p>}
-      {showEmpty ? (
-        <EmptyState message={emptyMessage} />
-      ) : visible.length > 0 ? (
-        <div className="ui-option-list" role="listbox" aria-label="Search results">
-          {sections.map((section, sectionIndex) => (
-            <div key={section.title ?? 'results'} role="group" aria-labelledby={section.title === null ? undefined : `${sectionId}-${sectionIndex}`}>
-              {section.title !== null && <SectionHeader id={`${sectionId}-${sectionIndex}`} title={section.title} />}
-              {section.entries.map((entry) => {
-                const index = position++
-                return (
-                  <div
-                    key={entryKey(entry)}
-                    role="option"
-                    aria-selected={index === current}
-                    onMouseEnter={() => setSelectedEntryKey(entryKey(entry))}
-                  >
-                    <ListRow
-                      title={<span className="ui-cluster"><EntryIcon entry={entry} /><span>{entry.title}</span></span>}
-                      description={entry.description}
-                      selected={index === current}
-                      onClick={() => run(entry)}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          ))}
+      <div className="shell-palette">
+        <div className="shell-palette__search">
+          <ControlIcon name="magnifying-glass" />
+          <TextField
+            ref={fieldRef}
+            autoFocus
+            label="Search"
+            aria-label={PALETTE_SEARCH_LABEL}
+            placeholder="Type to search"
+            value={filter}
+            onChange={(event) => {
+              setFilter(event.target.value)
+              setSelectedEntryKey(null)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Tab') {
+                event.preventDefault()
+                event.stopPropagation()
+                chooseScope(cycleScope(scope, event.shiftKey ? -1 : 1))
+                return
+              }
+              const next = paletteKey(event.key, current, visible.length)
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.preventDefault()
+              const selectedEntry = visible[next.selected]
+              setSelectedEntryKey(selectedEntry ? entryKey(selectedEntry) : null)
+              if (next.run && visible[next.selected]) {
+                event.preventDefault()
+                run(visible[next.selected]!)
+              }
+            }}
+          />
         </div>
-      ) : null}
+        <Tabs
+          label="Search scope"
+          items={PALETTE_SCOPES}
+          value={scope}
+          onChange={(id) => {
+            chooseScope(id as PaletteScope)
+            fieldRef.current?.focus()
+          }}
+          variant="underline"
+        />
+        {snapshot.errors.worktrees && <p className="ui-error-text" role="status">Worktrees unavailable: {snapshot.errors.worktrees}</p>}
+        {snapshot.worktrees === null && !snapshot.errors.worktrees && <p className="ui-text-muted" role="status">Loading worktrees…</p>}
+        {showEmpty ? (
+          <EmptyState message={emptyMessage} />
+        ) : visible.length > 0 ? (
+          <div className="ui-option-list" role="listbox" aria-label="Search results">
+            {sections.map((section, sectionIndex) => (
+              <div key={section.title ?? 'results'} role="group" aria-labelledby={section.title === null ? undefined : `${sectionId}-${sectionIndex}`}>
+                {section.title !== null && <SectionHeader id={`${sectionId}-${sectionIndex}`} title={section.title} />}
+                {section.entries.map((entry) => {
+                  const index = position++
+                  return (
+                    <div
+                      key={entryKey(entry)}
+                      role="option"
+                      aria-selected={index === current}
+                      onMouseEnter={() => setSelectedEntryKey(entryKey(entry))}
+                    >
+                      <ListRow
+                        title={<span className="ui-cluster"><EntryIcon entry={entry} /><span>{entry.title}</span></span>}
+                        description={entry.description}
+                        selected={index === current}
+                        onClick={() => run(entry)}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </Dialog>
   )
 }

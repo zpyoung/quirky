@@ -14,6 +14,8 @@ export type PaletteEntry = {
 
 export type PaletteScope = 'all' | 'worktrees' | 'commands' | 'files'
 
+export const PALETTE_SEARCH_LABEL = 'Search commands, tools, views, worktrees, and files'
+
 export const PALETTE_SCOPES: readonly { id: PaletteScope; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'worktrees', label: 'Worktrees' },
