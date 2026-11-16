@@ -5,12 +5,24 @@ import { join, relative } from 'node:path'
 import { discover, macosOnly } from '../suite'
 import { createProcessScope } from '../test-support/process-scope'
 
-type Step = { id?: string; name?: string; uses?: string; run?: string; if?: string | boolean; with?: Record<string, unknown>; env?: Record<string, string> }
+type Step = {
+  id?: string
+  name?: string
+  uses?: string
+  run?: string
+  if?: string | boolean
+  with?: Record<string, unknown>
+  env?: Record<string, string>
+  'timeout-minutes'?: number
+  'continue-on-error'?: boolean
+}
 type Job = {
   name?: string
   if?: string | boolean
   needs?: string | string[]
   permissions?: Record<string, string>
+  env?: Record<string, string>
+  'timeout-minutes'?: number
   steps?: Step[]
 }
 type Workflow = {
@@ -19,6 +31,27 @@ type Workflow = {
   permissions?: Record<string, string>
   jobs: Record<string, Job>
 }
+
+type StepStatus = 'success' | 'failure' | 'skipped'
+type UploadCall = {
+  id: string
+  name: string
+  path: string
+  retentionDays: unknown
+  ifNoFilesFound: unknown
+  overwrite: boolean
+  outcome: StepStatus
+  conclusion: StepStatus
+}
+type UploadSimulationOptions = {
+  resultsPresent: boolean
+  failedAttempts?: ReadonlySet<number>
+  partialArtifactOnFailure?: boolean
+  cancelled?: boolean
+  cancelAfterAttempt?: number
+  shardFailed?: boolean
+}
+type UploadedArtifact = { path: string; attempt: number; partial: boolean }
 
 const path = join(import.meta.dir, '../../.github/workflows/tests.yml')
 const source = await Bun.file(path).text()
@@ -31,6 +64,80 @@ const allRuns = Object.keys(jobs).flatMap(runs)
 const needsOf = (name: string): string[] => [jobs[name]!.needs ?? []].flat()
 const effectivePermissions = (name: string): Record<string, string> => jobs[name]!.permissions ?? workflow.permissions ?? {}
 const norm = (expr: unknown): string => String(expr).replace(/\$\{\{|\}\}/g, '').replace(/\s+/g, ' ').trim()
+
+const resultUploadSteps = (job: string): (Step & { id: string })[] =>
+  steps(job).filter(step => /^upload_results_[123]$/.test(step.id ?? '')) as (Step & { id: string })[]
+
+const shouldRunResultUpload = (
+  expression: unknown,
+  state: {
+    cancelled: boolean
+    resultsPresent: boolean
+    outcomes: Map<string, StepStatus>
+    conclusions: Map<string, StepStatus>
+  },
+): boolean => {
+  const condition = norm(expression)
+  if (condition === "!cancelled() && hashFiles('results/*.json') != ''") {
+    return !state.cancelled && state.resultsPresent
+  }
+  const retry = condition.match(/^!cancelled\(\) && steps\.(upload_results_[12])\.(outcome|conclusion) == 'failure'$/)
+  if (!retry) throw new Error(`Unsupported result-upload condition: ${condition}`)
+  const status = retry[2] === 'outcome' ? state.outcomes : state.conclusions
+  return !state.cancelled && status.get(retry[1]!) === 'failure'
+}
+
+const simulateResultUploads = (job: string, options: UploadSimulationOptions) => {
+  const outcomes = new Map<string, StepStatus>()
+  const conclusions = new Map<string, StepStatus>()
+  const attempts: UploadCall[] = []
+  const artifacts = new Map<string, UploadedArtifact>()
+  let cancelled = options.cancelled ?? false
+  let jobFailed = options.shardFailed ?? false
+
+  for (const step of resultUploadSteps(job)) {
+    const id = step.id
+    if (!shouldRunResultUpload(step.if, { cancelled, resultsPresent: options.resultsPresent, outcomes, conclusions })) {
+      outcomes.set(id, 'skipped')
+      conclusions.set(id, 'skipped')
+      continue
+    }
+
+    const attempt = Number(id.slice(-1))
+    const name = String(step.with?.name)
+    const path = String(step.with?.path)
+    const previous = artifacts.get(name)
+    const overwrite = step.with?.overwrite === true
+    let outcome: StepStatus
+    if (previous && !overwrite) {
+      outcome = 'failure'
+    } else if (options.failedAttempts?.has(attempt)) {
+      outcome = 'failure'
+      if (options.partialArtifactOnFailure) artifacts.set(name, { path, attempt, partial: true })
+    } else {
+      outcome = 'success'
+      artifacts.set(name, { path, attempt, partial: false })
+    }
+    const conclusion: StepStatus = outcome === 'failure' && step['continue-on-error'] === true ? 'success' : outcome
+    if (outcome === 'failure' && conclusion === 'failure') jobFailed = true
+
+    outcomes.set(id, outcome)
+    conclusions.set(id, conclusion)
+    attempts.push({
+      id,
+      name,
+      path,
+      retentionDays: step.with?.['retention-days'],
+      ifNoFilesFound: step.with?.['if-no-files-found'],
+      overwrite,
+      outcome,
+      conclusion,
+    })
+    if (options.cancelAfterAttempt === attempt) cancelled = true
+  }
+
+  return { attempts, artifacts, jobFailed }
+}
 
 const JOBS_OK = "${{ needs.plan.result != 'failure' && needs.plan.result != 'cancelled' && needs.linux.result != 'failure' && needs.linux.result != 'cancelled' && needs.macos.result != 'failure' && needs.macos.result != 'cancelled' }}"
 
@@ -567,6 +674,68 @@ if (process.argv.includes('--version')) {
   }, 30_000)
 })
 
+describe('Linux Playwright browser provisioning', () => {
+  test('installs the full Chromium bundle before shards without changing smoke or other jobs', () => {
+    const linux = steps('linux')
+    const dependencies = linux.find(step => step.run === 'bun install --frozen-lockfile')!
+    const install = linux.find(step => step.name === 'Install Playwright Chromium')!
+    const prepare = linux.find(step => step.name === 'Prepare sandboxed Chrome')!
+    const shard = linux.find(step => step.name === 'Run shard')!
+
+    expect(jobs.linux!.env?.PLAYWRIGHT_BROWSERS_PATH).toBe('${{ runner.temp }}/quirky-playwright')
+    expect(install.run).toBe('bun node_modules/playwright/cli.js install chromium')
+    expect(linux.indexOf(install)).toBeGreaterThan(linux.indexOf(dependencies))
+    expect(linux.indexOf(install)).toBeLessThan(linux.indexOf(shard))
+    expect(install.if).toBeUndefined()
+    expect(install['continue-on-error']).toBeUndefined()
+    expect(install.run).not.toMatch(/--only-shell|--no-shell/)
+    expect(prepare).toBeDefined()
+    expect(linux.indexOf(prepare)).toBeLessThan(linux.indexOf(shard))
+    expect(jobs.linux!['timeout-minutes']).toBe(30)
+
+    expect(jobs.macos!.env?.PLAYWRIGHT_BROWSERS_PATH).toBeUndefined()
+    expect(steps('macos').some(step => step.run?.includes('playwright/cli.js install chromium'))).toBe(false)
+    expect(jobs.speed!.env?.PLAYWRIGHT_BROWSERS_PATH).toBeUndefined()
+    expect(steps('speed').some(step => step.run === 'bun node_modules/playwright/cli.js install chromium')).toBe(true)
+  })
+
+  test('keeps the bundle path stable in fresh Bun children with different homes', () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-playwright-path-')))
+    const browsers = join(root, 'runner-temp', 'quirky-playwright')
+    const homes = [join(root, 'home-one'), join(root, 'home-two')]
+    const projectRoot = join(import.meta.dir, '../..')
+    try {
+      for (const home of homes) mkdirSync(home)
+      const executableForHome = (home: string): string => {
+        const child = Bun.spawnSync([
+          process.execPath,
+          '-e',
+          'import { chromium } from "playwright"; process.stdout.write(chromium.executablePath())',
+        ], {
+          cwd: projectRoot,
+          env: {
+            ...process.env,
+            HOME: home,
+            QUIRKY_HOME: home,
+            PLAYWRIGHT_BROWSERS_PATH: browsers,
+            BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0',
+          },
+          stdout: 'pipe',
+          stderr: 'pipe',
+        })
+        expect(child.exitCode).toBe(0)
+        return child.stdout.toString().trim()
+      }
+      const [first, second] = homes.map(executableForHome)
+      expect(first).not.toBe('')
+      expect(first).toBe(second)
+      expect(first.startsWith(`${browsers}/`)).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('Linux test coverage routing', () => {
   const root = join(import.meta.dir, '../..')
   const retained = [
@@ -743,8 +912,8 @@ describe('artifacts', () => {
   test('each job writes the artifact the table names', () => {
     const named = (job: string) => uploads.filter(upload => upload.job === job).map(upload => String(upload.step.with?.name))
     expect(named('plan')).toEqual(['test-plan'])
-    expect(named('linux')).toEqual(['test-results-linux-${{ matrix.shard }}'])
-    expect(named('macos')).toEqual(['test-results-macos'])
+    expect(named('linux')).toEqual(Array(3).fill('test-results-linux-${{ matrix.shard }}'))
+    expect(named('macos')).toEqual(Array(3).fill('test-results-macos'))
     expect(named('tests')).toEqual(['test-baseline-${{ github.sha }}'])
     expect(named('speed')).toEqual(['speed-run', 'speed-baseline-${{ github.sha }}'])
   })
@@ -754,6 +923,131 @@ describe('artifacts', () => {
       const retained = /^(test-baseline-|speed-)/.test(String(step.with?.name))
       expect(step.with?.['retention-days']).toBe(retained ? 14 : 1)
     }
+  })
+})
+
+describe('result upload retry ladder', () => {
+  const resultJobs = [
+    { name: 'linux', artifact: 'test-results-linux-${{ matrix.shard }}' },
+    { name: 'macos', artifact: 'test-results-macos' },
+  ] as const
+  const expectedIds = ['upload_results_1', 'upload_results_2', 'upload_results_3']
+  const expectedConditions = [
+    "!cancelled() && hashFiles('results/*.json') != ''",
+    "!cancelled() && steps.upload_results_1.outcome == 'failure'",
+    "!cancelled() && steps.upload_results_2.outcome == 'failure'",
+  ]
+
+  test('keeps the three parsed uploads bounded and identical per platform', () => {
+    for (const { name, artifact } of resultJobs) {
+      const ladder = resultUploadSteps(name)
+      expect(ladder.map(step => step.id)).toEqual(expectedIds)
+      expect(ladder.map(step => step.uses)).toEqual(Array(3).fill('actions/upload-artifact@v4'))
+      expect(ladder.map(step => norm(step.if))).toEqual(expectedConditions)
+      expect(ladder.map(step => step['timeout-minutes'])).toEqual([5, 5, 5])
+      expect(ladder.map(step => step['continue-on-error'])).toEqual([true, true, undefined])
+      expect(ladder.map(step => step.with?.name)).toEqual(Array(3).fill(artifact))
+      expect(ladder.map(step => step.with?.path)).toEqual(Array(3).fill('results/'))
+      expect(ladder.map(step => step.with?.['retention-days'])).toEqual([1, 1, 1])
+      expect(ladder.map(step => step.with?.['if-no-files-found'])).toEqual(Array(3).fill('error'))
+      expect(ladder.map(step => step.with?.overwrite)).toEqual([undefined, true, true])
+      const shard = steps(name).find(step => step.run?.includes('cli.ts run-shard'))!
+      expect(steps(name).indexOf(ladder[0]!)).toBeGreaterThan(steps(name).indexOf(shard))
+    }
+
+    const downloads = steps('tests').filter(step => step.uses?.startsWith('actions/download-artifact@'))
+    expect(downloads.some(step => step.with?.pattern === 'test-results-*')).toBe(true)
+  })
+
+  test('retries a partial first upload using outcome and skips the third after recovery', () => {
+    for (const { name, artifact } of resultJobs) {
+      const result = simulateResultUploads(name, {
+        resultsPresent: true,
+        failedAttempts: new Set([1]),
+        partialArtifactOnFailure: true,
+      })
+      expect(result.attempts.map(call => call.id)).toEqual(expectedIds.slice(0, 2))
+      expect(result.attempts.map(call => call.outcome)).toEqual(['failure', 'success'])
+      expect(result.attempts[0]?.conclusion).toBe('success')
+      expect(result.attempts.map(call => call.name)).toEqual([artifact, artifact])
+      expect(result.attempts.map(call => call.path)).toEqual(['results/', 'results/'])
+      expect(result.attempts[1]?.overwrite).toBe(true)
+      expect(result.artifacts.get(artifact)).toEqual({ path: 'results/', attempt: 2, partial: false })
+      expect(result.jobFailed).toBe(false)
+    }
+  })
+
+  test('recovers on the third upload after two transient failures', () => {
+    for (const { name, artifact } of resultJobs) {
+      const result = simulateResultUploads(name, {
+        resultsPresent: true,
+        failedAttempts: new Set([1, 2]),
+        partialArtifactOnFailure: true,
+      })
+      expect(result.attempts.map(call => call.id)).toEqual(expectedIds)
+      expect(result.attempts.map(call => call.outcome)).toEqual(['failure', 'failure', 'success'])
+      expect(result.attempts.map(call => call.conclusion)).toEqual(['success', 'success', 'success'])
+      expect(result.artifacts.get(artifact)).toEqual({ path: 'results/', attempt: 3, partial: false })
+      expect(result.jobFailed).toBe(false)
+    }
+  })
+
+  test('runs only the first upload when it succeeds', () => {
+    for (const { name } of resultJobs) {
+      const result = simulateResultUploads(name, { resultsPresent: true })
+      expect(result.attempts.map(call => call.id)).toEqual(['upload_results_1'])
+      expect(result.attempts[0]?.outcome).toBe('success')
+      expect(result.jobFailed).toBe(false)
+    }
+  })
+
+  test('fails hard when all three uploads fail', () => {
+    for (const { name } of resultJobs) {
+      const result = simulateResultUploads(name, {
+        resultsPresent: true,
+        failedAttempts: new Set([1, 2, 3]),
+        partialArtifactOnFailure: true,
+      })
+      expect(result.attempts.map(call => call.id)).toEqual(expectedIds)
+      expect(result.attempts.map(call => call.outcome)).toEqual(['failure', 'failure', 'failure'])
+      expect(result.attempts.map(call => call.conclusion)).toEqual(['success', 'success', 'failure'])
+      expect(result.jobFailed).toBe(true)
+    }
+  })
+
+  test('cancellation prevents an upload ladder from starting or continuing', () => {
+    for (const { name } of resultJobs) {
+      const alreadyCancelled = simulateResultUploads(name, { resultsPresent: true, cancelled: true })
+      expect(alreadyCancelled.attempts).toEqual([])
+
+      const cancelledAfterFirst = simulateResultUploads(name, {
+        resultsPresent: true,
+        failedAttempts: new Set([1]),
+        partialArtifactOnFailure: true,
+        cancelAfterAttempt: 1,
+      })
+      expect(cancelledAfterFirst.attempts.map(call => call.id)).toEqual(['upload_results_1'])
+    }
+  })
+
+  test('uploads result JSON after a shard failure without clearing the job failure', () => {
+    for (const { name } of resultJobs) {
+      const result = simulateResultUploads(name, { resultsPresent: true, shardFailed: true })
+      expect(result.attempts.map(call => call.id)).toEqual(['upload_results_1'])
+      expect(result.attempts[0]?.outcome).toBe('success')
+      expect(result.jobFailed).toBe(true)
+    }
+  })
+
+  test('skips uploads with no result JSON and keeps the existing incomplete-run checks', () => {
+    for (const { name } of resultJobs) {
+      const result = simulateResultUploads(name, { resultsPresent: false, shardFailed: true })
+      expect(result.attempts).toEqual([])
+      expect(result.jobFailed).toBe(true)
+    }
+    expect(steps('tests').some(step => step.with?.pattern === 'test-results-*')).toBe(true)
+    expect(steps('tests').find(step => step.run?.includes('cli.ts verdict'))?.if).toBe('always()')
+    expect(String(steps('tests').at(-1)?.if)).toContain('outcome')
   })
 })
 
