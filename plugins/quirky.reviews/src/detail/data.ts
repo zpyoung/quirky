@@ -1,5 +1,6 @@
 import type { JsonRecord, ReviewData, ReviewsState } from '../contracts'
 
+export type ReviewProvider = 'github' | 'gitlab'
 export type RepoIdentity = { host: string; owner: string; repo: string }
 export type ReviewComment = {
   kind: 'issue_comment' | 'review' | 'review_comment'
@@ -69,16 +70,39 @@ export function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function parseRepoIdentity(value: unknown): RepoIdentity | null {
+function isReviewProvider(value: unknown): value is ReviewProvider {
+  return value === 'github' || value === 'gitlab'
+}
+
+function validGitLabSegment(value: string): boolean {
+  return value.length <= 255 && /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(value) && value !== '.git'
+}
+
+export function parseRepoIdentity(value: unknown, provider?: ReviewProvider): RepoIdentity | null {
+  if (provider !== undefined && !isReviewProvider(provider)) return null
   if (!isRecord(value) || typeof value.host !== 'string' || typeof value.owner !== 'string' || typeof value.repo !== 'string') return null
-  if (!/^[A-Za-z0-9.-]+(?::[0-9]{1,5})?$/.test(value.host)
-    || value.owner.length === 0 || value.repo.length === 0
-    || value.owner.includes('/') || value.repo.includes('/')) return null
+  const hostPattern = provider === 'gitlab'
+    ? /^(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(?::[0-9]{1,5})?$/
+    : /^[A-Za-z0-9.-]+(?::[0-9]{1,5})?$/
+  if (!hostPattern.test(value.host)) return null
+  if (provider === 'gitlab') {
+    try {
+      if (new URL(`https://${value.host}`).host.toLowerCase() !== value.host.toLowerCase()) return null
+    } catch {
+      return null
+    }
+    const namespace = value.owner.split('/')
+    if (namespace.some((segment) => !validGitLabSegment(segment)) || !validGitLabSegment(value.repo)) return null
+  } else if (value.owner.length === 0 || value.repo.length === 0 || value.owner.includes('/') || value.repo.includes('/')) {
+    return null
+  }
   return { host: value.host, owner: value.owner, repo: value.repo }
 }
 
-export function repoFromReviewUrl(value: unknown, expectedNumber?: number): RepoIdentity | null {
-  if (typeof value !== 'string') return null
+function rawReviewUrl(value: unknown): { url: URL; segments: string[] } | null {
+  if (typeof value !== 'string' || value.length > 8192 || value.includes('\\')) return null
+  const raw = /^https?:\/\/[^/?#]+([^?#]*)(?:[?#].*)?$/i.exec(value)
+  if (!raw) return null
   let url: URL
   try {
     url = new URL(value)
@@ -86,20 +110,156 @@ export function repoFromReviewUrl(value: unknown, expectedNumber?: number): Repo
     return null
   }
   if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.username !== '' || url.password !== '') return null
-  const match = /^\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]*)\/?$/.exec(url.pathname)
-  if (!match) return null
-  const owner = match[1]
-  const repo = match[2]
-  const number = Number(match[3])
-  if (!owner || !repo || !Number.isSafeInteger(number) || expectedNumber !== undefined && number !== expectedNumber) return null
-  return { host: url.host, owner, repo }
+  let path = raw[1] || '/'
+  if (!path.startsWith('/')) return null
+  if (path.endsWith('/')) path = path.slice(0, -1)
+  const rawSegments = path.slice(1).split('/')
+  if (rawSegments.length === 0 || rawSegments.some((segment) => segment === '' || /%2f|%5c/i.test(segment))) return null
+  const segments: string[] = []
+  for (const rawSegment of rawSegments) {
+    let segment: string
+    try {
+      segment = decodeURIComponent(rawSegment)
+    } catch {
+      return null
+    }
+    if (segment.length === 0 || segment === '.' || segment === '..' || segment.includes('/') || segment.includes('\\')
+      || /[\u0000-\u001f\u007f]/.test(segment)) return null
+    segments.push(segment)
+  }
+  return { url, segments }
 }
+
+function reviewNumber(value: string): number | null {
+  if (!/^[1-9][0-9]*$/.test(value)) return null
+  const number = Number(value)
+  return Number.isSafeInteger(number) ? number : null
+}
+
+export function repoFromReviewUrl(value: unknown, expectedNumber?: number, provider?: ReviewProvider): RepoIdentity | null {
+  if (provider !== undefined && !isReviewProvider(provider)) return null
+  const parsed = rawReviewUrl(value)
+  if (parsed === null) return null
+  const { url, segments } = parsed
+  const providers: ReviewProvider[] = provider === undefined ? ['github', 'gitlab'] : [provider]
+  for (const selectedProvider of providers) {
+    let owner: string
+    let repo: string
+    let number: number | null
+    if (selectedProvider === 'github') {
+      if (segments.length !== 4 || segments[2] !== 'pull') continue
+      owner = segments[0]!
+      repo = segments[1]!
+      number = reviewNumber(segments[3]!)
+    } else {
+      if (segments.length < 5 || segments[segments.length - 3] !== '-' || segments[segments.length - 2] !== 'merge_requests') continue
+      const repoIndex = segments.length - 4
+      owner = segments.slice(0, repoIndex).join('/')
+      repo = segments[repoIndex]!
+      number = reviewNumber(segments[segments.length - 1]!)
+    }
+    if (number === null || expectedNumber !== undefined && number !== expectedNumber) continue
+    const identity = parseRepoIdentity({ host: url.host, owner, repo }, selectedProvider)
+    if (identity !== null) return identity
+  }
+  return null
+}
+
+export type GitHubAuthAccount = {
+  host: string
+  user: string
+  source: 'keyring' | 'env'
+  active: boolean
+  bindable?: boolean
+  scopes: string[]
+}
+
+export type GitLabAuthAccount = {
+  host: string
+  user: string
+  source: 'env' | 'keyring' | 'glab'
+  active: boolean
+  scopes: string[]
+}
+
+export type GitHubAuthDiagnostics = JsonRecord & {
+  provider?: 'github'
+  ghAvailable: boolean
+  activeAccount?: GitHubAuthAccount | null
+  accounts: GitHubAuthAccount[]
+  envTokenInProcess: boolean
+  missingScopes: string[]
+  requiredScopes: string[]
+  hasKeyringFallback: boolean
+  requiredHost?: string
+  requiredHostAuthenticated: boolean
+}
+
+export type GitLabAuthDiagnostics = JsonRecord & {
+  provider: 'gitlab'
+  tokenSource: 'env' | 'glab' | null
+  glabAvailable: boolean | null
+  tokenRejected: boolean
+  activeAccount: { host: string; user: string } | null
+  accounts: GitLabAuthAccount[]
+  envTokenInProcess: boolean
+  missingScopes: string[]
+  requiredScopes: string[]
+  hasKeyringFallback: boolean
+  requiredHost: string
+  requiredHostAuthenticated: boolean
+}
+
+export type ReviewsAuthDiagnostics = GitHubAuthDiagnostics | GitLabAuthDiagnostics
 
 export function sameRepo(left: RepoIdentity | null, right: RepoIdentity | null): boolean {
   return left === null ? right === null : right !== null
     && left.host.toLowerCase() === right.host.toLowerCase()
     && left.owner.toLowerCase() === right.owner.toLowerCase()
     && left.repo.toLowerCase() === right.repo.toLowerCase()
+}
+
+function validGitHubAuthAccount(value: unknown): value is GitHubAuthAccount {
+  return isRecord(value) && typeof value.host === 'string' && typeof value.user === 'string'
+    && (value.source === 'keyring' || value.source === 'env') && typeof value.active === 'boolean'
+    && (value.bindable === undefined || typeof value.bindable === 'boolean') && isStringArray(value.scopes)
+}
+
+function validGitLabAuthAccount(value: unknown): value is GitLabAuthAccount {
+  return isRecord(value) && typeof value.host === 'string' && typeof value.user === 'string'
+    && (value.source === 'env' || value.source === 'keyring' || value.source === 'glab')
+    && typeof value.active === 'boolean' && isStringArray(value.scopes)
+}
+
+function safeGitLabMergeMetadata(review: JsonRecord): boolean {
+  return review.autoMergeRequest === null && review.stack === null
+    && isRecord(review.mergeMethods) && review.mergeMethods.default === null
+    && Array.isArray(review.mergeMethods.allowed) && review.mergeMethods.allowed.length === 0
+    && review.mergeQueueRequired === false && review.autoMergeAllowed === null && review.mergeMetadataKnown === false
+}
+
+export function parseAuthDiagnostics(value: unknown): ReviewsAuthDiagnostics | null {
+  if (!isRecord(value)) return null
+  if (value.provider === 'gitlab') {
+    const active = value.activeAccount
+    if ((value.tokenSource !== 'env' && value.tokenSource !== 'glab' && value.tokenSource !== null)
+      || (value.glabAvailable !== null && typeof value.glabAvailable !== 'boolean')
+      || typeof value.tokenRejected !== 'boolean'
+      || !(active === null || isRecord(active) && typeof active.host === 'string' && typeof active.user === 'string')
+      || !Array.isArray(value.accounts) || !value.accounts.every(validGitLabAuthAccount)
+      || typeof value.envTokenInProcess !== 'boolean' || !isStringArray(value.missingScopes)
+      || !isStringArray(value.requiredScopes) || typeof value.hasKeyringFallback !== 'boolean'
+      || typeof value.requiredHost !== 'string' || typeof value.requiredHostAuthenticated !== 'boolean') return null
+    return value as unknown as GitLabAuthDiagnostics
+  }
+  if (value.provider !== undefined && value.provider !== 'github') return null
+  if (typeof value.ghAvailable !== 'boolean' || typeof value.requiredHostAuthenticated !== 'boolean'
+    || typeof value.envTokenInProcess !== 'boolean' || typeof value.hasKeyringFallback !== 'boolean'
+    || !isStringArray(value.missingScopes) || !isStringArray(value.requiredScopes)
+    || !Array.isArray(value.accounts) || !value.accounts.every(validGitHubAuthAccount)
+    || (value.activeAccount !== undefined && value.activeAccount !== null && !validGitHubAuthAccount(value.activeAccount))
+    || (value.requiredHost !== undefined && typeof value.requiredHost !== 'string')) return null
+  return value as unknown as GitHubAuthDiagnostics
 }
 
 export function parseReviewLookup(value: unknown):
@@ -115,14 +275,21 @@ export function parseReviewLookup(value: unknown):
   }
   if (value.kind !== 'found' || !isRecord(value.review)) return null
   const review = value.review
-  if (typeof review.provider !== 'string' || typeof review.number !== 'number' || !Number.isSafeInteger(review.number) || review.number < 1
+  if (!isReviewProvider(review.provider) || typeof review.number !== 'number' || !Number.isSafeInteger(review.number) || review.number < 1
     || typeof review.url !== 'string' || typeof review.title !== 'string' || typeof review.body !== 'string'
     || !['open', 'draft', 'closed', 'merged'].includes(String(review.state))
     || typeof review.headRefName !== 'string' || typeof review.baseRefName !== 'string'
     || typeof review.headRefOid !== 'string' || typeof review.baseRefOid !== 'string'
     || typeof review.mergeable !== 'string' || typeof review.checksStatus !== 'string'
-    || typeof review.reviewDecision !== 'string' || typeof review.mergeStateStatus !== 'string'
-    || !repoFromReviewUrl(review.url, review.number)) return null
+    || typeof review.reviewDecision !== 'string' || typeof review.mergeStateStatus !== 'string') return null
+  const urlRepo = repoFromReviewUrl(review.url, review.number, review.provider)
+  if (urlRepo === null) return null
+  for (const key of ['repository', 'prRepo'] as const) {
+    if (review[key] === undefined) continue
+    const suppliedRepo = parseRepoIdentity(review[key], review.provider)
+    if (suppliedRepo === null || !sameRepo(suppliedRepo, urlRepo)) return null
+  }
+  if (review.provider === 'gitlab' && !safeGitLabMergeMetadata(review)) return null
   return { kind: 'found', review: review as unknown as ReviewData, fetchedAt: value.fetchedAt }
 }
 
@@ -175,16 +342,23 @@ function parseComment(value: unknown): ReviewComment | null {
   return comment
 }
 
-export function parseCommentsResult(value: unknown, number: number): CommentsResult | null {
+export function parseCommentsResult(value: unknown, number: number, provider?: ReviewProvider): CommentsResult | null {
+  if (provider !== undefined && !isReviewProvider(provider)) return null
+  const selectedProvider = provider ?? 'github'
   if (!isRecord(value) || value.number !== number || !Array.isArray(value.comments)
-    || typeof value.partial !== 'boolean' || !isStringArray(value.partialFailures) || value.comments.length > 100) return null
+    || typeof value.partial !== 'boolean' || !isStringArray(value.partialFailures)
+    || selectedProvider === 'github' && value.comments.length > 100) return null
+  const truncated = selectedProvider === 'gitlab' && value.comments.length > 100
   const comments: ReviewComment[] = []
-  for (const raw of value.comments) {
-    const comment = parseComment(raw)
+  for (let index = 0; index < value.comments.length; index += 1) {
+    const comment = parseComment(value.comments[index])
     if (comment === null) return null
-    comments.push(comment)
+    if (index < 100) comments.push(comment)
   }
-  return { number, comments, partial: value.partial, partialFailures: value.partialFailures }
+  const partialFailures = truncated && !value.partialFailures.includes('reviews_comments_truncated')
+    ? [...value.partialFailures, 'reviews_comments_truncated']
+    : value.partialFailures
+  return { number, comments, partial: value.partial || truncated, partialFailures }
 }
 
 function parseChangedFile(value: unknown): ChangedFile | null {
@@ -337,12 +511,22 @@ export function reviewContext(state: ReviewsState, surface: 'detail' | 'checks')
     source = review?.prRepo
   }
   if (typeof worktree !== 'string' || worktree.length === 0 || number === null || !Number.isSafeInteger(number) || number < 1) return null
-  if (review !== null && review.number !== number) return null
-  const explicit = source === undefined ? null : parseRepoIdentity(source)
+  let provider: ReviewProvider | undefined
+  if (review !== null) {
+    if (!isReviewProvider(review.provider) || review.number !== number) return null
+    provider = review.provider
+    if (provider === 'gitlab' && !safeGitLabMergeMetadata(review)) return null
+  }
+  const explicit = source === undefined ? null : parseRepoIdentity(source, provider)
   if (source !== undefined && explicit === null) return null
-  const urlRepo = review === null ? null : repoFromReviewUrl(review.url, number)
-  if (review !== null && urlRepo === null || explicit !== null && urlRepo !== null && !sameRepo(explicit, urlRepo)) return null
-  return { surface, worktree, number, generation, review, repo: explicit ?? urlRepo }
+  const urlRepo = review === null ? null : repoFromReviewUrl(review.url, number, provider)
+  if (review !== null && urlRepo === null) return null
+  const repository = review?.repository === undefined ? null : parseRepoIdentity(review.repository, provider)
+  if (review?.repository !== undefined && repository === null) return null
+  if (explicit !== null && urlRepo !== null && !sameRepo(explicit, urlRepo)
+    || repository !== null && urlRepo !== null && !sameRepo(repository, urlRepo)
+    || explicit !== null && repository !== null && !sameRepo(explicit, repository)) return null
+  return { surface, worktree, number, generation, review, repo: explicit ?? repository ?? urlRepo }
 }
 export type ReviewStackEntry = {
   position: number
