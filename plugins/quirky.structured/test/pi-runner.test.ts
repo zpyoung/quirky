@@ -343,6 +343,25 @@ for (const variant of ['pi', 'omp'] as const) {
       expect(settings).toEqual({ model: 'openai/gpt-x', effort: 'high' })
     })
 
+    test('overlapping configure calls apply in arrival order', async () => {
+      const transport = await begin(null, { model: 'anthropic/old' })
+      let release!: () => void
+      const held = new Promise<void>((resolve) => (release = resolve))
+      transport.replies.set('get_available_models', () => ({ success: true, data: { models: [{ provider: 'a', id: 'solo' }] } }))
+      const originalWrite = transport.write.bind(transport)
+      transport.write = (frame) => {
+        if (frame.type === 'get_available_models') void held.then(() => originalWrite(frame))
+        else originalWrite(frame)
+      }
+      const first = setup.runner.configure!(setup.session.id, { model: 'solo' })
+      const second = setup.runner.configure!(setup.session.id, { model: 'openai/gpt-x' })
+      await Bun.sleep(5)
+      release()
+      await first
+      expect(await second).toEqual({ model: 'openai/gpt-x' })
+      expect(transport.commands('set_model').at(-1)).toMatchObject({ provider: 'openai', modelId: 'gpt-x' })
+    })
+
     test('models lists the available models as provider/id', async () => {
       const transport = await begin(null)
       transport.replies.set('get_available_models', () => ({

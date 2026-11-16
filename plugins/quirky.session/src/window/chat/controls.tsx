@@ -49,9 +49,11 @@ type LiveModels = { models: Choice[]; current: string | null } | 'failed' | null
 function useLiveModels(context: UiPluginContext, session: Session, capabilities: AgentCapabilities | null, options: AgentOptions | null): LiveModels {
   const [live, setLive] = useState<LiveModels>(null)
   const wanted = options !== null && options.models.length === 0 && capabilities?.model.ok === true
+  const started = session.status !== 'starting'
   useEffect(() => {
     setLive(null)
-    if (!wanted) return
+    // the runner answers "not running" until startup finishes, so wait and refetch when it does
+    if (!wanted || !started) return
     let cancelled = false
     context
       .call('quirky.structured/models', { session: session.id })
@@ -66,7 +68,7 @@ function useLiveModels(context: UiPluginContext, session: Session, capabilities:
     return () => {
       cancelled = true
     }
-  }, [context, session.id, wanted])
+  }, [context, session.id, wanted, started])
   return wanted ? live : null
 }
 
