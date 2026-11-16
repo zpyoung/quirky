@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { AskEnvelope, AskSpec, Session, SessionStatus, StructuredMessage } from '@quirky/protocol'
 import { createClaudeRunner, type ClaudeQueryParams } from '../claude-runner'
 import type { NewStructuredMessage, StructuredContext, StructuredRunner } from '../runner'
@@ -46,12 +49,17 @@ function makeContext(): StructuredContext {
   }
 }
 
-function envelope(status: Exclude<AskEnvelope['status'], 'unavailable'>, decision?: string): AskEnvelope {
+function envelope(status: Exclude<AskEnvelope['status'], 'unavailable'>, decision?: string, reason?: string): AskEnvelope {
   return {
     status,
     askId: 'a_1',
-    answers: decision ? { decision: { value: decision, source: 'option' } } : {},
-    skipped: decision ? [] : ['decision'],
+    answers: decision
+      ? {
+          decision: { value: decision, source: 'option' },
+          ...(reason ? { reason: { value: reason, source: 'input' as const } } : {})
+        }
+      : {},
+    skipped: decision ? (reason ? [] : ['reason']) : ['decision'],
     summary: ''
   }
 }
@@ -349,7 +357,7 @@ describe('canUseTool', () => {
     expect(question.question).toContain('Bash')
     expect(question.question).toContain('rm -rf build')
     expect(question.question).not.toContain('\n')
-    expect((question as any).options.map((o: any) => o.value)).toEqual(['allow', 'deny', 'always'])
+    expect((question as any).options.map((o: any) => o.value)).toEqual(['allow', 'always', 'deny'])
     expect(statuses.at(-1)).toBe('waiting')
     asks[0].resolve(envelope('answered', 'allow'))
     expect(await pending).toEqual({ behavior: 'allow', updatedInput: input })
@@ -362,6 +370,37 @@ describe('canUseTool', () => {
     await until(() => asks.length === 1)
     asks[0].resolve(envelope('answered', 'deny'))
     expect(await pending).toEqual({ behavior: 'deny', message: 'Denied from Quirky' })
+  })
+
+  test('the ask offers the three decisions with their labels and an optional reason', async () => {
+    const query = await begin()
+    const pending = canUse(query)
+    await until(() => asks.length === 1)
+    const [decision, reason] = asks[0].spec.questions as any[]
+    expect(decision.options).toEqual([
+      { value: 'allow', label: 'Allow once' },
+      { value: 'always', label: 'Allow for this session' },
+      { value: 'deny', label: 'Deny' }
+    ])
+    expect(reason).toEqual({ id: 'reason', type: 'text', question: 'Reason, if you deny', required: false })
+    asks[0].resolve(envelope('answered', 'allow'))
+    await pending
+  })
+
+  test('a deny reason becomes the denial message', async () => {
+    const query = await begin()
+    const pending = canUse(query)
+    await until(() => asks.length === 1)
+    asks[0].resolve(envelope('answered', 'deny', 'use the staging db'))
+    expect(await pending).toEqual({ behavior: 'deny', message: 'use the staging db' })
+  })
+
+  test('a reason typed with an allow is ignored', async () => {
+    const query = await begin()
+    const pending = canUse(query)
+    await until(() => asks.length === 1)
+    asks[0].resolve(envelope('answered', 'allow', 'whatever'))
+    expect(await pending).toEqual({ behavior: 'allow', updatedInput: { command: 'ls' } })
   })
 
   test('always allows and adds a session rule for the tool', async () => {
@@ -431,5 +470,94 @@ describe('stop', () => {
   test('is a no-op for an unknown session', async () => {
     await runner.stop('s_nope')
     expect(statuses).toEqual([])
+  })
+})
+
+describe('chat items', () => {
+  const run = async (query: FakeQuery, ...events: any[]) => {
+    for (const event of events) query.emit(event)
+  }
+  const items = () => messages.map((m) => m.item)
+
+  test('every journaled message carries an item', async () => {
+    const query = await begin('do it')
+    await run(
+      query,
+      { type: 'system', subtype: 'init', session_id: 'c1' },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }, { type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/a' } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'x' }] } },
+      { type: 'weird' },
+      { type: 'result', subtype: 'success', result: 'ok', is_error: false, duration_ms: 5 }
+    )
+    await until(() => messages.length === 7)
+    expect(items().every((item) => item !== undefined)).toBe(true)
+    expect(items().map((item) => item!.kind)).toEqual(['user', 'status', 'prose', 'activity', 'activity', 'status', 'turn-end'])
+    expect(items()[3]).toMatchObject({ callId: 't1', state: 'running' })
+    expect(items()[4]).toMatchObject({ callId: 't1', state: 'done' })
+    expect(items()[6]).toEqual({ kind: 'turn-end', state: 'done', durationMs: 5 })
+  })
+
+  test('sent messages carry their images and queue id', async () => {
+    const query = await begin()
+    const dir = mkdtempSync(join(tmpdir(), 'claude-img-'))
+    const image = join(dir, 'a.png')
+    writeFileSync(image, 'PNG')
+    await runner.send('s_1', 'look', { images: [image], queuedId: 'q-1' })
+    expect(messages.at(-1)!.item).toEqual({ kind: 'user', text: 'look', images: [image], queuedId: 'q-1' })
+    await until(() => query.written.length === 2)
+    expect(query.written[1].message.content).toEqual([
+      { type: 'text', text: 'look' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: Buffer.from('PNG').toString('base64') } }
+    ])
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  test('stopping mid-turn closes running calls as stopped, then ends the turn as stopped', async () => {
+    const query = await begin()
+    await run(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'sleep 9' } }, { type: 'tool_use', id: 't2', name: 'Edit', input: { file_path: '/a', old_string: 'a', new_string: 'b' } }] } })
+    await until(() => messages.length === 3)
+    await runner.stop('s_1')
+    expect(items().slice(3).map((item) => item && [item.kind, (item as any).callId, (item as any).state])).toEqual([
+      ['activity', 't1', 'stopped'],
+      ['file-change', 't2', 'stopped'],
+      ['turn-end', undefined, 'stopped']
+    ])
+  })
+
+  test('stopping an idle session adds no turn-end', async () => {
+    const query = await begin()
+    await run(query, { type: 'result', subtype: 'success', result: 'ok', is_error: false })
+    await until(() => statuses.includes('done'))
+    const before = messages.length
+    await runner.stop('s_1')
+    expect(messages).toHaveLength(before)
+  })
+
+  test('a crash mid-turn ends the turn as failed and journals an error item', async () => {
+    const query = await begin()
+    await run(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/a' } }] } })
+    await until(() => messages.length === 2)
+    query.fail(new Error('claude crashed'))
+    await until(() => statuses.includes('exited'))
+    expect(items().slice(2).map((item) => item!.kind)).toEqual(['activity', 'turn-end', 'error'])
+    expect(items().at(-1)).toEqual({ kind: 'error', reason: 'exited', stderrTail: ['claude crashed'], resumable: false })
+  })
+
+  test('partial-message deltas stream as throttled prose, and the final message supersedes them', async () => {
+    const query = await begin()
+    expect(query.params.options?.includePartialMessages).toBe(true)
+    const delta = (text: string) => ({ type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text } } })
+    await run(query, delta('Hel'), { type: 'stream_event', event: { type: 'message_start' } })
+    await tick()
+    expect(messages.filter((m) => m.item?.kind === 'prose')).toHaveLength(0)
+    await new Promise((resolve) => setTimeout(resolve, 280))
+    await run(query, delta('lo'))
+    await tick()
+    const streaming = messages.filter((m) => m.item?.kind === 'prose')
+    expect(streaming).toHaveLength(1)
+    expect(streaming[0]).toMatchObject({ role: 'system', item: { kind: 'prose', text: 'Hello', streaming: true } })
+    await run(query, assistantText('Hello'))
+    await until(() => messages.some((m) => m.role === 'assistant'))
+    expect(messages.at(-1)!.item).toEqual({ kind: 'prose', text: 'Hello' })
   })
 })

@@ -529,7 +529,7 @@ describe('the Claude runner inside the plugin', () => {
     })
     const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as any[])[0])
     expect(ask.sessionId).toBe(session.id)
-    expect(ask.spec.questions[0].options.map((o: any) => o.value)).toEqual(['allow', 'deny', 'always'])
+    expect(ask.spec.questions[0].options.map((o: any) => o.value)).toEqual(['allow', 'always', 'deny'])
     await call('quirky.ask/answer', { askId: ask.id, answers: { decision: { value: 'allow', source: 'option' } } })
     expect(await permission).toEqual({ behavior: 'allow', updatedInput: { command: 'ls' } })
 
@@ -549,12 +549,14 @@ describe('the Claude runner inside the plugin', () => {
     expect(messages.map((m) => [m.role, m.text.split('\n')[0]])).toEqual([
       ['user', 'fix it'],
       ['system', 'session started (m)'],
+      ['system', 'Approval needed'],
       ['assistant', 'done'],
       ['result', 'All good'],
       ['user', 'and tests']
     ])
+    expect(messages[2]!.item).toMatchObject({ kind: 'ask', variant: 'approval' })
     await waitFor(() => structuredEvents().length === messages.length)
-    expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5])
+    expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5, 6])
   })
 
   test('persists Claude identity after native init and resumes that session idle', async () => {
@@ -996,7 +998,7 @@ describe('v1 journal import', () => {
 })
 
 describe('structured journal store upgrades', () => {
-  test('preserves an existing v1 journal while appending the receipt migration', async () => {
+  test('preserves an existing v1 journal while appending the receipt, item and queue migrations', async () => {
     const home = shortHome()
     const storePath = join(home, 'plugin-data', 'quirky.structured', 'store.db')
     mkdirSync(dirname(storePath), { recursive: true })
@@ -1027,12 +1029,15 @@ describe('structured journal store upgrades', () => {
 
     const upgraded = new Database(storePath, { readonly: true })
     try {
-      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 2 })
+      expect(upgraded.query('PRAGMA user_version').get()).toEqual({ user_version: 4 })
       expect(
         upgraded
           .query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_send_receipts'")
           .all()
       ).toEqual([{ name: 'structured_send_receipts' }])
+      expect(
+        upgraded.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'structured_queue'").all()
+      ).toEqual([{ name: 'structured_queue' }])
     } finally {
       upgraded.close()
     }

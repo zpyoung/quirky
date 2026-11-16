@@ -85,6 +85,7 @@
               "role": { "type": "string", "enum": ["user", "assistant", "tool", "system", "result"] },
               "text": { "type": "string" },
               "data": { "description": "The agent's raw event." },
+              "item": { "type": "object", "description": "The typed chat item (kind user, prose, activity, file-change, tests, steps, ask, view, view-error, changes, turn-end, error or status); absent on messages journaled before items existed." },
               "at": { "type": "number" }
             },
             "required": ["sessionId", "seq", "role", "text", "at"]
@@ -179,7 +180,17 @@
             "expectedIncarnation": { "type": "string", "description": "When present, sends only to this live structured lease incarnation." },
             "operationId": { "type": "string", "description": "Optional durable idempotency key for exact retry; reusing it with different input is refused." },
             "requireIdle": { "type": "boolean" },
-            "expectedAfterSeq": { "type": "integer", "minimum": 0 }
+            "expectedAfterSeq": { "type": "integer", "minimum": 0 },
+            "images": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Absolute paths of png, jpg, jpeg, gif or webp files of at most 20 MB. Refused with invalid-params for an agent that does not accept images."
+            },
+            "when": {
+              "type": "string",
+              "enum": ["now", "idle"],
+              "description": "`now` (the default) sends at once; `idle` queues the message while the agent is working or waiting and sends it at once when idle."
+            }
           },
           "required": ["session", "text"]
         },
@@ -187,10 +198,89 @@
           "type": "object",
           "properties": {
             "ok": { "type": "boolean" },
-            "reason": { "type": "string", "enum": ["operation_unknown", "recipient_changed", "recipient_gone"] }
+            "reason": { "type": "string", "enum": ["operation_unknown", "recipient_changed", "recipient_gone"] },
+            "queuedId": { "type": "string", "description": "The queue entry, when `when: idle` queued the message." }
           },
           "required": ["ok"]
         }
+      },
+      {
+        "id": "capabilities",
+        "description": "What an agent's structured runner supports: steer, plan mode, permission modes, images, effort, approval for a session and resume. Static; it never contacts the agent. An unknown agent fails with invalid-params.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "agent": { "type": "string", "description": "claude, codex, pi or omp." } },
+          "required": ["agent"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] },
+            "steer": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "planMode": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "permissionModes": {
+              "type": "object",
+              "properties": {
+                "ok": { "type": "boolean" },
+                "modes": { "type": "array", "items": { "type": "string" } },
+                "reason": { "type": "string" }
+              },
+              "required": ["ok"]
+            },
+            "images": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "effort": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "approveForSession": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] },
+            "resume": { "type": "object", "properties": { "ok": { "type": "boolean" }, "reason": { "type": "string" } }, "required": ["ok"] }
+          },
+          "required": ["agent", "steer", "planMode", "permissionModes", "images", "effort", "approveForSession", "resume"]
+        }
+      },
+      {
+        "id": "queue",
+        "description": "The messages waiting in a session's queue, oldest first.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "images": { "type": "array", "items": { "type": "string" } }, "at": { "type": "string" } }, "required": ["id", "text", "at"] } }
+      },
+      {
+        "id": "dequeue",
+        "description": "Removes a message from a session's queue; an id that is not queued (or already flushed) fails with not-found.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "id": { "type": "string" } },
+          "required": ["session", "id"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "editQueued",
+        "description": "Changes the text of a queued message; an id that is not queued fails with not-found.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "id": { "type": "string" }, "text": { "type": "string" } },
+          "required": ["session", "id", "text"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "steer",
+        "description": "Removes a queued message and sends it now. An agent that cannot be steered fails with conflict (reason steer-unsupported); an id that is not queued fails with not-found.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "id": { "type": "string" } },
+          "required": ["session", "id"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
       }
     ],
     "event": [
@@ -208,12 +298,25 @@
                 "role": { "type": "string", "enum": ["user", "assistant", "tool", "system", "result"] },
                 "text": { "type": "string" },
                 "data": { "description": "The agent's raw event." },
+                "item": { "type": "object", "description": "The typed chat item; absent on messages journaled before items existed." },
                 "at": { "type": "number" }
               },
               "required": ["sessionId", "seq", "role", "text", "at"]
             }
           },
           "required": ["message"]
+        }
+      },
+      {
+        "id": "queueChanged",
+        "description": "A structured session's message queue changed.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "type": "string" },
+            "queue": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "images": { "type": "array", "items": { "type": "string" } }, "at": { "type": "string" } }, "required": ["id", "text", "at"] } }
+          },
+          "required": ["sessionId", "queue"]
         }
       },
       {
