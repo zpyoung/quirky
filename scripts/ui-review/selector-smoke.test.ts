@@ -29,7 +29,7 @@ import type { ReviewReport } from './contracts'
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url))
 const BUILD_AND_CAPTURE_TIMEOUT_MS = 600_000
-const TARGET_IDS = ['host:shell', 'host:scoped', 'host:popups'] as const
+const TARGET_IDS = ['host:shell', 'host:scoped', 'host:popups', 'host:settings', 'host:palette'] as const
 const THEMES = ['dark', 'light'] as const
 
 function chromiumExecutable(): string | null {
@@ -178,7 +178,7 @@ afterEach(() => {
   rmSync(scratch, { recursive: true, force: true })
 })
 
-test.skipIf(!executable)('the real shell, scoped and popups captures review six filtered dark and light cells', async () => {
+test.skipIf(!executable)('all five host targets capture and review ten dark and light cells', async () => {
   const outputDir = join(scratch, 'output')
   mkdirSync(outputDir)
   const checkoutHead = execFileSync('git', ['-C', repoRoot, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
@@ -200,7 +200,7 @@ test.skipIf(!executable)('the real shell, scoped and popups captures review six 
     expect(manifest.scope).toBe('filtered')
     expect(manifest.selectors).toEqual([...TARGET_IDS])
     expect(manifest.targets.map((target) => target.id)).toEqual([...TARGET_IDS])
-    expect(manifest.captures).toHaveLength(6)
+    expect(manifest.captures).toHaveLength(10)
     const expectedCells = TARGET_IDS.flatMap((targetId) => THEMES.map((theme) => `${targetId}\0${theme}`)).sort()
     expect(manifest.captures.map((capture) => `${capture.targetId}\0${capture.theme}`).sort()).toEqual(expectedCells)
     expect(manifest.captures.every((capture) => capture.status === 'captured' && capture.image !== null)).toBe(true)
@@ -232,7 +232,7 @@ test.skipIf(!executable)('the real shell, scoped and popups captures review six 
     expect(report.status).toBe('passed')
     expect(report.failures).toEqual([])
     expect(report.threshold).toBe(85)
-    expect(report.captures).toHaveLength(6)
+    expect(report.captures).toHaveLength(10)
     expect(report.captures.map((capture) => `${capture.targetId}\0${capture.theme}`).sort()).toEqual(expectedCells)
     expect(report.captures.every((capture) =>
       capture.passed &&
@@ -243,7 +243,7 @@ test.skipIf(!executable)('the real shell, scoped and popups captures review six 
     )).toBe(true)
 
     const calls = readFileSync(callsPath, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string[])
-    expect(calls).toHaveLength(7)
+    expect(calls).toHaveLength(11)
     expect(calls[0]).toEqual(['--check', 'gemini'])
     const reviewedCells = calls.slice(1).map((args) => {
       expect(args.slice(0, 4)).toEqual(['--alias', 'gemini', '--tools', 'read'])
