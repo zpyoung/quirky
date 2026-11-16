@@ -592,7 +592,7 @@ function eligibilityBlocker(value: Eligibility): { reason: string; message: stri
 function parseMinimalReview(value: unknown, canonical: CanonicalRepository): ReviewIdentity | null {
   if (!isRecord(value) || !Number.isSafeInteger(value.number) || (value.number as number) < 1 || typeof value.url !== 'string') return null
   const repository = repoFromReviewUrl(value.url, value.number as number, canonical.provider)
-  if (repository === null || !sameRepo(repository, canonical.repository)) return null
+  if (repository === null || canonical.provider === 'gitlab' && !sameRepo(repository, canonical.repository)) return null
   let url: URL
   try {
     url = new URL(value.url)
@@ -916,7 +916,7 @@ async function publishReview(
 ): Promise<Record<string, unknown>> {
   if (!isCurrent(env, worktree, generation)) throw env.invalid('stale_target', 'The create-review context changed before the result could be linked.')
   const reviewRepository = repoFromReviewUrl(review.url, review.number, canonical.provider)
-  if (reviewRepository === null || !sameRepo(reviewRepository, canonical.repository)) {
+  if (reviewRepository === null || canonical.provider === 'gitlab' && !sameRepo(reviewRepository, canonical.repository)) {
     throw env.invalid('invalid_response', 'The review URL does not match the canonical workspace repository.')
   }
   const result: JsonRecord = {

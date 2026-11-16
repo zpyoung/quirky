@@ -412,13 +412,9 @@ function reviewData(
     || typeof mergeable !== 'string' || typeof checksStatus !== 'string') {
     throw env.invalid('invalid_hosting_response', 'The hosting provider returned incomplete or unsupported pull request details.')
   }
-  if (provider === 'github') {
-    if ((mergeable !== 'MERGEABLE' && mergeable !== 'CONFLICTING' && mergeable !== 'UNKNOWN')
-      || (checksStatus !== 'neutral' && checksStatus !== 'pending' && checksStatus !== 'success' && checksStatus !== 'failure')) {
-      throw env.invalid('invalid_hosting_response', 'The hosting provider returned incomplete or unsupported pull request details.')
-    }
-  } else if (mergeable !== 'UNKNOWN' || checksStatus !== 'neutral') {
-    throw env.invalid('invalid_hosting_response', 'The hosting provider returned incomplete or unsupported merge-request details.')
+  if ((mergeable !== 'MERGEABLE' && mergeable !== 'CONFLICTING' && mergeable !== 'UNKNOWN')
+    || (checksStatus !== 'neutral' && checksStatus !== 'pending' && checksStatus !== 'success' && checksStatus !== 'failure')) {
+    throw env.invalid('invalid_hosting_response', 'The hosting provider returned incomplete or unsupported review details.')
   }
   const prRepo = repoFromUrl(env, url, number, provider)
   for (const candidate of [value.repository, value.prRepo]) {
@@ -428,7 +424,7 @@ function reviewData(
       throw env.invalid('repository_mismatch', 'The review repository does not match its canonical URL identity.')
     }
   }
-  if (canonical !== undefined && (provider !== canonical.provider || !sameRepo(prRepo, canonical.repository))) {
+  if (canonical !== undefined && (provider !== canonical.provider || provider === 'gitlab' && !sameRepo(prRepo, canonical.repository))) {
     throw env.invalid('repository_mismatch', 'The linked review resolved to a different repository identity.')
   }
   const review: ReviewData = {
@@ -663,9 +659,33 @@ function checksData(env: ReviewsEnv, value: unknown, number: number, headOid: st
 }
 
 function commentsData(env: ReviewsEnv, value: unknown, number: number, provider: ReviewProvider = 'github'): JsonRecord {
-  const parsed = parseCommentsResult(value, number, provider)
-  if (parsed === null) throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid comments result.')
-  return parsed
+  if (provider === 'gitlab') {
+    const parsed = parseCommentsResult(value, number, provider)
+    if (parsed === null) throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid comments result.')
+    return parsed
+  }
+  if (!isRecord(value) || value.number !== number || !Array.isArray(value.comments) || typeof value.partial !== 'boolean' ||
+    !Array.isArray(value.partialFailures)) {
+    throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid comments result.')
+  }
+  const comments: JsonRecord[] = []
+  for (const item of value.comments) {
+    if (!isRecord(item) || !(typeof item.id === 'string' || typeof item.id === 'number') ||
+      (item.kind !== 'issue_comment' && item.kind !== 'review' && item.kind !== 'review_comment') || typeof item.body !== 'string') {
+      throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid review comment.')
+    }
+    if (comments.length < MAX_CHECKS) comments.push({ ...item })
+  }
+  const partialFailures = value.partialFailures.filter((item): item is string => typeof item === 'string')
+  if (partialFailures.length !== value.partialFailures.length) {
+    throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid comments failure list.')
+  }
+  return {
+    ...value,
+    comments,
+    partialFailures,
+    truncated: value.comments.length > MAX_CHECKS || partialFailures.some((item) => item.includes('truncated') || item.includes('100-record')),
+  }
 }
 
 function selector(env: ReviewsEnv, params: Record<string, unknown>): string | undefined {
@@ -1452,20 +1472,23 @@ function assertTitleDraftFence(env: ReviewsEnv, checks: ChecksEntry, currentRepo
 
 async function linkReview(env: ReviewsEnv, worktree: Worktree, number: number, suppliedRepo: RepoIdentity | undefined, caller: PluginCaller): Promise<JsonRecord> {
   const canonical = await canonicalRepository(env, worktree.id)
-  if (suppliedRepo !== undefined && !sameRepo(suppliedRepo, canonical.repository)) {
+  if (canonical.provider === 'gitlab' && suppliedRepo !== undefined && !sameRepo(suppliedRepo, canonical.repository)) {
     throw env.invalid('repository_mismatch', 'The requested review repository does not match this workspace origin.')
   }
-  const prRepo = suppliedRepo ?? canonical.repository
+  const prRepo = suppliedRepo ?? (canonical.provider === 'gitlab' ? canonical.repository : undefined)
   const lookup = await callLookup(env, 'review', {
     worktree: worktree.id,
     number,
-    prRepo,
+    ...(prRepo === undefined ? {} : { prRepo }),
   }, canonical, number)
   if (lookup.kind !== 'found' || lookup.review === undefined) {
     const message = lookup.kind === 'unavailable' && nonEmptyString(lookup.record.message)
       ? lookup.record.message
       : `Pull request #${number} was not found for this workspace.`
     throw env.invalid(lookup.kind === 'unavailable' ? 'upstream_unavailable' : 'not_found', message)
+  }
+  if (suppliedRepo !== undefined && !sameRepo(suppliedRepo, lookup.prRepo)) {
+    throw env.invalid('repository_mismatch', 'The linked review resolved to a different repository identity.')
   }
   const confirmed = lookup.review
   env.update((state) => {
@@ -1939,7 +1962,7 @@ async function saveTitle(env: ReviewsEnv, params: Record<string, unknown>, calle
   if (!started) return { updated: false, number, title, stale: true, error: 'The review changed before the title could be saved.' }
   try {
     const canonical = await canonicalRepository(env, worktree.id)
-    if (canonical.provider !== review.provider || !sameRepo(canonical.repository, prRepo)) {
+    if (canonical.provider !== review.provider || canonical.provider === 'gitlab' && !sameRepo(canonical.repository, prRepo)) {
       throw env.invalid('repository_mismatch', 'The selected review no longer matches this workspace origin.')
     }
     if (env.read().checksByWorktree[worktree.id]?.generation !== generation) {
@@ -2014,9 +2037,13 @@ async function openReview(env: ReviewsEnv, params: Record<string, unknown>, call
     review = reviewData(env, current.review, canonical, number).review
   } else {
     const link = env.read().links[worktree.id]
-    const repo = link && link.number === number ? repoFromUrl(env, link.url, number, canonical.provider) : canonical.repository
-    if (!sameRepo(repo, canonical.repository)) throw env.invalid('repository_mismatch', 'The saved review link does not match this workspace origin.')
-    const result = await callLookup(env, 'review', { worktree: worktree.id, number, prRepo: repo }, canonical, number)
+    const repo = link && link.number === number
+      ? repoFromUrl(env, link.url, number, canonical.provider)
+      : canonical.provider === 'gitlab' ? canonical.repository : undefined
+    if (canonical.provider === 'gitlab' && (repo === undefined || !sameRepo(repo, canonical.repository))) {
+      throw env.invalid('repository_mismatch', 'The saved review link does not match this workspace origin.')
+    }
+    const result = await callLookup(env, 'review', { worktree: worktree.id, number, ...(repo === undefined ? {} : { prRepo: repo }) }, canonical, number)
     if (result.kind !== 'found' || !result.review) throw env.invalid(result.kind === 'unavailable' ? 'upstream_unavailable' : 'not_found', 'The selected review is not available for this workspace.')
     review = result.review
   }
@@ -2065,14 +2092,14 @@ async function checksSitterArm(
   const worktree = await resolveSitterWorktree(env, params, caller, false)
   if (!worktree) throw env.invalid('missing_worktree', 'A registered worktree is required to arm PR Sitter.')
   if (worktree.kind !== 'git') throw env.invalid('worktree_not_git', 'PR Sitter can only watch a Git worktree.')
-  const canonical = await canonicalRepository(env, worktree.id)
-  const selected = env.read().checksByWorktree[worktree.id]?.review
-  if (canonical.provider === 'gitlab' || selected?.provider === 'gitlab') {
+  const state = env.read()
+  const checks = state.checksByWorktree[worktree.id]
+  const diagnostics = checks?.lookup?.authDiagnostics ?? checks?.eligibility?.authDiagnostics
+  if (checks?.review?.provider === 'gitlab' || checks?.eligibility?.provider === 'gitlab'
+    || isRecord(diagnostics) && diagnostics.provider === 'gitlab'
+    || state.settings.worktree === worktree.id && state.settings.provider === 'gitlab'
+    || state.creation.worktree === worktree.id && state.creation.eligibility?.provider === 'gitlab') {
     throw env.invalid('unsupported_provider', 'PR Sitter is unavailable for GitLab merge requests.')
-  }
-  if (selected !== undefined && selected !== null
-    && (selected.provider !== canonical.provider || !sameRepo(selected.prRepo as RepoIdentity, canonical.repository))) {
-    throw env.invalid('repository_mismatch', 'The selected review does not match this workspace origin.')
   }
   const capabilityInput = params.capabilities
   if (!isRecord(capabilityInput)) {
