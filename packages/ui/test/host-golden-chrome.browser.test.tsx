@@ -192,11 +192,22 @@ for (const theme of themes) {
         const style = getComputedStyle(node)
         return [style.backgroundColor, style.borderTopWidth, style.maxHeight]
       })).toEqual(['rgba(0, 0, 0, 0)', '0px', '528px'])
+      const clearance = await page.locator('.ui-option-list').evaluate((node) => {
+        const list = node.getBoundingClientRect()
+        const row = node.querySelector('.ui-list-row')!.getBoundingClientRect()
+        const style = getComputedStyle(node)
+        return {
+          padding: [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft],
+          inset: [row.top - list.top, list.right - row.right, list.bottom - row.bottom, row.left - list.left]
+        }
+      })
+      expect(clearance.padding).toEqual(['8px', '8px', '8px', '8px'])
+      for (const inset of clearance.inset) expect(inset).toBeGreaterThanOrEqual(8)
       expect(await page.locator('.ui-list-row--selected').evaluate((node) => {
         const style = getComputedStyle(node)
         const description = node.querySelector('.ui-list-row__description')!
         return [style.backgroundColor, style.color, getComputedStyle(description).color, style.borderTopWidth, style.paddingTop, style.paddingBottom]
-      })).toEqual([theme.accent, theme.rail, theme.rail, '0px', '6px', '6px'])
+      })).toEqual([theme.accent, theme.rail, theme.rail, '0px', '8px', '8px'])
       await page.getByRole('textbox').focus()
       expect(await page.locator('.shell-palette__search').evaluate((node) => {
         const style = getComputedStyle(node)
@@ -250,6 +261,29 @@ for (const theme of themes) {
         const control = node.querySelector('input')!.getBoundingClientRect()
         return Math.abs((label.top + label.bottom) / 2 - (control.top + control.bottom) / 2)
       })).toBeLessThan(1)
+    } finally {
+      await page.close()
+    }
+  })
+
+  test.skipIf(!executable)(`Window-bar search keeps its neutral pill and compact light dimensions (${theme.name})`, async () => {
+    const page = await styledPage(theme.name, renderToStaticMarkup(
+      <header className="window-bar" aria-label="Window bar">
+        <div /><div />
+        <div className="window-bar__group window-bar__group--end">
+          <button className="window-bar__button window-bar__search" aria-label="Search commands, tools, views, and worktrees">
+            <ControlIcon name="magnifying-glass" /><span>Search</span><kbd>⌘K</kbd><span>(outside terminal)</span>
+          </button>
+        </div>
+      </header>
+    ))
+    try {
+      const search = page.getByRole('button', { name: 'Search commands, tools, views, and worktrees', exact: true })
+      expect(await search.evaluate((node) => {
+        const style = getComputedStyle(node)
+        return [style.backgroundColor, style.borderTopWidth, style.borderRadius, style.height, style.paddingLeft, style.paddingRight]
+      })).toEqual([theme.name === 'light' ? theme.selected : theme.surface, '0px', '7px', theme.name === 'light' ? '22px' : '26px', '8px', '8px'])
+      expect(await search.getByText('(outside terminal)', { exact: true }).isVisible()).toBe(true)
     } finally {
       await page.close()
     }
