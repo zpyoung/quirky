@@ -1164,7 +1164,8 @@ test('CLI-files report transfers shell-ready diagnostics while retaining cleanup
   const failure = typedStartupError(evidence, 'renderer-disconnected', 'shell readiness failed')
   const report = await runCliFilesParity({ createWorld: async () => { throw failure } })
 
-  expect(report.startup).toEqual(evidence.diagnostics)
+  const startup: StartupDiagnostics | undefined = report.startup
+  expect(startup).toEqual(evidence.diagnostics)
   expect(report.ok).toBe(false)
   expect(report.cleanup.ok).toBe(true)
   expect(report.cleanup.evidence).toMatchObject({
