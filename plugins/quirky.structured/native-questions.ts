@@ -97,19 +97,20 @@ export function approvalSpec(question: string): AskSpec {
 }
 
 /**
- * The decision an approval ask resolved to, failing closed: anything but an answered ask with a
- * known decision denies. A stale `always` becomes `allow` when the agent has no session-wide approval.
+ * The decision an approval ask resolved to, failing closed: anything but an `answered` or `partial`
+ * ask (the optional reason may be skipped) with a known decision denies. A stale `always` becomes `allow` when the agent has no session-wide approval.
  */
 export function approvalOutcome(
   envelope: AskEnvelope | null,
   sessionApproval: boolean
 ): { decision: ApprovalDecision; reason?: string } {
-  const answer = envelope?.status === 'answered' ? envelope.answers.decision : undefined
+  const readable = envelope?.status === 'answered' || envelope?.status === 'partial' ? envelope : null
+  const answer = readable?.answers.decision
   const value = answer && 'value' in answer ? answer.value : undefined
   const decision: ApprovalDecision = value === 'allow' || value === 'always' ? value : 'deny'
   if (decision === 'always') return { decision: sessionApproval ? 'always' : 'allow' }
   if (decision === 'allow') return { decision }
-  const typed = envelope?.status === 'answered' ? envelope.answers.reason : undefined
+  const typed = readable?.answers.reason
   const reason = typed && 'value' in typed && typeof typed.value === 'string' ? typed.value.trim() : ''
   return reason ? { decision, reason } : { decision }
 }
