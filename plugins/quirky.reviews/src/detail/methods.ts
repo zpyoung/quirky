@@ -215,7 +215,7 @@ export const detailSpecs: (MethodSpec & { description: string })[] = [
     destructive: true,
     confirm: 'Reopen pull request #{number}?',
     params: strictObject(surfaceNumber, ['surface', 'number']),
-    result: strictObject({ number: numberShape, state: { type: 'string', enum: ['open'] }, updated: { type: 'boolean' } }, ['number', 'state', 'updated']),
+    result: strictObject({ number: numberShape, state: { type: 'string', enum: ['open', 'draft'] }, updated: { type: 'boolean' } }, ['number', 'state', 'updated']),
   },
   {
     id: 'detailMerge',

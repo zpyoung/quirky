@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { validateValue, type Schema } from '@quirky/protocol'
 import {
   isRecord,
   type GitHubAuthAccount,
@@ -808,9 +809,17 @@ describe('GitLab Reviews daemon methods', () => {
       replies: { 'quirky.hosting/updateReview': { number: 5, state: 'draft', updated: true } },
     }, async (harness) => {
       selectDetail(harness, selectedGitLabReview({ state: 'closed' }))
-      await expect(harness.invoke('detail', 'detailReopenReview', {
+      const result = await harness.invoke('detail', 'detailReopenReview', {
         surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
-      })).resolves.toEqual({ number: 5, state: 'draft', updated: true })
+      })
+      expect(result).toEqual({ number: 5, state: 'draft', updated: true })
+      const declared = detailSpecs.find((spec) => spec.id === 'detailReopenReview')
+      expect(validateValue(declared!.result!, result, 'result')).toBeNull()
+      const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json() as {
+        contributes: { method: Array<{ id: string; result: Schema }> }
+      }
+      const published = manifest.contributes.method.find((method) => method.id === 'detailReopenReview')
+      expect(validateValue(published!.result, result, 'result')).toBeNull()
       expect(harness.env.read().detail.review?.state).toBe('draft')
     })
   })
