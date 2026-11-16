@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { runBrowserParity, validateOutcomes, type BrowserCheck, type BrowserParityReport } from './browser-run'
-import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, daemonStatus, readShimLogs, startBrowserWorld, type BrowserWorld, type CliReceipt } from './browser-world'
+import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, daemonStatus, readShimLogs, startBrowserWorld, waitForDaemon, restartBrowserDaemon, areChromeProcessesGone, type BrowserWorld, type CliReceipt } from './browser-world'
 import type { RuntimeInfo } from '@quirky/protocol/node'
 import { startBrowserFixture } from './browser-fixture'
 import type { BrowserRow } from './browser-table'
@@ -927,6 +927,136 @@ test('pane shim diagnostics retain the exact exported evidence shape', () => {
       orcaLog: 'invoked\n',
       securityLog: ''
     })
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+test('replacement readiness waits through stale runtime ownership and rechecks after health', async () => {
+  let now = 0
+  const expected = { pid: 41 } as RuntimeInfo
+  const stale = { pid: 40 } as RuntimeInfo
+  const reads = [stale, expected, stale, expected, expected]
+  const probePids: number[] = []
+  let sleepCalls = 0
+  await waitForDaemon('/isolated/home', {
+    pid: 41,
+    exitCode: null,
+    exited: new Promise<number>(() => {}),
+    kill() {}
+  } as never, 1_000, undefined, undefined, {
+    readRuntime: () => reads.shift() ?? expected,
+    probe: async runtime => {
+      probePids.push(runtime.pid)
+      return true
+    },
+    now: () => now,
+    sleep: async milliseconds => {
+      sleepCalls++
+      now += milliseconds
+    }
+  })
+
+  expect(probePids).toEqual([41, 41])
+  expect(sleepCalls).toBe(2)
+  expect(reads).toEqual([])
+})
+
+test('replacement readiness preserves exit, abort, and bounded timeout failures', async () => {
+  const pending = () => new Promise<number>(() => {})
+  const dependencies = {
+    readRuntime: () => ({ pid: 99 } as RuntimeInfo),
+    probe: async () => true,
+    now: () => 0,
+    sleep: async () => {}
+  }
+  const exited = await waitForDaemon('/isolated/home', {
+    pid: 41, exitCode: 17, exited: pending(), kill() {}
+  } as never, 100, undefined, undefined, dependencies).then(() => undefined, error => error)
+  expect(exited).toMatchObject({ kind: 'daemon-exited' })
+
+  const controller = new AbortController()
+  controller.abort()
+  const aborted = await waitForDaemon('/isolated/home', {
+    pid: 41, exitCode: null, exited: pending(), kill() {}
+  } as never, 100, controller.signal, undefined, dependencies).then(() => undefined, error => error)
+  expect(aborted).toMatchObject({ kind: 'aborted' })
+
+  let now = 0
+  const timedOut = await waitForDaemon('/isolated/home', {
+    pid: 41, exitCode: null, exited: pending(), kill() {}
+  } as never, 12, undefined, undefined, {
+    ...dependencies,
+    now: () => now,
+    sleep: async milliseconds => { now += milliseconds }
+  }).then(() => undefined, error => error)
+  expect(timedOut).toMatchObject({ kind: 'daemon-readiness-timeout' })
+})
+
+test('browser restart forwards SIGKILL and captures the old Chrome tree before orphan observation', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'browser-restart-receipt-'))
+  try {
+    const roots = ['profile-a', 'profile-b'].map(profileId => {
+      const profilePath = join(home, 'plugin-data', 'quirky.browser', 'profiles', profileId)
+      mkdirSync(profilePath, { recursive: true })
+      return {
+        profileId,
+        command: `Google Chrome --headless --user-data-dir=${join(profilePath, 'chrome-profile')}`
+      }
+    })
+    const before = new Map([
+      [201, { pid: 201, ppid: 90, pgid: 201, started: 'root-a', command: roots[0]!.command }],
+      [202, { pid: 202, ppid: 201, pgid: 201, started: 'child-a', command: 'Google Chrome Helper --type=renderer' }],
+      [301, { pid: 301, ppid: 90, pgid: 301, started: 'root-b', command: roots[1]!.command }],
+      [302, { pid: 302, ppid: 301, pgid: 301, started: 'child-b', command: 'Google Chrome Helper --type=renderer' }]
+    ])
+    const after = new Map([
+      [201, { ...before.get(201)!, ppid: 1 }],
+      [202, before.get(202)!],
+      [301, { ...before.get(301)!, ppid: 1 }],
+      [302, before.get(302)!]
+    ])
+    const snapshots = [before, after]
+    let daemonPid = 90
+    let forwardedOptions: unknown
+    let processEvidenceCalls = 0
+    const soakWorld = {
+      home,
+      get daemonPid() { return daemonPid },
+      async restartDaemon(_signal: AbortSignal | undefined, onSpawn: ((spawn: { spawnedAt: number; pid: number }) => void) | undefined, options: { killSignal?: 'SIGTERM' | 'SIGKILL' }) {
+        forwardedOptions = options
+        daemonPid = 91
+        onSpawn?.({ spawnedAt: 23, pid: daemonPid })
+        return { spawnedAt: 23, killSignal: options.killSignal ?? 'SIGTERM' }
+      }
+    } as never
+    const receipt = await restartBrowserDaemon(soakWorld, undefined, { killSignal: 'SIGKILL' }, {
+      deadline: Date.now() + 5_000,
+      async processEvidence() { processEvidenceCalls++; return {} },
+      snapshot: () => snapshots.shift() ?? after
+    })
+
+    expect(forwardedOptions).toEqual({ killSignal: 'SIGKILL' })
+    expect(processEvidenceCalls).toBe(2)
+    expect(receipt).toMatchObject({
+      previousPid: 90,
+      daemonPid: 91,
+      spawnedAt: 23,
+      killSignal: 'SIGKILL',
+      oldChromeTree: [
+        { pid: 201, started: 'root-a' },
+        { pid: 202, started: 'child-a' },
+        { pid: 301, started: 'root-b' },
+        { pid: 302, started: 'child-b' }
+      ],
+      orphanChromeAfterKill: [
+        { pid: 201, started: 'root-a', ppid: 1, profileId: 'profile-a' },
+        { pid: 301, started: 'root-b', ppid: 1, profileId: 'profile-b' }
+      ]
+    })
+    expect(areChromeProcessesGone(receipt.oldChromeTree, after)).toBe(false)
+    expect(areChromeProcessesGone(receipt.oldChromeTree, new Map([
+      [201, { ...after.get(201)!, started: 'reused' }]
+    ]))).toBe(true)
   } finally {
     rmSync(home, { recursive: true, force: true })
   }
