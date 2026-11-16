@@ -170,11 +170,15 @@ export function CardView({ context, input }: { context: UiPluginContext; input: 
   const { askId, sessionApproveDisabled } = input
   const [ask, setAsk] = useState<Ask | null>(null)
   const alive = useRef(true)
+  const loadSeq = useRef(0)
 
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current
     try {
       const asks = (await context.call('quirky.ask/list', { pendingOnly: false, askId })) as Ask[]
-      if (alive.current) setAsk(asks.find((candidate) => candidate.id === askId) ?? null)
+      if (!alive.current || seq !== loadSeq.current) return
+      const next = asks.find((candidate) => candidate.id === askId) ?? null
+      setAsk((current) => (current?.id === askId && current.envelope.status !== 'pending' && next?.envelope.status === 'pending' ? current : next))
     } catch (error) {
       context.log(`could not load ask ${askId}: ${errorText(error)}`)
     }
@@ -205,6 +209,7 @@ export function CardView({ context, input }: { context: UiPluginContext; input: 
   const approval = approvalOf(ask)
   const resolve = (envelope: AskEnvelope) => {
     if (envelope.status === 'pending') return
+    loadSeq.current += 1
     setAsk((current) => (current ? { ...current, envelope } : current))
     void load()
   }

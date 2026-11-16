@@ -336,6 +336,50 @@ describe('the ask card view', () => {
     expect(element.querySelector('[data-approval-record]')?.textContent).toBe(`Allowed once: ${COMMAND}`)
   })
 
+  test('a slower earlier load never restores the actions after a newer load resolved the ask', async () => {
+    const fake = fakeContext([approvalAsk()])
+    const element = await mountCard(fake, { askId: 'ask_a' })
+    expect(element.querySelector('[data-approval-card]')).not.toBeNull()
+
+    const pendingSnapshot = [approvalAsk()]
+    const envelope: AskEnvelope = { status: 'answered', askId: 'ask_a', answers: { decision: { value: 'allow', label: 'Allow once', source: 'option' } }, skipped: ['reason'], summary: '' }
+    const resolvedSnapshot = [resolvedAsk(approvalAsk(), envelope)]
+    const releases: ((asks: Ask[]) => void)[] = []
+    const call = fake.context.call.bind(fake.context)
+    ;(fake.context as { call: unknown }).call = (method: string, params?: Record<string, unknown>) =>
+      method === 'quirky.ask/list' && params?.askId === 'ask_a' ? new Promise<Ask[]>((resolve) => releases.push(resolve)) : call(method, params)
+
+    await fake.emit({ type: 'quirky.ask/created', data: { ask: approvalAsk(), seq: 5 } })
+    await fake.emit({ type: 'quirky.ask/resolved', data: { askId: 'ask_a', envelope, seq: 9 } })
+    expect(releases).toHaveLength(2)
+
+    await act(async () => releases[1]!(resolvedSnapshot))
+    expect(element.querySelector('[data-approval-record]')?.textContent).toBe(`Allowed once: ${COMMAND}`)
+
+    await act(async () => releases[0]!(pendingSnapshot))
+    expect(element.querySelector('[data-approval-card]')).toBeNull()
+    expect(element.querySelector('[data-approval-record]')?.textContent).toBe(`Allowed once: ${COMMAND}`)
+  })
+
+  test('a load that returns pending after the ask resolved locally leaves the record in place', async () => {
+    const fake = fakeContext([approvalAsk()])
+    const element = await mountCard(fake, { askId: 'ask_a' })
+    const releases: ((asks: Ask[]) => void)[] = []
+    const call = fake.context.call.bind(fake.context)
+    ;(fake.context as { call: unknown }).call = (method: string, params?: Record<string, unknown>) =>
+      method === 'quirky.ask/list' && params?.askId === 'ask_a' ? new Promise<Ask[]>((resolve) => releases.push(resolve)) : call(method, params)
+
+    await fake.emit({ type: 'quirky.ask/created', data: { ask: approvalAsk(), seq: 5 } })
+    await click(buttonIn(element, 'Allow once')!)
+    expect(element.querySelector('[data-approval-record]')).not.toBeNull()
+
+    await act(async () => {
+      for (const release of releases) release([approvalAsk()])
+    })
+    expect(element.querySelector('[data-approval-card]')).toBeNull()
+    expect(element.querySelector('[data-approval-record]')).not.toBeNull()
+  })
+
   test('a missing ask id renders nothing to act on', async () => {
     const element = await mountCard(fakeContext([approvalAsk()]), {})
     expect(element.querySelector('button')).toBeNull()
