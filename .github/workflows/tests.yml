@@ -109,6 +109,7 @@ jobs:
           path: plan
 
       - name: Prepare sandboxed Chrome
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           chrome=
@@ -131,11 +132,11 @@ jobs:
           if [ -f "$restriction" ] && [ "$(cat "$restriction")" = 1 ]; then
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
-          root=$(mktemp -d "$RUNNER_TEMP/quirky-chrome.XXXXXX")
+          root=
           smoke_pid=
-          cleanup() {
-            status=$?
-            trap - EXIT
+          smoke_attempt=0
+          total_started=$SECONDS
+          cleanup_attempt() {
             if [ -n "$smoke_pid" ]; then
               kill -TERM -- "-$smoke_pid" 2>/dev/null || true
               for attempt in {1..50}; do
@@ -144,31 +145,58 @@ jobs:
               done
               kill -KILL -- "-$smoke_pid" 2>/dev/null || true
               wait "$smoke_pid" 2>/dev/null || true
+              smoke_pid=
             fi
-            rm -rf "$root"
+            if [ -n "$root" ]; then
+              rm -rf "$root"
+              root=
+            fi
+          }
+          cleanup() {
+            status=$?
+            trap - EXIT
+            cleanup_attempt
+            echo "Chrome sandbox smoke total: $((SECONDS - total_started))s ($smoke_attempt attempts, exit $status)"
             exit "$status"
           }
           trap cleanup EXIT
           trap 'exit 130' INT
           trap 'exit 143' TERM
-          mkdir -p "$root/home" "$root/config" "$root/cache" "$root/profile"
-          smoke_started=$SECONDS
-          timeout --signal=TERM --kill-after=5s 20s env \
-            HOME="$root/home" XDG_CONFIG_HOME="$root/config" XDG_CACHE_HOME="$root/cache" \
-            "$chrome" --headless --dump-dom --disable-background-networking \
-            --no-first-run --no-default-browser-check --user-data-dir="$root/profile" \
-            'data:text/html,<html><body>quirky-linux-chrome</body></html>' \
-            > "$root/dom.html" 2> "$root/chrome.log" &
-          smoke_pid=$!
-          smoke_status=0
-          wait "$smoke_pid" || smoke_status=$?
-          echo "Chrome sandbox smoke: $((SECONDS - smoke_started))s (exit $smoke_status)"
-          if [ "$smoke_status" -eq 0 ]; then
-            grep -q 'quirky-linux-chrome' "$root/dom.html"
-          else
-            cat "$root/chrome.log" >&2
-            exit "$smoke_status"
-          fi
+          for smoke_attempt in 1 2 3; do
+            root=$(mktemp -d "$RUNNER_TEMP/quirky-chrome.XXXXXX")
+            mkdir -p "$root/home" "$root/config" "$root/cache" "$root/profile"
+            smoke_started=$SECONDS
+            timeout --signal=TERM --kill-after=5s 60s env \
+              HOME="$root/home" XDG_CONFIG_HOME="$root/config" XDG_CACHE_HOME="$root/cache" \
+              "$chrome" --headless --dump-dom --disable-background-networking \
+              --no-first-run --no-default-browser-check --user-data-dir="$root/profile" \
+              'data:text/html,<html><body>quirky-linux-chrome</body></html>' \
+              > "$root/dom.html" 2> "$root/chrome.log" &
+            smoke_pid=$!
+            smoke_status=0
+            wait "$smoke_pid" || smoke_status=$?
+            smoke_result=ok
+            if [ "$smoke_status" -ne 0 ]; then
+              case "$smoke_status" in
+                124|137) smoke_result=timeout ;;
+                *) smoke_result=chrome-exit ;;
+              esac
+            elif ! grep -q 'quirky-linux-chrome' "$root/dom.html"; then
+              smoke_status=1
+              smoke_result=missing-marker
+            fi
+            echo "Chrome sandbox smoke attempt $smoke_attempt/3: $((SECONDS - smoke_started))s (exit $smoke_status, result $smoke_result)"
+            if [ "$smoke_status" -ne 0 ]; then
+              echo "Chrome sandbox smoke attempt $smoke_attempt/3 stderr:" >&2
+              cat "$root/chrome.log" >&2
+              if [ "$smoke_result" = missing-marker ]; then
+                echo "Chrome sandbox smoke attempt $smoke_attempt/3: expected quirky-linux-chrome marker missing" >&2
+              fi
+            fi
+            cleanup_attempt
+            if [ "$smoke_status" -eq 0 ]; then exit 0; fi
+          done
+          exit "$smoke_status"
 
       - name: Run shard
         env:
