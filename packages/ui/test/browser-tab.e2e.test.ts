@@ -1,8 +1,6 @@
 import { createHash } from 'node:crypto'
 import {
-  accessSync,
   closeSync,
-  constants,
   cpSync,
   existsSync,
   lstatSync,
@@ -26,23 +24,14 @@ import type { QuirkyClient } from '@quirky/protocol'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import { createIsolatedRuntimeEnvironment } from '../../../scripts/ui-review/fixtures'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
+import { browserExecutable } from '../../../scripts/test-support/browser'
 
 const REPO_ROOT = realpathSync(resolve(import.meta.dir, '../../..'))
-const BROWSER_CANDIDATES = [
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-  '/usr/bin/google-chrome',
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser'
-] as const
 const BUILD_TIMEOUT_MS = 180_000
 const DAEMON_TIMEOUT_MS = 30_000
 const UI_TIMEOUT_MS = 30_000
 const TERMINAL_ECHO = 'G8_BROWSER_ECHO'
 const WATCH_FIXTURE = 'G8_BROWSER_WATCH_FIXTURE'
-
-type ExecutableLookup = (path: string) => boolean
 
 type BuildEnvironment = {
   HOME: string
@@ -124,31 +113,6 @@ class InjectedLifecycleFailure extends Error {
 function isWithin(root: string, path: string): boolean {
   const fromRoot = relative(root, path)
   return fromRoot === '' || (fromRoot !== '..' && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot))
-}
-
-function realExecutable(path: string): boolean {
-  try {
-    return statSync(path).isFile() && (accessSync(path, constants.X_OK), true)
-  } catch {
-    return false
-  }
-}
-
-/** Playwright's checked-in executable wins; installed candidates are only a fallback. */
-function resolveBrowserExecutable(bundledPath: string | undefined, lookup: ExecutableLookup = realExecutable): string {
-  if (bundledPath && lookup(bundledPath)) return bundledPath
-  for (const candidate of BROWSER_CANDIDATES) if (lookup(candidate)) return candidate
-  throw new Error(`No executable Chrome or Chromium was found (checked the Playwright bundle and ${BROWSER_CANDIDATES.join(', ')}).`)
-}
-
-function actualBrowserExecutable(): string {
-  let bundledPath: string | undefined
-  try {
-    bundledPath = chromium.executablePath()
-  } catch {
-    bundledPath = undefined
-  }
-  return resolveBrowserExecutable(bundledPath)
 }
 
 function assertOwnedPath(root: string, path: string, label: string, options: { allowMissingLeaf?: boolean; directory?: boolean } = {}): void {
@@ -1048,32 +1012,6 @@ async function expectBuilderNotCalled(root: string, env: BuildEnvironment): Prom
   expect(calls).toBe(0)
 }
 
-test('Chrome resolution prefers the Playwright bundle, falls back in spec order, and fails with no candidate', () => {
-  const bundled = '/fixture/playwright/chromium'
-  const visits: string[] = []
-  expect(resolveBrowserExecutable(bundled, (path) => { visits.push(path); return true })).toBe(bundled)
-  expect(visits).toEqual([bundled])
-
-  visits.length = 0
-  const installed = '/usr/bin/chromium'
-  expect(resolveBrowserExecutable('/missing/bundle/chromium', (path) => {
-    visits.push(path)
-    return path === installed
-  })).toBe(installed)
-  expect(visits).toEqual(['/missing/bundle/chromium', ...BROWSER_CANDIDATES.slice(0, BROWSER_CANDIDATES.indexOf(installed) + 1)])
-
-  visits.length = 0
-  let missing: unknown = null
-  try {
-    resolveBrowserExecutable('/missing/bundle/chromium', (path) => { visits.push(path); return false })
-  } catch (error) {
-    missing = error
-  }
-  expect(missing).toBeInstanceOf(Error)
-  expect((missing as Error).message).toContain('No executable Chrome or Chromium')
-  expect(visits).toEqual(['/missing/bundle/chromium', ...BROWSER_CANDIDATES])
-})
-
 test('build preflight rejects checkout roots and escaping plugin/output links before invoking a builder', async () => {
   const checkoutUi = createMinimalBuildLayout()
   try {
@@ -1147,6 +1085,7 @@ test('owned fixture lifecycle removes its root after setup and build failures', 
 })
 
 async function realBrowserScenario(injectFlowFailureAfterAcquisition: boolean): Promise<void> {
+  const executablePath = browserExecutable()
   const beforeStatus = checkoutGitStatus(REPO_ROOT)
   const beforeOutputs = checkoutOutputSnapshot(REPO_ROOT)
   let proof: RealBrowserProof | undefined
@@ -1159,7 +1098,6 @@ async function realBrowserScenario(injectFlowFailureAfterAcquisition: boolean): 
     expect(plan.pluginIds.length).toBeGreaterThan(0)
     const markers = stampOwnedBuildArtifacts(fixture)
 
-    const executablePath = actualBrowserExecutable()
     await fixture.startDaemon(executablePath)
     if (!fixture.client || !fixture.daemon) throw new Error('owned daemon startup did not return a client and process')
     const client = fixture.client
