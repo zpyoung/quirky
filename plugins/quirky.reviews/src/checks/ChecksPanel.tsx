@@ -123,6 +123,15 @@ function pollingIdentity(target: ChecksPollingTarget): string {
     target.repository ?? null,
   ])
 }
+function refreshOperationIdentity(target: ChecksPollingTarget): string {
+  return JSON.stringify([
+    target.worktree,
+    target.branch,
+    target.number,
+    target.provider,
+    target.repository ?? null,
+  ])
+}
 
 function baseRefreshInterval(target: ChecksPollingTarget): number {
   if (target.reviewState === 'merged' && target.checksPresent && !target.pending && target.checksRollup !== 'unknown') {
@@ -1227,7 +1236,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const currentTarget = useMemo(() => pollTarget(state, activeWorktree), [state.checks, activeWorktree])
   const currentTargetRef = useRef<ChecksPollingTarget | null>(currentTarget)
   currentTargetRef.current = currentTarget
-  const currentTargetIdentity = currentTarget === null ? null : pollingIdentity(currentTarget)
+  const currentTargetIdentity = currentTarget === null ? null : refreshOperationIdentity(currentTarget)
   const currentTargetLease = useRef({ identity: currentTargetIdentity, generation: 0 })
   if (currentTargetLease.current.identity !== currentTargetIdentity) {
     currentTargetLease.current = { identity: currentTargetIdentity, generation: currentTargetLease.current.generation + 1 }
@@ -1286,13 +1295,12 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const runRefresh = useCallback(async (
     reason: 'manual' | 'active',
     worktree = activeWorktree,
-    leaseCurrent?: () => boolean,
   ): Promise<boolean> => {
     if (!worktree) return false
     const targetAtStart = currentTargetRef.current
     const targetGeneration = currentTargetLease.current.generation
     const stillActive = () => mounted.current && activeWorktreeRef.current === worktree
-      && currentTargetLease.current.generation === targetGeneration && (leaseCurrent?.() ?? true)
+      && currentTargetLease.current.generation === targetGeneration
     if (!stillActive()) return false
     setActionError(null)
     const candidate: JsonRecord = targetAtStart?.worktree === worktree ? targetAtStart.candidate : { worktree, active: true }
@@ -1305,7 +1313,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       }
       if (!stillActive()) return false
       const queueResult = isRecord(queued) ? queued : null
-      const providerName = currentTargetRef.current?.provider === 'gitlab' ? 'GitLab' : 'GitHub'
+      const providerName = targetAtStart?.provider === 'gitlab' ? 'GitLab' : 'GitHub'
       const queuedError = queueResult && (queueResult.kind === 'paused' || queueResult.kind === 'unavailable')
         ? typeof queueResult.message === 'string' ? queueResult.message : `${providerName} refresh ${String(queueResult.kind)}.`
         : null
@@ -1339,12 +1347,13 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       subscribeLayout: (listener) => context.onLayout(() => listener()),
       subscribeConnection: (listener) => context.onConnection(listener),
       async report(candidates) {
+        const providerName = currentTargetRef.current?.provider === 'gitlab' ? 'GitLab' : 'GitHub'
         try {
           const result = await context.call('quirky.hosting/visibleRefreshCandidates', {
             generation: ++visibleCandidateGeneration,
             candidates
           })
-          if (!isRecord(result) || result.accepted !== true) throw new Error('GitHub did not accept the Checks visibility candidate set.')
+          if (!isRecord(result) || result.accepted !== true) throw new Error(`${providerName} did not accept the Checks visibility candidate set.`)
         } catch (error) {
           if (!isUnsupportedProviderError(error)) throw error
         }
@@ -1430,7 +1439,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       ? eligibility.authDiagnosticsError
       : null
   const diagnostics = diagnosticsCopy(diagnosticData)
-  const diagnosticProvider = currentReview?.provider === 'gitlab' || eligibility?.provider === 'gitlab' || diagnosticData?.provider === 'gitlab' ? 'GitLab' : 'GitHub'
+  const diagnosticProvider = currentReview?.provider === 'gitlab' || eligibility?.provider === 'gitlab'
+    || lookup?.provider === 'gitlab' || diagnosticData?.provider === 'gitlab' ? 'GitLab' : 'GitHub'
+  const diagnosticHeading = diagnosticProvider === 'GitLab' ? 'GitLab authentication diagnostics' : 'GitHub CLI diagnostics'
   const currentReviewOwner = active === null ? null : reviewContext(state, 'checks')
   const lookupGitStatus = statusFromLookup(lookup)
   const blockerReview = eligibility && isRecord(eligibility.review) ? eligibility.review : null
@@ -1547,7 +1558,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     if (!isCurrent()) return
     if (request.action === 'refresh') {
       controlValue(request, [])
-      return runRefresh('manual', activeWorktree, isCurrent)
+      return runRefresh('manual', activeWorktree)
     }
     if (request.action === 'unlink') {
       controlValue(request, [])
@@ -1888,7 +1899,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
           >
             {empty.action === 'open' ? `Open Review #${existingNumber ?? ''}` : empty.action === 'relink' ? `Link PR #${existingNumber ?? ''}` : empty.action === 'publish' ? 'Publish Branch' : empty.action === 'sync' ? 'Sync Branch' : empty.action === 'push' ? 'Push & Create PR' : `Connect ${diagnosticProvider}`}
           </Button>}
-          {diagnostics.length > 0 && <section className="ui-stack" aria-label={`${diagnosticProvider} authentication diagnostics`}><SectionHeader title={`${diagnosticProvider} authentication diagnostics`} /><ul className="ui-stack">{diagnostics.map((item) => <li key={item}>{item}</li>)}</ul></section>}
+          {diagnostics.length > 0 && <section className="ui-stack" aria-label={diagnosticHeading}><SectionHeader title={diagnosticHeading} /><ul className="ui-stack">{diagnostics.map((item) => <li key={item}>{item}</li>)}</ul></section>}
           {diagnosticData && <section className="ui-stack" aria-label={`${diagnosticProvider} account status`}>
             {typeof diagnosticData.requiredHost === 'string' && <p>Required host: <code>{diagnosticData.requiredHost}</code></p>}
             {Array.isArray(diagnosticData.accounts) && diagnosticData.accounts.length > 0 && <ul className="ui-stack">

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act } from 'react'
-import type { UiLayout, UiPluginContext } from '@quirky/protocol'
+import { CHORD_PLATFORM, type UiLayout, type UiPluginContext } from '@quirky/protocol'
 import { resolve } from 'node:path'
 import { collectInventory } from '../../../scripts/ui-scoreboard/inventory'
 import { discoverCandidates, discoverUiFiles } from '../../../scripts/ui-scoreboard/audit-discovery'
@@ -26,6 +26,12 @@ GlobalRegistrator.register()
 const WORKTREE = GITLAB_WORKTREE
 const HOST = GITLAB_HOST
 const REPO = GITLAB_REPOSITORY
+const GITHUB_REPO = { host: 'github.example.test', owner: 'group', repo: 'proj' }
+const GITHUB_DIAGNOSTICS: Record<string, unknown> = {
+  ghAvailable: true, activeAccount: null, accounts: [], envTokenInProcess: false,
+  missingScopes: [], requiredScopes: ['repo'], hasKeyringFallback: false,
+  requiredHost: GITHUB_REPO.host, requiredHostAuthenticated: true,
+}
 const OTHER_REPO = { host: 'github.com', owner: 'group', repo: 'other' }
 const NUMBER = GITLAB_REVIEW.number
 const HEAD = GITLAB_HEAD_OID
@@ -799,7 +805,7 @@ test('GitLab review details keep supported description and link actions while hi
   }
 
   const link = button(mounted.element, 'Open on GitLab')
-  const chord = process.platform === 'darwin' ? 'Shift+Cmd-click' : 'Shift+Ctrl-click'
+  const chord = CHORD_PLATFORM === 'darwin' ? 'Shift+Cmd-click' : 'Shift+Ctrl-click'
   expect(link.title).toBe(`Open on GitLab in Quirky Browser; ${chord} opens in system browser.`)
   await invoke(harness, page, 'open-link', { invert: true })
   expect(harness.calls.find((call) => call.method === 'quirky.reviews/openLink')?.params).toEqual({ url: MERGE_REQUEST_URL, worktree: WORKTREE, invert: true })
@@ -853,8 +859,9 @@ test('GitLab files navigation explains the missing capability without mounting c
   const mounted = mountSurface(harness, REVIEW_VIEW)
   await settle()
   expect(mounted.element.textContent).toContain('Changed files are unavailable for GitLab merge requests.')
-  expect(mounted.element.querySelector('[aria-label="Changed files"]')).toBeNull()
-  expect(harness.calls.some((call) => /detail(?:List|Read|Get)Files/.test(call.method))).toBe(false)
+  expect(mounted.element.querySelector('[aria-label="Files changed"]')).toBeNull()
+  expect(listReviewsUiControls(harness.context, REVIEW_VIEW).map((control) => control.slot)).not.toContain('files-changed')
+  expect(harness.backend.calls.filter((call) => call.method === 'quirky.hosting/files')).toHaveLength(0)
   const page = currentControl(harness, REVIEW_VIEW, 'review-page')
   expect(await invoke(harness, page, 'tab-set', { tab: 'files' })).toMatchObject({ delivered: true })
   expect(harness.calls.some((call) => call.method === 'quirky.reviews/detailSetTab' && call.params.tab === 'files')).toBe(true)
@@ -1017,10 +1024,12 @@ test('GitLab partial comment ingestion displays the bounded 100-note set without
 
 test('GitLab UI controls use their mounted auxiliary window identity, not the owner connection', async () => {
   const owner = createHarness({ initialState: stateFor(), view: REVIEW_VIEW, connectionId: 41 })
+  mountSurface(owner, REVIEW_VIEW)
   const auxiliary = createHarness({ initialState: stateFor(), view: REVIEW_VIEW, connectionId: 42 })
   const mounted = mountSurface(auxiliary, REVIEW_VIEW)
   await settle()
   auxiliary.clearCalls()
+  owner.clearCalls()
   const page = currentControl(auxiliary, REVIEW_VIEW, 'review-page')
   await invoke(auxiliary, page, 'refresh')
   await settle()
@@ -1258,21 +1267,22 @@ test('GitLab scheduler pause copy and error precedence preserve the direct read 
       { name: 'direct read failure', queue: { kind: 'paused', skippedReason: 'rate-limit', pausedUntil: 1_030_000, message: 'scheduler pause fixture' }, direct: { ok: false, error: 'direct read fixture failed' }, expected: 'direct read fixture failed', absent: 'scheduler pause fixture' },
     ]) {
       const timers = controlledWindowTimers()
-      const harness = createHarness({ initialState: stateFor(), view: CHECKS_PANEL, openChecks: true })
-      const mounted = mountSurface(harness, CHECKS_PANEL)
-      await settle()
-      harness.setMethod('quirky.hosting/refresh', async () => scenario.queue)
-      if (scenario.direct.ok) harness.setBackendReply('quirky.hosting/checks', GITLAB_CHECKS_REPLY)
-      else harness.setBackendReply('quirky.hosting/checks', () => { throw new Error('direct read fixture failed') })
-      harness.clearCalls()
-      await invokeCurrent(harness, CHECKS_PANEL, 'checks', 'refresh')
-      await settle()
-      expect(mounted.element.querySelector('.ui-inline-error')?.textContent, scenario.name).toContain(scenario.expected)
-      expect(mounted.element.textContent, scenario.name).not.toContain(scenario.absent)
-      expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')).toHaveLength(1)
-      expect(harness.calls.filter((call) => call.method === 'quirky.hosting/refresh')).toHaveLength(1)
-      expect(harness.backend.calls.filter((call) => call.method === 'quirky.hosting/checks')).toHaveLength(1)
-      timers.restore()
+      try {
+        const harness = createHarness({ initialState: stateFor(), view: CHECKS_PANEL, openChecks: true })
+        const mounted = mountSurface(harness, CHECKS_PANEL)
+        await settle()
+        harness.setMethod('quirky.hosting/refresh', async () => scenario.queue)
+        if (scenario.direct.ok) harness.setBackendReply('quirky.hosting/checks', GITLAB_CHECKS_REPLY)
+        else harness.setBackendReply('quirky.hosting/checks', () => { throw new Error('direct read fixture failed') })
+        harness.clearCalls()
+        await invokeCurrent(harness, CHECKS_PANEL, 'checks', 'refresh')
+        await settle()
+        expect(mounted.element.querySelector('.ui-inline-error')?.textContent, scenario.name).toContain(scenario.expected)
+        expect(mounted.element.textContent, scenario.name).not.toContain(scenario.absent)
+        expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')).toHaveLength(1)
+        expect(harness.calls.filter((call) => call.method === 'quirky.hosting/refresh')).toHaveLength(1)
+        expect(harness.backend.calls.filter((call) => call.method === 'quirky.hosting/checks')).toHaveLength(1)
+      } finally { timers.restore() }
     }
   } finally { Date.now = originalNow }
 })
@@ -1310,37 +1320,53 @@ test('non-capability GitLab queue failures do not fall back to a direct read', a
   expect(harness.backend.calls.filter((call) => call.method === 'quirky.hosting/checks')).toHaveLength(0)
 })
 
-test('visibility capability refusal is suppressed without fabricated acceptance or an immediate retry', async () => {
+test('visibility capability refusal stays retryable on a later visible session without immediate retries', async () => {
   const timers = controlledWindowTimers()
   try {
     const harness = createHarness({
       initialState: stateFor(), view: CHECKS_PANEL, openChecks: true,
-      methods: { 'quirky.hosting/visibleRefreshCandidates': async () => { throw providerError('unsupported_provider', 'visibility unavailable fixture') } },
+      methods: { 'quirky.hosting/visibleRefreshCandidates': async (params) => {
+        if (Array.isArray(params.candidates) && params.candidates.length === 0) {
+          return { accepted: true, generation: params.generation, candidates: 0 }
+        }
+        throw providerError('unsupported_provider', 'visibility unavailable fixture')
+      } },
     })
     const mounted = mountSurface(harness, CHECKS_PANEL)
     await settle()
-    expect(harness.calls.filter((call) => call.method === 'quirky.hosting/visibleRefreshCandidates')).toHaveLength(1)
+    expect(harness.calls.filter((call) => call.method === 'quirky.hosting/visibleRefreshCandidates' &&
+      Array.isArray(call.params.candidates) && call.params.candidates.length > 0)).toHaveLength(1)
+    const visible = harness.context.getLayout()
+    harness.setLayout({ ...visible, view: { id: 'view:fixture' }, tools: { open: {} } } as UiLayout)
+    await settle()
+    expect(harness.calls.some((call) => call.method === 'quirky.hosting/visibleRefreshCandidates' &&
+      Array.isArray(call.params.candidates) && call.params.candidates.length === 0)).toBe(true)
+    harness.setLayout(visible)
+    await settle()
+    expect(harness.calls.filter((call) => call.method === 'quirky.hosting/visibleRefreshCandidates' &&
+      Array.isArray(call.params.candidates) && call.params.candidates.length > 0)).toHaveLength(2)
     expect(harness.calls.filter((call) => call.method === 'quirky.hosting/refresh')).toHaveLength(0)
-    expect(mounted.element.textContent).not.toContain('visibility unavailable fixture')
-    expect(mounted.element.textContent).not.toContain('did not accept')
+    expect(mounted.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(mounted.element.textContent).toContain('hello')
   } finally { timers.restore() }
 })
 
 test('visibility reports retain ordinary rejected and malformed result errors', async () => {
   for (const [name, reply, message] of [
     ['network rejection', () => { throw providerError('network_error', 'visibility network failure') }, 'visibility network failure'],
-    ['not accepted', () => ({ accepted: false, generation: 1, candidates: 1 }), 'did not accept'],
+    ['not accepted', () => ({ accepted: false, generation: 1, candidates: 1 }), 'GitLab did not accept the Checks visibility candidate set.'],
   ] as const) {
     const timers = controlledWindowTimers()
-    const harness = createHarness({
-      initialState: stateFor(), view: CHECKS_PANEL, openChecks: true,
-      methods: { 'quirky.hosting/visibleRefreshCandidates': async () => reply() },
-    })
-    const mounted = mountSurface(harness, CHECKS_PANEL)
-    await settle()
-    expect(harness.calls.filter((call) => call.method === 'quirky.hosting/visibleRefreshCandidates').length, name).toBeGreaterThan(0)
-    expect(mounted.element.textContent, name).toContain(message)
-    timers.restore()
+    try {
+      const harness = createHarness({
+        initialState: stateFor(), view: CHECKS_PANEL, openChecks: true,
+        methods: { 'quirky.hosting/visibleRefreshCandidates': async () => reply() },
+      })
+      const mounted = mountSurface(harness, CHECKS_PANEL)
+      await settle()
+      expect(harness.calls.filter((call) => call.method === 'quirky.hosting/visibleRefreshCandidates'), name).toHaveLength(1)
+      expect(mounted.element.textContent, name).toContain(message)
+    } finally { timers.restore() }
   }
 })
 
@@ -1375,12 +1401,261 @@ test('held GitLab queue and visibility completions are fenced by replacement pro
     await settle()
     harness.setState(stateFor({ repo: REPO, provider: 'gitlab' }))
     await settle()
+    const replacement = currentControl(harness, CHECKS_PANEL, 'checks')
+    const freshQueue = harness.holdNext('quirky.hosting/refresh')
+    await invoke(harness, replacement, 'refresh')
+    await settle()
+    expect(harness.calls.filter((call) => call.method === 'quirky.hosting/refresh')).toHaveLength(2)
     await act(async () => { heldQueue.resolve({ kind: 'found', review: reviewFor(), fetchedAt: 1_000_000 }) })
     await settle()
     expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')).toHaveLength(0)
-    expect(mounted.element.textContent).not.toContain('target-unavailable')
+    expect(mounted.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(harness.calls.filter((call) => call.method === 'quirky.hosting/refresh')).toHaveLength(2)
+    await act(async () => { freshQueue.resolve({ kind: 'found', review: reviewFor(), fetchedAt: 1_000_000 }) })
+    await settle()
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')).toHaveLength(1)
   } finally { timers.restore() }
 })
+
+function settingsSnapshot(provider: 'github' | 'gitlab' | null): ReviewsState {
+  const repo = provider === 'github' ? GITHUB_REPO : REPO
+  const state = stateFor({ repo, provider: provider ?? 'gitlab' })
+  state.settings = {
+    ...state.settings, provider, repository: provider === null ? null : repo,
+    diagnostics: provider === 'github' ? GITHUB_DIAGNOSTICS : provider === 'gitlab' ? diagnostics() : null,
+    accounts: null, configuration: null, budget: null,
+  }
+  return state
+}
+
+test('resolving hosting identity does not cancel an in-flight defaults read', async () => {
+  const defaults = deferred<unknown>()
+  const refresh = deferred<unknown>()
+  const harness = createHarness({
+    initialState: settingsSnapshot(null), view: SETTINGS_VIEW,
+    methods: {
+      'quirky.reviews/hostingSettingsRefresh': () => refresh.promise,
+      'quirky.reviews/creationDefaults': (params) => params.scope === 'repository'
+        ? { defaults: CREATE_DEFAULTS, repoId: 'fixture-repo', overrides: {} } : defaults.promise,
+    },
+  })
+  const mounted = mountSurface(harness, SETTINGS_VIEW)
+  try {
+    await settle()
+    const reads = harness.calls.filter((call) => call.method === 'quirky.reviews/creationDefaults').length
+    expect(reads).toBeGreaterThan(0)
+    harness.setState(settingsSnapshot('gitlab'))
+    await settle()
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/creationDefaults')).toHaveLength(reads)
+    await act(async () => { defaults.resolve({ defaults: CREATE_DEFAULTS }); await defaults.promise })
+    await settle()
+    expect(actionEnabled(currentControl(harness, SETTINGS_VIEW, 'settings-defaults-global'), 'defaults-set')).toBe(true)
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/hostingSettingsRefresh')).toHaveLength(1)
+  } finally {
+    mounted.unmount()
+    await act(async () => {
+      defaults.resolve({ defaults: CREATE_DEFAULTS })
+      refresh.resolve({ worktree: WORKTREE, refreshed: true, fetchedAt: Date.now() })
+      await Promise.all([defaults.promise, refresh.promise])
+    })
+  }
+})
+
+for (const provider of ['github', 'gitlab'] as const) {
+  test(`${provider} settings initialize once while unresolved identity becomes known`, async () => {
+    const refresh = deferred<unknown>()
+    const harness = createHarness({
+      initialState: settingsSnapshot(null), view: SETTINGS_VIEW,
+      methods: { 'quirky.reviews/hostingSettingsRefresh': () => refresh.promise },
+    })
+    const mounted = mountSurface(harness, SETTINGS_VIEW)
+    try {
+      await settle()
+      expect(harness.calls.filter((call) => call.method === 'quirky.reviews/hostingSettingsRefresh')).toHaveLength(1)
+      expect(await invokeCurrent(harness, SETTINGS_VIEW, 'settings-defaults-global', 'defaults-scope', { scope: 'repository' })).toMatchObject({ delivered: true })
+      const defaultsReads = harness.calls.filter((call) => call.method === 'quirky.reviews/creationDefaults').length
+      expect(defaultsReads).toBeGreaterThan(0)
+      harness.setState(settingsSnapshot(provider))
+      await settle()
+      expect(harness.calls.filter((call) => call.method === 'quirky.reviews/hostingSettingsRefresh')).toHaveLength(1)
+      expect(harness.calls.filter((call) => call.method === 'quirky.reviews/creationDefaults')).toHaveLength(defaultsReads)
+      expect(currentControl(harness, SETTINGS_VIEW, 'settings-defaults-repository').slot).toBe('settings-defaults-repository')
+      expect(mounted.element.querySelector<HTMLInputElement>('input[value="repository"]')?.checked).toBe(true)
+    } finally {
+      mounted.unmount()
+      await act(async () => { refresh.resolve({ worktree: WORKTREE, refreshed: true, fetchedAt: Date.now() }); await refresh.promise })
+    }
+  })
+
+  test(`${provider} settings keep provider errors and recheck in the selected card`, async () => {
+    const refresh = deferred<unknown>()
+    const state = settingsSnapshot(provider)
+    state.settings.error = 'provider diagnosis fixture failed'
+    const harness = createHarness({
+      initialState: state, view: SETTINGS_VIEW,
+      methods: { 'quirky.reviews/hostingSettingsRefresh': () => refresh.promise },
+    })
+    const mounted = mountSurface(harness, SETTINGS_VIEW)
+    try {
+      await settle()
+      const name = provider === 'github' ? 'GitHub' : 'GitLab'
+      const card = mounted.element.querySelector<HTMLElement>(`article[aria-label="${name}"]`)
+      expect(card).not.toBeNull()
+      expect(card?.querySelector('.ui-inline-error')?.textContent).toContain('provider diagnosis fixture failed')
+      expect(card?.querySelector('button')?.textContent).toContain('Re-check')
+      expect(listReviewsUiControls(harness.context, SETTINGS_VIEW).filter((control) => control.slot === 'settings-hosting')).toHaveLength(1)
+      if (provider === 'gitlab') {
+        const notices = [...mounted.element.querySelectorAll('.ui-notice-line')].map((node) => node.textContent)
+        expect(notices).toContain('Account binding is unavailable for GitLab.')
+        expect(notices).toContain('API budget is unavailable for GitLab.')
+      }
+    } finally {
+      mounted.unmount()
+      await act(async () => { refresh.resolve({ worktree: WORKTREE, refreshed: false, fetchedAt: 0, error: 'provider diagnosis fixture failed' }); await refresh.promise })
+    }
+  })
+}
+
+test('unresolved settings remain neutral and do not arm a budget timer or permit budget reads', async () => {
+  const refresh = deferred<unknown>()
+  const harness = createHarness({
+    initialState: settingsSnapshot(null), view: SETTINGS_VIEW,
+    methods: { 'quirky.reviews/hostingSettingsRefresh': () => refresh.promise },
+  })
+  const originalSet = window.setInterval
+  const originalClear = window.clearInterval
+  const intervals: number[] = []
+  let mounted: MountedSurface | undefined
+  try {
+    window.setInterval = ((_handler: TimerHandler, delay?: number) => { intervals.push(delay ?? 0); return intervals.length }) as typeof window.setInterval
+    window.clearInterval = (() => {}) as typeof window.clearInterval
+    mounted = mountSurface(harness, SETTINGS_VIEW)
+    await settle()
+    expect(mounted.element.querySelector('article[aria-label="GitHub"]')?.textContent).not.toContain('Checking GitHub')
+    expect(mounted.element.textContent).not.toContain('Loading GitHub API budget')
+    expect(intervals).toHaveLength(0)
+    const control = currentControl(harness, SETTINGS_VIEW, 'settings-hosting')
+    expect(actionEnabled(control, 'budget-refresh')).toBe(false)
+    expect(await invoke(harness, control, 'budget-refresh')).toEqual({ delivered: false, reason: 'disabled' })
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    await settle()
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/hostingBudget')).toHaveLength(0)
+  } finally {
+    mounted?.unmount()
+    await act(async () => { refresh.resolve({ worktree: WORKTREE, refreshed: false, fetchedAt: 0 }); await refresh.promise })
+    window.setInterval = originalSet
+    window.clearInterval = originalClear
+  }
+})
+
+test('GitHub files navigation mounts the actual files control that GitLab omits', async () => {
+  const harness = createHarness({ initialState: stateFor({ repo: GITHUB_REPO, provider: 'github', detailTab: 'files' }), view: REVIEW_VIEW })
+  const mounted = mountSurface(harness, REVIEW_VIEW)
+  await settle()
+  expect(mounted.element.querySelector('[aria-label="Files changed"]')).not.toBeNull()
+  expect(listReviewsUiControls(harness.context, REVIEW_VIEW).map((control) => control.slot)).toContain('files-changed')
+})
+
+test('Checks auth copy identifies GitLab and preserves the GitHub CLI diagnostics label', async () => {
+  const gitlab = createHarness({ initialState: unavailableChecksState(), view: CHECKS_PANEL, openChecks: true })
+  const gitlabSurface = mountSurface(gitlab, CHECKS_PANEL)
+  await settle()
+  expect(gitlabSurface.element.textContent).toContain('Connect GitLab')
+  expect(gitlabSurface.element.textContent).not.toContain('Connect GitHub')
+  expect(gitlabSurface.element.textContent).not.toContain('gh auth login')
+  const githubState = stateFor({ repo: GITHUB_REPO, provider: 'github' })
+  githubState.checks.review = null
+  githubState.checks.lookup = { kind: 'unsupported', reason: 'not_authenticated', authDiagnostics: GITHUB_DIAGNOSTICS }
+  githubState.checks.eligibility = { eligible: false, reason: 'authentication_required', authDiagnostics: GITHUB_DIAGNOSTICS }
+  const github = createHarness({ initialState: githubState, view: CHECKS_PANEL, openChecks: true })
+  const githubSurface = mountSurface(github, CHECKS_PANEL)
+  await settle()
+  expect(githubSurface.element.textContent).toContain('GitHub CLI diagnostics')
+})
+
+for (const failures of [[], ['first partial fixture', 'second partial fixture']]) {
+  test(`partial comment copy preserves ${failures.length} failures without doubled punctuation`, async () => {
+    const harness = createHarness({ initialState: stateFor({ comments: commentsEnvelope(undefined, true, failures) }), view: REVIEW_VIEW })
+    const mounted = mountSurface(harness, REVIEW_VIEW)
+    await settle()
+    const text = [...mounted.element.querySelectorAll('p')].find((node) => node.textContent?.startsWith('Showing a limited set of comments'))?.textContent
+    expect(text).toBeDefined()
+    expect(text).not.toMatch(/comments\.\.|comments\.;/)
+    if (failures.length === 0) expect(text).toBe('Showing a limited set of comments.')
+    for (const failure of failures) expect(text).toContain(failure)
+  })
+}
+
+test('GitHub Resolve remains available during an independent comment operation', async () => {
+  const pending = deferred<unknown>()
+  const initial = stateFor({ repo: GITHUB_REPO, provider: 'github' })
+  initial.detail.commentDraft = 'pending GitHub comment'
+  const harness = createHarness({ initialState: initial, view: REVIEW_VIEW, backendReplies: { 'quirky.hosting/reviewConversation': () => pending.promise } })
+  const mounted = mountSurface(harness, REVIEW_VIEW)
+  try {
+    await settle()
+    await invokeCurrent(harness, REVIEW_VIEW, 'comment-composer', 'comment-send')
+    await settle()
+    expect(harness.backend.calls.some((call) => call.method === 'quirky.hosting/reviewConversation' && call.params?.action === 'add')).toBe(true)
+    expect(actionEnabled(currentControl(harness, REVIEW_VIEW, 'comment-composer'), 'comment-send')).toBe(false)
+    expect(button(mounted.element, 'Resolve').disabled).toBe(false)
+    expect(actionEnabled(currentControl(harness, REVIEW_VIEW, 'comments'), 'thread-set')).toBe(true)
+  } finally {
+    await act(async () => { pending.reject(new Error('finish pending comment fixture')); await pending.promise.catch(() => undefined) })
+  }
+})
+
+for (const provider of ['github', 'gitlab'] as const) {
+  for (const outcome of ['paused', 'failed'] as const) {
+    test(`${provider} refresh ${outcome} alert survives a same-MR head advance`, async () => {
+      const queue = deferred<unknown>()
+      const repo = provider === 'github' ? GITHUB_REPO : REPO
+      const initial = stateFor({ repo, provider })
+      const advanced = stateFor({ repo, provider })
+      const nextHead = 'c'.repeat(40)
+      advanced.checks.review = { ...reviewFor({ repo, provider }), headRefOid: nextHead }
+      advanced.checks.lookup = { ...advanced.checks.lookup, gitStatus: { branch: 'feature', head: nextHead } }
+      advanced.checks.checks = { ...GITLAB_CHECKS_REPLY, headSha: nextHead }
+      const harness = createHarness({
+        initialState: initial, view: CHECKS_PANEL, openChecks: true,
+        backendReplies: {
+          'quirky.hosting/repository': { provider, repository: repo },
+          'quirky.hosting/review': { kind: 'found', review: advanced.checks.review, fetchedAt: Date.now() },
+          'quirky.git/status': { ...GITLAB_STATUS, head: nextHead },
+          'quirky.hosting/checks': { ...GITLAB_CHECKS_REPLY, headSha: nextHead },
+          ...(provider === 'github' ? { 'quirky.hosting/reviewStack': { number: NUMBER, available: false, truncated: false, reason: 'stack_unavailable', message: 'No stack' } } : {}),
+        },
+      })
+      const timers = controlledWindowTimers()
+      let mounted: MountedSurface | undefined
+      try {
+        mounted = mountSurface(harness, CHECKS_PANEL)
+        await settle()
+        harness.clearCalls()
+        harness.setMethod('quirky.hosting/refresh', () => queue.promise)
+        await invokeCurrent(harness, CHECKS_PANEL, 'checks', 'refresh')
+        await settle()
+        expect(harness.calls.find((call) => call.method === 'quirky.hosting/refresh')?.params.candidate).toMatchObject({ headOid: HEAD })
+        harness.setState(advanced)
+        await settle()
+        await act(async () => {
+          if (outcome === 'paused') queue.resolve({ kind: 'paused', skippedReason: 'rate-limit', pausedUntil: Date.now() + 30_000 })
+          else queue.reject(providerError('network_error', 'head advance refresh failed'))
+          await queue.promise.catch(() => undefined)
+        })
+        await settle()
+        expect(harness.backend.env.view(WORKTREE).checks.review?.headRefOid).toBe(nextHead)
+        expect(mounted.element.querySelector('.ui-inline-error')?.textContent).toContain(outcome === 'paused'
+          ? `${provider === 'github' ? 'GitHub' : 'GitLab'} refresh paused.` : 'head advance refresh failed')
+        expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')).toHaveLength(outcome === 'paused' ? 1 : 0)
+      } finally {
+        mounted?.unmount()
+        queue.resolve({ kind: 'found', review: advanced.checks.review, fetchedAt: Date.now() })
+        timers.restore()
+      }
+    })
+  }
+}
 
 const FRAGMENT_PATH = 'plugins/quirky.reviews/ui-scoreboard/review-and-comments.json'
 let inventory: Inventory

@@ -494,7 +494,7 @@ export function Comments(props: CommentsProps) {
         </div>
       </div> : <div><Markdown source={comment.body} /></div>}
       <div className="ui-cluster">
-        {comment.threadId ? <Button disabled={pending} onClick={() => void commentsControl.request('thread-set', { comment: key, resolved: comment.isResolved !== true })}>{comment.isResolved === true ? 'Unresolve' : 'Resolve'}</Button> : null}
+        {comment.threadId ? <Button onClick={() => void commentsControl.request('thread-set', { comment: key, resolved: comment.isResolved !== true })}>{comment.isResolved === true ? 'Unresolve' : 'Resolve'}</Button> : null}
         {comment.kind === 'review_comment' && typeof comment.id === 'number' || isGitLab && topLevel(comment) ? <Button disabled={pending} onClick={() => void commentsControl.request('reply-open', { comment: key })}>Reply</Button> : null}
         {safeHttpUrl(comment.url) && owner ? <Button onClick={() => void commentsControl.request('comment-open', { comment: key })}>Go to comment</Button> : null}
         <Button aria-pressed={data.queued.includes(queueId)} onClick={() => void commentsControl.request('queue-set', { comment: key, queued: !data.queued.includes(queueId) })}>{data.queued.includes(queueId) ? 'Unqueue for agent' : 'Queue for agent'}</Button>
@@ -550,7 +550,7 @@ export function Comments(props: CommentsProps) {
     </div>} />
     {parsed !== null && data.error ? <InlineError message={`${data.error} Showing the last available comments where present.`} action={{ label: 'Retry', onAction: retry }} /> : null}
     {(actionError ?? draftField.error) ? <InlineError message={actionError ?? draftField.error!} /> : null}
-    {parsed?.partial === true ? <p role="status" className="ui-text-muted">{isGitLab ? 'Showing a limited set of comments.' : 'Showing the first 100 comments per source'}{parsed.partialFailures.length > 0 ? `; ${parsed.partialFailures.join(' ')}` : '.'}</p> : null}
+    {parsed?.partial === true ? <p role="status" className="ui-text-muted">{isGitLab ? 'Showing a limited set of comments.' : 'Showing the first 100 comments per source'}{parsed.partialFailures.length > 0 ? `${isGitLab ? ' ' : '; '}${parsed.partialFailures.join(' ')}` : !isGitLab && '.'}</p> : null}
     {content}
     {owner !== null ? <form className="ui-stack" data-review-control-target={composerControl.target} data-review-control-generation={composerControl.generation}
       onSubmit={(event) => { event.preventDefault(); void composerControl.request('comment-send') }}>
