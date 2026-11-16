@@ -418,7 +418,7 @@ function startupDiagnostics(value: unknown): CliFilesStartupDiagnostics | undefi
       !Array.isArray(value.renderer) || !isObject(value.logs)) return
   if (value.assets !== undefined && (!isObject(value.assets) ||
       typeof value.assets.uiDir !== 'string' || typeof value.assets.pluginsDir !== 'string')) return
-  const stages = ['launch', 'connect', 'context', 'page', 'navigation', 'connection', 'shell', 'worktree', 'layout', 'changes', 'ready', 'failed']
+  const stages = ['launch', 'connect', 'context', 'page', 'navigation', 'connection', 'shell', 'shell-ready', 'worktree', 'layout', 'changes', 'ready', 'failed']
   for (const entry of value.renderer) {
     if (!isObject(entry) || typeof entry.stage !== 'string' || !stages.includes(entry.stage) || !measured(entry.elapsedMs)) return
     for (const key of ['index', 'connId', 'browserPid']) {

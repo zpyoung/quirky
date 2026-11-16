@@ -7,7 +7,7 @@ import type { SoakWorld } from './world.ts'
 
 export type WindowStartupObservation = {
   stage: 'launch' | 'connect' | 'context' | 'page' | 'navigation'
-    | 'connection' | 'shell' | 'worktree' | 'layout' | 'changes' | 'ready' | 'failed'
+    | 'connection' | 'shell' | 'shell-ready' | 'worktree' | 'layout' | 'changes' | 'ready' | 'failed'
   elapsedMs: number
   index?: number
   worktree?: string
@@ -431,7 +431,12 @@ export async function openWindows(options: {
 }): Promise<SoakWindows> {
 
   const startupStartedAt = performance.now()
-  const { world, count, executable, out, signal } = options
+  const { world, count, executable, out, signal: parentSignal } = options
+  const acquisition = new AbortController()
+  const signal = acquisition.signal
+  const abort = () => acquisition.abort()
+  parentSignal.addEventListener('abort', abort, { once: true })
+  if (parentSignal.aborted) abort()
   const worktrees = assignWorktrees(world.fixtures.worktrees, count)
   const sessions: OpenWindow[] = []
   const pages: Page[] = []
@@ -441,25 +446,34 @@ export async function openWindows(options: {
   let launch: Promise<BrowserServer> | undefined
   let browserPid: number | null = null
   let stopPromise: Promise<void> | undefined
-  let currentIndex: number | undefined
-  let currentWorktree: string | undefined
-  let currentConnId: number | undefined
-  let currentMetrics: WindowMetrics | undefined
-  let lastStage: WindowStartupObservation['stage'] = 'launch'
+  type StartupContext = {
+    index?: number
+    worktree?: string
+    connId?: number
+    metrics?: WindowMetrics
+    stage: WindowStartupObservation['stage']
+  }
+  let current: StartupContext = { stage: 'launch' }
+  let firstFailure: { error: unknown; context: StartupContext } | undefined
+  const shellWaits: Promise<void>[] = []
+  const fail = (error: unknown, context: StartupContext): void => {
+    firstFailure ??= { error, context: { ...context } }
+    acquisition.abort()
+  }
 
-  const report = (stage: WindowStartupObservation['stage'], message?: string): void => {
-    lastStage = stage
+  const report = (stage: WindowStartupObservation['stage'], message?: string, context = current): void => {
+    context.stage = stage
     const observation: WindowStartupObservation = {
       stage,
       elapsedMs: Math.max(0, performance.now() - startupStartedAt),
-      ...(currentIndex === undefined ? {} : { index: currentIndex }),
-      ...(currentWorktree === undefined ? {} : { worktree: currentWorktree }),
-      ...(currentConnId === undefined ? {} : { connId: currentConnId }),
+      ...(context.index === undefined ? {} : { index: context.index }),
+      ...(context.worktree === undefined ? {} : { worktree: context.worktree }),
+      ...(context.connId === undefined ? {} : { connId: context.connId }),
       ...(browserPid === null ? {} : { browserPid }),
-      ...(currentMetrics === undefined ? {} : {
-        pageErrors: currentMetrics.pageErrorExamples.slice(0, 5),
-        ...(currentMetrics.failedRequests === undefined ? {} : {
-          failedRequests: currentMetrics.failedRequests.slice(0, 5).map((failure) => ({ ...failure }))
+      ...(context.metrics === undefined ? {} : {
+        pageErrors: context.metrics.pageErrorExamples.slice(0, 5),
+        ...(context.metrics.failedRequests === undefined ? {} : {
+          failedRequests: context.metrics.failedRequests.slice(0, 5).map((failure) => ({ ...failure }))
         })
       })
     }
@@ -486,7 +500,6 @@ export async function openWindows(options: {
     return stopPromise
   }
 
-  let failureIndex = 0
   try {
     throwIfAborted(signal)
     if (worktrees.length !== count) throw new Error(`requested ${count} windows but only ${worktrees.length} worktrees are available`)
@@ -514,12 +527,9 @@ export async function openWindows(options: {
     })
 
     for (let index = 0; index < worktrees.length; index++) {
-      failureIndex = index
       const worktree = worktrees[index]!.id
-      currentIndex = index
-      currentWorktree = worktree
-      currentConnId = undefined
-      currentMetrics = undefined
+      const owner: StartupContext = { index, worktree, stage: 'context' }
+      current = owner
       throwIfAborted(signal)
       report('context')
       const before = new Set(connectionIds(await rpc(world, 'ui.state', {}, 5_000, signal)))
@@ -559,7 +569,7 @@ export async function openWindows(options: {
       }
       const attribution: WindowAttribution = { settled: worktree, target: null }
       const statusRequests = new Map<string, number>()
-      currentMetrics = metrics
+      owner.metrics = metrics
       attachMetrics(page, metrics, requests, world.home, {
         index,
         worktree: (_method, params) => {
@@ -601,34 +611,42 @@ export async function openWindows(options: {
       }), 30_000, signal, 'renderer navigation')
       report('connection')
       const connId = await waitForNewConnection(world, before, signal)
-      currentConnId = connId
+      owner.connId = connId
       report('connection')
       throwIfAborted(signal)
-      report('shell')
-      await waitWithAbort(
-        page.locator('.shell-workspace').waitFor({ state: 'visible', timeout: 30_000 }),
-        30_000,
-        signal,
-        '.shell-workspace visibility'
-      )
       sessions.push({ index, attribution, connId, page, metrics, statusRequests })
+      report('shell')
+      shellWaits.push((async () => {
+        try {
+          await waitWithAbort(
+            page.locator('.shell-workspace').waitFor({ state: 'visible', timeout: 30_000 }),
+            30_000,
+            signal,
+            '.shell-workspace visibility'
+          )
+          throwIfAborted(signal)
+          report('shell-ready', undefined, owner)
+        } catch (error) {
+          fail(error, owner)
+        }
+      })())
     }
 
-    failureIndex = 0
-    currentIndex = undefined
-    currentWorktree = undefined
-    currentConnId = undefined
-    currentMetrics = undefined
+    await Promise.all(shellWaits)
+    throwIfAborted(signal)
+    current = { stage: 'changes' }
     report('changes')
     await rpc(world, 'quirky.worktree/setOptions', { filterRepoIds: [] }, 5_000, signal)
     await rpc(world, 'ui.tool.open', { id: 'panel:quirky.git/source-control' }, 5_000, signal)
 
     for (const session of sessions) {
-      failureIndex = session.index
-      currentIndex = session.index
-      currentWorktree = session.attribution.settled
-      currentConnId = session.connId
-      currentMetrics = session.metrics
+      current = {
+        index: session.index,
+        worktree: session.attribution.settled,
+        connId: session.connId,
+        metrics: session.metrics,
+        stage: 'worktree'
+      }
       throwIfAborted(signal)
       const worktree = worktrees[session.index]!
       report('worktree')
@@ -846,6 +864,9 @@ export async function openWindows(options: {
       stop
     }
   } catch (error) {
+    fail(error, current)
+    await Promise.all(shellWaits)
+    const failure = firstFailure!
     if (!server && launch) {
       try {
         server = await launch
@@ -853,10 +874,12 @@ export async function openWindows(options: {
       } catch {}
     }
     try {
-      report('failed', `${lastStage}: ${errorMessage(error)}`)
+      report('failed', `${failure.context.stage}: ${errorMessage(failure.error)}`, failure.context)
     } catch {}
     await stop()
-    if (/^window \d+:/.test(errorMessage(error))) throw error
-    throw new Error(`window ${failureIndex}: ${errorMessage(error)}`)
+    if (/^window \d+:/.test(errorMessage(failure.error))) throw failure.error
+    throw new Error(`window ${failure.context.index ?? 0}: ${errorMessage(failure.error)}`)
+  } finally {
+    parentSignal.removeEventListener('abort', abort)
   }
 }

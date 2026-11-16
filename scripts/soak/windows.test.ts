@@ -73,6 +73,7 @@ const current = {
   pages: [],
   selected: new Map(),
   events: [],
+  trace: [],
   rpcCalls: [],
   observations: [],
   requests: [],
@@ -92,7 +93,12 @@ const current = {
   resolveNavigate: undefined,
   navigationStarted: Promise.withResolvers(),
   resolveState: undefined,
-  reconciliationStarted: Promise.withResolvers()
+  reconciliationStarted: Promise.withResolvers(),
+  shellWaits: [Promise.withResolvers(), Promise.withResolvers()],
+  shellStarts: [Promise.withResolvers(), Promise.withResolvers()],
+  shellStarted: [false, false],
+  shellReady: [Promise.withResolvers(), Promise.withResolvers()],
+  watchdogExpired: false
 }
 
 let fastReconcileTimeout = false
@@ -134,6 +140,11 @@ function makePage() {
       return {
         async waitFor() {
           if (closed) throw new Error('page closed before shell became visible')
+          const index = current.pages.indexOf(page)
+          current.trace.push({ kind: 'shell-start', index })
+          current.shellStarted[index] = true
+          current.shellStarts[index].resolve()
+          if (scenario.startsWith('overlap-')) return current.shellWaits[index].promise
         }
       }
     },
@@ -186,6 +197,7 @@ function makePage() {
     }
   }
   current.pages.push(page)
+  current.trace.push({ kind: 'page-created', index: current.pages.length - 1 })
   return page
 }
 
@@ -316,6 +328,7 @@ const world = {
   control: {
     async callAny(method, params, options) {
       current.rpcCalls.push(method)
+      current.trace.push({ kind: 'rpc', method, params })
       if (method === 'ui.state') return { windows: current.connectionIds.map((connId) => ({ connId })) }
       if (method === 'ui.window.state') {
         current.stateReads++
@@ -367,7 +380,8 @@ const world = {
           return { worktreeId: 'wt-c' }
         }
         current.selected.set(connId, worktree)
-        if (['matching-during-navigation', 'two-windows', 'liveness'].includes(scenario)) sendStatus(page, worktree)
+        if (['matching-during-navigation', 'two-windows', 'liveness'].includes(scenario)
+          || scenario.startsWith('overlap-success-')) sendStatus(page, worktree)
         if (current.navigationCalls === 1 && (scenario.startsWith('switch-')
           || scenario.startsWith('abort-') || scenario.startsWith('wait-') || scenario.startsWith('finish-'))) {
           sendStatus(page, worktree)
@@ -388,18 +402,28 @@ const capture = async () => {
   try {
     const windows = await openWindows({
       world,
-      count: ['two-windows', 'liveness'].includes(scenario) ? 2 : 1,
+      count: scenario === 'two-windows' || scenario === 'liveness' || scenario.startsWith('overlap-') ? 2 : 1,
       executable: '/recording/chromium',
       out: process.env.QUIRKY_OUT,
       signal: controller.signal,
       ...(scenario === 'wait-ring-no-observer' ? {} : {
-        onRequest: (request) => current.requests.push(request)
+        onRequest: (request) => {
+          current.requests.push(request)
+          current.trace.push({ kind: 'request', request })
+        }
       }),
-      onStartup: (observation) => current.observations.push({
-        ...observation,
-        pageErrors: observation.pageErrors?.slice(),
-        failedRequests: observation.failedRequests?.map((request) => ({ ...request }))
-      })
+      onStartup: (observation) => {
+        const recorded = {
+          ...observation,
+          pageErrors: observation.pageErrors?.slice(),
+          failedRequests: observation.failedRequests?.map((request) => ({ ...request }))
+        }
+        current.observations.push(recorded)
+        current.trace.push({ kind: 'startup', observation: recorded })
+        if (recorded.stage === 'shell-ready' && typeof recorded.index === 'number') {
+          current.shellReady[recorded.index]?.resolve()
+        }
+      }
     })
     let liveness
     let livenessAfterDisconnect
@@ -515,6 +539,9 @@ const capture = async () => {
     return {
       resolved: true,
       finished,
+      pageOrder: windows.pages.map((page) => current.pages.indexOf(page)),
+      pageConnIds: windows.pages.map((page) => [...current.pagesByConn.entries()]
+        .find(([, assignedPage]) => assignedPage === page)?.[0] ?? null),
       liveness,
       livenessAfterDisconnect,
       livenessAfterCrash,
@@ -537,7 +564,46 @@ const capture = async () => {
 }
 
 let result
-if (scenario === 'late-launch-track-failure') {
+if (scenario.startsWith('overlap-')) {
+  const pending = capture()
+  const watchdog = Promise.withResolvers()
+  const watchdogTimer = nativeSetTimeout(() => {
+    current.watchdogExpired = true
+    controller.abort()
+    watchdog.resolve(false)
+  }, 1_000)
+  let bothShellsStarted
+  try {
+    bothShellsStarted = await Promise.race([
+      Promise.all(current.shellStarts.map(({ promise }) => promise)).then(() => true),
+      watchdog.promise
+    ])
+    if (bothShellsStarted) {
+      if (scenario === 'overlap-success-first' || scenario === 'overlap-success-second') {
+        const order = scenario === 'overlap-success-first' ? [0, 1] : [1, 0]
+        for (const index of order) {
+          current.trace.push({ kind: 'shell-release', index })
+          current.shellWaits[index].resolve()
+          await Promise.race([current.shellReady[index].promise, watchdog.promise])
+          if (current.watchdogExpired) break
+        }
+      } else if (scenario === 'overlap-fail-first') {
+        current.shellWaits[0].reject(new Error('first-shell-failed'))
+      } else if (scenario === 'overlap-fail-second') {
+        current.shellWaits[1].reject(new Error('second-shell-failed'))
+      } else if (scenario === 'overlap-abort') {
+        controller.abort()
+      }
+    }
+    result = await pending
+  } finally {
+    nativeClearTimeout(watchdogTimer)
+  }
+  if (scenario.startsWith('overlap-fail-') || scenario === 'overlap-abort' || !bothShellsStarted) {
+    for (const wait of current.shellWaits) wait.resolve()
+    await flushLateResponseHandlers()
+  }
+} else if (scenario === 'late-launch-track-failure') {
   const pending = capture()
   await current.launchReady.promise
   controller.abort()
@@ -557,13 +623,16 @@ if (scenario === 'late-launch-track-failure') {
 process.stdout.write(JSON.stringify({
   ...result,
   events: current.observations,
+  trace: current.trace,
   requests: current.requests,
   pidAtNavigation: current.pidAtNavigation,
   pidAtClose: current.pidAtClose,
   tracked: current.tracked,
   browserClosed: current.browserClosedCount,
-  serverClosed: current.serverClosed
+  serverClosed: current.serverClosed,
+  watchdogExpired: current.watchdogExpired
 }))
+
 `
 }
 
@@ -588,7 +657,7 @@ async function runRecordingWindowScenario(scenario: string): Promise<RecordingWi
       new Response(child.stdout).text(),
       new Response(child.stderr).text()
     ])
-    expect(exitCode).toBe(0)
+    expect(exitCode, stderr).toBe(0)
     expect(stderr).toBe('')
     return JSON.parse(stdout) as RecordingWindowRun
   } finally {
@@ -598,11 +667,24 @@ async function runRecordingWindowScenario(scenario: string): Promise<RecordingWi
 
 type RecordingWindowEvent = WindowStartupObservation
 
+type RecordingWindowTrace = {
+  kind: string
+  index?: number
+  method?: string
+  params?: unknown
+  observation?: RecordingWindowEvent
+  request?: WindowRequestObservation
+}
+
 type RecordingWindowRun = {
   resolved: boolean
   error?: string
   events: RecordingWindowEvent[]
+  trace: RecordingWindowTrace[]
   requests: WindowRequestObservation[]
+  pageOrder?: number[]
+  pageConnIds?: Array<number | null>
+  watchdogExpired: boolean
   pidAtNavigation: boolean
   tracked: number[]
   pidAtClose: boolean
@@ -861,6 +943,20 @@ test('reports per-window startup stages and ready identities with the captured b
     expect.objectContaining({ index: 0, worktree: 'ready', connId: 41 }),
     expect.objectContaining({ index: 1, worktree: 'retry', connId: 42 })
   ]))
+  const completed = result.events.filter(({ stage }) => stage === 'shell-ready')
+  expect(completed).toHaveLength(2)
+  expect(completed).toEqual([
+    expect.objectContaining({ index: 0, worktree: 'ready', connId: 41, browserPid: 801 }),
+    expect.objectContaining({ index: 1, worktree: 'retry', connId: 42, browserPid: 801 })
+  ])
+  const setup = result.events.findIndex(({ stage }) => stage === 'changes')
+  for (const completion of completed) {
+    const start = result.events.findIndex(({ stage, index }) => stage === 'shell' && index === completion.index)
+    const end = result.events.indexOf(completion)
+    expect(end).toBeGreaterThan(start)
+    expect(end).toBeLessThan(setup)
+    expect(completion.elapsedMs).toBeGreaterThanOrEqual(result.events[start]!.elapsedMs)
+  }
   const navigation = result.events.findIndex(({ stage }) => stage === 'navigation')
   expect(result.events.findIndex(({ stage, browserPid }) => stage === 'launch' && browserPid === 801))
     .toBeLessThan(navigation)
@@ -868,6 +964,118 @@ test('reports per-window startup stages and ready identities with the captured b
   expect(result.finished?.records.map(({ requests }) => requests)).toEqual([1, 1])
   expect(result.finished?.requests).toContainEqual({ method: 'quirky.git/status', total: 2 })
   expect(result.events.every(({ elapsedMs }) => Number.isFinite(elapsedMs) && elapsedMs >= 0)).toBe(true)
+})
+
+test('reports one shell completion for a single-window caller', async () => {
+  const result = await runRecordingWindowScenario('matching-during-navigation')
+  expect(result.resolved).toBe(true)
+  expect(result.events.filter(({ stage }) => stage === 'shell-ready')).toEqual([
+    expect.objectContaining({ index: 0, worktree: 'ready', connId: 41, browserPid: 801 })
+  ])
+})
+
+async function expectOverlappingShellSuccess(scenario: string, completionOrder: number[]): Promise<void> {
+  const result = await runRecordingWindowScenario(scenario)
+
+  expect(result.resolved, result.error).toBe(true)
+  expect(result.watchdogExpired).toBe(false)
+  expect(result.pageOrder).toEqual([0, 1])
+  expect(result.pageConnIds).toEqual([41, 42])
+  expect(result.finished?.records.map(({ index, connId, worktree }) => ({ index, connId, worktree }))).toEqual([
+    { index: 0, connId: 41, worktree: 'ready' },
+    { index: 1, connId: 42, worktree: 'retry' }
+  ])
+  expect(result.events.filter(({ stage }) => stage === 'ready').map(({ index, worktree, connId, browserPid }) => (
+    { index, worktree, connId, browserPid }
+  ))).toEqual([
+    { index: 0, worktree: 'ready', connId: 41, browserPid: 801 },
+    { index: 1, worktree: 'retry', connId: 42, browserPid: 801 }
+  ])
+
+  const starts = result.trace.filter(({ kind }) => kind === 'shell-start')
+  const completions = result.trace.filter(({ kind, observation }) => kind === 'startup' && observation?.stage === 'shell-ready')
+  expect(starts.map(({ index }) => index)).toEqual([0, 1])
+  expect(completions.map(({ observation }) => observation?.index)).toEqual(completionOrder)
+  expect(completions.map(({ observation }) => observation)).toEqual(completionOrder.map((index) => expect.objectContaining({
+    index,
+    worktree: index === 0 ? 'ready' : 'retry',
+    connId: index === 0 ? 41 : 42,
+    browserPid: 801
+  })))
+
+  const firstCompletion = result.trace.findIndex(({ kind, observation }) => kind === 'startup' && observation?.stage === 'shell-ready')
+  const lastStart = Math.max(...starts.map((_, index) => result.trace.indexOf(starts[index]!)))
+  expect(lastStart).toBeLessThan(firstCompletion)
+  for (const completion of completions) {
+    const shellStart = result.trace.findIndex(({ kind, observation }) => (
+      kind === 'startup' && observation?.stage === 'shell' && observation.index === completion.observation?.index
+    ))
+    expect(result.trace.indexOf(completion)).toBeGreaterThan(shellStart)
+  }
+
+  const setup = result.trace.findIndex(({ kind, method }) => kind === 'rpc' && method === 'quirky.worktree/setOptions')
+  const panelSetup = result.trace.findIndex(({ kind, method }) => kind === 'rpc' && method === 'ui.tool.open')
+  const worktreeNavigation = result.trace.findIndex(({ kind, method }) => kind === 'rpc' && method === 'quirky.worktree/navigate')
+  const lastCompletion = Math.max(...completions.map((completion) => result.trace.indexOf(completion)))
+  expect(setup).toBeGreaterThan(lastCompletion)
+  expect(panelSetup).toBeGreaterThan(lastCompletion)
+  expect(worktreeNavigation).toBeGreaterThan(lastCompletion)
+}
+
+test('overlaps both shell waits and preserves assignment order when window 0 completes first', async () => {
+  await expectOverlappingShellSuccess('overlap-success-first', [0, 1])
+})
+
+test('overlaps both shell waits and preserves assignment order when window 1 completes first', async () => {
+  await expectOverlappingShellSuccess('overlap-success-second', [1, 0])
+})
+
+test('attributes overlapping shell failures to the failing window and closes resources once', async () => {
+  for (const failure of [
+    { scenario: 'overlap-fail-first', index: 0, worktree: 'ready', connId: 41, message: 'first-shell-failed' },
+    { scenario: 'overlap-fail-second', index: 1, worktree: 'retry', connId: 42, message: 'second-shell-failed' }
+  ]) {
+    const result = await runRecordingWindowScenario(failure.scenario)
+
+    expect(result.resolved, failure.scenario).toBe(false)
+    expect(result.error, failure.scenario).toBe(`window ${failure.index}: ${failure.message}`)
+    expect(result.watchdogExpired, failure.scenario).toBe(false)
+    expect(result.trace.filter(({ kind }) => kind === 'shell-start').map(({ index }) => index), failure.scenario).toEqual([0, 1])
+    expect(result.events.filter(({ stage }) => stage === 'ready'), failure.scenario).toEqual([])
+    expect(result.events.filter(({ stage }) => stage === 'shell-ready'), failure.scenario).toEqual([])
+    expect(result.events.filter(({ stage }) => stage === 'failed'), failure.scenario).toEqual([
+      expect.objectContaining({
+        stage: 'failed',
+        index: failure.index,
+        worktree: failure.worktree,
+        connId: failure.connId,
+        browserPid: 801,
+        message: `shell: ${failure.message}`
+      })
+    ])
+    expect(result.requests, failure.scenario).toEqual([])
+    expect(result.browserClosed, failure.scenario).toBe(1)
+    expect(result.serverClosed, failure.scenario).toBe(1)
+  }
+})
+
+test('aborts overlapping shell waits without late readiness, navigation, requests, or unhandled rejection', async () => {
+  const result = await runRecordingWindowScenario('overlap-abort')
+
+  expect(result.resolved).toBe(false)
+  expect(result.error).toContain('soak setup was interrupted')
+  expect(result.watchdogExpired).toBe(false)
+  expect(result.trace.filter(({ kind }) => kind === 'shell-start').map(({ index }) => index)).toEqual([0, 1])
+  const terminalFailure = result.trace.findIndex(({ kind, observation }) => kind === 'startup' && observation?.stage === 'failed')
+  expect(terminalFailure).toBeGreaterThanOrEqual(0)
+  const lateTrace = result.trace.slice(terminalFailure + 1)
+  expect(lateTrace.filter(({ kind, observation }) => kind === 'startup'
+    && ['shell-ready', 'ready', 'navigation'].includes(observation?.stage ?? ''))).toEqual([])
+  expect(lateTrace.filter(({ kind, method }) => kind === 'rpc' && method === 'quirky.worktree/navigate')).toEqual([])
+  expect(lateTrace.filter(({ kind }) => kind === 'request')).toEqual([])
+  expect(result.requests).toEqual([])
+  expect(result.browserClosed).toBe(1)
+  expect(result.serverClosed).toBe(1)
 })
 
 test('retains bounded navigation failure diagnostics without authenticated URL secrets', async () => {
