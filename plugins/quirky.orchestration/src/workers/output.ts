@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import * as supervision from '@quirky/supervision'
 import type { Session } from '@quirky/protocol'
 import type { DispatchId, DispatchRow, JsonValue, UtcTimestamp } from '../contracts'
 import type {
@@ -606,7 +607,7 @@ function terminalReadLines(value: unknown): string[] | null {
   return lines
 }
 
-async function loadTerminalArchiveTail(runtime: WorkerRuntime, sessionId: string): Promise<TerminalCapture | null> {
+async function loadTerminalCapture(runtime: WorkerRuntime, sessionId: string): Promise<TerminalCapture | null> {
   let raw: unknown
   try {
     raw = await runtime.context.pty.read(sessionId, 0)
@@ -745,21 +746,30 @@ async function loadStructured(
     const metadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
     return { source: 'structured', sessionId: resource?.sessionId ?? null, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['structured_lease_unavailable'] }
   }
-  let raw: unknown
+  const engine = supervision.createSupervision(runtime.context)
+  let raw: unknown = null
+  let failureReason: 'structured_journal_invalid' | 'structured_journal_unreadable' | null = null
   try {
-    raw = await runtime.context.call('quirky.structured/messages', { session: identity.sessionId })
-  } catch {
+    raw = await engine.readMessages({ session: identity.sessionId })
+  } catch (error) {
+    failureReason = error instanceof supervision.SupervisionError && error.code === 'invalid-response'
+      ? 'structured_journal_invalid'
+      : 'structured_journal_unreadable'
+  } finally {
+    engine.dispose()
+  }
+  if (!await sameLease(runtime, dispatch, record, resource, identity)) {
+    const changedMetadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
+    return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(changedMetadata), content: '', messages: [], clipped: false, warnings: ['structured_lease_changed'] }
+  }
+  if (failureReason) {
     const metadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
-    return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['structured_journal_unreadable'] }
+    return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: [failureReason] }
   }
   const messages = parseStructuredMessages(raw, identity.sessionId)
   if (!messages) {
     const metadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
     return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['structured_journal_invalid'] }
-  }
-  if (!await sameLease(runtime, dispatch, record, resource, identity)) {
-    const changedMetadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: false })
-    return { source: 'structured', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(changedMetadata), content: '', messages: [], clipped: false, warnings: ['structured_lease_changed'] }
   }
   const content = structuredArchiveContent(identity.sessionId, messages)
   const metadata = newMetadata(dispatchId, resource, record, 'structured', identity, { exact: true })
@@ -783,14 +793,13 @@ async function loadTerminal(
   dispatchId: DispatchId,
   record: WorkerRecord | null,
   resource: TerminalResource | null,
-  identity: SessionIdentity | null,
-  loadTail: typeof loadTerminalTail = loadTerminalTail
+  identity: SessionIdentity | null
 ): Promise<SourceSnapshot> {
   if (!record || !resource || !identity) {
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: false })
     return { source: 'terminal', sessionId: resource?.sessionId ?? null, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['terminal_lease_unavailable'] }
   }
-  const capture = await loadTail(runtime, identity.sessionId)
+  const capture = await loadTerminalCapture(runtime, identity.sessionId)
   if (!capture) {
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: false })
     return { source: 'terminal', sessionId: identity.sessionId, archived: false, sourceExact: false, fallbackReason: null, sourceIdentity: opaqueSourceIdentity(metadata), content: '', messages: [], clipped: false, warnings: ['terminal_history_unreadable'] }
@@ -1072,7 +1081,7 @@ export function createWorkerOutput(core: WorkerCore, repo: WorkerRepository, run
     if (transcript.kind === 'ready') {
       return makeArchive(dispatchId, resource, 'transcript', transcript.snapshot.content, transcript.metadata, 'captured')
     }
-    const terminal = await loadTerminal(runtime, dispatch, dispatchId, record, resource, identity, loadTerminalArchiveTail)
+    const terminal = await loadTerminal(runtime, dispatch, dispatchId, record, resource, identity)
     const content = terminal.sourceExact ? terminal.content : ''
     const metadata = newMetadata(dispatchId, resource, record, 'terminal', identity, { exact: terminal.sourceExact, truncated: terminal.clipped, fallbackReason: transcript.reason })
     const status = !terminal.sourceExact ? 'unavailable' : content.length === 0 ? 'empty' : 'captured'

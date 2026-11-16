@@ -1,19 +1,20 @@
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import type { AgentKind } from '@quirky/protocol'
 import { Button, Dialog, FormRow } from '@quirky/ui'
+import type { WorktreeSessions } from './model'
 
 export type NewSessionRequest = { agent: AgentKind; background: boolean; label: string }
 
 type Props = {
   request: NewSessionRequest
-  onSubmit: (prompt: string) => Promise<void>
+  store: Pick<WorktreeSessions, 'create'>
   onClose: () => void
 }
 
 const formStyle = { display: 'flex', flexDirection: 'column', gap: 'var(--ui-space-12)', minWidth: 0 } satisfies CSSProperties
 const textareaStyle = { fontFamily: 'var(--ui-font-body)', resize: 'vertical' } satisfies CSSProperties
 
-export function PromptDialog({ request, onSubmit, onClose }: Props) {
+export function PromptDialog({ request, store, onClose }: Props) {
   const [prompt, setPrompt] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const id = useId()
@@ -30,7 +31,7 @@ export function PromptDialog({ request, onSubmit, onClose }: Props) {
     if (!canSubmit) return
     setSubmitting(true)
     try {
-      await onSubmit(prompt)
+      if (await store.create(request.agent, prompt, request.background)) onClose()
     } finally {
       setSubmitting(false)
     }

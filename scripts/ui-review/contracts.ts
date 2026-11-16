@@ -43,6 +43,8 @@ export type CaptureOptions = {
   themes?: readonly CaptureTheme[]
   timeoutMs: number
   signal?: AbortSignal
+  /** Test-only bound for overlay visibility waits. */
+  overlayOpenMs?: number
 }
 export type ReviewOptions = {
   outputDir: string

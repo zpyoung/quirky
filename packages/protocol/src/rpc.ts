@@ -39,11 +39,55 @@ import type { UiToolPlacement, UiToolResize, UiToolSlot } from './tool-slots'
 export const PROTOCOL_VERSION = 2
 
 export type ClientRole = 'desktop' | 'ui' | 'cli' | 'mobile'
-
 type Ok = { ok: true }
+
+
+export type MemoryProcess = { pid: number; ppid: number; rssBytes: number; name: string }
+export type MemoryTree = { processCount: number; rssBytes: number; processes: MemoryProcess[]; omitted: number }
+export type DiagnosticsMemoryReport = {
+  schemaVersion: 1
+  takenAt: number
+  daemon: {
+    pid: number
+    rssBytes: number | null
+    heapUsedBytes: number
+    heapTotalBytes: number
+    externalBytes: number
+    /** Descendants outside the PTY host subtree and without the report's own reader; null without a process table. */
+    descendants: MemoryTree | null
+  }
+  ptyHost: { pid: number | null; alive: boolean; rssBytes: number | null }
+  /** One row per running PTY session with a live pid; tree covers the session root and its descendants. */
+  sessions: { sessionId: string; pid: number; title: string | null; cwd: string; tree: MemoryTree | null }[]
+  /** Each process counted once across daemon, descendants, host and sessions; null without a process table. */
+  totals: { processCount: number; rssBytes: number } | null
+  unavailable: { part: 'process-table' | 'pty-host' | 'pty-sessions'; reason: string }[]
+}
 
 /** Params a destructive method also accepts: `yes` skips the confirmation, `confirmation` names an answered ask. */
 export type Confirmable = { yes?: boolean; confirmation?: string }
+export type FolderListing = {
+  path: string
+  parent: string | null
+  entries: { name: string; path: string }[]
+  offset: number
+  limit: number
+  hasMore: boolean
+}
+
+export type BrowserHostPrompt = {
+  requestId: string
+  kind: 'folder-picker' | 'window-open'
+  title: string
+  expiresAt: number
+  busy: boolean
+  error: string | null
+  draftPath?: string
+  directory?: FolderListing
+  selectedPaths?: string[]
+  multiple?: boolean
+}
+
 
 /**
  * Every daemon method: params in, result out. The desktop UI, the CLI and mobile all use these;
@@ -78,6 +122,7 @@ export type Methods = {
       socket: string | null
     }
   }
+  'diagnostics.memory': { params: Record<string, never>; result: DiagnosticsMemoryReport }
   /** Replies, then stops the daemon (not the PTY host). */
   'daemon.stop': { params: Record<string, never>; result: Ok }
 
@@ -147,6 +192,29 @@ export type Methods = {
   'ui.panel.close': { params: Record<string, never>; result: UiLayout }
   'ui.sidebar.set': { params: { visible: boolean }; result: UiLayout }
   'ui.focus': { params: { target: 'sidebar' | 'view' | 'panel' }; result: UiLayout }
+  /** Browser entry-point and controller APIs for an ordinary tab. */
+  /** Returns the built browser UI's authenticated loopback entry URL. */
+  'ui.url': { params: Record<string, never>; result: { url: string } }
+  /** Requests that the daemon host open the authenticated browser UI URL in its default browser. */
+  'ui.open': { params: Record<string, never>; result: { url: string; requested: true } }
+  /** Lists canonical daemon-filesystem directories, including directory symlinks, in a page. */
+  'ui.folder.list': {
+    params: { path?: string; offset?: number; limit?: number }
+    result: FolderListing
+  }
+  /** Controls the browser host in one exact live UI window. */
+  'ui.browserHost.control': {
+    params: {
+      connId: number
+      action: 'state' | 'set-path' | 'navigate' | 'select' | 'confirm' | 'cancel' | 'open-popup'
+      requestId?: string
+      path?: string
+      selected?: boolean
+      offset?: number
+    }
+    result: { active: BrowserHostPrompt | null }
+  }
+
   /** Runs a plugin UI command in one open window and returns its result. */
   'ui.command.run': { params: { id: string; args?: unknown }; result: { result: unknown } }
   /** Dismisses the toast with `key` in the window that shows it and runs its `onDismiss`; NotFound for an unknown key, Conflict when no window is open. */
@@ -185,7 +253,7 @@ export type Methods = {
   'desktop.window.attach': { params: DesktopWindowAttachRequest; result: DesktopWindowSummary }
   /** Updates the view/input in this exact attached auxiliary window without changing the main layout. Role `ui` only. */
   'desktop.window.update': { params: DesktopWindowUpdateRequest; result: DesktopWindowSummary }
-  /** Runs a command in the exact owning main shell and activates that native window on success. Role `ui` only. */
+  /** Runs a command in the exact owner shell of an auxiliary window and, unless `activateOwner` is false, activates that native window on success. Role `ui` only. */
   'desktop.window.runOwnerCommand': { params: DesktopWindowRunOwnerCommandRequest; result: DesktopWindowRunOwnerCommandResult }
   /** Removes a window after its native owner confirms it closed. Role `desktop` only. */
   'desktop.window.closed': { params: DesktopWindowClosedRequest; result: DesktopWindowCloseResult }
@@ -285,7 +353,9 @@ export const RpcErrorCode = {
   Unauthorized: -32001,
   NotFound: -32004,
   Conflict: -32009,
-  ConfirmationRequired: -32010
+  ConfirmationRequired: -32010,
+  Timeout: -32011,
+  Busy: -32012
 } as const
 
 /** WebSocket path on the daemon's loopback port; auth is `?token=<runtime token>`. */

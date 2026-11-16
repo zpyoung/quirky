@@ -145,6 +145,10 @@ Project iteration reads include actual `ProjectV2IterationField.configuration` c
 
 Boolean setting contributions may declare `menu: "view"`. The public `SettingDeclaration`/setting schemas and manifest validator expose this optional metadata; existing declarations remain unchanged. The native shell derives checked View items from effective `setting.list` results, refetches after plugin/setting changes, and toggles through fresh `setting.get` then `setting.set`. Tasks declares its visibility switch this way, without core knowledge of a Tasks plugin ID. Standard native app/Edit/Window roles remain present. Parent owns these protocol/daemon/desktop seams and their real-daemon regression.
 
+The hidden `command:quirky.tasks/issue-control` addresses the mounted issue page by the `worktree` and `number` in `quirky tasks state` → `navigation.detail`. Its actions are `edit-description`, `cancel-description` and `cancel-duplicate`; it returns `{ delivered: number }`. For one live UI window, use `quirky ui run command:quirky.tasks/issue-control --args '{"worktree":"<worktree>","number":256,"action":"cancel-description"}'`. With multiple windows, use `ui.window.command.run` with that command ID, args and the target window's `connId` from `ui.state`. Page buttons dispatch to their own window, including popped-out Tasks views.
+
+Issue and pull-request detail states use the shared loading, empty and error components. A failed issue refresh keeps the confirmed page visible with a retry notice. The Markdown composer's image URL field opens from the native “Insert image URL” disclosure below the Write textarea; it is absent while the composer is disabled.
+
 
 
 **Amendments:** 2026-10-28 — remove the temporary user-Project type limitation after the dependent API parity cutover; type catalog capability belongs to the issue repository owner. 2026-10-29 — clarify the no-origin Tasks list state: one singular/plural no-remote empty state using selected repository names, with New GitHub issue disabled.

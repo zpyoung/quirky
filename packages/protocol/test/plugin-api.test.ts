@@ -1,11 +1,161 @@
 import { describe, expect, test } from 'bun:test'
-import { PLUGIN_API_VERSION, pluginApiCompatibilityError } from '../src/plugin-api'
+import {
+  PLUGIN_API_VERSION,
+  RpcErrorCode,
+  pluginApiCompatibilityError,
+  type ClientStream,
+  type MountCleanup,
+  type MountFunction,
+  type PluginContext,
+  type ProcessRunner,
+  type ProcessSpawner,
+  type RunResult,
+  type SpawnExit,
+  type SpawnOptions,
+  type SpawnedProcess,
+  type TerminalStreamOptions,
+  type UiPluginContext
+} from '@quirky/protocol'
+
+type Assert<T extends true> = T
+type ProcessCapabilityAssertions = [
+  Assert<PluginContext['process'] extends ProcessRunner ? true : false>,
+  Assert<PluginContext['process'] extends ProcessSpawner ? true : false>,
+  Assert<{ run: ProcessRunner['run'] } extends ProcessRunner ? true : false>,
+  Assert<ReturnType<PluginContext['process']['spawn']> extends SpawnedProcess ? true : false>,
+  Assert<Extract<ReturnType<PluginContext['process']['spawn']>, Promise<unknown>> extends never ? true : false>,
+  Assert<'pipe' extends NonNullable<SpawnOptions['stderr']> ? true : false>,
+  Assert<true extends SpawnOptions['groupGrace'] ? true : false>,
+  Assert<SpawnedProcess['stderr'] extends ReadableStream<Uint8Array> ? true : false>,
+  Assert<SpawnExit['groupSurvived'] extends true | undefined ? true : false>,
+  Assert<RunResult['groupSurvived'] extends true | undefined ? true : false>,
+]
+type StreamCapabilityAssertions = [
+  Assert<ClientStream['send'] extends (bytes: Uint8Array) => boolean | void ? true : false>,
+  Assert<ClientStream['lagged'] extends boolean | undefined ? true : false>,
+  Assert<ClientStream['lag'] extends (() => void) | undefined ? true : false>,
+  Assert<ClientStream['onLag'] extends ((callback: () => void) => void) | undefined ? true : false>,
+  Assert<Parameters<UiPluginContext['onStream']>[2] extends TerminalStreamOptions | undefined ? true : false>,
+  Assert<
+    { streamId: number; send(bytes: Uint8Array): void; onClose(callback: () => void): void; close(): void } extends ClientStream
+      ? true
+      : false
+  >,
+]
+
+
+type MountCapabilityAssertions = [
+  Assert<(() => void) extends MountFunction ? true : false>,
+  Assert<(() => () => void) extends MountFunction ? true : false>,
+  Assert<(() => MountCleanup) extends MountFunction ? true : false>,
+  Assert<NonNullable<MountCleanup['updateInput']> extends (input: unknown) => boolean ? true : false>,
+]
 
 describe('stable plugin API floors', () => {
-  test('the host release is 1.2.0 and refuses newer floors', () => {
-    expect(PLUGIN_API_VERSION).toBe('1.2.0')
+  test('the host supports the release that introduced daemon plugin spawning', () => {
+    expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
+  })
+
+  test('the host supports immediate emits and earlier releases', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.15.0')
+    expect(pluginApiCompatibilityError('1.0.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.1.0')).toBeNull()
     expect(pluginApiCompatibilityError('1.2.0')).toBeNull()
-    expect(pluginApiCompatibilityError('1.2.1')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.3.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.4.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.5.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.5.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.6.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.6.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.9.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.10.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.10.1', '1.10.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.11.0', '1.10.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.7.1', '1.7.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('2.0.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.6.0', '1.5.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0', '1.6.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.10.0', '1.9.0')).toContain('apiVersion')
+  })
+
+  test('the host supports output-gap recovery and earlier releases', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.15.0')
+    expect(pluginApiCompatibilityError('1.11.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.11.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.12.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.12.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.13.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.15.1')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.16.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.13.0', '1.12.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.12.0', '1.11.0')).toContain('apiVersion')
+  })
+
+  test('the host supports the 1.8.0 release and earlier API floors', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.15.0')
+    expect(pluginApiCompatibilityError('1.7.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.1')).toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.0', '1.8.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.7.1', '1.8.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0', '1.8.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.8.1', '1.8.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.8.0', '1.7.0')).not.toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).not.toBeNull()
+  })
+
+  test('the host supports the release that adds output policies to the daemon process runner', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.15.0')
+    expect(pluginApiCompatibilityError('1.9.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.9.0', '1.9.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.9.1', '1.9.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.10.0', '1.9.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.9.0', '1.8.0')).toContain('apiVersion')
+  })
+
+  test('the host supports raw stderr and bounded process-group cleanup', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.15.0')
+    expect(pluginApiCompatibilityError('1.10.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.11.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.11.1', '1.11.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.12.0', '1.11.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.11.0', '1.10.0')).toContain('apiVersion')
+  })
+
+  test('the host supports method deadlines and stalled-job diagnostics', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.15.0')
+    expect(pluginApiCompatibilityError('1.12.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.12.1', '1.12.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.13.0', '1.12.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.12.0', '1.11.0')).toContain('apiVersion')
+  })
+
+  test('the host supports the running-handler limit release', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.15.0')
+    expect(RpcErrorCode.Busy).toBe(-32012)
+    expect(pluginApiCompatibilityError('1.13.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.14.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.14.1', '1.14.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.15.0', '1.14.0')).toContain('apiVersion')
+    expect(pluginApiCompatibilityError('1.14.0', '1.13.0')).toContain('apiVersion')
+  })
+
+  test('the host supports commands that leave the owner window in the background', () => {
+    expect(PLUGIN_API_VERSION).toBe('1.15.0')
+    expect(pluginApiCompatibilityError('1.15.0')).toBeNull()
+    expect(pluginApiCompatibilityError('1.15.0', '1.14.0')).toContain('apiVersion')
   })
 
   test.each([

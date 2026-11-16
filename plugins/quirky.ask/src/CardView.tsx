@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { Button, SectionHeader, TextField } from '@quirky/ui'
 import type { Ask, AskAnswer, AskEnvelope, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { AskCard } from './AskCard'
-import { ASK_FALLBACK_TITLE } from './store'
+import { ASK_FALLBACK_TITLE, type AskStore } from './store'
 
 export const CARD_VIEW_ID = 'view:quirky.ask/card'
 
@@ -166,8 +166,9 @@ function ApprovalCard({ ask, approval, context, sessionApproveDisabled, onResolv
  * for a runner's `decision`/`reason` ask, and a one-line record once the ask is answered or expired.
  * Reloads the ask when it is created, surfaced or resolved, and after the person answers.
  */
-export function CardView({ context, input }: { context: UiPluginContext; input: CardViewInput }) {
+export function CardView({ context, input, store }: { context: UiPluginContext; input: CardViewInput; store: AskStore }) {
   const { askId, sessionApproveDisabled } = input
+  const previews = useSyncExternalStore(store.subscribe, store.previews)
   const [ask, setAsk] = useState<Ask | null>(null)
   const alive = useRef(true)
   const loadSeq = useRef(0)
@@ -230,7 +231,7 @@ export function CardView({ context, input }: { context: UiPluginContext; input: 
   if (approval) {
     return <ApprovalCard ask={ask} approval={approval} context={context} sessionApproveDisabled={sessionApproveDisabled} onResolved={resolve} />
   }
-  return <AskCard ask={ask} context={context} onResolved={(_askId, envelope) => resolve(envelope)} />
+  return <AskCard ask={ask} context={context} resolve={(_askId, envelope) => resolve(envelope)} previews={previews} />
 }
 
 /** Reads the view input, which is untrusted until it has an `askId`. */

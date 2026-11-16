@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Badge, Button, EmptyState, ListRow } from '@quirky/ui'
+import { Badge, Button, EmptyState, InlineError, ListRow } from '@quirky/ui'
 import type { GitChange, GitDiff, MountFunction, UiPluginContext } from '@quirky/protocol'
 
 import { useNotesBinding } from '../notes/binding'
@@ -10,7 +10,6 @@ import { noteCounts, useNotes, type Note } from '../notes/useNotes'
 import { PANEL_ID } from '../shared/view-input'
 import { messageOf } from './data'
 import { DiffPane } from './DiffPane'
-import { ErrorNotice } from './Fallbacks'
 import { useDiffSettings, type DiffSettings } from './settings'
 
 export const TURN_CHANGES_VIEW_ID = 'view:quirky.git/turn-changes'
@@ -52,6 +51,7 @@ type FileProps = {
 }
 
 const noReload = async (): Promise<void> => {}
+const noStaleReload = (): void => {}
 const noSave = (): void => {}
 
 /** One changed file: its row, and once expanded its read-only diff with line comments. */
@@ -94,10 +94,10 @@ function ChangedFile({ context, input, change, expanded, onToggle, notes, noteCo
         <div data-turn-diff>
           {diff.status === 'loading' && <p className="ui-text-muted" role="status" style={{ padding: 'var(--ui-space-8) var(--ui-space-12)' }}>Loading diff...</p>}
           {diff.status === 'error' && (
-            <>
-              <ErrorNotice message={diff.message} />
-              <Button onClick={() => setAttempt(attempt + 1)}>Retry</Button>
-            </>
+            <InlineError
+              message={`Error loading diff: ${diff.message}`}
+              action={{ label: 'Retry', onAction: () => setAttempt(attempt + 1) }}
+            />
           )}
           {diff.status === 'ready' && (
             <DiffPane
@@ -111,6 +111,7 @@ function ChangedFile({ context, input, change, expanded, onToggle, notes, noteCo
               variant="section"
               onSaved={noSave}
               onReload={noReload}
+              onStaleReload={noStaleReload}
               notes={binding}
             />
           )}
@@ -154,7 +155,7 @@ export function TurnChanges({ context, input }: { context: UiPluginContext; inpu
   }, [])
 
   if (changes.status === 'loading') return <p className="ui-text-muted" role="status">Loading changes...</p>
-  if (changes.status === 'error') return <ErrorNotice message={changes.message} subject="changes" />
+  if (changes.status === 'error') return <InlineError message={`Error loading changes: ${changes.message}`} />
   const files = changes.value
   if (files.length === 0) return <EmptyState message="This turn changed no files." />
 

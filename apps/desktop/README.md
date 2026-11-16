@@ -104,7 +104,8 @@ each window's effective layout, so a shared change does not replace another wind
 
 ## Native folder and auxiliary-window bridges
 
-Supported shells expose public `desktop.folder.pick` and `desktop.window.open/list/close` routes. Folder cancellation returns no paths and does not overwrite the UI's typed draft; a missing native shell refuses rather than showing a browser prompt. Dashboard's open-as setting selects an in-window view or an owner-bound pop-out. Auxiliary route/filter updates retain that window identity, while workspace-card commands route to its owning main window.
+Supported shells expose public `desktop.folder.pick` and `desktop.window.open/list/close` routes. Folder cancellation returns no paths and does not overwrite the UI's typed draft; browser tabs use the daemon-filesystem folder dialog described in [Browser UI](../../README.md#browser-ui). Dashboard's open-as setting selects an in-window view or an owner-bound pop-out. Auxiliary route/filter updates retain that window identity, while workspace-card commands route to its owning main window.
+The CLI command `quirky desktop pick-folder` exposes the same focused-window folder picker.
 
 These bridges do not provide generic per-window workspace sleep/close routing. Notification permission, click and dismissal callbacks also remain unavailable in the pinned SDK; a void notification call is not delivery proof. Production signed helper/TCC/launchd/admission/upgrade integration still requires an authorized signing identity.
 
@@ -190,7 +191,7 @@ rm -rf /tmp/qtest
 `bun run ui:review` starts the real daemon and desktop renderer against a fresh isolated
 home, registers a disposable local repository and two Git worktrees, and captures the live
 UI contribution inventory in dark and light. It does not open the foreground native window,
-load your profile, install hooks, or use provider accounts. Chromium and all app processes are
+load your profile, install hooks, or use your provider accounts. Chromium and all app processes are
 owned by the run and stopped before it returns.
 
 Install the development dependencies, then either install a Playwright browser with
@@ -229,6 +230,9 @@ theme metadata, PNGs, per-image reviewer responses/logs, `review-report.json` an
 Filtered runs identify their exact scope and do not certify the whole application. The command
 builds UI assets unless `--skip-build` is supplied; missing assets still fail.
 
+Reviewer output may contain one outer plain or `json` Markdown code fence. Assessment fields
+remain strictly validated; surrounding prose, nested fences and other non-JSON replies fail.
+
 Exit 0 means a complete requested capture-only inventory (**not reviewed**) or all requested
 reviews passed; exit 1 means capture/coverage/mount or score failure; exit 2 means invalid
 arguments, missing prerequisites, invalid evidence or reviewer/runtime failure. Signals await
@@ -237,6 +241,181 @@ and native-only surfaces fail explicitly rather than disappearing from coverage;
 states remain reviewable. Renderer screenshots do not certify OS chrome, native browser embedding,
 focus or notifications; those belong to native QA. The existing, not-yet-restyled UI is expected
 to fail against the new goldens.
+
+## UI scoreboard
+
+The scoreboard discovers every immediate plugin manifest, including plugins without UI,
+and the five host screenshot targets. It scans plugin production source and shared UI source
+for compatibility-token consumption; shared findings fail every UI-bearing plugin and the host.
+The absent, paused `quirky.avatar` branch is listed separately, not counted as a plugin.
+Plugins with declared render contributions count as UI-bearing even without a UI module.
+
+```sh
+# Full, fresh two-theme capture and independent model review; every image must score 85.
+bun run ui:scoreboard -- --author-family openai --output /tmp/quirky-ui-scoreboard
+
+# No browser, build, daemon or reviewer. Screenshots remain explicitly unmeasured.
+bun run ui:scoreboard -- --static-only --output /tmp/quirky-ui-static
+
+# Measure one plugin in both themes; this cannot certify the whole application's goal.
+bun run ui:scoreboard -- --plugin quirky.session --author-family openai \
+  --output /tmp/quirky-session-scoreboard
+
+# Enrolled static checks only; no runtime or artifact directory.
+bun run ui:scoreboard:check
+```
+
+All reporting modes write `scoreboard.json` and `scoreboard.md` to a fresh absolute directory,
+print their paths, and retain failures and non-applicable reasons. Full and plugin modes accept
+`--reviewer` and `--browser` as above, but no threshold override, skip-build or historical report.
+`--plugin` requires a known plugin with declared capture targets. Its report contains only that
+plugin, omits host checks, and always records `goalPassed: false`; exit 0 means that plugin's
+checks passed. Plugins without declared capture targets receive `N/A` for screenshots even if
+they have a UI bundle; their source audits still run.
+Dirty production source blocks capture; source changes during measurement invalidate the run.
+Exit 0 certifies a complete passing full report, passing plugin checks, or a passing ratchet;
+1 means failed checks, 2 means operational/inventory errors. Cancellation awaits cleanup and exits 130/143.
+An omitted reviewer theme is an operational failure: measured cells are retained, and no
+further target reviews are requested.
+
+Escaped compatibility tokens are checked in style contexts, including JSX style/class props,
+style objects, CSS templates and DOM style APIs. Escapes in CLI arguments or Markdown text do
+not count as styles. Browser page captures review the browser toolbar and view chrome, not
+native web content. Account captures use disposable provider executables and a local Keychain guard.
+
+### State and action coverage
+
+The four UI checks read `plugins/<id>/ui-scoreboard.json` and
+`plugins/<id>/ui-scoreboard/<name>.json` fragments. Either location is optional;
+at least one coverage file is required. Every file uses the same strict JSON
+format: `schemaVersion: 1`, a `surfaces` map and `states`, `notState` and
+`actions` arrays. Empty maps and arrays are valid. Unknown keys, duplicate keys
+and empty quotes are rejected.
+
+Fragment names must match `^[a-z0-9][a-z0-9-]*\.json$`. Dot-entries are ignored.
+Other entries, subdirectories and symlinks fail inventory. The fragment directory
+is not production UI source.
+
+Coverage is the union of all files, root first and then fragments in byte-order
+by name. The audit processes all `states`, then all `notState`, then all `actions`.
+Surface keys must be unique: `coverage-surface-duplicate` fails the three state
+checks and the first declaration is evaluated. Duplicate candidate claims still
+fail with `coverage-duplicate`, naming the claiming files. An invalid file fails
+all four checks without hiding evidence from valid files.
+
+Evidence from a coverage file carries its repository-relative `coverageFile`.
+Failing messages end with ` [<file>]`; duplicate claims list the distinct claiming
+files. Passing messages stay unchanged. Unmapped candidates have no coverage file.
+
+To repair a large plugin in separate PRs, give each PR its own fragments named
+after the part they cover, such as `sidebar.json`. Put a surface's three decisions
+in the fragment covering that surface's top-level component. No shared root or
+index file needs editing. The ratchet evaluates the plugin's combined coverage;
+enroll a plugin only when all its files pass together.
+
+A ref is `{ "file": "...", "quote": "..." }`. Its file path must be canonical,
+repository-relative and point into the plugin's UI import graph. The quote must
+occur exactly once in that file. Add an optional, nonempty `anchor` if a quote
+contains multiple candidates of the entry's category; it must equal the complete
+candidate anchor text and occur once in the quote at the intended candidate's start.
+
+List a decision for each state on every surface key. Keys are target IDs such as
+`view:quirky.example/main`; a UI plugin without targets uses `ui`. An
+`applicable: true` decision requires a matching `states` entry. A false
+decision requires a `reason` and at least one evidence ref.
+
+`states` entries require `surface`, `state`, `site` and `render`; `anchor` is
+optional. The render is linked to the candidate named by `site`:
+
+- A shared component render has `component`, `element` and `import` fields, with
+  optional `via` refs. Quote the JSX element; `import` must quote a named value
+  import from `@quirky/ui` in the same file. Use `via` for complete helper
+  declarations when a helper returns the render.
+- A toast render has `component: "toast"`, `call` and optional `via` refs. Quote
+  the toast call.
+- Loading accepts `EmptyState` or `NoticeLine`; empty accepts `EmptyState`;
+  error accepts `InlineError`, `FormRow` with an `error` attribute, or `toast`.
+
+`notState` entries require `site` and a nonempty `reason`; `anchor` is
+optional. They classify a state candidate that is not one of the three covered
+states.
+
+Each `actions` entry requires `site` and exactly one of `route`, `transient` or
+`notAction`; `anchor` is optional:
+
+- `route` contains an `invoke` ref, a `target` string and optional `via` refs.
+  `invoke` identifies the public route expression; `target` records its
+  resolved value.
+- `transient` is `caret`, `hover` or `draft`, with a nonempty `reason`.
+- `notAction` is `lifecycle`, `subscription`, `forwarded` or `barrier`, with a nonempty `reason`; a `barrier` is accepted only for a JSX handler with one plain event parameter whose body contains only zero-argument `stopPropagation()`/`preventDefault()` calls, including at least one `stopPropagation()`, and a referenced function must have one unique, unreassigned function declaration or `const` function binding lexically visible at the JSX use.
+
+The classifications have these restrictions:
+
+- Decisive events such as click, submit, drop and retry must route or forward,
+  not use a transient, lifecycle or subscription classification.
+- Unresolved spreads, computed names, listeners and element assignments may
+  only route or forward.
+- A native `<form>` without `onSubmit` cannot be covered; add a routed handler.
+- `forwarded` is checked by shape: an `on*` reference or single call, or a
+  simple props spread. A locally declared handler named `on*` can pass; the
+  reviewer must check that it actually forwards.
+
+Routes must resolve to a declared target or method and a CLI command:
+
+| UI expression | Target | API | CLI |
+| --- | --- | --- | --- |
+| `.call(M)` for a plugin method | `M` | `M` | `quirky <group> <declared words>`, otherwise `quirky <group> <method>` |
+| `.call(M)` for a kernel method | `M` | `M` | The matching `quirky <command>` form |
+| `.executeCommand(C)` or a `command: C` property | `C` (`command:<plugin>/<id>`) | `ui.command.run` | `quirky ui run C` |
+| `.openView(V)` | `V` (`view:<plugin>/<id>`) | `ui.view.open` | `quirky ui open-view V` |
+| `.togglePanel(P)` | `P` (`panel:<plugin>/<id>`) | `ui.panel.open` | `quirky ui open-panel P` |
+| `.closeView()` | `ui.view.close` | `ui.view.close` | `quirky ui close-view` |
+
+Targets resolve string literals, plain templates and one top-level `const` hop
+(in the same file or a named import from a relative UI file), only if no nearer
+binding shadows that name. Templates may interpolate those values. Put the
+resolved string in `target`.
+
+This is a syntactic audit, not a semantic judge. It cannot tell whether a
+message is really an error, whether a custom spinner means loading, or whether
+a `notState`, `transient` or `notAction` reason is sound. It links helpers by
+name but does not prove a helper is called. It also cannot prove a `.call` or
+`.toast` receiver is the plugin context, or that an `executeCommand` target is
+implemented. Reviewers still judge route equivalence: the host's `openView`
+uses `ui.window.view.open`, while the CLI route is `ui.view.open`. A component
+handler prop without an `on` prefix is invisible to discovery; handlers inside
+its DOM are still found.
+
+The bounded token scan checks literal names and visible unresolved token construction, not
+arbitrary data flow or dependency-injected CSS. Semantic hue/tile templates and directly
+imported literal `uiTokens` catalog paths are supported. Escaped, incomplete and unsupported
+dynamic custom-property names fail rather than being guessed. Tests, fixtures, build output,
+comments and the legacy compatibility definition sheet are excluded from consumption checks.
+A dynamic custom-property prefix starts at an identifier boundary. BEM modifier class names
+such as `ui-button--${variant}` are not custom-property evidence.
+
+`scripts/ui-scoreboard-ratchet.json` records enrolled plugin/static-check pairs.
+`quirky.terminal-dock` covers all five static checks. Repair workers enroll newly
+passing pairs in the same PR; reviewers reject deleting enrollment to hide
+regressions. All five static checks are enrollable
+for plugins. `screenshots` remain unenrollable, and the host row still has only
+token and screenshot checks.
+The ratchet runs from `typecheck` and directly in the Tests workflow's Plan job, including draft
+PRs. Non-enrolled debt stays visible in reports without blocking unrelated work.
+Screenshots/model review never run automatically from these static gates.
+
+`quirky.orchestration` covers all five static checks across settings, remote worker
+output and the floating setup card. Its hidden `copy-install-command` and `copy-prompt`
+commands are available through `quirky ui run`; `copy-prompt` takes an `example` id
+from its manifest enum. Remote read failures keep the last output visible.
+
+Plugin ratchet tests call `checkRatchet` with their own enrollment in-process.
+Run the repository-wide `bun run ui:scoreboard:check` separately: nesting that scan
+inside a plugin test makes its timeout depend on unrelated plugins and runner load.
+
+Full measurement uses the existing isolated headless renderer and installed reviewer prerequisites.
+It never installs browsers, resets usage or changes accounts. Native menus, window chrome and
+native-only surfaces cannot be certified by renderer screenshots; missing surfaces remain failures.
 
 ## Why the build unpacks the installer
 

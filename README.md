@@ -22,12 +22,53 @@ logs and cleanup.
 
 Inside any Quirky terminal, the `quirky` command is on PATH: try `quirky status` or `quirky help`.
 
+## Browser UI
+
+A plain browser tab uses the UI served by the local daemon. From the repository root, build the
+served UI with the existing `bun run build` instructions, or rebuild only the UI with:
+
+```sh
+bun run --filter './packages/ui' build
+```
+
+The daemon serves `packages/ui/dist` by default. Start it on the machine that will run the browser:
+
+```sh
+bun run daemon
+```
+
+In another terminal, request the authenticated URL with `quirky ui url` (or
+`bun packages/cli/src/main.ts ui url` from this checkout). Add `--open` to ask the daemon host's
+default browser to open it; this confirms only that the OS opener accepted the request, not that a
+page rendered. Use `--json` for the URL object. The address is loopback-only and is intended for a
+browser on the daemon host, not a remote machine.
+
+The URL contains a bearer token in its fragment. Treat the whole URL as a password: do not share
+it, paste it into public logs, or leave it in shell history. JSON output also contains the token.
+
+The browser folder dialog browses directories on the daemon host, not the browser computer, and
+does not upload files. Auxiliary tabs use browser popups; a popup blocker can prevent them from
+opening and may require the dialog's user-click retry. Browser panes must use explicit Chrome
+**Watch** mode; **Native** browser mode is unavailable in a plain tab. Browser tabs do not provide
+native file reveal or operating-system notification permission, click, or dismissal callbacks.
+
 ## Phone companion
 
 `apps/mobile` contains the Expo companion for direct LAN or tailnet connections. It pairs with
 `quirky mobile pair --address <reachable-desktop-address>` by scanning the QR, opening the
 `quirky://pair` link, or pasting the code. Pairing pins the desktop key; bearer credentials stay
 in the phone's secure store. No relay or cloud account is used.
+
+If pairing reports that the device registry or encryption identity was damaged and set aside,
+a local owner can run `quirky mobile reset-pairing --confirm`. The command keeps set-aside files,
+but every paired device must pair again. Owner CLI grants are revoked when a new identity is
+created. If the owner grant registry can't be written, restart Quirky and run the command again,
+as its error instructs.
+
+The desktop Mobile page and Settings > Mobile offer “Try again” when settings fail to load.
+“Copy pairing code” is also available as
+`quirky ui run command:quirky.mobile/copy-pairing-code` while a pairing panel is open.
+The command never includes the pairing URL in its result.
 
 Build the desktop normally to include its verified workspace/session page bundle. For an iOS
 development build, run `bun run --filter '@quirky/mobile' ios` with Xcode configured. The custom
@@ -239,8 +280,20 @@ does not load local images.
   all use.
 - **`packages/ui`:** the React UI, served by the daemon.
 - **`packages/cli`:** the `quirky` command.
+- **`packages/git`:** git operations and worktree/status helpers.
 - **`apps/desktop`:** the Electrobun window.
 - **`prototypes/`:** stack experiments, such as the native Swift shell.
+
+`quirkyd` and `quirky-pty` log stray uncaught exceptions and unhandled rejections to stderr
+without exiting. Startup failures still exit with status 1; a duplicate instance exits with
+status 0. A failed PTY-host shutdown logs its error, cleans up its listener and PID file, and
+exits with status 1.
+
+The git runner and status/compare streams share eight child-process slots, with queued writes
+ahead of reads. Identical read-only calls share a run only if it starts after every caller arrived;
+later callers wait for the next run. Completed results are not cached, and shared results are
+isolated from caller mutation. Package writes invalidate read cohorts on entry and settlement.
+Direct blob/patch streams and `gh` execution do not use this gate.
 
 A PR's checks run the tests its change affects on GitHub Actions. Add the `full-suite` label to run
 every test, on that push and later ones. Agents push to a draft PR for results and don't run suites

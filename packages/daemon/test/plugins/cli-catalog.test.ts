@@ -295,7 +295,7 @@ describe('group aliases', () => {
 
   test('drops an alias that is a kernel group word', async () => {
     expect(KERNEL_CLI_GROUPS).toEqual([
-      'api', 'daemon', 'distro', 'help', 'job', 'open', 'plugin', 'setting', 'skill', 'status', 'theme', 'ui',
+      'api', 'daemon', 'diagnostics', 'distro', 'help', 'job', 'open', 'plugin', 'setting', 'skill', 'status', 'theme', 'ui',
     ])
     const s = await boot({ installed: [plugin('acme.k', ['status', 'ok'])] })
 

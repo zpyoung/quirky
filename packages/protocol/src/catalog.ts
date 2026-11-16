@@ -20,7 +20,16 @@ export type ApiMethodEntry = {
   confirm?: string
 }
 
-export type ApiEventEntry = { name: string; plugin: string | null; description?: string; data: Schema | null }
+export type ApiEventEntry = {
+  name: string
+  plugin: string | null
+  description?: string
+  data: Schema | null
+  /** Key paths into `data`; present when the event's declaration enables coalescing. */
+  coalesce?: string[]
+  /** Key path into `data` copied to the event envelope's `worktreeId`. */
+  worktree?: string
+}
 
 export type ApiUiCommandEntry = { id: string; plugin: string; title: string; description?: string; args: Schema }
 

@@ -6,7 +6,8 @@ import { makeTempHome } from '../../../packages/daemon/test/helpers'
 import { createAutomationService, type AutomationServiceContext } from '../service'
 import type { AutomationOwner, AutomationTargetResolution, AutomationTargetResolver } from '../dispatch-contract'
 import { createAutomationStore, migrations } from '../store'
-import type { AutomationUiEnv, AutomationUiState } from '../src/ui-contracts'
+import type { AutomationUiState } from '../src/ui-contracts'
+import type { AutomationUiEnv } from '../src/state'
 import { editorMethods } from '../src/editor/methods'
 
 const fixtures: { cleanup(): void }[] = []
@@ -162,7 +163,8 @@ function makeFixture(options: FixtureOptions = {}) {
     revision: 0,
     navigation: {
       page: 'list', automationId: null, runId: null, tab: 'overview', query: '', host: 'all',
-      status: 'all', lastRun: 'all', agent: '', sort: 'name', direction: 'asc', runQuery: '', runStatus: 'all'
+      status: 'all', lastRun: 'all', agent: '', sort: 'name', direction: 'asc', runQuery: '', runStatus: 'all',
+      promptExpanded: false, historyStarts: [0], runLimit: 100, settingsNotice: false
     },
     editor: null
   }

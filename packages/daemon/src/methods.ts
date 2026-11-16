@@ -1,3 +1,7 @@
+import { readdir, realpath, stat } from 'node:fs/promises'
+import type { Dirent, Stats } from 'node:fs'
+import { homedir } from 'node:os'
+import { dirname, isAbsolute, join, parse as parsePath } from 'node:path'
 import {
   CATALOG_SCHEMA_VERSION,
   CONNECTION_METHODS,
@@ -14,11 +18,14 @@ import {
   type Schema,
   type NativeDesktopCapabilities,
   type DesktopShellReply,
+  type FolderListing,
+  type Methods,
   type UiLayout,
   type UiToolPlacement,
   type UiToolSlot
 } from '@quirky/protocol'
-import { conflict, invalidParams } from './errors'
+import { conflict, invalidParams, notFound } from './errors'
+import { kernelProcess } from './kernel-process'
 import { describeCli } from './plugins/cli-catalog'
 import type { DistroService } from './plugins/distros'
 import type { PluginHost } from './plugins/host'
@@ -36,6 +43,147 @@ export type Handlers = { [M in MethodName]: Handler<M> }
 
 const ROLES: readonly ClientRole[] = ['desktop', 'ui', 'cli', 'mobile']
 const OK = { ok: true } as const
+const BROWSER_HOST_FIELDS: Record<Methods['ui.browserHost.control']['params']['action'], readonly string[]> = {
+  state: [],
+  'set-path': ['requestId', 'path'],
+  navigate: ['requestId', 'path', 'offset'],
+  select: ['requestId', 'path', 'selected'],
+  confirm: ['requestId'],
+  cancel: ['requestId'],
+  'open-popup': ['requestId']
+}
+
+function browserHostControlParams(params: Params): Methods['ui.browserHost.control']['params'] {
+  const connId = int(params, 'connId', 1)
+  const rawAction = params.action
+  if (typeof rawAction !== 'string' || !Object.hasOwn(BROWSER_HOST_FIELDS, rawAction)) {
+    throw invalidParams('action must be one of state, set-path, navigate, select, confirm, cancel, open-popup')
+  }
+  const action = rawAction as Methods['ui.browserHost.control']['params']['action']
+  const fields = BROWSER_HOST_FIELDS[action]
+  for (const key of Object.keys(params)) {
+    if (key !== 'connId' && key !== 'action' && !fields.includes(key)) {
+      throw invalidParams(`${key} is not valid for browser host action ${action}`)
+    }
+  }
+
+  const requestId = fields.includes('requestId') ? str(params, 'requestId') : undefined
+  const path = fields.includes('path') ? str(params, 'path') : undefined
+  const selected = action === 'select' ? optBool(params, 'selected') : undefined
+  if (action === 'select' && selected === undefined) throw invalidParams('selected must be a boolean')
+  const offset = action === 'navigate' && params.offset !== undefined ? int(params, 'offset', 0) : undefined
+
+  return {
+    connId,
+    action,
+    ...(requestId === undefined ? {} : { requestId }),
+    ...(path === undefined ? {} : { path }),
+    ...(selected === undefined ? {} : { selected }),
+    ...(offset === undefined ? {} : { offset })
+  }
+}
+
+function errnoCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return undefined
+  return typeof error.code === 'string' ? error.code : undefined
+}
+
+function folderFsFailure(path: string, error: unknown): never {
+  switch (errnoCode(error)) {
+    case 'ENOENT':
+      throw notFound(`directory does not exist: ${path}`)
+    case 'ENOTDIR':
+      throw invalidParams(`path is not a directory: ${path}`)
+    case 'EACCES':
+    case 'EPERM':
+      throw conflict(`cannot read directory: ${path}`)
+    default:
+      throw conflict(`cannot read directory: ${path}`)
+  }
+}
+
+function compareCodePoints(left: string, right: string): number {
+  let leftIndex = 0
+  let rightIndex = 0
+  while (leftIndex < left.length && rightIndex < right.length) {
+    const leftPoint = left.codePointAt(leftIndex)!
+    const rightPoint = right.codePointAt(rightIndex)!
+    if (leftPoint !== rightPoint) return leftPoint < rightPoint ? -1 : 1
+    leftIndex += leftPoint > 0xffff ? 2 : 1
+    rightIndex += rightPoint > 0xffff ? 2 : 1
+  }
+  if (leftIndex === left.length && rightIndex === right.length) return 0
+  return leftIndex === left.length ? -1 : 1
+}
+
+async function listBrowserFolder(path: string | undefined, offset: number, limit: number): Promise<FolderListing> {
+  const requestedPath = path ?? homedir()
+  if (requestedPath.length === 0) throw invalidParams('path must be a non-empty absolute path')
+  if (requestedPath.includes('\0')) throw invalidParams('path must not contain NUL')
+  if (!isAbsolute(requestedPath)) throw invalidParams('path must be absolute')
+
+  let canonicalPath: string
+  try {
+    canonicalPath = await realpath(requestedPath)
+  } catch (error) {
+    folderFsFailure(requestedPath, error)
+  }
+
+  let directoryInfo: Stats
+  try {
+    directoryInfo = await stat(canonicalPath)
+  } catch (error) {
+    folderFsFailure(requestedPath, error)
+  }
+  if (!directoryInfo.isDirectory()) throw invalidParams(`path is not a directory: ${requestedPath}`)
+
+  let directoryEntries: Dirent[]
+  try {
+    directoryEntries = await readdir(canonicalPath, { withFileTypes: true })
+  } catch (error) {
+    folderFsFailure(requestedPath, error)
+  }
+  const names = await Promise.all(directoryEntries.map(async (entry) => {
+    if (entry.isDirectory()) return entry.name
+    if (!entry.isSymbolicLink()) return null
+    try {
+      return (await stat(join(canonicalPath, entry.name))).isDirectory() ? entry.name : null
+    } catch (error) {
+      const code = errnoCode(error)
+      if (code === 'ENOENT' || code === 'ENOTDIR') return null
+      folderFsFailure(join(canonicalPath, entry.name), error)
+    }
+  }))
+  const directories = names.filter((name): name is string => name !== null).sort(compareCodePoints)
+  const entries = directories.slice(offset, offset + limit).map((name) => ({
+    name,
+    path: join(canonicalPath, name)
+  }))
+  return {
+    path: canonicalPath,
+    parent: canonicalPath === parsePath(canonicalPath).root ? null : dirname(canonicalPath),
+    entries,
+    offset,
+    limit,
+    hasMore: offset + limit < directories.length
+  }
+}
+
+async function requireBuiltBrowserUi(core: Core): Promise<void> {
+  const indexPath = core.browserUiIndexPath
+  if (!indexPath) throw notFound('browser UI is not built')
+  let indexInfo
+  try {
+    indexInfo = await stat(indexPath)
+  } catch (error) {
+    if (errnoCode(error) === 'ENOENT' || errnoCode(error) === 'ENOTDIR') {
+      throw notFound('browser UI is not built')
+    }
+    throw conflict('browser UI could not be checked')
+  }
+  if (!indexInfo.isFile()) throw notFound('browser UI is not built')
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function str(params: Params, key: string): string {
@@ -161,7 +309,9 @@ function describeApi(core: Core, plugins: PluginHost): ApiDescription {
       name: shortId(contribution),
       plugin: contribution.plugin,
       ...descriptionOf(contribution.data),
-      data: schemaField(contribution.data, 'data', null)
+      data: schemaField(contribution.data, 'data', null),
+      ...(Array.isArray(contribution.data.coalesce) ? { coalesce: contribution.data.coalesce as string[] } : {}),
+      ...(typeof contribution.data.worktree === 'string' ? { worktree: contribution.data.worktree } : {})
     }))
   ]
   const uiCommands: ApiDescription['uiCommands'] = effective('command').map((contribution) => ({
@@ -244,6 +394,7 @@ export function createHandlers(
       return OK
     },
     'status.get': () => core.status(),
+    'diagnostics.memory': () => core.memory(),
     'daemon.stop': () => {
       setTimeout(services.stopDaemon, 0)
       return OK
@@ -313,6 +464,37 @@ export function createHandlers(
       return layout.setSidebar(visible)
     },
     'ui.focus': (params) => layout.focus(focusTarget(params)),
+    'ui.url': async () => {
+      await requireBuiltBrowserUi(core)
+      const url = core.browserUiUrl
+      if (!url) throw conflict('browser UI URL is unavailable')
+      return { url }
+    },
+    'ui.open': async () => {
+      await requireBuiltBrowserUi(core)
+      const url = core.browserUiUrl
+      const opener = process.platform === 'darwin' ? 'open' : process.platform === 'linux' ? 'xdg-open' : undefined
+      if (!url || !opener) throw conflict('could not request the default browser')
+      const result = await kernelProcess.run([opener, url], { timeoutMs: 5000 }).catch(() => {
+        throw conflict('could not request the default browser')
+      })
+      if (result.exitCode !== 0 || result.signal !== null || result.stopped !== undefined || result.spawnError !== undefined) {
+        throw conflict('could not request the default browser')
+      }
+      return { url, requested: true }
+    },
+    'ui.folder.list': (params) => {
+      const path = optStr(params, 'path')
+      const offset = params.offset === undefined ? 0 : int(params, 'offset', 0)
+      const limit = params.limit === undefined ? 100 : int(params, 'limit', 1)
+      if (limit > 200) throw invalidParams('limit must be an integer <= 200')
+      return listBrowserFolder(path, offset, limit)
+    },
+    'ui.browserHost.control': (params) => {
+      const { connId, ...control } = browserHostControlParams(params)
+      return layout.browserHostControl(connId, control)
+    },
+
     'ui.command.run': (params) => layout.runCommand(str(params, 'id'), params.args),
     'ui.toast.dismiss': async (params) => {
       await layout.dismissToast(str(params, 'key'))
@@ -399,11 +581,15 @@ export function createHandlers(
         ...(title === undefined ? {} : { title })
       })
     },
-    'desktop.window.runOwnerCommand': (params, conn) => layout.runOwnerCommand(conn, {
-      windowId: str(params, 'windowId'),
-      id: str(params, 'id'),
-      ...(params.args === undefined ? {} : { args: params.args })
-    }),
+    'desktop.window.runOwnerCommand': (params, conn) => {
+      const activateOwner = optBool(params, 'activateOwner')
+      return layout.runOwnerCommand(conn, {
+        windowId: str(params, 'windowId'),
+        id: str(params, 'id'),
+        ...(params.args === undefined ? {} : { args: params.args }),
+        ...(activateOwner === undefined ? {} : { activateOwner })
+      })
+    },
     'desktop.window.closed': (params, conn) => {
       if (conn.role !== 'desktop') throw invalidParams('only the native desktop shell can close an auxiliary window')
       return layout.desktopWindowClosed(conn, {

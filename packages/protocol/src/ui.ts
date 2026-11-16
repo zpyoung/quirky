@@ -1,3 +1,4 @@
+import type { TerminalStreamOptions } from './client'
 import type { NativeBrowserCapability } from './native-browser'
 import type { QuirkyEvent } from './rpc'
 import type { UiToolEntry, UiToolLayout, UiToolSlot } from './tool-slots'
@@ -293,16 +294,39 @@ export type UiToastState = {
 export type UiState = { windows: UiWindowInfo[]; layout: UiLayout; slots: UiSlotState[]; toasts: UiToastState[] }
 
 /**
+ * A mounted view may accept new input in place; false or no updater asks the host to remount.
+ * Cleanup remains callable for every slot kind. Plugin API 1.7.0.
+ */
+export type MountCleanup = (() => void) & {
+  updateInput?(input: unknown): boolean
+}
+
+/**
  * Renders a slot into `element`; the returned function cleans up. `report` sends a JSON summary
  * of what the slot shows. A view embedded with `mountView` gets `input` and no `report`.
  */
 export type MountFunction = (
   element: HTMLElement,
   props: { input?: unknown; report?(state: unknown): void }
-) => (() => void) | void
+) => MountCleanup | void
 
 /** Runs a command, with the arguments it was invoked with. */
 export type CommandHandler = (args?: unknown) => unknown
+
+/** Narrows a UI event subscription. Plugin API 1.5.0. */
+export type UiSubscribeOptions = {
+  /**
+   * A worktree ID leaves out plugin events tagged with another worktree; null leaves out all
+   * tagged plugin events. Omitted delivers every event. Untagged plugin events and all kernel
+   * events are always delivered.
+   */
+  worktreeId?: string | null
+}
+
+export type UiExecuteCommandOptions = {
+  /** In a popped-out window, false runs the command in the owner window without raising it. Default true. Ignored in a main window. Plugin API 1.15.0. */
+  activateOwner?: boolean
+}
 
 /** What a plugin's `activate` receives in the window. */
 export type UiPluginContext = {
@@ -323,11 +347,18 @@ export type UiPluginContext = {
   provide(contributionId: string, implementation: unknown): void
   /** Invokes a daemon or plugin method. */
   call(method: string, params?: Record<string, unknown>): Promise<unknown>
-  /** Listens to every daemon event; the returned function unsubscribes. */
-  subscribe(listener: (event: QuirkyEvent) => void | Promise<void>): () => void
+  /**
+   * Listens to daemon events; the returned function unsubscribes. `options.worktreeId` leaves out
+   * plugin events tagged with another worktree. The scope is fixed when `subscribe` is called.
+   */
+  subscribe(listener: (event: QuirkyEvent) => void | Promise<void>, options?: UiSubscribeOptions): () => void
   /** Reads a setting by short name in the plugin's own namespace, or by full setting ID. */
   getSetting(name: string): unknown
-  executeCommand(id: string, args?: unknown): Promise<void>
+  /**
+   * Runs a command locally in a main window, or in the owner of a popped-out window.
+   * Pop-outs activate the owner on success unless options.activateOwner is false.
+   */
+  executeCommand(id: string, args?: unknown, options?: UiExecuteCommandOptions): Promise<void>
   /**
    * Mints a one-use, same-window drag capability. Put only its opaque token in DataTransfer;
    * external bytes cannot create a capability.
@@ -346,15 +377,23 @@ export type UiPluginContext = {
   /** Listens to layout changes; the returned function unsubscribes. */
   onLayout(listener: (layout: UiLayout) => void): () => void
   /** Listens to binary stream frames tagged `streamId`; the returned function unsubscribes. */
-  onStream(streamId: number, listener: (bytes: Uint8Array) => void): () => void
+  onStream(
+    streamId: number,
+    listener: (bytes: Uint8Array) => void,
+    options?: TerminalStreamOptions
+  ): () => void
   /** Listens to connection status changes; the returned function unsubscribes. */
   onConnection(listener: (status: 'connected' | 'reconnecting') => void): () => void
   /** Shows a confirm dialog; resolves true when the person confirms. */
   confirm(options: { title: string; body?: string; confirmLabel?: string }): Promise<boolean>
   /** Shows a toast; `options` can make it a success or warning, keyed, persistent or actionable. */
   toast(title: string, body: string, options?: ToastOptions): void
-  /** Shows a count on the panel's toggle, with `title` as its tooltip (default "<count> waiting"); null clears it. */
-  setPanelBadge(panelId: string, count: number | null, title?: string): void
+  /**
+   * Shows a count on the toggle of one of this plugin's panels or sidebar sections, with `title` as
+   * its tooltip (default "<count> waiting") and `tone` as its color (default `'needs-you'`); null
+   * clears it.
+   */
+  setPanelBadge(panelId: string, count: number | null, title?: string, tone?: 'needs-you' | 'failing'): void
   /**
    * Sets a window-global context key that keybinding `when` conditions read; `undefined` clears
    * it. The window clears every key this plugin set when the plugin is deactivated.

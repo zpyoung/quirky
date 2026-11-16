@@ -25,6 +25,10 @@ import { fileURLToPath } from 'node:url'
 import { QuirkyClient } from '../client'
 import { RPC_PATH, type ClientRole } from '../rpc'
 
+export { installProcessErrorGuards, type ProcessErrorGuardOptions } from './process-guard'
+export { homeLockPath, isPidAlive, tryHomeLock, type HomeLock } from './home-lock'
+export { parseExitWithParent, watchParent } from './parent-watch'
+
 /** Written by quirkyd at startup (mode 0600) and removed on clean exit. */
 export type RuntimeInfo = {
   pid: number
@@ -40,6 +44,12 @@ export type RuntimeInfo = {
   socket?: string
   /** `daemonEntryHash` of the file the daemon runs from; absent from daemons that predate it. */
   entryHash?: string
+}
+
+export type DaemonHealth = {
+  pid: number
+  daemonVersion?: string
+  startupSettled?: boolean
 }
 
 export const HEALTH_PATH = '/health'
@@ -135,19 +145,35 @@ export function rpcUrl(info: RuntimeInfo): string {
   return `ws://127.0.0.1:${info.port}${RPC_PATH}?token=${encodeURIComponent(info.token)}`
 }
 
-/** True when the daemon described by `info` answers its health check. */
-export async function isDaemonAlive(info: RuntimeInfo | null, timeoutMs = 1500): Promise<boolean> {
-  if (!info) return false
+/** Reads the daemon's `/health` answer when it comes from `info.pid` within `timeoutMs`. */
+export async function readDaemonHealth(
+  info: RuntimeInfo | null,
+  timeoutMs = 1500
+): Promise<DaemonHealth | null> {
+  if (!info) return null
   try {
     const response = await fetch(`http://127.0.0.1:${info.port}${HEALTH_PATH}`, {
       signal: AbortSignal.timeout(timeoutMs)
     })
-    if (!response.ok) return false
-    const body = (await response.json()) as { pid?: number }
-    return body.pid === info.pid
+    if (!response.ok) return null
+    const body = (await response.json()) as {
+      pid?: number
+      daemonVersion?: unknown
+      startupSettled?: unknown
+    }
+    if (body.pid !== info.pid) return null
+    const health: DaemonHealth = { pid: info.pid }
+    if (typeof body.daemonVersion === 'string') health.daemonVersion = body.daemonVersion
+    if (typeof body.startupSettled === 'boolean') health.startupSettled = body.startupSettled
+    return health
   } catch {
-    return false
+    return null
   }
+}
+
+/** True when the daemon described by `info` answers its health check. */
+export async function isDaemonAlive(info: RuntimeInfo | null, timeoutMs = 1500): Promise<boolean> {
+  return (await readDaemonHealth(info, timeoutMs)) !== null
 }
 
 const SOURCE_ENTRY = join('packages', 'daemon', 'src', 'main.ts')
@@ -188,18 +214,91 @@ export function daemonEntryHash(entry: string): string {
   return hash.digest('hex').slice(0, 16)
 }
 
-/** Stops a running daemon the way `quirky daemon restart` does and waits for its health check to go quiet. */
-async function stopDaemon(info: RuntimeInfo, timeoutMs = 10000): Promise<void> {
+function validateDaemonPid(pid: number): void {
+  if (typeof pid !== 'number' || !Number.isSafeInteger(pid) || pid <= 0) {
+    throw new Error('invalid daemon pid')
+  }
+  if (pid === process.pid) throw new Error(`refusing to signal this process (pid ${pid})`)
+}
+
+function hasProcessErrorCode(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === code
+}
+
+/** Sends a signal to a daemon pid, returning false when that process is already gone. */
+export function signalDaemon(pid: number, signal: 'SIGTERM' | 'SIGKILL'): boolean {
+  validateDaemonPid(pid)
   try {
-    process.kill(info.pid, 'SIGTERM')
-  } catch {
-    return
+    process.kill(pid, signal)
+    return true
+  } catch (error) {
+    if (hasProcessErrorCode(error, 'ESRCH')) return false
+    throw error
   }
+}
+
+function daemonProcessExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    if (hasProcessErrorCode(error, 'ESRCH')) return false
+    if (hasProcessErrorCode(error, 'EPERM')) return true
+    throw error
+  }
+}
+
+function cannotKillDaemonError(pid: number, timeoutMs: number): Error {
+  return new Error(
+    `quirkyd (pid ${pid}) did not stop within ${timeoutMs / 1000}s and could not be killed`
+  )
+}
+
+/** Waits for a daemon pid to exit, sending SIGKILL after the initial deadline if needed. */
+export async function waitForDaemonExit(
+  pid: number,
+  options: { timeoutMs?: number; killWaitMs?: number } = {}
+): Promise<'exited' | 'killed'> {
+  validateDaemonPid(pid)
+  const timeoutMs = options.timeoutMs ?? 10000
+  const killWaitMs = options.killWaitMs ?? 2000
   const deadline = Date.now() + timeoutMs
-  while (await isDaemonAlive(info, 500)) {
-    if (Date.now() > deadline) throw new Error(`quirkyd (pid ${info.pid}) did not stop within ${timeoutMs / 1000}s`)
-    await Bun.sleep(100)
+
+  while (daemonProcessExists(pid)) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await Bun.sleep(Math.min(100, remaining))
   }
+  if (!daemonProcessExists(pid)) return 'exited'
+
+  let signalled: boolean
+  try {
+    signalled = signalDaemon(pid, 'SIGKILL')
+  } catch {
+    throw cannotKillDaemonError(pid, timeoutMs)
+  }
+  if (!signalled) return 'exited'
+
+  const killDeadline = Date.now() + killWaitMs
+  while (daemonProcessExists(pid)) {
+    const remaining = killDeadline - Date.now()
+    if (remaining <= 0) throw cannotKillDaemonError(pid, timeoutMs)
+    await Bun.sleep(Math.min(100, remaining))
+  }
+  return 'killed'
+}
+
+/**
+ * Waits for daemon exit, using SIGTERM then SIGKILL if the graceful wait expires.
+ * Rejects invalid or own-process pids, signalling errors, and a pid still alive after the kill wait.
+ */
+async function stopDaemon(
+  info: RuntimeInfo,
+  timeoutMs = 10000,
+  killWaitMs = 2000
+): Promise<void> {
+  signalDaemon(info.pid, 'SIGTERM')
+  await waitForDaemonExit(info.pid, { timeoutMs, killWaitMs })
 }
 
 export function defaultDaemonEntry(): string {
@@ -246,6 +345,8 @@ export async function ensureDaemon(
     args?: string[]
     /** Stop a running daemon whose entry differs from `daemonEntry`, as after an app update, and start this one. */
     replaceStale?: boolean
+    stopTimeoutMs?: number
+    killWaitMs?: number
   } = {}
 ): Promise<RuntimeInfo> {
   const home = ensureHome(options.home ?? quirkyHome())
@@ -254,7 +355,7 @@ export async function ensureDaemon(
   if (await isDaemonAlive(existing)) {
     const current = existing as RuntimeInfo
     if (!options.replaceStale || !existsSync(entry) || current.entryHash === daemonEntryHash(entry)) return current
-    await stopDaemon(current)
+    await stopDaemon(current, options.stopTimeoutMs, options.killWaitMs)
   }
 
   if (!existsSync(entry)) throw new Error(`quirkyd entry not found: ${entry}`)

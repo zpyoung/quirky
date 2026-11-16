@@ -1,7 +1,6 @@
-import { spawn } from 'node:child_process'
 import { lstat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
-import type { PluginContext } from '@quirky/protocol'
+import type { PluginContext, SpawnExit } from '@quirky/protocol'
 
 export const QUICK_OPEN_MAX_ENTRIES = 20_001
 export const QUICK_OPEN_MAX_RESULTS = 50
@@ -15,7 +14,6 @@ const EXCLUDED_DIRS = [
 export type Inventory = { paths: string[]; truncated: boolean }
 export type RankedPath = { path: string; name: string; score: number; line?: number; column?: number }
 
-type SpawnResult = { bytes: Buffer; code: number; stderr: string; truncated: boolean }
 
 export function normalizeRipgrepPath(path: string): string | null {
   let normalized = path
@@ -27,8 +25,10 @@ export function normalizeRipgrepPath(path: string): string | null {
 
 export class FileInventory {
   private cache = new Map<string, { expires: number; promise: Promise<Inventory> }>()
-
-  constructor(private readonly context: PluginContext) {}
+  private readonly maxBytes: number
+  constructor(private readonly context: PluginContext, limits: { maxBytes?: number } = {}) {
+    this.maxBytes = limits.maxBytes ?? MAX_INVENTORY_BYTES
+  }
 
   async list(root: string, includeIgnored = true, followSymlinks = false): Promise<Inventory> {
     const cacheKey = `${root}\0${includeIgnored}\0${followSymlinks}`
@@ -90,11 +90,79 @@ export class FileInventory {
       args.push('--glob', `!**/${excluded}`)
     }
     args.push('--', '.')
-    const result = await spawnBounded('rg', args, root, MAX_INVENTORY_BYTES)
-    if (result.code !== 0 && result.code !== 1) {
-      throw this.context.error('not-found', `ripgrep (rg) could not list worktree files: ${result.stderr.trim() || `exit ${result.code}`}`)
+    const handle = this.context.process.spawn(['rg', ...args], {
+      timeoutMs: 30_000,
+      cwd: root,
+      stderrTailBytes: 24_576
+    })
+    const reader = handle.stdout.getReader()
+    const decoder = new TextDecoder()
+    const names: string[] = []
+    let pendingName = ''
+    let bytesRead = 0
+    let truncated = false
+    let readFailed = false
+    let stopPromise: Promise<SpawnExit> | undefined
+    const stop = () => {
+      stopPromise ??= handle.stop()
+      return stopPromise
     }
-    const names = result.bytes.toString('utf8').split('\0').filter(Boolean)
+    const consume = (chunk: Uint8Array) => {
+      pendingName += decoder.decode(chunk, { stream: true })
+      let delimiter = pendingName.indexOf('\0')
+      while (delimiter >= 0) {
+        const name = pendingName.slice(0, delimiter)
+        if (name !== '') names.push(name)
+        pendingName = pendingName.slice(delimiter + 1)
+        delimiter = pendingName.indexOf('\0')
+      }
+    }
+    const readTask = (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) return
+          if (truncated) continue
+          const available = this.maxBytes - bytesRead
+          if (value.byteLength > available) {
+            if (available > 0) consume(value.subarray(0, available))
+            bytesRead = this.maxBytes
+            truncated = true
+            void stop()
+            continue
+          }
+          bytesRead += value.byteLength
+          consume(value)
+        }
+      } catch {
+        if (!truncated) {
+          readFailed = true
+          void stop()
+        }
+      } finally {
+        reader.releaseLock()
+      }
+    })()
+    const exit = await handle.exited
+    await readTask
+    if (readFailed && !truncated && exit.stopped !== 'timeout') {
+      throw this.context.error('not-found', 'ripgrep (rg) could not list worktree files: its output could not be read to its end')
+    }
+    if (exit.spawnError !== undefined) {
+      if (exit.spawnError.code === 'ENOENT') {
+        throw this.context.error('not-found', 'ripgrep (rg) is required for file inventory and contents search; install ripgrep and retry')
+      }
+      throw this.context.error('not-found', exit.spawnError.message)
+    }
+    if (exit.stopped === 'timeout') truncated = true
+    if (exit.exitCode !== 0 && exit.exitCode !== 1 && !truncated) {
+      const stderr = handle.stderrTail().slice(-8192).trim()
+      throw this.context.error('not-found', `ripgrep (rg) could not list worktree files: ${stderr || `exit ${exit.exitCode ?? -1}`}`)
+    }
+    if (!truncated) {
+      pendingName += decoder.decode()
+      if (pendingName !== '') names.push(pendingName)
+    }
     const count = Math.min(names.length, QUICK_OPEN_MAX_ENTRIES)
     const limited: string[] = []
     for (let index = 0; index < count; index++) {
@@ -102,7 +170,7 @@ export class FileInventory {
       if (path !== null) limited.push(path)
     }
     const filtered = await this.excludeNestedWorktrees(root, limited)
-    return { paths: filtered, truncated: result.truncated || names.length > QUICK_OPEN_MAX_ENTRIES }
+    return { paths: filtered, truncated: truncated || names.length > QUICK_OPEN_MAX_ENTRIES }
   }
 
   private async excludeNestedWorktrees(root: string, names: string[]): Promise<string[]> {
@@ -155,33 +223,3 @@ function fuzzyScore(haystack: string, needle: string): number | null {
   return needle.length * 3 + streakBest * 2 - first - (last - first - needle.length + 1)
 }
 
-function spawnBounded(command: string, args: string[], cwd: string, maxBytes: number): Promise<SpawnResult> {
-  const process = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
-  const chunks: Buffer[] = []
-  let bytes = 0
-  let stderr = ''
-  let truncated = false
-  process.stdout.on('data', (chunk: Buffer) => {
-    if (bytes >= maxBytes) {
-      truncated = true
-      process.kill('SIGTERM')
-      return
-    }
-    const keep = Math.min(chunk.byteLength, maxBytes - bytes)
-    chunks.push(chunk.subarray(0, keep))
-    bytes += keep
-    if (keep < chunk.byteLength) {
-      truncated = true
-      process.kill('SIGTERM')
-    }
-  })
-  process.stderr.setEncoding('utf8')
-  process.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-8192) })
-  const { promise, resolve, reject } = Promise.withResolvers<SpawnResult>()
-  process.once('error', reject)
-  process.once('close', (code) => resolve({ bytes: Buffer.concat(chunks, bytes), code: code ?? -1, stderr, truncated }))
-  return promise.catch((error: NodeJS.ErrnoException) => {
-    if (error.code === 'ENOENT') throw new Error('ripgrep (rg) is required for file inventory and contents search; install ripgrep and retry')
-    throw error
-  })
-}

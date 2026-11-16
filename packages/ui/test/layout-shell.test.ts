@@ -1,3 +1,9 @@
+import { act, createElement, StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { PLUGIN_API_VERSION, type UiModel } from '@quirky/protocol'
+import { AppContext } from '../src/context'
+import { PluginSlot } from '../src/plugins/PluginSlot'
+import type { HostState, WindowPluginHost } from '../src/plugins/host'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
@@ -648,4 +654,251 @@ test('a press in a tool panel or the center card moves the panel focus attribute
 
   panel.dispatchEvent(new Event('focusin', { bubbles: true }))
   expect(holders()).toEqual([panel])
+})
+
+type SlotMountWithInput = (() => void) & { updateInput?: (input: unknown) => boolean }
+
+function createSlotHarness(env: WindowEnv, options: { updater?: boolean } = {}) {
+  const original = env.win.host.getState()
+  let current: HostState = { ...original, slots: { ...original.slots } }
+  const listeners = new Set<() => void>()
+  const mounts: { id: string; element: HTMLElement; child: HTMLElement; input: unknown; updates: unknown[] }[] = []
+  const cleanups: HTMLElement[] = []
+  const previousActEnvironment = Reflect.get(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
+  Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true)
+
+  const mount = (
+    id: string,
+    element: HTMLElement,
+    props?: { input?: unknown },
+    mountOptions?: { deferCleanup?: boolean; afterCleanup?: () => void }
+  ): SlotMountWithInput => {
+    const child = element.ownerDocument.createElement('span')
+    child.className = 'slot-test-child'
+    child.textContent = JSON.stringify(props?.input ?? null)
+    element.appendChild(child)
+    const record = { id, element, child, input: props?.input, updates: [] as unknown[] }
+    mounts.push(record)
+    let released = false
+    const unmount = (() => {
+      if (released) return
+      released = true
+      cleanups.push(element)
+      const finish = () => mountOptions?.afterCleanup?.()
+      if (mountOptions?.deferCleanup) queueMicrotask(finish)
+      else finish()
+    }) as SlotMountWithInput
+    if (options.updater !== false) {
+      unmount.updateInput = (input) => {
+        record.updates.push(input)
+        const mode = (input as { mode?: string } | null)?.mode
+        if (mode === 'throw') throw new Error('updater failed')
+        if (mode !== 'accept') return false
+        child.textContent = JSON.stringify(input)
+        return true
+      }
+    }
+    return unmount
+  }
+
+  const host = {
+    getState: () => current,
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    mount
+  } as unknown as WindowPluginHost
+  const container = env.win.document.createElement('div')
+  env.win.document.body.appendChild(container)
+  const root = createRoot(container)
+  const value = { store: env.win.store, connection: env.win.connection, plugins: host }
+
+  const render = async (id: string, input: unknown) => {
+    await act(async () => {
+      root.render(createElement(
+        AppContext.Provider,
+        { value },
+        createElement(StrictMode, null, createElement(PluginSlot, { id, input }))
+      ))
+    })
+  }
+  const setModel = async (model: UiModel) => {
+    await act(async () => {
+      current = { ...current, model }
+      listeners.forEach((listener) => listener())
+    })
+  }
+  const setSlotError = async (id: string) => {
+    await act(async () => {
+      current = {
+        ...current,
+        slots: { ...current.slots, [id]: { status: 'error', message: 'forced retry' } }
+      }
+      listeners.forEach((listener) => listener())
+    })
+  }
+  const unmount = async () => {
+    await act(async () => root.unmount())
+    container.remove()
+  }
+  const restoreActEnvironment = () => {
+    if (previousActEnvironment === undefined) Reflect.deleteProperty(globalThis, 'IS_REACT_ACT_ENVIRONMENT')
+    else Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', previousActEnvironment)
+  }
+  return {
+    container,
+    getModel: () => current.model!,
+    mounts,
+    cleanups,
+    render,
+    setModel,
+    setSlotError,
+    unmount,
+    restoreActEnvironment
+  }
+}
+
+test('PluginSlot preserves the exact body on accepted input and remounts once on declined or throwing input in StrictMode', async () => {
+  const env = await boot()
+  const harness = createSlotHarness(env)
+  const firstInput = { mode: 'accept', step: 1 }
+  try {
+    await harness.render(PAGE, firstInput)
+    const initialBody = harness.container.querySelector<HTMLElement>('.plugin-slot-body')!
+    const initialChild = initialBody.firstElementChild
+    const cleanupCount = harness.cleanups.length
+    expect(harness.mounts.at(-1)?.input).toEqual(firstInput)
+    expect(harness.mounts.flatMap((mount) => mount.updates)).toEqual([])
+
+    const acceptedInput = { mode: 'accept', step: 2 }
+    await harness.render(PAGE, acceptedInput)
+    expect(harness.container.querySelector('.plugin-slot-body') === initialBody).toBe(true)
+    expect(initialBody.firstElementChild === initialChild).toBe(true)
+    expect(initialBody.isConnected).toBe(true)
+    expect(initialChild?.textContent).toBe(JSON.stringify(acceptedInput))
+    expect(harness.cleanups).toHaveLength(cleanupCount)
+
+    const declinedInput = { mode: 'decline', step: 3 }
+    await harness.render(PAGE, declinedInput)
+    await env.win.waitFor(() => harness.container.querySelectorAll('.plugin-slot-body').length === 1)
+    const declinedBody = harness.container.querySelector<HTMLElement>('.plugin-slot-body')!
+    expect(declinedBody !== initialBody).toBe(true)
+    expect(initialBody.isConnected).toBe(false)
+    expect(harness.mounts.at(-1)?.input).toEqual(declinedInput)
+    expect(harness.cleanups).toHaveLength(cleanupCount + 1)
+
+    const throwingInput = { mode: 'throw', step: 4 }
+    const beforeThrowBody = declinedBody
+    await harness.render(PAGE, throwingInput)
+    await env.win.waitFor(() => harness.container.querySelectorAll('.plugin-slot-body').length === 1)
+    const throwingBody = harness.container.querySelector<HTMLElement>('.plugin-slot-body')!
+    expect(throwingBody !== beforeThrowBody).toBe(true)
+    expect(beforeThrowBody.isConnected).toBe(false)
+    expect(harness.mounts.at(-1)?.input).toEqual(throwingInput)
+    expect(harness.cleanups).toHaveLength(cleanupCount + 2)
+    expect(harness.mounts.flatMap((mount) => mount.updates)).toEqual([acceptedInput, declinedInput, throwingInput])
+  } finally {
+    await harness.unmount()
+    harness.restoreActEnvironment()
+  }
+  expect(harness.container.querySelector('.plugin-slot-body')).toBeNull()
+  expect(harness.cleanups).toHaveLength(harness.mounts.length)
+})
+
+test('PluginSlot remounts with a fresh body when a mounted cleanup has no updater', async () => {
+  const env = await boot()
+  const harness = createSlotHarness(env, { updater: false })
+  try {
+    await harness.render(PAGE, { step: 1 })
+    const previousBody = harness.container.querySelector<HTMLElement>('.plugin-slot-body')!
+    const cleanupCount = harness.cleanups.length
+
+    const nextInput = { step: 2 }
+    await harness.render(PAGE, nextInput)
+    await env.win.waitFor(() => harness.container.querySelectorAll('.plugin-slot-body').length === 1)
+
+    const freshBody = harness.container.querySelector<HTMLElement>('.plugin-slot-body')!
+    expect(freshBody !== previousBody).toBe(true)
+    expect(previousBody.isConnected).toBe(false)
+    expect(harness.mounts.at(-1)?.input).toEqual(nextInput)
+    expect(harness.cleanups).toHaveLength(cleanupCount + 1)
+  } finally {
+    await harness.unmount()
+    harness.restoreActEnvironment()
+  }
+  expect(harness.cleanups).toHaveLength(harness.mounts.length)
+})
+
+test('PluginSlot identity changes and retry bypass updateInput and unmount exactly once under StrictMode', async () => {
+  const env = await boot()
+  const harness = createSlotHarness(env)
+  const stableInput = { mode: 'accept', step: 1 }
+  try {
+    await harness.render(PAGE, stableInput)
+    expect(harness.mounts.flatMap((mount) => mount.updates)).toEqual([])
+
+    const transition = async (update: (model: UiModel) => UiModel) => {
+      const beforeMounts = harness.mounts.length
+      const beforeCleanups = harness.cleanups.length
+      await harness.setModel(update(harness.getModel()))
+      await env.win.waitFor(() => harness.container.querySelectorAll('.plugin-slot-body').length === 1)
+      expect(harness.mounts).toHaveLength(beforeMounts + 1)
+      expect(harness.cleanups).toHaveLength(beforeCleanups + 1)
+      expect(harness.mounts.flatMap((mount) => mount.updates)).toEqual([])
+    }
+
+    await transition((model) => ({
+      ...model,
+      views: model.views.map((entry) => entry.id === PAGE
+        ? { ...entry, plugin: 'acme.other', module: '/plugins/acme.other/ui.js' }
+        : entry),
+      modules: {
+        ...model.modules,
+        'acme.other': { url: '/plugins/acme.other/ui.js', apiVersion: PLUGIN_API_VERSION, provides: [PAGE] }
+      }
+    }))
+    await transition((model) => ({
+      ...model,
+      views: model.views.map((entry) => entry.id === PAGE
+        ? { ...entry, module: '/plugins/acme.other/next.js' }
+        : entry)
+    }))
+    await transition((model) => ({
+      ...model,
+      modules: {
+        ...model.modules,
+        'acme.other': { ...model.modules['acme.other']!, url: '/plugins/acme.other/next-ui.js' }
+      }
+    }))
+    await transition((model) => ({
+      ...model,
+      modules: {
+        ...model.modules,
+        'acme.other': { ...model.modules['acme.other']!, apiVersion: '1.0.0' }
+      }
+    }))
+
+    const beforeIdChange = harness.mounts.length
+    const beforeIdCleanup = harness.cleanups.length
+    await harness.render(OTHER, stableInput)
+    await env.win.waitFor(() => harness.container.querySelectorAll('.plugin-slot-body').length === 1)
+    expect(harness.mounts).toHaveLength(beforeIdChange + 1)
+    expect(harness.cleanups).toHaveLength(beforeIdCleanup + 1)
+
+    const beforeRetryMounts = harness.mounts.length
+    const beforeRetryCleanups = harness.cleanups.length
+    await harness.setSlotError(OTHER)
+    const reload = harness.container.querySelector<HTMLButtonElement>(`[data-plugin-slot="${OTHER}"] button`)
+    expect(reload?.textContent).toBe('Reload')
+    await act(async () => reload!.click())
+    await env.win.waitFor(() => harness.mounts.length === beforeRetryMounts + 1)
+    expect(harness.cleanups).toHaveLength(beforeRetryCleanups + 1)
+    expect(harness.mounts.flatMap((mount) => mount.updates)).toEqual([])
+  } finally {
+    await harness.unmount()
+    harness.restoreActEnvironment()
+  }
+  expect(harness.container.querySelector('.plugin-slot-body')).toBeNull()
+  expect(harness.cleanups).toHaveLength(harness.mounts.length)
 })

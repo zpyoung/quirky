@@ -1,12 +1,62 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
+import { mock } from 'node:test'
 import { act } from 'react'
-import { bytesToBase64, GRAPHITE_TERMINAL_PALETTES, TERMINAL_ANSI_KEYS, type TerminalAppearanceMode, type TerminalPalette } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, bytesToBase64, GRAPHITE_TERMINAL_PALETTES, TERMINAL_ANSI_KEYS, type TerminalAppearanceMode, type TerminalPalette } from '@quirky/protocol'
 import type { ITheme } from '@xterm/xterm'
 import { version as xtermVersion } from '@xterm/xterm/package.json'
 import { fakeContext, loadPane, mountPane, paneHandlers, settings, settle, startRecording, stopRecording, terminals, unloadPane, type MountedPane } from './pane-support'
-
+import { trackKittyFlags } from '../../src/window/pane/kitty'
+import { BRACKETED_END, BRACKETED_START, PASTE_CHUNK_BYTES, PASTE_DIRECT_BYTES } from '../../src/window/pane/paste'
 let mounted: MountedPane | null = null
 const text = (value: string) => new TextEncoder().encode(value)
+function deferred<T>() {
+  const { promise, resolve, reject } = Promise.withResolvers<T>()
+  return { promise, resolve, reject }
+}
+let restoreClock: (() => void) | null = null
+
+function fakeClock() {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 })
+  restoreClock = () => {
+    mock.timers.reset()
+    restoreClock = null
+  }
+  return {
+    now: () => Date.now(),
+    advance: async (duration: number) => {
+      await act(async () => {
+        mock.timers.tick(duration)
+        for (let index = 0; index < 8; index += 1) await Promise.resolve()
+      })
+    }
+  }
+}
+
+async function drainClock(): Promise<void> {
+  await act(async () => {
+    for (let index = 0; index < 8; index += 1) {
+      mock.timers.tick(0)
+      await Promise.resolve()
+    }
+  })
+}
+
+async function flushWithClock(pane: MountedPane): Promise<void> {
+  let flushed = false
+  const pending = pane.flush().then(() => { flushed = true })
+  for (let attempt = 0; attempt < 100 && !flushed; attempt += 1) await drainClock()
+  if (!flushed) throw new Error('xterm write callback did not settle under mock timers')
+  await pending
+}
+
+async function pressKey(pane: MountedPane, init: KeyboardEventInit) {
+  await act(async () => void pane.textarea().dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })))
+}
+
+function terminalText(pane: MountedPane): string {
+  const buffer = pane.term().buffer.active
+  return Array.from({ length: buffer.length }, (_, index) => buffer.getLine(index)?.translateToString(true) ?? '').join('\n')
+}
 
 function expectGraphitePalette(theme: ITheme | undefined, appearance: TerminalAppearanceMode, base: Partial<TerminalPalette> = {}) {
   const expected = GRAPHITE_TERMINAL_PALETTES[appearance]
@@ -22,6 +72,7 @@ beforeEach(startRecording)
 afterEach(async () => {
   await mounted?.unmount()
   mounted = null
+  restoreClock?.()
   stopRecording()
   document.body.innerHTML = ''
   document.documentElement.removeAttribute('data-theme')
@@ -57,13 +108,167 @@ describe('attach, replay and input', () => {
     await act(async () => pane.term().input('ls'))
     expect(fake.callsTo('quirky.terminal/write')[0]!.params).toEqual({ session: 's1', data: 'ls' })
   })
-
-  test('replayed queries never answer into the live shell', async () => {
-    const { fake, pane } = await mount({}, paneHandlers({ replay: bytesToBase64(text('\x1b[6n\x1b[>q')) }))
-    await pane.flush()
+  test('a browser key uses one guarded write without a separate claim RPC', async () => {
+    const { fake, pane } = await mount()
+    const identityCalls = fake.callsTo('quirky.session/identity').length
+    const callsBeforeKey = fake.calls.length
     expect(fake.callsTo('quirky.terminal/write')).toEqual([])
-    await act(async () => pane.term().input('x'))
-    expect(fake.callsTo('quirky.terminal/write')).toHaveLength(1)
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
+
+    await pressKey(pane, { key: 'a', keyCode: 65 })
+    await settle()
+
+    expect(fake.calls.slice(callsBeforeKey)).toEqual([{
+      method: 'quirky.terminal/write',
+      params: { session: 's1', data: 'a', expectedIncarnation: 'fixture-s1' }
+    }])
+    expect(fake.callsTo('quirky.session/identity')).toHaveLength(identityCalls)
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
+  })
+  test('the first key claims at time zero and renews only at 30 seconds', async () => {
+    const { fake, pane } = await mount()
+    const clock = fakeClock()
+    expect(clock.now()).toBe(0)
+
+    await pressKey(pane, { key: 'a', keyCode: 65 })
+    await drainClock()
+    const first = { session: 's1', data: 'a', expectedIncarnation: 'fixture-s1' }
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([first])
+
+    await clock.advance(29_999)
+    await pressKey(pane, { key: 'b', keyCode: 66 })
+    await drainClock()
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      first,
+      { session: 's1', data: 'b' }
+    ])
+
+    await clock.advance(1)
+    await pressKey(pane, { key: 'c', keyCode: 67 })
+    await drainClock()
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      first,
+      { session: 's1', data: 'b' },
+      { session: 's1', data: 'c', expectedIncarnation: 'fixture-s1' }
+    ])
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
+  })
+
+  test('human bytes wait for identity and then write in arrival order after the guarded first byte', async () => {
+    const identity = deferred<Record<string, unknown>>()
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.session/identity': () => identity.promise
+    }))
+
+    await pressKey(pane, { key: 'a', keyCode: 65 })
+    await pressKey(pane, { key: 'b', keyCode: 66 })
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+
+    identity.resolve({ sessionId: 's1', processIncarnation: 'late-p', live: true })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's1', data: 'a', expectedIncarnation: 'late-p' },
+      { session: 's1', data: 'b' }
+    ])
+  })
+
+  test.each([
+    ['rejection', 'reject'],
+    ['wrong-session identity', 'wrong-session'],
+    ['empty incarnation', 'empty']
+  ] as const)('does not release queued bytes after %s', async (_name, failure) => {
+    const identity = deferred<Record<string, unknown>>()
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.session/identity': () => identity.promise
+    }))
+    await pressKey(pane, { key: 'x', keyCode: 88 })
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+
+    if (failure === 'reject') identity.reject(new Error('identity unavailable'))
+    else if (failure === 'wrong-session') identity.resolve({ sessionId: 'other', processIncarnation: 'p', live: true })
+    else identity.resolve({ sessionId: 's1', processIncarnation: '', live: true })
+    await settle()
+
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+    expect(fake.toasts.map((toast) => toast.title)).toEqual(['Input blocked'])
+  })
+
+  test('unmounting before identity completes discards the key and ignores late identity', async () => {
+    const identity = deferred<Record<string, unknown>>()
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.session/identity': () => identity.promise
+    }))
+    await pressKey(pane, { key: 'x', keyCode: 88 })
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+
+    await pane.unmount()
+    mounted = null
+    identity.resolve({ sessionId: 's1', processIncarnation: 'late-p', live: true })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+    expect(fake.toasts).toEqual([])
+  })
+
+  test('a rejected guarded write discards waiting human and generated bytes until a new key', async () => {
+    let rejectGuard!: (reason?: unknown) => void
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.terminal/write': (params) => {
+        if (!('expectedIncarnation' in params)) return { ok: true }
+        const { promise, reject } = Promise.withResolvers<{ ok: true }>()
+        rejectGuard = reject
+        return promise
+      }
+    }))
+
+    await pressKey(pane, { key: 'a', keyCode: 65 })
+    await pressKey(pane, { key: 'b', keyCode: 66 })
+    await fake.push(101, '\x1b[>q')
+    await pane.flush()
+    await settle()
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's1', data: 'a', expectedIncarnation: 'fixture-s1' }
+    ])
+
+    rejectGuard(new Error('custody refused'))
+    await settle()
+    expect(fake.toasts.map((toast) => toast.title)).toEqual(['Input blocked'])
+    await pressKey(pane, { key: 'c', keyCode: 67 })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's1', data: 'a', expectedIncarnation: 'fixture-s1' },
+      { session: 's1', data: 'c', expectedIncarnation: 'fixture-s1' }
+    ])
+  })
+
+
+
+  test('replay queries stay muted; live and Kitty replies are legacy before one guarded key', async () => {
+    const queries = '\x1b[6n\x1b[>q\x1b_Ga=z,i=1;payload\x1b\\'
+    const { fake, pane } = await mount({}, paneHandlers({ replay: bytesToBase64(text(queries)) }))
+    await pane.flush()
+    await settle()
+    expect(fake.callsTo('quirky.terminal/write')).toEqual([])
+
+    const identityCalls = fake.callsTo('quirky.session/identity').length
+    await fake.push(101, queries)
+    await pane.flush()
+    await settle()
+    const generated = fake.callsTo('quirky.terminal/write').map((call) => call.params)
+    expect(generated).toContainEqual({ session: 's1', data: '\x1b[1;1R' })
+    expect(generated).toContainEqual({ session: 's1', data: `\x1bP>|xterm.js(${xtermVersion})\x1b\\` })
+    expect(generated.some(({ data }) =>
+      typeof data === 'string' && data.startsWith('\x1b_Gi=1;ENOTSUP:') && data.endsWith('\x1b\\')
+    )).toBe(true)
+    expect(generated.every((params) => !('expectedIncarnation' in params))).toBe(true)
+
+    await pressKey(pane, { key: 'x', keyCode: 88 })
+    await settle()
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      ...generated,
+      { session: 's1', data: 'x', expectedIncarnation: 'fixture-s1' }
+    ])
+    expect(fake.callsTo('quirky.session/identity')).toHaveLength(identityCalls)
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
   })
 
   test('a program asking about synchronized output hears that the pane supports it', async () => {
@@ -99,15 +304,18 @@ describe('attach, replay and input', () => {
 
   test('an attach that is not live shows the final screen and sends no input', async () => {
     const { fake, pane } = await mount({}, paneHandlers({}, { 'quirky.terminal/attach': () => ({ streamId: 9, replay: bytesToBase64(text('bye')), live: false }) }))
+    await pressKey(pane, { key: 'a', keyCode: 65 })
     await act(async () => pane.term().input('ls'))
     expect(fake.callsTo('quirky.terminal/write')).toEqual([])
     expect(fake.streams.has(9)).toBe(false)
   })
 
-  test('a failed attach writes the reason into the pane', async () => {
+  test('a failed attach shows a shared error without adding synthetic terminal output', async () => {
     const { pane } = await mount({}, paneHandlers({}, { 'quirky.terminal/attach': () => Promise.reject(new Error('no such session')) }))
     await pane.flush()
-    expect(pane.term().buffer.active.getLine(1)!.translateToString(true)).toContain('Could not attach: no such session')
+    expect(pane.element.querySelector('[data-terminal-connection-state] .ui-inline-error')?.textContent).toBe('Could not attach: no such session')
+    expect(pane.element.querySelector('[data-terminal-connection-state] .ui-notice-line')).toBeNull()
+    expect(terminalText(pane)).not.toContain('Could not attach: no such session')
   })
 
   test('unmounting detaches the stream and stops listening to it', async () => {
@@ -119,13 +327,355 @@ describe('attach, replay and input', () => {
     expect(fake.streams.has(101)).toBe(false)
   })
 
-  test('each attach gets its own stream', async () => {
+  test('each attach gets its own stream and guarded process incarnation', async () => {
     const { fake, pane } = await mount()
+    await pressKey(pane, { key: 'a', keyCode: 65 })
+    await settle()
     await pane.rerender({ sessionId: 's2' })
+    await settle()
+    await pressKey(pane, { key: 'b', keyCode: 66 })
     await settle()
     const ids = fake.callsTo('quirky.terminal/attach').map((call) => call.params.session)
     expect(ids).toEqual(['s1', 's2'])
     expect(fake.streams.has(102)).toBe(true)
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's1', data: 'a', expectedIncarnation: 'fixture-s1' },
+      { session: 's2', data: 'b', expectedIncarnation: 'fixture-s2' }
+    ])
+  })
+})
+describe('output loss recovery', () => {
+  test('resubscribes after lag, resets Kitty state and replays behind the input gate', async () => {
+    const initialReplay = bytesToBase64(text('old\r\n\x1b[>5u\x1b_Ga=T,f=100;AAAA'))
+    const historyLines = 321
+    const { fake, pane } = await mount(
+      { settings: settings({ scrollback: historyLines }) },
+      paneHandlers({ replay: initialReplay }, {
+        'quirky.terminal/resync': () => ({ streamId: 102, replay: bytesToBase64(text('new\x1b[6n')), live: true })
+      })
+    )
+    await pane.flush()
+    await pressKey(pane, { key: 'Enter', keyCode: 13, shiftKey: true })
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's1', data: '\x1b[13;2u', expectedIncarnation: 'fixture-s1' }
+    ])
+
+    const clock = fakeClock()
+    await fake.lag(101)
+    expect(fake.streams.has(101)).toBe(false)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+    await clock.advance(249)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+    await clock.advance(1)
+    await flushWithClock(pane)
+
+    expect(fake.callsTo('quirky.terminal/resync').map((call) => call.params)).toEqual([{ streamId: 101, historyLines }])
+    expect(fake.streams.has(102)).toBe(true)
+    expect(terminalText(pane)).toContain('new')
+    expect(terminalText(pane)).not.toContain('old')
+    await pressKey(pane, { key: 'Enter', keyCode: 13, shiftKey: true })
+    await drainClock()
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's1', data: '\x1b[13;2u', expectedIncarnation: 'fixture-s1' },
+      { session: 's1', data: '\x1b\r', expectedIncarnation: 'fixture-s1' }
+    ])
+    expect(fake.callsTo('quirky.session/identity')).toHaveLength(1)
+    expect(fake.callsTo('quirky.terminal/userInput')).toEqual([])
+  })
+  test('a replay interruption closes a bracketed paste after its opener', async () => {
+    const body = Promise.withResolvers<{ ok: true }>()
+    const bodyStarted = Promise.withResolvers<void>()
+    const replayHeld = Promise.withResolvers<void>()
+    let holdReplay = false
+    let releaseReplay!: () => void
+    const handlers = paneHandlers({}, {
+      'quirky.terminal/write': (params) => {
+        if (params.data === BRACKETED_START || params.data === BRACKETED_END) return { ok: true }
+        if (params.data.startsWith('x')) {
+          bodyStarted.resolve()
+          return body.promise
+        }
+        return { ok: true }
+      },
+      'quirky.terminal/resync': () => {
+        holdReplay = true
+        return { streamId: 102, replay: bytesToBase64(text('resynced')), live: true }
+      }
+    })
+    const { fake, pane } = await mount({}, handlers)
+    await act(async () => void pane.term().write('\x1b[?2004h'))
+    await pane.flush()
+
+    const terminal = pane.term()
+    const originalWrite = terminal.write
+    terminal.write = (data, callback) => {
+      if (holdReplay && data === '' && callback) {
+        holdReplay = false
+        releaseReplay = callback
+        replayHeld.resolve()
+        originalWrite.call(terminal, data)
+        return
+      }
+      originalWrite.call(terminal, data, callback)
+    }
+    const clock = fakeClock()
+    const paste = pane.handle().paste('x'.repeat(PASTE_DIRECT_BYTES + 100))
+    await bodyStarted.promise
+    await fake.lag(101)
+    await clock.advance(250)
+    await replayHeld.promise
+
+    body.resolve({ ok: true })
+    await paste
+    await flushWithClock(pane)
+    releaseReplay()
+    terminal.write = originalWrite
+
+    const params = fake.callsTo('quirky.terminal/write').map((call) => call.params)
+    expect(params).toHaveLength(3)
+    expect(params[0]).toEqual({ session: 's1', data: BRACKETED_START, expectedIncarnation: 'fixture-s1' })
+    expect(params[1]).toEqual({ session: 's1', data: 'x'.repeat(PASTE_CHUNK_BYTES) })
+    expect(params[2]).toEqual({ session: 's1', data: BRACKETED_END })
+    expect(fake.toasts).toEqual([])
+  })
+  test('fallback reattach discards chunks and cleanup from the previous paste attachment', async () => {
+    const body = Promise.withResolvers<{ ok: true }>()
+    const bodyStarted = Promise.withResolvers<void>()
+    const handlers = paneHandlers({}, {
+      'quirky.terminal/write': (params) => {
+        if (params.data === BRACKETED_START || params.data === BRACKETED_END) return { ok: true }
+        if (params.data.startsWith('x')) {
+          bodyStarted.resolve()
+          return body.promise
+        }
+        return { ok: true }
+      },
+      'quirky.terminal/resync': () => { throw new RpcError(RpcErrorCode.NotFound, 'no such stream: 101') }
+    })
+    const { fake, pane } = await mount({}, handlers)
+    await act(async () => void pane.term().write('\x1b[?2004h'))
+    await pane.flush()
+    const clock = fakeClock()
+    const paste = pane.handle().paste('x'.repeat(PASTE_DIRECT_BYTES + 100))
+    await bodyStarted.promise
+    await fake.lag(101)
+    await clock.advance(250)
+    await drainClock()
+
+    body.resolve({ ok: true })
+    await paste
+    const params = fake.callsTo('quirky.terminal/write').map((call) => call.params)
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(2)
+    expect(fake.callsTo('quirky.session/identity')).toHaveLength(2)
+    expect(params).toHaveLength(2)
+    expect(params[0]).toEqual({ session: 's1', data: BRACKETED_START, expectedIncarnation: 'fixture-s1' })
+    expect(params[1]).toEqual({ session: 's1', data: 'x'.repeat(PASTE_CHUNK_BYTES) })
+  })
+
+  test('bounds a continuous lag flood and converges after it ends', async () => {
+    let nextStream = 101
+    let replay = 0
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.terminal/resync': () => ({
+        streamId: ++nextStream,
+        replay: bytesToBase64(text(`replay-${++replay}`)),
+        live: true
+      })
+    }))
+    const clock = fakeClock()
+    await fake.lag(101)
+    await clock.advance(250)
+    await flushWithClock(pane)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+
+    for (let index = 0; index < 4; index += 1) {
+      await fake.lag(102 + index)
+      await clock.advance(2_000)
+      await flushWithClock(pane)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(index + 2)
+    }
+    await fake.lag(106)
+    await clock.advance(1_750)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(5)
+    await clock.advance(250)
+    await flushWithClock(pane)
+
+    expect(clock.now()).toBe(10_250)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(6)
+    expect(fake.streams.has(107)).toBe(true)
+    expect(terminalText(pane)).toContain('replay-6')
+  })
+
+  test('fallback reattach replaces the cached process incarnation before the next human write', async () => {
+    let identityGeneration = 0
+    const handlers = paneHandlers({ replay: bytesToBase64(text('attached again')) }, {
+      'quirky.session/identity': (params) => ({
+        sessionId: params.session,
+        processIncarnation: `fallback-${++identityGeneration}`,
+        live: true
+      }),
+      'quirky.terminal/resync': () => { throw new RpcError(RpcErrorCode.NotFound, 'no such stream: 101') }
+    })
+    const { fake, pane } = await mount({}, handlers)
+    const clock = fakeClock()
+    await fake.lag(101)
+    await clock.advance(250)
+    await flushWithClock(pane)
+    await drainClock()
+    await pressKey(pane, { key: 'a', keyCode: 65 })
+    await drainClock()
+
+    expect(fake.callsTo('quirky.terminal/resync').map((call) => call.params.streamId)).toEqual([101])
+    expect(fake.callsTo('quirky.terminal/attach')).toHaveLength(2)
+    expect(fake.streams.has(102)).toBe(true)
+    expect(terminalText(pane)).toContain('attached again')
+    expect(fake.callsTo('quirky.session/identity')).toHaveLength(2)
+    expect(fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's1', data: 'a', expectedIncarnation: 'fallback-2' }
+    ])
+  })
+
+  test('shows attach failure after a NotFound fallback fails', async () => {
+    const handlers = paneHandlers()
+    const attach = handlers['quirky.terminal/attach']!
+    let attaches = 0
+    handlers['quirky.terminal/attach'] = (params) => {
+      if (attaches++ > 0) throw new Error('attach unavailable')
+      return attach(params)
+    }
+    handlers['quirky.terminal/resync'] = () => { throw new RpcError(RpcErrorCode.NotFound, 'no such stream: 101') }
+    const { fake, pane } = await mount({}, handlers)
+    const clock = fakeClock()
+    await fake.lag(101)
+    await clock.advance(250)
+    await flushWithClock(pane)
+
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+    expect(pane.element.querySelector('[data-terminal-connection-state] .ui-inline-error')?.textContent).toBe('Could not attach: attach unavailable')
+    expect(terminalText(pane)).not.toContain('Could not attach: attach unavailable')
+    expect(fake.streams.has(101)).toBe(false)
+  })
+  test('detaches an ended replacement stream after replaying its final screen', async () => {
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.terminal/resync': () => ({ streamId: 102, replay: bytesToBase64(text('final screen')), live: false })
+    }))
+    const clock = fakeClock()
+    await fake.lag(101)
+    await clock.advance(250)
+    await flushWithClock(pane)
+
+    expect(terminalText(pane)).toContain('final screen')
+    expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toContain(102)
+  })
+
+
+  test('retries transient resync failures three times at two-second intervals, then stops', async () => {
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.terminal/resync': () => { throw new RpcError(RpcErrorCode.Internal, 'host busy') }
+    }))
+    const clock = fakeClock()
+    await fake.lag(101)
+    await clock.advance(250)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+
+    for (let retry = 1; retry <= 3; retry += 1) {
+      await clock.advance(1_999)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(retry)
+      await clock.advance(1)
+      expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(retry + 1)
+    }
+    expect(fake.callsTo('quirky.terminal/resync').map((call) => call.params.streamId)).toEqual([101, 101, 101, 101])
+    await clock.advance(5_000)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(4)
+    expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toContain(101)
+    restoreClock?.()
+    await pane.flush()
+    expect(pane.element.querySelector('[data-terminal-connection-state] .ui-inline-error')?.textContent).toBe('Could not resync: host busy')
+    expect(terminalText(pane)).not.toContain('Could not resync: host busy')
+  })
+
+  test('cancels a pending resync timer when the pane is disposed', async () => {
+    const { fake, pane } = await mount()
+    const clock = fakeClock()
+    await fake.lag(101)
+    await pane.unmount()
+    mounted = null
+    await clock.advance(250)
+
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(0)
+    expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toContain(101)
+    expect(fake.streams.has(101)).toBe(false)
+  })
+
+  test('detaches the replacement stream when resync settles after disposal', async () => {
+    let resolveResync!: (value: Record<string, unknown>) => void
+    const pending = new Promise<Record<string, unknown>>((resolve) => { resolveResync = resolve })
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.terminal/resync': () => pending
+    }))
+    const clock = fakeClock()
+    await fake.lag(101)
+    await clock.advance(250)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+    await pane.unmount()
+    mounted = null
+    resolveResync({ streamId: 102, replay: '', live: true })
+    await drainClock()
+
+    expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toContain(102)
+    expect(fake.streams.has(102)).toBe(false)
+  })
+  test('detaches the original stream if an in-flight resync is rejected after disposal', async () => {
+    let rejectResync!: (reason: unknown) => void
+    const pending = new Promise<Record<string, unknown>>((_resolve, reject) => { rejectResync = reject })
+    const { fake, pane } = await mount({}, paneHandlers({}, {
+      'quirky.terminal/resync': () => pending
+    }))
+    const clock = fakeClock()
+    await fake.lag(101)
+    await clock.advance(250)
+    await flushWithClock(pane)
+    expect(fake.callsTo('quirky.terminal/resync')).toHaveLength(1)
+
+    await pane.unmount()
+    mounted = null
+    expect(fake.callsTo('quirky.terminal/detach').map((call) => call.params.streamId)).toContain(101)
+    rejectResync(new RpcError(RpcErrorCode.Internal, 'host busy'))
+    await drainClock()
+
+    expect(fake.callsTo('quirky.terminal/detach').filter((call) => call.params.streamId === 101)).toHaveLength(1)
+  })
+})
+
+describe('Kitty terminal reset', () => {
+  test('ESC c resets kitty flags and returns false for xterm RIS handling', () => {
+    const csi: ((params: (number | number[])[]) => boolean)[] = []
+    let esc: (() => boolean) | undefined
+    let escId: { intermediates?: string; final: string } | undefined
+    let disposals = 0
+    const parser: Parameters<typeof trackKittyFlags>[0] = {
+      registerCsiHandler: (_id, callback) => {
+        csi.push(callback)
+        return { dispose: () => { disposals += 1 } }
+      },
+      registerEscHandler: (id, callback) => {
+        escId = id
+        esc = callback
+        return { dispose: () => { disposals += 1 } }
+      }
+    }
+    const tracked = trackKittyFlags(parser)
+    csi[0]!([5])
+    expect(tracked.kitty.flags).toBe(5)
+    expect(escId).toEqual({ final: 'c' })
+    expect(esc!()).toBe(false)
+    expect(tracked.kitty.flags).toBe(0)
+    tracked.dispose()
+    expect(disposals).toBe(4)
+
+    const legacy = trackKittyFlags({ registerCsiHandler: () => ({ dispose: () => {} }) })
+    expect(legacy.kitty.flags).toBe(0)
+    legacy.dispose()
   })
 })
 

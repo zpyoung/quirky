@@ -157,7 +157,7 @@ if (mode === 'tamper-image') {
   const metadata = JSON.parse(prompt.slice(prompt.indexOf(marker) + marker.length));
   fs.appendFileSync(metadata.imagePath, 'tampered');
 }
-let score = mode === 'bad-score' ? 101 : mode === 'boundary' ? 85 : mode === 'low-dark' && prompt.includes('\"theme\":\"dark\"') ? 84 : 100;
+let score = mode === 'bad-score' || mode === 'fenced-bad-score' ? 101 : mode === 'boundary' ? 85 : mode === 'low-dark' && prompt.includes('\"theme\":\"dark\"') ? 84 : 100;
 const assessment = {
   targetVisible: mode !== 'target-hidden',
   imagesRead: mode !== 'images-not-read',
@@ -165,7 +165,18 @@ const assessment = {
   reasons: ['The target surface and both images were inspected.', 'Spacing and component styling are compared against the approved theme.']
 };
 process.stderr.write('  ▶ resolved ' + provider + '/' + model + ':high (alias gemini)' + String.fromCharCode(10));
-process.stdout.write(mode === 'invalid-json' ? '{"targetVisible": true,' + String.fromCharCode(10) : JSON.stringify(assessment) + String.fromCharCode(10));
+const newline = String.fromCharCode(10);
+const fence = String.fromCharCode(96).repeat(3);
+let response = mode === 'invalid-json' ? '{"targetVisible": true,' : JSON.stringify(assessment);
+if (mode.startsWith('fenced-')) {
+  const tag = mode === 'fenced-plain' ? '' : mode === 'fenced-other-language' ? 'javascript' : 'json';
+  response = ' ' + newline + fence + tag + ' ' + newline + response + newline + ' ' + fence + newline + ' ';
+  if (mode === 'fenced-nested') response = fence + 'json' + newline + response + newline + fence;
+  if (mode === 'fenced-duplicate') response += response;
+}
+if (mode === 'prose-prefix' || mode === 'fenced-prose-prefix') response = 'Assessment:' + newline + response;
+if (mode === 'prose-suffix' || mode === 'fenced-prose-suffix') response += newline + 'Assessment complete.';
+process.stdout.write(response + newline);
 `
 }
 
@@ -312,6 +323,18 @@ test('the reviewer is told host:popups deliberately shows several popups togethe
   expect(prompt).toMatch(/host:popups target deliberately shows several popups at once/i)
 })
 
+test('only browser page reviews exclude unavailable native page content', async () => {
+  await reviewManifest(manifest('view:quirky.browser/page'), options())
+  const prompts = readFileSync(promptLogFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as string)
+  expect(prompts).toHaveLength(2)
+  for (const prompt of prompts) {
+    expect(prompt).toContain("The view:quirky.browser/page capture reviews only the browser view's own chrome around the native pane; native web page content is unavailable in browser-rendered captures and its absence is not a defect.")
+  }
+  rmSync(promptLogFile)
+  await reviewManifest(manifest(), options())
+  expect(readFileSync(promptLogFile, 'utf8')).not.toContain('native web page content is unavailable')
+})
+
 test('invalid JSON and out-of-range scores are reviewer errors', async () => {
   for (const mode of ['invalid-json', 'bad-score']) {
     setEnv('UI_REVIEW_FAKE_MODE', mode)
@@ -319,6 +342,28 @@ test('invalid JSON and out-of-range scores are reviewer errors', async () => {
     expect(report.status).toBe('error')
     expect(report.captures).toHaveLength(0)
   }
+})
+
+test.each(['fenced-json', 'fenced-plain'])('a valid assessment inside one outer fence parses (%s)', async (mode) => {
+  setEnv('UI_REVIEW_FAKE_MODE', mode)
+  const report = await reviewManifest(manifest(), options())
+  expect(report.status).toBe('passed')
+  expect(report.captures.map((capture) => capture.score)).toEqual([100, 100])
+})
+
+test('a fenced assessment still rejects an out-of-range score', async () => {
+  setEnv('UI_REVIEW_FAKE_MODE', 'fenced-bad-score')
+  const report = await reviewManifest(manifest(), options())
+  expect(report.status).toBe('error')
+  expect(report.captures).toHaveLength(0)
+  expect(report.failures.join(' ')).toContain('between 0 and 100')
+})
+
+test.each(['prose-prefix', 'prose-suffix', 'fenced-prose-prefix', 'fenced-prose-suffix', 'fenced-nested', 'fenced-duplicate', 'fenced-other-language'])('non-JSON framing is still rejected (%s)', async (mode) => {
+  setEnv('UI_REVIEW_FAKE_MODE', mode)
+  const report = await reviewManifest(manifest(), options())
+  expect(report.status).toBe('error')
+  expect(report.captures).toHaveLength(0)
 })
 
 test('same-family resolved reviewer is rejected', async () => {

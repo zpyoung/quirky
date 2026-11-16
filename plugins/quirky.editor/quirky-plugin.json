@@ -1,6 +1,6 @@
 {
   "id": "quirky.editor",
-  "apiVersion": "1.1.0",
+  "apiVersion": "1.12.0",
   "name": "Editor",
   "version": "0.1.0",
   "description": "Worktree-scoped file editing, recovery, search and explorer services.",
@@ -73,7 +73,8 @@
             "path": { "type": "string", "description": "Required non-empty worktree-relative path; an authorized absolute path is also accepted." },
             "preview": { "type": "boolean", "description": "Open as the replaceable Explorer preview tab." },
             "pinned": { "type": "boolean" },
-            "focus": { "type": "boolean", "description": "Focus the new tab; defaults false for API callers." },
+            "focus": { "type": "boolean", "description": "Select the opened tab in its worktree's workspace; defaults false for API callers and true when window is supplied." },
+            "window": { "type": "integer", "minimum": 1, "description": "Exact live UI connection ID to navigate to the file's worktree after the tab is selected. Implies focus; refused with focus false. Omitted, no window changes what it shows." },
             "mode": { "type": "string", "enum": ["source", "rich", "preview"] },
             "group": { "type": "string", "description": "Non-empty terminal tab group when supplied." },
             "line": { "type": "integer", "minimum": 1 },
@@ -525,6 +526,7 @@
       {"id":"documentRoot","description":"Resolve an authorized document root. Explicit floating selects only the editor-owned profile notes directory, never HOME or another workspace.","readOnly":true,"params":{"type":"object","properties":{"worktree":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"id":{"type":"string"},"path":{"type":"string"}},"required":["id","path"],"additionalProperties":false}},
       {
         "id": "markdown",
+        "timeout": "30m",
         "description": "Source-preserving Markdown capabilities, edits, links, templates, search, TOC, safe detached rendering and export.",
         "params": {
           "type": "object",
@@ -665,6 +667,7 @@
       },
       {
         "id": "notebook",
+        "timeout": "24h",
         "description": "Parse and edit notebook cells, inspect environments, manage trust and run the local kernel. Install/venv actions use a conditional setup confirmation.",
         "destructive": true,
         "confirm": "Set up the requested local notebook environment?",
@@ -745,6 +748,8 @@
       },
       {"id":"find","description":"Open Find on the focused editor surface.","params":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Surface-specific union: source {opened:true,query?}; rich Markdown {opened:true,replace:false,query?,total?}; notebook {opened:true} or {opened:true,query,matches,truncated}; CSV {opened:true} or {filtered:true,query}; PDF {opened:true} or {found,page,totalPages}."}},"required":["result"],"additionalProperties":false}},
       {"id":"replace","description":"Open Replace on the focused editor surface.","params":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"Surface-specific union: source {opened:true,query?}; rich/preview Markdown {opened:true,replace:true,query?,total?}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"go-to-definition","description":"Go to the definition at the focused source editor caret, or at a supplied line and column (both or neither). Navigation reads saved TypeScript, JavaScript and Python files.","params":{"type":"object","properties":{"line":{"type":"integer","minimum":1},"column":{"type":"integer","minimum":1}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{kind:'definition',status:'opened',path,line,column}, {kind:'definition',status:'list',count,truncated}, or {kind:'definition',status:'empty'}."}},"required":["result"],"additionalProperties":false}},
+      {"id":"find-references","description":"Find references at the focused source editor caret, or at a supplied line and column (both or neither). Navigation reads saved TypeScript, JavaScript and Python files.","params":{"type":"object","properties":{"line":{"type":"integer","minimum":1},"column":{"type":"integer","minimum":1}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{kind:'references',status:'list',count,truncated} or {kind:'references',status:'empty'}."}},"required":["result"],"additionalProperties":false}},
       {"id":"markdown-preview","description":"Open the focused Markdown document in Preview.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,bufferId,tabId|null}."}},"required":["result"],"additionalProperties":false}},
       {"id":"toggle-word-wrap","description":"Toggle word wrap in the focused source editor.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{wordWrap:boolean}."}},"required":["result"],"additionalProperties":false}},
       {"id":"copy-context","description":"Copy the focused selection with its document path and line range.","params":{"type":"object","properties":{},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{copied:true,path,lines}."}},"required":["result"],"additionalProperties":false}},
@@ -757,9 +762,9 @@
       {"id":"open-markdown","description":"Open a Markdown document in an exact workspace tab group.","params":{"type":"object","properties":{"worktree":{"type":"string"},"group":{"type":"string"}},"additionalProperties":false},"result":{"type":"object","properties":{"result":{"description":"{opened:true,dialog:'open-markdown'}."}},"required":["result"],"additionalProperties":false}}
     ],
     "event": [
-      { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false } },
+      { "id": "changed", "description": "Editor state changed; clients should re-fetch authoritative state.", "data": { "type": "object", "properties": { "revision": { "type": "integer", "minimum": 0 } }, "required": ["revision"], "additionalProperties": false }, "coalesce": [] },
       { "id": "saved", "description": "A save wrote a file. beforeHash is the previous content hash, or null when the file did not exist or was overwritten without a baseline; afterHash is the sha-256 hex of the bytes written.", "data": { "type": "object", "properties": { "path": { "type": "string" }, "beforeHash": { "description": "String or null; the schema subset has no union type." }, "afterHash": { "type": "string" } }, "required": ["path", "beforeHash", "afterHash"], "additionalProperties": false } },
-      { "id": "explorerChanged", "description": "Filesystem tree changed for a worktree; clients should reload its root, expanded directories and active filename filter.", "data": { "type": "object", "properties": { "worktreeId": { "type": "string" } }, "required": ["worktreeId"], "additionalProperties": false } }
+      { "id": "explorerChanged", "description": "Filesystem tree changed for a worktree; clients should reload its root, expanded directories and active filename filter.", "data": { "type": "object", "properties": { "worktreeId": { "type": "string" } }, "required": ["worktreeId"], "additionalProperties": false }, "worktree": "worktreeId", "coalesce": [] }
     ],
     "view": [
       { "id": "document", "title": "Editor Document", "description": "A worktree file rendered by the matching editor surface." }
@@ -789,17 +794,37 @@
       { "id": "editorSidebarWidth", "type": "number", "default": 350, "minimum": 220, "maximum": 900, "title": "Editor Sidebar Width", "description": "Preferred sidebar width in CSS pixels." }
     ],
     "command": [
+      {
+        "id": "ui-control",
+        "title": "Editor UI Control",
+        "palette": false,
+        "description": "Deliver a validated local action to a mounted Editor surface.",
+        "args": {
+          "type": "object",
+          "properties": {
+            "surface": { "type": "string" },
+            "target": { "type": "string" },
+            "generation": { "type": "string" },
+            "action": { "type": "string" },
+            "data": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["surface", "target", "generation", "action"],
+          "additionalProperties": false
+        }
+      },
       { "id": "open", "title": "Open File", "description": "Open an authorized worktree-relative file.", "args": { "type": "object", "properties": { "worktree": { "type": "string" }, "path": { "type": "string" }, "focus": { "type": "boolean" }, "preview": { "type": "boolean" } }, "required": ["path"], "additionalProperties": false } },
       { "id": "quick-open", "title": "Go to File", "description": "Open Quick Open." },
       { "id": "search", "title": "Search Files", "description": "Search file contents." },
       { "id": "save", "title": "Save File", "description": "Save the focused editor draft; untitled Markdown opens the relative-path Save As dialog." },
-      { "id": "close", "title": "Close Editor Tab", "description": "Close the focused editor tab after its dirty-close decision." },
+      { "id": "close", "title": "Close Editor Tab", "description": "Close the focused editor tab after its dirty-close decision.", "args": { "type": "object", "properties": { "bufferId": { "type": "string" }, "tabId": { "type": "string" } }, "additionalProperties": false } },
       { "id": "close-all", "title": "Close All Editor Tabs", "description": "Close editor tabs with per-buffer dirty decisions." },
       { "id": "reopen", "title": "Reopen Closed Editor Tab", "description": "Reopen the last eligible closed editor tab." },
       { "id": "explorer", "title": "Show Explorer", "description": "Open the Explorer sidebar panel." },
       { "id": "source-control", "title": "Show Source Control", "description": "Open the public Source Control contribution." },
       {"id":"find","title":"Find","description":"Open Find on the focused editor surface.","args":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false}},
       {"id":"replace","title":"Replace","description":"Open Replace on the focused editor surface.","args":{"type":"object","properties":{"query":{"type":"string"}},"additionalProperties":false}},
+      {"id":"go-to-definition","title":"Go to Definition","description":"Go to a saved source symbol's definition. Supply both line and column, or neither to use the caret.","args":{"type":"object","properties":{"line":{"type":"integer","minimum":1},"column":{"type":"integer","minimum":1}},"additionalProperties":false}},
+      {"id":"find-references","title":"Find References","description":"List references to a saved source symbol. Supply both line and column, or neither to use the caret.","args":{"type":"object","properties":{"line":{"type":"integer","minimum":1},"column":{"type":"integer","minimum":1}},"additionalProperties":false}},
       {"id":"markdown-preview","title":"Markdown Preview","description":"Open the focused Markdown document in Preview."},
       {"id":"toggle-word-wrap","title":"Toggle Word Wrap","description":"Toggle word wrap in the focused source editor."},
       {"id":"copy-context","title":"Copy Context","description":"Copy the focused selection with its document path and line range."},
@@ -822,6 +847,8 @@
       { "id": "source-control", "key": "mod+shift+g", "command": "source-control", "description": "Show Source Control", "when": "editorWorkspaceFocus" },
       {"id":"find","key":"mod+f","command":"find","description":"Find in the focused editor surface.","when":"editorFocus"},
       {"id":"replace","key":"mod+alt+f","command":"replace","description":"Replace in the focused editor surface.","when":"editorFocus"},
+      {"id":"go-to-definition","key":"f12","command":"go-to-definition","description":"Go to Definition.","when":"editorFocus"},
+      {"id":"find-references","key":"shift+f12","command":"find-references","description":"Find References.","when":"editorFocus"},
       {"id":"markdown-preview","key":"mod+shift+v","command":"markdown-preview","description":"Open Markdown Preview.","when":"editorFocus"},
       {"id":"toggle-word-wrap","key":"alt+z","command":"toggle-word-wrap","description":"Toggle Word Wrap.","when":"editorFocus"},
       {"id":"copy-context","key":"mod+alt+c","command":"copy-context","description":"Copy Selection Context.","when":"editorFocus"},
@@ -857,6 +884,8 @@
       { "id": "viewer", "words": "viewer", "summary": "inspect or operate a file viewer", "method": "viewer" },
       {"id":"find","words":"find","summary":"Open Find on the focused editor surface","method":"find"},
       {"id":"replace","words":"replace","summary":"Open Replace on the focused editor surface","method":"replace"},
+      {"id":"go-to-definition","words":"go-to-definition","summary":"Go to the focused saved source symbol's definition","method":"go-to-definition"},
+      {"id":"find-references","words":"find-references","summary":"Find references to the focused saved source symbol","method":"find-references"},
       {"id":"markdown-preview","words":"markdown-preview","summary":"Open the focused Markdown document in Preview","method":"markdown-preview"},
       {"id":"toggle-word-wrap","words":"toggle-word-wrap","summary":"Toggle word wrap in the focused source editor","method":"toggle-word-wrap"},
       {"id":"copy-context","words":"copy-context","summary":"Copy the focused selection with its document path and line range","method":"copy-context"},

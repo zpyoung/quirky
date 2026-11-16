@@ -80,6 +80,20 @@ describe('SC-48: a confirmed delivery shows a success toast', () => {
     expect(pastes(result.child.session)).toHaveLength(1)
     expect((await lastToast(result.child.session)).title).toBe('The handoff brief was sent.')
   })
+
+  test('a turn that starts and ends inside one window is delivered', async () => {
+    const s = await opened()
+    stoppers.push(
+      rig.onSpawn((id) => {
+        // Let child startup settle before driving both hooks inside the real 250 ms daemon window.
+        setTimeout(() => void rig.eventually(() => rig.turn(id, 'the handed off brief', 'done')), 450)
+      })
+    )
+    const result = await handoff(s.id, 'blind-bot')
+
+    expect(result.delivery).toBe('delivered')
+    expect(pastes(result.child.session)).toHaveLength(1)
+  })
 })
 
 describe('SC-49: a failed delivery is retried once by itself', () => {

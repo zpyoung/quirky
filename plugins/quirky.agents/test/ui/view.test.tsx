@@ -304,9 +304,28 @@ describe('SC-40: expanding a row edits that agent', () => {
     const chevron = v.button('Expand agent settings', v.row('claude')!)!
     expect(chevron.getAttribute('aria-expanded')).toBe('false')
     await v.click(chevron)
+    expect(fake.executed.at(-1)).toEqual({
+      id: 'command:quirky.agents/agent-details',
+      args: { agent: 'claude', expanded: true }
+    })
+    expect(v.button('Collapse agent settings', v.row('claude')!)!.getAttribute('aria-expanded')).toBe('true')
     expect(v.row('claude')!.querySelector('[aria-label="Arguments"]')).not.toBeNull()
-    await v.click(v.button('Collapse agent settings', v.row('claude')!))
+
+    await fake.command('agent-details', { agent: 'claude', expanded: false })
+    expect(v.button('Expand agent settings', v.row('claude')!)!.getAttribute('aria-expanded')).toBe('false')
     expect(v.row('claude')!.querySelector('[aria-label="Arguments"]')).toBeNull()
+  })
+
+  test('an agent expanded before the settings view mounts is rendered expanded', async () => {
+    agents = new FakeAgents()
+    fake = fakeAgentsContext(agents)
+    activate(fake.context)
+    await fake.command('agent-details', { agent: 'claude', expanded: true })
+
+    const v = await mountSettings(fake)
+    view = v
+    expect(v.button('Collapse agent settings', v.row('claude')!)!.getAttribute('aria-expanded')).toBe('true')
+    expect(v.row('claude')!.querySelector('[aria-label="Arguments"]')).not.toBeNull()
   })
 })
 
@@ -380,22 +399,31 @@ describe('keeping the listing current', () => {
     expect(defaultButtons(v).at(-1)!.getAttribute('aria-pressed')).toBe('true')
   })
 
-  test('a failed first load says so and can be retried', async () => {
-    agents = new FakeAgents()
-    let fail = true
-    fake = fakeAgentsContext(agents, {
-      'quirky.agents/list': () => {
-        if (fail) throw new Error('daemon unavailable')
-        return agents.listing()
-      }
-    })
+  test('initial loading uses the shared NoticeLine while the list is pending', async () => {
+    const gate = Promise.withResolvers<void>()
+    agents.listGate = gate.promise
+    fake = fakeAgentsContext(agents)
     activate(fake.context)
     view = await mountSettings(fake)
-    expect(view.q('[role="alert"]')!.textContent).toContain('daemon unavailable')
-    fail = false
+
+    expect(view.q('.ui-notice-line')?.textContent).toBe('Loading agents…')
+    expect(view.q('.ui-help-text')).toBeNull()
+    gate.resolve()
+    await settle()
+  })
+
+  test('a failed first load says so and can be retried', async () => {
+    agents = new FakeAgents()
+    agents.failNextList = new Error('daemon unavailable')
+    fake = fakeAgentsContext(agents)
+    activate(fake.context)
+    view = await mountSettings(fake)
+    expect(view.q('.ui-inline-error[role="alert"]')?.textContent).toContain('daemon unavailable')
+    expect(view.q('.ui-inline-error__dismiss')).toBeNull()
+    expect(view.q('.ui-error-text')).toBeNull()
     await view.click(view.button('Try again'))
     await settle()
-    expect(view.q('[role="alert"]')).toBeNull()
+    expect(view.q('.ui-inline-error[role="alert"]')).toBeNull()
     expect(section(view, 'Installed').textContent).toContain('4 detected')
   })
 

@@ -28,7 +28,10 @@ export type ClientConn = {
   streams: Map<number, string>
   nextStreamId: number
   sendText(text: string): void
+  /** Removes an unsent terminal-lag marker when its stream closes. */
+  closeStreamOutput?(streamId: number): void
+  /** Returns false when an output frame was not accepted by the transport. */
+  sendBinary(bytes: Uint8Array): boolean | void
   /** streamId -> closes that stream; run on disconnect. */
   streamClosers: Map<number, () => void>
-  sendBinary(bytes: Uint8Array): void
 }

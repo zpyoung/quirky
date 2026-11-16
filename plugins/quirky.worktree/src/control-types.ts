@@ -70,6 +70,7 @@ export type WorktreeControl = Worktree & {
   externalVisible: boolean
   externalVisibility: Exclude<ExternalVisibility, 'inherit'>
   externalInboxSuppressed: boolean
+  tagIds: string[]
 }
 
 export type WorktreeSleepPreviewRow = {

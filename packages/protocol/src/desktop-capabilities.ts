@@ -17,7 +17,7 @@ export type DesktopWindowOpenRequest = { request: DesktopWindowRequest; ownerShe
 export type DesktopWindowAttachRequest = { windowId: string; ownerShellConnId: number }
 export type DesktopWindowUpdateRequest = { windowId: string; view: string | null; input?: unknown; title?: string }
 export type DesktopWindowClosedRequest = { windowId: string; ownerShellConnId: number }
-export type DesktopWindowRunOwnerCommandRequest = { windowId: string; id: string; args?: unknown }
+export type DesktopWindowRunOwnerCommandRequest = { windowId: string; id: string; args?: unknown; activateOwner?: boolean }
 export type DesktopWindowRunOwnerCommandResult = { result: unknown; activated: boolean }
 
 /** Absence of an SDK acknowledgement must never be reported as native delivery or permission. */

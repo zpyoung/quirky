@@ -128,7 +128,7 @@ export async function activate(context: PluginContext): Promise<void> {
           }) as Worktree
           cwd = worktree.path
         }
-        const result = await runCommand({ command, cwd, timeoutSeconds, signal: record.controller.signal })
+        const result = await runCommand(context.process, { command, cwd, timeoutSeconds, signal: record.controller.signal })
         return resultFor(checkId, result, record.cancelled)
       } finally {
         if (active.get(checkId) === record) active.delete(checkId)

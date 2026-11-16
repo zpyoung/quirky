@@ -355,3 +355,24 @@ export const uiRun: Command = {
     ctx.out.result(reply, () => formatGeneric(reply.result))
   }
 }
+
+export const uiUrl: Command = {
+  name: 'ui url',
+  summary: 'print the browser UI URL and optionally request the daemon host to open it',
+  positionals: [],
+  flags: {
+    open: { type: 'boolean', description: 'request the daemon host’s default browser' }
+  },
+  methods: ['ui.url', 'ui.open'],
+  plugin: null,
+  async run(args, ctx) {
+    takePositionals(args, [])
+    if (args.flags.open === true) {
+      const result = await ctx.rpc.call('ui.open', {})
+      ctx.out.result(result, () => result.url)
+      return
+    }
+    const result = await ctx.rpc.call('ui.url', {})
+    ctx.out.result(result, () => result.url)
+  }
+}

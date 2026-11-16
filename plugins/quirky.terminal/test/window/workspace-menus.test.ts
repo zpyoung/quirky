@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test'
 import { act } from 'react'
 import { TAB_COLORS } from '../../src/layout/types'
+import { controllerFor, setFloatingFocus } from '../../src/window/workspace/registry'
 import {
   callsTo,
   click,
@@ -57,7 +58,10 @@ const overlayQuery = <T extends Element = HTMLElement>(view: MountedWorkspace, s
 const overlayQueryAll = <T extends Element = HTMLElement>(view: MountedWorkspace, selector: string) => [...view.element.ownerDocument.querySelectorAll<T>(selector)]
 const row = (view: MountedWorkspace, label: string) =>
   [...view.element.ownerDocument.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((el) => el.querySelector('.qt-menu-label')!.textContent === label) ?? null
-const contextMenu = (view: MountedWorkspace, selector: string, init: MouseEventInit = {}) => fire(view.q(selector), mouse('contextmenu', init))
+const contextMenu = async (view: MountedWorkspace, selector: string, init: MouseEventInit = {}) => {
+  await fire(view.q(selector), mouse('contextmenu', init))
+  await settle()
+}
 
 /** Tabs A, B (pinned), C in one group with C active, beside a second group when `split`. */
 function threeTabs(split: boolean) {
@@ -131,11 +135,232 @@ describe('SC-20: the tab menu', () => {
     expect(callsTo(view.fake, 'pinTab')[1]).toEqual({ tab: 'tab-b', pinned: false })
   })
 
-  test('Copy Tab ID writes the ID to the clipboard', async () => {
-    const view = await mount(threeTabs(false))
-    await contextMenu(view, '[data-tab="tab-c"]')
+  test('copy ID rows use the workspace command and copy the addressed terminal IDs', async () => {
+    const view = await mount()
+    await contextMenu(view, '[data-tab="tab-2"]')
     await click(row(view, 'Copy Tab ID'))
-    expect(copied).toEqual(['tab-c'])
+    await settle()
+    await contextMenu(view, '[data-pane="pane-3"]')
+    await click(row(view, 'Copy Pane ID'))
+    await settle()
+    await contextMenu(view, '[data-pane="pane-3"]')
+    await click(row(view, 'Copy Terminal ID'))
+    await settle()
+    expect(copied).toEqual(['tab-2', 'pane-3', 's-3'])
+    expect(
+      view.fake.callsTo('ui.window.command.run')
+        .map(({ params }) => params)
+        .filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action')
+        .map(({ connId, id, args }) => ({ connId, id, args }))
+    ).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/workspace-menu-action', args: { action: 'copy-id', target: 'tab-2', kind: 'tab' } },
+      { connId: 41, id: 'command:quirky.terminal/workspace-menu-action', args: { action: 'copy-id', target: 'pane-3', kind: 'pane' } },
+      { connId: 41, id: 'command:quirky.terminal/workspace-menu-action', args: { action: 'copy-id', target: 'pane-3', kind: 'session' } }
+    ])
+  })
+
+  test('clipboard refusal is reported once by the UI wrapper', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => { throw new Error('clipboard denied') }, readText: async () => clipboardText }
+    })
+    const view = await mount()
+    await contextMenu(view, '[data-tab="tab-2"]')
+    await click(row(view, 'Copy Tab ID'))
+    await settle()
+    expect(view.fake.toasts).toEqual([{ title: 'Could not copy', body: 'clipboard denied' }])
+  })
+
+  test('choosing an agent routes through the current workspace catalog', async () => {
+    const view = await mount(conceptualWorkspace(), {
+      daemon: {
+        agents: {
+          defaultAgent: 'claude',
+          agents: [{ id: 'claude', label: 'Claude', installed: true, enabled: true, isDefault: true, permissions: { mode: 'yolo' } }]
+        }
+      }
+    })
+    await click(view.q('[data-plus="grp-2"]'))
+    await settle()
+    await click(row(view, 'Claude'))
+    await settle()
+    expect(
+      view.fake.callsTo('ui.window.command.run')
+        .map(({ params }) => params)
+        .filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action')
+        .map(({ connId, id, args }) => ({ connId, id, args }))
+    ).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/workspace-menu-action', args: { action: 'choose-agent', target: 'grp-2', agent: 'claude', background: false } }
+    ])
+    expect(view.controller().getSnapshot().dialog).toMatchObject({
+      kind: 'new-session',
+      group: 'grp-2',
+      request: { agent: 'claude', background: false, permissions: 'yolo' }
+    })
+    expect(callsTo(view.fake, 'newTab')).toEqual([])
+    expect(view.fake.callsTo('quirky.structured/create')).toEqual([])
+  })
+
+  test('choosing background Claude routes the background request without creating a session', async () => {
+    const view = await mount(conceptualWorkspace(), {
+      daemon: {
+        agents: {
+          defaultAgent: 'claude',
+          agents: [{ id: 'claude', label: 'Claude', installed: true, enabled: true, isDefault: true, permissions: { mode: 'yolo' } }]
+        }
+      }
+    })
+    await click(view.q('[data-plus="grp-2"]'))
+    await settle()
+    await click(row(view, 'Claude (background)'))
+    await settle()
+    expect(
+      view.fake.callsTo('ui.window.command.run')
+        .map(({ params }) => params)
+        .filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action')
+        .map(({ args }) => args)
+    ).toEqual([{ action: 'choose-agent', target: 'grp-2', agent: 'claude', background: true }])
+    expect(view.controller().getSnapshot().dialog).toMatchObject({
+      kind: 'new-session',
+      group: 'grp-2',
+      request: { agent: 'claude', background: true }
+    })
+    const dialog = view.controller().getSnapshot().dialog
+    if (dialog?.kind !== 'new-session') throw new Error('agent prompt did not open')
+    expect(dialog.request.permissions).toBeUndefined()
+    expect(view.q<HTMLButtonElement>('[role="dialog"] button[type="submit"]')!.disabled).toBe(true)
+    expect(callsTo(view.fake, 'newTab')).toEqual([])
+    expect(view.fake.callsTo('quirky.structured/create')).toEqual([])
+  })
+
+  test('agent choice rechecks the catalog and reports an unavailable agent once', async () => {
+    const view = await mount(conceptualWorkspace(), {
+      daemon: {
+        agents: {
+          defaultAgent: 'claude',
+          agents: [{ id: 'claude', label: 'Claude', installed: true, enabled: true, isDefault: true }]
+        }
+      }
+    })
+    await click(view.q('[data-plus="grp-2"]'))
+    await settle()
+    const call = view.fake.context.call.bind(view.fake.context)
+    view.fake.context.call = async (method, params) => {
+      if (method === 'quirky.agents/list') {
+        return { defaultAgent: 'claude', agents: [{ id: 'claude', label: 'Claude', installed: true, enabled: false, isDefault: true }] }
+      }
+      return call(method, params)
+    }
+    await click(row(view, 'Claude'))
+    await settle()
+    expect(view.fake.toasts).toEqual([{ title: 'Could not choose agent', body: 'agent claude is not available' }])
+    expect(view.last().dialog).toBeNull()
+    expect(callsTo(view.fake, 'newTab')).toEqual([])
+    expect(view.fake.callsTo('quirky.structured/create')).toEqual([])
+  })
+
+  test('context menus use the local open-menu route with their pointer position', async () => {
+    const view = await mount()
+    await contextMenu(view, '[data-tab="tab-2"]', { clientX: 23, clientY: 31 })
+    expect(
+      view.fake.callsTo('ui.window.command.run')
+        .map(({ params }) => params)
+        .filter(({ id }) => id === 'command:quirky.terminal/open-menu')
+        .map(({ connId, id, args }) => ({ connId, id, args }))
+    ).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/open-menu', args: { kind: 'tab', target: 'tab-2', x: 23, y: 31 } }
+    ])
+  })
+
+  test('open-menu bridge failure is reported without an owner-window fallback', async () => {
+    const view = await mount()
+    const executed: unknown[][] = []
+    view.fake.context.executeCommand = async (...args: unknown[]) => void executed.push(args)
+    const call = view.fake.context.call.bind(view.fake.context)
+    view.fake.context.call = async (method, params) => {
+      if (method === 'ui.window.self') throw new Error('window offline')
+      return call(method, params)
+    }
+    await contextMenu(view, '[data-tab="tab-2"]')
+    expect(view.last().menu).toBeNull()
+    expect(view.fake.toasts).toEqual([{ title: 'Could not open menu', body: 'window offline' }])
+    expect(view.fake.callsTo('ui.window.command.run')).toEqual([])
+    expect(executed).toEqual([])
+  })
+
+  test('trusted command drops route once through the workspace action with group context', async () => {
+    const view = await mount(conceptualWorkspace(), {
+      extra: { 'quirky.terminal/groupInfo': () => ({ workspace: 'wt-main' }) }
+    })
+    const consumed: string[] = []
+    const executed: unknown[][] = []
+    view.fake.context.consumeCommandDrag = (token: string) => {
+      consumed.push(token)
+      return { command: 'command:acme.tools/run', args: { task: 'build', group: 'forged', worktree: 'forged' } }
+    }
+    view.fake.context.executeCommand = async (...args: unknown[]) => void executed.push(args)
+    const transfer = {
+      types: ['application/x-quirky-command'],
+      getData: () => 'drag-1'
+    } as unknown as DataTransfer
+    const event = new Event('drop', { bubbles: true })
+    Object.defineProperty(event, 'dataTransfer', { value: transfer })
+    await fire(view.q('[data-group-body="grp-2"]')!, event)
+    await settle()
+    expect(consumed).toEqual(['drag-1'])
+    expect(
+      view.fake.callsTo('ui.window.command.run')
+        .map(({ params }) => params)
+        .filter(({ id }) => id === 'command:quirky.terminal/workspace-menu-action')
+        .map(({ connId, id, args }) => ({ connId, id, args }))
+    ).toEqual([
+      {
+        connId: 41,
+        id: 'command:quirky.terminal/workspace-menu-action',
+        args: { action: 'run-group-command', target: 'grp-2', command: 'command:acme.tools/run', args: { task: 'build', group: 'forged', worktree: 'forged' } }
+      }
+    ])
+    expect(executed).toEqual([
+      ['command:acme.tools/run', { task: 'build', group: 'grp-2', worktree: 'wt-main' }]
+    ])
+  })
+
+  test('dropped command failures toast once and never execute a substitute', async () => {
+    const view = await mount(conceptualWorkspace(), {
+      extra: { 'quirky.terminal/groupInfo': () => { throw new Error('layout offline') } }
+    })
+    const consumed: string[] = []
+    const executed: unknown[][] = []
+    view.fake.context.consumeCommandDrag = (token: string) => {
+      consumed.push(token)
+      return { command: 'command:acme.tools/run', args: { task: 'build' } }
+    }
+    view.fake.context.executeCommand = async (...args: unknown[]) => void executed.push(args)
+    const transfer = {
+      types: ['application/x-quirky-command'],
+      getData: () => 'drag-1'
+    } as unknown as DataTransfer
+    const event = new Event('drop', { bubbles: true })
+    Object.defineProperty(event, 'dataTransfer', { value: transfer })
+    await fire(view.q('[data-group-body="grp-2"]')!, event)
+    await settle()
+    expect(consumed).toEqual(['drag-1'])
+    expect(view.fake.toasts).toEqual([{ title: 'Could not run dropped command', body: 'layout offline' }])
+    expect(executed).toEqual([])
+  })
+
+  test('an empty floating group shares EmptyState and keeps New Terminal and Minimize', async () => {
+    const floating = makeWorkspace(group('grp-floating', []), { id: 'floating' })
+    const view = await mount(floating, { input: { worktree: 'floating' } })
+    expect(view.q('.ui-empty-state')!.textContent).toBe('No terminals open.')
+    expect([...view.q('.qt-empty')!.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+      'New Terminal⌘T',
+      'Minimize⌘W'
+    ])
+    await click([...view.q('.qt-empty')!.querySelectorAll('button')][1]!)
+    expect(callsTo(view.fake, 'setFloating')).toEqual([{ open: false }])
+    await click([...view.q('.qt-empty')!.querySelectorAll('button')][0]!)
+    expect(callsTo(view.fake, 'newTab')).toEqual([{ workspace: 'floating', group: 'grp-floating' }])
   })
 
   test('Close Others and the side rows ask the daemon about the tabs they would close', async () => {
@@ -165,6 +390,8 @@ describe('SC-20: the tab menu', () => {
     const view = await mount(threeTabs(false))
     await contextMenu(view, '[data-tab="tab-a"]')
     await click(row(view, 'Change Title'))
+    await settle()
+    expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/rename-tab').map(({ args }) => args)).toEqual([{ tab: 'tab-a' }])
     expect(view.q<HTMLInputElement>('input[aria-label="Tab title"]')!.value).toBe('A')
   })
 
@@ -189,6 +416,82 @@ describe('SC-20: the tab menu', () => {
     await act(async () => view.controller().closeMenu())
     expect(view.last().menu).toBeNull()
   })
+
+  test('the plus button toggles with local open and close commands', async () => {
+    const view = await mount()
+    await click(view.q('[data-plus="grp-1"]'))
+    await settle()
+    expect(view.last().menu).toMatchObject({ kind: 'plus', target: 'grp-1' })
+    await click(view.q('[data-plus="grp-1"]'))
+    await settle()
+    expect(view.last().menu).toBeNull()
+    expect(
+      view.fake.callsTo('ui.window.command.run')
+        .map(({ params }) => params)
+        .filter(({ id }) => id === 'command:quirky.terminal/open-menu' || id === 'command:quirky.terminal/close-menu')
+        .map(({ id, args }) => ({ id, args }))
+    ).toEqual([
+      { id: 'command:quirky.terminal/open-menu', args: { kind: 'plus', target: 'grp-1' } },
+      { id: 'command:quirky.terminal/close-menu', args: { target: 'grp-1' } }
+    ])
+  })
+
+  for (const removed of [false, true]) {
+    test(removed
+      ? 'a pending menu close refuses a vanished group instead of the focused workspace'
+      : 'a pending menu close keeps its original group when floating gains focus', async () => {
+      const view = await mount()
+      const floating = await mountFixture(
+        fakeDaemon(makeWorkspace(group('floating-group', []), { id: 'floating' })),
+        { input: { worktree: 'floating' } }
+      )
+      const mainController = controllerFor('wt-main')!
+      const floatingController = controllerFor('floating')!
+      view.fake.layout.view = { id: 'view:quirky.session/worktree', input: { worktree: 'wt-main' } }
+      const self = Promise.withResolvers<{ connId: number }>()
+      const entered = Promise.withResolvers<void>()
+      const call = view.fake.context.call.bind(view.fake.context)
+      try {
+        await act(async () => mainController.openMenu('plus', 'grp-1'))
+        await settle()
+        view.fake.context.call = async (method, params) => {
+          if (method === 'ui.window.self') {
+            entered.resolve()
+            return self.promise
+          }
+          return call(method, params)
+        }
+        await click(view.q('[data-plus="grp-1"]'))
+        await entered.promise
+        await act(async () => {
+          if (removed) {
+            view.daemon.set(makeWorkspace(group('replacement-group', [])))
+            await mainController.refresh()
+            mainController.openMenu('plus', 'replacement-group')
+          }
+          floatingController.openMenu('actions', 'floating-group')
+          setFloatingFocus(true)
+        })
+        self.resolve({ connId: 41 })
+        await settle()
+        await settle()
+
+        expect(floatingController.getSnapshot().menu).toMatchObject({ kind: 'actions', target: 'floating-group' })
+        if (removed) {
+          expect(mainController.getSnapshot().menu).toMatchObject({ kind: 'plus', target: 'replacement-group' })
+          expect(view.fake.toasts).toEqual([{ title: 'Could not close menu', body: 'no mounted terminal workspace holds grp-1' }])
+        } else {
+          expect(mainController.getSnapshot().menu).toBeNull()
+          expect(view.fake.toasts).toEqual([])
+        }
+      } finally {
+        self.resolve({ connId: 41 })
+        await settle()
+        setFloatingFocus(false)
+        await floating.unmount()
+      }
+    })
+  }
 })
 
 describe('SC-39: the pane menu', () => {
@@ -280,6 +583,25 @@ describe('SC-39: the pane menu', () => {
     expect(callsTo(view.fake, 'resetPane')).toEqual([{ pane: 'pane-4' }])
   })
 
+  test('Copy and Select All use their local pane commands', async () => {
+    const view = await mount()
+    await contextMenu(view, '[data-pane="pane-3"]')
+    await click(row(view, 'Copy'))
+    await settle()
+    await contextMenu(view, '[data-pane="pane-3"]')
+    await click(row(view, 'Select All'))
+    await settle()
+    expect(
+      view.fake.callsTo('ui.window.command.run')
+        .map(({ params }) => params)
+        .filter(({ id }) => id === 'command:quirky.terminal/copy' || id === 'command:quirky.terminal/select-all')
+        .map(({ connId, id, args }) => ({ connId, id, args }))
+    ).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/copy', args: { pane: 'pane-3' } },
+      { connId: 41, id: 'command:quirky.terminal/select-all', args: { pane: 'pane-3' } }
+    ])
+  })
+
   test('Close Pane closes through the close flow', async () => {
     const view = await mount()
     await contextMenu(view, '[data-pane="pane-4"]')
@@ -292,6 +614,10 @@ describe('SC-39: the pane menu', () => {
     const view = await mount()
     await contextMenu(view, '[data-pane="pane-4"]')
     await click(row(view, 'Set Title…'))
+    await settle()
+    expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/set-pane-title').map(({ connId, id, args }) => ({ connId, id, args }))).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/set-pane-title', args: { pane: 'pane-4' } }
+    ])
     expect(callsTo(view.fake, 'focusPane')).toEqual([{ pane: 'pane-4' }])
     const input = view.q<HTMLInputElement>('input[aria-label="Pane title"]')!
     await type(input, 'logs')
@@ -333,7 +659,13 @@ describe('SC-39: the pane menu', () => {
     await contextMenu(view, '[data-pane="pane-3"]')
     await click(row(view, 'Paste'))
     await settle()
-    expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([{ session: 's-3', data: 'hello' }])
+    expect(view.fake.callsTo('ui.window.command.run').map(({ params }) => params).filter(({ id }) => id === 'command:quirky.terminal/paste').map(({ connId, id, args }) => ({ connId, id, args }))).toEqual([
+      { connId: 41, id: 'command:quirky.terminal/paste', args: { pane: 'pane-3' } }
+    ])
+    await settle()
+    expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's-3', data: 'hello', expectedIncarnation: 'fixture-s-3' }
+    ])
   })
 
   test('with right-click paste on, right-click pastes and Ctrl-click opens the menu', async () => {
@@ -342,7 +674,9 @@ describe('SC-39: the pane menu', () => {
     await fire(view.q('[data-pane="pane-3"] [data-terminal-pane]'), mouse('contextmenu'))
     await settle()
     expect(view.last().menu).toBeNull()
-    expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params.data)).toEqual(['pasted'])
+    expect(view.fake.callsTo('quirky.terminal/write').map((call) => call.params)).toEqual([
+      { session: 's-3', data: 'pasted', expectedIncarnation: 'fixture-s-3' }
+    ])
     await fire(view.q('[data-pane="pane-3"] [data-terminal-pane]'), mouse('contextmenu', { ctrlKey: true }))
     expect(view.last().menu).toMatchObject({ kind: 'pane', target: 'pane-3' })
   })

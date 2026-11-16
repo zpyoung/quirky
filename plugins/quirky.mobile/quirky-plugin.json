@@ -1,6 +1,6 @@
 {
   "id": "quirky.mobile",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.12.0",
   "name": "Mobile",
   "version": "0.1.0",
   "description": "Pair phones with Quirky over a direct encrypted connection.",
@@ -16,6 +16,7 @@
         "description": "Read or long-poll the bounded notification-only replay for an authenticated phone; never exposes general daemon events.",
         "connection": true,
         "readOnly": true,
+        "timeout": "40s",
         "params": {
           "type": "object",
           "properties": {
@@ -235,6 +236,32 @@
           "type": "object",
           "properties": { "revoked": { "type": "boolean" } },
           "required": ["revoked"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "resetPairing",
+        "description": "Local owner recovery: start an empty device registry, and a new E2EE identity only when its file is missing (revoking owner CLI grants first), after the store set either aside. Never deletes set-aside files.",
+        "destructive": true,
+        "confirm": "Reset Quirky mobile pairing? Every paired phone must pair again, and owner CLI grants are revoked if a new encryption identity is created.",
+        "params": {
+          "type": "object",
+          "properties": { "confirm": { "type": "boolean" } },
+          "required": ["confirm"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "identityCreated": { "type": "boolean" },
+            "unpairedDevices": { "type": "number" },
+            "ownerGrantsRevoked": { "type": "number" },
+            "ownerGrantsRemaining": {},
+            "previousRegistry": {},
+            "quarantined": { "type": "array", "items": { "type": "string" } },
+            "unsynced": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["identityCreated", "unpairedDevices", "ownerGrantsRevoked", "ownerGrantsRemaining", "previousRegistry", "quarantined", "unsynced"],
           "additionalProperties": false
         }
       },
@@ -654,6 +681,7 @@
       {
         "id": "changed",
         "description": "Mobile pairing or safe settings changed; reload state to see current values.",
+        "coalesce": [],
         "data": { "type": "object", "properties": {}, "additionalProperties": false }
       }
     ],
@@ -666,7 +694,17 @@
     ],
     "command": [
       { "id": "open", "title": "Open Mobile" },
-      { "id": "open-settings", "title": "Open Mobile Settings" }
+      { "id": "open-settings", "title": "Open Mobile Settings" },
+      {
+        "id": "copy-pairing-code",
+        "title": "Copy Mobile Pairing Code",
+        "description": "Copy the given pairing code URL, or the one shown in this window's Mobile pairing panel, to the clipboard without printing it.",
+        "args": {
+          "type": "object",
+          "properties": { "pairingUrl": { "type": "string" } },
+          "additionalProperties": false
+        }
+      }
     ],
     "cli-command": [
       { "id": "info", "summary": "read this desktop's mobile identity", "methods": ["quirky.mobile/info"] },
@@ -718,6 +756,12 @@
         "positionals": [{ "name": "grant-id", "description": "the owner grant UUID", "required": true }],
         "flags": { "confirm": { "type": "boolean", "description": "Required explicit confirmation to revoke the grant." } },
         "methods": ["quirky.mobile/ownerRevoke"]
+      },
+      {
+        "id": "reset-pairing",
+        "summary": "start mobile pairing over after its registry or identity was set aside (local owner only)",
+        "flags": { "confirm": { "type": "boolean", "description": "Required explicit confirmation; every paired device must pair again." } },
+        "methods": ["quirky.mobile/resetPairing"]
       },
       { "id": "devices", "summary": "list paired mobile devices", "methods": ["quirky.mobile/devices"] },
       {

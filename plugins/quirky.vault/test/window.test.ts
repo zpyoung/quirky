@@ -14,6 +14,7 @@ import {
   type Features
 } from '../../quirky.terminal/test/e2e-ui/features-support'
 import type { PublicListResult, SearchStatus, SearchTipState } from '../src/types'
+import { quietHistoryReport } from './support/history-window'
 
 afterEach(stopAll)
 
@@ -108,14 +109,34 @@ test(
       expect('filePath' in session).toBe(false)
 
       await runCommand(f, 'command:quirky.vault/open', { agent: 'claude', sessionId: session.sessionId })
-      await reportOf<HistoryReport>(f, HISTORY_PANEL, 'the selected source in All scope', (report) => report.scope === 'all' && report.visibleIds.includes(session.id))
+      await quietHistoryReport<HistoryReport>(f, HISTORY_PANEL, 'the automatically selected and expanded source in All scope', (report) => report.scope === 'all' && report.visibleIds.includes(session.id) && report.selectedId === session.id && report.expandedIds.includes(session.id))
       const row = await until(f, () => f!.win.document.querySelector<HTMLElement>(`[data-vault-session-row="${session.id}"]`))
+      await until(f, () => row.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Hide details"]'))
+      await until(f, () => f!.win.document.querySelector(`[data-vault-session-details="${session.id}"]`)?.textContent?.includes('real preview turn'))
+
+      await f.h.call('quirky.vault/setView', { selectedId: null, expandedIds: [] })
+      await quietHistoryReport<HistoryReport>(f, HISTORY_PANEL, 'the selection and expansion cleared by another caller', (report) => report.selectedId === null && report.expandedIds.length === 0)
+      await until(f, () => !f!.win.document.querySelector(`[data-vault-session-details="${session.id}"]`))
+      await until(f, () => row.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Show details"]'))
       row.click()
-      await reportOf<HistoryReport>(f, HISTORY_PANEL, 'the selected row', (report) => report.selectedId === session.id)
-      row.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"]')!.click()
-      await reportOf<HistoryReport>(f, HISTORY_PANEL, 'the expanded row', (report) => report.expandedIds.includes(session.id))
+      await quietHistoryReport<HistoryReport>(f, HISTORY_PANEL, 'the selected but collapsed row', (report) => report.selectedId === session.id && !report.expandedIds.includes(session.id))
+      await until(f, () => !f!.win.document.querySelector(`[data-vault-session-details="${session.id}"]`))
+      const expand = await until(f, () => row.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Show details"]'))
+      expand.click()
+      await quietHistoryReport<HistoryReport>(f, HISTORY_PANEL, 'the expanded row', (report) => report.selectedId === session.id && report.expandedIds.includes(session.id))
+      await until(f, () => f!.win.document.querySelector(`[data-vault-session-details="${session.id}"]`)?.textContent?.includes('real preview turn'))
+      await until(f, () => f!.calls.some((call) => call.method === 'quirky.vault/firstPrompt' && call.settled))
       expect(f.calls.some((call) => call.method === 'quirky.vault/firstPrompt' && call.settled)).toBe(true)
       expect(f.win.document.querySelector(`[data-vault-session-details="${session.id}"]`)?.textContent).toContain('real preview turn')
+
+      const collapse = await until(f, () => row.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Hide details"]'))
+      collapse.click()
+      await quietHistoryReport<HistoryReport>(f, HISTORY_PANEL, 'the collapsed row', (report) => !report.expandedIds.includes(session.id))
+      await until(f, () => !f!.win.document.querySelector(`[data-vault-session-details="${session.id}"]`))
+      await runCommand(f, 'command:quirky.vault/open', { agent: 'claude', sessionId: session.sessionId })
+      await quietHistoryReport<HistoryReport>(f, HISTORY_PANEL, 'the mounted panel reopened with expanded details', (report) => report.selectedId === session.id && report.expandedIds.includes(session.id))
+      await until(f, () => f!.win.document.querySelector(`[data-vault-session-details="${session.id}"]`)?.textContent?.includes('real preview turn'))
+      await until(f, () => row.querySelector<HTMLButtonElement>('[aria-label="Toggle session details"][title="Hide details"]'))
     } finally {
       await f?.stop()
       rmSync(source, { recursive: true, force: true })

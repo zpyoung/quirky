@@ -1,10 +1,10 @@
 /** Branch compare: the committed changes between a merge base and HEAD, and the file lists they are built from. */
 import { lstat, readFile, readlink } from 'node:fs/promises'
-import { join } from 'node:path'
+import { resolve, join } from 'node:path'
 import type { GitChange, GitChangeStatus, GitCompare } from '@quirky/protocol'
 import { MAX_BLOB_BYTES } from './diffs'
 import { GitError } from './index'
-import { drainText, git, gitEnv, readChunk, retryStalled, runGit } from './run'
+import { git, retryStalled, runGit, shareGitRead, streamNullRecords } from './run'
 import { STATUS_ENTRY_LIMIT } from './status'
 
 const decoder = new TextDecoder()
@@ -108,61 +108,13 @@ async function untrackedChange(cwd: string, path: string): Promise<GitChange> {
   }
 }
 
-/**
- * Streams git's NUL-separated stdout one token at a time and kills git once `onToken` returns
- * true, so a huge listing is never held in memory. Throws `GitError` when git fails on its own,
- * and a stalled pipe (see `retryStalled`) when git's output does not end after it exited.
- */
-async function streamTokens(cwd: string, args: string[], onToken: (token: string) => boolean | Promise<boolean>): Promise<void> {
-  let proc: ReturnType<typeof Bun.spawn>
-  try {
-    proc = Bun.spawn(['git', ...args], {
-      cwd,
-      env: await gitEnv(cwd, { readOnly: true }),
-      stdin: 'ignore',
-      stdout: 'pipe',
-      stderr: 'pipe'
-    })
-  } catch (err) {
-    throw new GitError(`failed to run git: ${(err as Error).message}`, '', -1)
-  }
-  const stderr = drainText(proc)
-  const reader = (proc.stdout as ReadableStream<Uint8Array>).getReader()
-  const stream = new TextDecoder()
-  let carry = ''
-  let stopped = false
-  try {
-    read: for (;;) {
-      const { done, value } = await readChunk(reader, proc.exited)
-      if (done) break
-      carry += stream.decode(value, { stream: true })
-      const tokens = carry.split('\0')
-      carry = tokens.pop() ?? ''
-      for (const token of tokens) {
-        if (await onToken(token)) {
-          stopped = true
-          break read
-        }
-      }
-    }
-    if (!stopped && carry.length > 0) await onToken(carry)
-  } finally {
-    if (stopped) proc.kill()
-  }
-  const exitCode = await proc.exited
-  const errText = await stderr
-  if (!stopped && exitCode !== 0) {
-    throw new GitError(`git ${args[0]} failed (exit ${exitCode})${errText.trim() ? `: ${errText.trim()}` : ''}`, errText, exitCode)
-  }
-}
-
 /** The tokens of the first `bound` records of `diff --raw -z` (`numstat` false) or `diff --numstat -z` (true) against `from`. */
 async function trackedTokens(cwd: string, from: string, numstat: boolean, bound: number): Promise<string[]> {
-  return retryStalled(async () => {
+  return retryStalled(async (timeoutMs) => {
     const tokens: string[] = []
     let records = 0
     let pending = 0
-    await streamTokens(
+    await streamNullRecords(
       cwd,
       ['diff', numstat ? '--numstat' : '--raw', '-z', '--find-renames', '--end-of-options', from, '--'],
       (token) => {
@@ -177,7 +129,8 @@ async function trackedTokens(cwd: string, from: string, numstat: boolean, bound:
           }
         }
         return pending === 0 && records >= bound
-      }
+      },
+      { timeoutMs }
     )
     return tokens
   })
@@ -185,13 +138,13 @@ async function trackedTokens(cwd: string, from: string, numstat: boolean, bound:
 
 /** The first `bound` untracked paths git lists, skipping shared symlinks. */
 async function untrackedPrefix(cwd: string, bound: number, isSharedSymlink: (path: string) => Promise<boolean>): Promise<string[]> {
-  return retryStalled(async () => {
+  return retryStalled(async (timeoutMs) => {
     const paths: string[] = []
-    await streamTokens(cwd, ['ls-files', '--others', '--exclude-standard', '-z'], async (path) => {
+    await streamNullRecords(cwd, ['ls-files', '--others', '--exclude-standard', '-z'], async (path) => {
       if (path === '' || (await isSharedSymlink(path))) return false
       paths.push(path)
       return paths.length >= bound
-    })
+    }, { timeoutMs })
     return paths
   })
 }
@@ -225,7 +178,7 @@ async function recreatedChange(cwd: string, from: string, path: string): Promise
     return { ...change, binary: true }
   }
   const counted = await runGit(cwd, ['diff', '--no-index', '--numstat', '-z', '--', '-', full], { readOnly: true, input: baseBlob.stdout })
-  if (counted.exitCode > 1) throw new GitError(`git diff failed (exit ${counted.exitCode}): ${counted.stderr.trim()}`, counted.stderr, counted.exitCode)
+  if (counted.exitCode !== 0 && counted.exitCode !== 1) throw new GitError(`git diff failed (exit ${counted.exitCode}): ${counted.stderr.trim()}`, counted.stderr, counted.exitCode)
   const [added, removed] = decoder.decode(counted.stdout).split('\t')
   return { ...change, added: Number(added), removed: Number(removed) }
 }
@@ -240,10 +193,32 @@ async function recreatedChange(cwd: string, from: string, path: string): Promise
  * paths git reports (then sorted) and `capped` is set only when more exist; untracked paths in
  * `sharedSymlinks` that are symlinks are left out. Throws `GitError` when git fails.
  */
-export async function worktreeChangeList(
+export function worktreeChangeList(
   cwd: string,
   from: string,
   options: { limit?: number; sharedSymlinks?: string[] } = {}
+): Promise<{ changes: GitChange[]; capped: boolean }> {
+  const limit = options.limit ?? STATUS_ENTRY_LIMIT
+  const sharedSymlinks = [...new Set(options.sharedSymlinks ?? [])].sort()
+  const key = JSON.stringify([
+    'worktreeChangeList',
+    resolve(cwd),
+    from,
+    limit,
+    sharedSymlinks,
+    process.env.PATH ?? ''
+  ])
+  return shareGitRead(
+    key,
+    () => worktreeChangeListOnce(cwd, from, { limit, sharedSymlinks }),
+    (value) => structuredClone(value)
+  )
+}
+
+async function worktreeChangeListOnce(
+  cwd: string,
+  from: string,
+  options: { limit?: number; sharedSymlinks?: string[] }
 ): Promise<{ changes: GitChange[]; capped: boolean }> {
   const limit = options.limit ?? STATUS_ENTRY_LIMIT
   const shared = new Set(options.sharedSymlinks ?? [])
@@ -340,7 +315,12 @@ async function resolveCommitOid(cwd: string, rev: string): Promise<string | null
  * (`invalid-base`, `unborn-head`, `no-merge-base`) are results with a `message`, not errors.
  * `baseSource` is left null for the caller, which knows where `base` came from.
  */
-export async function compare(cwd: string, base: string): Promise<GitCompare> {
+export function compare(cwd: string, base: string): Promise<GitCompare> {
+  const key = JSON.stringify(['compare', resolve(cwd), base, process.env.PATH ?? ''])
+  return shareGitRead(key, () => compareOnce(cwd, base), (value) => structuredClone(value))
+}
+
+async function compareOnce(cwd: string, base: string): Promise<GitCompare> {
   const [baseOid, headOid] = await Promise.all([resolveCommitOid(cwd, base), resolveCommitOid(cwd, 'HEAD')])
   const result: GitCompare = {
     status: 'ready',

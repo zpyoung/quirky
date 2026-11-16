@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 const write = (name: string, body: string) => writeFileSync(join(dir, name), `import { expect, test } from 'bun:test'\nimport { existsSync, writeFileSync } from 'node:fs'\n${body}\n`)
-const options = (files: string[], overrides: Partial<{ platform: Platform; jobs: number; limitMs: number; run: Run }> = {}) => ({
+const options = (files: string[], overrides: Partial<{ platform: Platform; jobs: number; limitMs: number; run: Run; alone: ReadonlySet<string>; log: (text: string) => void }> = {}) => ({
   cwd: dir,
   files,
   platform: 'linux' as const,
@@ -132,6 +132,150 @@ test('keeps input order, bounds concurrency by jobs, and passes the limit throug
   expect(new Set(limits)).toEqual(new Set([1234]))
 })
 
+test('runs listed files first and alone, then runs the rest concurrently without changing result order', async () => {
+  const files = ['regular-a.test.ts', 'solo-a.test.ts', 'regular-b.test.ts', 'solo-b.test.ts', 'regular-c.test.ts', 'regular-d.test.ts']
+  const alone = new Set(['solo-a.test.ts', 'missing.test.ts', 'solo-b.test.ts'])
+  const started: string[] = []
+  let active = 0
+  let peak = 0
+  let regularStarts = 0
+  const firstGate = Promise.withResolvers<void>()
+  const secondGate = Promise.withResolvers<void>()
+  const regularGate = Promise.withResolvers<void>()
+  const firstStarted = Promise.withResolvers<void>()
+  const secondStarted = Promise.withResolvers<void>()
+  const threeRegularStarted = Promise.withResolvers<void>()
+  const run: Run = async (_cwd, args) => {
+    const file = args.find((arg) => !arg.startsWith('-'))!.replace(/^\.\//, '')
+    started.push(file)
+    active++
+    peak = Math.max(peak, active)
+    if (file === 'solo-a.test.ts') {
+      firstStarted.resolve()
+      await firstGate.promise
+    } else if (file === 'solo-b.test.ts') {
+      secondStarted.resolve()
+      await secondGate.promise
+    } else {
+      regularStarts++
+      if (regularStarts === 3) threeRegularStarted.resolve()
+      await regularGate.promise
+    }
+    active--
+    return { code: 0, output: '', timedOut: false }
+  }
+
+  const pending = runTestFiles(options(files, { jobs: 3, run, alone }))
+  try {
+    await firstStarted.promise
+    expect(started).toEqual(['solo-a.test.ts'])
+    expect(active).toBe(1)
+    firstGate.resolve()
+    await secondStarted.promise
+    expect(started).toEqual(['solo-a.test.ts', 'solo-b.test.ts'])
+    expect(active).toBe(1)
+    secondGate.resolve()
+    await threeRegularStarted.promise
+    expect(started.slice(0, 5)).toEqual(['solo-a.test.ts', 'solo-b.test.ts', 'regular-a.test.ts', 'regular-b.test.ts', 'regular-c.test.ts'])
+    expect(active).toBe(3)
+  } finally {
+    firstGate.resolve()
+    secondGate.resolve()
+    regularGate.resolve()
+  }
+
+  const results = await pending
+  expect(started).toEqual(['solo-a.test.ts', 'solo-b.test.ts', 'regular-a.test.ts', 'regular-b.test.ts', 'regular-c.test.ts', 'regular-d.test.ts'])
+  expect(peak).toBe(3)
+  expect(results.map((result) => result.file)).toEqual(files)
+})
+
+test('logs only a listed passing file in its exact passed-alone group', async () => {
+  const files = ['ordinary.test.ts', 'scripts/parity/cli-files.test.ts']
+  const logged: string[] = []
+  const run: Run = async (_cwd, args) => {
+    const file = args.find((arg) => !arg.startsWith('-'))!.replace(/^\.\//, '')
+    return { code: 0, output: file === files[1] ? 'retained output' : 'quiet output', timedOut: false }
+  }
+  const results = await runTestFiles(options(files, {
+    run,
+    alone: new Set([files[1]]),
+    log: (text) => logged.push(text)
+  }))
+  expect(logged).toEqual(['::group::scripts/parity/cli-files.test.ts passed alone\nretained output\n::endgroup::\n'])
+  expect(results.map((result) => result.file)).toEqual(files)
+  expect(results.every((result) => result.first.fileError === null)).toBe(true)
+})
+
+test('bounds a listed passing output to whole UTF-8 lines', async () => {
+  const rows = Array.from({ length: 400 }, (_, index) => `row-${String(index).padStart(4, '0')}-${'é'.repeat(50)}`)
+  const lastLine = 'last complete line'
+  const output = [...rows, lastLine].join('\n')
+  expect(Buffer.byteLength(output, 'utf8')).toBeGreaterThan(40_000)
+  const logged: string[] = []
+  const run: Run = async () => ({ code: 0, output, timedOut: false })
+
+  await runTestFiles(options(['large.test.ts'], {
+    run,
+    alone: new Set(['large.test.ts']),
+    log: (text) => logged.push(text)
+  }))
+
+  const match = logged[0].match(/^::group::large\.test\.ts passed alone\n([\s\S]*)\n::endgroup::\n$/)
+  expect(match).not.toBeNull()
+  const tail = match![1]
+  expect(Buffer.byteLength(tail, 'utf8')).toBeLessThanOrEqual(16_384)
+  expect(tail.endsWith(lastLine)).toBe(true)
+  expect(tail.includes('\uFFFD')).toBe(false)
+  expect(tail.split('\n').every((line) => line === lastLine || /^row-\d{4}-é{50}$/.test(line))).toBe(true)
+})
+
+test('keeps listed failure and timeout groups unbounded and unchanged', async () => {
+  const failureOutput = 'failure line\n'.repeat(1800)
+  const timeoutOutput = 'timeout line\n'.repeat(1800)
+  const files = ['failed.test.ts', 'timed-out.test.ts']
+  const outputs: Record<string, string> = {
+    'failed.test.ts': failureOutput,
+    'timed-out.test.ts': timeoutOutput
+  }
+  const run: Run = async (_cwd, args) => {
+    const file = args.find((arg) => !arg.startsWith('-'))!.replace(/^\.\//, '')
+    return { code: file === files[0] ? 1 : 143, output: outputs[file], timedOut: file === files[1] }
+  }
+  const logged: string[] = []
+
+  await runTestFiles(options(files, {
+    run,
+    alone: new Set(files),
+    log: (text) => logged.push(text)
+  }))
+
+  expect(logged).toEqual(files.map((file) => `::group::${file} failed\n${outputs[file]}\n::endgroup::\n`))
+  expect(logged.every((text) => Buffer.byteLength(text, 'utf8') > 16_384)).toBe(true)
+})
+
+test('logs a listed passing rerun in the passed-alone group', async () => {
+  const file = 'scripts/parity/cli-files.test.ts'
+  let calls = 0
+  const logged: string[] = []
+  const run: Run = async () => {
+    calls++
+    return { code: calls === 1 ? 1 : 0, output: calls === 1 ? 'first failure' : 'rerun output', timedOut: false }
+  }
+  const opts = options([file], { run, alone: new Set([file]), log: (text) => logged.push(text) })
+  const original = await runTestFiles(opts)
+
+  const { results, skipped } = await rerunFailed(opts, original, 5)
+
+  expect(skipped).toBe(false)
+  expect(results[0].first).toEqual(original[0].first)
+  expect(results[0].rerun?.fileError).toBeNull()
+  expect(logged).toEqual([
+    `::group::${file} failed\nfirst failure\n::endgroup::\n`,
+    `::group::${file} passed alone\nrerun output\n::endgroup::\n`
+  ])
+})
+
 test('hands the output of a failed attempt to log, and stays quiet about a clean one', async () => {
   const logged: string[] = []
   const run: Run = async (_cwd, args) => {
@@ -140,6 +284,12 @@ test('hands the output of a failed attempt to log, and stays quiet about a clean
   }
   await runTestFiles({ ...options(['good.test.ts', 'bad.test.ts'], { run }), log: (text) => logged.push(text) })
   expect(logged).toEqual(['::group::bad.test.ts failed\nerror: expected M\n::endgroup::\n'])
+})
+test('an empty alone set keeps successful files quiet', async () => {
+  const logged: string[] = []
+  const run: Run = async () => ({ code: 0, output: 'ordinary output', timedOut: false })
+  await runTestFiles(options(['ordinary.test.ts'], { run, alone: new Set(), log: (text) => logged.push(text) }))
+  expect(logged).toEqual([])
 })
 
 test('gives each test longer than bun\'s default, because runners are slower than the machines the tests were written on', async () => {

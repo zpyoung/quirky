@@ -122,8 +122,9 @@ test('paired daemons preserve FIFO mail and ask identity; a rejected home comple
     '--subject', 'Rejected federated completion',
     '--body', 'The home owner policy deliberately rejects this report.',
   ])
-  const rejected = JSON.parse(rejectedResult.stdout) as { kind: string; report: { status: string } }
+  const rejected = JSON.parse(rejectedResult.stdout) as { kind: string; report: { status: string; lifecycle?: { code: string } } }
   expect(rejected.report.status).toBe('rejected')
+  expect(rejected.report.lifecycle?.code).toBe('mail_fixture_rejected')
   const hostAfterRejection = await host.fixture.call('quirky.orchestration/workerShow', {
     dispatchId: hostRows.dispatchId,
   }) as WorkerShowResult

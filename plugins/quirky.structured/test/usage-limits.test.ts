@@ -6,12 +6,14 @@ import { waitFor } from '../../../packages/daemon/test/helpers'
 import { createClaudeRunner } from '../claude-runner'
 import { createCodexRunner } from '../codex-runner'
 import type { NewStructuredMessage, StructuredContext } from '../runner'
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import { createCodexAppServerFixture, isolatedProviderEnvironment } from './fakes/codex-app-server'
 import { FakeQuery } from './fakes/fake-query'
 
 const ENV_KEYS = ['HOME', 'QUIRKY_HOME', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME'] as const
 let home: string | undefined
 let priorEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {}
+let processRunners: OwnedProcessRunner[] = []
 
 function isolatedHome(): string {
   home = mkdtempSync('/tmp/qs-usage-limits-')
@@ -27,7 +29,8 @@ function isolatedHome(): string {
   return home
 }
 
-afterEach(() => {
+afterEach(async () => {
+  await Promise.all(processRunners.splice(0).map((runner) => runner.dispose()))
   if (home) rmSync(home, { recursive: true, force: true })
   home = undefined
   for (const key of ENV_KEYS) {
@@ -58,8 +61,11 @@ function session(agent: 'claude' | 'codex', cwd: string): Session {
 
 function contextFor(options: { codexPath?: string; claudePath?: string } = {}) {
   const messages: StructuredMessage[] = []
+  const processRunner = createProcessRunner({ owner: 'usage-limits-test' })
+  processRunners.push(processRunner)
   const statuses: string[] = []
   const context: StructuredContext = {
+    process: processRunner,
     appendMessage(input: NewStructuredMessage) {
       const message: StructuredMessage = {
         sessionId: input.sessionId,

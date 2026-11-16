@@ -89,13 +89,31 @@ export type SplitButtonProps = {
   title?: string
   /** Accessible name of the caret that opens the item menu. */
   menuLabel: string
-  /** Items set `enabled: false` plus `detail` to stay listed, greyed, with their reason. */
-  items: ContextMenuItem[]
-  onChoose(id: string): void
+  /** Items the button uses for its own menu; omit when the caller owns the menu. */
+  items?: ContextMenuItem[]
+  /** Called when an item with an `id` is selected from the button's own menu. */
+  onChoose?(id: string): void
+  /** When provided, the caller owns the menu; receives the caret's bottom-right corner. */
+  onOpenMenu?(anchor: { x: number; y: number }): void
+  /** Whether the caller-owned menu is open; controls the caret's `aria-expanded`. */
+  menuOpen?: boolean
 }
 export type InlineErrorProps = {
   message: string
   action?: { label: string; onAction(): void }
-  onDismiss(): void
+  /** Without it there is no dismiss button. */
+  onDismiss?(): void
 }
 export type ScopeChipProps = { label: string; onRemove(): void; removeLabel?: string }
+
+export type UiTagColor = 'blue' | 'violet' | 'teal' | 'coral' | 'magenta' | 'mint' | 'sand' | 'rose'
+export type UiActivityMarkState = 'running' | 'waiting' | 'error' | 'idle' | 'asleep'
+export type UiTag = { id: string; name: string; color: UiTagColor | null }
+export type ActivityMarkProps = { state: UiActivityMarkState; label: string }
+export type TagChipProps = { name: string; color: UiTagColor | null }
+export type TagChipsProps = { tags: UiTag[]; max?: number }
+export type CheckboxProps = { checked: boolean; indeterminate?: boolean; label: string; onChange: (checked: boolean) => void; hideLabel?: boolean }
+export type SwatchGroupProps = { value: UiTagColor | null; onChange: (color: UiTagColor | null) => void; label: string }
+export type NoticeLineProps = { children: ReactNode; actions?: UiAction[] }
+export type HoverCardProps = { anchor: HTMLElement | null; open: boolean; children: ReactNode }
+export type BulkBarProps = { count: number; actions: UiAction[]; onClear: () => void }

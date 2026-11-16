@@ -4,11 +4,14 @@
 
 ## Requirements
 
-- Install Google Chrome or Chromium on macOS; the plugin does not bundle a browser.
+- Install Google Chrome or Chromium on macOS or Linux; the plugin does not bundle a browser.
 - The desktop bundle includes the pinned `agent-browser` helper (0.27.0).
 - Set `QUIRKY_BROWSER_CHROME` to an absolute executable path if the standard Chrome/Chromium locations are unsuitable.
+- Default discovery tries the macOS Google Chrome and Chromium app executables, then `/usr/bin/google-chrome`, `/usr/bin/google-chrome-stable`, `/usr/bin/chromium`, and `/usr/bin/chromium-browser`, in that order. Candidates must be executable.
 
-The Native Browser view embeds a sandboxed system webview without starting automation Chrome. Watch explicitly shows an existing managed agent page through its CDP screencast. Disabling the plugin closes only helper and Chrome processes it owns. macOS is the exercised platform; other platforms are not claimed as supported.
+Managed automation and Watch support installed Chrome/Chromium on macOS and Linux. The Native Browser view embeds a sandboxed system webview in the desktop shell without starting automation Chrome; its macOS-specific capabilities remain separate. Watch explicitly shows an existing managed agent page through its CDP screencast. Disabling the plugin closes only helper and Chrome processes it owns.
+
+Chrome, the native helper, Safe Storage lookups and user-approved `open` commands use the plugin's shared process runner. Shutdown awaits owned children and bounded process-group cleanup; `groupSurvived` reports descendants that remain after that bound, rather than guaranteeing the whole group is gone. Download opening and external-app approval return immediately; failed launches log a reason with paths and URLs redacted. Safe Storage reads stop after five seconds or more than 4,096 stdout bytes and never log credentials.
 
 ## CLI
 
@@ -28,13 +31,15 @@ quirky browser exec --page <page-id> --command 'fill "#email" "agent@example.tes
 quirky browser tab close --page <page-id> --yes --json
 ```
 
-Page operations accept an explicit `--page` or use the existing worktree/current-directory scope rules. `--worktree all` is for read-only page listings. `tab switch --focus` fails explicitly because native window focus is unsupported in this headless feature.
+Page operations accept an explicit `--page` or use the existing worktree/current-directory scope rules. `--worktree all` is for read-only page listings. `tab switch --focus` reveals the selected page in a Watch pane in its worktree and switches one Quirky window to that worktree, reusing an existing Watch pane. `open-url --client caller` creates and reveals a Default-profile page in its worktree; routing chooses the caller's matching window (the focused one if several match), a sole connected window if none match, or an explicit `--client <connection-id>` when ambiguous, and neither command raises or activates an OS window.
 
 CLI values are literal data. In particular, a string beginning with `@file:` is passed unchanged; the CLI does not read files or stdin implicitly.
 
 Bulk input is explicit: `fill --value-file <path>`, `eval --expression-file <path>`, or an operation's `--text-file <path>` reads only that named field. Corresponding `--value-stdin`, `--expression-stdin` and `--text-stdin` read stdin only when requested. Inline/file/stdin choices are mutually exclusive; a literal `@file:` value never opts into reading.
 
 Advanced automation adds history, semantic locators, keyboard/mouse and form operations, uploads/downloads, full-page screenshots/PDF, console/network/HAR, interception and page emulation. `exec` remains a closed typed command parser: it cannot launch or retarget the helper, close its session, change transport, or bypass ordinary page scoping.
+
+`intercept enable` holds matching requests on the selected managed page until `intercept disable` releases them. `intercept list` shows only pending requests, each with `pending: true`. List and disable remain available while a held navigation blocks another command. Re-enabling replaces the patterns without releasing requests already held. Each page holds at most 1,000 requests; further matches pass through. Watch uses the same queue, which survives stopping Watch. Closing a page, changing its profile or losing its browser discards held requests; patterns survive profile changes and browser loss.
 
 ```sh
 quirky browser full-screenshot --page <page-id> --format png --json
@@ -74,6 +79,16 @@ Every pane API method has a `quirky browser pane ...` CLI command, including sug
 Find protects the focused typed query from delayed canonical replies. Next, Previous and Enter use that current query; canonical updates after editing and switching to a different pane still hydrate the field.
 
 `pane close` returns `true` after the hosted tab and pane resources are removed. Its `fromTab` and `tabId` parameters are reserved for the terminal's authenticated close hook.
+
+Window-local controls are also public commands. Read `tabs[].id` from `pane state`, then address a mounted pane:
+
+```sh
+quirky ui run command:quirky.browser/paneUiControl --args '{"action":"open-find","pane":"<pane-id>"}'
+quirky ui run command:quirky.browser/preferencesControl --args '{"action":"toggle-profile-menu","instance":"browser-pane:<pane-id>:profile-menu"}'
+quirky ui run command:quirky.browser/preferencesControl --args '{"action":"toggle-import-hint","instance":"browser-pane:<pane-id>:import-hint"}'
+```
+
+`paneUiControl` also accepts `dismiss-message`, `retry-watch`, `retry-native`, `dismiss-page-error`, `close-browser-menu`, and `close-history-menu`. It returns `{ pane, action, delivered }`; `preferencesControl` returns `{ instance, action, delivered }`. Delivery counts mounted controllers, including multiple mounts of one pane; a missing or unmounted target returns zero. These calls do not activate the owner window. They use the existing `ui.command.run` window routing, which refuses ambiguous multiple-window targets.
 
 Native is available only in the desktop shell. A plain web client explains that the system webview cannot be embedded and offers an explicit Watch action; it never silently substitutes Chrome. Native browsing uses the selected visible viewport size. Mobile device emulation is available only in Watch.
 
@@ -145,13 +160,13 @@ Browser Settings expose the pane defaults, Chrome identity, link routing, termin
 
 Link Routing defaults to the system browser. Cmd-click opens directly; Shift+Cmd-click forces the system browser unless Shift inversion is enabled, when it reverses the configured route for that click. HTTP(S) navigation from terminal and Markdown/editor surfaces retains its originating worktree. Ordinary rich-editor link clicks remain editing; modified navigation uses routing. File links keep their editor/reveal behavior. A failed explicit in-app route is an error, not a silent external fallback.
 
-Chrome identity is `clean` by default; it removes embedding/headless user-agent tokens. `native` preserves Chrome's actual user agent. Changes require a daemon or Browser-plugin restart; an existing runtime keeps its activation-time mode. This is not a credential/fingerprint guarantee.
+Browser identity is `clean` by default; it removes embedding/headless user-agent tokens from managed Chrome and, when the desktop exposes the system webview’s user agent, Native pages too. `native` preserves each engine’s actual user agent. Changes require a daemon or Browser-plugin restart; an existing runtime keeps its activation-time mode. This is not a credential/fingerprint guarantee.
 
 ### Explicit capability limits
 
 - **Cookie import destination:** menu, toolbar hint and per-profile Settings import controls update the selected managed Chrome/Watch profile, not the separate Native WKWebView engine. Hide Hint persists and can be reversed in Settings.
-- **Native clear/removal:** `profileClear`/`profileDelete` and their `tab profile clear|delete` CLI commands require confirmation and refuse active profiles. Current SDK has no deletion completion acknowledgement; native capability rejects before invocation, preserving Chrome data/profile metadata. Successful native clear/removal is **not shipped**. `sa-browser-native-profile-clear-completion` owns the missing barrier; the one-use desktop claim command cannot bypass ordinary destructive confirmation.
-- **Native identity:** no supported native UA override is available. Settings state the limit rather than store a working-looking no-op. Follow-up: `sa-browser-native-identity`.
+- **Native clear/removal:** Desktop Browser storage uses stable, home-scoped identifiers per profile through `Session.setStorageIdentifier`. When supported, `Session.clearStorageData('all')` must report completion before the daemon clears or removes the profile. The headless CLI has no desktop Native-clear acknowledgement and refuses clear/delete, preserving Chrome data and profile metadata. The headless parity run does not prove live WKWebView clearing.
+- **Native identity:** The desktop reads the system webview’s user agent and applies the active `clean` identity before mounting a Native page when the SDK exposes it; `native` keeps the system value. The headless parity run does not provide live WKWebView identity evidence.
 - **Localhost Worktree Labels:** off by default. When on, a worktree's `http://localhost:<port>` link opens at `http://<label>.quirky.localhost:<proxy>/`, which a daemon-owned label proxy routes to that worktree's server, WebSockets included. Agent Chrome reaches it directly. The Native pane routes only `quirky.localhost` through Electrobun's per-partition `Session.setProxy`, which needs macOS 14 or later, and refuses label URLs where that isn't available. `browser localhost-label register|list` manage labels by hand.
 - **Native test state:** `QUIRKY_HOME` alone does not prove WKWebView storage-root isolation. Native nightly scenarios must use newly created UUID profiles only; never clear/use shared Default without independent native-root proof. Web checks cannot prove native storage isolation or deletion.
 
@@ -179,7 +194,7 @@ Cookie and storage CRUD share the same scoped API/CLI. Dialog accept/dismiss use
 
 ## Running browser tests
 
-Run `bun scripts/suite.ts plugins/quirky.browser` for the canonical package checks. Real browser automation, extras API/CLI, cookie import, Watch and design-runtime files run on macOS with installed Chrome, as listed in `scripts/test-on-macos.txt`; the remote Linux host does not provide Chrome. These checks retain real owned browser processes rather than skipping browser scenarios or substituting mocks.
+Run the single-file browser CLI parity acceptance with `bun test scripts/parity/browser.test.ts`; see the [Orca browser parity table](../../docs/parity/orca-browser.md) for the 80-command inventory and the reasons rows are left out. The acceptance uses real owned browser processes and requires installed Chrome/Chromium on macOS or Linux. Linux CI shards verify a sandboxed headless launch before running tests; a missing or unusable browser fails the shard preparation.
 
 The browser harness installs the public dependencies of its real plugins, including the Worktrees dependency on `quirky.cli`. It uses temporary process homes and synthetic cookie source files and cleans up the owned browser and daemon. UI import tests verify explicit discovery, file recovery, captured destination confirmation and command execution without pinning explanatory copy or button punctuation.
 

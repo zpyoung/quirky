@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { spawnPty } from '../../pty-host/src/pty-process'
 import { buildSessionEnv, commandArgv, installIntegrationFiles, shellArgv } from '../src/launch'
 import { InteractivePath, readInteractivePath } from '../src/interactive-path'
+import { liveProcesses, stopAllProcesses } from '@quirky/process'
 import { makeTempHome, waitFor } from './helpers'
 import daemonPackage from '../package.json'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
@@ -182,6 +183,88 @@ describe('command sessions with the interactive shell PATH', () => {
       return true
     }
   }
+
+  test('a running PATH probe is kernel-owned and stopped with the daemon processes', async () => {
+    const pidFile = join(root, 'probe.pid')
+    write(join(userHome, '.zshrc'), `echo $$ > ${pidFile}\nsleep 30`)
+    const startedAt = Date.now()
+    let shellPid: number | undefined
+    let probe: Promise<string | undefined> | undefined
+    let passed = false
+    try {
+      probe = readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'))
+      // zsh startup and process registration happen on real OS time.
+      shellPid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
+      const entry = await waitFor(
+        () => liveProcesses().find(value => value.owner === 'kernel' && value.command === '/bin/zsh' && value.pid === shellPid),
+        2000
+      )
+      expect(entry).toMatchObject({ owner: 'kernel', command: '/bin/zsh', pid: shellPid })
+
+      await stopAllProcesses()
+      expect(await probe).toBeUndefined()
+      expect(Date.now() - startedAt).toBeLessThan(10_000)
+      // The OS must reap the stopped shell before kill(pid, 0) reports it gone.
+      await waitFor(gone(shellPid), 3000)
+      expect(liveProcesses().filter(value => value.owner === 'kernel')).toEqual([])
+      passed = true
+    } finally {
+      const cleanupPid = shellPid
+        ?? liveProcesses().find(value => value.owner === 'kernel' && value.command === '/bin/zsh')?.pid
+        ?? (existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8').trim()) || undefined : undefined)
+      try {
+        await stopAllProcesses()
+      } finally {
+        if (!passed && cleanupPid !== undefined) {
+          try {
+            process.kill(-cleanupPid, 'SIGKILL')
+          } catch {}
+          // The OS must finish reaping the probe before the fixture is removed.
+          await waitFor(gone(cleanupPid), 3000)
+        }
+        if (probe !== undefined) await probe
+      }
+    }
+  })
+
+  test('a background job from the rc file dies when the interactive shell exits', async () => {
+    const pidFile = join(root, 'sleep.pid')
+    write(join(userHome, '.zshrc'), `sleep 30 &\necho $! > ${pidFile}\nexport PATH=/opt/rc-bin:$PATH`)
+    let sleepPid: number | undefined
+    let passed = false
+    try {
+      const path = await readInteractivePath(quirkyHome, '/bin/zsh', userEnv('/bin/zsh'))
+      // zsh writes the background PID as an rc-file side effect on real OS time.
+      sleepPid = await waitFor(() => existsSync(pidFile) && Number(readFileSync(pidFile, 'utf8').trim()), 5000)
+      expect(path?.split(':')[0]).toBe('/opt/rc-bin')
+      // Wait for the operating system to finish the background process after shell exit.
+      await waitFor(gone(sleepPid), 3000)
+      passed = true
+    } finally {
+      const cleanupPid = sleepPid
+        ?? (existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8').trim()) || undefined : undefined)
+      try {
+        await stopAllProcesses()
+      } finally {
+        if (!passed && cleanupPid !== undefined) {
+          try {
+            process.kill(cleanupPid, 'SIGKILL')
+          } catch {}
+          // The OS must finish reaping the background job before the fixture is removed.
+          await waitFor(gone(cleanupPid), 3000)
+        }
+      }
+    }
+  })
+
+  test('a shell that cannot start has no interactive PATH', async () => {
+    try {
+      expect(await readInteractivePath(quirkyHome, '/no/such/zsh', userEnv('/no/such/zsh'))).toBeUndefined()
+    } finally {
+      await stopAllProcesses()
+    }
+  })
+
 
   test('a shell that keeps running after printing its PATH is stopped at the timeout', async () => {
     const pidFile = join(root, 'logout.pid')

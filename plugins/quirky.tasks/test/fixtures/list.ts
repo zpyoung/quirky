@@ -48,13 +48,13 @@ import { join } from 'node:path'
 const fixtureDir = process.env.QUIRKY_TEST_FIXTURE_DIR
 if (typeof fixtureDir !== 'string') throw new Error('missing isolated fixture directory')
 const statePath = join(fixtureDir, 'state.json')
-const loaded = JSON.parse(readFileSync(statePath, 'utf8'))
-const state = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {}
 const args = process.argv.slice(2)
 const inputIndex = args.indexOf('--input')
 const inputText = process.env.QUIRKY_TEST_GH_INPUT ??
   (inputIndex >= 0 && args[inputIndex + 1] === '-' ? readFileSync(0, 'utf8') : '')
 const request = inputText ? JSON.parse(inputText) : null
+const loaded = JSON.parse(readFileSync(statePath, 'utf8'))
+const state = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {}
 const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
 const requestObject = isObject(request) ? request : {}
 const variables = isObject(requestObject.variables) ? { ...requestObject.variables } : {}
@@ -70,21 +70,18 @@ for (let index = 0; index < args.length; index += 1) {
 }
 const graphqlVariables = isObject(variables.variables) ? { ...variables.variables, ...variables } : variables
 if (typeof requestObject.query === 'string') graphqlVariables.query = requestObject.query
-const calls = Array.isArray(state.calls) ? state.calls : []
-calls.push({ args, variables: graphqlVariables, input: request })
-state.calls = calls
 const save = () => {
   const temporaryPath = statePath + '.' + process.pid + '.tmp'
   writeFileSync(temporaryPath, JSON.stringify(state))
   renameSync(temporaryPath, statePath)
 }
-const emit = (value) => { save(); process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value)); process.exit(0) }
-const fail = (message) => { save(); process.stderr.write(message); process.exit(1) }
+const emit = (value) => { process.stdout.write(typeof value === 'string' ? value : JSON.stringify(value)); process.exit(0) }
+const fail = (message) => { process.stderr.write(message); process.exit(1) }
 function repoArgument() {
   const index = args.findIndex((part) => part === '--repo' || part === '-R')
   return String(args[index + 1] ?? 'test-owner/test-repo').split('/').slice(-2).join('/')
 }
-save()
+
 if (args[0] === 'auth' && args[1] === 'status') {
   emit(state.auth === false ? 'No authentication configured for github.com\n' : 'Logged in to github.com account fixture-user (keyring)\nActive account: true\nToken scopes: repo, project, read:org\n')
 }
@@ -193,6 +190,7 @@ if (args[0] === 'api') {
       const lagSearch = isObject(state.lagSearch) ? state.lagSearch : null
       if (first !== 1 && lagSearch?.repository === key && Number(lagSearch.remaining) > 0 && Array.isArray(lagSearch.items)) {
         lagSearch.remaining = Number(lagSearch.remaining) - 1
+        save()
         filtered = lagSearch.items.filter((item) => matches(item, search))
       }
       const nodes = filtered.slice(after, after + first).map(toGraphqlNode)
@@ -211,6 +209,7 @@ if (args[0] === 'api') {
       const item = Object.values(state.items ?? {}).flat().find((entry) => entry.kind === 'pullRequest' && pullRequestId(entry) === id)
       if (!item) fail('pull request was not found for auto-merge')
       item.autoMergeRequest = { enabledAt: '2026-10-01T00:00:00Z' }
+      save()
       emit({ data: { enablePullRequestAutoMerge: { pullRequest: { id, autoMergeRequest: item.autoMergeRequest } } } })
     }
     if (query.includes('HostingChecksRollup')) {
@@ -303,6 +302,7 @@ if (args[0] === 'api') {
     const lagSearch = isObject(state.lagSearch) ? state.lagSearch : null
     if (perPage !== 1 && lagSearch?.repository === key && Number(lagSearch.remaining) > 0 && Array.isArray(lagSearch.items)) {
       lagSearch.remaining = Number(lagSearch.remaining) - 1
+      save()
       filtered = lagSearch.items.filter((item) => matches(item, query))
     }
     const items = filtered.slice((page - 1) * perPage, page * perPage).map((item) => item.kind === 'issue' ? toRestIssue(item) : toRestPull(item))

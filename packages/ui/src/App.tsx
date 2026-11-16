@@ -6,6 +6,7 @@ import { ConnectionBanner } from './components/ConnectionBanner'
 import { MainArea } from './components/MainArea'
 import { SettingsDialog } from './components/SettingsDialog'
 import { Toasts } from './components/Toasts'
+import { ShellErrorBoundary } from './components/ShellErrorBoundary'
 import { useAppState, usePluginHost, usePluginState } from './context'
 import { CommandPalette } from './plugins/CommandPalette'
 import { OverlayLayer } from './plugins/OverlayLayer'
@@ -21,14 +22,16 @@ import {
   type ToolShellChrome
 } from './shell/ToolShell'
 import { WindowBar } from './shell/WindowBar'
+import { FolderDialog } from './browser-host/FolderDialog'
+import type { BrowserHostController } from './browser-host'
 
 function NoToken() {
   return (
     <div className="fullscreen-message">
       <h1>Not connected</h1>
       <p>
-        This page needs an access token. Open Quirky from the desktop app, or use the URL the daemon
-        prints, which ends in <code>#token=…</code>.
+        This page needs an access token. Run <code>quirky ui url</code> on the daemon host and open
+        the address it returns.
       </p>
     </div>
   )
@@ -47,7 +50,11 @@ const EMPTY_CHROME: ToolShellChrome = { rail: 0, splitter: 0, centerMinWidth: 0,
 
 type WorkspaceMeasurement = { width: number; height: number; chrome: ToolShellChrome }
 
-export function App() {
+export function App({ browserHost = null }: { browserHost?: BrowserHostController | null }) {
+  return <ShellErrorBoundary><AppContent browserHost={browserHost} /></ShellErrorBoundary>
+}
+
+function AppContent({ browserHost }: { browserHost: BrowserHostController | null }) {
   const state = useAppState()
   const { model, layout, windowRoute } = usePluginState()
   const host = usePluginHost()
@@ -58,6 +65,7 @@ export function App() {
   const auxiliary = windowRoute !== null
   useShortcuts()
   useThemeVariables()
+  useEffect(() => () => browserHost?.dispose(), [browserHost])
   useEffect(() => {
     if (process.env.QUIRKY_BUILD_CHANNEL === 'dev') return
     const handleContextMenu = (event: MouseEvent) => {
@@ -166,6 +174,7 @@ export function App() {
       {layout.palette === true && <CommandPalette onClose={() => host.setPalette(false)} />}
       <Toasts />
       <ConfirmHost />
+      <FolderDialog controller={browserHost} />
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} />}
     </div>
   )

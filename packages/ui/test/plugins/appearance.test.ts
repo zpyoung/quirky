@@ -6,6 +6,7 @@ import { DARK_THEME, DEFAULT_THEME, LIGHT_THEME, THEME_TOKENS, type ThemeInfo, t
 import { AppContext, type AppContextValue } from '../../src/context'
 import type { HostState, WindowPluginHost } from '../../src/plugins/host'
 import { useThemeVariables } from '../../src/plugins/useThemeVariables'
+import * as appearance from '../../src/plugins/appearance'
 
 const DARK_QUERY = '(prefers-color-scheme: dark)'
 type TestMediaQuery = MediaQueryList & {
@@ -236,4 +237,13 @@ test('the frame color is #0c0d0f in dark and #eef0f3 in light, written to --ui-r
   expect(DEFAULT_THEME.colors.bg).toBe('#0c0d0f')
   expect(DARK_THEME.colors.bg).toBe('#0c0d0f')
   expect(LIGHT_THEME.colors.bg).toBe('#eef0f3')
+})
+
+test('theme variable names cover exactly the protocol theme tokens', () => {
+  const { THEME_VARIABLE_NAMES } = appearance
+  expect(THEME_VARIABLE_NAMES).toBeDefined()
+  expect(Object.keys(THEME_VARIABLE_NAMES).sort()).toEqual([...THEME_TOKENS].sort())
+  for (const token of THEME_TOKENS) {
+    expect<string>(THEME_VARIABLE_NAMES[token]).toBe('--' + token)
+  }
 })

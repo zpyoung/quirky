@@ -101,9 +101,12 @@ function setup() {
   const opened: { id: string; input?: unknown }[] = []
   const provided = new Map<string, unknown>()
   const listeners = new Set<(event: QuirkyEvent) => void | Promise<void>>()
+  const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
+  const activityCallWaiters: (() => void)[] = []
+  const activityGates: { promise: Promise<void>; resolve: () => void }[] = []
+  const failures: { method: string; cause: unknown }[] = []
   let raceNextAcknowledge = false
   let nextClearGate: Promise<void> | null = null
-  const activityCallWaiters: (() => void)[] = []
 
   const context = {
     pluginId: 'quirky.agent-status',
@@ -114,6 +117,11 @@ function setup() {
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       if (method === 'quirky.agent-status/activity') {
+        for (const resolve of activityCallWaiters.splice(0)) resolve()
+      }
+      const failureIndex = failures.findIndex((entry) => entry.method === method)
+      if (failureIndex !== -1) throw failures.splice(failureIndex, 1)[0]!.cause
+      if (method === 'quirky.agent-status/activity') {
         const text = typeof params.text === 'string' ? params.text.toLocaleLowerCase() : ''
         const result = {
           threads: data
@@ -122,7 +130,8 @@ function setup() {
             .filter((entry) => !text || [entry.prompt, entry.agent, entry.worktreeName, entry.sessionName].some((value) => value.toLocaleLowerCase().includes(text)))
             .map((entry) => ({ ...entry }))
         }
-        for (const resolve of activityCallWaiters.splice(0)) resolve()
+        const gate = activityGates.shift()
+        if (gate) await gate.promise
         return result
       }
       if (method === 'quirky.agent-status/acknowledge') {
@@ -175,7 +184,10 @@ function setup() {
     getLayout: () => ({ view: null, panel: null, sidebar: true, focus: null }),
     onLayout: () => () => {},
     onStream: () => () => {},
-    onConnection: () => () => {},
+    onConnection(listener: (status: 'connected' | 'reconnecting') => void) {
+      connectionListeners.add(listener)
+      return () => void connectionListeners.delete(listener)
+    },
     confirm: async () => true,
     toast() {},
     setPanelBadge() {},
@@ -194,6 +206,20 @@ function setup() {
     opened,
     provided,
     sessions,
+    notifyActivityChanged() {
+      for (const listener of listeners) void listener({ type: 'quirky.agent-status/changed', data: {} })
+    },
+    notifyConnected() {
+      for (const listener of connectionListeners) listener('connected')
+    },
+    failNext(method: string, cause: unknown) {
+      failures.push({ method, cause })
+    },
+    deferNextActivity() {
+      const gate = Promise.withResolvers<void>()
+      activityGates.push(gate)
+      return () => gate.resolve()
+    },
     makeRace: () => (raceNextAcknowledge = true),
     deferNextClear() {
       const gate = Promise.withResolvers<void>()
@@ -205,18 +231,19 @@ function setup() {
       activityCallWaiters.push(waiter.resolve)
       return waiter.promise
     },
-    async mount(id: string, input?: unknown, target: HTMLElement = host) {
+    async mount(id: string, input?: unknown, target: HTMLElement = host, waitForThread = id === VIEW) {
       let cleanup = () => {}
       await act(async () => {
         const implementation = provided.get(id) as ((element: HTMLElement, options: { input?: unknown }) => () => void) | undefined
         if (!implementation) throw new Error(`no UI mount for ${id}`)
         cleanup = implementation(target, { input })
       })
-      if (id === VIEW) await act(async () => waitForRenderedElement('[data-session-id="s-wait"]'))
+      if (waitForThread) await act(async () => waitForRenderedElement('[data-session-id="s-wait"]'))
       return () => act(async () => cleanup())
     }
   }
 }
+
 
 function waitForRenderedElement(selector: string): Promise<Element> {
   const existing = host.querySelector(selector)
@@ -261,6 +288,145 @@ function waitForActivityText(text: string): Promise<void> {
   observer.observe(host, { childList: true, characterData: true, subtree: true })
   return promise
 }
+test('Activity sidebar and center render their shared loading states while requests are pending', async () => {
+  const h = setup()
+  const releaseSidebar = h.deferNextActivity()
+  const releaseCenter = h.deferNextActivity()
+  const cleanupSidebar = await h.mount(SIDEBAR, undefined, host, false)
+  const centerHost = document.createElement('div')
+  document.body.append(centerHost)
+  const cleanupCenter = await h.mount(VIEW, { group: 'status' }, centerHost, false)
+
+  expect(host.querySelector('.ui-notice-line')?.textContent).toContain('Loading Activity…')
+  expect(host.querySelector('.ui-text-muted')).toBeNull()
+  expect(centerHost.querySelector('.ui-empty-state')?.textContent).toContain('Loading Activity…')
+  expect(centerHost.querySelector('.ui-text-muted')).toBeNull()
+
+  releaseSidebar()
+  releaseCenter()
+  await cleanupCenter()
+  await cleanupSidebar()
+})
+test('Activity sidebar keeps newer filter results when an older request resolves late', async () => {
+  const h = setup()
+  const releaseInitial = h.deferNextActivity()
+  const cleanup = await h.mount(SIDEBAR, undefined, host, false)
+
+  await typeInto(host.querySelector<HTMLInputElement>('input[aria-label="Search Activity"]')!, 'audit')
+  await click(host.querySelector('button[aria-label="Apply Activity filters"]')!)
+  await act(async () => waitForRenderedElement('[data-session-id="s-work"]'))
+  expect(host.querySelector('[data-session-id="s-wait"]')).toBeNull()
+
+  await act(async () => {
+    releaseInitial()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  expect(host.querySelector('[data-session-id="s-wait"]')).toBeNull()
+  expect(host.querySelector('[data-session-id="s-work"]')).not.toBeNull()
+  await cleanup()
+})
+
+test('Activity sidebar unsubscribes and ignores pending loads after unmount', async () => {
+  const h = setup()
+  const releaseInitial = h.deferNextActivity()
+  const cleanup = await h.mount(SIDEBAR, undefined, host, false)
+  expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity')).toHaveLength(1)
+
+  await cleanup()
+  await act(async () => {
+    releaseInitial()
+    await Promise.resolve()
+    await Promise.resolve()
+  })
+  const activityCallCount = h.calls.filter((call) => call.method === 'quirky.agent-status/activity').length
+  h.notifyActivityChanged()
+  h.notifyConnected()
+
+  expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity')).toHaveLength(activityCallCount)
+  expect(host.querySelector('main')).toBeNull()
+})
+
+
+test('Activity sidebar recovers from an initial load error with Retry', async () => {
+  const h = setup()
+  h.failNext('quirky.agent-status/activity', new Error('activity store offline'))
+  const cleanup = await h.mount(SIDEBAR)
+  await act(async () => waitForActivityText('activity store offline'))
+
+  const error = host.querySelector('.ui-inline-error[role="alert"]')
+  expect(error?.textContent).toContain('activity store offline')
+  expect(error?.querySelectorAll('button')).toHaveLength(1)
+  expect(error?.querySelector('.ui-inline-error__action')?.textContent).toBe('Retry')
+  expect(host.querySelector('.ui-empty-state')).toBeNull()
+
+  await click(error!.querySelector('.ui-inline-error__action')!)
+  await act(async () => waitForRenderedElement('[data-session-id="s-wait"]'))
+  expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity')).toHaveLength(2)
+  expect(host.querySelector('.ui-inline-error')).toBeNull()
+  await cleanup()
+})
+test('Activity center recovers from an initial load error with Retry', async () => {
+  const h = setup()
+  h.failNext('quirky.agent-status/activity', new Error('center activity unavailable'))
+  const cleanup = await h.mount(VIEW, { group: 'status' }, host, false)
+  await act(async () => waitForActivityText('center activity unavailable'))
+
+  const error = host.querySelector('.ui-inline-error[role="alert"]')
+  expect(error?.textContent).toContain('center activity unavailable')
+  expect(error?.querySelectorAll('button')).toHaveLength(1)
+  expect(error?.querySelector('.ui-inline-error__action')?.textContent).toBe('Retry')
+
+  await click(error!.querySelector('.ui-inline-error__action')!)
+  await act(async () => waitForRenderedElement('[data-session-id="s-wait"]'))
+  expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity')).toHaveLength(2)
+  expect(h.opened).toEqual([])
+  expect(host.querySelector('.ui-inline-error')).toBeNull()
+  await cleanup()
+})
+
+test('Activity sidebar preserves populated threads and recovers when acknowledge fails', async () => {
+  const h = setup()
+  const cleanup = await h.mount(SIDEBAR)
+  h.failNext('quirky.agent-status/acknowledge', new Error('acknowledge failed'))
+  const markRead = [...host.querySelectorAll<HTMLButtonElement>('[data-session-id="s-wait"] button')]
+    .find((button) => button.textContent?.trim() === 'Mark read')!
+  await click(markRead)
+  await act(async () => waitForActivityText('acknowledge failed'))
+
+  expect(host.querySelector('.ui-inline-error[role="alert"]')?.textContent).toContain('acknowledge failed')
+  expect(host.querySelector('[data-session-id="s-wait"]')).not.toBeNull()
+  expect(host.querySelector('[data-session-id="s-done"]')).not.toBeNull()
+
+  const activityCallCount = h.calls.filter((call) => call.method === 'quirky.agent-status/activity').length
+  await click(host.querySelector('.ui-inline-error__action')!)
+  expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity')).toHaveLength(activityCallCount + 1)
+  expect(host.querySelector('.ui-inline-error')).toBeNull()
+  expect(host.querySelector('[data-session-id="s-wait"]')).not.toBeNull()
+  expect(host.querySelector('[data-session-id="s-done"]')).not.toBeNull()
+  await cleanup()
+})
+
+test('Activity sidebar preserves populated threads and recovers when clear-completed fails', async () => {
+  const h = setup()
+  const cleanup = await h.mount(SIDEBAR)
+  h.failNext('quirky.agent-status/clearCompleted', new Error('clear completed failed'))
+  await click(host.querySelector('button[aria-label="Clear completed activity"]')!)
+  await act(async () => waitForActivityText('clear completed failed'))
+
+  expect(host.querySelector('.ui-inline-error[role="alert"]')?.textContent).toContain('clear completed failed')
+  expect(host.querySelector('[data-session-id="s-wait"]')).not.toBeNull()
+  expect(host.querySelector('[data-session-id="s-done"]')).not.toBeNull()
+
+  const activityCallCount = h.calls.filter((call) => call.method === 'quirky.agent-status/activity').length
+  await click(host.querySelector('.ui-inline-error__action')!)
+  expect(h.calls.filter((call) => call.method === 'quirky.agent-status/activity')).toHaveLength(activityCallCount + 1)
+  expect(host.querySelector('.ui-inline-error')).toBeNull()
+  expect(host.querySelector('[data-session-id="s-wait"]')).not.toBeNull()
+  expect(host.querySelector('[data-session-id="s-done"]')).not.toBeNull()
+  await cleanup()
+})
+
 
 test('Activity sidebar renders its empty state and disables clear-completed', async () => {
   const h = setup()

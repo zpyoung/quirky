@@ -10,7 +10,7 @@ export function registerMobileNotifications(context: PluginContext): () => void 
   const unsubscribe = context.subscribe(event => {
     if (event.type !== 'notify' || event.desktop === false) return
     recording = recording.then(async () => {
-      const away = await readDesktopAway()
+      const away = await readDesktopAway(context.process)
       if (stopped) return
       replay.append({ title: event.title, body: event.body,
         ...(event.worktreeId ? { worktreeId: event.worktreeId } : {}),

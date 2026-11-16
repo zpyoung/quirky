@@ -1,4 +1,4 @@
-import type { DesktopShellAction, DesktopShellBridge, QuirkyEvent } from '@quirky/protocol'
+import type { DesktopShellAction, DesktopShellBridge, DesktopWindowSummary, QuirkyEvent } from '@quirky/protocol'
 import { confirmForPlugin } from './components/ConfirmHost'
 import { dismissToastByKey } from './components/Toasts'
 import { Connection } from './connection'
@@ -7,47 +7,119 @@ import { WindowPluginHost, type HostDeps } from './plugins/host'
 import { reportedToasts } from './lib/state'
 import { Store } from './store'
 import { desktopBridgeForWindow, noNativeDesktopCapabilities, type DesktopWindowRoute } from './desktop-bridge'
-
+import { isRecord, type BrowserHostCall, type BrowserHostControlParams, type BrowserHostController } from './browser-host'
 type DesktopShellRequestEvent = Extract<QuirkyEvent, { type: 'desktop.shell.request' }>
 
-async function answerDesktopShellRequest(
+export async function answerDesktopShellRequest(
   connection: Connection,
   bridge: DesktopShellBridge | null,
   event: DesktopShellRequestEvent,
+  log: (message: string) => void,
+  browserHost: BrowserHostController | null = null
+): Promise<void> {
+  const call: BrowserHostCall = (method, params) => connection.callAny(method, params)
+  let result: unknown
+  try {
+    if (bridge) {
+      let nativeResult: unknown
+      const action: DesktopShellAction = event.action
+      switch (action.kind) {
+        case 'folder-picker':
+          if (!bridge.capabilities.directoryPicker) throw new Error('native directory selection is unavailable')
+          nativeResult = await bridge.pickFolder(action.request)
+          break
+        case 'window-open':
+          if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
+          nativeResult = await bridge.openWindow(action.request, event.ownerShell)
+          break
+        case 'window-close':
+          if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
+          nativeResult = await bridge.closeWindow(action.request.windowId)
+          break
+        case 'window-activate-owner':
+          if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
+          const activation = await bridge.activateOwner(action.request.windowId)
+          if (!activation.activated) throw new Error('the owning native window could not be activated')
+          nativeResult = activation
+          break
+        case 'reveal-item':
+          if (!bridge.capabilities.revealItem) throw new Error('native item reveal is unavailable')
+          nativeResult = await bridge.revealItem(action.request)
+          break
+      }
+      result = nativeResult
+    } else if (browserHost) {
+      result = await browserHost.handleShellRequest(event, call)
+    } else {
+      throw new Error('native desktop shell is unavailable')
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'desktop shell operation failed'
+    await connection.callAny('desktop.shell.reply', { requestId: event.requestId, error: { message } })
+      .catch((replyError) => log(`desktop shell reply failed: ${replyError}`))
+    return
+  }
+
+  try {
+    await connection.callAny('desktop.shell.reply', { requestId: event.requestId, result })
+  } catch (error) {
+    log(`desktop shell reply failed: ${error}`)
+    if (!bridge && browserHost && event.action.kind === 'window-open' && isWindowResult(result)) {
+      await discardBrowserWindowOpen(browserHost, result.windowId, call, undefined, log)
+    }
+    return
+  }
+
+  if (bridge || !browserHost || event.action.kind !== 'window-open' || !isWindowResult(result)) return
+  let registered: boolean | undefined
+  try {
+    const windows = await call('desktop.window.list', {})
+    if (!Array.isArray(windows)) throw new Error('the daemon returned an invalid browser window list')
+    const route = windows.find((candidate): candidate is DesktopWindowSummary =>
+      isDesktopWindowSummary(candidate) && candidate.windowId === result.windowId
+    )
+    registered = route !== undefined
+    if (!route || route.ownerShell.connId !== event.ownerShell.connId || route.ownerShell.name !== event.ownerShell.name) {
+      throw new Error('the browser tab route was not registered to its exact owner')
+    }
+    browserHost.commitWindowOpen(result.windowId)
+  } catch (error) {
+    if (registered === undefined) {
+      try {
+        const windows = await call('desktop.window.list', {})
+        registered = Array.isArray(windows) && windows.some((candidate) =>
+          isDesktopWindowSummary(candidate) && candidate.windowId === result.windowId
+        )
+      } catch {
+        // The cleanup method below makes one owner-targeted close attempt before retaining the handle.
+      }
+    }
+    log(`browser tab registration failed: ${error}`)
+    await discardBrowserWindowOpen(browserHost, result.windowId, call, registered, log)
+  }
+}
+
+function isWindowResult(value: unknown): value is { windowId: string } {
+  return isRecord(value) && typeof value.windowId === 'string' && value.windowId.length > 0
+}
+
+function isDesktopWindowSummary(value: unknown): value is DesktopWindowSummary {
+  return isRecord(value) && typeof value.windowId === 'string' &&
+    isRecord(value.ownerShell) && typeof value.ownerShell.connId === 'number'
+}
+
+
+async function discardBrowserWindowOpen(
+  browserHost: BrowserHostController,
+  windowId: string,
+  call: BrowserHostCall,
+  registered: boolean | undefined,
   log: (message: string) => void
 ): Promise<void> {
   try {
-    if (!bridge) throw new Error('native desktop shell is unavailable')
-    let result
-    const action: DesktopShellAction = event.action
-    switch (action.kind) {
-      case 'folder-picker':
-        if (!bridge.capabilities.directoryPicker) throw new Error('native directory selection is unavailable')
-        result = await bridge.pickFolder(action.request)
-        break
-      case 'window-open':
-        if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
-        result = await bridge.openWindow(action.request, event.ownerShell)
-        break
-      case 'window-close':
-        if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
-        result = await bridge.closeWindow(action.request.windowId)
-        break
-      case 'window-activate-owner':
-        if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
-        result = await bridge.activateOwner(action.request.windowId)
-        if (!result.activated) throw new Error('the owning native window could not be activated')
-        break
-      case 'reveal-item':
-        if (!bridge.capabilities.revealItem) throw new Error('native item reveal is unavailable')
-        result = await bridge.revealItem(action.request)
-        break
-    }
-    await connection.callAny('desktop.shell.reply', { requestId: event.requestId, result })
+    await browserHost.discardWindowOpen(windowId, call, registered)
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'native desktop operation failed'
-    await connection.callAny('desktop.shell.reply', { requestId: event.requestId, error: { message } })
-      .catch((replyError) => log(`native desktop reply failed: ${replyError}`))
+    log(`browser tab cleanup failed: ${error}`)
   }
 }
 
@@ -125,12 +197,13 @@ export type ShellOptions = {
   windowActivity?: HostDeps['windowActivity']
   /** Trusted native bridge from this exact desktop window, absent in browser shells. */
   desktopBridge?: DesktopShellBridge | null
-  /** A local-only route used by an auxiliary native window. */
+  /** Explicit browser host controller; headless callers do not acquire browser behavior implicitly. */
+  browserHost?: BrowserHostController | null
+  /** A local-only route used by an auxiliary native or browser window. */
   windowRoute?: DesktopWindowRoute | null
   /** Delay before the first reconnect attempt. */
   initialDelayMs?: number
 }
-
 
 /**
  * The window's store, daemon connection and plugin host, wired together: the host refreshes on
@@ -140,11 +213,13 @@ export function createShell(options: ShellOptions): AppContextValue {
   const store = new Store()
   const connection = new Connection(store, options.where, { initialDelayMs: options.initialDelayMs })
   const desktopBridge = options.desktopBridge === undefined ? desktopBridgeForWindow() : options.desktopBridge
+  const browserHost = desktopBridge ? null : options.browserHost ?? null
+  const call: BrowserHostCall = (method, params) => connection.callAny(method, params)
 
   const plugins = new WindowPluginHost({
-    call: (method, params) => connection.callAny(method, params),
+    call: (method, params, callOptions) => connection.callAny(method, params, callOptions),
     onEvent: (listener) => connection.onEvent(listener),
-    onStream: (streamId, listener) => connection.onStream(streamId, listener),
+    onStream: (streamId, listener, streamOptions) => connection.onStream(streamId, listener, streamOptions),
     onConnection: (listener) => connection.onStatus(listener),
     importModule: options.importModule,
     confirm: confirmForPlugin,
@@ -154,13 +229,16 @@ export function createShell(options: ShellOptions): AppContextValue {
     log: options.log,
     readClipboardText: desktopBridge ? () => desktopBridge.readClipboardText() : undefined,
     nativeDropPaths: desktopBridge ? (fileNames) => desktopBridge.nativeDropPaths(fileNames) : undefined,
+    browserHostControl: browserHost
+      ? (params) => browserHost.controlRouted(params as Omit<BrowserHostControlParams, 'connId'>, call)
+      : undefined,
     windowFocus: options.windowFocus,
     windowActivity: options.windowActivity,
     windowRoute: options.windowRoute
   })
   connection.onEvent((event) => {
     if (event.type === 'desktop.shell.request') {
-      void answerDesktopShellRequest(connection, desktopBridge, event, options.log)
+      void answerDesktopShellRequest(connection, desktopBridge, event, options.log, browserHost)
     }
   })
 
@@ -174,14 +252,21 @@ export function createShell(options: ShellOptions): AppContextValue {
     reportedFrom = toasts
     reportToasts()
   })
+  if (browserHost) {
+    connection.onStatus((status) => {
+      if (status === 'reconnecting') browserHost.disconnect()
+    })
+  }
   connection.onConnected(() => {
     if (options.windowRoute) {
       connection.callAny('desktop.window.attach', {
         windowId: options.windowRoute.windowId, ownerShellConnId: options.windowRoute.ownerShellConnId
       }).catch((error) => options.log(`auxiliary window attach failed: ${error}`))
     }
-    connection.callAny('desktop.shell.capabilities', desktopBridge?.capabilities ?? noNativeDesktopCapabilities())
-      .catch((error) => options.log(`native desktop capabilities report failed: ${error}`))
+    connection.callAny(
+      'desktop.shell.capabilities',
+      desktopBridge?.capabilities ?? browserHost?.capabilities ?? noNativeDesktopCapabilities()
+    ).catch((error) => options.log(`native desktop capabilities report failed: ${error}`))
     reportToasts()
     plugins.connected().catch((error) => options.log(`plugin refresh failed: ${error}`))
   })

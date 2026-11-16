@@ -4,7 +4,7 @@ import type { PaneTab } from './pane-contract'
 import { setLiveDesignPageKeys, type DesignAction } from './design-window/DesignWindow'
 import { BrowserPaneWindow, focusBrowserAddress, focusBrowserFind, focusedBrowserPane, runFocusedBrowserDesign } from './window/BrowserPaneWindow'
 import { registerPreferencesUi } from './preferences-ui'
-
+import { dispatchDesignControl, dispatchPaneUiControl } from './ui-control'
 const PAGE_VIEW = 'view:quirky.browser/page'
 const WORKTREE_VIEW = 'view:quirky.session/worktree'
 
@@ -56,9 +56,13 @@ async function openBrowserTab(context: UiPluginContext, raw: unknown): Promise<u
     context.toast('Could not open Browser', message, { kind: 'warning' })
     return { ok: false, reason: message }
   }
-  const params: Record<string, unknown> = { worktree }
-  for (const name of ['url', 'page', 'mode', 'profile', 'group'] as const) {
-    if (typeof args[name] === 'string' && args[name] !== '') params[name] = args[name]
+  const params = {
+    worktree,
+    ...Object.fromEntries(
+      ['url', 'page', 'mode', 'profile', 'group']
+        .filter(name => typeof args[name] === 'string' && args[name] !== '')
+        .map(name => [name, args[name]])
+    )
   }
   try {
     const pane = await context.call('quirky.browser/paneOpen', params) as PaneTab
@@ -91,6 +95,8 @@ function isDesignAction(value: unknown): value is DesignAction {
 function commandHandlers(context: UiPluginContext): Record<string, BrowserCommand> {
   return {
     'new-tab': (args) => openBrowserTab(context, args),
+    paneUiControl: (args) => dispatchPaneUiControl(context, args),
+    designControl: (args) => dispatchDesignControl(context, args),
     design: (raw) => {
       const { action, pane } = argsOf(raw)
       if (!isDesignAction(action)) return { started: false, reason: 'Design action must be grab, annotate, draw, or cancel.' }

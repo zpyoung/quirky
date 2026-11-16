@@ -50,6 +50,32 @@ pays for that split and has learned its protocol (`src/main/daemon/`, protocol v
 the split and drops Orca's other copies of terminal state (see [Terminal history](#terminal-history)).
 The PTY host's protocol is small and versioned so a new `quirkyd` can adopt an old PTY host.
 
+Every PTY `hello` has a 5 s deadline, shortened when the connection budget is smaller. If the
+host is unavailable, the daemon logs the failure and still starts its API. Shutdown gives plugins
+5 s together before continuing cleanup; an 8 s process watchdog kills registered children and
+exits if shutdown is still stuck. Repeated stop signals do not interrupt that cleanup.
+
+Daemon replacement waits for the old pid to disappear, not just for `/health` to go quiet. It
+sends SIGKILL after 10 s and allows another 2 s for exit. `quirky daemon restart` also bounds its
+connection, handshake and stop request together at 5 s, closes its link before signalling, and
+reports whether the old process stopped cleanly, was terminated, was killed, or was not running.
+
+`quirky serve` starts and owns one foreground daemon, reporting readiness only when runtime,
+health and status agree on its identity. A signal or loss of `serve`'s parent forwards one SIGTERM,
+waits up to 10 s, then sends SIGKILL if needed. The daemon's `--exit-with-parent=<pid>` flag exits
+before startup if its owner is gone, or shuts it down when that parent later exits. The PTY host
+and its terminal sessions survive because `serve` does not own or stop them.
+
+The daemon sends its supported protocol range in `hello`; the host chooses the highest version
+both speak. A host built before negotiation is adopted with an exact-version hello when its
+version is in range. A host below the daemon's minimum is shut down and replaced; an incompatible
+newer host is refused without starting another one.
+
+Each daemon and PTY host holds its own kernel lock on the home until it exits. A slow or paused
+holder keeps ownership. During an upgrade from a build without these locks, an accepting PTY
+socket or a live pid in the old pid file also keeps the home. The only live-pid exception is a
+matching last-holder record from the now-free kernel lock, which proves that pid has been reused.
+
 Orca by comparison runs Electron main (runtime, RPC, a second headless emulator per PTY), the
 terminal daemon, several renderers, one Chromium process per browser tab, and forked helpers for
 plugins, vault scanning, file watching and computer use
@@ -80,6 +106,12 @@ as notifications. Terminal output travels in binary frames (`[kind u8][stream u3
 the same shape as Orca's `binary-v1` in `src/main/daemon/daemon-stream-binary-framing.ts`), so bytes
 are never JSON-encoded. `quirkyd` relays PTY frames without parsing them.
 
+The window host's refresh reads and the shell's attention reads have a 30 s deadline. A failed
+refresh releases the queue so the next refresh can run; it does not reconnect or cancel daemon
+work. Mutations and plugin UI calls keep their own timing contracts. The attention projection
+applies valid session change/removal events directly after its first successful load; malformed
+events or events during a session-list read trigger a fresh list read instead.
+
 ### Method groups
 
 The API mirrors the kept features. Names are indicative; the prototype fixes them.
@@ -93,6 +125,11 @@ The API mirrors the kept features. Names are indicative; the prototype fixes the
   and `git.*`.
 - **Hosting:** `hosting.*` covers PRs, issues, checks, reviews and merges across GitHub, GitLab,
   Bitbucket, Gitea and Azure DevOps.
+  `quirky.hosting` uses `gh` for GitHub. GitLab hosts are selected through `gitlabHosts`
+  (default `gitlab.com`), with `GITLAB_TOKEN` or the host's `glab` token used for REST v4.
+  GitLab supports repository identity, auth diagnosis, merge-request reads, creation and state
+  changes, comments and discussions. GitLab merging, checks, file APIs and Reviews UI support
+  are not implemented.
 - **Browser:** `browser.*` keeps the command set agents already use (snapshot, click, fill,
   screenshot, tabs and the rest; `src/cli/browser-handler-groups.ts`).
 - **Background work:** `automation.*`, `orchestration.*`, `heimdall.*`, `sitter.*`, `objective.*`,
@@ -121,6 +158,10 @@ Per session, `quirky-pty` keeps three things:
 1. **Raw output log on disk.** It is append-only and framed, with torn-tail detection like Orca's
    `output.log` (`src/main/daemon/terminal-history-log.ts`). It rotates at 16 MB per session and
    keeps two segments, so history survives restarts and crashes.
+   The writer keeps a compact in-memory index, grouping consecutive output records smaller than
+   4 KiB into roughly 64 KiB file spans. Live attach, history pages and reads use that index rather
+   than walking both segments. Reopened logs index the older segment once on first read; stored
+   sessions still scan from disk. Missing or truncated indexed files fall back to a disk scan.
 2. **Screen state in memory.** An emulator holds the visible screen and modes (alternate screen,
    cursor, bracketed paste, mouse) with no scrollback. That costs well under 1 MB per session, and
    it lets any client get an exact repaint without replaying bytes. A checkpoint (the serialized
@@ -133,6 +174,12 @@ When a pane attaches, it gets the screen snapshot, then the last N lines of hist
 more from the log on request. The renderer never holds more than its window, and a pane that isn't
 visible is unmounted: its xterm.js instance is disposed and reattaches from the PTY host when shown.
 The mobile app and the CLI use the same snapshot and history calls.
+
+Each `pty.sock` connection holds at most 256 MiB of encoded output across its socket queue and
+pending subscribe output. Exceeding that cap disconnects the peer, removes its subscriptions and
+clears queued bytes immediately. Unsubscribe and session removal or termination reclaim unstarted
+frames for that session; a partially written frame finishes so other sessions and RPC replies
+remain decodable. Custom non-terminating signals do not reclaim output.
 
 The screen emulator is where the stacks differ. On Bun it is `@xterm/headless` with `scrollback: 0`.
 In Go, terminal emulation libraries are young (tuios.dev/vt, vt-go), so the fallback is to record
@@ -176,6 +223,19 @@ Background agents run structured: orchestration workers, loops, sitter fix agent
 automations. Interactive Claude and Codex sessions stay in terminal panes with the dock, because a
 structured interactive session needs a chat view, and native chat is on the dropped list. Once
 hidden panes are unmounted, an interactive terminal costs memory only while it's on screen.
+
+### Federated worker reports
+
+Paired hosts queue worker reports durably and wait for their home's result. A relay pass already
+running when a report is queued is not proof of delivery: after that pass settles, the host reads
+the stored result or joins one new pass. Errors from that new pass reach the caller without retry.
+
+When a peer pulls mail, `quirky.orchestration/federationAck` carries the imported page's
+`results`: up to 50 `{ sequence, id, result }` entries. An acknowledgement that advances the
+cursor must cover every newly acknowledged item. The sender stores those results before moving
+the cursor; missing or mismatched entries leave both unchanged. Replayed acknowledgements at or
+below the cursor remain no-ops. Both paired daemons should run the same build; an older peer's
+result-free acknowledgements are refused, while push-side imports still deliver mail.
 
 ## Browser
 

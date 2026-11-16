@@ -1,0 +1,186 @@
+{
+  "id": "soak.faults",
+  "name": "Soak Faults",
+  "version": "1.0.0",
+  "apiVersion": "1.0.0",
+  "description": "Injects controlled faults into a throwaway soak daemon.",
+  "main": "main.ts",
+  "ui": "dist/ui.js",
+  "contributes": {
+    "method": [
+      {
+        "id": "leak",
+        "description": "Starts child processes at a bounded interval.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "count": { "type": "integer", "minimum": 1, "maximum": 200 },
+            "everyMs": { "type": "integer", "minimum": 10, "maximum": 60000 },
+            "lifetimeSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 }
+          },
+          "required": ["count", "everyMs", "lifetimeSeconds"]
+        }
+      },
+      {
+        "id": "zombies",
+        "description": "Starts process holders whose children become zombies.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "holders": { "type": "integer", "minimum": 1, "maximum": 10 },
+            "each": { "type": "integer", "minimum": 1, "maximum": 10 },
+            "lifetimeSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 }
+          },
+          "required": ["holders", "each", "lifetimeSeconds"]
+        }
+      },
+      {
+        "id": "refresh",
+        "description": "Updates the shared owner slot and emits its value later.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" }
+          },
+          "required": ["owner"]
+        }
+      },
+      {
+        "id": "block",
+        "description": "Blocks the daemon event loop for a measured duration.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "ms": { "type": "integer", "minimum": 100, "maximum": 10000 }
+          },
+          "required": ["ms"]
+        }
+      },
+      {
+        "id": "report",
+        "description": "Returns the fault plugin's current state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      },
+      {
+        "id": "feedbackStart",
+        "description": "Arms one bounded two-worktree feedback sequence.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktrees": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "required": ["worktrees"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": { "started": { "type": "boolean" } },
+          "required": ["started"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "feedbackRefresh",
+        "description": "Accepts the expected next owner in the armed feedback sequence.",
+        "params": {
+          "type": "object",
+          "properties": { "owner": { "type": "string" } },
+          "required": ["owner"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 17 }
+          },
+          "required": ["owner", "sequence"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "feedbackReport",
+        "description": "Returns the bounded feedback fixture's current state.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "worktrees": { "items": { "type": "string" } },
+            "refreshes": { "type": "integer", "minimum": 0, "maximum": 17 },
+            "active": { "type": "boolean" }
+          },
+          "required": ["worktrees", "refreshes", "active"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "event": [
+      {
+        "id": "changed",
+        "description": "Reports the latest refreshed owner.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" }
+          },
+          "required": ["owner"]
+        }
+      },
+      {
+        "id": "feedbackStarted",
+        "description": "Seeds the first owner for the bounded feedback sequence.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktrees": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "first": { "type": "string" }
+          },
+          "required": ["worktrees", "first"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "feedbackChanged",
+        "description": "Reports one completed refresh in the bounded feedback sequence.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "worktrees": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "owner": { "type": "string" },
+            "sequence": { "type": "integer", "minimum": 1, "maximum": 17 }
+          },
+          "required": ["worktrees", "owner", "sequence"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "panel": [
+      {
+        "id": "feedback",
+        "title": "Feedback fixture",
+        "description": "Passive two-worktree feedback detector fixture.",
+        "defaultSlot": "right-bottom"
+      }
+    ]
+  }
+}

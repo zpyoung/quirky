@@ -69,6 +69,15 @@ type TranscriptPoll = TranscriptFence & {
 }
 type OscTurn = { providerId: string; turnId: string; turnStartedAt: number }
 type TranscriptOwner = { session: Session; row: AgentRow }
+type AnnouncedRow = {
+  state: AgentRow['state']
+  agent: AgentRow['agent']
+  leadProviderSession: AgentRow['lead']['providerSession']
+  turnStartedAt: AgentRow['turnStartedAt']
+  question: AgentRow['question']
+  heldPermission: AgentRow['heldPermission']
+  worktreeId: string
+}
 
 /** One hook, as the daemon delivered it or as the spool replays it. */
 export type HookInput = {
@@ -110,6 +119,14 @@ type SettledState = 'done' | 'waiting' | 'blocked'
 const validProviderId = (id: string) => id.length >= 1 && id.length <= MAX_PROVIDER_ID && !id.startsWith('-') && !CONTROL_CHARACTERS.test(id)
 
 const sameSummary = (a: AgentStatusSummary | null | undefined, b: AgentStatusSummary | null) => JSON.stringify(a ?? null) === JSON.stringify(b)
+const sameHeldPermission = (a: AgentRow['heldPermission'], b: AgentRow['heldPermission']): boolean =>
+  a === b || (
+    a !== undefined && b !== undefined &&
+    a.toolUseId === b.toolUseId &&
+    a.toolName === b.toolName &&
+    a.input === b.input &&
+    a.childId === b.childId
+  )
 const CLAUDE_SCREEN_RULE_PREFIX = 'Claude screen rule '
 
 const isClaudeScreenInference = (row: AgentRow | null | undefined): row is AgentRow =>
@@ -130,6 +147,7 @@ const hasHookOrProgramStatus = (row: AgentRow | null): boolean =>
  */
 export class AgentStatusService {
   private readonly queues = new Map<string, Promise<void>>()
+  private readonly announcedRows = new Map<string, AnnouncedRow>()
   private readonly hookedSessions = new Set<string>()
   private readonly caches = new Map<string, NormalizerCache>()
   private readonly records = new Map<string, ProgramStatusRecords>()
@@ -145,7 +163,7 @@ export class AgentStatusService {
   private readonly sender: Sender
   private readonly waits: Waits
   private readonly sources: RuleSources
-  private readonly matcher = new Matcher()
+  private readonly matcher: Matcher
   private readonly sampler: ScreenSampler
   private readonly screen: ScreenDeps
   private stopped = false
@@ -154,10 +172,11 @@ export class AgentStatusService {
     private readonly context: PluginContext,
     private readonly rows: RowStore,
     private readonly activity: ActivityFeed,
-    private readonly isAlive: IsAlive = processAlive,
+    private readonly isAlive: IsAlive = (pid, start) => processAlive(pid, start, context.process),
     private readonly now: () => number = Date.now,
     private readonly timing: Timing = timingFrom(process.env)
   ) {
+    this.matcher = new Matcher(context.process)
     this.sources = new RuleSources({
       userDir: join(context.home, 'agent-rules'),
       builtinDir: join(context.dir, 'rules'),
@@ -228,7 +247,7 @@ export class AgentStatusService {
       this.cancelTranscriptPoll(sessionId)
       this.oscTurns.delete(sessionId)
       this.cancelProgramRetry(sessionId)
-      this.context.emit('changed', { sessionId, row: null })
+      this.emitChanged(sessionId, null, session?.worktreeId)
     })
   }
 
@@ -373,6 +392,7 @@ export class AgentStatusService {
    * `detail` is the displayed one, so a decayed row says how long it has been quiet.
    */
   async get(sessionId: string, at?: number): Promise<(AgentRow & { display: string; label: string }) | null> {
+    await this.queues.get(sessionId)
     const row = this.rows.get(sessionId)
     if (!row) return null
     const session = await this.findSession(sessionId)
@@ -618,12 +638,13 @@ export class AgentStatusService {
     // a row only titles or OSC 7501 fed has no lead to protect: a hook takes it over
     const stored = this.rows.get(session.id)
     const known = stored && stored.lastHookAt !== null ? stored : null
-    const verdict = decideIdentity(
+    const verdict = await decideIdentity(
       known,
       { source: input.source, providerSession: normalized.providerSession?.id ?? null, movesLead: normalized.movesLead === true },
       now,
       this.isAlive
     )
+    if (this.stopped) return rollBack()
     if (verdict === 'ignore') return rollBack()
     this.caches.set(session.id, cache)
 
@@ -877,8 +898,54 @@ export class AgentStatusService {
       this.activity.sync(session, row, startsTurn)
     })
     await this.publish(session, row)
-    this.context.emit('changed', { sessionId: session.id, row })
+    this.emitChanged(session.id, row, session.worktreeId)
     this.wake(session.id)
+  }
+
+  private emitChanged(sessionId: string, row: AgentRow | null, worktreeId?: string): void {
+    const previous = this.announcedRows.get(sessionId)
+    if (row === null) {
+      const removedWorktreeId = worktreeId ?? previous?.worktreeId
+      try {
+        this.context.emit(
+          'changed',
+          removedWorktreeId === undefined
+            ? { sessionId, row: null }
+            : { sessionId, worktreeId: removedWorktreeId, row: null },
+          { immediate: true }
+        )
+      } finally {
+        this.announcedRows.delete(sessionId)
+      }
+      return
+    }
+
+    const heldPermissionChanged = !sameHeldPermission(previous?.heldPermission, row.heldPermission)
+    const immediate = previous === undefined ||
+      previous.state !== row.state ||
+      previous.question !== row.question ||
+      heldPermissionChanged ||
+      previous.agent !== row.agent ||
+      previous.leadProviderSession !== row.lead.providerSession ||
+      previous.turnStartedAt !== row.turnStartedAt
+    const announcedWorktreeId = worktreeId ?? previous?.worktreeId
+    const data = announcedWorktreeId === undefined
+      ? { sessionId, row }
+      : { sessionId, worktreeId: announcedWorktreeId, row }
+    const accepted = this.context.emit('changed', data, { immediate })
+    if (!accepted || announcedWorktreeId === undefined) return
+
+    this.announcedRows.set(sessionId, {
+      state: row.state,
+      agent: row.agent,
+      leadProviderSession: row.lead.providerSession,
+      turnStartedAt: row.turnStartedAt,
+      question: row.question,
+      heldPermission: heldPermissionChanged
+        ? row.heldPermission && { ...row.heldPermission }
+        : previous?.heldPermission,
+      worktreeId: announcedWorktreeId
+    })
   }
 
   private wake(sessionId: string): void {
@@ -1044,7 +1111,9 @@ export class AgentStatusService {
 
   private async endIfGone(sessionId: string): Promise<void> {
     const row = this.rows.get(sessionId)
-    if (!row || row.lead.agentPid === null || row.lead.ended || this.isAlive(row.lead.agentPid, row.lead.agentStart)) return
+    if (!row || row.lead.agentPid === null || row.lead.ended) return
+    const alive = await this.isAlive(row.lead.agentPid, row.lead.agentStart)
+    if (this.stopped || alive) return
     this.caches.delete(sessionId)
     const session = await this.liveSession(sessionId)
     if (session) await this.commit(session, null)

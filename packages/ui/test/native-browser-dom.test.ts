@@ -21,6 +21,8 @@ type GuestView = HTMLElement & {
   onExecute?: (script: string) => void
   lastExecution?: string
   listeners: Map<string, Set<(event: CustomEvent) => void>>
+  syncCalls: boolean[]
+  onSyncDimensions?: (force?: boolean) => void
   loadURL(url: string): void
   reloadIgnoringCache?(): Promise<boolean>
   supportsReloadIgnoringCache?(): Promise<boolean>
@@ -36,6 +38,8 @@ beforeAll(async () => {
     webviewId = 7
     listeners = new Map<string, Set<(event: CustomEvent) => void>>()
     onExecute?: (script: string) => void
+    syncCalls: boolean[] = []
+    onSyncDimensions?: (force?: boolean) => void
     lastExecution?: string
     connectedCallback() {
       const announce = announceGuest
@@ -48,7 +52,7 @@ beforeAll(async () => {
       this.listeners.set(name, listeners)
     }
     off(name: string, listener: (event: CustomEvent) => void) { this.listeners.get(name)?.delete(listener) }
-    syncDimensions() {}
+    syncDimensions(force?: boolean) { this.syncCalls.push(force === true); this.onSyncDimensions?.(force) }
     canGoBack() { return Promise.resolve(false) }
     canGoForward() { return Promise.resolve(false) }
     loadURL() { throw new Error('DOM fixture cannot navigate off its owned page') }
@@ -69,16 +73,18 @@ beforeAll(async () => {
 })
 afterAll(() => GlobalRegistrator.unregister())
 
-async function mountGuest(claimGate?: Promise<void>, userAgent?: string) {
+async function mountGuest(claimGate?: Promise<void>, userAgent?: string, masks?: string[]) {
   const claims: Array<{ userAgent: string | null }> = []
   const element = document.createElement('div')
   document.body.append(element)
   const mounted = Promise.withResolvers<GuestView>()
+  const claimStarted = Promise.withResolvers<void>()
   const released = Promise.withResolvers<void>()
   announceGuest = mounted.resolve
   const capability = createNativeBrowserCapability(adapterFor({
     async claimNativeBrowserView(params) {
       claims.push({ userAgent: params.userAgent })
+      claimStarted.resolve()
       if (claimGate) await claimGate
       return { zoomFactor: 1 }
     },
@@ -90,14 +96,213 @@ async function mountGuest(claimGate?: Promise<void>, userAgent?: string) {
   const handle = capability.mount(element, {
     id: crypto.randomUUID(), url: 'about:blank', zoom: 0,
     partition: `persist:quirky-browser-profile_${crypto.randomUUID().replaceAll('-', '')}`, onState() {},
-    ...(userAgent === undefined ? {} : { userAgent })
+    ...(userAgent === undefined ? {} : { userAgent }),
+    ...(masks === undefined ? {} : { masks })
   })
   const guest = await mounted.promise
   const preload = guest?.getAttribute('preload')
   if (!guest || !preload) throw new Error('native adapter did not attach its real guest program')
   ;(window as Window & { __electrobunSendToHost?: (detail: unknown) => void }).__electrobunSendToHost = (detail) => guest.emitState(detail)
   window.eval(preload)
-  return { handle, guest, claims, capability, async cleanup() { handle.dispose(); await released.promise; element.remove() } }
+  return {
+    handle, guest, claims, claimStarted: claimStarted.promise, capability,
+    released: released.promise,
+    async cleanup() { handle.dispose(); await released.promise; element.remove() }
+  }
+}
+
+type FixtureMotion = { playState: AnimationPlayState; effect: { target: Element | null } }
+
+/** Controls only host-DOM scheduling; actual fixture mutations still create native DOM records. */
+function installMaskFixture() {
+  const undo: Array<() => void> = []
+  const intervals = new Map<number, { callback: () => void; every: number; next: number; active: boolean }>()
+  const frames = new Map<number, FrameRequestCallback>()
+  const mutationObservers = new Set<ControlledMutationObserver>()
+  const resizeObservers = new Set<ControlledResizeObserver>()
+  const rects = new WeakMap<Element, DOMRect>()
+  const motions = new WeakMap<Element, FixtureMotion[]>()
+  const listeners = new Set<{ target: EventTarget; type: string; listener: EventListenerOrEventListenerObject; capture: boolean }>()
+  const watchedEvents = new Set([
+    'scroll', 'load', 'resize', 'input', 'change', 'focus', 'blur', 'focusin', 'focusout',
+    'pointerover', 'pointerout', 'pointerdown', 'pointerup', 'pointercancel', 'click', 'toggle',
+    'transitionrun', 'transitionstart', 'transitionend', 'transitioncancel',
+    'animationstart', 'animationiteration', 'animationend', 'animationcancel'
+  ])
+  const NativeMutationObserver = globalThis.MutationObserver
+  let intervalCalls = 0
+  let frameCalls = 0
+  let cancelCalls = 0
+  let queryCalls = 0
+  let rectCalls = 0
+  let clock = 0
+  let nextInterval = 0
+  let nextFrame = 0
+  const suffix = ':not(details:not([open]) *)'
+
+  function replace(target: object, name: string, value: unknown) {
+    const descriptor = Object.getOwnPropertyDescriptor(target, name)
+    Object.defineProperty(target, name, { configurable: true, writable: true, value })
+    undo.push(() => descriptor ? Object.defineProperty(target, name, descriptor) : Reflect.deleteProperty(target, name))
+  }
+
+  class ControlledMutationObserver implements MutationObserver {
+    private readonly native: MutationObserver
+    private pending: MutationRecord[] = []
+    observesHostDocument = false
+    constructor(private readonly callback: MutationCallback) {
+      this.native = new NativeMutationObserver((records) => this.pending.push(...records))
+      mutationObservers.add(this)
+    }
+    observe(target: Node, options?: MutationObserverInit) {
+      this.native.observe(target, options)
+      if (target === document || target === document.documentElement || target === document.body) this.observesHostDocument = true
+    }
+    disconnect() { this.native.disconnect(); this.pending = []; mutationObservers.delete(this) }
+    takeRecords() {
+      this.pending.push(...this.native.takeRecords())
+      const records = this.pending
+      this.pending = []
+      return records
+    }
+    deliver() {
+      const records = this.takeRecords()
+      if (records.length) this.callback(records, this)
+    }
+  }
+
+  class ControlledResizeObserver implements ResizeObserver {
+    private readonly targets = new Set<Element>()
+    private active = true
+    constructor(private readonly callback: ResizeObserverCallback) { resizeObservers.add(this) }
+    observe(target: Element) { if (this.active) this.targets.add(target) }
+    unobserve(target: Element) { this.targets.delete(target) }
+    disconnect() { this.targets.clear(); this.active = false; resizeObservers.delete(this) }
+    notify(target: Element) {
+      if (!this.active || !this.targets.has(target)) return
+      const rect = rects.get(target) ?? new DOMRect()
+      this.callback([{ target, contentRect: rect } as ResizeObserverEntry], this)
+    }
+  }
+
+  const originalQuery = document.querySelectorAll
+  replace(document, 'querySelectorAll', function (this: Document, selector: string) {
+    queryCalls += 1
+    if (!selector.endsWith(suffix)) return originalQuery.call(this, selector)
+    // happy-dom lacks this WebKit selector; emulate only its closed-details exclusion.
+    const matches = originalQuery.call(this, selector.slice(0, -suffix.length))
+    return Array.from(matches).filter((element) => {
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        if (parent.localName === 'details' && !parent.hasAttribute('open')) return false
+      }
+      return true
+    }) as unknown as NodeListOf<Element>
+  })
+  const originalRect = Element.prototype.getBoundingClientRect
+  replace(Element.prototype, 'getBoundingClientRect', function (this: Element) {
+    rectCalls += 1
+    return rects.get(this) ?? originalRect.call(this)
+  })
+  replace(Element.prototype, 'getAnimations', function (this: Element) {
+    return (motions.get(this) ?? []).filter((animation) => animation.effect?.target === this) as unknown as Animation[]
+  })
+  replace(globalThis, 'MutationObserver', ControlledMutationObserver)
+  replace(globalThis, 'ResizeObserver', ControlledResizeObserver)
+  replace(globalThis, 'requestAnimationFrame', (callback: FrameRequestCallback) => {
+    const id = ++nextFrame
+    frameCalls += 1
+    frames.set(id, callback)
+    return id
+  })
+  replace(globalThis, 'cancelAnimationFrame', ((id: number) => { cancelCalls += 1; frames.delete(id) }) as typeof cancelAnimationFrame)
+  replace(globalThis, 'setInterval', ((callback: TimerHandler, delay?: number, ...args: unknown[]) => {
+    const id = ++nextInterval
+    const every = Math.max(1, Number(delay) || 1)
+    intervalCalls += 1
+    intervals.set(id, { callback: () => {
+      if (typeof callback === 'function') callback(...args)
+    }, every, next: clock + every, active: true })
+    return id
+  }) as typeof setInterval)
+  replace(globalThis, 'clearInterval', ((id: number) => {
+    const interval = intervals.get(Number(id))
+    if (interval) interval.active = false
+  }) as typeof clearInterval)
+
+  for (const target of [document, window]) {
+    const originalAdd = target.addEventListener
+    const originalRemove = target.removeEventListener
+    replace(target, 'addEventListener', function (
+      this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions
+    ) {
+      if (listener) originalAdd.call(this, type, listener, options)
+      if (listener && watchedEvents.has(type)) {
+        const capture = typeof options === 'boolean' ? options : options?.capture === true
+        // the guest preload shares this fixture's window; only the host watcher uses capture.
+        if (capture) listeners.add({ target: this, type, listener, capture })
+      }
+    })
+    replace(target, 'removeEventListener', function (
+      this: EventTarget, type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions
+    ) {
+      if (listener) originalRemove.call(this, type, listener, options)
+      if (listener) {
+        const capture = typeof options === 'boolean' ? options : options?.capture === true
+        for (const entry of listeners) {
+          if (entry.target === this && entry.type === type && entry.listener === listener && entry.capture === capture) listeners.delete(entry)
+        }
+      }
+    })
+  }
+
+  function flushMutations() { for (const observer of [...mutationObservers]) observer.deliver() }
+  function flushFrame() {
+    const scheduled = [...frames.values()]
+    frames.clear()
+    for (const callback of scheduled) callback(clock)
+    return scheduled.length
+  }
+  function advanceBy(ms: number) {
+    const deadline = clock + ms
+    for (;;) {
+      const due = [...intervals.values()].filter((interval) => interval.active && interval.next <= deadline).sort((a, b) => a.next - b.next)[0]
+      if (!due) break
+      clock = due.next
+      due.callback()
+      due.next += due.every
+    }
+    clock = deadline
+  }
+  function setRect(element: Element, x: number, y: number, width: number, height: number) {
+    rects.set(element, new DOMRect(x, y, width, height))
+  }
+  function addMotion(target: Element, playState: AnimationPlayState = 'running') {
+    const motion = { playState, effect: { target } } as FixtureMotion
+    motions.set(target, [...(motions.get(target) ?? []), motion])
+    return motion
+  }
+  function notifyResize(target: Element) { for (const observer of [...resizeObservers]) observer.notify(target) }
+  function dispatch(target: EventTarget, name: string, bubbles = true) { target.dispatchEvent(new Event(name, { bubbles })) }
+  function restore() {
+    for (const observer of [...mutationObservers]) observer.disconnect()
+    for (const observer of [...resizeObservers]) observer.disconnect()
+    for (const { target, type, listener, capture } of listeners) target.removeEventListener(type, listener, capture)
+    frames.clear()
+    intervals.clear()
+    for (const undoProperty of undo.reverse()) undoProperty()
+  }
+
+  return {
+    flushMutations, flushFrame, advanceBy, setRect, addMotion, notifyResize, dispatch, restore,
+    get intervalCalls() { return intervalCalls },
+    get frameCalls() { return frameCalls },
+    get cancelCalls() { return cancelCalls },
+    get pendingFrames() { return frames.size },
+    get queryCalls() { return queryCalls },
+    get rectCalls() { return rectCalls },
+    get activeObservers() { return [...mutationObservers].filter((observer) => observer.observesHostDocument).length + resizeObservers.size },
+    get activeListeners() { return listeners.size }
+  }
 }
 
 test('finding text does not replace framework-owned nodes or break a later page update', async () => {
@@ -386,30 +591,320 @@ test('every native mask excludes closed details and fits the comma-separated mas
   }
 })
 
-test('an overlay opening over a still view re-syncs its masks until the view is disposed', async () => {
-  const guest = await mountGuest()
+async function readyForMaskTests(guest: Awaited<ReturnType<typeof mountGuest>>) {
+  await guest.handle.request({ action: 'zoom', level: 0 })
+  guest.guest.syncCalls.length = 0
+}
+
+function flushMaskFrame(fixture: ReturnType<typeof installMaskFixture>) {
+  fixture.flushMutations()
+  expect(fixture.pendingFrames).toBe(1)
+  expect(fixture.flushFrame()).toBe(1)
+}
+
+test('static native masks do no periodic DOM work while idle', async () => {
+  const fixture = installMaskFixture()
+  let guest: Awaited<ReturnType<typeof mountGuest>> | undefined
+  const overlay = document.createElement('div')
+  overlay.setAttribute('role', 'dialog')
+  fixture.setRect(overlay, 10, 20, 300, 200)
+  try {
+    guest = await mountGuest()
+    await readyForMaskTests(guest)
+    const initialQueries = fixture.queryCalls
+    const initialRects = fixture.rectCalls
+    const initialFrames = fixture.frameCalls
+    fixture.advanceBy(1000)
+    expect(fixture.intervalCalls).toBe(0)
+    expect(fixture.pendingFrames).toBe(0)
+    expect(fixture.frameCalls).toBe(initialFrames)
+    expect(fixture.queryCalls).toBe(initialQueries)
+    expect(fixture.rectCalls).toBe(initialRects)
+    expect(guest.guest.syncCalls).toHaveLength(0)
+
+    document.body.append(overlay)
+    flushMaskFrame(fixture)
+    expect(guest.guest.syncCalls).toHaveLength(1)
+    const settledQueries = fixture.queryCalls
+    const settledRects = fixture.rectCalls
+    const settledFrames = fixture.frameCalls
+    fixture.advanceBy(1000)
+    expect(fixture.intervalCalls).toBe(0)
+    expect(fixture.pendingFrames).toBe(0)
+    expect(fixture.frameCalls).toBe(settledFrames)
+    expect(fixture.queryCalls).toBe(settledQueries)
+    expect(fixture.rectCalls).toBe(settledRects)
+    expect(guest.guest.syncCalls).toHaveLength(1)
+  } finally {
+    overlay.remove()
+    await guest?.cleanup()
+    fixture.restore()
+  }
+})
+
+test('mask notifications coalesce and sample valid selectors, state, layout and event changes', async () => {
+  const fixture = installMaskFixture()
+  let guest: Awaited<ReturnType<typeof mountGuest>> | undefined
+  const layout = document.createElement('section')
+  const candidate = document.createElement('div')
+  const checkbox = document.createElement('input')
+  checkbox.type = 'checkbox'
+  const button = document.createElement('button')
+  layout.append(candidate, checkbox, button)
+  const details = document.createElement('details')
+  const nestedDialog = document.createElement('div')
+  nestedDialog.setAttribute('role', 'dialog')
+  details.append(nestedDialog)
+  document.body.append(layout, details)
+  fixture.setRect(candidate, 1, 2, 30, 40)
+  fixture.setRect(checkbox, 3, 4, 10, 10)
+  fixture.setRect(button, 5, 6, 20, 20)
+  fixture.setRect(nestedDialog, 7, 8, 50, 50)
+  try {
+    guest = await mountGuest(undefined, undefined, ['[', '.custom-mask', 'input:checked', 'button:focus'])
+    await readyForMaskTests(guest)
+    let expectedSyncs = 0
+    const changed = () => {
+      flushMaskFrame(fixture)
+      expectedSyncs += 1
+      expect(guest?.guest.syncCalls).toHaveLength(expectedSyncs)
+    }
+    const unchanged = () => {
+      flushMaskFrame(fixture)
+      expect(guest?.guest.syncCalls).toHaveLength(expectedSyncs)
+    }
+
+    candidate.setAttribute('role', 'dialog')
+    changed()
+    candidate.removeAttribute('role')
+    changed()
+    candidate.classList.add('custom-mask')
+    changed()
+    candidate.style.position = 'fixed'
+    fixture.setRect(candidate, 2, 2, 30, 40)
+    changed()
+    const label = document.createTextNode('before')
+    layout.append(label)
+    unchanged()
+    fixture.setRect(candidate, 2, 2, 31, 40)
+    label.data = 'after'
+    changed()
+
+    fixture.setRect(candidate, 3, 2, 30, 40)
+    fixture.notifyResize(candidate)
+    changed()
+    fixture.setRect(candidate, 4, 2, 30, 40)
+    fixture.notifyResize(layout)
+    changed()
+
+    fixture.setRect(candidate, 5, 2, 30, 40)
+    fixture.dispatch(candidate, 'scroll', false)
+    changed()
+    fixture.setRect(candidate, 6, 2, 30, 40)
+    fixture.dispatch(candidate, 'load', false)
+    changed()
+    fixture.setRect(candidate, 7, 2, 30, 40)
+    fixture.dispatch(window, 'resize')
+    changed()
+
+    checkbox.checked = true
+    fixture.dispatch(checkbox, 'input', false)
+    changed()
+    checkbox.checked = false
+    fixture.dispatch(checkbox, 'change', false)
+    changed()
+    fixture.setRect(candidate, 8, 2, 30, 40)
+    button.focus()
+    fixture.dispatch(button, 'focusin', false)
+    changed()
+    fixture.setRect(candidate, 9, 2, 30, 40)
+    fixture.dispatch(candidate, 'pointerdown', false)
+    changed()
+
+    details.open = true
+    changed()
+    details.open = false
+    changed()
+
+    fixture.setRect(candidate, 10, 2, 30, 40)
+    fixture.setRect(candidate, 11, 2, 30, 40)
+    fixture.notifyResize(candidate)
+    fixture.dispatch(window, 'resize')
+    fixture.dispatch(candidate, 'scroll', false)
+    expect(fixture.pendingFrames).toBe(1)
+    changed()
+    fixture.dispatch(candidate, 'scroll', false)
+    unchanged()
+
+    let feedbackAdded = false
+    guest.guest.onSyncDimensions = () => {
+      if (feedbackAdded) return
+      feedbackAdded = true
+      const feedback = document.createElement('span')
+      feedback.textContent = 'sync feedback'
+      layout.append(feedback)
+    }
+    fixture.setRect(candidate, 12, 2, 30, 40)
+    fixture.dispatch(window, 'resize')
+    changed()
+    fixture.flushMutations()
+    expect(fixture.pendingFrames).toBe(1)
+    expect(fixture.flushFrame()).toBe(1)
+    expect(guest.guest.syncCalls).toHaveLength(expectedSyncs)
+    expect(fixture.pendingFrames).toBe(0)
+    guest.guest.onSyncDimensions = undefined
+  } finally {
+    await guest?.cleanup()
+    layout.remove()
+    details.remove()
+    fixture.restore()
+  }
+})
+
+test('only active mask and ancestor motion samples frames and stops at settled states', async () => {
+  const fixture = installMaskFixture()
+  let guest: Awaited<ReturnType<typeof mountGuest>> | undefined
+  const layout = document.createElement('section')
+  const mask = document.createElement('div')
+  mask.setAttribute('role', 'dialog')
+  const spinner = document.createElement('span')
+  layout.append(mask)
+  mask.append(spinner)
+  document.body.append(layout)
+  fixture.setRect(mask, 0, 0, 40, 40)
+  const maskMotion = fixture.addMotion(mask)
+  const transition = fixture.addMotion(layout)
+  fixture.addMotion(spinner)
+  try {
+    guest = await mountGuest()
+    await readyForMaskTests(guest)
+    expect(fixture.pendingFrames).toBe(1)
+    expect(fixture.flushFrame()).toBe(1)
+    fixture.setRect(mask, 10, 0, 40, 40)
+    fixture.setRect(mask, 20, 0, 40, 40)
+    expect(fixture.flushFrame()).toBe(1)
+    expect(guest.guest.syncCalls).toHaveLength(1)
+    fixture.setRect(mask, 40, 0, 40, 40)
+    expect(fixture.flushFrame()).toBe(1)
+    expect(guest.guest.syncCalls).toHaveLength(2)
+
+    maskMotion.playState = 'paused'
+    transition.playState = 'paused'
+    expect(fixture.flushFrame()).toBe(1)
+    expect(fixture.pendingFrames).toBe(0)
+    fixture.dispatch(spinner, 'animationstart')
+    expect(fixture.pendingFrames).toBe(0)
+
+    maskMotion.playState = 'running'
+    transition.playState = 'running'
+    fixture.dispatch(mask, 'animationstart')
+    fixture.dispatch(layout, 'transitionrun')
+    expect(fixture.pendingFrames).toBe(1)
+    expect(fixture.flushFrame()).toBe(1)
+    fixture.setRect(mask, 60, 0, 40, 40)
+    maskMotion.playState = 'finished'
+    transition.playState = 'idle'
+    fixture.dispatch(mask, 'animationend')
+    fixture.dispatch(layout, 'transitioncancel')
+    expect(fixture.flushFrame()).toBe(1)
+    expect(guest.guest.syncCalls).toHaveLength(3)
+    expect(fixture.pendingFrames).toBe(0)
+
+    maskMotion.playState = 'running'
+    fixture.dispatch(mask, 'animationstart')
+    expect(fixture.flushFrame()).toBe(1)
+    expect(fixture.pendingFrames).toBe(1)
+    layout.remove()
+    fixture.flushMutations()
+    expect(fixture.flushFrame()).toBe(1)
+    expect(guest.guest.syncCalls).toHaveLength(4)
+    expect(fixture.pendingFrames).toBe(0)
+  } finally {
+    await guest?.cleanup()
+    layout.remove()
+    fixture.restore()
+  }
+})
+
+test('mask disposal cancels queued frames and detaches observers and event listeners', async () => {
+  const fixture = installMaskFixture()
+  let guest: Awaited<ReturnType<typeof mountGuest>> | undefined
+  const overlay = document.createElement('div')
+  overlay.setAttribute('role', 'dialog')
+  fixture.setRect(overlay, 1, 1, 20, 20)
+  try {
+    guest = await mountGuest()
+    await readyForMaskTests(guest)
+    expect(fixture.activeObservers).toBeGreaterThan(0)
+    expect(fixture.activeListeners).toBeGreaterThan(0)
+    document.body.append(overlay)
+    fixture.flushMutations()
+    expect(fixture.pendingFrames).toBe(1)
+    const cancelCalls = fixture.cancelCalls
+    await guest.handle.dispose()
+    expect(fixture.cancelCalls).toBeGreaterThan(cancelCalls)
+    expect(fixture.pendingFrames).toBe(0)
+    expect(fixture.activeObservers).toBe(0)
+    expect(fixture.activeListeners).toBe(0)
+    const calls = guest.guest.syncCalls.length
+    const queries = fixture.queryCalls
+    const rects = fixture.rectCalls
+    overlay.remove()
+    document.body.append(overlay)
+    fixture.notifyResize(overlay)
+    fixture.dispatch(overlay, 'scroll', false)
+    fixture.dispatch(overlay, 'transitionrun')
+    fixture.flushMutations()
+    expect(fixture.pendingFrames).toBe(0)
+    expect(fixture.queryCalls).toBe(queries)
+    expect(fixture.rectCalls).toBe(rects)
+    expect(guest.guest.syncCalls).toHaveLength(calls)
+  } finally {
+    overlay.remove()
+    await guest?.cleanup()
+    fixture.restore()
+  }
+})
+
+test('disposing during a pending native claim cancels mask work and detaches watchers', async () => {
+  const fixture = installMaskFixture()
+  const claim = Promise.withResolvers<void>()
+  let guest: Awaited<ReturnType<typeof mountGuest>> | undefined
   const overlay = document.createElement('div')
   overlay.setAttribute('role', 'dialog')
   try {
-    let syncs = 0
-    Object.assign(guest.guest, { syncDimensions: () => { syncs += 1 } })
-    await Bun.sleep(250)
-    expect(syncs).toBe(0)
-
+    guest = await mountGuest(claim.promise)
+    await guest.claimStarted
     document.body.append(overlay)
-    await Bun.sleep(250)
-    expect(syncs).toBe(1)
-
+    fixture.flushMutations()
+    expect(fixture.pendingFrames).toBe(1)
+    expect(fixture.activeObservers).toBeGreaterThan(0)
+    expect(fixture.activeListeners).toBeGreaterThan(0)
+    const calls = guest.guest.syncCalls.length
+    const queries = fixture.queryCalls
+    const rects = fixture.rectCalls
+    const disposing = guest.handle.dispose()
+    expect(fixture.pendingFrames).toBe(0)
+    expect(fixture.activeObservers).toBe(0)
+    expect(fixture.activeListeners).toBe(0)
     overlay.remove()
-    await Bun.sleep(250)
-    expect(syncs).toBe(2)
-
-    await guest.cleanup()
     document.body.append(overlay)
-    await Bun.sleep(250)
-    expect(syncs).toBe(2)
+    fixture.notifyResize(overlay)
+    fixture.dispatch(overlay, 'scroll', false)
+    fixture.dispatch(overlay, 'animationstart')
+    fixture.flushMutations()
+    expect(fixture.pendingFrames).toBe(0)
+    expect(fixture.queryCalls).toBe(queries)
+    expect(fixture.rectCalls).toBe(rects)
+    expect(guest.guest.syncCalls).toHaveLength(calls)
+    claim.resolve()
+    await disposing
+    await guest.released
   } finally {
+    claim.resolve()
     overlay.remove()
+    await guest?.cleanup()
+    fixture.restore()
   }
 })
 

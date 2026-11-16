@@ -2,20 +2,25 @@ import { useRef, useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { UiToolHue } from '@quirky/protocol'
 import {
+  ActivityMark,
   AgentIcon,
   Badge,
+  BulkBar,
   Button,
+  Checkbox,
   ControlIcon,
   Dialog,
   EmptyState,
   FileIcon,
   FormRow,
+  HoverCard,
   ExpandingIconButton,
   IconButton,
   InlineAgentCard,
   InlineError,
   ListRow,
   Menu,
+  NoticeLine,
   PopupMenu,
   ProjectTile,
   ReviewMark,
@@ -23,11 +28,15 @@ import {
   SectionHeader,
   SplitButton,
   StatusDot,
+  SwatchGroup,
   Tabs,
+  TagChip,
+  TagChips,
   TextField,
   Toast,
   ToolIcon,
-  ToolPanelFrame
+  ToolPanelFrame,
+  type UiTagColor
 } from '@quirky/ui'
 import '@quirky/ui/styles.css'
 
@@ -58,6 +67,14 @@ type CategoryName =
   | 'SplitButton'
   | 'InlineError'
   | 'ScopeChip'
+  | 'ActivityMark'
+  | 'TagChip'
+  | 'TagChips'
+  | 'Checkbox'
+  | 'SwatchGroup'
+  | 'NoticeLine'
+  | 'HoverCard'
+  | 'BulkBar'
 
 type CategoryProps = { name: CategoryName; theme: Theme; children: ReactNode }
 
@@ -525,6 +542,123 @@ function ScopeChipDemo({ theme }: { theme: Theme }) {
   )
 }
 
+const galleryTags = [
+  { id: 'release', name: 'Release', color: 'violet' as const },
+  { id: 'hotfix', name: 'Hotfix', color: 'coral' as const },
+  { id: 'docs', name: 'Docs', color: null },
+  { id: 'infra', name: 'Infra', color: 'teal' as const }
+]
+
+function ActivityMarkDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="ActivityMark" theme={theme}>
+      <div className="ui-cluster">
+        <ActivityMark state="running" label="Agent running" />
+        <ActivityMark state="waiting" label="Agent waiting for you" />
+        <ActivityMark state="error" label="Agent errored" />
+        <ActivityMark state="idle" label="Agent idle" />
+        <ActivityMark state="asleep" label="Worktree asleep" />
+      </div>
+    </Category>
+  )
+}
+
+function TagChipDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="TagChip" theme={theme}>
+      <div className="ui-cluster">
+        {galleryTags.map((tag) => <TagChip key={tag.id} name={tag.name} color={tag.color} />)}
+      </div>
+    </Category>
+  )
+}
+
+function TagChipsDemo({ theme }: { theme: Theme }) {
+  return (
+    <Category name="TagChips" theme={theme}>
+      <TagChips tags={galleryTags} />
+      <TagChips tags={galleryTags} max={3} />
+      <TagChips tags={galleryTags.slice(0, 1)} />
+    </Category>
+  )
+}
+
+function CheckboxDemo({ theme }: { theme: Theme }) {
+  const [selected, setSelected] = useState([true, false])
+  const count = selected.filter(Boolean).length
+  return (
+    <Category name="Checkbox" theme={theme}>
+      <Checkbox
+        label="Select all worktrees"
+        checked={count === selected.length}
+        indeterminate={count > 0 && count < selected.length}
+        onChange={(checked) => setSelected(selected.map(() => checked))}
+      />
+      <Checkbox label="Select feat/login" checked={selected[0] ?? false} onChange={(checked) => setSelected([checked, selected[1] ?? false])} />
+      <Checkbox label="Select fix/cache" hideLabel checked={selected[1] ?? false} onChange={(checked) => setSelected([selected[0] ?? false, checked])} />
+      <Status name="checkbox">Selected worktrees: {count}</Status>
+    </Category>
+  )
+}
+
+function SwatchGroupDemo({ theme }: { theme: Theme }) {
+  const [color, setColor] = useState<UiTagColor | null>('blue')
+  return (
+    <Category name="SwatchGroup" theme={theme}>
+      <SwatchGroup label="Tag color" value={color} onChange={setColor} />
+      <Status name="swatch-group">Tag color: {color ?? 'grey'}</Status>
+    </Category>
+  )
+}
+
+function NoticeLineDemo({ theme }: { theme: Theme }) {
+  const [saved, setSaved] = useState(false)
+  return (
+    <Category name="NoticeLine" theme={theme}>
+      <NoticeLine actions={[{ label: 'Save', onAction: () => setSaved(true) }, { label: 'Revert', onAction: () => setSaved(false) }]}>
+        {saved ? 'View saved' : 'View changed'}
+      </NoticeLine>
+      <NoticeLine>Hiding 3 asleep worktrees</NoticeLine>
+      <Status name="notice-line">Notice: {saved ? 'saved' : 'unsaved'}</Status>
+    </Category>
+  )
+}
+
+function HoverCardDemo({ theme }: { theme: Theme }) {
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null)
+  const [open, setOpen] = useState(false)
+  return (
+    <Category name="HoverCard" theme={theme}>
+      <Button
+        ref={setAnchor}
+        type="button"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+      >
+        feat/login
+      </Button>
+      <HoverCard anchor={anchor} open={open}>Three commits ahead of main, checks passing.</HoverCard>
+      <Status name="hover-card">Hover card: {open ? 'open' : 'closed'}</Status>
+    </Category>
+  )
+}
+
+function BulkBarDemo({ theme }: { theme: Theme }) {
+  const [last, setLast] = useState('none')
+  return (
+    <Category name="BulkBar" theme={theme}>
+      <BulkBar
+        count={3}
+        actions={[{ label: 'Tag', onAction: () => setLast('tag') }, { label: 'Archive', onAction: () => setLast('archive') }]}
+        onClear={() => setLast('clear')}
+      />
+      <Status name="bulk-bar">Bulk action: {last}</Status>
+    </Category>
+  )
+}
+
 function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
   return (
     <section className="ui-gallery-theme" data-theme={theme} aria-label={`${label} theme component examples`}>
@@ -555,6 +689,14 @@ function ThemeGallery({ theme, label }: { theme: Theme; label: string }) {
         <SplitButtonDemo theme={theme} />
         <InlineErrorDemo theme={theme} />
         <ScopeChipDemo theme={theme} />
+        <ActivityMarkDemo theme={theme} />
+        <TagChipDemo theme={theme} />
+        <TagChipsDemo theme={theme} />
+        <CheckboxDemo theme={theme} />
+        <SwatchGroupDemo theme={theme} />
+        <NoticeLineDemo theme={theme} />
+        <HoverCardDemo theme={theme} />
+        <BulkBarDemo theme={theme} />
       </div>
     </section>
   )

@@ -1,6 +1,6 @@
 {
   "id": "quirky.reviews",
-  "apiVersion": "1.0.0",
+  "apiVersion": "1.12.0",
   "name": "Hosting reviews",
   "version": "0.1.0",
   "description": "Pull-request review, workspace Checks, creation and hosting settings over public hosting APIs.",
@@ -731,6 +731,10 @@
             "number": {
               "type": "integer",
               "minimum": 1
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             },
             "prRepo": {
               "type": "object",
@@ -1880,6 +1884,7 @@
       },
       {
         "id": "detailMerge",
+        "timeout": "1h",
         "description": "Merge or queue a pull request after confirmation and an exact-head guard.",
         "destructive": true,
         "confirm": "Confirm {action} for pull request #{number} using {method}?",
@@ -2515,6 +2520,7 @@
       },
       {
         "id": "detailRerunChecks",
+        "timeout": "1h",
         "description": "Rerun actionable checks or failed checks.",
         "params": {
           "type": "object",
@@ -2807,10 +2813,15 @@
       {
         "id": "checksGet",
         "readOnly": true,
-        "description": "Read the active-workspace checks state and its current review target.",
+        "description": "Read the checks state and current review target for a workspace; omitted, the most recently refreshed workspace.",
         "params": {
           "type": "object",
-          "properties": {},
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Exact workspace ID whose checks state to read."
+            }
+          },
           "additionalProperties": false
         },
         "result": {
@@ -3101,6 +3112,30 @@
             "title": {
               "type": "string",
               "description": "At most 256 characters."
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -3136,6 +3171,30 @@
             "number": {
               "type": "integer",
               "minimum": 1
+            },
+            "prRepo": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "owner",
+                "repo"
+              ],
+              "additionalProperties": false
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -3361,6 +3420,7 @@
       },
       {
         "id": "checksGitAction",
+        "timeout": "1h",
         "description": "Publish, push or sync the exact workspace through quirky.git and then refresh its hosting eligibility.",
         "params": {
           "type": "object",
@@ -3597,6 +3657,10 @@
             },
             "useTemplate": {
               "type": "boolean"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -3672,6 +3736,10 @@
             },
             "stack": {
               "type": "boolean"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
@@ -3780,6 +3848,7 @@
       },
       {
         "id": "createSubmit",
+        "timeout": "30m",
         "description": "recheck eligibility, push if required, create once, and link confirmed results",
         "params": {
           "type": "object",
@@ -4572,16 +4641,304 @@
           ],
           "additionalProperties": false
         }
+      },
+      {
+        "id": "checksSitterGet",
+        "readOnly": true,
+        "description": "Read the PR Sitter fleet row and optionally its live detail for one worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; omitted to resolve the caller workspace when available."
+            },
+            "includeDetail": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "sitter": {
+              "description": "Hosted-review fleet row for this worktree, or null."
+            },
+            "detail": {
+              "description": "Live watcher detail when requested, or null."
+            },
+            "activeCount": {
+              "type": "integer"
+            },
+            "otherActiveCount": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "available",
+            "sitter",
+            "detail",
+            "activeCount",
+            "otherActiveCount"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSitterArm",
+        "description": "Enroll or re-arm the hosted-review PR Sitter for a worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; omitted to resolve the caller workspace."
+            },
+            "capabilities": {
+              "type": "object",
+              "properties": {
+                "updateBranch": {
+                  "type": "string",
+                  "enum": ["off", "gated", "on"]
+                },
+                "resolveConflicts": {
+                  "type": "string",
+                  "enum": ["off", "gated", "on"]
+                },
+                "fixChecks": {
+                  "type": "string",
+                  "enum": ["off", "gated", "on"]
+                },
+                "merge": {
+                  "type": "string",
+                  "enum": ["off", "gated", "on"]
+                }
+              },
+              "required": [
+                "updateBranch",
+                "resolveConflicts",
+                "fixChecks",
+                "merge"
+              ],
+              "additionalProperties": false
+            },
+            "branchUpdateMode": {
+              "type": "string",
+              "enum": ["merge-base-update", "rebase"]
+            },
+            "mergeMethod": {
+              "description": "merge, squash, rebase, or null for repository default."
+            },
+            "mergeCheckScope": {
+              "type": "string",
+              "enum": ["all", "required"]
+            },
+            "budgetHours": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "capabilities",
+            "budgetHours"
+          ],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["enrolled", "re-armed"]
+            },
+            "enrollment": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": ["ok", "kind", "enrollment"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSitterApprove",
+        "description": "Approve the exact current scope of one open PR Sitter escalation.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; omitted to resolve the caller workspace."
+            },
+            "watcherId": {
+              "type": "string"
+            },
+            "escalationId": {
+              "type": "string"
+            },
+            "expectedScope": {
+              "type": "object",
+              "properties": {
+                "actionKind": {
+                  "type": "string"
+                },
+                "contentIdentity": {
+                  "type": "string"
+                },
+                "evidenceKey": {
+                  "type": "string"
+                },
+                "preparedCommitSha": {
+                  "type": "string"
+                }
+              },
+              "required": ["actionKind", "contentIdentity", "evidenceKey"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["escalationId"],
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["applied"]
+            },
+            "appliedAtMs": {
+              "type": "integer"
+            }
+          },
+          "required": ["ok", "kind", "appliedAtMs"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSitterStop",
+        "description": "Disarm the PR Sitter for one worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; omitted to resolve the caller workspace."
+            },
+            "watcherId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["applied"]
+            },
+            "appliedAtMs": {
+              "type": "integer"
+            }
+          },
+          "required": ["ok", "kind", "appliedAtMs"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSitterStopAll",
+        "description": "Disarm every stoppable hosted-review PR Sitter.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "total": {
+              "type": "integer"
+            },
+            "stopped": {
+              "type": "integer"
+            },
+            "refusedCount": {
+              "type": "integer"
+            },
+            "indeterminateCount": {
+              "type": "integer"
+            },
+            "warning": {
+              "description": "Partial-stop warning, or null when every command applied."
+            }
+          },
+          "required": [
+            "total",
+            "stopped",
+            "refusedCount",
+            "indeterminateCount",
+            "warning"
+          ],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "checksSitterDebugReport",
+        "readOnly": true,
+        "description": "Read a PR Sitter diagnostic report for one worktree.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string",
+              "description": "Worktree selector; omitted to resolve the caller workspace."
+            },
+            "watcherId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "report": {
+              "type": "object",
+              "description": "The diagnostic report.",
+              "additionalProperties": true
+            }
+          },
+          "required": ["report"],
+          "additionalProperties": false
+        }
       }
     ],
     "event": [
       {
         "id": "changed",
+        "description": "Review state changed; refetch. Coalesces by worktree tag; carries a worktree when only that worktree's Checks entry changed.",
+        "worktree": "worktree",
+        "coalesce": [],
         "data": {
           "type": "object",
           "properties": {
             "revision": {
               "type": "integer"
+            },
+            "worktree": {
+              "type": "string"
             }
           },
           "required": [
@@ -4620,6 +4977,22 @@
       }
     ],
     "command": [
+      {
+        "id": "ui-control",
+        "title": "Run Reviews UI control",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "target": { "type": "string" },
+            "generation": { "type": "integer", "minimum": 1 },
+            "action": { "type": "string" },
+            "value": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["target", "generation", "action"],
+          "additionalProperties": false
+        }
+      },
       {
         "id": "show-checks",
         "title": "Show Checks"
@@ -4729,6 +5102,155 @@
           "required": [
             "text"
           ]
+        }
+      },
+      {
+        "id": "open-sitter",
+        "title": "Open PR sitter",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "arm-sitter",
+        "title": "Arm PR sitter",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "capabilities": {
+              "type": "object",
+              "properties": {
+                "updateBranch": {
+                  "type": "string",
+                  "enum": ["off", "gated", "on"]
+                },
+                "resolveConflicts": {
+                  "type": "string",
+                  "enum": ["off", "gated", "on"]
+                },
+                "fixChecks": {
+                  "type": "string",
+                  "enum": ["off", "gated", "on"]
+                },
+                "merge": {
+                  "type": "string",
+                  "enum": ["off", "gated", "on"]
+                }
+              },
+              "required": [
+                "updateBranch",
+                "resolveConflicts",
+                "fixChecks",
+                "merge"
+              ],
+              "additionalProperties": false
+            },
+            "branchUpdateMode": {
+              "type": "string",
+              "enum": ["merge-base-update", "rebase"]
+            },
+            "mergeMethod": {
+              "description": "merge, squash, rebase, or null for repository default."
+            },
+            "mergeCheckScope": {
+              "type": "string",
+              "enum": ["all", "required"]
+            },
+            "budgetHours": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": ["capabilities", "budgetHours"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "approve-sitter",
+        "title": "Approve PR sitter action",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "watcherId": {
+              "type": "string"
+            },
+            "escalationId": {
+              "type": "string"
+            },
+            "expectedScope": {
+              "type": "object",
+              "properties": {
+                "actionKind": {
+                  "type": "string"
+                },
+                "contentIdentity": {
+                  "type": "string"
+                },
+                "evidenceKey": {
+                  "type": "string"
+                },
+                "preparedCommitSha": {
+                  "type": "string"
+                }
+              },
+              "required": ["actionKind", "contentIdentity", "evidenceKey"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["escalationId"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "stop-sitter",
+        "title": "Stop PR sitter",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "watcherId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "stop-all-sitters",
+        "title": "Stop all PR sitters",
+        "args": {
+          "type": "object",
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "copy-sitter-debug",
+        "title": "Copy PR sitter debug report",
+        "args": {
+          "type": "object",
+          "properties": {
+            "worktree": {
+              "type": "string"
+            },
+            "watcherId": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
         }
       }
     ],
@@ -5072,6 +5594,36 @@
         "id": "hosting-settings-refresh",
         "method": "hostingSettingsRefresh",
         "summary": "refresh the daemon-owned hosting settings snapshot for an exact repository"
+      },
+      {
+        "id": "checks-sitter-state",
+        "method": "checksSitterGet",
+        "summary": "read PR Sitter status and active hosted-review watcher counts"
+      },
+      {
+        "id": "checks-sitter-arm",
+        "method": "checksSitterArm",
+        "summary": "arm or re-arm PR Sitter with explicit capabilities and active-time budget"
+      },
+      {
+        "id": "checks-sitter-approve",
+        "method": "checksSitterApprove",
+        "summary": "approve the exact current scope of an open PR Sitter escalation"
+      },
+      {
+        "id": "checks-sitter-stop",
+        "method": "checksSitterStop",
+        "summary": "stop the PR Sitter for one worktree"
+      },
+      {
+        "id": "checks-sitter-stop-all",
+        "method": "checksSitterStopAll",
+        "summary": "stop every stoppable hosted-review PR Sitter"
+      },
+      {
+        "id": "checks-sitter-debug-report",
+        "method": "checksSitterDebugReport",
+        "summary": "read a PR Sitter diagnostic report"
       }
     ]
   }

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { expect, test } from 'bun:test'
 import { run } from '../../../packages/cli/src/main'
@@ -52,6 +52,18 @@ test('profile menus API persists creation and switches only the requested hosted
     const unused = await call(h, 'preferencesState') as PreferencesState
     expect(unused.profiles.find((entry) => entry.profile.id === id)?.active).toBe(false)
     expect(h.spawnCount()).toBe(0)
+    await expect(call(h, 'profileDelete', { profile: id, yes: true })).rejects.toThrow()
+    const unusedCreated = await cli(h, ['browser', 'tab', 'profile', 'create', '--label', 'Unused', '--json'])
+    expect(unusedCreated.code).toBe(0)
+    const unusedProfile = JSON.parse(unusedCreated.stdout)
+    expect(unusedProfile).toEqual({ profile: expect.objectContaining({ id: expect.any(String), label: 'Unused' }) })
+    const unusedId = unusedProfile.profile.id
+    const deleted = await cli(h, ['browser', 'tab', 'profile', 'delete', '--profile', unusedId, '--yes', '--json'])
+    expect(deleted.code).toBe(0)
+    expect(JSON.parse(deleted.stdout)).toEqual({ deleted: true })
+    const afterDelete = await call(h, 'preferencesState') as PreferencesState
+    expect(afterDelete.profiles.some((entry) => entry.profile.id === id)).toBe(true)
+    expect(afterDelete.profiles.some((entry) => entry.profile.id === unusedId)).toBe(false)
   } finally { await h.cleanup() }
 })
 
@@ -65,10 +77,19 @@ test('destructive profile API requires confirmation; absent native window preser
     writeFileSync(sentinel, 'preserve until native clear succeeds')
     await expect(call(h, 'profileDelete', { profile: id })).rejects.toThrow()
     expect(existsSync(sentinel)).toBe(true)
+    const beforeDelete = await call(h, 'preferencesState') as PreferencesState
+    expect(beforeDelete.profiles.some((entry) => entry.profile.id === id)).toBe(true)
+    rmSync(join(directory, '.no-native-pane'), { force: true })
     await expect(call(h, 'profileDelete', { profile: id, yes: true })).rejects.toThrow()
     expect(existsSync(sentinel)).toBe(true)
     const preferences = await call(h, 'preferencesState') as PreferencesState
     expect(preferences.profiles.some((entry) => entry.profile.id === id)).toBe(true)
+    const freshId = await profile(h, 'Never Native')
+    const freshDirectory = join(h.home, 'plugin-data', 'quirky.browser', 'profiles', freshId)
+    expect(await call(h, 'profileDelete', { profile: freshId, yes: true })).toEqual({ deleted: true })
+    expect(existsSync(freshDirectory)).toBe(false)
+    const afterDelete = await call(h, 'preferencesState') as PreferencesState
+    expect(afterDelete.profiles.some((entry) => entry.profile.id === freshId)).toBe(false)
     await expect(call(h, 'profileDelete', { profile: 'default', yes: true })).rejects.toThrow()
     await expect(call(h, 'profileClearNativeClaim', { request: 'forged' })).rejects.toThrow()
   } finally { await h.cleanup() }
@@ -80,6 +101,8 @@ test('one-use confirmed native clear claim guards profile reuse and deletion thr
   try {
     const worktree = await h.addFolderWorktree('ClearProfile')
     const id = await profile(h)
+    const pane = await call(h, 'paneOpen', { worktree, mode: 'native', profile: id }) as PaneTab
+    expect(await call(h, 'paneClose', { pane: pane.id })).toBe(true)
     const ui = await h.daemon.connect('ui', 'Owned native capability boundary')
     const requested = Promise.withResolvers<{ request: string; partition: string }>()
     const completed = Promise.withResolvers<void>()

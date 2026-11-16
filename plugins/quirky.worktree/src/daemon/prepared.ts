@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { gitApi } from '@quirky/git'
-import type { PluginStore, Repo } from '@quirky/protocol'
+import type { PluginStore, ProcessRunner, Repo } from '@quirky/protocol'
 
 const PREPARATION_DIR = '.quirky-preparing'
 const PREPARATION_LIMIT = 3
@@ -24,6 +24,7 @@ type PreparedWorktreeRow = {
 type PreparedEnv = {
   store: PluginStore
   ownerId: string
+  process: ProcessRunner
   log(message: string): void
 }
 
@@ -59,20 +60,23 @@ function deleteRow(store: PluginStore, id: string): void {
   store.run('DELETE FROM prepared_worktrees WHERE id = ?', id)
 }
 
-async function runGit(repoPath: string, args: string[]): Promise<string> {
-  const child = Bun.spawn(['git', '-C', repoPath, ...args], {
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
+async function runGit(processRunner: ProcessRunner, repoPath: string, args: string[], timeoutMs: number): Promise<string> {
+  const result = await processRunner.run(['git', '-C', repoPath, ...args], {
+    timeoutMs,
+    killGraceMs: 2_000,
+    maxOutputBytes: 16 * 1024 * 1024,
+    outputMode: 'separate',
+    overflow: 'stop',
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_NO_LAZY_FETCH: '1' }
   })
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited
-  ])
-  if (exitCode !== 0) throw new Error(stderr.trim() || `git ${args[0]} failed (exit ${exitCode})`)
-  return stdout
+  if (result.stopped || result.spawnError || result.signal !== null || result.exitCode !== 0) {
+    throw new Error(
+      result.stderr.trim() ||
+      result.spawnError?.message ||
+      (result.stopped ? `git ${args[0]} stopped: ${result.stopped}` : `git ${args[0]} failed (exit ${result.exitCode})`)
+    )
+  }
+  return result.stdoutText
 }
 
 async function registrationOf(repo: Repo, row: PreparedWorktreeRow) {
@@ -143,7 +147,7 @@ async function removePrepared(env: PreparedEnv, repo: Pick<Repo, 'id' | 'path'>,
         env.log(`kept prepared path ${path}: it contains user changes`)
         return false
       }
-      await runGit(repo.path, ['worktree', 'unlock', path])
+      await runGit(env.process, repo.path, ['worktree', 'unlock', path], 30_000)
       await gitApi().removeWorktree(repo.path, path, false)
     } catch (error) {
       env.log(`could not remove prepared checkout ${path}: ${error instanceof Error ? error.message : String(error)}`)
@@ -151,7 +155,7 @@ async function removePrepared(env: PreparedEnv, repo: Pick<Repo, 'id' | 'path'>,
     }
   } else {
     try {
-      await runGit(repo.path, ['worktree', 'unlock', path])
+      await runGit(env.process, repo.path, ['worktree', 'unlock', path], 30_000)
       await gitApi().prune(repo.path)
     } catch (error) {
       env.log(`could not prune prepared checkout ${path}: ${error instanceof Error ? error.message : String(error)}`)
@@ -239,7 +243,7 @@ export async function prepareCheckout(
     created_at: now
   }
   try {
-    await runGit(repo.path, ['worktree', 'add', '--detach', '--lock', '--reason', reasonOf(row), path, baseRef])
+    await runGit(env.process, repo.path, ['worktree', 'add', '--detach', '--lock', '--reason', reasonOf(row), path, baseRef], 86_400_000)
     const registration = await registrationOf(repo, row)
     if (!registration) throw new Error('Git did not report the exact locked detached checkout just created')
     env.store.run(
@@ -301,10 +305,10 @@ export async function claimPreparedCheckout(
       }
     }
 
-    await runGit(repo.path, ['worktree', 'unlock', row.path])
-    await runGit(repo.path, ['worktree', 'move', row.path, destination])
+    await runGit(env.process, repo.path, ['worktree', 'unlock', row.path], 30_000)
+    await runGit(env.process, repo.path, ['worktree', 'move', row.path, destination], 86_400_000)
     try {
-      await runGit(destination, ['checkout', '--no-track', '-b', branch, baseOid])
+      await runGit(env.process, destination, ['checkout', '--no-track', '-b', branch, baseOid], 86_400_000)
       deleteRow(env.store, row.id)
       return true
     } catch (error) {
@@ -322,7 +326,7 @@ export async function claimPreparedCheckout(
     const atPool = await git.listRegistrations(repo.path).catch(() => [])
     const registration = atPool.find((entry) => resolve(entry.path) === resolve(row.path))
     if (registration && registration.branch === null && registration.head === row.base_oid && registration.locked === null) {
-      await runGit(repo.path, ['worktree', 'lock', '--reason', reasonOf(row), row.path]).catch(() => undefined)
+      await runGit(env.process, repo.path, ['worktree', 'lock', '--reason', reasonOf(row), row.path], 30_000).catch(() => undefined)
     }
     env.log(`could not claim prepared checkout ${row.id}: ${error instanceof Error ? error.message : String(error)}`)
     return false

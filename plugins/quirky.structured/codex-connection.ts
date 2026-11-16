@@ -1,5 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { TextDecoder } from 'node:util'
+import type { ProcessSpawner, SpawnExit, SpawnedProcess } from '@quirky/protocol'
 
 export type CodexRpcId = string | number
 export type CodexRpcMessage = Record<string, unknown>
@@ -19,62 +19,61 @@ type PendingRequest = {
 
 const MAX_FRAME_BYTES = 1024 * 1024
 const STDERR_TAIL_CHARS = 16 * 1024
+const STDERR_TAIL_BYTES = STDERR_TAIL_CHARS * 3
 const DEFAULT_CONTROL_TIMEOUT_MS = 15_000
-const STDIN_GRACE_MS = 250
-const TERM_GRACE_MS = 2_000
-const FINAL_CLOSE_GRACE_MS = 500
-
+const STDOUT_EXIT_WAIT_MS = 250
+const CLOSE_EXIT_WAIT_MS = 250
+const STOP_GRACE_MS = 2_000
 
 const isRpcId = (value: unknown): value is CodexRpcId => typeof value === 'string' || typeof value === 'number'
+const asError = (value: unknown): Error => value instanceof Error ? value : new Error(String(value))
 
 /** Owns one stdio app-server process and correlates bidirectional JSON-RPC messages. */
 export class CodexConnection {
-  private readonly child: ChildProcessWithoutNullStreams
+  private readonly handle: SpawnedProcess
   private readonly decoder = new TextDecoder('utf-8', { fatal: true })
-  private readonly stderrDecoder = new TextDecoder()
   private readonly pending = new Map<CodexRpcId, PendingRequest>()
-  private readonly closed = Promise.withResolvers<void>()
-  private readonly cleanup = Promise.withResolvers<void>()
+  private readonly exited: Promise<SpawnExit>
   private frameBuffer = ''
-  private stderr = ''
   private nextId = 1
   private failure: Error | null = null
   private closing = false
-  private isClosed = false
+  private exitResult: SpawnExit | undefined
+  private closePromise: Promise<void> | undefined
 
   constructor(
+    process: ProcessSpawner,
     executable: string,
     cwd: string,
     env: NodeJS.ProcessEnv,
     private readonly handlers: CodexConnectionHandlers
   ) {
-    this.child = spawn(executable, ['app-server'], {
+    this.handle = process.spawn([executable, 'app-server'], {
+      timeoutMs: null,
       cwd,
       env,
-      stdio: 'pipe',
-      detached: process.platform !== 'win32'
+      stdin: 'pipe',
+      stderrTailBytes: STDERR_TAIL_BYTES,
+      killGraceMs: STOP_GRACE_MS
     })
-    this.child.stdout.on('data', (chunk: Buffer) => this.readStdout(chunk))
-    this.child.stdout.on('end', () => this.finishStdout())
-    this.child.stdout.on('error', (error) => this.fail(new Error(`Codex app-server stdout failed: ${error.message}`)))
-    this.child.stderr.on('data', (chunk: Buffer) => this.readStderr(chunk))
-    this.child.stderr.on('error', (error) => this.fail(new Error(`Codex app-server stderr failed: ${error.message}`)))
-    this.child.stdin.on('error', (error) => this.fail(new Error(`Codex app-server stdin failed: ${error.message}`)))
-    this.child.once('error', (error) => this.fail(new Error(`could not start Codex app-server: ${error.message}`)))
-    this.child.once('close', (code, signal) => {
-      this.isClosed = true
-      if (!this.closing) this.fail(this.childExitError(code, signal))
-      this.closed.resolve()
+    this.exited = this.handle.exited.then((exit) => {
+      this.exitResult = exit
+      if (exit.spawnError) this.fail(new Error(`could not start Codex app-server: ${exit.spawnError.message}`))
+      return exit
+    })
+    void this.readStdout().catch((error) => {
+      if (!this.closing && !this.failure) this.fail(new Error(`Codex app-server stdout failed: ${asError(error).message}`))
     })
   }
 
   get stderrTail(): string {
-    return this.stderr
+    const tail = this.handle.stderrTail()
+    return tail.length > STDERR_TAIL_CHARS ? tail.slice(-STDERR_TAIL_CHARS) : tail
   }
 
   request(method: string, params: unknown, timeoutMs = DEFAULT_CONTROL_TIMEOUT_MS): Promise<unknown> {
     if (this.failure) return Promise.reject(this.failure)
-    if (this.closing || this.isClosed) return Promise.reject(new Error('Codex app-server connection is closed'))
+    if (this.closing || this.exitResult) return Promise.reject(new Error('Codex app-server connection is closed'))
 
     const id = this.nextId++
     const { promise, resolve, reject } = Promise.withResolvers<unknown>()
@@ -92,7 +91,7 @@ export class CodexConnection {
     } catch (error) {
       clearTimeout(timer)
       this.pending.delete(id)
-      const failure = error instanceof Error ? error : new Error(String(error))
+      const failure = asError(error)
       reject(failure)
       this.fail(failure)
     }
@@ -104,46 +103,32 @@ export class CodexConnection {
   }
 
   respond(id: CodexRpcId, result: unknown): void {
-    if (this.closing || this.isClosed) return
+    if (this.closing || this.exitResult) return
     this.write({ id, result })
   }
 
   respondError(id: CodexRpcId, code: number, message: string): void {
-    if (this.closing || this.isClosed) return
+    if (this.closing || this.exitResult) return
     this.write({ id, error: { code, message } })
   }
 
-  async close(): Promise<void> {
-    if (this.closing) {
-      await this.cleanup.promise
-      return
-    }
+  close(): Promise<void> {
+    if (this.closePromise) return this.closePromise
     this.closing = true
-    try {
-      this.rejectPending(new Error('Codex app-server connection closed'))
-      if (!this.isClosed) {
-        try {
-          this.child.stdin.end()
-        } catch {
-          // A process that already closed its pipe is handled by the close event.
-        }
-      }
-      await this.waitForClose(STDIN_GRACE_MS)
-      await this.terminateProcessGroup()
-      if (!this.isClosed) {
-        this.child.stdin.destroy()
-        this.child.stdout.destroy()
-        this.child.stderr.destroy()
-        await this.waitForClose(FINAL_CLOSE_GRACE_MS)
-      }
-    } finally {
-      this.cleanup.resolve()
-    }
+    this.rejectPending(new Error('Codex app-server connection closed'))
+    this.closePromise = this.closeProcess()
+    return this.closePromise
+  }
+
+  private async closeProcess(): Promise<void> {
+    void this.handle.closeInput()
+    await this.waitForExit(CLOSE_EXIT_WAIT_MS)
+    await this.handle.stop({ graceMs: STOP_GRACE_MS })
   }
 
   private write(message: Record<string, unknown>): void {
     if (this.failure) throw this.failure
-    if (this.closing || this.isClosed) throw new Error('Codex app-server connection is closed')
+    if (this.closing || this.exitResult) throw new Error('Codex app-server connection is closed')
     let frame: string
     try {
       frame = JSON.stringify(message)
@@ -151,10 +136,47 @@ export class CodexConnection {
       throw new Error(`could not encode Codex app-server message: ${error instanceof Error ? error.message : String(error)}`)
     }
     if (Buffer.byteLength(frame) > MAX_FRAME_BYTES) throw new Error('Codex app-server message exceeds the frame limit')
-    this.child.stdin.write(`${frame}\n`)
+    try {
+      void this.handle.write(`${frame}\n`).then(
+        (written) => {
+          if (written || this.closing || this.failure) return
+          const pipeError = new Error('Codex app-server stdin failed: the pipe is closed')
+          this.fail(pipeError)
+        },
+        (error) => {
+          if (!this.closing && !this.failure) this.fail(new Error(`Codex app-server stdin failed: ${asError(error).message}`))
+        }
+      )
+    } catch (error) {
+      const failure = asError(error)
+      this.fail(failure)
+      throw failure
+    }
   }
 
-  private readStdout(chunk: Buffer): void {
+  private async readStdout(): Promise<void> {
+    const reader = this.handle.stdout.getReader()
+    try {
+      for (;;) {
+        try {
+          const { done, value } = await reader.read()
+          if (done) {
+            await this.finishStdout()
+            return
+          }
+          this.readStdoutChunk(value)
+        } catch (error) {
+          if (!this.closing && !this.failure) this.fail(new Error(`Codex app-server stdout failed: ${asError(error).message}`))
+          return
+        }
+        if (this.closing || this.failure) return
+      }
+    } finally {
+      reader.releaseLock()
+    }
+  }
+
+  private readStdoutChunk(chunk: Uint8Array): void {
     if (this.closing || this.failure) return
     try {
       this.frameBuffer += this.decoder.decode(chunk, { stream: true })
@@ -177,24 +199,21 @@ export class CodexConnection {
       }
       if (Buffer.byteLength(this.frameBuffer) > MAX_FRAME_BYTES) throw new Error('Codex app-server frame exceeds the limit')
     } catch (error) {
-      this.fail(error instanceof Error ? error : new Error(String(error)))
+      this.fail(asError(error))
     }
   }
 
-  private finishStdout(): void {
+  private async finishStdout(): Promise<void> {
     if (this.closing || this.failure) return
     try {
       this.frameBuffer += this.decoder.decode()
       if (this.frameBuffer.length > 0) throw new Error('Codex app-server closed with an incomplete JSONL frame')
-      throw new Error('Codex app-server stdout closed')
     } catch (error) {
-      this.fail(error instanceof Error ? error : new Error(String(error)))
+      this.fail(asError(error))
+      return
     }
-  }
-
-  private readStderr(chunk: Buffer): void {
-    this.stderr += this.stderrDecoder.decode(chunk, { stream: true })
-    if (this.stderr.length > STDERR_TAIL_CHARS) this.stderr = this.stderr.slice(-STDERR_TAIL_CHARS)
+    await this.waitForExit(STDOUT_EXIT_WAIT_MS)
+    if (!this.closing && !this.failure) this.fail(new Error('Codex app-server stdout closed'))
   }
 
   private receive(value: unknown): void {
@@ -246,7 +265,7 @@ export class CodexConnection {
     try {
       this.handlers.failure(error)
     } catch {
-      // The runner owns its own diagnostic callback failures.
+      // Failure observers do not own connection cleanup.
     }
   }
 
@@ -258,67 +277,11 @@ export class CodexConnection {
     this.pending.clear()
   }
 
-  private childExitError(code: number | null, signal: NodeJS.Signals | null): Error {
-    const details = this.stderr.trim()
-    return new Error(
-      `Codex app-server exited${code === null ? '' : ` with code ${code}`}${signal ? ` (${signal})` : ''}${details ? `: ${details}` : ''}`
-    )
-  }
-
-  private signalGroup(signal: NodeJS.Signals): void {
-    const pid = this.child.pid
-    if (pid === undefined) return
-    try {
-      if (process.platform === 'win32') this.child.kill(signal)
-      else process.kill(-pid, signal)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-        try {
-          this.child.kill(signal)
-        } catch {
-          // The process group is signalled again with SIGKILL if necessary.
-        }
-      }
-    }
-  }
-
-  private processGroupExists(): boolean {
-    const pid = this.child.pid
-    if (pid === undefined) return false
-    if (process.platform === 'win32') return !this.isClosed
-    try {
-      process.kill(-pid, 0)
-      return true
-    } catch (error) {
-      return (error as NodeJS.ErrnoException).code !== 'ESRCH'
-    }
-  }
-
-  private async terminateProcessGroup(): Promise<void> {
-    this.signalGroup('SIGTERM')
-    await this.waitForGroupExit(TERM_GRACE_MS)
-    if (!this.processGroupExists()) return
-    this.signalGroup('SIGKILL')
-    await this.waitForGroupExit(TERM_GRACE_MS)
-  }
-
-  private async waitForGroupExit(timeoutMs: number): Promise<void> {
-    const deadline = Date.now() + timeoutMs
-    while (this.processGroupExists()) {
-      const remaining = deadline - Date.now()
-      if (remaining <= 0) return
-      const { promise, resolve } = Promise.withResolvers<void>()
-      setTimeout(resolve, Math.min(25, remaining))
-      await promise
-    }
-  }
-
-  private async waitForClose(timeoutMs: number): Promise<void> {
-    if (this.isClosed) return
+  private async waitForExit(timeoutMs: number): Promise<void> {
+    if (this.exitResult) return
     const timeout = Promise.withResolvers<void>()
     const timer = setTimeout(timeout.resolve, timeoutMs)
-    await Promise.race([this.closed.promise, timeout.promise])
+    await Promise.race([this.exited, timeout.promise])
     clearTimeout(timer)
   }
-
 }

@@ -27,6 +27,8 @@ type Fanout = {
   userInput: Set<{ pluginId: string; listener: (input: PluginUserInput) => void }>
   userInputEvidence: Map<string, PluginUserInput>
   reconnect: Set<{ pluginId: string; listener: ReconnectListener }>
+  lagged: Set<{ pluginId: string; listener: (sessionId: string) => void }>
+  invalidate: Set<(sessionId: string) => void>
   /** Plugins holding a host subscription per session; the host subscription ends when the last holder lets go. */
   holds: Map<string, Set<string>>
   log: (message: string) => void
@@ -48,6 +50,8 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
     userInputEvidence: new Map(),
     reconnect: new Set(),
     holds: new Map(),
+    lagged: new Set(),
+    invalidate: new Set(),
     log,
     run: (pluginId, call) => run(pluginId, call)
   }
@@ -71,6 +75,13 @@ function fanoutFor(pty: PtyClient, log: (message: string) => void): Fanout {
   pty.onReconnect(() => {
     for (const entry of [...fanout.reconnect]) run(entry.pluginId, () => entry.listener())
   })
+  pty.onLagged((sessionId) => {
+    fanout.holds.delete(sessionId)
+    for (const invalidate of fanout.invalidate) invalidate(sessionId)
+    for (const entry of [...fanout.lagged]) {
+      if (fanout.lagged.has(entry)) run(entry.pluginId, () => entry.listener(sessionId))
+    }
+  })
   fanouts.set(pty, fanout)
   return fanout
 }
@@ -93,6 +104,8 @@ export function createPtyApi(
   const removers = new Set<() => void>()
   const attempts = new Map<string, { inflight: number; succeeded: boolean }>()
   let revoked = false
+  const invalidate = (sessionId: string) => { attempts.delete(sessionId) }
+  fanout.invalidate.add(invalidate)
 
   const live = () => {
     if (revoked) throw new Error(`${pluginId} is no longer active`)
@@ -193,7 +206,7 @@ export function createPtyApi(
           ...(options?.mode === undefined ? {} : { mode: options.mode }),
           ...(options?.historyLines === undefined ? {} : { historyLines: options.historyLines })
         })
-        attempt.succeeded = true
+        if (attempts.get(sessionId) === attempt) attempt.succeeded = true
         return result
       } catch (error) {
         // only the last failing attempt may roll the hold back, and only if no attempt succeeded
@@ -231,6 +244,7 @@ export function createPtyApi(
     },
     onData: (listener) => listen(fanout.data, { pluginId, listener }),
     onExit: (listener) => listen(fanout.exit, { pluginId, listener }),
+    onLagged: (listener) => listen(fanout.lagged, { pluginId, listener }),
     onFact: (listener) => listen(fanout.fact, { pluginId, listener }),
     onInput: (listener) => listen(fanout.input, { pluginId, listener }),
     reportUserInput(input) {
@@ -254,6 +268,7 @@ export function createPtyApi(
     revoke() {
       revoked = true
       attempts.clear()
+      fanout.invalidate.delete(invalidate)
       for (const remove of [...removers]) remove()
       for (const [sessionId, holders] of [...fanout.holds]) {
         if (!holders.has(pluginId) || !release(sessionId)) continue

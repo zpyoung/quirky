@@ -1,4 +1,4 @@
-import { decodeTerminalOutput } from './frames'
+import { decodeTerminalFrame } from './frames'
 import {
   PROTOCOL_VERSION,
   type ClientRole,
@@ -33,6 +33,10 @@ export class ConnectionLost extends Error {
 /** Per-call options; `requestId` sets the idempotency key and `timeoutMs` bounds local waiting only. */
 export type CallOptions = { requestId?: string; timeoutMs?: number }
 
+export type TerminalStreamOptions = {
+  onLagged?: () => void
+}
+
 export type ClientHello = {
   role: ClientRole
   name?: string
@@ -53,9 +57,16 @@ type Transport = { send(text: string): void; close(): void }
 const MAX_SOCKET_LINE_BYTES = 16 * 1024 * 1024
 
 type Pending = { resolve: (value: unknown) => void; reject: (error: Error) => void }
+type StreamHandler = {
+  handler: (bytes: Uint8Array) => void
+  onLagged?: () => void
+  fired: boolean
+  active: boolean
+}
 
 // frames can land before the caller registers a handler for a fresh stream id
 const MAX_BUFFERED_BYTES_PER_STREAM = 4 * 1024 * 1024
+const MAX_LAGGED_STREAMS = 1_024
 
 /**
  * A daemon connection. `connect` uses WebSocket, which works in browsers and in Bun, with `url`
@@ -67,8 +78,9 @@ export class QuirkyClient {
   private readonly pending = new Map<number, Pending>()
   private readonly eventHandlers = new Set<(event: QuirkyEvent) => void>()
   private readonly closeHandlers = new Set<() => void>()
-  private readonly streamHandlers = new Map<number, (bytes: Uint8Array) => void>()
+  private readonly streamHandlers = new Map<number, StreamHandler>()
   private readonly streamBuffers = new Map<number, Uint8Array[]>()
+  private readonly laggedStreams = new Set<number>()
   private closed = false
 
   private constructor(private readonly transport: Transport) {}
@@ -95,17 +107,31 @@ export class QuirkyClient {
 
   /**
    * Connects over the daemon's unix socket (newline-delimited JSON, Bun only). `hello.token`
-   * must be the runtime token; the daemon refuses any other first message.
+   * must be the runtime token; `options.signal` aborts connection/hello and force-closes the socket.
    */
-  static async connectSocket(path: string, hello: ClientHello): Promise<QuirkyClient> {
+  static async connectSocket(path: string, hello: ClientHello, options: { signal?: AbortSignal } = {}): Promise<QuirkyClient> {
+    const signal = options.signal
+    if (signal?.aborted) throw signal.reason
+
     let client: QuirkyClient | undefined
+    let socket: Bun.Socket<undefined> | undefined
+    const abortWait = signal ? Promise.withResolvers<never>() : undefined
+    const onAbort = () => {
+      socket?.terminate()
+      client?.handleClose()
+      abortWait?.reject(signal?.reason)
+    }
+    if (signal) {
+      signal.addEventListener('abort', onAbort, { once: true })
+      if (signal.aborted) onAbort()
+    }
+
     const decoder = new TextDecoder()
     let pendingLine = ''
     let pendingBytes: Uint8Array | null = null
-    let socket: Bun.Socket<undefined>
 
     const flush = () => {
-      while (pendingBytes && pendingBytes.length > 0) {
+      while (socket && pendingBytes && pendingBytes.length > 0) {
         const written = socket.write(pendingBytes)
         if (written <= 0) return
         pendingBytes = written >= pendingBytes.length ? null : pendingBytes.subarray(written)
@@ -113,47 +139,68 @@ export class QuirkyClient {
     }
 
     try {
-      socket = await Bun.connect<undefined>({
-        unix: path,
-        socket: {
-          data(_socket, chunk) {
-            pendingLine += decoder.decode(chunk, { stream: true })
-            let newline = pendingLine.indexOf('\n')
-            while (newline !== -1) {
-              const line = pendingLine.slice(0, newline)
-              pendingLine = pendingLine.slice(newline + 1)
-              if (line !== '') client?.handleMessage(line)
-              newline = pendingLine.indexOf('\n')
-            }
-            if (pendingLine.length > MAX_SOCKET_LINE_BYTES) {
-              pendingLine = ''
-              client?.close()
-            }
-          },
-          drain: flush,
-          close: () => client?.handleClose(),
-          error: () => client?.handleClose()
-        }
-      })
-    } catch (error) {
-      throw new Error(`could not connect to quirkyd at ${path}: ${(error as Error).message}`)
-    }
+      let connectedSocket: Bun.Socket<undefined>
+      try {
+        const opening = Bun.connect<undefined>({
+          unix: path,
+          socket: {
+            open(openedSocket) {
+              socket = openedSocket
+              if (signal?.aborted) openedSocket.terminate()
+            },
+            data(_socket, chunk) {
+              pendingLine += decoder.decode(chunk, { stream: true })
+              let newline = pendingLine.indexOf('\n')
+              while (newline !== -1) {
+                const line = pendingLine.slice(0, newline)
+                pendingLine = pendingLine.slice(newline + 1)
+                if (line !== '') client?.handleMessage(line)
+                newline = pendingLine.indexOf('\n')
+              }
+              if (pendingLine.length > MAX_SOCKET_LINE_BYTES) {
+                pendingLine = ''
+                client?.close()
+              }
+            },
+            drain: flush,
+            close: () => client?.handleClose(),
+            error: () => client?.handleClose()
+          }
+        })
+        const connecting = opening.then((openedSocket) => {
+          socket = openedSocket
+          if (signal?.aborted) openedSocket.terminate()
+          return openedSocket
+        })
+        connectedSocket = await (abortWait ? Promise.race([connecting, abortWait.promise]) : connecting)
+      } catch (error) {
+        if (signal?.aborted) throw signal.reason
+        throw new Error(`could not connect to quirkyd at ${path}: ${(error as Error).message}`)
+      }
 
-    client = new QuirkyClient({
-      send(text) {
-        const bytes = new TextEncoder().encode(`${text}\n`)
-        pendingBytes = pendingBytes ? concat(pendingBytes, bytes) : bytes
-        flush()
-      },
-      close: () => socket.end()
-    })
-    try {
-      await client.handshake(hello)
+      socket = connectedSocket
+      client = new QuirkyClient({
+        send(text) {
+          const bytes = new TextEncoder().encode(`${text}\n`)
+          pendingBytes = pendingBytes ? concat(pendingBytes, bytes) : bytes
+          flush()
+        },
+        close: () => connectedSocket.end()
+      })
+      const handshake = client.handshake(hello)
+      await (abortWait ? Promise.race([handshake, abortWait.promise]) : handshake)
+      return client
     } catch (error) {
-      client.close()
+      if (signal?.aborted) {
+        socket?.terminate()
+        client?.handleClose()
+        throw signal.reason
+      }
+      client?.close()
       throw error
+    } finally {
+      signal?.removeEventListener('abort', onAbort)
     }
-    return client
   }
 
   private async handshake(hello: ClientHello): Promise<void> {
@@ -235,15 +282,36 @@ export class QuirkyClient {
     return () => this.closeHandlers.delete(handler)
   }
 
-  /** Receives a terminal stream's bytes, including any that arrived before this call. */
-  onTerminalOutput(streamId: number, handler: (bytes: Uint8Array) => void): () => void {
-    this.streamHandlers.set(streamId, handler)
-    const buffered = this.streamBuffers.get(streamId)
-    this.streamBuffers.delete(streamId)
-    for (const bytes of buffered ?? []) handler(bytes)
-    return () => {
-      if (this.streamHandlers.get(streamId) === handler) this.streamHandlers.delete(streamId)
+  /**
+   * Receives a terminal stream's bytes, including any that arrived before this call.
+   * A gap discards buffered output and reports onLagged once; pre-registration gaps notify asynchronously.
+   */
+  onTerminalOutput(
+    streamId: number,
+    handler: (bytes: Uint8Array) => void,
+    options?: TerminalStreamOptions
+  ): () => void {
+    const previous = this.streamHandlers.get(streamId)
+    if (previous) previous.active = false
+    const registration: StreamHandler = { handler, onLagged: options?.onLagged, fired: false, active: true }
+    this.streamHandlers.set(streamId, registration)
+
+    if (this.laggedStreams.has(streamId)) {
       this.streamBuffers.delete(streamId)
+      queueMicrotask(() => this.notifyLagged(registration))
+    } else {
+      const buffered = this.streamBuffers.get(streamId)
+      this.streamBuffers.delete(streamId)
+      for (const bytes of buffered ?? []) handler(bytes)
+    }
+
+    return () => {
+      registration.active = false
+      if (this.streamHandlers.get(streamId) === registration) {
+        this.streamHandlers.delete(streamId)
+        this.streamBuffers.delete(streamId)
+        this.laggedStreams.delete(streamId)
+      }
     }
   }
 
@@ -255,16 +323,29 @@ export class QuirkyClient {
 
   private handleMessage(data: unknown): void {
     if (typeof data !== 'string') {
-      const frame = decodeTerminalOutput(data as ArrayBuffer)
+      const frame = decodeTerminalFrame(data as ArrayBuffer | Uint8Array)
       if (!frame) return
-      const handler = this.streamHandlers.get(frame.streamId)
-      if (handler) {
-        handler(frame.bytes)
+      const registration = this.streamHandlers.get(frame.streamId)
+      if (this.laggedStreams.has(frame.streamId)) {
+        if (frame.kind === 'lagged') this.notifyLagged(registration)
+        return
+      }
+      if (frame.kind === 'lagged') {
+        this.streamBuffers.delete(frame.streamId)
+        this.latchLagged(frame.streamId)
+        this.notifyLagged(registration)
+        return
+      }
+      if (registration) {
+        registration.handler(frame.bytes)
         return
       }
       const buffer = this.streamBuffers.get(frame.streamId) ?? []
       const size = buffer.reduce((sum, chunk) => sum + chunk.length, 0)
-      if (size + frame.bytes.length <= MAX_BUFFERED_BYTES_PER_STREAM) {
+      if (size + frame.bytes.length > MAX_BUFFERED_BYTES_PER_STREAM) {
+        this.streamBuffers.delete(frame.streamId)
+        this.latchLagged(frame.streamId)
+      } else {
         buffer.push(frame.bytes.slice())
         this.streamBuffers.set(frame.streamId, buffer)
       }
@@ -291,11 +372,29 @@ export class QuirkyClient {
     }
   }
 
+  private notifyLagged(registration: StreamHandler | undefined): void {
+    if (!registration || !registration.active || registration.fired) return
+    registration.fired = true
+    registration.onLagged?.()
+  }
+
+  private latchLagged(streamId: number): void {
+    if (this.laggedStreams.has(streamId)) return
+    this.laggedStreams.add(streamId)
+    if (this.laggedStreams.size > MAX_LAGGED_STREAMS) {
+      const oldest = this.laggedStreams.values().next().value
+      if (oldest !== undefined) this.laggedStreams.delete(oldest)
+    }
+  }
+
   private handleClose(): void {
     if (this.closed) return
     this.closed = true
+    for (const registration of this.streamHandlers.values()) registration.active = false
     for (const { reject } of this.pending.values()) reject(new ConnectionLost())
     this.pending.clear()
+    this.streamBuffers.clear()
+    this.laggedStreams.clear()
     for (const handler of this.closeHandlers) handler()
   }
 }

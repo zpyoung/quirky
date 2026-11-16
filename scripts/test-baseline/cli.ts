@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
 import type { bunTestFile } from '../suite'
+import { readSpeedEvidence } from '../speed/ci'
 import { BaselineUnavailable, buildBaseline, defaultGh, fetchBaseline, findBaseline, findBaselines } from './baseline'
 import { compareResults } from './compare'
 import { applyIssueActions, planIssues, readOpenIssues } from './issues'
@@ -14,7 +15,7 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 
   plan       --event <pull_request|push|workflow_dispatch> [--full <true|false>] --out <dir>
   run-shard  --plan <dir> (--shard <index> | --macos) --out <file>
-  verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false>
+  verdict    --plan <dir> --in <dir> --out <dir> --jobs-ok <true|false> [--speed <dir>]
   issues     --plan <dir> --baseline <file> --only <open|close>
   affected   [--json]
 `
@@ -22,6 +23,7 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 const EVENTS = ['pull_request', 'push', 'workflow_dispatch']
 const NOT_ON_CI_LIST = 'scripts/test-not-on-ci.txt'
 const MACOS_LIST = 'scripts/test-on-macos.txt'
+const ALONE_LIST = 'scripts/test-alone.txt'
 
 /**
  * What the commands touch outside their arguments. Tests replace `gh`, the clock, the process
@@ -311,8 +313,10 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
   const files = values.macos ? plan.macos : plan.linuxShards[Number(values.shard)]
   if (!files) throw new UsageError(`--shard ${values.shard} is outside the plan's ${plan.linuxShards.length} shards`)
 
+  const { macosOnly } = await import('../suite')
+  const alone = macosOnly(join(ctx.cwd, ALONE_LIST))
   const { FILE_LIMIT_MS, FILES_AT_ONCE_CI, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }
+  const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err, alone }
   const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
   if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files in this job failed, so none were rerun\n`)
   writeJson(out, rerun.results)
@@ -321,7 +325,7 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
 }
 
 async function verdictCommand(args: string[], ctx: Context): Promise<number> {
-  const values = parse(args, { plan: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' }, 'jobs-ok': { type: 'string' } })
+  const values = parse(args, { plan: { type: 'string' }, in: { type: 'string' }, out: { type: 'string' }, 'jobs-ok': { type: 'string' }, speed: { type: 'string' } })
   const planDir = need(values.plan, 'plan')
   const inDir = need(values.in, 'in')
   const outDir = need(values.out, 'out')
@@ -374,7 +378,15 @@ async function verdictCommand(args: string[], ctx: Context): Promise<number> {
     runBroken: problems.length > 0,
   })
 
-  writeText(join(outDir, 'comment.md'), renderComment(verdict, ctx.now()))
+  let comment = renderComment(verdict, ctx.now())
+  if (values.speed !== undefined) {
+    try {
+      comment += '\n' + readSpeedEvidence(values.speed, ctx.env.SPEED_HEAD || plan.head)
+    } catch {
+      comment += '\n### Speed\n\nnot measured: speed evidence reader failed\n'
+    }
+  }
+  writeText(join(outDir, 'comment.md'), comment)
   writeJson(join(outDir, 'verdict.json'), verdict)
   const baselinePath = join(outDir, 'baseline.json')
   rmSync(baselinePath, { force: true })

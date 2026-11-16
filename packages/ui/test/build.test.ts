@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const uiDir = join(import.meta.dir, '..')
@@ -144,6 +144,61 @@ describe("SC-29: plugin UI modules share the window's React", () => {
     expect(chunks.length).toBeGreaterThan(0)
     for (const entry of ['react.js', 'react-dom-client.js', 'jsx-runtime.js']) {
       expect(read(join('vendor', entry))).toMatch(/from\s*"\.\/chunk-/)
+    }
+  })
+})
+
+describe('KaTeX assets and vendor preloads', () => {
+  test('keeps KaTeX fonts out of main.css', () => {
+    const mainCss = readFileSync(join(out, 'main.css'))
+    const text = mainCss.toString('utf8')
+    expect(text).not.toContain('data:font/')
+    expect(text).not.toMatch(/font-family\s*:\s*KaTeX/i)
+    expect(mainCss.byteLength).toBeLessThan(400_000)
+  })
+
+  test('copies the installed KaTeX stylesheet and fonts unchanged', () => {
+    const sourceCss = resolveFromUi('katex/dist/katex.min.css')
+    const sourceFonts = join(dirname(sourceCss), 'fonts')
+    const outputFonts = join(out, 'katex/fonts')
+    expect(existsSync(join(out, 'katex/katex.min.css'))).toBe(true)
+    expect(readFileSync(join(out, 'katex/katex.min.css'))).toEqual(readFileSync(sourceCss))
+    expect(existsSync(join(outputFonts, 'KaTeX_Main-Regular.woff2'))).toBe(true)
+
+    const sourceFiles = readdirSync(sourceFonts).sort()
+    expect(readdirSync(outputFonts).sort()).toEqual(sourceFiles)
+    for (const file of sourceFiles) {
+      expect(readFileSync(join(outputFonts, file))).toEqual(readFileSync(join(sourceFonts, file)))
+    }
+  })
+
+  test('links the KaTeX stylesheet after main.css in the head', () => {
+    const html = read('index.html')
+    const mainCssAt = html.indexOf('<link rel="stylesheet" href="./main.css" />')
+    const katexCssAt = html.indexOf('<link rel="stylesheet" href="./katex/katex.min.css" />')
+    const headEndAt = html.indexOf('</head>')
+    expect(mainCssAt).toBeGreaterThan(-1)
+    expect(katexCssAt).toBeGreaterThan(mainCssAt)
+    expect(katexCssAt).toBeLessThan(headEndAt)
+  })
+
+  test('preloads every vendor JavaScript file after the import map and before main.js', () => {
+    const html = read('index.html')
+    const vendorFiles = readdirSync(join(out, 'vendor'))
+      .filter(file => file.endsWith('.js'))
+      .sort()
+    const preloads = [...html.matchAll(/<link rel="modulepreload" href="\.\/vendor\/([^"]+)" \/>/g)]
+    expect(preloads.map(([, file]) => file!).sort()).toEqual(vendorFiles)
+
+    const importMapAt = html.indexOf('<script type="importmap">')
+    const importMapEndAt = html.indexOf('</script>', importMapAt) + '</script>'.length
+    const mainScriptAt = html.indexOf('<script type="module" src="./main.js"></script>')
+    expect(importMapAt).toBeGreaterThan(-1)
+    expect(importMapEndAt).toBeGreaterThan(importMapAt)
+    expect(mainScriptAt).toBeGreaterThan(importMapEndAt)
+    for (const preload of preloads) {
+      expect(preload.index!).toBeGreaterThan(importMapEndAt)
+      expect(preload.index!).toBeLessThan(mainScriptAt)
     }
   })
 })

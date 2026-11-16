@@ -1,0 +1,29 @@
+{
+  "createdAt": "2026-11-09T19:52:32.898Z",
+  "plugins": [
+    "sidebar-section:quirky.worktree/worktrees",
+    "sidebar-section:quirky.worktree/remote-workspaces",
+    "view:quirky.worktree/environments"
+  ],
+  "reportPath": "/var/folders/x5/07kj5yld16l9wd5p_v01h20c0000gp/T/redesign-worktrees-plugin/after/ui-review/review-report.json",
+  "surfaces": [
+    {
+      "id": "view:quirky.worktree/environments",
+      "plugin": "quirky.worktree",
+      "dark": 87,
+      "light": 76
+    },
+    {
+      "id": "sidebar-section:quirky.worktree/worktrees",
+      "plugin": "quirky.worktree",
+      "dark": 74,
+      "light": 46
+    },
+    {
+      "id": "sidebar-section:quirky.worktree/remote-workspaces",
+      "plugin": "quirky.worktree",
+      "dark": 73,
+      "light": 89
+    }
+  ]
+}

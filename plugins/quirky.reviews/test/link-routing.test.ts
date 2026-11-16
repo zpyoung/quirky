@@ -159,16 +159,15 @@ test('review links use Browser routing, exact worktree context, and safe error b
       worktreeId: reviews.worktree, mode: 'native', page: null, url: inferredDetailUrl
     })
 
-    await reviews.client.callAny('quirky.reviews/open', { worktree: reviews.worktree, number: 12 })
-    const checksRefresh = await reviews.client.callAny('quirky.reviews/checksRefresh', { worktree: checksWorktree })
-    expect(checksRefresh).toMatchObject({ ok: true, worktree: checksWorktree, kind: 'folder' })
+    await reviews.client.callAny('quirky.reviews/open', { worktree: checksWorktree, number: 12 })
+    await reviews.client.call('ui.view.open', { id: 'view:quirky.reviews/review', input: { worktree: reviews.worktree, number: 12, tab: 'conversation' } })
     await reviews.client.callAny('quirky.reviews/showChecks', {})
-    const activeReviews = await reviews.client.callAny('quirky.reviews/state', {}) as {
+    const checksRefresh = await reviews.client.callAny('quirky.reviews/checksRefresh', { worktree: checksWorktree, force: true })
+    expect(checksRefresh).toMatchObject({ ok: true, worktree: checksWorktree, kind: 'folder' })
+    const activeReviews = await reviews.client.callAny('quirky.reviews/state', { worktree: reviews.worktree }) as {
       detail: { target: { worktree: string } | null }
-      checks: { worktree: string | null }
     }
-    expect(activeReviews.detail.target?.worktree).toBe(reviews.worktree)
-    expect(activeReviews.checks.worktree).toBe(checksWorktree)
+    expect(activeReviews.detail.target?.worktree).toBe(checksWorktree)
     const beforeAmbiguousLayout = await reviews.client.call('ui.state', {}) as { layout: { view: unknown; panel: string | null } }
     expect(beforeAmbiguousLayout).toMatchObject({
       layout: { view: { id: 'view:quirky.reviews/review' }, panel: 'panel:quirky.reviews/checks' }

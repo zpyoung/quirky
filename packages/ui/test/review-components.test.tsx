@@ -135,6 +135,50 @@ describe('SplitButton', () => {
     expect(document.querySelector('[role="menu"]')).toBeNull()
     expect(document.activeElement).toBe(caret)
   })
+  test('hands the caret corner to a caller-owned menu', async () => {
+    const anchors: Array<{ x: number; y: number }> = []
+    await render(h(SplitButton, {
+      label: 'Pull 1 commit',
+      onClick: () => {},
+      menuLabel: 'More ship steps',
+      menuOpen: false,
+      onOpenMenu: (anchor) => anchors.push(anchor),
+    }))
+    const caret = byLabel('More ship steps')
+    expect(caret.getAttribute('aria-expanded')).toBe('false')
+    await click(caret)
+    expect(anchors).toEqual([{ x: 0, y: 0 }])
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+    expect(caret.getAttribute('aria-expanded')).toBe('false')
+  })
+
+  test('reports the caller-owned menu as expanded', async () => {
+    await render(h(SplitButton, {
+      label: 'Pull 1 commit',
+      onClick: () => {},
+      menuLabel: 'More ship steps',
+      menuOpen: true,
+      onOpenMenu: () => {},
+    }))
+    expect(byLabel('More ship steps').getAttribute('aria-expanded')).toBe('true')
+    expect(document.querySelector('[role="menu"]')).toBeNull()
+  })
+
+  test('does not open a caller-owned menu while busy', async () => {
+    let opened = 0
+    await render(h(SplitButton, {
+      label: 'Pulling',
+      busy: true,
+      onClick: () => {},
+      menuLabel: 'More ship steps',
+      menuOpen: false,
+      onOpenMenu: () => { opened += 1 },
+    }))
+    const caret = byLabel('More ship steps')
+    expect(caret.disabled).toBe(true)
+    await click(caret)
+    expect(opened).toBe(0)
+  })
 })
 
 describe('InlineError', () => {
@@ -154,6 +198,19 @@ describe('InlineError', () => {
     const action = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Retry')!
     await click(action)
     expect(acted).toBe(1)
+  })
+
+  test('offers only its retry action when dismissal is not provided', async () => {
+    let retried = 0
+    await render(h(InlineError, { message: 'Push failed', action: { label: 'Retry', onAction: () => { retried += 1 } } }))
+    const alert = container.querySelector('[role="alert"]')!
+    expect(alert.textContent).toContain('Push failed')
+    const buttons = alert.querySelectorAll('button')
+    expect(buttons.length).toBe(1)
+    expect(buttons[0]!.textContent).toBe('Retry')
+    expect(container.querySelector('button[aria-label="Dismiss"]')).toBeNull()
+    await click(buttons[0]!)
+    expect(retried).toBe(1)
   })
 })
 

@@ -665,6 +665,29 @@ describe('Project ledger API: settings, restart and persisted corruption', () =>
 
 // SC-11/12: retention, stable project identity, explicit attachment and owner deletion guards.
 describe('Project ledger API: owner lifecycle and attachment', () => {
+  test('filing by ledger id uses its live owner and refuses filing after detachment', async () => {
+    const harness = await start()
+    const created = await fileEntry(harness, 'bug')
+    const target = { ledgerId: created.ledger.ledgerId }
+    const filed = await fileEntry(harness, 'bug', { target, content: { ...created.entry.content, title: 'Filed by ledger id' } })
+    expect(filed.entry.id).toBe('bug-2')
+    expect(filed.ledger).toMatchObject({
+      ledgerId: target.ledgerId,
+      owner: { tier: 'project', id: harness.project.repo.id },
+      entryCount: 2
+    })
+
+    const preview = await harness.operation('removal-preview', { removal: { repoIds: [harness.project.repo.id] } }) as LedgerResponse
+    await harness.client.callAny('quirky.repo/remove', {
+      repo: harness.project.repo.id,
+      expectedLedgers: preview.removalPreview.map(({ ledgerId, revision }) => ({ ledgerId, revision }))
+    })
+    const rejected = await failure(fileEntry(harness, 'bug', { target }))
+    expect(rejected.data?.kind).toBe('owner-missing')
+    const detached = await harness.operation('list', { target }) as LedgerResponse
+    expect(detached.ledger).toMatchObject({ ledgerId: target.ledgerId, owner: null, entryCount: 2 })
+  })
+
   test('removal preview snapshots guard repo removal; retained entries detach and reattach eagerly on re-add', async () => {
     const harness = await start()
     const created = await fileEntry(harness, 'bug', { title: 'Retain across project removal' })

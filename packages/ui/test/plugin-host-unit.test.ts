@@ -3,6 +3,7 @@ import {
   DEFAULT_THEME,
   UI_TOOL_SLOTS,
   PLUGIN_API_VERSION,
+  type MountCleanup,
   type NativeBrowserCapability,
   type QuirkyEvent,
   type SettingInfo,
@@ -21,6 +22,9 @@ import { freshToolLayout, projectTools, resolveToolLayout } from '../../daemon/s
 import type { DesktopWindowRoute } from '../src/desktop-bridge'
 import { createNativeBrowserCapability } from '../src/native-browser'
 import { WindowPluginHost, type HostState } from '../src/plugins/host'
+
+const apiVersionParts = PLUGIN_API_VERSION.split('.').map(Number) as [number, number, number]
+const NEXT_API_MINOR_VERSION = `${apiVersionParts[0]}.${apiVersionParts[1] + 1}.0`
 
 type Fake = { text?: string }
 type ModuleFactory = () => unknown
@@ -114,6 +118,7 @@ function setup(
     windowRoute?: DesktopWindowRoute
     nativeDropPaths?: (fileNames: readonly string[]) => Promise<string[] | null>
     nativeBrowser?: NativeBrowserCapability
+    contributions?: (options?: { timeoutMs?: number }) => Promise<UiModel>
   } = {}
 ) {
   let model = initial
@@ -183,10 +188,11 @@ function setup(
     return changeLayout({ tools: { ...current, open: { ...current.open, [slot]: null } } })
   }
   const streams = new Map<number, Set<(bytes: Uint8Array) => void>>()
+  const streamLagListeners = new Map<number, Set<() => void>>()
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
   let confirmAnswer = true
-  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const calls: { method: string; params: Record<string, unknown>; options?: { timeoutMs?: number } }[] = []
   const imports: string[] = []
   const modules = new Map<string, ModuleFactory>()
   const toasts: [string, string][] = []
@@ -196,11 +202,11 @@ function setup(
   const holds = new Map<string, Promise<void>>()
 
   const host = new WindowPluginHost({
-    call: async (method, params) => {
-      calls.push({ method, params })
+    call: async (method, params, callOptions) => {
+      calls.push({ method, params, ...(callOptions === undefined ? {} : { options: callOptions }) })
       switch (method) {
         case 'ui.contributions':
-          return model
+          return options.contributions ? options.contributions(callOptions) : model
         case 'ui.window.self':
           return { connId: 1 }
         case 'ui.window.state': {
@@ -276,11 +282,20 @@ function setup(
       if (!factory) throw new Error(`no module ${url}`)
       return factory()
     },
-    onStream: (streamId, listener) => {
+    onStream: (streamId, listener, options) => {
       const set = streams.get(streamId) ?? new Set()
       set.add(listener)
       streams.set(streamId, set)
-      return () => set.delete(listener)
+      const lag = options?.onLagged
+      if (lag) {
+        const callbacks = streamLagListeners.get(streamId) ?? new Set()
+        callbacks.add(lag)
+        streamLagListeners.set(streamId, callbacks)
+      }
+      return () => {
+        set.delete(listener)
+        if (lag) streamLagListeners.get(streamId)?.delete(lag)
+      }
     },
     onConnection: (listener) => {
       connectionListeners.add(listener)
@@ -308,6 +323,7 @@ function setup(
     confirms,
     answerConfirm: (answer: boolean) => (confirmAnswer = answer),
     pushStream: (streamId: number, bytes: Uint8Array) => streams.get(streamId)?.forEach((listener) => listener(bytes)),
+    lagStream: (streamId: number) => streamLagListeners.get(streamId)?.forEach((listener) => listener()),
     setConnection: (status: 'connected' | 'reconnecting') => connectionListeners.forEach((listener) => listener(status)),
     streamListeners: (streamId: number) => streams.get(streamId)?.size ?? 0,
     connectionListenerCount: () => connectionListeners.size,
@@ -571,7 +587,7 @@ test('incompatible API floor changes deactivate cached UI modules before reuse',
     sidebarSections: [section(plugin, 'list'), section(NOTES, 'list')],
     commands: [command(plugin, 'run')]
   })
-  for (const apiVersion of ['1.3.0', undefined, '^1.0.0', 1] as const) {
+  for (const apiVersion of [NEXT_API_MINOR_VERSION, undefined, '^1.0.0', 1] as const) {
     const t = setup(makeSkewModel())
     let executions = 0
     const skew = recording([`sidebar-section:${plugin}/list`, commandId], (id) =>
@@ -707,6 +723,110 @@ test('SC-11: a plugin calls the daemon through its context and receives events o
   expect(received).toEqual([])
   await tick()
   expect(received).toEqual([{ type: 'acme.notes/changed', data: null }])
+})
+
+describe('worktree-scoped event subscriptions', () => {
+  const A = 'wt_aaaaaaaaaaaa'
+  const B = 'wt_bbbbbbbbbbbb'
+  const events: QuirkyEvent[] = [
+    { type: 'acme.notes/changed', data: null, worktreeId: A },
+    { type: 'acme.notes/changed', data: null, worktreeId: B },
+    { type: 'acme.notes/changed', data: { worktreeId: B } },
+    { type: 'notify', title: 'a', body: 'b', desktop: false, worktreeId: B },
+    { type: 'ui.keybindings.changed' }
+  ]
+
+  async function subscribed(register: (context: UiPluginContext) => void) {
+    const t = setup(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+    t.useModule(NOTES, {
+      activate(context) {
+        register(context)
+        context.provide(LIST, () => {})
+      }
+    })
+    await t.host.refresh()
+    t.host.mount(LIST, element())
+    await settled(t, LIST)
+    return t
+  }
+
+  test.each([
+    { name: 'omitted', options: undefined },
+    { name: 'empty', options: {} },
+    { name: 'undefined worktree', options: { worktreeId: undefined } },
+    { name: 'one worktree', options: { worktreeId: A } },
+    { name: 'no worktree', options: { worktreeId: null } }
+  ])('$name delivers untagged plugin and all kernel events', async ({ options }) => {
+    const received: QuirkyEvent[] = []
+    let unsubscribe!: () => void
+    const t = await subscribed((context) => {
+      unsubscribe = context.subscribe((event) => { received.push(event) }, options)
+    })
+    for (const event of events) t.emit(event)
+    await tick()
+    await tick()
+    const expected = options?.worktreeId === A
+      ? [events[0], ...events.slice(2)]
+      : options?.worktreeId === null ? events.slice(2) : events
+    expect(received).toEqual(expected)
+    unsubscribe()
+    t.emit(events[0])
+    await tick()
+    await tick()
+    expect(received).toEqual(expected)
+  })
+
+  test('invalid options throw without registering the listener', async () => {
+    const received: QuirkyEvent[] = []
+    const listener = (event: QuirkyEvent) => { received.push(event) }
+    let context!: UiPluginContext
+    const t = await subscribed((value) => { context = value })
+    for (const options of [{ worktreeId: 7 }, { worktreeId: {} }]) {
+      // @ts-expect-error Exercise invalid runtime options from untyped plugins.
+      expect(() => context.subscribe(listener, options)).toThrow('subscribe: worktreeId must be a string or null')
+    }
+    for (const options of [A, null]) {
+      // @ts-expect-error Exercise invalid runtime options from untyped plugins.
+      expect(() => context.subscribe(listener, options)).toThrow('subscribe: options must be an object')
+    }
+    for (const event of events) t.emit(event)
+    await tick()
+    await tick()
+    expect(received).toEqual([])
+  })
+
+  test('the later scope replaces one function registration and either disposer removes it', async () => {
+    const received: QuirkyEvent[] = []
+    const listener = (event: QuirkyEvent) => { received.push(event) }
+    let unsubscribe!: () => void
+    const t = await subscribed((context) => {
+      unsubscribe = context.subscribe(listener)
+      context.subscribe(listener, { worktreeId: B })
+    })
+    for (const event of events) t.emit(event)
+    await tick()
+    await tick()
+    expect(received).toEqual(events.slice(1))
+    unsubscribe()
+    t.emit(events[1])
+    await tick()
+    await tick()
+    expect(received).toEqual(events.slice(1))
+  })
+
+  test('the scope is fixed when subscribed, not read from mutated options', async () => {
+    const received: QuirkyEvent[] = []
+    const options = { worktreeId: A }
+    const t = await subscribed((context) => {
+      context.subscribe((event) => { received.push(event) }, options)
+      options.worktreeId = B
+    })
+    t.emit(events[0])
+    t.emit(events[1])
+    await tick()
+    await tick()
+    expect(received).toEqual([events[0]])
+  })
 })
 
 test('nativeDropPaths passes the dropped file names to the desktop shell and is null without one', async () => {
@@ -1718,11 +1838,116 @@ test('SC-4: plugin.changed refetches the model and reconciles', async () => {
   await t.host.refresh()
   expect(t.methodCalls('ui.contributions')).toHaveLength(1)
 
-  t.setModel(makeModel())
+  const before = state(t)
+  const updated = makeModel()
+  t.setModel(updated)
   t.emit({ type: 'plugin.changed' })
-  await until(() => state(t).model?.sidebarSections.length === 0)
+  await until(() => state(t).model === updated)
+  expect(state(t)).not.toBe(before)
+  expect(state(t).model?.sidebarSections).toEqual([])
   expect(t.methodCalls('ui.contributions')).toHaveLength(2)
   expect(t.methodCalls('setting.list')).toHaveLength(2)
+})
+
+test('plugin.changed events share one queued refresh behind an active fetch', async () => {
+  const notes = section(NOTES, 'list')
+  const search = section('acme.search', 'list')
+  const size = 'setting:acme.notes/fontSize'
+  const model = makeModel({ sidebarSections: [notes, search] })
+  const firstContributions = Promise.withResolvers<UiModel>()
+  const secondContributions = Promise.withResolvers<UiModel>()
+  let contributionReads = 0
+  const t = setup(model, {
+    settings: [setting(size, 13)],
+    contributions: () => {
+      contributionReads += 1
+      if (contributionReads === 1) return firstContributions.promise
+      if (contributionReads === 2) return secondContributions.promise
+      return Promise.resolve(model)
+    }
+  })
+  const firstSettings = gate()
+  const secondSettings = gate()
+  t.holds.set('setting.list', firstSettings.opened)
+  type ListenerRead = { fetches: number; setting: unknown }
+  const notesReads: ListenerRead[] = []
+  const searchReads: ListenerRead[] = []
+  for (const [plugin, id, reads] of [
+    [NOTES, LIST, notesReads],
+    ['acme.search', 'sidebar-section:acme.search/list', searchReads]
+  ] as const) {
+    t.useModule(plugin, {
+      activate(context) {
+        context.provide(id, () => {})
+        context.subscribe((event) => {
+          if (event.type === 'plugin.changed') {
+            reads.push({ fetches: t.methodCalls('ui.contributions').length, setting: context.getSetting(size) })
+          }
+        })
+      }
+    })
+  }
+
+  const firstRefresh = t.host.refresh()
+  await until(() => contributionReads === 1 && t.methodCalls('setting.list').length === 1)
+  for (let i = 0; i < 10; i++) t.emit({ type: 'plugin.changed' })
+  expect(contributionReads).toBe(1)
+
+  t.setSettings([setting(size, 14)])
+  t.holds.set('setting.list', secondSettings.opened)
+  firstContributions.resolve(model)
+  firstSettings.open()
+  await firstRefresh
+  await until(() => contributionReads === 2 && t.methodCalls('setting.list').length === 2)
+  await until(() => state(t).plugins[NOTES]?.state === 'active' && state(t).plugins['acme.search']?.state === 'active')
+  expect(notesReads).toEqual([])
+  expect(searchReads).toEqual([])
+
+  secondContributions.resolve(model)
+  await tick()
+  expect(notesReads).toEqual([])
+  expect(searchReads).toEqual([])
+  secondSettings.open()
+
+  const expected = Array.from({ length: 10 }, () => ({ fetches: 2, setting: 14 }))
+  await until(() => notesReads.length === 10 && searchReads.length === 10)
+  expect(notesReads).toEqual(expected)
+  expect(searchReads).toEqual(expected)
+  expect(t.methodCalls('ui.contributions')).toHaveLength(2)
+})
+
+test('a refresh with deep-equal model and settings preserves state and mounted contributions', async () => {
+  const model = makeModel({ sidebarSections: [section(NOTES, 'list')] })
+  const settings = [setting('setting:acme.notes/fontSize', 13)]
+  const t = setup(model, { settings })
+  let cleanups = 0
+  let delivered = 0
+  t.useModule(NOTES, {
+    activate(context) {
+      context.provide(LIST, () => () => cleanups++)
+      context.subscribe((event) => {
+        if (event.type === 'plugin.changed') delivered++
+      })
+    }
+  })
+  await t.host.refresh()
+  await loaded(t, NOTES)
+  const release = t.host.mount(LIST, element())
+  await settled(t, LIST)
+
+  const before = state(t)
+  let notifications = 0
+  t.host.subscribe(() => notifications++)
+  t.setModel(makeModel({ sidebarSections: [section(NOTES, 'list')] }))
+  t.setSettings([setting('setting:acme.notes/fontSize', 13)])
+  t.emit({ type: 'plugin.changed' })
+  await until(() => delivered === 1)
+
+  expect(state(t)).toBe(before)
+  expect(notifications).toBe(0)
+  expect(cleanups).toBe(0)
+  release()
+  expect(cleanups).toBe(1)
 })
 
 test('a change to a setting that shows or hides contributions refetches the model', async () => {
@@ -1822,13 +2047,78 @@ test('host subscribers are notified as canonical tool state changes until they u
 })
 
 test('refresh rejects when the daemon call fails, and the next refresh still works', async () => {
-  const t = setup(makeModel())
-  const original = t.setModel
-  t.setModel(undefined as unknown as UiModel)
-  await t.host.refresh().catch(() => {})
-  original(makeModel())
+  const model = makeModel()
+  const firstContributions = Promise.withResolvers<UiModel>()
+  let contributionReads = 0
+  const t = setup(model, {
+    contributions: () => {
+      contributionReads += 1
+      return contributionReads === 1 ? firstContributions.promise : Promise.resolve(model)
+    }
+  })
+  const first = t.host.refresh()
+  await until(() => contributionReads === 1)
+  const queued = t.host.refresh()
+  firstContributions.reject(new Error('daemon unavailable'))
+
+  await expect(first).rejects.toThrow('daemon unavailable')
+  await queued
+  expect(contributionReads).toBe(2)
+  expect(state(t).model).toBe(model)
+})
+
+test('refresh reads have a deadline and a timed-out refresh does not block the next one', async () => {
+  const model = makeModel()
+  let contributionReads = 0
+  const t = setup(model, {
+    contributions: (callOptions) => {
+      contributionReads += 1
+      if (contributionReads > 1) return Promise.resolve(model)
+      return Promise.reject(new Error(`RPC call timed out after ${callOptions?.timeoutMs ?? 'missing'} ms`))
+    }
+  })
+  const first = t.host.refresh()
+  const shared = t.host.refresh()
+  await expect(first).rejects.toThrow('RPC call timed out after 30000 ms')
+  await expect(shared).rejects.toThrow('RPC call timed out after 30000 ms')
+
   await t.host.refresh()
-  expect(state(t).model).not.toBeNull()
+  expect(contributionReads).toBe(2)
+  expect(t.methodCalls('ui.window.self').map((call) => call.options)).toEqual([{ timeoutMs: 30000 }])
+  for (const method of ['ui.window.state', 'ui.contributions', 'setting.list']) {
+    expect(t.methodCalls(method).map((call) => call.options)).toEqual([{ timeoutMs: 30000 }, { timeoutMs: 30000 }])
+  }
+})
+
+test('plugin calls and host writes do not get read deadlines', async () => {
+  const t = setup(makeModel({
+    sidebarSections: [section(NOTES, 'list')],
+    panels: [panel(NOTES, 'side')],
+    views: [view(NOTES, 'page')]
+  }))
+  const reports: ((state: unknown) => void)[] = []
+  const { module, record } = recording([LIST, SIDE], (id) =>
+    id === SIDE
+      ? (_el: unknown, props: { report(state: unknown): void }) => reports.push(props.report)
+      : () => {}
+  )
+  t.useModule(NOTES, module)
+  await t.host.refresh()
+  t.host.mount(LIST, element())
+  await settled(t, LIST)
+  t.host.mount(SIDE, element())
+  await settled(t, SIDE)
+  await record.contexts[0]!.call('repo.list')
+  reports[0]!({ count: 1 })
+  await t.host.saveSettings({ settings: { 'setting:acme.notes/fontSize': 18 }, theme: 'default' })
+  await t.host.focus('panel')
+  t.host.openView(PAGE)
+  await until(() => t.methodCalls('ui.window.view.open').length === 1)
+
+  for (const method of ['repo.list', 'setting.set', 'theme.set', 'ui.focus', 'ui.report', 'ui.window.view.open']) {
+    expect(t.methodCalls(method).length).toBeGreaterThan(0)
+    expect(t.methodCalls(method).every((call) => call.options === undefined)).toBe(true)
+  }
 })
 
 test('stop cleans up mounts, deactivates plugins and stops listening to events', async () => {
@@ -2141,6 +2431,22 @@ test('D21: onStream hands a plugin its stream frames until it unsubscribes or th
   t.setModel(makeModel())
   await t.host.refresh()
   expect(t.streamListeners(8)).toBe(0)
+})
+
+test('onStream delivers lag callbacks until unsubscribe or plugin disposal', async () => {
+  const { t, context } = await booted()
+  let lagged = 0
+  const stop = context().onStream(7, () => {}, { onLagged: () => lagged++ })
+  context().onStream(8, () => {}, { onLagged: () => lagged++ })
+  t.lagStream(7)
+  expect(lagged).toBe(1)
+  stop()
+  t.lagStream(7)
+  expect(lagged).toBe(1)
+  t.setModel(makeModel())
+  await t.host.refresh()
+  t.lagStream(8)
+  expect(lagged).toBe(1)
 })
 
 test('D21: onConnection reports connected and reconnecting, and is removed with the plugin', async () => {
@@ -2754,6 +3060,46 @@ describe('mountView', () => {
     expect(state(t).slots[SHELF]).toBeUndefined()
   })
 
+  test('embedded view input updates retain the mounted view and queue the newest input while loading', async () => {
+    const t = setup(makeModel({ views: [view(SHELF_PLUGIN, 'page')], commands: [command(NOTES, 'go')] }))
+    const ready = gate()
+    let mounts = 0
+    let cleanups = 0
+    const content = { draft: '', selection: '' }
+    t.useModule(SHELF_PLUGIN, async () => {
+      await ready.opened
+      return recording([SHELF], () => (_element: HTMLElement, props: { input: { selection: string } }) => {
+        mounts++
+        content.draft = 'unsaved review'
+        content.selection = props.input.selection
+        const cleanup: MountCleanup = () => { cleanups++ }
+        cleanup.updateInput = (input) => {
+          if (!input || typeof input !== 'object' || !('selection' in input) || typeof input.selection !== 'string') return false
+          content.selection = input.selection
+          return true
+        }
+        return cleanup
+      }).module
+    })
+    const notes = recording(['command:acme.notes/go'])
+    t.useModule(NOTES, notes.module)
+    await t.host.refresh()
+    await loaded(t, NOTES)
+    const cleanup = notes.record.contexts[0]!.mountView(SHELF, element(), { selection: 'first' }) as MountCleanup
+    expect(cleanup.updateInput?.({ selection: 'queued' })).toBe(true)
+    ready.open()
+    await until(() => mounts === 1)
+    expect(content).toEqual({ draft: 'unsaved review', selection: 'queued' })
+    content.draft = 'edited review'
+    expect(cleanup.updateInput?.({ selection: 'next' })).toBe(true)
+    expect(content).toEqual({ draft: 'edited review', selection: 'next' })
+    expect(cleanups).toBe(0)
+    cleanup()
+    cleanup()
+    expect(cleanups).toBe(1)
+    expect(cleanup.updateInput?.({ selection: 'stale' })).toBe(false)
+  })
+
   test('SC-69: unmounting before the view\'s plugin has loaded mounts nothing', async () => {
     const t = setup(makeModel({ views: [view(SHELF_PLUGIN, 'page')], commands: [command(NOTES, 'go')] }))
     const release = gate()
@@ -2888,4 +3234,376 @@ test('an auxiliary view context reads and updates its own daemon route without c
     method: 'desktop.window.runOwnerCommand',
     params: { windowId: route.windowId, id: 'command:acme.dashboard/openActivityThread', args: { worktreeId: 'worktree-1' } }
   }])
+})
+
+test('an auxiliary view context can run an owner command without activating its owner', async () => {
+  const viewId = 'view:acme.dashboard/page'
+  const route: DesktopWindowRoute = {
+    windowId: 'window-route-1', ownerShellConnId: 21, view: viewId, title: 'Dashboard', attached: true
+  }
+  const t = setup(makeModel({
+    views: [view('acme.dashboard', 'page')],
+    commands: [command('acme.dashboard', 'openActivityThread')]
+  }), { windowRoute: route })
+  let context: UiPluginContext | undefined
+  t.useModule('acme.dashboard', {
+    activate(next) {
+      context = next
+      next.provide(viewId, () => () => {})
+      next.provide('command:acme.dashboard/openActivityThread', () => ({ opened: true }))
+    }
+  })
+  await t.host.refresh()
+  t.host.mount(viewId, element())
+  await until(() => context !== undefined)
+
+  await context!.executeCommand(
+    'command:acme.dashboard/openActivityThread',
+    { worktreeId: 'worktree-1' },
+    { activateOwner: false }
+  )
+
+  expect(t.methodCalls('desktop.window.runOwnerCommand')).toEqual([{
+    method: 'desktop.window.runOwnerCommand',
+    params: {
+      windowId: 'window-route-1',
+      id: 'command:acme.dashboard/openActivityThread',
+      args: { worktreeId: 'worktree-1' },
+      activateOwner: false
+    }
+  }])
+})
+
+test('executeCommand validates options in main and auxiliary windows, and main commands stay local', async () => {
+  const commandId = 'command:acme.notes/run'
+  const create = async (windowRoute?: DesktopWindowRoute) => {
+    const t = setup(makeModel({ commands: [command(NOTES, 'run')] }), windowRoute ? { windowRoute } : {})
+    const received: unknown[] = []
+    let context: UiPluginContext | undefined
+    t.useModule(NOTES, {
+      activate(next) {
+        context = next
+        next.provide(commandId, (args: unknown) => received.push(args))
+      }
+    })
+    await t.host.refresh()
+    await until(() => context !== undefined)
+    return { t, context: context!, received }
+  }
+  const main = await create()
+  const auxiliary = await create({
+    windowId: 'window-route-1', ownerShellConnId: 21, view: null, attached: true
+  })
+
+  for (const entry of [main, auxiliary]) {
+    await expect(entry.context.executeCommand('command:acme.notes/missing', {}, { activateOwner: 'no' } as never))
+      .rejects.toThrow('executeCommand: options.activateOwner must be a boolean')
+    await expect(entry.context.executeCommand('command:acme.notes/missing', {}, 5 as never))
+      .rejects.toThrow('executeCommand: options must be an object')
+    expect(entry.received).toEqual([])
+    expect(entry.t.methodCalls('desktop.window.runOwnerCommand')).toEqual([])
+  }
+
+  await main.context.executeCommand(commandId, { a: 1 }, { activateOwner: false })
+  expect(main.received).toEqual([{ a: 1 }])
+  expect(main.t.methodCalls('desktop.window.runOwnerCommand')).toEqual([])
+})
+
+type MountWithInput = (() => void) & { updateInput?: (input: unknown) => boolean }
+
+const mountWithInput = (host: WindowPluginHost, id: string, input?: unknown): MountWithInput =>
+  host.mount(id, element(), { input }) as MountWithInput
+
+test('a view mount accepts and declines input updates without taking ownership of cleanup', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  const received: unknown[] = []
+  const updates: unknown[] = []
+  let cleanups = 0
+  t.useModule(NOTES, recording([PAGE], () => (_el: unknown, props: unknown) => {
+    received.push(props)
+    const cleanup = () => cleanups++
+    return Object.assign(cleanup, {
+      updateInput(input: unknown) {
+        updates.push(input)
+        return (input as { same?: boolean } | null)?.same === true
+      }
+    })
+  }).module)
+  await t.host.refresh()
+
+  const unmount = mountWithInput(t.host, PAGE, { step: 1 })
+  expect(typeof unmount.updateInput).toBe('function')
+  expect(state(t).slots[PAGE]).toEqual({ status: 'loading' })
+  await settled(t, PAGE)
+  expect(received).toEqual([{ input: { step: 1 }, report: expect.any(Function) }])
+
+  const accepted = { same: true, step: 2 }
+  const declined = { same: false, step: 3 }
+  expect(unmount.updateInput!(accepted)).toBe(true)
+  expect(unmount.updateInput!(declined)).toBe(false)
+  expect(updates).toEqual([accepted, declined])
+  expect(cleanups).toBe(0)
+
+  unmount()
+  expect(cleanups).toBe(1)
+})
+
+test('a view mount without an updater returns false for undefined and plain cleanup results', async () => {
+  const idWithoutCleanup = 'view:acme.notes/empty'
+  const idWithCleanup = 'view:acme.notes/plain'
+  const t = setup(makeModel({ views: [view(NOTES, 'empty'), view(NOTES, 'plain')] }))
+  let cleanups = 0
+  t.useModule(NOTES, recording([idWithoutCleanup, idWithCleanup], (id) => () => {
+    if (id === idWithoutCleanup) return undefined
+    return () => cleanups++
+  }).module)
+  await t.host.refresh()
+
+  const empty = mountWithInput(t.host, idWithoutCleanup)
+  const plain = mountWithInput(t.host, idWithCleanup)
+  await Promise.all([settled(t, idWithoutCleanup), settled(t, idWithCleanup)])
+
+  expect(empty.updateInput!({ step: 2 })).toBe(false)
+  expect(plain.updateInput!({ step: 2 })).toBe(false)
+  expect(cleanups).toBe(0)
+  plain()
+  expect(cleanups).toBe(1)
+  empty()
+})
+
+test('a throwing view input updater is logged and declined without releasing the mount', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  let cleanups = 0
+  t.useModule(NOTES, recording([PAGE], () => () => Object.assign(
+    () => cleanups++,
+    { updateInput() { throw new Error('boom') } }
+  )).module)
+  await t.host.refresh()
+
+  const unmount = mountWithInput(t.host, PAGE, { step: 1 })
+  await settled(t, PAGE)
+  expect(unmount.updateInput!({ step: 2 })).toBe(false)
+  expect(t.logs).toContain('acme.notes: updateInput failed: boom')
+  expect(cleanups).toBe(0)
+
+  unmount()
+  expect(cleanups).toBe(1)
+})
+
+test('view input updates during module loading coalesce to the latest input', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  const importGate = gate()
+  const received: unknown[] = []
+  t.useModule(NOTES, async () => {
+    await importGate.opened
+    return recording([PAGE], () => (_el: unknown, props: unknown) => {
+      received.push(props)
+      return undefined
+    }).module
+  })
+  await t.host.refresh()
+  await until(() => t.imports.length === 1)
+
+  const unmount = mountWithInput(t.host, PAGE, { step: 1 })
+  expect(state(t).slots[PAGE]).toEqual({ status: 'loading' })
+  expect(unmount.updateInput!({ step: 2 })).toBe(true)
+  expect(unmount.updateInput!({ step: 3 })).toBe(true)
+  expect(received).toEqual([])
+
+  importGate.open()
+  await settled(t, PAGE)
+  expect(received).toEqual([{ input: { step: 3 }, report: expect.any(Function) }])
+  expect(unmount.updateInput!({ step: 4 })).toBe(false)
+  unmount()
+})
+
+test('failed view loads, missing providers, throwing mounts, and missing contributions never accept input', async () => {
+  const loadId = 'view:acme.load/page'
+  const activationId = 'view:acme.activation/page'
+  const missingProviderId = 'view:acme.missing/page'
+  const mountFailureId = 'view:acme.throw/page'
+  const absentId = 'view:acme.absent/page'
+  const t = setup(makeModel({
+    views: [
+      view('acme.load', 'page'),
+      view('acme.activation', 'page'),
+      view('acme.missing', 'page'),
+      view('acme.throw', 'page')
+    ]
+  }))
+  t.useModule('acme.activation', {
+    activate() {
+      throw new Error('activation failed')
+    }
+  })
+  t.useModule('acme.missing', { activate() {} })
+  t.useModule('acme.throw', recording([mountFailureId], () => () => {
+    throw new Error('mount failed')
+  }).module)
+  await t.host.refresh()
+
+  const load = mountWithInput(t.host, loadId)
+  const activation = mountWithInput(t.host, activationId)
+  const missingProvider = mountWithInput(t.host, missingProviderId)
+  const mountFailure = mountWithInput(t.host, mountFailureId)
+  const absent = mountWithInput(t.host, absentId)
+  await Promise.all([
+    settled(t, loadId),
+    settled(t, activationId),
+    settled(t, missingProviderId),
+    settled(t, mountFailureId)
+  ])
+
+  for (const [id, mount] of [
+    [loadId, load],
+    [activationId, activation],
+    [missingProviderId, missingProvider],
+    [mountFailureId, mountFailure],
+    [absentId, absent]
+  ] as const) {
+    expect(state(t).slots[id]?.status).toBe('error')
+    expect(mount.updateInput!({ step: 2 })).toBe(false)
+    mount()
+  }
+})
+
+test('released view mounts reject input without calling the plugin updater', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  let updaterCalls = 0
+  let cleanups = 0
+  t.useModule(NOTES, recording([PAGE], () => () => Object.assign(
+    () => cleanups++,
+    { updateInput() { updaterCalls++; return true } }
+  )).module)
+  await t.host.refresh()
+
+  const unmount = mountWithInput(t.host, PAGE)
+  await settled(t, PAGE)
+  unmount()
+  expect(unmount.updateInput!({ step: 2 })).toBe(false)
+  expect(updaterCalls).toBe(0)
+  expect(cleanups).toBe(1)
+})
+
+test('owner, contribution module, module URL, and API changes invalidate old view updaters', async () => {
+  const cases: {
+    name: string
+    nextModel: (model: UiModel) => UiModel
+  }[] = [
+    {
+      name: 'owner',
+      nextModel: () => makeModel({ views: [{ ...view('acme.other', 'page'), id: PAGE }] })
+    },
+    {
+      name: 'contribution module',
+      nextModel: (model) => makeModel({
+        views: [{ ...model.views[0]!, module: '/plugins/acme.notes/other.js' }],
+        modules: model.modules
+      })
+    },
+    {
+      name: 'module URL',
+      nextModel: (model) => makeModel({
+        views: model.views,
+        modules: {
+          ...model.modules,
+          [NOTES]: { ...model.modules[NOTES]!, url: '/plugins/acme.notes/other-ui.js' }
+        }
+      })
+    },
+    {
+      name: 'module API version',
+      nextModel: (model) => makeModel({
+        views: model.views,
+        modules: { ...model.modules, [NOTES]: { ...model.modules[NOTES]!, apiVersion: '1.0.0' } }
+      })
+    }
+  ]
+
+  for (const staleCase of cases) {
+    const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+    let updaterCalls = 0
+    let cleanups = 0
+    t.useModule(NOTES, recording([PAGE], () => () => Object.assign(
+      () => cleanups++,
+      { updateInput() { updaterCalls++; return true } }
+    )).module)
+    await t.host.refresh()
+    const unmount = mountWithInput(t.host, PAGE)
+    await settled(t, PAGE)
+
+    t.setModel(staleCase.nextModel(state(t).model!))
+    await t.host.refresh()
+
+    expect(unmount.updateInput!({ reason: staleCase.name })).toBe(false)
+    expect(updaterCalls).toBe(0)
+    expect(cleanups).toBe(1)
+    unmount()
+    t.host.stop()
+  }
+})
+
+test('a provide breach invalidates a mounted view updater before it can accept another input', async () => {
+  const t = setup(makeModel({ views: [view(NOTES, 'page')] }))
+  let context!: UiPluginContext
+  let updaterCalls = 0
+  let cleanups = 0
+  t.useModule(NOTES, {
+    activate(next) {
+      context = next
+      context.provide(PAGE, () => Object.assign(
+        () => cleanups++,
+        {
+          updateInput() {
+            updaterCalls++
+            try {
+              context.provide('command:acme.notes/undeclared', () => {})
+            } catch {}
+            return true
+          }
+        }
+      ))
+    }
+  })
+  await t.host.refresh()
+
+  const unmount = mountWithInput(t.host, PAGE)
+  await settled(t, PAGE)
+  expect(unmount.updateInput!({ step: 2 })).toBe(false)
+  expect(unmount.updateInput!({ step: 3 })).toBe(false)
+  expect(updaterCalls).toBe(1)
+  expect(cleanups).toBe(1)
+  expect(state(t).slots[PAGE]?.status).toBe('error')
+})
+
+test('non-view mounts reject input without invoking an attached updater', async () => {
+  const entries = [
+    section(NOTES, 'list'),
+    panel(NOTES, 'panel'),
+    overlay(NOTES, 'overlay'),
+    slot('status-bar', NOTES, 'status'),
+    slot('settings-section', NOTES, 'settings'),
+    slot('activity-item', NOTES, 'activity')
+  ]
+  const ids = entries.map((entry) => entry.id)
+  const t = setup(makeModel({
+    sidebarSections: [entries[0]!],
+    panels: [entries[1]!],
+    overlays: [entries[2]!],
+    statusBars: [entries[3]!],
+    settingsSections: [entries[4]!],
+    activityItems: [entries[5]!]
+  }))
+  let updaterCalls = 0
+  t.useModule(NOTES, recording(ids, () => () => Object.assign(
+    () => {},
+    { updateInput() { updaterCalls++; return true } }
+  )).module)
+  await t.host.refresh()
+
+  const mounts = ids.map((id) => mountWithInput(t.host, id, { ignored: true }))
+  await Promise.all(ids.map((id) => settled(t, id)))
+  for (const mount of mounts) expect(mount.updateInput!({ step: 2 })).toBe(false)
+  expect(updaterCalls).toBe(0)
+  mounts.forEach((mount) => mount())
 })

@@ -2,6 +2,7 @@ import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import type { ProjectGroup, QuirkyEvent, Repo, UiLayout, UiPluginContext, WorkspaceOriginView } from '@quirky/protocol'
 import { act } from 'react'
+import { UI_CONTROL_COMMAND } from '../src/ui-control'
 import type { WorktreeControl } from '../src/control-types'
 
 const SLOT = 'sidebar-section:quirky.worktree/worktrees'
@@ -42,7 +43,8 @@ const WORKTREE_DEFAULTS: Omit<WorktreeControl, 'id' | 'repoId' | 'path' | 'branc
   cleanupContext: { archivedAt: null, volatile: null, remoteConnected: null },
   externalVisible: true,
   externalVisibility: 'show',
-  externalInboxSuppressed: false
+  externalInboxSuppressed: false,
+  tagIds: []
 }
 
 type LoopState = 'running' | 'needs-you' | 'paused'
@@ -226,6 +228,13 @@ function setup(ids: string[], unreadIds: string[] = []) {
       switch (method) {
         case 'ui.window.self':
           return { connId: 1 }
+        case 'ui.window.command.run': {
+          if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
+          if (params.id !== UI_CONTROL_COMMAND) throw new Error(`unexpected command ${String(params.id)}`)
+          const handler = provided.get(UI_CONTROL_COMMAND) as ((args: unknown) => unknown) | undefined
+          if (!handler) throw new Error(`unexpected command ${UI_CONTROL_COMMAND}`)
+          return { result: await handler(params.args) }
+        }
         case 'quirky.worktree/origins':
           return [...world.origins]
         case 'quirky.repo/list':
@@ -291,7 +300,7 @@ function setup(ids: string[], unreadIds: string[] = []) {
       return () => void connectionListeners.delete(listener)
     },
     getSetting: () => undefined,
-    executeCommand: async () => {},
+    executeCommand: async () => { throw new Error('executeCommand must not be used for UI controls') },
     openView: () => {},
     closeView: () => {},
     togglePanel: () => {},

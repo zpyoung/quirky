@@ -225,6 +225,7 @@ export type EditorOpenParams = {
   line?: number
   column?: number
   matchLength?: number
+  window?: number
 }
 
 export type EditorMutateAction = 'createFile' | 'createFolder' | 'rename' | 'move' | 'duplicate' | 'delete' | 'import'

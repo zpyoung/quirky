@@ -1,9 +1,14 @@
 import { Database } from 'bun:sqlite'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import childProcess from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, test } from 'bun:test'
-import { RpcErrorCode, type PluginContext, type PluginStore, type QuirkyEvent, type Session, type StructuredMessage, type Worktree } from '@quirky/protocol'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { RpcErrorCode, type PluginContext, type PluginStore, type QuirkyEvent, type RunOptions, type RunResult, type Session, type StructuredMessage, type Worktree } from '@quirky/protocol'
+import * as supervision from '@quirky/supervision'
+import type { StructuredSample, StructuredWatch, SupervisionEngine } from '@quirky/supervision'
+
+import { createProcessRunner, type OwnedProcessRunner } from '../../../packages/process/src/api'
 import type { LoopCreateInput } from '../src/types'
 import { normalizeLoopConfig } from '../src/config'
 import { loopMigrations } from '../src/store'
@@ -13,16 +18,52 @@ import { HostPowerService } from '../../../packages/daemon/src/host-power'
 const roots: string[] = []
 const runtimes: Runtime[] = []
 const activeServices: LoopService[] = []
+const processRunners: OwnedProcessRunner[] = []
+const syncProcessMocks: { mockRestore(): void }[] = []
 afterEach(async () => {
+  for (const mock of syncProcessMocks.splice(0)) mock.mockRestore()
   for (const runtime of runtimes) runtime.releasePendingOperations()
   await Promise.all(activeServices.splice(0).map((service) => service.shutdown()))
+  await Promise.all(processRunners.splice(0).map((runner) => runner.dispose()))
   for (const runtime of runtimes.splice(0)) runtime.close()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
 type ScriptedTurn = 'settle' | 'exit' | 'hold'
+type SendBarrier = { entered: () => void; wait: Promise<void>; release: () => void; settled: () => void }
+type JournalReadGate = { entered: () => void; wait: Promise<void>; release: () => void }
+type HeldJournalRead = { entered: Promise<void>; release: () => void }
+type ProcessHandler = (argv: readonly string[], options?: RunOptions) => Promise<RunResult>
+type ProcessCall = { argv: string[]; options?: RunOptions }
+
+function runResult(stdoutText = '', overrides: Partial<RunResult> = {}): RunResult {
+  return {
+    stdout: new TextEncoder().encode(stdoutText),
+    stdoutText,
+    stderr: '',
+    exitCode: 0,
+    signal: null,
+    durationMs: 0,
+    ...overrides
+  }
+}
+
+function forbidSynchronousExecFileSync(): void {
+  const mock = spyOn(childProcess, 'execFileSync').mockImplementation(() => {
+    throw new Error('synchronous process execution is forbidden')
+  })
+  syncProcessMocks.push(mock)
+}
+
+function nextTurn(): Promise<void> {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  setImmediate(resolve)
+  return promise
+}
 
 class Runtime {
+  readonly processCalls: ProcessCall[] = []
+  processHandler: ProcessHandler | null = null
   readonly calls: { method: string; params: Record<string, unknown> }[] = []
   readonly events: QuirkyEvent[] = []
   readonly sends: { session: string; text: string; expectedAfterSeq: number }[] = []
@@ -37,10 +78,15 @@ class Runtime {
   readonly waiters = new Set<() => void>()
   readonly turns: ScriptedTurn[] = []
   readonly cumulativeCosts: number[] = []
+  readonly failedJournalResponsesAfterSend: unknown[] = []
+  readonly failedJournalCursors: number[] = []
+  readonly journalCursorsAfterFailure: number[] = []
   pendingAsks: { id: string; sessionId: string; envelope: { status: 'pending' } }[] = []
   private sessionCount = 0
-  private sendBarrier: { entered: () => void; wait: Promise<void>; release: () => void } | null = null
+  private sendBarrier: SendBarrier | null = null
   private activeSendRelease: (() => void) | null = null
+  private journalReadGateAfterFailure: JournalReadGate | null = null
+  private journalReadGate: JournalReadGate | null = null
   private readonly database: Database
   private readonly pluginStore: PluginStore
   readonly context: PluginContext
@@ -105,6 +151,19 @@ class Runtime {
       },
       getSetting: () => undefined, storedSettingValue: () => undefined,
       error(kind, message) { return Object.assign(new Error(message), { code: kind }) },
+      process: {
+        run: async (argv, options) => {
+          if (argv[0] === 'git' && !argv.includes('--git-path')) {
+            await nextTurn()
+            throw new Error('Loop engine tests must not run evidence git')
+          }
+          runtime.processCalls.push({ argv: [...argv], ...(options === undefined ? {} : { options }) })
+          const handler = runtime.processHandler
+          if (handler === null) throw new Error('Loop engine tests must not run subprocesses')
+          return await handler(argv, options)
+        },
+        spawn: () => { throw new Error('Loop engine tests must not spawn subprocesses') },
+      },
       pty: {} as PluginContext['pty'], notify: () => undefined, launch: {} as PluginContext['launch']
     } as PluginContext
   }
@@ -112,11 +171,32 @@ class Runtime {
   close(): void {
     this.database.close()
   }
-  holdNextSend(): { entered: Promise<void>; release: () => void } {
+  storedJournalCursor(loopId: string): number {
+    return this.pluginStore.get<{ journal_cursor: number }>(
+      'SELECT journal_cursor FROM loops WHERE id = ?', loopId
+    )?.journal_cursor ?? 0
+  }
+  holdNextSend(): { entered: Promise<void>; release: () => void; settled: Promise<void> } {
     const entered = Promise.withResolvers<void>()
     const released = Promise.withResolvers<void>()
-    this.sendBarrier = { entered: entered.resolve, wait: released.promise, release: released.resolve }
+    const settled = Promise.withResolvers<void>()
+    this.sendBarrier = {
+      entered: entered.resolve,
+      wait: released.promise,
+      release: released.resolve,
+      settled: settled.resolve
+    }
     this.activeSendRelease = released.resolve
+    return { entered: entered.promise, release: released.resolve, settled: settled.promise }
+  }
+  holdJournalReadAfterFailure(): HeldJournalRead {
+    const entered = Promise.withResolvers<void>()
+    const released = Promise.withResolvers<void>()
+    this.journalReadGateAfterFailure = {
+      entered: entered.resolve,
+      wait: released.promise,
+      release: released.resolve
+    }
     return { entered: entered.promise, release: released.resolve }
   }
   releasePendingOperations(): void {
@@ -126,6 +206,12 @@ class Runtime {
     barrier?.release()
     this.activeSendRelease?.()
     this.activeSendRelease = null
+    for (const gate of [this.journalReadGateAfterFailure, this.journalReadGate]) {
+      gate?.entered()
+      gate?.release()
+    }
+    this.journalReadGateAfterFailure = null
+    this.journalReadGate = null
   }
 
   private wakeWaiters(): void {
@@ -217,6 +303,7 @@ class Runtime {
         barrier.entered()
         await barrier.wait
         this.activeSendRelease = null
+        barrier.settled()
       }
       const session = this.sessions.get(sessionId)
       const journal = this.journals.get(sessionId) ?? []
@@ -239,8 +326,42 @@ class Runtime {
       let rows = (this.journals.get(sessionId) ?? []).filter((item) => item.seq > afterSeq)
       if (params.tail === true && typeof params.limit === 'number') rows = rows.slice(-params.limit)
       else if (typeof params.limit === 'number') rows = rows.slice(0, params.limit)
+      if (this.failedJournalCursors.length > 0) {
+        this.journalCursorsAfterFailure.push(afterSeq)
+        this.wakeWaiters()
+        const gate = this.journalReadGate
+        this.journalReadGate = null
+        if (gate) {
+          gate.entered()
+          await gate.wait
+        }
+      }
+      if (this.sends.length > 0 && this.failedJournalResponsesAfterSend.length > 0) {
+        this.failedJournalCursors.push(afterSeq)
+        const response = this.failedJournalResponsesAfterSend.shift()
+        this.journalReadGate = this.journalReadGateAfterFailure
+        this.journalReadGateAfterFailure = null
+        this.wakeWaiters()
+        return response
+      }
       return rows
     }
+    if (method === 'quirky.checks/run') {
+      return {
+        checkId: String(params.checkId),
+        ran: true,
+        pass: true,
+        exitCode: 0,
+        timedOut: false,
+        aborted: false,
+        stdoutTail: '',
+        stderrTail: '',
+        stdoutTruncated: false,
+        stderrTruncated: false,
+        durationMs: 0
+      }
+    }
+    if (method === 'quirky.checks/cancel') return { cancelled: false }
     if (method === 'quirky.session/get') {
       const session = this.sessions.get(String(params.session))
       if (!session) throw Object.assign(new Error('unknown session'), { code: 'not-found' })
@@ -297,11 +418,124 @@ class ManualClock {
   }
 }
 
+type SupervisionCall = { method: string; args: unknown[] }
+
+function wrapSupervisionMethod(
+  engine: SupervisionEngine,
+  method: Extract<keyof SupervisionEngine, string>,
+  calls: SupervisionCall[],
+  observeSample?: (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => void,
+  beforeWatch?: (input: StructuredWatch<unknown>) => void
+): void {
+  const target = engine as unknown as Record<string, (...args: unknown[]) => unknown>
+  const original = target[method]!.bind(engine)
+  spyOn(target, method).mockImplementation((...args) => {
+    calls.push({ method, args })
+    if (method !== 'watchStructured') return original(...args)
+    const input = args[0] as StructuredWatch<unknown>
+    beforeWatch?.(input)
+    if (!observeSample) return original(input)
+    return original({
+      ...input,
+      onSample: async (sample: StructuredSample, signal: AbortSignal) => {
+        const decision = await input.onSample(sample, signal)
+        observeSample(sample, decision)
+        return decision
+      }
+    })
+  })
+}
+
+function spyOnSupervisionEngine(
+  observeSample?: (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => void,
+  beforeWatch?: (input: StructuredWatch<unknown>) => void
+) {
+  const calls: SupervisionCall[] = []
+  const create = supervision.createSupervision
+  const factory = spyOn(supervision, 'createSupervision')
+  factory.mockImplementation((context, options) => {
+    const engine = create(context, options)
+    for (const method of [
+      'create', 'resume', 'send', 'readMessages', 'watchStructured', 'wake',
+      'runCheck', 'cancelCheck', 'stop', 'stopOwned', 'dispose'
+    ] as const) {
+      wrapSupervisionMethod(engine, method, calls, observeSample, beforeWatch)
+    }
+    return engine
+  })
+  syncProcessMocks.push(factory)
+  return { calls, factory }
+}
+
 function service(runtime: Runtime, now: () => number = Date.now): LoopService {
   const loops = new LoopService(runtime.context, { pollMs: 2, userIdleMs: 0, noBusyEdgeMs: 25, now })
   activeServices.push(loops)
   return loops
 }
+
+
+async function assertApprovalHoldAccounting(emitSessionEvent: boolean, sampleBeforeApproval: boolean): Promise<void> {
+  const runtime = rig()
+  const clock = new ManualClock()
+  runtime.turns.push('hold')
+  const workingSample = Promise.withResolvers<void>()
+  const heldSample = Promise.withResolvers<void>()
+  let heldSampleStatus: Session['status'] | null = null
+  spyOnSupervisionEngine((sample) => {
+    if (!sample.session.ok) return
+    const status = sample.session.value.status
+    if (status === 'working') workingSample.resolve()
+    if (heldSampleStatus === status) {
+      heldSampleStatus = null
+      heldSample.resolve()
+    }
+  })
+  const loops = service(runtime, clock.now)
+  await loops.start()
+  const created = await loops.create(input({
+    ...input().config,
+    caps: { maxActiveMinutes: 1 },
+    askBeforeNext: true
+  }))
+  await runtime.until(() => runtime.sends.length === 1 ? true : null)
+  await workingSample.promise
+
+  const sessionId = runtime.sends[0]!.session
+  const ask = { id: 'ask-clock', sessionId, envelope: { status: 'pending' as const } }
+  const journal = Promise.withResolvers<unknown>()
+
+  if (sampleBeforeApproval) {
+    runtime.failedJournalResponsesAfterSend.push(journal.promise)
+    runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+    await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
+    await flushFakeRpcs()
+  }
+
+  clock.advance(1000)
+  runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'waiting' })
+  runtime.pendingAsks = [ask]
+  if (!sampleBeforeApproval) runtime.failedJournalResponsesAfterSend.push(journal.promise)
+  heldSampleStatus = sampleBeforeApproval ? 'working' : 'waiting'
+  if (emitSessionEvent || sampleBeforeApproval) {
+    runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+  }
+  await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
+  await flushFakeRpcs()
+
+  const held = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'needs-you')
+  expect(held.activeMs).toBe(1000)
+  clock.advance(5000)
+  journal.resolve([])
+  await heldSample.promise
+
+  runtime.pendingAsks = []
+  runtime.emit('quirky.ask/resolved', { askId: ask.id })
+  runtime.respond(sessionId, 'finished after approval')
+  const paused = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
+  expect(paused.pauseReason).toBe('ask-before-next')
+  expect(paused.activeMs).toBe(1000)
+}
+
 
 function loopUntil(runtime: Runtime, loops: LoopService, id: string, match: (snapshot: ReturnType<LoopService['get']>) => boolean) {
   return runtime.until(() => {
@@ -309,6 +543,88 @@ function loopUntil(runtime: Runtime, loops: LoopService, id: string, match: (sna
     return match(snapshot) ? snapshot : null
   })
 }
+function flushFakeRpcs(): Promise<void> {
+  const flushed = Promise.withResolvers<void>()
+  setImmediate(flushed.resolve)
+  return flushed.promise
+}
+async function assertJournalFailureRetainsLoopCursor(response: unknown): Promise<void> {
+  const runtime = rig()
+  runtime.turns.push('hold')
+  const failedWatchSample = Promise.withResolvers<{
+    sample: StructuredSample
+    decision: supervision.WatchDecision<unknown>
+  }>()
+  let busyBeforeSettledEdge = false
+  let settledBeforeWatch = false
+  let postSendReadBeforeWatch = false
+  let failureArmed = false
+  const recovery: { gate?: HeldJournalRead; cursor?: number } = {}
+  const engine = spyOnSupervisionEngine(
+    (sample: StructuredSample, decision: supervision.WatchDecision<unknown>) => {
+      if (sample.session.ok && sample.session.value.status === 'done') {
+        failedWatchSample.resolve({ sample, decision })
+      }
+    },
+    () => {
+      if (failureArmed) return
+      const sessionId = runtime.sends[0]?.session
+      if (sessionId === undefined) return
+      failureArmed = true
+      const sendIndex = runtime.calls.findIndex(({ method }) => method === 'quirky.structured/send')
+      postSendReadBeforeWatch = sendIndex >= 0 && runtime.calls.some(
+        (call, index) => index > sendIndex && call.method === 'quirky.structured/messages'
+      )
+      busyBeforeSettledEdge = runtime.sessions.get(sessionId)?.status === 'working'
+      recovery.cursor = runtime.storedJournalCursor(created.id)
+      runtime.failedJournalResponsesAfterSend.push(response)
+      recovery.gate = runtime.holdJournalReadAfterFailure()
+      runtime.respond(sessionId, 'settled after journal recovery')
+      settledBeforeWatch = true
+    }
+  )
+  const loops = service(runtime)
+  await loops.start()
+  const created = await loops.create(input())
+
+  try {
+    const { sample: failedSample, decision: failedDecision } = await failedWatchSample.promise
+    const heldRead = recovery.gate
+    const storedCursorBeforeFailure = recovery.cursor
+    if (heldRead === undefined || storedCursorBeforeFailure === undefined) {
+      throw new Error('the watch did not capture the recovery journal baseline')
+    }
+
+    expect(engine.calls.some(({ method }) => method === 'watchStructured')).toBe(true)
+    expect(postSendReadBeforeWatch).toBe(true)
+    expect(busyBeforeSettledEdge).toBe(true)
+    expect(settledBeforeWatch).toBe(true)
+    expect(failedSample.afterSeq).toBe(0)
+    expect(failedSample.session).toMatchObject({ ok: true, value: { status: 'done' } })
+    expect(failedSample.journal).toMatchObject({ ok: false, error: { code: 'invalid-response' } })
+    expect(failedDecision).toMatchObject({ kind: 'continue' })
+
+    await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
+    await runtime.until(() => runtime.journalCursorsAfterFailure.length > 0 ? true : null)
+    await heldRead.entered
+
+    expect(runtime.failedJournalCursors).toEqual([0])
+    expect(runtime.journalCursorsAfterFailure[0]).toBe(0)
+    expect(runtime.journalCursorsAfterFailure[0]).toBe(runtime.failedJournalCursors[0])
+    expect(storedCursorBeforeFailure).toBe(1)
+    expect(runtime.storedJournalCursor(created.id)).toBe(storedCursorBeforeFailure)
+    expect(loops.get(created.id)).toMatchObject({ state: 'running', iterationsCompleted: 0 })
+    expect(loops.get(created.id).iterationsCompleted).toBe(0)
+    expect(loops.iterations(created.id).some((attempt) => attempt.endReason === 'settled')).toBe(false)
+
+    heldRead.release()
+    await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
+    expect(loops.iterations(created.id)).toMatchObject([{ endReason: 'settled' }])
+  } finally {
+    recovery.gate?.release()
+  }
+}
+
 
 describe('LoopService background engine', () => {
   test('rejects unsupported agents, presets, blank prompts and invalid numeric config before provider launch', async () => {
@@ -326,6 +642,7 @@ describe('LoopService background engine', () => {
     expect(runtime.created).toEqual([])
     expect(await loops.list()).toEqual([])
   })
+
 
   test('applies documented config defaults and accepts finite fractional cost caps', () => {
     const config = normalizeLoopConfig({
@@ -381,8 +698,196 @@ describe('LoopService background engine', () => {
     expect(runtime.events.filter((event) => event.type === 'quirky.loops/notification')).toHaveLength(1)
   })
 
-  test('installs private git exclusion before running and never writes .gitignore', async () => {
+  test('routes loop effects, turn watching, checks and shutdown through one shared engine', async () => {
+    const engine = spyOnSupervisionEngine()
+    const runtime = rig()
+    const loops = service(runtime)
+    await loops.start()
+    const created = await loops.create(input({
+      ...input().config,
+      done: { check: { command: 'test -f result.txt', timeoutSeconds: 30, runWhen: 'every-iteration' } }
+    }))
+    await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'completed')
+    await loops.shutdown()
+
+    expect(engine.factory).toHaveBeenCalledTimes(1)
+    for (const method of ['create', 'readMessages', 'send', 'watchStructured', 'runCheck', 'stop', 'dispose']) {
+      expect(engine.calls.some((call) => call.method === method), method).toBe(true)
+    }
+    expect(runtime.calls.find(({ method }) => method === 'quirky.checks/run')?.params).toEqual({
+      checkId: `${created.id}:1:1`,
+      command: 'test -f result.txt',
+      cwd: runtime.worktree.path,
+      timeoutSeconds: 30
+    })
+  })
+
+  test('keeps specified agent and check RPCs behind the supervision engine', () => {
+    const directRpc = /quirky\.(?:structured\/(?:create|resume|send|messages|stop(?:Owned)?)|checks\/(?:run|cancel))/
+    for (const file of ['driver.ts', 'service.ts', 'evidence.ts']) {
+      const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
+      expect(source, file).not.toMatch(directRpc)
+    }
+  })
+
+  test('holds the loop journal cursor after an unverifiable journal read', async () => {
+    await assertJournalFailureRetainsLoopCursor(null)
+  })
+
+  test('holds the loop journal cursor after a foreign-session journal row', async () => {
+    const foreignRow: StructuredMessage = {
+      sessionId: 'foreign-session',
+      seq: 2,
+      role: 'assistant',
+      text: 'settled after journal recovery',
+      at: Date.now()
+    }
+    await assertJournalFailureRetainsLoopCursor([foreignRow])
+  })
+
+  test('waits for private exclusion before persisting, publishing or starting a git loop', async () => {
+    forbidSynchronousExecFileSync()
     const runtime = rig('git')
+    runtime.turns.push('hold')
+    const loops = service(runtime)
+    await loops.start()
+    const pending = Promise.withResolvers<RunResult>()
+    runtime.processHandler = async () => pending.promise
+    let settled = false
+    const creation = loops.create(input())
+    void creation.then(() => {
+      settled = true
+    }, () => {
+      settled = true
+    })
+
+    await nextTurn()
+    expect(runtime.processCalls).toEqual([{
+      argv: ['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'],
+      options: { rerunnable: true, maxOutputBytes: 1048576 }
+    }])
+    expect(settled).toBe(false)
+    expect(await loops.list()).toEqual([])
+    expect(runtime.events.filter((event) => event.type === 'quirky.loops/changed')).toEqual([])
+    expect(runtime.created).toEqual([])
+
+    pending.resolve(runResult('.git/info/exclude\n'))
+    const created = await creation
+    expect(readFileSync(join(runtime.worktree.path, '.git', 'info', 'exclude'), 'utf8')).toBe('/.quirky/loops/\n')
+    expect(existsSync(created.notesPath)).toBe(true)
+  })
+
+  test('resolves relative exclusions, adds a newline and avoids duplicate entries', async () => {
+    forbidSynchronousExecFileSync()
+    const runtime = rig('git')
+    runtime.turns.push('hold', 'hold')
+    const excludePath = join(runtime.worktree.path, '.git', 'info', 'exclude')
+    mkdirSync(join(runtime.worktree.path, '.git', 'info'), { recursive: true })
+    writeFileSync(excludePath, 'existing rule')
+    runtime.processHandler = async () => runResult('.git/info/exclude\n')
+    const loops = service(runtime)
+    await loops.start()
+
+    const first = await loops.create(input())
+    const second = await loops.create(input())
+
+    expect(readFileSync(excludePath, 'utf8')).toBe('existing rule\n/.quirky/loops/\n')
+    expect(readFileSync(excludePath, 'utf8').split('/.quirky/loops/')).toHaveLength(2)
+    for (const created of [first, second]) {
+      expect(readFileSync(created.notesPath, 'utf8')).toContain('Edit freely')
+      expect(existsSync(join(created.notesPath, '..', 'log.md'))).toBe(true)
+    }
+    expect(existsSync(join(runtime.worktree.path, '.gitignore'))).toBe(false)
+    expect(runtime.processCalls).toHaveLength(2)
+    expect(runtime.processCalls.every(({ argv, options }) =>
+      argv[0] === 'git' && argv[1] === '-C' && argv[2] === runtime.worktree.path &&
+      options?.rerunnable === true && options.maxOutputBytes === 1048576
+    )).toBe(true)
+  })
+
+  test('uses an absolute private exclusion path as returned', async () => {
+    forbidSynchronousExecFileSync()
+    const runtime = rig('git')
+    runtime.turns.push('hold')
+    const excludePath = join(runtime.worktree.path, 'git-metadata', 'info', 'exclude')
+    runtime.processHandler = async () => runResult(`${excludePath}\n`)
+    const loops = service(runtime)
+    await loops.start()
+
+    await loops.create(input())
+
+    expect(readFileSync(excludePath, 'utf8')).toBe('/.quirky/loops/\n')
+    expect(existsSync(join(runtime.worktree.path, '.git', 'info', 'exclude'))).toBe(false)
+    expect(runtime.processCalls).toEqual([{
+      argv: ['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'],
+      options: { rerunnable: true, maxOutputBytes: 1048576 }
+    }])
+  })
+
+  test('rejects incomplete exclusion reads before persisting or starting a loop', async () => {
+    forbidSynchronousExecFileSync()
+    const failures: {
+      name: string
+      result?: RunResult
+      rejection?: Error
+      message: string
+    }[] = [
+      { name: 'nonzero exit', result: runResult('.git/info/exclude\n', { exitCode: 1 }), message: 'git rev-parse failed' },
+      { name: 'signal', result: runResult('.git/info/exclude\n', { exitCode: null, signal: 'SIGTERM' }), message: 'git rev-parse failed' },
+      { name: 'signal reported with exit code', result: runResult('.git/info/exclude\n', { signal: 'SIGTERM' }), message: 'git rev-parse failed' },
+      {
+        name: 'spawn failure',
+        result: runResult('.git/info/exclude\n', { exitCode: null, spawnError: { code: 'ENOENT', message: 'not found' } }),
+        message: 'git rev-parse failed'
+      },
+      {
+        name: 'spawn failure reported with exit code',
+        result: runResult('.git/info/exclude\n', { spawnError: { code: 'ENOENT', message: 'not found' } }),
+        message: 'git rev-parse failed'
+      },
+      { name: 'timeout', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'timeout' }), message: 'git rev-parse failed' },
+      { name: 'abort', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'aborted' }), message: 'git rev-parse failed' },
+      { name: 'overflow', result: runResult('.git/info/exclude\n', { exitCode: null, stopped: 'overflow' }), message: 'git rev-parse failed' },
+      { name: 'timeout reported with exit code', result: runResult('.git/info/exclude\n', { stopped: 'timeout' }), message: 'git rev-parse failed' },
+      { name: 'abort reported with exit code', result: runResult('.git/info/exclude\n', { stopped: 'aborted' }), message: 'git rev-parse failed' },
+      { name: 'overflow reported with exit code', result: runResult('.git/info/exclude\n', { stopped: 'overflow' }), message: 'git rev-parse failed' },
+      { name: 'runner rejection', rejection: new Error('private runner diagnostic'), message: 'git rev-parse failed' },
+      { name: 'empty path', result: runResult(' \n\t'), message: 'git did not return a private info/exclude path' }
+    ]
+
+    for (const failure of failures) {
+      const runtime = rig('git')
+      const excludePath = join(runtime.worktree.path, '.git', 'info', 'exclude')
+      mkdirSync(join(runtime.worktree.path, '.git', 'info'), { recursive: true })
+      writeFileSync(excludePath, 'original contents\n')
+      runtime.processHandler = async () => {
+        if (failure.rejection) throw failure.rejection
+        return failure.result!
+      }
+      const loops = service(runtime)
+      await loops.start()
+
+      const error = await loops.create(input()).then(() => null, (caught: unknown) => caught)
+      expect(error, failure.name).toMatchObject({
+        code: 'conflict',
+        message: `could not prepare loop notes and private git exclusion: ${failure.message}`
+      })
+      expect(runtime.processCalls, failure.name).toHaveLength(1)
+      expect(runtime.processCalls[0], failure.name).toEqual({
+        argv: ['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'],
+        options: { rerunnable: true, maxOutputBytes: 1048576 }
+      })
+      expect(await loops.list(), failure.name).toEqual([])
+      expect(runtime.created, failure.name).toEqual([])
+      expect(runtime.events.filter((event) => event.type === 'quirky.loops/changed'), failure.name).toEqual([])
+      expect(readFileSync(excludePath, 'utf8'), failure.name).toBe('original contents\n')
+    }
+  })
+
+  test('installs private git exclusion before running and never writes .gitignore', async () => {
+    forbidSynchronousExecFileSync()
+    const runtime = rig('git')
+    runtime.turns.push('hold')
     const env = {
       ...process.env,
       HOME: join(runtime.root, 'home'),
@@ -391,15 +896,25 @@ describe('LoopService background engine', () => {
       CODEX_HOME: join(runtime.root, 'provider-home', 'codex'),
       GIT_CONFIG_NOSYSTEM: '1'
     }
-    expect(Bun.spawnSync(['git', 'init', '-q', runtime.worktree.path], { env }).exitCode).toBe(0)
+    const processRunner = createProcessRunner({ owner: 'loop-engine-git-test' })
+    processRunners.push(processRunner)
+    const initialized = await processRunner.run(['git', 'init', '-q', runtime.worktree.path], { env })
+    expect(initialized.exitCode).toBe(0)
+    runtime.processHandler = (argv, options) => processRunner.run(argv, options)
     const loops = service(runtime)
     await loops.start()
     await loops.create(input())
-    const exclude = Bun.spawnSync(['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'], { env }).stdout.toString().trim()
+    const excluded = await processRunner.run(
+      ['git', '-C', runtime.worktree.path, 'rev-parse', '--git-path', 'info/exclude'],
+      { env }
+    )
+    expect(excluded.exitCode).toBe(0)
+    const exclude = excluded.stdoutText.trim()
     const excludePath = exclude.startsWith('/') ? exclude : join(runtime.worktree.path, exclude)
     expect(readFileSync(excludePath, 'utf8')).toContain('/.quirky/loops/')
     expect(existsSync(join(runtime.worktree.path, '.gitignore'))).toBe(false)
   })
+
 
   test('delivers queued steer and edited prompt on the next resumed send', async () => {
     const runtime = rig()
@@ -538,6 +1053,7 @@ describe('LoopService background engine', () => {
   })
 
   test('restart pauses an unfinished attempt and native-resumes continue at the same iteration', async () => {
+    const engine = spyOnSupervisionEngine()
     const runtime = rig()
     runtime.turns.push('hold', 'settle')
     const first = service(runtime)
@@ -554,38 +1070,115 @@ describe('LoopService background engine', () => {
     await restarted.resume(created.id)
     await loopUntil(runtime, restarted, created.id, (snapshot) => snapshot.state === 'paused' && snapshot.pauseReason === 'cap-iterations')
     expect(runtime.resumed).toEqual([runtime.created[0]])
+    expect(engine.factory).toHaveBeenCalledTimes(2)
+    expect(engine.calls.some(({ method }) => method === 'resume')).toBe(true)
     expect(runtime.created).toHaveLength(1)
     expect(restarted.iterations(created.id).map(({ n, attempt }) => [n, attempt])).toEqual([[1, 1], [1, 2]])
   })
+  test('shutdown returns before a held send and restart interrupts without replay', async () => {
+    const runtime = rig()
+    const send = runtime.holdNextSend()
+    const first = service(runtime)
+    await first.start()
+    const created = await first.create(input({ ...input().config, sessionPolicy: 'continue', caps: {} }))
+    await send.entered
 
-  test('excludes approval holds from active time while charging the working turn', async () => {
+    let shutdownReturned = false
+    const shuttingDown = first.shutdown().then(() => {
+      shutdownReturned = true
+    })
+    try {
+      await runtime.until(() => runtime.stopped.length > 0 ? true : null)
+      await flushFakeRpcs()
+      expect(shutdownReturned).toBe(true)
+
+      activeServices.splice(activeServices.indexOf(first), 1)
+      const restarted = service(runtime)
+      await restarted.start()
+      expect(restarted.get(created.id)).toMatchObject({ state: 'paused', pauseReason: 'interrupted-by-restart' })
+      expect(restarted.iterations(created.id)).toMatchObject([{ n: 1, attempt: 1, endReason: 'interrupted' }])
+      expect(runtime.sendAttempts).toHaveLength(1)
+      expect(runtime.sends).toHaveLength(0)
+      expect(runtime.created).toHaveLength(1)
+
+      send.release()
+      await send.settled
+      await flushFakeRpcs()
+      expect(runtime.sendAttempts).toHaveLength(1)
+      expect(runtime.sends).toHaveLength(0)
+    } finally {
+      send.release()
+      await send.settled
+      await shuttingDown
+    }
+  })
+
+  test('excludes approval holds from active time when a session event wakes the watcher', async () => {
+    await assertApprovalHoldAccounting(true, false)
+  })
+
+  test('excludes approval holds from active time when fallback polling wakes the watcher', async () => {
+    await assertApprovalHoldAccounting(false, false)
+  })
+
+  test('charges working time before an approval event interrupts a held working sample', async () => {
+    await assertApprovalHoldAccounting(true, true)
+  })
+
+  test('approval time cannot satisfy the no-busy settlement timeout after a stale sample', async () => {
     const runtime = rig()
     const clock = new ManualClock()
     runtime.turns.push('hold')
+    const call = runtime.context.call.bind(runtime.context)
+    const send = spyOn(runtime.context, 'call').mockImplementation(async (method, params) => {
+      const value = await call(method, params)
+      if (method === 'quirky.structured/send') {
+        const sessionId = String(params?.session)
+        runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'running' })
+      }
+      return value
+    })
+    let idleSample = Promise.withResolvers<'continue' | 'done'>()
+    spyOnSupervisionEngine((sample, decision) => {
+      if (sample.session.ok && sample.session.value.status === 'running') idleSample.resolve(decision.kind)
+    })
     const loops = service(runtime, clock.now)
-    await loops.start()
-    const created = await loops.create(input({
-      ...input().config,
-      caps: { maxActiveMinutes: 1 },
-      askBeforeNext: true
-    }))
-    await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.phase === 'working')
-    clock.advance(5000)
-    const sessionId = runtime.sends[0]!.session
-    const ask = { id: 'ask-clock', sessionId, envelope: { status: 'pending' as const } }
-    runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'waiting' })
-    runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
-    const held = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'needs-you')
-    expect(held.activeMs).toBe(5000)
-    runtime.pendingAsks = [ask]
-    runtime.emit('quirky.ask/created', { ask })
-    clock.advance(100_000)
-    runtime.pendingAsks = []
-    runtime.emit('quirky.ask/resolved', { askId: ask.id })
-    runtime.respond(sessionId, 'finished after approval')
-    const paused = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
-    expect(paused.pauseReason).toBe('ask-before-next')
-    expect(paused.activeMs).toBe(5000)
+    const journal = Promise.withResolvers<unknown>()
+    try {
+      await loops.start()
+      const created = await loops.create(input())
+      expect(await idleSample.promise).toBe('continue')
+      const sessionId = runtime.sends[0]!.session
+      runtime.failedJournalResponsesAfterSend.push(journal.promise)
+      runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+      await runtime.until(() => runtime.failedJournalCursors.length === 1 ? true : null)
+      await flushFakeRpcs()
+      runtime.pendingAsks = [{ id: 'ask-idle-clock', sessionId, envelope: { status: 'pending' } }]
+      runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'waiting' })
+      runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+      await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'needs-you')
+
+      clock.advance(5000)
+      runtime.pendingAsks = []
+      runtime.sessions.set(sessionId, { ...runtime.sessions.get(sessionId)!, status: 'running' })
+      runtime.emit('quirky.ask/resolved', { askId: 'ask-idle-clock' })
+      idleSample = Promise.withResolvers<'continue' | 'done'>()
+      journal.resolve([])
+      expect(await idleSample.promise).toBe('continue')
+      idleSample = Promise.withResolvers<'continue' | 'done'>()
+      expect(await idleSample.promise).toBe('continue')
+      expect(loops.get(created.id).iterationsCompleted).toBe(0)
+      expect(loops.get(created.id).state).toBe('running')
+
+      clock.advance(25)
+      runtime.emit('quirky.session/changed', { session: runtime.sessions.get(sessionId) })
+      const paused = await loopUntil(runtime, loops, created.id, (snapshot) => snapshot.state === 'paused')
+      expect(paused.iterationsCompleted).toBe(1)
+      expect(loops.iterations(created.id)).toMatchObject([{ endReason: 'settled' }])
+    } finally {
+      journal.resolve([])
+      send.mockRestore()
+    }
   })
 
   test('pauses a configured cost cap when provider usage is unavailable instead of treating it as zero', async () => {

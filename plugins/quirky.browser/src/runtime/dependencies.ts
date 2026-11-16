@@ -1,3 +1,5 @@
+import type { ProcessRunner, ProcessSpawner, SpawnedProcess } from '@quirky/protocol'
+
 import type { BrowserFamily, Cookie } from '../cookies/types'
 
 export type CookieTransport = {
@@ -13,17 +15,19 @@ export type BrowserSpawnOptions = {
   stdin: 'ignore'
   stdout: 'ignore'
   stderr: 'ignore'
-  detached?: boolean
 }
 
-export type BrowserChild = Bun.Subprocess<'ignore', 'ignore', 'ignore'>
+export type BrowserChild = Pick<SpawnedProcess, 'pid' | 'exited' | 'stop'>
 export type BrowserSpawn = (command: string[], options: BrowserSpawnOptions) => BrowserChild
+export type BrowserProcess = ProcessRunner & ProcessSpawner
 export type BrowserOperationEvent = { pageId: string; method: string }
 export type BrowserTestControl = { crashHelper(profileId: string): Promise<void> }
 
 export type BrowserDependencies = {
   runtimeRoot: string
+  process: BrowserProcess
   spawn: BrowserSpawn
+  log?: (message: string) => void
   chromeArguments?: string[]
   chromePath?: string | null
   sourceRoots?: Partial<Record<BrowserFamily, string>>

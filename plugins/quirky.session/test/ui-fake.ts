@@ -1,5 +1,5 @@
 import { act } from 'react'
-import { RpcError, RpcErrorCode, type QuirkyEvent, type Session, type UiLayout, type UiPluginContext } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type QuirkyEvent, type Session, type UiExecuteCommandOptions, type UiLayout, type UiPluginContext } from '@quirky/protocol'
 import { createNativeBrowserCapability } from '../../../packages/ui/src/native-browser'
 import type { AgentInfo, AgentListing } from '../../quirky.agents/src/core/types'
 
@@ -72,7 +72,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
   const eventListeners = new Set<(event: QuirkyEvent) => void>()
   const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const streams = new Map<number, (bytes: Uint8Array) => void>()
+  const streamLagHandlers = new Map<number, () => void>()
   const opened: { id: string; input: unknown }[] = []
+  const executed: { id: string; args?: unknown; options?: UiExecuteCommandOptions }[] = []
   const toasts: { title: string; body: string }[] = []
   const confirms: { title: string; body?: string; confirmLabel?: string }[] = []
   const state = { confirmAnswer: true }
@@ -103,7 +105,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
       if (!(name in settings)) throw new Error(`no setting ${name}`)
       return settings[name]
     },
-    async executeCommand() {},
+    async executeCommand(id, args, options?: UiExecuteCommandOptions) {
+      executed.push({ id, args, ...(options === undefined ? {} : { options }) })
+    },
     createCommandDrag() { throw new Error('command dragging is unavailable in this fake') },
     consumeCommandDrag() { return null },
     cancelCommandDrag() {},
@@ -118,9 +122,13 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     getLayout: () => layout,
     setPalette() {},
     onLayout: () => () => {},
-    onStream(streamId, listener) {
+    onStream(streamId, listener, options?: { onLagged?: () => void }) {
       streams.set(streamId, listener)
-      return () => streams.delete(streamId)
+      if (options?.onLagged) streamLagHandlers.set(streamId, options.onLagged)
+      return () => {
+        streams.delete(streamId)
+        streamLagHandlers.delete(streamId)
+      }
     },
     onConnection(listener) {
       connectionListeners.add(listener)
@@ -150,9 +158,11 @@ export function fakeContext(handlers: Record<string, Handler> = {}, settings: Re
     calls,
     provided,
     opened,
+    executed,
     toasts,
     confirms,
     streams,
+    lag: (streamId: number) => streamLagHandlers.get(streamId)?.(),
     layout,
     state,
     /** Every `mountView` call so far, with whether its cleanup has run. */
@@ -226,12 +236,14 @@ export function attachResult(over: Record<string, unknown> = {}): Record<string,
 
 /** Serves the calls the view makes with a worktree, its sessions and the lifecycle methods. */
 export function sessionHandlers(sessions: Session[], extra: Record<string, Handler> = {}): Record<string, Handler> {
+  let nextStreamId = 8
   return {
     'quirky.worktree/resolve': () => WORKTREE,
     'quirky.worktree/wake': () => ({ worktrees: [] }),
     'quirky.session/list': () => sessions,
     'quirky.agents/list': () => DEFAULT_AGENTS,
     'quirky.terminal/attach': () => attachResult(),
+    'quirky.terminal/resync': () => attachResult({ streamId: nextStreamId++ }),
     'quirky.terminal/detach': () => ({ ok: true }),
     'quirky.terminal/write': () => ({ ok: true }),
     'quirky.terminal/resize': () => ({ ok: true }),

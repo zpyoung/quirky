@@ -1,10 +1,32 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Baseline, FileResult, GhRunner, TestStatus } from './types'
 
 const ARTIFACT_NAME = /^test-baseline-([0-9a-f]{40})$/
 const WALK_LIMIT = 500
 const FLAKE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+export type BaselineArtifact<T extends { commit: string }> = {
+  name: RegExp
+  entry: string
+  cacheNamespace: string
+  validate(value: unknown): T | null
+  maxJsonBytes?: number
+  source?: { event: 'push'; workflowPath: '.github/workflows/tests.yml' }
+}
+
+export type FindOptions = { cwd: string; head: string; repo: string; gh?: GhRunner; fromParent?: boolean }
+export type ArtifactFindOptions = FindOptions & {
+  artifact?: Pick<BaselineArtifact<{ commit: string }>, 'name' | 'source'>
+}
+export type Found = { commit: string; artifactId: number }
+export type FetchOptions = {
+  cwd: string
+  repo: string
+  gh?: GhRunner
+  download?: (args: string[], dest: string) => Promise<void>
+}
+
+type ArtifactSource = NonNullable<BaselineArtifact<{ commit: string }>['source']>
 
 /** Thrown when a baseline can't be located or used because `gh` failed or a download was unusable. A missing baseline is not an error; `findBaseline` returns null for that. */
 export class BaselineUnavailable extends Error {
@@ -29,13 +51,53 @@ function git(cwd: string, args: string[]): string | null {
 
 type Listed = { id: number; createdAt: string }
 
-function publishedByMain(run: unknown, commit: string): boolean {
-  if (!run || typeof run !== 'object') return false
-  const { head_branch, head_sha, repository_id, head_repository_id } = run as Record<string, unknown>
-  return head_branch === 'main' && head_sha === commit && repository_id != null && head_repository_id === repository_id
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null
 }
 
-async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Listed>> {
+function publishedByMain(run: unknown, commit: string): boolean {
+  const value = record(run)
+  if (!value) return false
+  const repositoryId = value.repository_id ?? record(value.repository)?.id
+  const headRepositoryId = value.head_repository_id ?? record(value.head_repository)?.id
+  return value.head_branch === 'main' && value.head_sha === commit && repositoryId != null && headRepositoryId === repositoryId
+}
+
+async function publishedBySource(repo: string, runId: number, commit: string, source: ArtifactSource, gh: GhRunner): Promise<boolean> {
+  let output: string
+  try {
+    output = await gh([
+      'api',
+      `repos/${repo}/actions/runs/${runId}`,
+      '--jq',
+      '{id, event, path, head_branch, head_sha, repository_id: .repository.id, head_repository_id: .head_repository.id}',
+    ])
+  } catch (error) {
+    throw new BaselineUnavailable(`could not verify workflow run ${runId} for ${repo}: ${error instanceof Error ? error.message : error}`, { cause: error })
+  }
+
+  let run: unknown
+  try {
+    run = JSON.parse(output)
+  } catch (error) {
+    throw new BaselineUnavailable(`unreadable workflow run ${runId} for ${repo}`, { cause: error })
+  }
+  const value = record(run)
+  return value?.id === runId
+    && value.event === source.event
+    && value.path === source.workflowPath
+    && publishedByMain(value, commit)
+}
+
+function matchingCommit(name: unknown, pattern: RegExp): string | undefined {
+  if (typeof name !== 'string') return undefined
+  pattern.lastIndex = 0
+  const commit = pattern.exec(name)?.[1]
+  pattern.lastIndex = 0
+  return commit
+}
+
+async function listBaselines(repo: string, gh: GhRunner, artifact: Pick<BaselineArtifact<{ commit: string }>, 'name' | 'source'>, candidateCommits: ReadonlySet<string>): Promise<Map<string, Listed>> {
   let output: string
   try {
     output = await gh([
@@ -49,28 +111,40 @@ async function listBaselines(repo: string, gh: GhRunner): Promise<Map<string, Li
     throw new BaselineUnavailable(`could not list artifacts for ${repo}: ${error instanceof Error ? error.message : error}`, { cause: error })
   }
   const newest = new Map<string, Listed>()
+  const sourceRuns = new Map<string, Promise<boolean>>()
   for (const line of output.split('\n')) {
     if (!line.trim()) continue
-    let artifact: { id?: unknown; name?: unknown; expired?: unknown; created_at?: unknown; workflow_run?: unknown }
+    let listed: { id?: unknown; name?: unknown; expired?: unknown; created_at?: unknown; workflow_run?: unknown }
     try {
-      artifact = JSON.parse(line)
+      listed = JSON.parse(line)
     } catch (error) {
       throw new BaselineUnavailable(`unreadable artifact listing for ${repo}`, { cause: error })
     }
-    const commit = typeof artifact.name === 'string' ? ARTIFACT_NAME.exec(artifact.name)?.[1] : undefined
-    if (!commit || artifact.expired === true || typeof artifact.id !== 'number') continue
-    if (!publishedByMain(artifact.workflow_run, commit)) continue
-    const createdAt = typeof artifact.created_at === 'string' ? artifact.created_at : ''
+    const commit = matchingCommit(listed.name, artifact.name)
+    if (!commit || !candidateCommits.has(commit) || listed.expired === true || typeof listed.id !== 'number') continue
+    const workflowRun = record(listed.workflow_run)
+    if (artifact.source) {
+      const runId = workflowRun?.id
+      if (typeof runId !== 'number') continue
+      const sourceKey = `${runId}:${commit}`
+      let trusted = sourceRuns.get(sourceKey)
+      if (!trusted) {
+        trusted = publishedBySource(repo, runId, commit, artifact.source, gh)
+        sourceRuns.set(sourceKey, trusted)
+      }
+      if (!await trusted) continue
+    } else if (!publishedByMain(workflowRun, commit)) {
+      continue
+    }
+    const createdAt = typeof listed.created_at === 'string' ? listed.created_at : ''
     const current = newest.get(commit)
-    if (!current || createdAt > current.createdAt || (createdAt === current.createdAt && artifact.id > current.id)) {
-      newest.set(commit, { id: artifact.id, createdAt })
+    if (!current || createdAt > current.createdAt || (createdAt === current.createdAt && listed.id > current.id)) {
+      newest.set(commit, { id: listed.id, createdAt })
     }
   }
   return newest
 }
 
-type FindOptions = { cwd: string; head: string; repo: string; gh?: GhRunner; fromParent?: boolean }
-type Found = { commit: string; artifactId: number }
 
 /**
  * Finds the nearest first-parent ancestor of `head` on main that has a stored baseline, looking back at most 500 commits.
@@ -80,18 +154,20 @@ type Found = { commit: string; artifactId: number }
  * (a push, so a run never finds itself). Returns null when nothing matches, when there is no merge base, or when
  * `fromParent` is set on a commit with no parent. Throws `BaselineUnavailable` when `gh` fails.
  */
-export async function findBaseline(opts: FindOptions): Promise<Found | null> {
+export async function findBaseline(opts: ArtifactFindOptions): Promise<Found | null> {
   return (await findBaselines(opts, 1))[0] ?? null
 }
 
 /** Up to `limit` baselines along the same walk as `findBaseline`, nearest first; the first is the one `findBaseline` returns. */
-export async function findBaselines(opts: FindOptions, limit: number): Promise<Found[]> {
+export async function findBaselines(opts: ArtifactFindOptions, limit: number): Promise<Found[]> {
+  if (limit <= 0) return []
   const start = opts.fromParent ? git(opts.cwd, ['rev-parse', '--verify', '--quiet', `${opts.head}^`]) : git(opts.cwd, ['merge-base', opts.head, 'origin/main'])
   if (!start) return []
-  const listed = await listBaselines(opts.repo, opts.gh ?? defaultGh)
-  if (listed.size === 0) return []
   const walk = git(opts.cwd, ['rev-list', '--first-parent', '-n', String(WALK_LIMIT), start])
   if (walk === null) return []
+  const commits = new Set(walk.split('\n'))
+  const listed = await listBaselines(opts.repo, opts.gh ?? defaultGh, opts.artifact ?? { name: ARTIFACT_NAME }, commits)
+  if (listed.size === 0) return []
   const found: Found[] = []
   for (const commit of walk.split('\n')) {
     const hit = listed.get(commit)
@@ -101,10 +177,83 @@ export async function findBaselines(opts: FindOptions, limit: number): Promise<F
   return found
 }
 
-function parseBaseline(text: string): Baseline | null {
+function parseBaseline(value: unknown): Baseline | null {
+  const parsed = record(value)
+  return parsed?.version === 1 ? parsed as Baseline : null
+}
+
+const TEST_ARTIFACT: BaselineArtifact<Baseline> = {
+  name: ARTIFACT_NAME,
+  entry: 'baseline.json',
+  cacheNamespace: 'test-baseline',
+  validate: parseBaseline,
+}
+
+export function parseArtifactJson(text: string): unknown {
+  const parsed = JSON.parse(text) as unknown
+  type Frame = { kind: 'array' } | { kind: 'object'; keys: Set<string>; expectingKey: boolean }
+  const stack: Frame[] = []
+
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index]
+    if (char === '"') {
+      let end = index + 1
+      while (end < text.length) {
+        if (text[end] === '\\') {
+          end += 2
+        } else if (text[end] === '"') {
+          break
+        } else {
+          end++
+        }
+      }
+      const frame = stack[stack.length - 1]
+      if (frame?.kind === 'object' && frame.expectingKey) {
+        const key = JSON.parse(text.slice(index, end + 1)) as string
+        if (frame.keys.has(key)) throw new SyntaxError(`duplicate JSON object key ${JSON.stringify(key)}`)
+        frame.keys.add(key)
+        frame.expectingKey = false
+      }
+      index = end
+    } else if (char === '{') {
+      stack.push({ kind: 'object', keys: new Set(), expectingKey: true })
+    } else if (char === '[') {
+      stack.push({ kind: 'array' })
+    } else if (char === '}' || char === ']') {
+      stack.pop()
+    } else if (char === ',') {
+      const frame = stack[stack.length - 1]
+      if (frame?.kind === 'object') frame.expectingKey = true
+    }
+  }
+  return parsed
+}
+
+type FetchArtifact<T extends { commit: string }> = BaselineArtifact<T> | BaselineArtifact<Baseline>
+
+function validateArtifact<T extends { commit: string }>(
+  text: string,
+  artifact: FetchArtifact<T>,
+  strictJson: boolean,
+): T | Baseline | null {
   try {
-    const value = JSON.parse(text)
-    return value && typeof value === 'object' && value.version === 1 ? (value as Baseline) : null
+    const value = strictJson ? parseArtifactJson(text) : JSON.parse(text)
+    return artifact.validate(value)
+  } catch {
+    return null
+  }
+}
+
+function readCached<T extends { commit: string }>(
+  path: string,
+  commit: string,
+  artifact: FetchArtifact<T>,
+  strictJson: boolean,
+): T | Baseline | null {
+  try {
+    if (artifact.maxJsonBytes !== undefined && statSync(path).size > artifact.maxJsonBytes) return null
+    const cached = validateArtifact(readFileSync(path, 'utf8'), artifact, strictJson)
+    return cached?.commit === commit ? cached : null
   } catch {
     return null
   }
@@ -116,25 +265,75 @@ async function downloadWithGh(args: string[], dest: string): Promise<void> {
   if (code !== 0) throw new Error(`gh ${args.join(' ')} exited ${code}: ${stderr.trim()}`)
 }
 
+async function readZipEntry(zip: string, entry: string, maxBytes?: number): Promise<string> {
+  if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 0)) {
+    throw new BaselineUnavailable(`invalid JSON size limit for ${entry}`)
+  }
+  const proc = Bun.spawn(['unzip', '-p', zip, entry], { stdout: 'pipe', stderr: 'pipe' })
+  const reader = proc.stdout.getReader()
+  const stderrPromise = new Response(proc.stderr).text()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      if (maxBytes !== undefined && size + value.byteLength > maxBytes) {
+        proc.kill()
+        await proc.exited
+        await stderrPromise
+        throw new BaselineUnavailable(`${entry} exceeds its ${maxBytes}-byte decompressed JSON limit`)
+      }
+      chunks.push(value)
+      size += value.byteLength
+    }
+  } catch (error) {
+    if (!(error instanceof BaselineUnavailable)) {
+      try {
+        proc.kill()
+      } catch {}
+      await proc.exited
+      await stderrPromise
+    }
+    throw error
+  } finally {
+    reader.releaseLock()
+  }
+
+  const [stderr, code] = await Promise.all([stderrPromise, proc.exited])
+  if (code !== 0) throw new BaselineUnavailable(`could not read archive entry ${entry}: ${stderr.trim()}`)
+  const bytes = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(bytes)
+}
+
 /**
- * Loads the baseline `findBaseline` returned. A copy cached at `<git common dir>/test-baseline/<commit>.json` is used
- * when valid; otherwise the artifact zip is downloaded, `baseline.json` is extracted with the system `unzip`, checked for
- * `version: 1` and for a `commit` equal to `found.commit`, and cached. A cached copy that fails either check is
- * downloaded again. Throws `BaselineUnavailable` for a failed download, a missing or unreadable `baseline.json`,
- * a wrong version or a baseline recorded for a different commit. `gh` is accepted for symmetry with `findBaseline` but unused, since a zip can't pass through a
- * `GhRunner`; `download` receives the `gh` arguments and a path to write the zip to.
+ * Loads a listed baseline from its cache or artifact entry. Non-default descriptors key caches by commit and selected
+ * artifact ID; the default unit cache remains keyed by commit. Both paths validate the value and its commit.
  */
-export async function fetchBaseline(
-  found: { commit: string; artifactId: number },
-  opts: { cwd: string; repo: string; gh?: GhRunner; download?: (args: string[], dest: string) => Promise<void> },
-): Promise<Baseline> {
+export function fetchBaseline<T extends { commit: string }>(
+  found: Found,
+  opts: FetchOptions & { artifact: BaselineArtifact<T> },
+): Promise<T>
+export function fetchBaseline(found: Found, opts: FetchOptions): Promise<Baseline>
+export async function fetchBaseline<T extends { commit: string }>(
+  found: Found,
+  opts: FetchOptions & { artifact?: BaselineArtifact<T> },
+): Promise<T | Baseline> {
+  const strictJson = opts.artifact !== undefined
+  const artifact: FetchArtifact<T> = opts.artifact ?? TEST_ARTIFACT
   const common = git(opts.cwd, ['rev-parse', '--path-format=absolute', '--git-common-dir'])
   if (!common) throw new BaselineUnavailable(`${opts.cwd} is not in a git repository`)
-  const cacheDir = join(common, 'test-baseline')
-  const cached = join(cacheDir, `${found.commit}.json`)
+  const cacheDir = join(common, artifact.cacheNamespace)
+  const cacheName = `${found.commit}${opts.artifact ? `-${found.artifactId}` : ''}.json`
+  const cached = join(cacheDir, cacheName)
   if (existsSync(cached)) {
-    const hit = parseBaseline(readFileSync(cached, 'utf8'))
-    if (hit && hit.commit === found.commit) return hit
+    const hit = readCached(cached, found.commit, artifact, strictJson)
+    if (hit) return hit
   }
 
   mkdirSync(cacheDir, { recursive: true })
@@ -146,19 +345,16 @@ export async function fetchBaseline(
     } catch (error) {
       throw new BaselineUnavailable(`could not download artifact ${found.artifactId}: ${error instanceof Error ? error.message : error}`, { cause: error })
     }
-    const unzipped = Bun.spawnSync(['unzip', '-p', zip, 'baseline.json'])
-    if (unzipped.exitCode !== 0) {
-      throw new BaselineUnavailable(`artifact ${found.artifactId} has no readable baseline.json: ${unzipped.stderr.toString().trim()}`)
-    }
-    const baseline = parseBaseline(unzipped.stdout.toString())
-    if (!baseline) throw new BaselineUnavailable(`artifact ${found.artifactId} holds an unreadable or unsupported baseline.json`)
-    if (baseline.commit !== found.commit) {
-      throw new BaselineUnavailable(`artifact ${found.artifactId} holds a baseline for ${baseline.commit}, not ${found.commit}`)
+    const text = await readZipEntry(zip, artifact.entry, artifact.maxJsonBytes)
+    const value = validateArtifact(text, artifact, strictJson)
+    if (!value) throw new BaselineUnavailable(`artifact ${found.artifactId} holds an unreadable or unsupported ${artifact.entry}`)
+    if (value.commit !== found.commit) {
+      throw new BaselineUnavailable(`artifact ${found.artifactId} holds a baseline for ${value.commit}, not ${found.commit}`)
     }
     const staged = join(scratch, 'baseline.json')
-    writeFileSync(staged, JSON.stringify(baseline))
+    writeFileSync(staged, JSON.stringify(value))
     renameSync(staged, cached)
-    return baseline
+    return value
   } finally {
     rmSync(scratch, { recursive: true, force: true })
   }

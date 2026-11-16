@@ -50,3 +50,5 @@ Self-review: all assigned visual surfaces map to AC1–6; no API/state migration
 Amendments: 2026-10-28 — shared ContextMenu styles were exported only through the terminal host stylesheet. Add a clean canonical CSS cutover (existing selectors unchanged) so Tasks and Automations can reuse the public control without feature-local copies.
 
 2026-10-28 — bounded actual UI showed openEditor mounting Automations twice (slot plus center), with duplicate dialog IDs/focus traps. A draft disappeared during interaction; its exact cancellation cause is not established. Fix the proven duplicate visible-tool navigation ownership as part of default-slot migration, without altering scheduling or definition APIs.
+
+2026-11-01 — [the compact and expanded Tasks spec](../2026-11-01-tasks-compact-expand/logic.md#this-replaces-one-line-of-the-tasks-restyle-spec) replaces the Tasks part of "no custom shell buttons or center-tab takeover": Tasks now moves into a center tab when the user asks. Opening Tasks from its stripe icon still leaves center work intact.

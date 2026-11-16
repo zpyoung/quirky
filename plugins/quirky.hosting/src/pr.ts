@@ -4,6 +4,7 @@ import { createPRMutationMethods } from './pr-mutations'
 import { createPRLookup } from './pr-review'
 import { createPRConversationMethods } from './review-conversation'
 import { createPRStackMethods } from './review-stack'
+import { routeByProvider } from './gitlab/router'
 
 export function prMethods(env: HostingEnv): Record<string, Handler> {
   const lookup = createPRLookup(env)
@@ -16,7 +17,7 @@ export function prMethods(env: HostingEnv): Record<string, Handler> {
     delete request.fresh
     return lookup.forBranch(request, caller, { noCache: fresh === true, strict: fresh === true })
   }
-  return {
+  return routeByProvider(env, {
     forBranch,
     pushRepository: lookup.pushRepository,
     review: lookup.review,
@@ -25,5 +26,5 @@ export function prMethods(env: HostingEnv): Record<string, Handler> {
     ...createPRMutationMethods(env, lookup),
     ...createPRConversationMethods(env, lookup),
     ...createPRStackMethods(env, lookup)
-  }
+  }, { beginReviewSnapshot: lookup.beginReviewSnapshot })
 }
