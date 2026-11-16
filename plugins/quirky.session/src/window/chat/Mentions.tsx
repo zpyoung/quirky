@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { RpcErrorCode, type UiPluginContext } from '@quirky/protocol'
+import { EmptyState, InlineError } from '@quirky/ui'
 
 const MAX_RESULTS = 8
 
@@ -65,8 +66,8 @@ const note = { ...popover, color: 'var(--ui-muted)', padding: 'var(--ui-space-8)
 
 /** The `@file` list above the composer; `active` is the highlighted index and `onPick` receives a path. */
 export function Mentions({ search, active, onPick }: { search: Search; active: number; onPick: (path: string) => void }) {
-  if (search.unavailable) return <div style={note} role="status">File search unavailable</div>
-  if (search.items.length === 0) return <div style={note} role="status">No matching files</div>
+  if (search.unavailable) return <div style={note}><InlineError message="File search unavailable" /></div>
+  if (search.items.length === 0) return <div style={note} role="status"><EmptyState message="No matching files" /></div>
   return (
     <ul style={popover} role="listbox" aria-label="Files">
       {search.items.map((path, index) => (

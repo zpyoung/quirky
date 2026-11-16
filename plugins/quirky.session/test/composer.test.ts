@@ -425,6 +425,13 @@ describe('@ mentions', () => {
     await mount()
     await type('@a')
     await settle()
-    expect(host!.textContent).toContain('File search unavailable')
+    expect(host!.querySelector('[role="alert"]')?.textContent).toContain('File search unavailable')
+  })
+
+  test('says no files match with the shared empty state', async () => {
+    await mount({ 'quirky.editor/quickOpen': () => ({ results: [] }) })
+    await type('@zz')
+    await settle()
+    expect(host!.querySelector('.ui-empty-state')?.textContent).toBe('No matching files')
   })
 })

@@ -21,7 +21,7 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 const layout = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--ui-space-12)', minWidth: 0, padding: 'var(--ui-space-24) var(--ui-space-16)' } satisfies CSSProperties
 const title = { margin: 0, fontSize: 'var(--ui-font-title)' } satisfies CSSProperties
 const lead = { margin: 0, color: 'var(--ui-muted)', textAlign: 'center' } satisfies CSSProperties
-const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(var(--compat-px-220), 1fr))', gap: 'var(--ui-space-8)', width: '100%', maxWidth: 'var(--compat-px-520)' } satisfies CSSProperties
+const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(calc(220 * var(--ui-length-unit)), 1fr))', gap: 'var(--ui-space-8)', width: '100%', maxWidth: 'calc(520 * var(--ui-length-unit))' } satisfies CSSProperties
 const card = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 'var(--ui-space-2)', textAlign: 'left', height: 'auto', padding: 'var(--ui-space-8) var(--ui-space-12)' } satisfies CSSProperties
 const note = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
 

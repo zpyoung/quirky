@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
-import { Button, SectionHeader, TextField } from '@quirky/ui'
+import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { Button, EmptyState, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import type { Ask, AskAnswer, AskEnvelope, QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import { AskCard } from './AskCard'
 import { ASK_FALLBACK_TITLE, type AskStore } from './store'
@@ -9,6 +9,8 @@ export const CARD_VIEW_ID = 'view:quirky.ask/card'
 export type CardViewInput = { askId: string; sessionApproveDisabled?: string }
 
 type Decision = 'allow' | 'always' | 'deny'
+
+type LoadPhase = { status: 'loading' } | { status: 'ready' } | { status: 'failed'; message: string }
 
 const DECISION_LABELS: Record<Decision, string> = {
   allow: 'Allow once',
@@ -107,6 +109,8 @@ function ApprovalCard({ ask, approval, context, sessionApproveDisabled, onResolv
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const hasReason = ask.spec.questions.some((question) => question.id === 'reason')
+  const onStartDeny = () => setDenying(true)
+  const onCancelDeny = () => setDenying(false)
 
   const send = async (decision: Decision) => {
     const answers: Record<string, AskAnswer> = { decision: { value: decision, label: DECISION_LABELS[decision], source: 'option' } }
@@ -140,7 +144,7 @@ function ApprovalCard({ ask, approval, context, sessionApproveDisabled, onResolv
       <div data-approval-actions style={ACTIONS_STYLE}>
         {denying ? (
           <>
-            <Button disabled={busy} onClick={() => setDenying(false)}>Cancel</Button>
+            <Button disabled={busy} onClick={onCancelDeny}>Cancel</Button>
             <Button variant="destructive" disabled={busy} onClick={() => void send('deny')}>Confirm deny</Button>
           </>
         ) : (
@@ -153,7 +157,7 @@ function ApprovalCard({ ask, approval, context, sessionApproveDisabled, onResolv
             >
               {DECISION_LABELS.always}
             </Button>
-            <Button variant="destructive" disabled={busy} onClick={() => setDenying(true)}>{DECISION_LABELS.deny}</Button>
+            <Button variant="destructive" disabled={busy} onClick={onStartDeny}>{DECISION_LABELS.deny}</Button>
           </>
         )}
       </div>
@@ -170,23 +174,29 @@ export function CardView({ context, input, store }: { context: UiPluginContext; 
   const { askId, sessionApproveDisabled } = input
   const previews = useSyncExternalStore(store.subscribe, store.previews)
   const [ask, setAsk] = useState<Ask | null>(null)
+  const [phase, setPhase] = useState<LoadPhase>({ status: 'loading' })
   const alive = useRef(true)
   const loadSeq = useRef(0)
 
-  const load = useCallback(async () => {
+  async function load(): Promise<void> {
     const seq = ++loadSeq.current
     try {
       const asks = (await context.call('quirky.ask/list', { pendingOnly: false, askId })) as Ask[]
       if (!alive.current || seq !== loadSeq.current) return
       const next = asks.find((candidate) => candidate.id === askId) ?? null
       setAsk((current) => (current?.id === askId && current.envelope.status !== 'pending' && next?.envelope.status === 'pending' ? current : next))
+      setPhase({ status: 'ready' })
     } catch (error) {
       context.log(`could not load ask ${askId}: ${errorText(error)}`)
+      if (!alive.current || seq !== loadSeq.current) return
+      setPhase((current) => (current.status === 'ready' ? current : { status: 'failed', message: errorText(error) }))
     }
-  }, [context, askId])
+  }
 
   useEffect(() => {
     alive.current = true
+    setAsk(null)
+    setPhase({ status: 'loading' })
     void load()
     const unsubscribeEvents = context.subscribe((event: QuirkyEvent) => {
       if (!('data' in event)) return
@@ -203,9 +213,15 @@ export function CardView({ context, input, store }: { context: UiPluginContext; 
       unsubscribeEvents()
       unsubscribeConnection()
     }
-  }, [context, askId, load])
+  }, [context, askId])
 
-  if (!ask) return null
+  if (!ask) {
+    if (phase.status === 'failed') {
+      return <InlineError message={`Could not load the question: ${phase.message}`} action={{ label: 'Retry', onAction: () => void load() }} />
+    }
+    if (phase.status === 'loading') return <NoticeLine>Loading question…</NoticeLine>
+    return <EmptyState message="This question is no longer available." />
+  }
 
   const approval = approvalOf(ask)
   const resolve = (envelope: AskEnvelope) => {
@@ -219,7 +235,8 @@ export function CardView({ context, input, store }: { context: UiPluginContext; 
     const record = approval ? approvalRecord(ask, approval) : ordinaryRecord(ask)
     return (
       <p
-        {...(approval ? { 'data-approval-record': ask.id } : { 'data-ask-record': ask.id })}
+        data-approval-record={approval ? ask.id : undefined}
+        data-ask-record={approval ? undefined : ask.id}
         role="status"
         style={RECORD_STYLE}
       >

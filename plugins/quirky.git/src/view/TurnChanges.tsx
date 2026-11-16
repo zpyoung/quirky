@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Badge, Button, EmptyState, InlineError, ListRow } from '@quirky/ui'
+import { Badge, Button, EmptyState, InlineError, ListRow, NoticeLine } from '@quirky/ui'
 import type { GitChange, GitDiff, MountFunction, UiPluginContext } from '@quirky/protocol'
 
 import { useNotesBinding } from '../notes/binding'
@@ -57,23 +57,27 @@ const noSave = (): void => {}
 /** One changed file: its row, and once expanded its read-only diff with line comments. */
 function ChangedFile({ context, input, change, expanded, onToggle, notes, noteCount, settings }: FileProps) {
   const [diff, setDiff] = useState<Load<GitDiff>>({ status: 'loading' })
-  const [attempt, setAttempt] = useState(0)
+  const latest = useRef(0)
   const binding = useNotesBinding(context, input.worktree, notes)
   const { worktree, fromTree, toTree } = input
   const { path, oldPath } = change
 
-  useEffect(() => {
-    if (!expanded) return
-    let alive = true
+  function loadDiff(): void {
+    const attempt = ++latest.current
     setDiff({ status: 'loading' })
     context
       .call('quirky.git/diff', { worktree, path, source: 'trees', from: fromTree, to: toTree, ...(oldPath === undefined ? {} : { oldPath }) })
-      .then((value) => alive && setDiff({ status: 'ready', value: value as GitDiff }))
-      .catch((error: unknown) => alive && setDiff({ status: 'error', message: messageOf(error) }))
+      .then((value) => attempt === latest.current && setDiff({ status: 'ready', value: value as GitDiff }))
+      .catch((error: unknown) => attempt === latest.current && setDiff({ status: 'error', message: messageOf(error) }))
+  }
+
+  useEffect(() => {
+    if (!expanded) return
+    loadDiff()
     return () => {
-      alive = false
+      latest.current++
     }
-  }, [context, expanded, worktree, path, oldPath, fromTree, toTree, attempt])
+  }, [context, expanded, worktree, path, oldPath, fromTree, toTree])
 
   return (
     <div role="listitem" data-turn-file={path}>
@@ -92,12 +96,9 @@ function ChangedFile({ context, input, change, expanded, onToggle, notes, noteCo
       />
       {expanded && (
         <div data-turn-diff>
-          {diff.status === 'loading' && <p className="ui-text-muted" role="status" style={{ padding: 'var(--ui-space-8) var(--ui-space-12)' }}>Loading diff...</p>}
+          {diff.status === 'loading' && <div role="status"><NoticeLine>Loading diff...</NoticeLine></div>}
           {diff.status === 'error' && (
-            <InlineError
-              message={`Error loading diff: ${diff.message}`}
-              action={{ label: 'Retry', onAction: () => setAttempt(attempt + 1) }}
-            />
+            <InlineError message={`Error loading diff: ${diff.message}`} action={{ label: 'Retry', onAction: loadDiff }} />
           )}
           {diff.status === 'ready' && (
             <DiffPane
@@ -154,7 +155,7 @@ export function TurnChanges({ context, input }: { context: UiPluginContext; inpu
     })
   }, [])
 
-  if (changes.status === 'loading') return <p className="ui-text-muted" role="status">Loading changes...</p>
+  if (changes.status === 'loading') return <div role="status"><NoticeLine>Loading changes...</NoticeLine></div>
   if (changes.status === 'error') return <InlineError message={`Error loading changes: ${changes.message}`} />
   const files = changes.value
   if (files.length === 0) return <EmptyState message="This turn changed no files." />

@@ -67,13 +67,16 @@ export function QueuedList({ context, session, capabilities }: { context: UiPlug
     }
   }, [context, session.id])
 
-  const act = async (method: string, params: Record<string, unknown>) => {
+  const act = async (request: () => Promise<unknown>) => {
     try {
-      await context.call(method, { session: session.id, ...params })
+      await request()
     } catch (error) {
       context.toast('Could not update the queue', messageOf(error))
     }
   }
+
+  const onCancelEdit = () => setEditing(null)
+  const onEdit = (entry: QueuedMessage) => setEditing({ id: entry.id, text: entry.text })
 
   if (queue.length === 0) return null
 
@@ -101,24 +104,24 @@ export function QueuedList({ context, session, capabilities }: { context: UiPlug
                   onClick={() => {
                     const text = editing.text.trim()
                     setEditing(null)
-                    void act('quirky.structured/editQueued', { id: entry.id, text })
+                    void act(() => context.call('quirky.structured/editQueued', { session: session.id, id: entry.id, text }))
                   }}
                 >
                   Save
                 </Button>
-                <Button onClick={() => setEditing(null)}>Cancel</Button>
+                <Button onClick={onCancelEdit}>Cancel</Button>
               </div>
             </>
           ) : (
             <>
               <span style={body}>{entry.text}</span>
               <div style={actions}>
-                <Button aria-label="Edit queued message" onClick={() => setEditing({ id: entry.id, text: entry.text })}>Edit</Button>
-                <Button aria-label="Delete queued message" onClick={() => void act('quirky.structured/dequeue', { id: entry.id })}>Delete</Button>
+                <Button aria-label="Edit queued message" onClick={() => onEdit(entry)}>Edit</Button>
+                <Button aria-label="Delete queued message" onClick={() => void act(() => context.call('quirky.structured/dequeue', { session: session.id, id: entry.id }))}>Delete</Button>
                 <Button
                   disabled={steerReason !== undefined}
                   title={steerReason}
-                  onClick={() => void act('quirky.structured/steer', { id: entry.id })}
+                  onClick={() => void act(() => context.call('quirky.structured/steer', { session: session.id, id: entry.id }))}
                 >
                   Steer now
                 </Button>
