@@ -741,10 +741,16 @@ function includedStackEntries(env: ReviewsEnv, selection: Selection): ReviewStac
 }
 
 
-function parseReviewUpdate(raw: unknown, number: number, expectedState: 'open' | 'closed', provider: ReviewProvider): boolean | null {
-  if (!isRecord(raw) || raw.number !== number || raw.state !== expectedState || typeof raw.updated !== 'boolean') return null
-  if (provider === 'github' && raw.updated !== true) return null
-  return raw.updated
+function parseReviewUpdate(
+  raw: unknown,
+  number: number,
+  allowedStates: readonly ('open' | 'draft' | 'closed')[],
+  provider: ReviewProvider,
+): { state: 'open' | 'draft' | 'closed'; updated: boolean } | null {
+  if (!isRecord(raw) || raw.number !== number || typeof raw.updated !== 'boolean') return null
+  if (raw.state !== 'open' && raw.state !== 'draft' && raw.state !== 'closed') return null
+  if (!allowedStates.includes(raw.state) || (provider === 'github' && raw.updated !== true)) return null
+  return { state: raw.state, updated: raw.updated }
 }
 
 function withReviewChange(review: ReviewData, change: Partial<ReviewData>): ReviewData {
@@ -2110,17 +2116,20 @@ async function updateReviewState(
   })
   try {
     const raw = await env.call('quirky.hosting/updateReview', { ...hostingParams(selected), action })
-    const expected = action === 'close' ? 'closed' : 'open'
-    const updated = parseReviewUpdate(raw, selected.number, expected, selected.review!.provider as ReviewProvider)
-    if (updated === null) throw env.invalid('invalid_upstream', `The hosting API did not confirm the pull request ${action} action.`)
+    const provider = selected.review!.provider as ReviewProvider
+    const allowedStates = action === 'close' ? ['closed'] as const
+      : action === 'reopen' && provider === 'gitlab' ? ['open', 'draft'] as const
+      : ['open'] as const
+    const confirmed = parseReviewUpdate(raw, selected.number, allowedStates, provider)
+    if (confirmed === null) throw env.invalid('invalid_upstream', `The hosting API did not confirm the pull request ${action} action.`)
     if (!selectionMatches(env.read(), selected)) throw env.invalid('stale_target', 'The selected pull request changed before the state update was confirmed.')
     applyIfOwner(env, selected, (state) => {
       const current = surfaceReview(state, selected)
-      if (current !== null) assignReview(state, selected, withReviewChange(current, { state: expected }))
+      if (current !== null) assignReview(state, selected, withReviewChange(current, { state: confirmed.state }))
       if (selectedSurface === 'detail') state.detail.error = null
       else checksOf(state, selected.worktree).error = null
     })
-    return { number: selected.number, state: expected, updated }
+    return { number: selected.number, ...confirmed }
   } catch (error) {
     if (action !== 'ready' && mutationCounters.get(ticket.key) === ticket.sequence) {
       applyIfOwner(env, selected, (state) => {

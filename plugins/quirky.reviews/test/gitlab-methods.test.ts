@@ -803,6 +803,40 @@ describe('GitLab Reviews daemon methods', () => {
     }
   })
 
+  test('GitLab reopen applies the confirmed draft state', async () => {
+    await withHarness({
+      replies: { 'quirky.hosting/updateReview': { number: 5, state: 'draft', updated: true } },
+    }, async (harness) => {
+      selectDetail(harness, selectedGitLabReview({ state: 'closed' }))
+      await expect(harness.invoke('detail', 'detailReopenReview', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
+      })).resolves.toEqual({ number: 5, state: 'draft', updated: true })
+      expect(harness.env.read().detail.review?.state).toBe('draft')
+    })
+  })
+
+  test('state changes reject unconfirmed states and restore the prior review', async () => {
+    const cases = [
+      { provider: 'gitlab', method: 'detailReopenReview', initial: 'closed', returned: 'closed' },
+      { provider: 'github', method: 'detailReopenReview', initial: 'closed', returned: 'draft' },
+      { provider: 'gitlab', method: 'detailCloseReview', initial: 'open', returned: 'draft' },
+      { provider: 'gitlab', method: 'detailMarkReady', initial: 'draft', returned: 'draft' },
+    ] as const
+    for (const item of cases) {
+      await withHarness({
+        replies: { 'quirky.hosting/updateReview': { number: 5, state: item.returned, updated: true } },
+      }, async (harness) => {
+        selectDetail(harness, item.provider === 'gitlab'
+          ? selectedGitLabReview({ state: item.initial })
+          : selectedGitHubReview(undefined, { state: item.initial }))
+        await expect(harness.invoke('detail', item.method, {
+          surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
+        })).rejects.toMatchObject({ data: { reason: 'invalid_upstream' } })
+        expect(harness.env.read().detail.review?.state).toBe(item.initial)
+      })
+    }
+  })
+
   test('GitLab body, comment, numeric reply, and numberless thread writes use exact repository identity', async () => {
     await withHarness({
       replies: {
