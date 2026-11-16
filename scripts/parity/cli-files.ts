@@ -8,11 +8,21 @@ import { parseCliRefusal, type CliReceipt } from './cli-run'
 import { checkIds } from './cli-checks'
 import * as table from './cli-table'
 import { CLI_FILE_OBSERVATION_BINDINGS } from './cli-table'
-import { createCliFilesWorld, type CliFilesWorld } from './cli-world'
+import { createCliFilesWorld, CliFilesStartupError, getProcessInspectionMetadata, type CliFilesWorld, type CliFilesStartupDiagnostics, type CliProcessInspectionMetadata } from './cli-world'
 import type { BrowserContext } from 'playwright'
 
 type JsonObject = Record<string, unknown>
 type MaybePromise<T> = T | Promise<T>
+async function settleReads<T extends readonly unknown[] | []>(
+  reads: T
+): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
+  try {
+    return await Promise.all(reads)
+  } catch (error) {
+    await Promise.allSettled(reads)
+    throw error
+  }
+}
 
 export type CliFilesArguments = { json: boolean; help: boolean }
 export type CliFileSnapshot = {
@@ -79,6 +89,12 @@ export type CliFileObservationEvidence = {
   elapsedMs?: number
   [key: string]: unknown
 }
+type CliFilesFailureInfo = {
+  kind: string
+  message: string
+  processInspection?: CliProcessInspectionMetadata
+}
+
 export type CliFileObservation = {
   id: string
   status: 'observed' | 'failed' | 'not-run'
@@ -86,7 +102,7 @@ export type CliFileObservation = {
   before: CliFileSnapshot[]
   after: CliFileSnapshot[]
   evidence: CliFileObservationEvidence
-  error?: { kind: string; message: string }
+  error?: CliFilesFailureInfo
 }
 export type CliFilesReport = {
   schemaVersion: 1
@@ -106,9 +122,10 @@ export type CliFilesReport = {
   cleanup: { ok: boolean; error?: string; evidence?: JsonObject }
   elapsedMs: number
   buildElapsedMs: number
+  startup?: CliFilesStartupDiagnostics
   guards?: { denied: string[]; egress: string[]; injected: boolean }
   fixtures?: JsonObject
-  error?: { stage: string; kind: string; message: string }
+  error?: CliFilesFailureInfo & { stage: string }
 }
 export type CliFileNavigationHistory = { worktrees: string[]; index: number }
 
@@ -291,6 +308,12 @@ function tailIsLocalJson(argv: readonly string[]): boolean {
 }
 function sanitizeText(text: string, home: string, tokens: readonly string[]): string {
   let output = text
+  output = output.replace(/(?:https?|wss?):\/\/[^\s"'<>]+/giu, (address) => {
+    try {
+      const url = new URL(address)
+      return `${url.protocol}//${url.host}${url.pathname}`
+    } catch { return address.split(/[?#]/, 1)[0]! }
+  })
   if (home) output = output.split(home).join('<cli-home>')
   for (const token of tokens) if (token) output = output.split(token).join('<redacted>')
   output = output.replace(/([?#&](?:hookToken|runtimeToken|token)=)[^&#\s]+/gi, '$1<redacted>')
@@ -299,6 +322,12 @@ function sanitizeText(text: string, home: string, tokens: readonly string[]): st
 }
 function sanitizeValue(value: unknown, home: string, tokens: readonly string[], key = ''): unknown {
   if (/^(?:token|hookToken|runtimeToken|sessionToken|authorization|secret|password)$/i.test(key)) return '<redacted>'
+  if (key === 'processInspection') {
+    const metadata = getProcessInspectionMetadata({ processInspection: value })
+    return metadata
+      ? getProcessInspectionMetadata({ processInspection: sanitizeValue(metadata, home, tokens) })
+      : undefined
+  }
   if (typeof value === 'string') return sanitizeText(value, home, tokens)
   if (Array.isArray(value)) return value.map((item) => sanitizeValue(item, home, tokens))
   if (!isObject(value)) return value
@@ -306,12 +335,102 @@ function sanitizeValue(value: unknown, home: string, tokens: readonly string[], 
   for (const [childKey, child] of Object.entries(value)) result[childKey] = sanitizeValue(child, home, tokens, childKey)
   return result
 }
-function safeError(error: unknown): { kind: string; message: string; stderrTail?: string } {
+function boundedStartupText(text: string): string {
+  const bytes = Buffer.from(text)
+  let start = Math.max(0, bytes.length - MAX_DIAGNOSTIC_BYTES)
+  while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start++
+  return bytes.subarray(start).toString('utf8')
+}
+
+function startupDiagnostics(value: unknown): CliFilesStartupDiagnostics | undefined {
+  if (!isObject(value) || typeof value.phase !== 'string' || !['environment', 'fixtures', 'build', 'daemon', 'renderer', 'ready'].includes(value.phase)) return
+  const measured = (item: unknown) => typeof item === 'number' && Number.isFinite(item) && item >= 0
+  if (![value.elapsedMs, value.buildElapsedMs, value.rendererElapsedMs].every(measured) ||
+      !Array.isArray(value.renderer) || !isObject(value.logs)) return
+  if (value.assets !== undefined && (!isObject(value.assets) ||
+      typeof value.assets.uiDir !== 'string' || typeof value.assets.pluginsDir !== 'string')) return
+  const stages = ['launch', 'connect', 'context', 'page', 'navigation', 'connection', 'shell', 'worktree', 'layout', 'changes', 'ready', 'failed']
+  for (const entry of value.renderer) {
+    if (!isObject(entry) || typeof entry.stage !== 'string' || !stages.includes(entry.stage) || !measured(entry.elapsedMs)) return
+    for (const key of ['index', 'connId', 'browserPid']) {
+      if (entry[key] !== undefined && (!Number.isSafeInteger(entry[key]) || Number(entry[key]) < (key === 'index' ? 0 : 1))) return
+    }
+    for (const key of ['worktree', 'message']) if (entry[key] !== undefined && typeof entry[key] !== 'string') return
+    if (entry.pageErrors !== undefined && (!Array.isArray(entry.pageErrors) || entry.pageErrors.some(error => typeof error !== 'string'))) return
+    if (entry.failedRequests !== undefined && (!Array.isArray(entry.failedRequests) || entry.failedRequests.some(request =>
+      !isObject(request) || typeof request.path !== 'string' || typeof request.message !== 'string'))) return
+  }
+  for (const key of ['buildTail', 'daemonTail', 'rendererTail']) if (value.logs[key] !== undefined && typeof value.logs[key] !== 'string') return
+  if (value.processInspection !== undefined && !getProcessInspectionMetadata(value)) return
+  const safe = sanitizeValue(value, '', [])
+  if (!isObject(safe)) return
+  const logs: CliFilesStartupDiagnostics['logs'] = {}
+  for (const key of ['buildTail', 'daemonTail', 'rendererTail'] as const) {
+    const text = record(safe.logs, 'startup logs')[key]
+    if (typeof text === 'string') logs[key] = boundedStartupText(text)
+  }
+  // Every field was checked above; bounding only removes diagnostic examples.
+  const diagnostics = safe as CliFilesStartupDiagnostics
+  return {
+    ...diagnostics,
+    renderer: diagnostics.renderer.slice(-64).map(entry => ({
+      ...entry,
+      ...(entry.message ? { message: boundedStartupText(entry.message) } : {}),
+      ...(entry.pageErrors ? { pageErrors: entry.pageErrors.slice(-5).map(boundedStartupText) } : {}),
+      ...(entry.failedRequests ? { failedRequests: entry.failedRequests.slice(-5).map(request => ({
+        path: boundedStartupText(request.path.split(/[?#]/, 1)[0]!),
+        message: boundedStartupText(request.message)
+      })) } : {})
+    })),
+    logs
+  }
+}
+
+function startupProcessesVerified(value: unknown, diagnostics: CliFilesStartupDiagnostics | undefined): boolean {
+  if (!diagnostics || !isObject(value) || typeof value.ok !== 'boolean' || !isObject(value.evidence)) return false
+  const evidence = value.evidence
+  if (!isObject(evidence.started) || typeof evidence.started.daemon !== 'boolean' || typeof evidence.started.browser !== 'boolean' ||
+      evidence.unresolvedAcquisition !== false || evidence.scopeCleanupComplete !== true || evidence.acquisitionSettled !== true ||
+      evidence.processIdentitiesGone !== true || typeof evidence.homeRemoved !== 'boolean' ||
+      !Array.isArray(evidence.trackedIdentities) || !Array.isArray(evidence.identities)) return false
+  const identities = evidence.trackedIdentities
+  const keys = new Set<string>()
+  for (const identity of identities) {
+    if (!isObject(identity) || identity.gone !== true || typeof identity.kind !== 'string' || !identity.kind ||
+        typeof identity.started !== 'string' || !identity.started || typeof identity.command !== 'string' || !identity.command ||
+        !Number.isSafeInteger(identity.pid) || Number(identity.pid) <= 0 ||
+        !Number.isSafeInteger(identity.ppid) || Number(identity.ppid) < 0 ||
+        !Number.isSafeInteger(identity.pgid) || Number(identity.pgid) <= 0) return false
+    const key = `${identity.pid}\0${identity.started}\0${identity.command}`
+    if (keys.has(key)) return false
+    keys.add(key)
+  }
+  const daemon = identities.filter(identity => isObject(identity) && identity.kind === 'daemon')
+  const browser = identities.filter(identity => isObject(identity) && identity.kind === 'browser')
+  if (daemon.length !== (evidence.started.daemon ? 1 : 0) || browser.length !== (evidence.started.browser ? 1 : 0)) return false
+  if (daemon.some(identity => !isObject(identity) || !String(identity.command).includes('daemon/src/main.ts')) ||
+      browser.some(identity => !isObject(identity) || !/chrome|chromium/i.test(String(identity.command)))) return false
+  if (!evidence.started.daemon && identities.some(identity => isObject(identity) && /^(daemon|pty)/.test(String(identity.kind)))) return false
+  if (!evidence.started.browser && identities.some(identity => isObject(identity) && /^browser/.test(String(identity.kind)))) return false
+  if (evidence.started.browser && !evidence.started.daemon) return false
+  const notifiedBrowserPids = new Set(diagnostics.renderer.flatMap(entry => entry.browserPid === undefined ? [] : [entry.browserPid]))
+  if (notifiedBrowserPids.size > 0 && (!evidence.started.browser || notifiedBrowserPids.size !== 1 ||
+      !browser.some(identity => isObject(identity) && notifiedBrowserPids.has(Number(identity.pid))))) return false
+  const summaries = identities.filter(identity => isObject(identity) && ['daemon', 'browser', 'pty'].includes(String(identity.kind)))
+    .map(identity => {
+      const entry = record(identity, 'startup identity')
+      return { kind: entry.kind, pid: entry.pid, gone: entry.gone }
+    })
+  return isDeepStrictEqual(evidence.identities, summaries)
+}
+
+function safeError(error: unknown): CliFilesFailureInfo & { stderrTail?: string } {
   const value = error && typeof error === 'object' ? error as Record<string, unknown> : {}
   const kind = typeof value.kind === 'string' ? value.kind : typeof value.code === 'string' ? value.code : 'observation-failed'
   const message = error instanceof Error ? error.message : String(error)
   const stderrTail = typeof value.stderrTail === 'string' ? value.stderrTail.slice(-MAX_DIAGNOSTIC_BYTES) : undefined
-  return { kind, message, ...(stderrTail ? { stderrTail } : {}) }
+  const processInspection = getProcessInspectionMetadata(error)
+  return { kind, message, ...(stderrTail ? { stderrTail } : {}), ...(processInspection ? { processInspection } : {}) }
 }
 function parseErrorEnvelope(value: unknown): { code: string; message: string; data?: unknown } {
   const outer = record(value, 'CLI refusal envelope')
@@ -2624,7 +2743,9 @@ export class CliFilesRunner {
   currentStage = 'setup'
   activeObservation: ObservationBuilder | undefined
   buildElapsedMs = 0
-  primaryFailure: { stage: string; kind: string; message: string } | undefined
+  startup: CliFilesStartupDiagnostics | undefined
+  failedStartupCleanup: unknown
+  primaryFailure: CliFilesReport['error']
   cleanupFailure: string | undefined
   cleanupEvidence: JsonObject = {}
   guardEvidence: { denied: string[]; egress: string[]; injected: boolean } | undefined
@@ -2996,8 +3117,10 @@ export class CliFilesRunner {
     const layout = record(state.layout, `${phase} window layout`)
     const worktree = string(layout.worktree, `${phase} window worktree`)
     if (state.connId !== entry.connId) throw new CliFilesFailure('connection-mismatch', `${phase} returned the wrong window connection`)
-    const workspace = await this.api(`${stateId}-workspace`, 'quirky.terminal/workspace', { workspace: worktree })
-    const editor = await this.editor(`${stateId}-editor`, ['state', '--worktree', worktree])
+    const [workspace, editor] = await settleReads([
+      this.api(`${stateId}-workspace`, 'quirky.terminal/workspace', { workspace: worktree }),
+      this.editor(`${stateId}-editor`, ['state', '--worktree', worktree])
+    ] as const)
     return {
       connId: entry.connId,
       receiptIds: { window: initialLayout?.receiptId ?? `${stateId}-state`, workspace: `${stateId}-workspace`, editor: `${stateId}-editor` },
@@ -3006,31 +3129,40 @@ export class CliFilesRunner {
       editor: record(editor, `${phase} public editor state`)
     }
   }
+  private async captureDomWindow(index: number): Promise<CliFileDomWindow> {
+    const entry = this.windows[index]!
+    const captured = await this.readRenderer(() => entry.page.evaluate(capturePageDom))
+    captured.connId = entry.connId
+    return captured
+  }
 
   async captureSample(phase: string): Promise<CapturedSample> {
-    const publicWindows: CliFilePublicWindow[] = []
-    const domWindows: CliFileDomWindow[] = []
-    for (let index = 0; index < 2; index += 1) {
-      publicWindows.push(await this.readPublicWindow(index, phase))
-      const captured = await this.readRenderer(() => this.windows[index]!.page.evaluate(capturePageDom))
-      captured.connId = this.windows[index]!.connId
-      domWindows.push(captured)
+    const captureWindow = async (index: number) => {
+      const publicWindow = await this.readPublicWindow(index, phase)
+      const domWindow = await this.captureDomWindow(index)
+      return { public: publicWindow, dom: domWindow }
     }
-    const snapshots = publicWindows.map((window, index) => snapshotFrom(window, domWindows[index]!))
-    return { public: publicWindows, dom: domWindows, snapshots }
+    const [first, other] = await settleReads([captureWindow(0), captureWindow(1)] as const)
+    return {
+      public: [first.public, other.public],
+      dom: [first.dom, other.dom],
+      snapshots: [snapshotFrom(first.public, first.dom), snapshotFrom(other.public, other.dom)]
+    }
   }
   async captureSampleAfterFirstWindowRead(phase: string, firstWindow: CliFilePublicWindow, otherWindow: CliFilePublicWindow): Promise<CapturedSample> {
     if (firstWindow.connId !== this.windows[0]!.connId) {
       throw new CliFilesFailure('connection-mismatch', `${phase} first layout read is not from page A`)
     }
     const publicWindows = [firstWindow, otherWindow]
-    const domWindows: CliFileDomWindow[] = []
-    for (let index = 0; index < 2; index += 1) {
-      const captured = await this.readRenderer(() => this.windows[index]!.page.evaluate(capturePageDom))
-      captured.connId = this.windows[index]!.connId
-      domWindows.push(captured)
-    }
-    const snapshots = publicWindows.map((window, index) => snapshotFrom(window, domWindows[index]!))
+    const [firstDom, otherDom] = await settleReads([
+      this.captureDomWindow(0),
+      this.captureDomWindow(1)
+    ] as const)
+    const domWindows = [firstDom, otherDom]
+    const snapshots = [
+      snapshotFrom(firstWindow, firstDom),
+      snapshotFrom(otherWindow, otherDom)
+    ]
     return { public: publicWindows, dom: domWindows, snapshots }
   }
 
@@ -3159,10 +3291,14 @@ export class CliFilesRunner {
         before: builder.before,
         after: builder.after,
         evidence: { ...builder.evidence, elapsedMs: Math.max(1, Date.now() - builder.startedAt) },
-        error: { kind: failure.kind, message: sanitizeText(failure.message, this.home, this.tokenValues) }
+        error: {
+          kind: failure.kind,
+          message: sanitizeText(failure.message, this.home, this.tokenValues),
+          ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
+        }
       }
       this.observations.set(id, observation)
-      this.primaryFailure ??= { stage: id, kind: failure.kind, message: sanitizeText(failure.message, this.home, this.tokenValues) }
+      this.primaryFailure ??= { stage: id, ...observation.error! }
       this.workController.abort(error)
       this.progress(`${id} failed: ${failure.message}`)
     } finally {
@@ -3480,13 +3616,11 @@ export class CliFilesRunner {
   }
 
   async captureHistories(id: string, sample: CapturedSample): Promise<CliFilesHistories> {
-    const reads: CliFileHistoryRead[] = []
-    for (const [index, window] of sample.public.entries()) {
-      reads.push(await this.captureNavigationHistory(
-        `${id}-${index}`, window.connId, shownWorktree(window)
-      ))
-    }
-    return { target: reads[0]!, other: reads[1]! }
+    const reads = sample.public.map((window, index) =>
+      this.captureNavigationHistory(`${id}-${index}`, window.connId, shownWorktree(window))
+    )
+    const histories = await settleReads(reads)
+    return { target: histories[0]!, other: histories[1]! }
   }
 
   async transition(
@@ -3506,18 +3640,18 @@ export class CliFilesRunner {
       }
     }
     const result = await mutate()
-    const layouts: Array<{ receiptId: string; state: JsonObject }> = []
-    const histories: CliFileHistoryRead[] = []
-    for (const [index, window] of this.windows.entries()) {
+    const layoutReads = await settleReads(this.windows.map(async (window, index) => {
       const receiptId = `${id}-immediate-window-${index}`
       const state = record(await this.api(receiptId, 'ui.window.state', { connId: window.connId }), `${id} immediate layout`)
-      layouts.push({ receiptId, state })
-      histories.push(await this.captureNavigationHistory(`${id}-history-after-${index}`, window.connId,
-        string(record(state.layout, `${id} immediate layout`).worktree, `${id} immediate worktree`)))
-    }
-    const historyAfter = { target: histories[0]!, other: histories[1]! }
-    const first = await this.readPublicWindow(0, `${id}-first-read`, layouts[0]!)
-    const other = await this.readPublicWindow(1, `${id}-other-read`, layouts[1]!)
+      const shown = string(record(state.layout, `${id} immediate layout`).worktree, `${id} immediate worktree`)
+      const history = await this.captureNavigationHistory(`${id}-history-after-${index}`, window.connId, shown)
+      return { layout: { receiptId, state }, history }
+    }))
+    const historyAfter = { target: layoutReads[0]!.history, other: layoutReads[1]!.history }
+    const [first, other] = await settleReads([
+      this.readPublicWindow(0, `${id}-first-read`, layoutReads[0]!.layout),
+      this.readPublicWindow(1, `${id}-other-read`, layoutReads[1]!.layout)
+    ] as const)
     progress.result = result
     progress.firstPublicRead = first
     progress.historyAfter = historyAfter
@@ -3780,10 +3914,11 @@ export class CliFilesRunner {
     const window = this.windows[1]!
     const receiptId = `${id}-window`
     const windowState = record(await this.api(receiptId, 'ui.window.state', { connId: window.connId }), `${id} other layout`)
-    const dom = await this.readRenderer(() => window.page.evaluate(capturePageDom))
-    dom.connId = window.connId
-    const history = await this.captureNavigationHistory(`${id}-history`, window.connId,
-      string(record(windowState.layout, `${id} other layout`).worktree, `${id} other worktree`))
+    const worktree = string(record(windowState.layout, `${id} other layout`).worktree, `${id} other worktree`)
+    const [dom, history] = await settleReads([
+      this.captureDomWindow(1),
+      this.captureNavigationHistory(`${id}-history`, window.connId, worktree)
+    ] as const)
     return { connId: window.connId, receiptId, windowState, dom, history }
   }
 
@@ -4037,6 +4172,7 @@ export class CliFilesRunner {
     this.world = await factory({ signal: this.workController.signal, deadline: this.workDeadline })
     this.home = this.world.home
     this.buildElapsedMs = this.world.buildElapsedMs
+    this.startup = startupDiagnostics(this.world.startupDiagnostics)
     const runtime = readRuntime(this.world.home)
     if (!runtime || runtime.pid !== this.world.daemonPid) throw new CliFilesFailure('runtime-identity', 'new world runtime does not match its daemon PID')
     this.tokenValues.push(runtime.token, runtime.hookToken)
@@ -4198,7 +4334,12 @@ export class CliFilesRunner {
       await this.assertLive(true)
     } catch (error) {
       const failure = safeError(error)
-      this.primaryFailure ??= { stage: 'cleanup-liveness', kind: failure.kind, message: sanitizeText(failure.message, this.home, this.tokenValues) }
+      this.primaryFailure ??= {
+        stage: 'cleanup-liveness',
+        kind: failure.kind,
+        message: sanitizeText(failure.message, this.home, this.tokenValues),
+        ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
+      }
       return
     }
     try {
@@ -4303,9 +4444,22 @@ export class CliFilesRunner {
   async cleanupWorld(): Promise<void> {
     if (!this.world) {
       await this.cleanupSentinel()
-      this.cleanupFailure = [this.cleanupFailure, 'owned world cleanup identity could not be verified'].filter(Boolean).join('; ')
+      const transferred = this.failedStartupCleanup
+      const processIdentitiesGone = startupProcessesVerified(transferred, this.startup)
+      const verified = processIdentitiesGone && isObject(transferred) && transferred.ok === true &&
+        transferred.error === undefined && isObject(transferred.evidence) && transferred.evidence.homeRemoved === true
+      const rawEvidence = isObject(transferred) && isObject(transferred.evidence) ? transferred.evidence : {}
+      const trackedIdentities = Array.isArray(rawEvidence.trackedIdentities) ? rawEvidence.trackedIdentities : []
+      if (!verified) this.cleanupFailure = [this.cleanupFailure, 'owned world cleanup identity could not be verified'].filter(Boolean).join('; ')
       if (this.sentinelError) this.cleanupFailure = [this.cleanupFailure, this.sentinelError].filter(Boolean).join('; ')
-      this.cleanupEvidence = { processIdentitiesGone: false, trackedIdentities: [], sentinelAlive: this.sentinelAliveAfterWorld }
+      this.cleanupEvidence = {
+        ...rawEvidence,
+        trackedIdentities,
+        daemonIdentityFound: trackedIdentities.some(identity => isObject(identity) && identity.kind === 'daemon'),
+        browserIdentityFound: trackedIdentities.some(identity => isObject(identity) && identity.kind === 'browser'),
+        processIdentitiesGone,
+        sentinelAlive: this.sentinelAliveAfterWorld
+      }
       clearTimeout(this.cleanupTimer)
       return
     }
@@ -4367,11 +4521,25 @@ export class CliFilesRunner {
       if (!this.primaryFailure) await this.fileWindowScenarios()
       if (!this.primaryFailure) await this.captureGuards()
     } catch (error) {
+      if (error instanceof CliFilesStartupError) {
+        const supplied: unknown = error.startupEvidence
+        if (isObject(supplied)) {
+          this.startup = startupDiagnostics(supplied.diagnostics)
+          if (this.startup) {
+            this.buildElapsedMs = this.startup.buildElapsedMs
+            this.failedStartupCleanup = sanitizeValue(supplied.cleanup, '', [])
+            if (isObject(this.failedStartupCleanup) && typeof this.failedStartupCleanup.error === 'string') {
+              this.cleanupFailure = [this.cleanupFailure, this.failedStartupCleanup.error].filter(Boolean).join('; ')
+            }
+          }
+        }
+      }
       const failure = safeError(error)
       this.primaryFailure ??= {
         stage: this.currentStage,
         kind: failure.kind,
-        message: sanitizeText(failure.message, this.home, this.tokenValues)
+        message: sanitizeText(failure.message, this.home, this.tokenValues),
+        ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
       }
       if (error && typeof error === 'object' && 'cleanupError' in error && typeof (error as Record<string, unknown>).cleanupError === 'string') {
         this.cleanupFailure = [(error as Record<string, unknown>).cleanupError as string, this.cleanupFailure].filter(Boolean).join('; ')
@@ -4424,6 +4592,7 @@ export class CliFilesRunner {
       },
       elapsedMs: Math.max(1, Date.now() - this.startedAt),
       buildElapsedMs: this.buildElapsedMs,
+      ...(this.startup ? { startup: this.startup } : {}),
       ...(this.guardEvidence ? { guards: this.guardEvidence } : {}),
       ...(Object.keys(this.fixtureEvidence).length ? { fixtures: { ...this.fixtureEvidence, gitCommands: this.gitEvidence } } : {}),
       ...(this.primaryFailure ? { error: this.primaryFailure } : {})

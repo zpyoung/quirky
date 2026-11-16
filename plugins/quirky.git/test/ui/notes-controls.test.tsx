@@ -35,7 +35,7 @@ const text = (element: Element | null | undefined) => (element?.textContent ?? '
 const cards = (root: ParentNode) => qa(root, '[data-note-card="saved"]')
 const buttonIn = (root: ParentNode, label: string) => qa<HTMLButtonElement>(root, 'button').find((button) => text(button) === label || button.getAttribute('aria-label') === label) ?? null
 const textareaIn = (root: ParentNode) => q<HTMLTextAreaElement>(root, 'textarea')
-const addresses = (): Address[] => (mounted?.report().uiControls ?? []) as Address[]
+const addresses = (): Address[] => ((mounted?.report().uiControls ?? []) as Address[]).filter(({ target }) => target === 'notes:w1')
 const control = (generation: string, action: string, id: string): Control => ({
   surface: 'view:quirky.git/diff', target: 'notes:w1', generation, action, data: { id }
 })
