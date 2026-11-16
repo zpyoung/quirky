@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ChangeEvent, type CSSProperties, type FormEvent } from 'react'
-import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'
+import { Badge, Button, Checkbox, ControlIcon, EmptyState, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { ActivityThread } from './activity-types'
 import { ActivityModel, groupActivityThreads, hasActivityFilters, type ActivitySnapshot, type ActivityViewInput, type GroupBy } from './activity-model'
@@ -136,8 +136,8 @@ function ActivityFilterForm({ model, view, showWorktreeField }: { model: Activit
     model.updateView({ text: draftText, worktree: draftWorktree })
   }
 
-  function toggleUnreadOnly(event: ChangeEvent<HTMLInputElement>): void {
-    model.updateView({ text: draftText, worktree: draftWorktree, unreadOnly: event.currentTarget.checked })
+  function toggleUnreadOnly(checked: boolean): void {
+    model.updateView({ text: draftText, worktree: draftWorktree, unreadOnly: checked })
   }
 
   function changeActivityGroup(event: ChangeEvent<HTMLSelectElement>): void {
@@ -164,31 +164,19 @@ function ActivityFilterForm({ model, view, showWorktreeField }: { model: Activit
           onChange={changeDraftWorktree}
         />
       ) : null}
-      <FormRow label="Unread only" htmlFor={`${controlId}-unread`}>
-        <input
-          id={`${controlId}-unread`}
-          aria-label="Unread only"
-          type="checkbox"
-          checked={view.unreadOnly === true}
-          style={{ accentColor: 'var(--ui-accent)' }}
-          onChange={toggleUnreadOnly}
-        />
-      </FormRow>
-      <FormRow label="Group by" htmlFor={`${controlId}-group`}>
-        <select
-          id={`${controlId}-group`}
-          aria-label="Group Activity by"
-          className="ui-text-field__input"
-          style={{ appearance: 'auto' }}
-          value={view.group}
-          onChange={changeActivityGroup}
-        >
-          <option value="status">Status</option>
-          <option value="worktree">Workspace</option>
-          <option value="provider">Provider</option>
-          <option value="none">No groups</option>
-        </select>
-      </FormRow>
+      <Checkbox label="Unread only" checked={view.unreadOnly === true} onChange={toggleUnreadOnly} />
+      <SelectField
+        id={`${controlId}-group`}
+        label="Group by"
+        aria-label="Group Activity by"
+        value={view.group}
+        onChange={changeActivityGroup}
+      >
+        <option value="status">Status</option>
+        <option value="worktree">Workspace</option>
+        <option value="provider">Provider</option>
+        <option value="none">No groups</option>
+      </SelectField>
       <Button type="submit" aria-label="Apply Activity filters" variant="primary">
         Apply
       </Button>
