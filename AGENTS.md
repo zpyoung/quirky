@@ -15,6 +15,7 @@ Pick the row that matches what you need:
 | One file while you edit | `bun test <file>` | This Mac |
 
 Files in `scripts/test-on-macos.txt` run in the Tests workflow's macOS job.
+Files in `scripts/test-alone.txt` run first in their CI job with no other test file running.
 
 - Never run `bun run test`, `bun test` with no path, or `bun scripts/suite.ts <dirs>` here, because they run on this Mac. The one exception is the build loop's final `queue.ts check`.
 - Read the result from the PR's Tests comment, or wait with `gh pr checks <number> --watch`. A full run takes about 10-30 minutes and compares against the baseline from main, so only `new` failures count against you.

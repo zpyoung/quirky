@@ -23,6 +23,7 @@ const USAGE = `usage: bun scripts/test-baseline/cli.ts <command> [options]
 const EVENTS = ['pull_request', 'push', 'workflow_dispatch']
 const NOT_ON_CI_LIST = 'scripts/test-not-on-ci.txt'
 const MACOS_LIST = 'scripts/test-on-macos.txt'
+const ALONE_LIST = 'scripts/test-alone.txt'
 
 /**
  * What the commands touch outside their arguments. Tests replace `gh`, the clock, the process
@@ -312,8 +313,10 @@ async function runShardCommand(args: string[], ctx: Context): Promise<number> {
   const files = values.macos ? plan.macos : plan.linuxShards[Number(values.shard)]
   if (!files) throw new UsageError(`--shard ${values.shard} is outside the plan's ${plan.linuxShards.length} shards`)
 
+  const { macosOnly } = await import('../suite')
+  const alone = macosOnly(join(ctx.cwd, ALONE_LIST))
   const { FILE_LIMIT_MS, FILES_AT_ONCE_CI, RERUN_LIMIT, rerunFailed, runTestFiles } = await import('./runner')
-  const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err }
+  const options = { cwd: ctx.cwd, files, platform: values.macos ? ('macos' as const) : ('linux' as const), jobs: FILES_AT_ONCE_CI, limitMs: FILE_LIMIT_MS, run: ctx.run, log: ctx.err, alone }
   const rerun = await rerunFailed(options, await runTestFiles(options), RERUN_LIMIT)
   if (rerun.skipped) ctx.err(`more than ${RERUN_LIMIT} files in this job failed, so none were rerun\n`)
   writeJson(out, rerun.results)

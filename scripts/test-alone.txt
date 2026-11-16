@@ -1,0 +1,3 @@
+# Test files that need an uncontended first attempt in CI. Add a file only when CI evidence shows it fails beside other files, and say why.
+# Listed files still run in CI; this changes only their scheduling and successful-output logging.
+scripts/parity/cli-files.test.ts first attempts failed in 19 of 22 observed runs, while solo reruns had no health refusals (issues #541 and #586).
