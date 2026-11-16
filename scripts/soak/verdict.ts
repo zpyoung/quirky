@@ -14,6 +14,7 @@ import type {
   PanelRequestRecord,
   PhaseRecord,
   TaskInteractionRecord,
+  ProbeRecord,
   ProcessRow,
   Sample,
   SoakConfig,
@@ -45,6 +46,7 @@ export type SoakEvidence = {
   gitProbes?: GitProbeRecord[]
   day?: DayInputs
   switches?: SwitchRecord[]
+  phases?: PhaseRecord[]
   taskInteractions?: TaskInteractionRecord[]
   dayDrainError?: string | null
 }
