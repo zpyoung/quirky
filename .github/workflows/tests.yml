@@ -66,8 +66,6 @@ jobs:
     needs: plan
     if: needs.plan.outputs.linux_shards != '[]'
     runs-on: ubuntu-latest
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/quirky-playwright
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -213,6 +211,9 @@ jobs:
             if [ "$smoke_status" -eq 0 ]; then exit 0; fi
           done
           exit "$smoke_status"
+
+      - name: Set Playwright browser path
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/quirky-playwright" >> "$GITHUB_ENV"
 
       - name: Install Playwright Chromium
         run: bun node_modules/playwright/cli.js install chromium

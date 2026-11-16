@@ -33,7 +33,6 @@ const UI_TIMEOUT_MS = 30_000
 const TERMINAL_ECHO = 'G8_BROWSER_ECHO'
 const WATCH_FIXTURE = 'G8_BROWSER_WATCH_FIXTURE'
 
-
 type BuildEnvironment = {
   HOME: string
   QUIRKY_HOME: string
@@ -115,7 +114,6 @@ function isWithin(root: string, path: string): boolean {
   const fromRoot = relative(root, path)
   return fromRoot === '' || (fromRoot !== '..' && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot))
 }
-
 
 function assertOwnedPath(root: string, path: string, label: string, options: { allowMissingLeaf?: boolean; directory?: boolean } = {}): void {
   const absolute = resolve(path)
@@ -1013,7 +1011,6 @@ async function expectBuilderNotCalled(root: string, env: BuildEnvironment): Prom
   expect(failure).toBeInstanceOf(Error)
   expect(calls).toBe(0)
 }
-
 
 test('build preflight rejects checkout roots and escaping plugin/output links before invoking a builder', async () => {
   const checkoutUi = createMinimalBuildLayout()

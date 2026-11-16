@@ -180,7 +180,7 @@ function fakeRun(script: Record<string, Record<string, FakeStatus>[]>, calls: Ca
     calls.files.push(file)
     calls.active++
     calls.maxActive = Math.max(calls.maxActive, calls.active)
-    await Promise.resolve()
+    await Bun.sleep(15)
     calls.active--
     const cases = Object.entries(tests).map(([name, status]) => {
       const body = status === 'fail' ? '<failure message="x" />' : status === 'skip' ? '<skipped />' : ''
@@ -932,7 +932,6 @@ describe('verdict', () => {
       expect(readJson<FileResult[]>(resultPath)[0].first.tests[0].status).toBe('skipped')
     })
   })
-
 
   test('every fileError the runner can produce is accepted', async () => {
     const errors: FileError[] = [null, 'timeout', 'no-report', 'exit-mismatch']

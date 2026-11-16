@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { discover, macosOnly } from '../suite'
@@ -678,11 +678,22 @@ describe('Linux Playwright browser provisioning', () => {
   test('installs the full Chromium bundle before shards without changing smoke or other jobs', () => {
     const linux = steps('linux')
     const dependencies = linux.find(step => step.run === 'bun install --frozen-lockfile')!
+    const configure = linux.find(step => step.name === 'Set Playwright browser path')!
     const install = linux.find(step => step.name === 'Install Playwright Chromium')!
     const prepare = linux.find(step => step.name === 'Prepare sandboxed Chrome')!
     const shard = linux.find(step => step.name === 'Run shard')!
 
-    expect(jobs.linux!.env?.PLAYWRIGHT_BROWSERS_PATH).toBe('${{ runner.temp }}/quirky-playwright')
+    for (const job of Object.values(jobs)) {
+      for (const value of Object.values(job.env ?? {})) {
+        expect(value).not.toMatch(/\$\{\{[^}]*\brunner\./)
+      }
+    }
+    expect(configure).toBeDefined()
+    expect(configure.run).toBe('echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/quirky-playwright" >> "$GITHUB_ENV"')
+    expect(linux.indexOf(configure)).toBeLessThan(linux.indexOf(install))
+    expect(linux.indexOf(configure)).toBeLessThan(linux.indexOf(shard))
+    expect(configure.if).toBeUndefined()
+    expect(configure['continue-on-error']).toBeUndefined()
     expect(install.run).toBe('bun node_modules/playwright/cli.js install chromium')
     expect(linux.indexOf(install)).toBeGreaterThan(linux.indexOf(dependencies))
     expect(linux.indexOf(install)).toBeLessThan(linux.indexOf(shard))
@@ -706,6 +717,18 @@ describe('Linux Playwright browser provisioning', () => {
     const projectRoot = join(import.meta.dir, '../..')
     try {
       for (const home of homes) mkdirSync(home)
+      const runnerTemp = join(root, 'runner-temp')
+      const githubEnv = join(root, 'github-env')
+      const configure = steps('linux').find(step => step.name === 'Set Playwright browser path')!
+      const setup = Bun.spawnSync(['bash', '-eu', '-c', configure.run!], {
+        env: { ...process.env, QUIRKY_HOME: root, RUNNER_TEMP: runnerTemp, GITHUB_ENV: githubEnv },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      expect(setup.exitCode).toBe(0)
+      const exported = readFileSync(githubEnv, 'utf8').trim()
+      expect(exported).toBe(`PLAYWRIGHT_BROWSERS_PATH=${browsers}`)
+      const browserPath = exported.slice('PLAYWRIGHT_BROWSERS_PATH='.length)
       const executableForHome = (home: string): string => {
         const child = Bun.spawnSync([
           process.execPath,
@@ -717,7 +740,7 @@ describe('Linux Playwright browser provisioning', () => {
             ...process.env,
             HOME: home,
             QUIRKY_HOME: home,
-            PLAYWRIGHT_BROWSERS_PATH: browsers,
+            PLAYWRIGHT_BROWSERS_PATH: browserPath,
             BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0',
           },
           stdout: 'pipe',
