@@ -47,27 +47,38 @@ function inspect(file: string, text: string): { violations: Violation[]; imports
     ts.forEachChild(node, (child) => bind(child, scope))
   }
   bind(source, root)
-  function literal(expression: ts.Expression, scope: Scope, seen = new Set<ts.Expression>()): string | undefined {
-    if (seen.has(expression)) return undefined
+  function literals(expression: ts.Expression, scope: Scope, seen = new Set<ts.Expression>()): string[] {
+    if (seen.has(expression)) return []
     seen = new Set(seen).add(expression)
-    if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return expression.text
+    if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) return [expression.text]
     if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression) || ts.isTypeAssertionExpression(expression) || ts.isSatisfiesExpression(expression)) {
-      return literal(expression.expression, scope, seen)
+      return literals(expression.expression, scope, seen)
+    }
+    if (ts.isConditionalExpression(expression)) {
+      return [...literals(expression.whenTrue, scope, seen), ...literals(expression.whenFalse, scope, seen)]
     }
     if (ts.isBinaryExpression(expression) && expression.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-      const left = literal(expression.left, scope, seen)
-      const right = literal(expression.right, scope, seen)
-      return left === undefined || right === undefined ? undefined : left + right
+      const left = literals(expression.left, scope, seen)
+      const right = literals(expression.right, scope, seen)
+      return left.flatMap((prefix) => right.map((suffix) => prefix + suffix))
+    }
+    if (ts.isTemplateExpression(expression)) {
+      let values = [expression.head.text]
+      for (const span of expression.templateSpans) {
+        const substitutions = literals(span.expression, scope, seen)
+        values = values.flatMap((prefix) => substitutions.map((value) => prefix + value + span.literal.text))
+      }
+      return values
     }
     if (ts.isIdentifier(expression)) {
       let current: Scope | undefined = scope
       while (current) {
         const binding = current.bindings.get(expression.text)
-        if (binding) return binding.expression ? literal(binding.expression, binding.scope, seen) : undefined
+        if (binding) return binding.expression ? literals(binding.expression, binding.scope, seen) : []
         current = current.parent
       }
     }
-    return undefined
+    return []
   }
   const violations: Violation[] = []
   const imports: string[] = []
@@ -88,9 +99,10 @@ function inspect(file: string, text: string): { violations: Violation[]; imports
     }
     if (ts.isCallExpression(node)) {
       for (const argument of node.arguments) {
-        const method = literal(argument, scopes.get(node) ?? root)
-        if (method && forbidden.has(method)) {
-          violations.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, method })
+        for (const method of new Set(literals(argument, scopes.get(node) ?? root))) {
+          if (forbidden.has(method)) {
+            violations.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1, method })
+          }
         }
       }
       const argument = node.arguments[0]
@@ -150,6 +162,10 @@ function fixture(files: Record<string, string>): string {
   return join(root, 'quirky-plugin.json')
 }
 
+function activeGraphs(root: string) {
+  return supervisors.map((supervisor) => graph(join(root, 'plugins', supervisor, 'quirky-plugin.json')))
+}
+
 afterEach(() => {
   for (const root of temporary.splice(0)) rmSync(root, { recursive: true, force: true })
 })
@@ -157,8 +173,7 @@ afterEach(() => {
 test('active daemon source graphs delegate low-level supervision RPCs to the engine', () => {
   const files = new Set<string>()
   const violations: Violation[] = []
-  for (const supervisor of supervisors) {
-    const result = graph(join(repository, 'plugins', supervisor, 'quirky-plugin.json'))
+  for (const result of activeGraphs(repository)) {
     for (const file of result.files) files.add(file)
     violations.push(...result.violations)
   }
@@ -168,9 +183,10 @@ test('active daemon source graphs delegate low-level supervision RPCs to the eng
     expect(files.has(file)).toBe(true)
     expect(inspect(file, readFileSync(file, 'utf8')).imports).toContain('@quirky/supervision')
   }
-  // the loop transcript view is display-only, not a daemon exception; avatar remains paused.
-  expect(files.has(join(repository, 'plugins/quirky.loops/window/LoopView.tsx'))).toBe(false)
-  expect([...files].some((file) => file.startsWith(join(repository, 'plugins/quirky.avatar/')))).toBe(false)
+  // the loop transcript view is display-only, not a daemon exception.
+  const loopView = join(repository, 'plugins/quirky.loops/window/LoopView.tsx')
+  expect(existsSync(loopView)).toBe(true)
+  expect(files.has(loopView)).toBe(false)
 })
 
 test('RPC detection handles call syntax, helpers and constant method expressions', () => {
@@ -268,4 +284,43 @@ test('function-local var and destructured bindings shadow outer method aliases',
   ]) {
     expect(inspect('fixture.ts', `const method = 'quirky.structured/stop'; ${local}`).violations).toEqual([])
   }
+})
+
+test('conditional methods include every statically resolved branch', () => {
+  for (const { source, methods } of [
+    { source: "context.call(kind === 'structured' ? 'quirky.structured/stop' : 'quirky.session/close', params)", methods: ['quirky.structured/stop'] },
+    { source: "const method = choose ? 'quirky.structured/create' : 'quirky.structured/resume'; context.call(method)", methods: ['quirky.structured/create', 'quirky.structured/resume'] },
+    { source: "context.call(choose ? unknownMethod : 'quirky.checks/cancel')", methods: ['quirky.checks/cancel'] }
+  ]) {
+    expect(inspect('fixture.ts', source).violations.map(({ method }) => method)).toEqual(methods)
+  }
+})
+
+test('template method arguments fold constant substitutions', () => {
+  for (const { source, methods } of [
+    { source: "const NS = 'quirky.structured'; context.call(`${NS}/send`)", methods: ['quirky.structured/send'] },
+    { source: "const NS = 'quirky.structured'; const verb = choose ? 'create' : 'resume'; context.call(`${NS}/${verb}`)", methods: ['quirky.structured/create', 'quirky.structured/resume'] },
+    { source: "context.call(`${unknownNamespace}/send`)", methods: [] }
+  ]) {
+    expect(inspect('fixture.ts', source).violations.map(({ method }) => method)).toEqual(methods)
+  }
+})
+
+test('active graph discovery excludes an existing paused avatar daemon', () => {
+  const manifests = Object.fromEntries(supervisors.flatMap((id) => [
+    [`plugins/${id}/quirky-plugin.json`, JSON.stringify({ main: 'main.ts' })],
+    [`plugins/${id}/main.ts`, 'export const active = true']
+  ]))
+  const manifest = fixture({
+    ...manifests,
+    'plugins/quirky.avatar/quirky-plugin.json': JSON.stringify({ main: 'main.ts' }),
+    'plugins/quirky.avatar/main.ts': "context.call('quirky.structured/create')"
+  })
+  const root = dirname(manifest)
+  const avatar = join(root, 'plugins/quirky.avatar/main.ts')
+  expect(existsSync(avatar)).toBe(true)
+  expect(inspect(avatar, readFileSync(avatar, 'utf8')).violations).toHaveLength(1)
+  const graphs = activeGraphs(root)
+  expect(graphs.flatMap(({ files }) => [...files])).not.toContain(avatar)
+  expect(graphs.flatMap(({ violations }) => violations)).toEqual([])
 })
