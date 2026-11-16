@@ -64,6 +64,10 @@ function itemUpdated(details: JsonRecord | null): string | null {
   const item = itemDetails(details)
   return item && typeof item.updatedAt === 'string' ? item.updatedAt : null
 }
+function canEditReviewBody(review: ReviewData | null, details: JsonRecord | null): boolean {
+  return review !== null && (review.provider === 'gitlab' || itemDetails(details)?.viewerCanUpdate === true)
+}
+
 
 function listOfLogins(value: unknown): string[] | null {
   if (value === null) return null
@@ -132,6 +136,7 @@ function reviewsControlTarget(surface: string, slot: string, owner: ReviewContex
     owner?.worktree ?? null,
     repo,
     owner?.number ?? null,
+    owner?.review?.provider ?? null,
     owner?.review?.headRefOid ?? null,
     resource,
   ])
@@ -140,7 +145,7 @@ function reviewsControlTarget(surface: string, slot: string, owner: ReviewContex
 function ownerBoundary(owner: ReviewContext | null): string {
   return owner === null
     ? 'none'
-    : JSON.stringify([owner.worktree, owner.number, owner.generation, owner.repo, owner.review?.headRefOid ?? null])
+    : JSON.stringify([owner.worktree, owner.number, owner.generation, owner.repo, owner.review?.provider ?? null, owner.review?.headRefOid ?? null])
 }
 
 function deliveryError(result: Extract<ReviewsUiControlResult, { delivered: false }>): string {
@@ -252,6 +257,7 @@ function useReviewsControl(options: ReviewsControlOptions) {
 function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; state: ReviewsSurfaceProps['state']; owner: ReviewContext }) {
   const { context, state, owner } = props
   const review = owner.review
+  const isGitLab = review?.provider === 'gitlab'
   const details = owner.surface === 'detail' ? state.detail.details : null
   const item = itemDetails(details)
   const assignees = listOfLogins(review?.assignees ?? item?.assignees)
@@ -338,7 +344,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
 
   useEffect(() => {
     const request = ++catalogRequest.current
-    if (!assigneeOpen && !reviewerOpen) {
+    if (isGitLab || (!assigneeOpen && !reviewerOpen)) {
       setCatalog({ status: 'idle', options: [], error: null })
       return () => {
         if (catalogRequest.current === request) catalogRequest.current += 1
@@ -371,9 +377,10 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
       clearTimeout(timer)
       if (catalogRequest.current === request) catalogRequest.current += 1
     }
-  }, [assigneeOpen, reviewerOpen, query, context, owner.worktree, identity, catalogRetry])
+  }, [assigneeOpen, reviewerOpen, query, context, owner.worktree, identity, catalogRetry, isGitLab])
 
   const writeAssignees = (logins: string[], stillCurrent: () => boolean): Promise<unknown> => {
+    if (isGitLab) throw new Error('Assignment editing is unavailable for GitLab merge requests.')
     if (pendingRef.current !== null) throw new Error('An assignment change is already in progress.')
     const token = { id: ++writeGeneration.current, identity }
     pendingRef.current = token
@@ -406,6 +413,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
   }
 
   const writeReviewers = (action: 'add' | 'remove', logins: string[], stillCurrent: () => boolean): Promise<unknown> => {
+    if (isGitLab) throw new Error('Assignment editing is unavailable for GitLab merge requests.')
     if (pendingRef.current !== null) throw new Error('An assignment change is already in progress.')
     if (logins.length === 0) throw new Error('Enter at least one reviewer.')
     const token = { id: ++writeGeneration.current, identity }
@@ -451,11 +459,12 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
     session: 'assignments',
     active: true,
     actions: () => [
-      { action: 'assignees-open', enabled: !pending && assignees !== null && !assigneeOpen },
-      { action: 'reviewers-open', enabled: !pending && !reviewerOpen },
-      { action: 'reviewer-remove', enabled: !pending && (reviewers?.length ?? 0) > 0 },
+      { action: 'assignees-open', enabled: !isGitLab && !pending && assignees !== null && !assigneeOpen },
+      { action: 'reviewers-open', enabled: !isGitLab && !pending && !reviewerOpen },
+      { action: 'reviewer-remove', enabled: !isGitLab && !pending && (reviewers?.length ?? 0) > 0 },
     ],
     run: (request, isCurrent, accept) => {
+      if (isGitLab) throw new Error('Assignment editing is unavailable for GitLab merge requests.')
       const value = controlValue(request, request.action === 'reviewer-remove' ? ['login'] : [])
       const current = currentOwner(isCurrent)
       if (!current()) return
@@ -497,7 +506,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
     slot: 'assignee-form',
     owner,
     session: String(assigneeSession),
-    active: assigneeOpen,
+    active: assigneeOpen && !isGitLab,
     actions: () => [
       { action: 'assignees-close', enabled: !pending },
       { action: 'assignees-retry', enabled: catalog.status === 'error' },
@@ -505,6 +514,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
       { action: 'assignees-save', enabled: !pending && assignees !== null && assignmentError(selectedAssignees) === null },
     ],
     run: (request, isCurrent, accept) => {
+      if (isGitLab) throw new Error('Assignment editing is unavailable for GitLab merge requests.')
       const current = currentOwner(isCurrent)
       const session = assigneeSession
       const sessionIsCurrent = () => current() && assigneeSessionRef.current === session
@@ -562,7 +572,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
     slot: 'reviewer-form',
     owner,
     session: String(reviewerSession),
-    active: reviewerOpen,
+    active: reviewerOpen && !isGitLab,
     actions: () => [
       { action: 'reviewers-close', enabled: !pending },
       { action: 'reviewers-retry', enabled: catalog.status === 'error' },
@@ -570,6 +580,7 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
       { action: 'reviewers-add', enabled: !pending },
     ],
     run: (request, isCurrent, accept) => {
+      if (isGitLab) throw new Error('Assignment editing is unavailable for GitLab merge requests.')
       const current = currentOwner(isCurrent)
       const session = reviewerSession
       const sessionIsCurrent = () => current() && reviewerSessionRef.current === session
@@ -625,11 +636,11 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
     data-review-control-generation={assignmentsControl.generation}
   >
     <section className="ui-stack" aria-label="Assignees">
-      <SectionHeader title="Assignees" actions={<Button disabled={assignees === null || pending || assigneeOpen} onClick={() => { void assignmentsControl.request('assignees-open') }}>Edit assignees</Button>} />
+      <SectionHeader title="Assignees" actions={<Button disabled={isGitLab || assignees === null || pending || assigneeOpen} onClick={() => { void assignmentsControl.request('assignees-open') }}>Edit assignees</Button>} />
       {assignees === null ? <InlineError message="Assignee data is unavailable." /> : assignees.length === 0 ? <EmptyState message="No one assigned." /> : <ul className="ui-stack" style={{ listStyle: 'none', padding: 0 }}>
         {assignees.map((login) => <li key={login}><ListRow title={login} /></li>)}
       </ul>}
-      {assigneeOpen ? <div
+      {assigneeOpen && !isGitLab ? <div
         className="ui-stack"
         data-review-control-target={assigneeControl.target}
         data-review-control-generation={assigneeControl.generation}
@@ -663,12 +674,12 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
       </div> : null}
     </section>
     <section className="ui-stack" aria-label="Reviewers">
-      <SectionHeader title="Reviewers" actions={<Button disabled={pending || reviewerOpen} onClick={() => { void assignmentsControl.request('reviewers-open') }}>Request reviewers</Button>} />
+      <SectionHeader title="Reviewers" actions={<Button disabled={isGitLab || pending || reviewerOpen} onClick={() => { void assignmentsControl.request('reviewers-open') }}>Request reviewers</Button>} />
       {reviewers === null ? <InlineError message="Requested reviewer data is unavailable." /> : reviewers.length === 0 ? <EmptyState message="No reviewers requested." /> : <ul className="ui-stack" style={{ listStyle: 'none', padding: 0 }}>
-        {reviewers.map((login) => <li key={login}><ListRow title={login} trailing={<Button disabled={pending} aria-label={`Unrequest reviewer ${login}`} onClick={() => { void assignmentsControl.request('reviewer-remove', { login }) }}>Remove</Button>} /></li>)}
+        {reviewers.map((login) => <li key={login}><ListRow title={login} trailing={<Button disabled={isGitLab || pending} aria-label={`Unrequest reviewer ${login}`} onClick={() => { void assignmentsControl.request('reviewer-remove', { login }) }}>Remove</Button>} /></li>)}
       </ul>}
       {reviews === null ? <InlineError message="Review status is unavailable." /> : reviews.length === 0 ? <EmptyState message={reviewStatus ?? 'No reviews submitted yet.'} /> : <p className="ui-text-muted">{reviewStatus}</p>}
-      {reviewerOpen ? <div
+      {reviewerOpen && !isGitLab ? <div
         className="ui-stack"
         data-review-control-target={reviewerControl.target}
         data-review-control-generation={reviewerControl.generation}
@@ -692,9 +703,14 @@ function AssignmentPanels(props: { context: ReviewsSurfaceProps['context']; stat
 }
 
 export function ReviewPage(props: ReviewsSurfaceProps) {
-  const routing = useReviewLinkRouting(props.context)
   const owner = reviewContext(props.state, 'detail')
   const review = props.state.detail.review
+  const isGitLab = review?.provider === 'gitlab'
+  const reviewKind = isGitLab ? 'merge request' : 'pull request'
+  const reviewKindTitle = isGitLab ? 'Merge request' : 'Pull request'
+  const editDescriptionLabel = isGitLab ? 'Edit merge request description' : 'Edit description'
+  const saveDescriptionLabel = isGitLab ? 'Save merge request description' : 'Save description'
+  const routing = useReviewLinkRouting(props.context, isGitLab ? 'gitlab' : 'github')
   const detail = props.state.detail
   const url = review === null ? null : safeHttpUrl(review.url)
   const repo = targetRepo(detail.target, review, owner?.repo ?? null)
@@ -786,7 +802,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     refresh: props.refresh,
     resend: true,
   })
-  const canEditBody = itemDetails(detail.details)?.viewerCanUpdate === true
+  const canEditBody = canEditReviewBody(review, detail.details)
   const bodyBusyForSession = (bodyBusy?.identity === identity && bodyBusy.session === bodySession)
     || (bodyOperation.current?.identity === identity && bodyOperation.current.session === bodySession)
   const previousIdentity = useRef(identity)
@@ -826,6 +842,10 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   const loadWorkspaceRef = useRef<(isCurrent?: () => boolean) => Promise<void>>(async () => {})
   loadWorkspaceRef.current = (isCurrent = () => true) => {
     const currentOwner = ownerRef.current
+    if (currentOwner?.review?.provider === 'gitlab') {
+      setWorkspace({ status: 'ready', link: null, error: null })
+      return Promise.resolve()
+    }
     const currentUrl = urlRef.current
     const currentIdentity = identityRef.current
     const ownerIsCurrent = ownerGuard()
@@ -863,9 +883,14 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   }
 
   useEffect(() => {
-    void loadWorkspaceRef.current()
+    if (isGitLab) {
+      workspaceRequest.current += 1
+      setWorkspace({ status: 'ready', link: null, error: null })
+    } else {
+      void loadWorkspaceRef.current()
+    }
     return () => { workspaceRequest.current += 1 }
-  }, [props.context, identity, url])
+  }, [props.context, identity, url, isGitLab])
 
   const currentWorkspaceTarget = () => {
     const currentOwner = ownerRef.current
@@ -891,6 +916,9 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     const currentWorkspace = workspaceRef.current
     const currentTarget = currentWorkspaceTarget()
     const ownerIsCurrent = ownerGuard()
+    if (currentOwner?.review?.provider === 'gitlab') {
+      throw new Error('Workspace creation is unavailable for GitLab merge requests.')
+    }
     if (currentOwner === null || currentTarget === null || currentWorkspace.status !== 'ready') {
       throw new Error('Workspace link status is not ready.')
     }
@@ -944,11 +972,11 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
       { action: 'tab-set', enabled: owner !== null && !pageActionPending('tab-set') },
       { action: 'copy-link', enabled: url !== null && !pageActionPending('copy-link') },
       { action: 'open-link', enabled: owner !== null && url !== null && !pageActionPending('open-link') },
-      { action: 'workspace-retry', enabled: owner !== null && url !== null && workspace.status === 'error' && !pageActionPending('workspace-retry') },
-      { action: 'workspace-start', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link === null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
-      { action: 'workspace-resume', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link !== null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
-      { action: 'workspace-start-new', enabled: owner !== null && url !== null && workspace.status === 'ready' && workspace.link !== null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
-      { action: 'body-open', enabled: canEditBody && review !== null && !bodyEditing },
+      { action: 'workspace-retry', enabled: !isGitLab && owner !== null && url !== null && workspace.status === 'error' && !pageActionPending('workspace-retry') },
+      { action: 'workspace-start', enabled: !isGitLab && owner !== null && url !== null && workspace.status === 'ready' && workspace.link === null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
+      { action: 'workspace-resume', enabled: !isGitLab && owner !== null && url !== null && workspace.status === 'ready' && workspace.link !== null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
+      { action: 'workspace-start-new', enabled: !isGitLab && owner !== null && url !== null && workspace.status === 'ready' && workspace.link !== null && !workspaceBusy && workspaceOperation.current?.identity !== identity },
+      { action: 'body-open', enabled: owner !== null && canEditBody && review !== null && !bodyEditing },
     ],
     run: (request, isCurrent, accept) => {
       const ownerIsCurrent = ownerGuard()
@@ -1031,13 +1059,17 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
             if (current()) setPageError(null)
             return result
           }).catch((error) => {
-            if (current()) props.context.toast('Could not open pull request link', errorText(error), { kind: 'error' })
+            if (current()) {
+              if (isGitLab) props.context.toast('Could not open merge request link', errorText(error), { kind: 'error' })
+              else props.context.toast('Could not open pull request link', errorText(error), { kind: 'error' })
+            }
             throw error
           }),
         ))
       }
       if (request.action === 'workspace-retry') {
         requireNoControlValue(request)
+        if (isGitLab) throw new Error('Workspace creation is unavailable for GitLab merge requests.')
         if (workspaceRef.current.status !== 'error') throw new Error('Workspace link status is already available.')
         if (ownerRef.current === null) throw new Error('No pull request is selected.')
         if (urlRef.current === null) throw new Error('The pull request URL is unavailable.')
@@ -1046,13 +1078,14 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
       }
       if (request.action === 'workspace-start' || request.action === 'workspace-resume' || request.action === 'workspace-start-new') {
         requireNoControlValue(request)
+        if (isGitLab) throw new Error('Workspace creation is unavailable for GitLab merge requests.')
         return accept(openWorkspace(request.action === 'workspace-resume' ? 'resume' : 'start', request.action === 'workspace-start-new', isCurrent))
       }
       if (request.action === 'body-open') {
         requireNoControlValue(request)
         const currentOwner = ownerRef.current
-        if (itemDetails(detailRef.current.details)?.viewerCanUpdate !== true || currentOwner === null || currentOwner.review === null) {
-          throw new Error('You cannot edit this pull request description.')
+        if (!canEditReviewBody(currentOwner?.review ?? null, detailRef.current.details) || currentOwner === null || currentOwner.review === null) {
+          throw new Error(isGitLab ? 'You cannot edit this merge request description.' : 'You cannot edit this pull request description.')
         }
         bodySessionRef.current += 1
         setBodySession(bodySessionRef.current)
@@ -1086,8 +1119,8 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     const currentOwner = ownerRef.current
     const session = bodySessionRef.current
     if (currentOwner === null || currentOwner.review === null) throw new Error('No pull request is selected.')
-    if (itemDetails(detailRef.current.details)?.viewerCanUpdate !== true) {
-      throw new Error('You can no longer edit this pull request description.')
+    if (!canEditReviewBody(currentOwner.review, detailRef.current.details)) {
+      throw new Error(isGitLab ? 'You can no longer edit this merge request description.' : 'You can no longer edit this pull request description.')
     }
     if (bodyOperation.current?.identity === identity && bodyOperation.current.session === session) {
       throw new Error('The description is already being saved.')
@@ -1115,8 +1148,8 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
       try {
         await bodyField.settled()
         if (!stillCurrent() || action.status() === 'gone') return
-        if (itemDetails(detailRef.current.details)?.viewerCanUpdate !== true) {
-          throw new Error('You can no longer edit this pull request description.')
+        if (!canEditReviewBody(ownerRef.current?.review ?? null, detailRef.current.details)) {
+          throw new Error(isGitLab ? 'You can no longer edit this merge request description.' : 'You can no longer edit this pull request description.')
         }
         const value = action.take()
         if (value === null) throw new Error('The description draft is unavailable.')
@@ -1186,6 +1219,7 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
   const filesCount = isRecord(detail.files) && Array.isArray(detail.files.files) ? detail.files.files.length : null
   const commentsCount = isRecord(detail.comments) && Array.isArray(detail.comments.comments) ? detail.comments.comments.length : null
   const body = review?.body ?? ''
+  const updatedAt = itemUpdated(detail.details) ?? (isGitLab && typeof review?.updatedAt === 'string' ? review.updatedAt : null)
   const attached = workspace.link
   const workspaceReady = workspace.status === 'ready' && owner !== null && url !== null
   const workspaceAction = (action: 'start' | 'resume', newWorkspace = false) =>
@@ -1193,70 +1227,72 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
 
   if (owner === null) return <main
     className="ui-stack"
-    aria-label="Pull request detail"
+    aria-label={isGitLab ? 'Merge request detail' : 'Pull request detail'}
     data-review-control-target={pageControl.target}
     data-review-control-generation={pageControl.generation}
   >
-    <EmptyState message="No pull request selected. Open a pull request from Tasks or the Checks panel to view its details." />
+    <EmptyState message={isGitLab
+      ? 'No merge request selected. Open a merge request from the Checks panel to view its details.'
+      : 'No pull request selected. Open a pull request from Tasks or the Checks panel to view its details.'} />
     {pageError ? <InlineError message={pageError} /> : null}
   </main>
 
   return <main
     className="ui-stack"
-    aria-label="Pull request detail"
+    aria-label={isGitLab ? 'Merge request detail' : 'Pull request detail'}
     data-review-control-target={pageControl.target}
     data-review-control-generation={pageControl.generation}
   >
     <header className="ui-stack">
       <div className="ui-cluster" style={{ justifyContent: 'space-between' }}>
-        <Button onClick={() => { void pageControl.request('back') }}>Back to pull requests</Button>
-        <nav className="ui-cluster" aria-label="Pull request repository">
+        <Button onClick={() => { void pageControl.request('back') }}>Back to {isGitLab ? 'merge requests' : 'pull requests'}</Button>
+        <nav className="ui-cluster" aria-label={isGitLab ? 'Merge request repository' : 'Pull request repository'}>
           {repo ? <span>{repo.owner} / {repo.repo}</span> : <span>Repository unavailable</span>}
           <span>#{owner.number}</span>
         </nav>
         <div className="ui-cluster">
-          <Button disabled={url === null} onClick={() => { void pageControl.request('copy-link') }}>Copy pull request link</Button>
+          <Button disabled={url === null} onClick={() => { void pageControl.request('copy-link') }}>Copy {reviewKind} link</Button>
           <Button
             disabled={url === null}
             title={routing.title}
             onClick={(event) => { void pageControl.request('open-link', { invert: routing.invert(event) }) }}
-          >Open on host</Button>
+          >{isGitLab ? 'Open on GitLab' : 'Open on host'}</Button>
         </div>
       </div>
       {review === null ? <div className="ui-stack">
-        <SectionHeader title={`Pull request #${owner.number}`} />
+        <SectionHeader title={`${reviewKindTitle} #${owner.number}`} />
         {detail.loading
-          ? <div aria-live="polite"><NoticeLine>Loading pull request…</NoticeLine></div>
-          : <InlineError message={detail.error ?? 'Pull request details are unavailable.'} action={{ label: 'Retry', onAction: () => { void pageControl.request('refresh') } }} />}
+          ? <div aria-live="polite"><NoticeLine>{isGitLab ? 'Loading merge request…' : 'Loading pull request…'}</NoticeLine></div>
+          : <InlineError message={detail.error ?? (isGitLab ? 'Merge request details are unavailable.' : 'Pull request details are unavailable.')} action={{ label: 'Retry', onAction: () => { void pageControl.request('refresh') } }} />}
       </div> : <>
         <div className="ui-cluster" style={{ justifyContent: 'space-between', alignItems: 'start' }}>
           <div className="ui-stack">
             <h1>{review.title} <span>#{review.number}</span></h1>
             <Badge tone={review.state === 'open' ? 'working' : review.state === 'merged' ? 'accent' : 'neutral'}>{review.state === 'open' ? 'Open' : review.state === 'draft' ? 'Draft' : review.state === 'closed' ? 'Closed' : 'Merged'}</Badge>
           </div>
-          <div className="ui-cluster">
-            <Button
-              disabled={!workspaceReady || workspaceBusy}
-              onClick={() => { void workspaceAction(attached ? 'resume' : 'start') }}
-            >{workspaceBusy ? 'Opening…' : attached ? `Resume workspace · ${attached.name}` : 'Start workspace'}</Button>
-            {attached ? <Menu label="Workspace options" items={[{
-              id: 'start-new-workspace',
-              label: 'Start new workspace',
-              disabled: !workspaceReady || workspaceBusy,
-              onAction: () => { void workspaceAction('start', true) },
-            }]} /> : null}
-          </div>
+          {isGitLab ? <NoticeLine>Workspace creation is unavailable for GitLab merge requests.</NoticeLine> : <div className="ui-cluster">
+              <Button
+                disabled={!workspaceReady || workspaceBusy}
+                onClick={() => { void workspaceAction(attached ? 'resume' : 'start') }}
+              >{workspaceBusy ? 'Opening…' : attached ? `Resume workspace · ${attached.name}` : 'Start workspace'}</Button>
+              {attached ? <Menu label="Workspace options" items={[{
+                id: 'start-new-workspace',
+                label: 'Start new workspace',
+                disabled: !workspaceReady || workspaceBusy,
+                onAction: () => { void workspaceAction('start', true) },
+              }]} /> : null}
+            </div>}
         </div>
-        {workspace.status === 'loading' ? <div aria-live="polite"><NoticeLine>Checking linked workspace…</NoticeLine></div> : null}
-        {workspace.status === 'error' ? <InlineError
+        {!isGitLab && workspace.status === 'loading' ? <div aria-live="polite"><NoticeLine>Checking linked workspace…</NoticeLine></div> : null}
+        {!isGitLab && workspace.status === 'error' ? <InlineError
           message={`Workspace link status unavailable: ${workspace.error ?? 'Workspace attachment could not be checked.'}. Start and Resume are disabled until the link can be checked.`}
           action={{ label: 'Retry', onAction: () => { void pageControl.request('workspace-retry') } }}
         /> : null}
         <div className="ui-cluster ui-text-muted">
           <span>by {itemAuthor(detail.details) ?? 'Unknown author'}</span>
           <span>{review.baseRefName} ← {review.headRefName}</span>
-          {relativeUpdated(itemUpdated(detail.details)) ? <time>{relativeUpdated(itemUpdated(detail.details))}</time> : null}
-          {attached ? <span>Workspace: {attached.name}</span> : workspace.status === 'ready' ? <span>No linked workspace</span> : null}
+          {relativeUpdated(updatedAt) ? <time>{relativeUpdated(updatedAt)}</time> : null}
+          {!isGitLab && attached ? <span>Workspace: {attached.name}</span> : !isGitLab && workspace.status === 'ready' ? <span>No linked workspace</span> : null}
         </div>
       </>}
     </header>
@@ -1267,14 +1303,14 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
     /> : null}
     {pageError ? <InlineError message={pageError} /> : null}
     {review === null ? null : <div className="ui-stack">
-      <Tabs label="Pull request sections" items={[
+      <Tabs label={isGitLab ? 'Merge request sections' : 'Pull request sections'} items={[
         { id: 'conversation', label: `Conversation${commentsCount === null ? '' : ` (${commentsCount})`}` },
         { id: 'checks', label: `Checks${checksCount === null ? '' : ` (${checksCount})`}` },
         { id: 'files', label: `Files changed${filesCount === null ? '' : ` (${filesCount})`}` },
       ]} value={detail.tab} onChange={(tab) => { void pageControl.request('tab-set', { tab }) }} />
       <div className="ui-cluster" style={{ justifyContent: 'flex-end' }}>
         <Button disabled={detail.loading} onClick={() => { void pageControl.request('refresh') }}>
-          {detail.loading ? 'Refreshing…' : 'Refresh pull request'}
+          {detail.loading ? 'Refreshing…' : `Refresh ${reviewKind}`}
         </Button>
       </div>
     </div>}
@@ -1284,18 +1320,18 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
         {detail.tab === 'conversation' ? <>
           <section
             className="ui-stack"
-            aria-label="Pull request description"
+            aria-label={isGitLab ? 'Merge request description' : 'Pull request description'}
             data-review-control-target={bodyControl.target}
             data-review-control-generation={bodyControl.generation}
           >
-            <SectionHeader title="Description" actions={canEditBody && !bodyEditing
-              ? <Button onClick={() => { void pageControl.request('body-open') }}>Edit description</Button>
+            <SectionHeader title={isGitLab ? 'Merge request description' : 'Description'} actions={canEditBody && !bodyEditing
+              ? <Button onClick={() => { void pageControl.request('body-open') }}>{editDescriptionLabel}</Button>
               : undefined} />
             {bodyEditing ? <div className="ui-stack">
               <MarkdownComposer
                 value={bodyField.value ?? body}
                 onChange={updateBodyDraft}
-                label="Pull request description"
+                label={`${reviewKindTitle} description`}
                 minRows={8}
                 disabled={!canEditBody}
                 onSubmit={() => { void bodyControl.request('body-save') }}
@@ -1303,14 +1339,16 @@ export function ReviewPage(props: ReviewsSurfaceProps) {
               {bodySaveError ?? bodyField.error ? <InlineError message={bodySaveError ?? bodyField.error ?? ''} /> : null}
               <div className="ui-cluster">
                 <Button variant="primary" disabled={!canEditBody || bodyBusyForSession} onClick={() => { void bodyControl.request('body-save') }}>
-                  {bodyBusyForSession ? 'Saving…' : 'Save description'}
+                  {bodyBusyForSession ? 'Saving…' : saveDescriptionLabel}
                 </Button>
                 <Button onClick={() => { void bodyControl.request('body-cancel') }}>Cancel</Button>
               </div>
             </div> : body === '' ? <EmptyState message="No description." /> : <div><Markdown source={body} /></div>}
           </section>
           <Comments {...props} surface="detail" />
-        </> : detail.tab === 'checks' ? <ChecksList {...props} surface="detail" /> : <FilesChanged {...props} />}
+        </> : detail.tab === 'checks' ? <ChecksList {...props} surface="detail" /> : (
+          isGitLab ? <NoticeLine>Changed files are unavailable for GitLab merge requests.</NoticeLine> : <FilesChanged {...props} />
+        )}
       </div>
       <aside className="ui-stack" aria-label="Review actions and assignments">
         <ReviewActions {...props} surface="detail" />

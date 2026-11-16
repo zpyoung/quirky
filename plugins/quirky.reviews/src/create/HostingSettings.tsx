@@ -11,21 +11,15 @@ import {
   type ReviewsUiControlResult
 } from '../checks/data'
 import { isRecord } from './guards'
+import { parseAuthDiagnostics, parseRepoIdentity, type RepoIdentity, type ReviewProvider, type ReviewsAuthDiagnostics } from '../detail/data'
+
 
 type Account = { host: string; user: string; source: string; bindable: boolean; scopes: string[] }
 type AccountsSnapshot = { requiredHost: string; accounts: Account[] }
 type HostingConfig = { account: { host: string; user: string } | null }
 type Budget = { limit: number; remaining: number; resetAt: number }
 type BudgetSnapshot = { core: Budget; search: Budget; graphql: Budget; fetchedAt: number }
-type ProviderCheck = {
-  ghAvailable: boolean
-  requiredHost: string
-  requiredHostAuthenticated: boolean
-  missingScopes: string[]
-  requiredScopes: string[]
-  envTokenInProcess: boolean
-  activeAccount: unknown
-}
+type ProviderCheck = ReviewsAuthDiagnostics
 
 const DEFAULT_FIELDS: Array<{ key: keyof CreationDefaults; label: string }> = [
   { key: 'draft', label: 'Draft by default' },
@@ -60,19 +54,15 @@ function accountList(value: unknown): AccountsSnapshot | null {
 }
 
 function providerCheck(value: unknown): ProviderCheck | null {
-  if (!isRecord(value) || typeof value.ghAvailable !== 'boolean' || typeof value.requiredHostAuthenticated !== 'boolean' ||
-    typeof value.requiredHost !== 'string' || typeof value.envTokenInProcess !== 'boolean' || !Array.isArray(value.missingScopes) ||
-    value.missingScopes.some((scope) => typeof scope !== 'string') || !Array.isArray(value.requiredScopes) ||
-    value.requiredScopes.some((scope) => typeof scope !== 'string')) return null
-  return {
-    ghAvailable: value.ghAvailable,
-    requiredHost: value.requiredHost,
-    requiredHostAuthenticated: value.requiredHostAuthenticated,
-    missingScopes: value.missingScopes as string[],
-    requiredScopes: value.requiredScopes as string[],
-    envTokenInProcess: value.envTokenInProcess,
-    activeAccount: value.activeAccount
+  if (!isRecord(value)) return null
+  const parserValue = value.provider === 'gitlab' ? value : {
+    ...value,
+    ...(value.accounts === undefined ? { accounts: [] } : {}),
+    ...(value.hasKeyringFallback === undefined ? { hasKeyringFallback: false } : {})
   }
+  const parsed = parseAuthDiagnostics(parserValue)
+  if (!parsed || (parsed.provider !== 'gitlab' && typeof parsed.requiredHost !== 'string')) return null
+  return parsed
 }
 
 function hostingConfig(value: unknown): HostingConfig | null {
@@ -117,6 +107,12 @@ function workspaceOptions(value: unknown): WorkspaceOption[] | null {
 function accountKey(account: { host: string; user: string } | null): string {
   return account ? `${account.host}\u0000${account.user}` : 'ambient'
 }
+function settingsIdentity(provider: unknown, repository: unknown): string {
+  const knownProvider: ReviewProvider | undefined = provider === 'github' || provider === 'gitlab' ? provider : undefined
+  const providerKey = knownProvider ?? (typeof provider === 'string' && provider !== '' ? `unknown:${provider}` : null)
+  const identity: RepoIdentity | null = parseRepoIdentity(repository, knownProvider)
+  return JSON.stringify([providerKey, identity ? [identity.host.toLowerCase(), identity.owner.toLowerCase(), identity.repo.toLowerCase()] : null])
+}
 
 function percentTone(bucket: Budget): 'ok' | 'warning' | 'critical' | 'unknown' {
   if (bucket.limit <= 0 || bucket.remaining < 0) return 'unknown'
@@ -138,12 +134,14 @@ function resetLabel(resetAt: number): string {
 }
 
 function githubLoginCommand(check: ProviderCheck): string {
-  const host = /^[A-Za-z0-9.[\]:-]+$/.test(check.requiredHost) ? check.requiredHost : 'github.com'
+  const requiredHost = typeof check.requiredHost === 'string' ? check.requiredHost : 'github.com'
+  const host = /^[A-Za-z0-9.[\]:-]+$/.test(requiredHost) ? requiredHost : 'github.com'
   return `gh auth login --hostname ${host}`
 }
 
 function githubScopeCommand(check: ProviderCheck): string {
-  const host = /^[A-Za-z0-9.[\]:-]+$/.test(check.requiredHost) ? check.requiredHost : 'github.com'
+  const requiredHost = typeof check.requiredHost === 'string' ? check.requiredHost : 'github.com'
+  const host = /^[A-Za-z0-9.[\]:-]+$/.test(requiredHost) ? requiredHost : 'github.com'
   const scopes = check.missingScopes.filter((scope) => /^[A-Za-z0-9:_-]+$/.test(scope))
   return `gh auth refresh --hostname ${host}${scopes.map((scope) => ` -s ${scope}`).join('')}`
 }
@@ -154,13 +152,15 @@ type SettingsControlOptions = {
   context: UiPluginContext
   slot: string
   worktree: string | null
+  identity?: string
   actions(): ControlAction[]
   run: ControlRun
   onError(message: string): void
 }
 
-function settingsControlTarget(slot: string, worktree: string | null): string {
-  return JSON.stringify([SETTINGS_VIEW, slot, worktree, null, null, null, null])
+function settingsControlTarget(slot: string, worktree: string | null, identity?: string): string {
+  const target = [SETTINGS_VIEW, slot, worktree, null, null, null, null]
+  return JSON.stringify(identity === undefined ? target : [...target, identity])
 }
 
 function exactValue(value: unknown, keys: string[], label: string): Record<string, unknown> {
@@ -190,7 +190,7 @@ function requestSettingsControl(
 }
 
 function useSettingsControl(options: SettingsControlOptions) {
-  const target = settingsControlTarget(options.slot, options.worktree)
+  const target = settingsControlTarget(options.slot, options.worktree, options.identity)
   const actionsRef = useRef(options.actions)
   const runRef = useRef(options.run)
   const errorRef = useRef(options.onError)
@@ -275,6 +275,7 @@ type SettingsOperationOwner = {
   token: symbol
   isCurrent: () => boolean
   forceBudget: boolean
+  hostingSession: number | null
 }
 type SettingsOperationState = Record<SettingsOperationKind, SettingsOperationOwner | null>
 
@@ -288,11 +289,18 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   const settings = props.state.settings
   const settingsMatches = worktree !== null && settings.worktree === worktree
   const diagnostics = settingsMatches ? providerCheck(settings.diagnostics) : null
-  const provider = diagnostics
-  const accountsData = settingsMatches ? accountList(settings.accounts) : null
+  const declaredProvider = settingsMatches ? settings.provider : null
+  const providerId: ReviewProvider | null = declaredProvider === 'github' || declaredProvider === 'gitlab'
+    ? declaredProvider
+    : declaredProvider === null || declaredProvider === undefined ? diagnostics?.provider ?? 'github' : null
+  const provider = diagnostics && (diagnostics.provider ?? 'github') === providerId ? diagnostics : null
+  const isGitLab = providerId === 'gitlab'
+  const isGitHub = providerId === 'github'
+  const hostingIdentity = settingsIdentity(providerId ?? declaredProvider, settingsMatches ? settings.repository : null)
+  const accountsData = settingsMatches && isGitHub ? accountList(settings.accounts) : null
   const accounts = accountsData?.accounts ?? []
-  const configuration = settingsMatches ? hostingConfig(settings.configuration) : null
-  const budget = settingsMatches ? budgetValue(settings.budget) : null
+  const configuration = settingsMatches && isGitHub ? hostingConfig(settings.configuration) : null
+  const budget = settingsMatches && isGitHub ? budgetValue(settings.budget) : null
   const [localSettingsError, setLocalSettingsError] = useState<string | null>(null)
   const [accountSelection, setAccountSelection] = useState('ambient')
   const accountSelectionRef = useRef(accountSelection)
@@ -358,6 +366,11 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   }
   currentWorktree.current = worktree
   const worktreeSessionEpoch = worktreeSession.current.epoch
+  const hostingSession = useRef({ identity: hostingIdentity, epoch: 0 })
+  if (hostingSession.current.identity !== hostingIdentity) {
+    hostingSession.current = { identity: hostingIdentity, epoch: hostingSession.current.epoch + 1 }
+  }
+  const hostingSessionEpoch = hostingSession.current.epoch
   function replaceWorktree(next: string | null) {
     if (currentWorktree.current === next) return
     workspaceControl.invalidate()
@@ -371,21 +384,22 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   const providerOwner = operationState.provider
   const budgetOwner = operationState.budget
   const loadingProvider = worktree !== null && providerOwner?.worktree === worktree && providerOwner.isCurrent()
-  const loadingBudget = worktree !== null && (
+  const loadingBudget = isGitHub && worktree !== null && (
     (budgetOwner?.worktree === worktree && budgetOwner.isCurrent()) ||
     (providerOwner?.worktree === worktree && providerOwner.isCurrent() && providerOwner.forceBudget)
   )
   const savingAccount = worktree !== null && operationState.account?.worktree === worktree && operationState.account.isCurrent()
   const savingDefaults = operationState.defaults?.worktree === worktree
     && operationState.defaults.scope === defaultScope && operationState.defaults.isCurrent()
-  const refreshingBudget = worktree !== null && budgetOwner?.worktree === worktree && budgetOwner.isCurrent()
+  const refreshingBudget = isGitHub && worktree !== null && budgetOwner?.worktree === worktree && budgetOwner.isCurrent()
+  const providerName = providerId === 'gitlab' ? 'GitLab' : providerId === 'github' ? 'GitHub' : 'Hosting'
   const providerError = worktree !== null && provider === null && !loadingProvider
-    ? settingsError ?? 'GitHub diagnostics are unavailable.' : null
-  const accountsError = worktree !== null && accountsData === null && !loadingProvider
+    ? settingsError ?? `${providerName} diagnostics are unavailable.` : null
+  const accountsError = isGitHub && worktree !== null && accountsData === null && !loadingProvider
     ? settingsError ?? 'GitHub accounts are unavailable.' : null
-  const configurationError = worktree !== null && configuration === null && !loadingProvider
+  const configurationError = isGitHub && worktree !== null && configuration === null && !loadingProvider
     ? settingsError ?? 'Repository hosting configuration is unavailable.' : null
-  const budgetError = worktree !== null && budget === null && !loadingBudget
+  const budgetError = isGitHub && worktree !== null && budget === null && !loadingBudget
     ? settingsError ?? 'GitHub API budget is unavailable.' : null
   const storedAccountKey = accountKey(configuration?.account ?? null)
   const repositoryDefaultsReady = worktree !== null && repoDefaultsWorktree === worktree
@@ -398,7 +412,8 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     operationStateRef.current = next
     setOperationState(next)
   }
-  const operationKey = (kind: SettingsOperationKind, target: string | null, scope: string) => JSON.stringify([kind, target, scope])
+  const operationKey = (kind: SettingsOperationKind, target: string | null, scope: string) =>
+    JSON.stringify([kind, target, scope, kind === 'account' || kind === 'provider' || kind === 'budget' ? hostingSessionEpoch : null])
   const operationLocked = (kind: SettingsOperationKind, target: string | null, scope: string) => operationLocks.current.has(operationKey(kind, target, scope))
   const operationOwnerIsCurrent = (kind: SettingsOperationKind, target: string | null, scope?: string) => {
     const owner = operationStateRef.current[kind]
@@ -417,7 +432,10 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     if (!isCurrent()) return false
     const key = operationKey(kind, target, scope)
     if (operationLocks.current.has(key)) return false
-    const owner: SettingsOperationOwner = { kind, action, worktree: target, scope, token: Symbol(action), isCurrent, forceBudget }
+    const owner: SettingsOperationOwner = {
+      kind, action, worktree: target, scope, token: Symbol(action), isCurrent, forceBudget,
+      hostingSession: kind === 'account' || kind === 'provider' || kind === 'budget' ? hostingSessionEpoch : null
+    }
     operationLocks.current.set(key, owner)
     setOperationOwner(kind, owner)
     void Promise.resolve().then(() => {
@@ -444,9 +462,10 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     for (const [key, owner] of operationLocks.current) {
       const replacedTarget = owner.kind !== 'workspace' && owner.worktree !== worktree
       const replacedScope = owner.kind === 'defaults' && owner.scope !== defaultScope
-      if ((replacedTarget || replacedScope) && operationLocks.current.get(key) === owner) operationLocks.current.delete(key)
+      const replacedHosting = owner.hostingSession !== null && owner.hostingSession !== hostingSessionEpoch
+      if ((replacedTarget || replacedScope || replacedHosting) && operationLocks.current.get(key) === owner) operationLocks.current.delete(key)
     }
-  }, [defaultScope, worktree])
+  }, [defaultScope, hostingSessionEpoch, worktree])
 
   const loadWorktrees = useCallback(async (isCurrent: () => boolean = () => mounted.current) => {
     const request = ++workspaceRequestSequence.current
@@ -475,6 +494,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   }, [loadWorktrees])
 
   const runBudgetRefresh = useCallback(async (target: string, force: boolean, isCurrent: () => boolean) => {
+    if (providerId !== 'github' || !isCurrent()) return
     setLocalSettingsError(null)
     try {
       await props.context.call('quirky.reviews/hostingBudget', { worktree: target, force })
@@ -484,7 +504,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     }
     if (!isCurrent()) return
     await props.refresh()
-  }, [props.context, props.refresh])
+  }, [props.context, props.refresh, providerId])
 
   const runProviderRefresh = useCallback(async (target: string, forceBudget: boolean, isCurrent: () => boolean) => {
     setLocalSettingsError(null)
@@ -511,9 +531,11 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
 
   const refreshBudget = useCallback((force: boolean) => {
     const target = worktree
-    if (!target) return
+    if (!target || !isGitHub) return
     const session = worktreeSession.current.epoch
-    const isCurrent = () => mounted.current && currentWorktree.current === target && worktreeSession.current.epoch === session
+    const hostSession = hostingSession.current.epoch
+    const isCurrent = () => mounted.current && currentWorktree.current === target &&
+      worktreeSession.current.epoch === session && hostingSession.current.epoch === hostSession
     startOperation(
       'budget',
       force ? 'budget-visible-refresh' : 'budget-timer-refresh',
@@ -524,13 +546,15 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       () => runBudgetRefresh(target, force, isCurrent),
       setLocalSettingsError
     )
-  }, [runBudgetRefresh, worktree])
+  }, [isGitHub, runBudgetRefresh, worktree])
 
   const recheckProvider = useCallback((forceBudget = true) => {
     const target = worktree
-    if (!target) return
+    if (!target || providerId === null) return
     const session = worktreeSession.current.epoch
-    const isCurrent = () => mounted.current && currentWorktree.current === target && worktreeSession.current.epoch === session
+    const hostSession = hostingSession.current.epoch
+    const isCurrent = () => mounted.current && currentWorktree.current === target &&
+      worktreeSession.current.epoch === session && hostingSession.current.epoch === hostSession
     startOperation(
       'provider',
       'provider-recheck',
@@ -541,7 +565,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       () => runProviderRefresh(target, forceBudget, isCurrent),
       setLocalSettingsError
     )
-  }, [runProviderRefresh, worktree])
+  }, [hostingSessionEpoch, providerId, runProviderRefresh, worktree])
 
   const loadDefaults = useCallback(async (request: number, controlCurrent: () => boolean = () => true) => {
     const target = worktree
@@ -628,14 +652,18 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   useEffect(() => {
     accountSelectionRef.current = storedAccountKey
     setAccountSelection(storedAccountKey)
-  }, [worktree, storedAccountKey])
+  }, [hostingIdentity, worktree, storedAccountKey])
+  useEffect(() => {
+    setLocalSettingsError(null)
+    setAccountSaveError(null)
+  }, [hostingIdentity])
 
   useEffect(() => {
     const refreshVisibleBudget = () => {
-      if (document.visibilityState === 'visible') refreshBudget(false)
+      if (isGitHub && document.visibilityState === 'visible') refreshBudget(false)
     }
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') refreshBudget(true)
+      if (isGitHub && document.visibilityState === 'visible') refreshBudget(true)
     }
     const timer = window.setInterval(refreshVisibleBudget, 60_000)
     document.addEventListener('visibilitychange', onVisibilityChange)
@@ -643,7 +671,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibilityChange)
     }
-  }, [refreshBudget])
+  }, [isGitHub, refreshBudget])
   const selectedDefaults = defaultScope === 'global' || !repositoryDefaultsReady ? globalDefaults : repoDefaults
   const displayedDefaults = defaultScope === 'repository' && !currentRepoHasOverride ? globalDefaults : selectedDefaults
   const setDefault = (key: keyof CreationDefaults, value: boolean) => {
@@ -677,7 +705,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
   const defaultsReadBusy = operationLocked('defaults', worktree, 'read')
   const defaultsWriteBusy = operationLocked('defaults', worktree, defaultScope)
   const accountWriteBusy = operationLocked('account', worktree, 'hosting')
-  const canSelectAccount = worktree !== null && configuration !== null && accountsData !== null &&
+  const canSelectAccount = isGitHub && worktree !== null && configuration !== null && accountsData !== null &&
     !savingAccount && !loadingProvider && !accountWriteBusy
   const canSaveAccount = canSelectAccount && (accountSelectionRef.current === 'ambient' || selectedAccount !== null)
   const canSelectRepositoryScope = worktree !== null && repositoryDefaultsReady && !repositoryDefaultsLoading &&
@@ -690,10 +718,11 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     !repositoryDefaultsLoading && !defaultsReadBusy && !defaultsWriteBusy
   const defaultsReadFailed = (defaultsError !== null && !globalDefaultsReady) || repositoryDefaultsError !== null
   const canRetryDefaults = defaultsReadFailed && !globalDefaultsLoading && !repositoryDefaultsLoading && !defaultsReadBusy
-  const canRecheckProvider = worktree !== null && !loadingProvider && !operationLocked('provider', worktree, 'hosting')
-  const canRefreshBudget = worktree !== null && !loadingBudget && !operationLocked('budget', worktree, 'hosting')
-  const currentFor = (target: string | null, isCurrent: () => boolean, session = worktreeSessionEpoch) =>
-    () => mounted.current && isCurrent() && currentWorktree.current === target && worktreeSession.current.epoch === session
+  const canRecheckProvider = worktree !== null && providerId !== null && !loadingProvider && !operationLocked('provider', worktree, 'hosting')
+  const canRefreshBudget = isGitHub && worktree !== null && !loadingBudget && !operationLocked('budget', worktree, 'hosting')
+  const currentFor = (target: string | null, isCurrent: () => boolean, session = worktreeSessionEpoch, hostSession?: number) =>
+    () => mounted.current && isCurrent() && currentWorktree.current === target &&
+      worktreeSession.current.epoch === session && (hostSession === undefined || hostingSession.current.epoch === hostSession)
 
   const runWorkspaceControl: ControlRun = (request, isCurrent) => {
     const target = worktree
@@ -791,7 +820,10 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
 
   const runHostingControl: ControlRun = (request, isCurrent) => {
     const target = worktree
-    const current = currentFor(target, isCurrent)
+    const current = currentFor(target, isCurrent, worktreeSessionEpoch, hostingSessionEpoch)
+    if ((request.action === 'account-select' || request.action === 'account-save') && !isGitHub) {
+      throw new Error(isGitLab ? 'Account binding is unavailable for GitLab.' : 'Account binding is unavailable for this provider.')
+    }
     if (request.action === 'account-select') {
       if (!canSelectAccount) throw new Error('Repository account selection is not ready.')
       const value = request.value
@@ -845,7 +877,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     }
     if (request.action === 'provider-recheck') {
       noValue(request, request.action)
-      if (!canRecheckProvider || !target) throw new Error('GitHub readiness cannot be rechecked right now.')
+      if (!canRecheckProvider || !target) throw new Error(`${providerName} readiness cannot be rechecked right now.`)
       startOperation('provider', 'provider-read', target, 'hosting', current, true,
         (owner) => runProviderRefresh(target, true, owner.isCurrent),
         setLocalSettingsError)
@@ -853,6 +885,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     }
     if (request.action === 'budget-refresh') {
       noValue(request, request.action)
+      if (!isGitHub) throw new Error(isGitLab ? 'API budget is unavailable for GitLab.' : 'API budget is unavailable for this provider.')
       if (!canRefreshBudget || !target) throw new Error('GitHub API budget cannot be refreshed right now.')
       startOperation('budget', 'budget-read', target, 'hosting', current, true,
         (owner) => runBudgetRefresh(target, true, owner.isCurrent),
@@ -908,6 +941,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     context: props.context,
     slot: 'settings-hosting',
     worktree,
+    identity: hostingIdentity,
     actions: () => {
       const accountBusy = operationOwnerIsCurrent('account', worktree, 'hosting')
       const providerBusy = operationOwnerIsCurrent('provider', worktree, 'hosting') || accountBusy
@@ -918,23 +952,36 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       const selectionIsValid = accountSelectionRef.current === 'ambient' || requiredHostAccounts.some((account) =>
         accountKey(account) === accountSelectionRef.current && account.bindable)
       return [
-        { action: 'provider-recheck', enabled: worktree !== null && !providerBusy && !operationLocked('provider', worktree, 'hosting') },
-        { action: 'budget-refresh', enabled: worktree !== null && !budgetBusy && !operationLocked('budget', worktree, 'hosting') },
-        { action: 'account-select', enabled: canSelect },
-        { action: 'account-save', enabled: canSelect && selectionIsValid && !operationLocked('account', worktree, 'hosting') }
+        { action: 'provider-recheck', enabled: providerId !== null && worktree !== null && !providerBusy && !operationLocked('provider', worktree, 'hosting') },
+        { action: 'budget-refresh', enabled: isGitHub && worktree !== null && !budgetBusy && !operationLocked('budget', worktree, 'hosting') },
+        { action: 'account-select', enabled: isGitHub && canSelect },
+        { action: 'account-save', enabled: isGitHub && canSelect && selectionIsValid && !operationLocked('account', worktree, 'hosting') }
       ]
     },
     run: runHostingControl,
     onError: setLocalSettingsError
   })
 
-  const githubReadiness = providerError ? 'Unavailable' : !provider ? 'Checking…'
-    : !provider.ghAvailable ? 'Not installed'
-      : !provider.requiredHostAuthenticated ? 'Not authenticated'
-        : provider.missingScopes.length > 0 ? 'Connected · scope update needed'
+  const githubCheck = provider && provider.provider !== 'gitlab' ? provider : null
+  const gitlabCheck = provider?.provider === 'gitlab' ? provider : null
+  const githubReadiness = providerError ? 'Unavailable' : !githubCheck ? 'Checking…'
+    : !githubCheck.ghAvailable ? 'Not installed'
+      : !githubCheck.requiredHostAuthenticated ? 'Not authenticated'
+        : githubCheck.missingScopes.length > 0 ? 'Connected · scope update needed'
           : 'Connected'
-  const activeAccount = provider && isRecord(provider.activeAccount) && typeof provider.activeAccount.user === 'string' && typeof provider.activeAccount.host === 'string'
-    ? `${provider.activeAccount.user} @ ${provider.activeAccount.host}` : null
+  const gitlabReadiness = providerError ? 'Unavailable' : !gitlabCheck ? 'Checking…'
+    : !gitlabCheck.requiredHostAuthenticated ? 'Not authenticated'
+      : gitlabCheck.missingScopes.length > 0 ? 'Connected · scope update needed'
+        : 'Connected'
+  const activeAccount = githubCheck && isRecord(githubCheck.activeAccount) &&
+    typeof githubCheck.activeAccount.user === 'string' && typeof githubCheck.activeAccount.host === 'string'
+    ? `${githubCheck.activeAccount.user} @ ${githubCheck.activeAccount.host}` : null
+  const gitlabActiveAccount = gitlabCheck === null ? null : gitlabCheck.accounts.find((account) =>
+    account.active && account.host.toLowerCase() === gitlabCheck.requiredHost.toLowerCase()) ?? null
+  const gitlabScopesUnknown = gitlabCheck !== null && gitlabCheck.requiredHostAuthenticated &&
+    gitlabCheck.missingScopes.length === 0 && (!gitlabActiveAccount || gitlabActiveAccount.scopes.length === 0)
+  const gitlabTokenSource = gitlabCheck?.tokenSource === 'env' ? 'GITLAB_TOKEN'
+    : gitlabCheck?.tokenSource === 'glab' ? 'glab' : null
 
   return <main className="ui-stack" aria-label="Hosting settings">
     <header className="ui-stack">
@@ -976,29 +1023,44 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     <section className="ui-stack" aria-label="Review providers" aria-busy={loadingProvider} aria-live="polite">
       <SectionHeader title="Review providers" />
       {!worktree && <EmptyState message="Select a registered Git worktree to inspect repository hosting." />}
+      {worktree && providerError && <InlineError message={providerError} />}
       <article className="ui-stack" aria-label="GitHub">
         <SectionHeader title="GitHub" />
-        {worktree && loadingProvider && <NoticeLine>Checking GitHub readiness…</NoticeLine>}
-        {worktree && providerError && <InlineError message={providerError} />}
-        {provider && <p role="status">
-          <Badge tone={provider.missingScopes.length ? 'needs-you' : provider.requiredHostAuthenticated ? 'working' : 'neutral'}>{githubReadiness}</Badge>
-        </p>}
-        {provider && <>
-          {provider.ghAvailable === false && <p>Install GitHub CLI: <code>brew install gh</code></p>}
-          {provider.ghAvailable && !provider.requiredHostAuthenticated && <p>Sign in to {provider.requiredHost}: <code>{githubLoginCommand(provider)}</code></p>}
-          {provider.missingScopes.length > 0 && <p>Required scopes are missing. Re-authorize with: <code>{githubScopeCommand(provider)}</code></p>}
-          {activeAccount && <p>Active account: {activeAccount}</p>}
-          {provider.envTokenInProcess && <p>Environment credentials are in use for this process. Credentials are never shown or stored by these settings.</p>}
-        </>}
-        <Button disabled={!canRecheckProvider} onClick={() => { void hostingControl.request('provider-recheck') }}>{loadingProvider ? 'Re-checking…' : 'Re-check GitHub'}</Button>
-        {provider && <p>Required account scope: <code>{provider.requiredHost}</code>{provider.requiredScopes.length ? ` · ${provider.requiredScopes.join(', ')}` : ''}</p>}
+        {isGitHub ? <>
+          {worktree && loadingProvider && <NoticeLine>Checking GitHub readiness…</NoticeLine>}
+          {githubCheck && <p role="status">
+            <Badge tone={githubCheck.missingScopes.length ? 'needs-you' : githubCheck.requiredHostAuthenticated ? 'working' : 'neutral'}>{githubReadiness}</Badge>
+          </p>}
+          {githubCheck && <>
+            {githubCheck.ghAvailable === false && <p>Install GitHub CLI: <code>brew install gh</code></p>}
+            {githubCheck.ghAvailable && !githubCheck.requiredHostAuthenticated && <p>Sign in to {githubCheck.requiredHost ?? 'github.com'}: <code>{githubLoginCommand(githubCheck)}</code></p>}
+            {githubCheck.missingScopes.length > 0 && <p>Required scopes are missing. Re-authorize with: <code>{githubScopeCommand(githubCheck)}</code></p>}
+            {activeAccount && <p>Active account: {activeAccount}</p>}
+            {githubCheck.envTokenInProcess && <p>Environment credentials are in use for this process. Credentials are never shown or stored by these settings.</p>}
+          </>}
+          {githubCheck && <p>Required account scope: <code>{githubCheck.requiredHost ?? 'github.com'}</code>{githubCheck.requiredScopes.length ? ` · ${githubCheck.requiredScopes.join(', ')}` : ''}</p>}
+        </> : <p>GitHub is not selected for this repository.</p>}
       </article>
 
       <article className="ui-stack" aria-label="GitLab">
         <SectionHeader title="GitLab" />
-        <p>Unsupported: this build has no public GitLab hosting methods. CLI login alone does not enable MR reads or creation.</p>
-        <p>CLI setup command (not a readiness check): <code>glab auth login</code></p>
+        {isGitLab ? <>
+          {worktree && loadingProvider && <NoticeLine>Checking GitLab readiness…</NoticeLine>}
+          {gitlabCheck && <p role="status">
+            <Badge tone={gitlabCheck.missingScopes.length ? 'needs-you' : gitlabCheck.requiredHostAuthenticated ? 'working' : 'neutral'}>{gitlabReadiness}</Badge>
+          </p>}
+          {gitlabTokenSource && <p>Credential source: <code>{gitlabTokenSource}</code></p>}
+          {gitlabCheck?.tokenRejected && <p>GitLab rejected the configured token.</p>}
+          {gitlabCheck && !gitlabCheck.requiredHostAuthenticated && !gitlabCheck.tokenRejected &&
+            <p>Not authenticated. Set GITLAB_TOKEN or run glab auth login.</p>}
+          {gitlabCheck && gitlabCheck.missingScopes.length > 0 &&
+            <p>Missing GitLab scopes: {gitlabCheck.missingScopes.join(', ')}.</p>}
+          {gitlabScopesUnknown && <p>Scopes unknown</p>}
+          {gitlabCheck?.activeAccount && <p>Active account: {gitlabCheck.activeAccount.user} @ {gitlabCheck.activeAccount.host}</p>}
+          {gitlabCheck && <p>Required account scope: <code>{gitlabCheck.requiredHost}</code>{gitlabCheck.requiredScopes.length ? ` · ${gitlabCheck.requiredScopes.join(', ')}` : ''}</p>}
+        </> : <p>GitLab is not selected for this repository.</p>}
       </article>
+      <Button disabled={!canRecheckProvider} onClick={() => { void hostingControl.request('provider-recheck') }}>{loadingProvider ? 'Re-checking…' : `Re-check ${providerName}`}</Button>
       <article className="ui-stack" aria-label="Bitbucket">
         <SectionHeader title="Bitbucket" />
         <p>Unsupported: no public Bitbucket hosting diagnostics or review-creation methods are registered.</p>
@@ -1053,60 +1115,73 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       </div>
     </section>
 
-    <section className="ui-stack" aria-label="Repository GitHub account">
-      <SectionHeader title="Repository GitHub account" />
-      {worktree && loadingProvider && accountsData === null && <NoticeLine>Loading GitHub accounts…</NoticeLine>}
-      {worktree && configurationError && <InlineError message={configurationError} />}
-      {worktree && accountsError && <InlineError message={accountsError} />}
-      {selectedBinding && !bindingAvailable && <InlineError message={`The saved binding to ${selectedBinding.user} @ ${selectedBinding.host} is unavailable. It remains saved and GitHub requests fail closed; no ambient-account fallback is used.`} />}
-      <FormRow label="Account for this repository" htmlFor="hosting-account">
-        <select
-          id="hosting-account"
-          className="ui-text-field__input"
-          value={accountSelection}
-          disabled={!canSelectAccount}
-          onChange={(event) => {
-            const value = event.target.value
-            if (value === 'ambient') {
-              void hostingControl.request('account-select', { ambient: true })
-              return
-            }
-            const account = requiredHostAccounts.find((candidate) => accountKey(candidate) === value)
-            if (account) void hostingControl.request('account-select', { host: account.host, user: account.user })
-          }}
-        >
-          <option value="ambient">Default (ambient gh login)</option>
-          {selectedBinding && !bindingAvailable && <option value={accountOption} disabled>Unavailable saved binding · {selectedBinding.user} @ {selectedBinding.host}</option>}
-          {requiredHostAccounts.map((account) => <option key={accountKey(account)} value={accountKey(account)} disabled={!account.bindable}>
-            {account.user} @ {account.host}{account.bindable ? '' : ` · ${account.source} account cannot be bound`}
-          </option>)}
-        </select>
-      </FormRow>
-      {requiredHostAccounts.map((account) => <p key={`${accountKey(account)}-scope`}>
-        {account.user} @ {account.host} · {account.source} · scopes: {account.scopes.length ? account.scopes.join(', ') : 'unknown'}
-      </p>)}
-      {accountSaveError && <InlineError message={accountSaveError} />}
-      <Button variant="primary" disabled={!canSaveAccount} onClick={() => { void hostingControl.request('account-save') }}>{savingAccount ? 'Saving account…' : 'Save account binding'}</Button>
+    <section className="ui-stack" aria-label={isGitLab ? 'GitLab account binding' : 'Repository GitHub account'}>
+      <SectionHeader title={isGitLab ? 'Account binding' : 'Repository GitHub account'} />
+      {isGitLab
+        ? <p>Account binding is unavailable for GitLab.</p>
+        : isGitHub
+          ? <>
+            {worktree && loadingProvider && accountsData === null && <NoticeLine>Loading GitHub accounts…</NoticeLine>}
+            {worktree && configurationError && <InlineError message={configurationError} />}
+            {worktree && accountsError && <InlineError message={accountsError} />}
+            {selectedBinding && !bindingAvailable && <InlineError message={`The saved binding to ${selectedBinding.user} @ ${selectedBinding.host} is unavailable. It remains saved and GitHub requests fail closed; no ambient-account fallback is used.`} />}
+            <FormRow label="Account for this repository" htmlFor="hosting-account">
+              <select
+                id="hosting-account"
+                className="ui-text-field__input"
+                value={accountSelection}
+                disabled={!canSelectAccount}
+                onChange={(event) => {
+                  const value = event.target.value
+                  if (value === 'ambient') {
+                    void hostingControl.request('account-select', { ambient: true })
+                    return
+                  }
+                  const account = requiredHostAccounts.find((candidate) => accountKey(candidate) === value)
+                  if (account) void hostingControl.request('account-select', { host: account.host, user: account.user })
+                }}
+              >
+                <option value="ambient">Default (ambient gh login)</option>
+                {selectedBinding && !bindingAvailable && <option value={accountOption} disabled>Unavailable saved binding · {selectedBinding.user} @ {selectedBinding.host}</option>}
+                {requiredHostAccounts.map((account) => <option key={accountKey(account)} value={accountKey(account)} disabled={!account.bindable}>
+                  {account.user} @ {account.host}{account.bindable ? '' : ` · ${account.source} account cannot be bound`}
+                </option>)}
+              </select>
+            </FormRow>
+            {requiredHostAccounts.map((account) => <p key={`${accountKey(account)}-scope`}>
+              {account.user} @ {account.host} · {account.source} · scopes: {account.scopes.length ? account.scopes.join(', ') : 'unknown'}
+            </p>)}
+            {accountSaveError && <InlineError message={accountSaveError} />}
+            <Button variant="primary" disabled={!canSaveAccount} onClick={() => { void hostingControl.request('account-save') }}>{savingAccount ? 'Saving account…' : 'Save account binding'}</Button>
+          </>
+          : <p>Account binding is unavailable for this provider.</p>}
     </section>
 
-    <section className="ui-stack" aria-label="GitHub API Budget" aria-busy={loadingBudget} aria-live="polite">
-      <SectionHeader title="GitHub API Budget" />
-      <Button disabled={!canRefreshBudget} onClick={() => { void hostingControl.request('budget-refresh') }}>{refreshingBudget ? 'Refreshing…' : 'Refresh budget'}</Button>
-      {worktree && !budget && loadingBudget && <NoticeLine>Loading GitHub API budget…</NoticeLine>}
-      {worktree && !budget && budgetError && <InlineError message={budgetError} />}
-      {budget && <>
-        <dl className="ui-stack">
-          {([['REST', budget.core], ['Search', budget.search], ['GraphQL', budget.graphql]] as const).map(([name, bucket]) => {
-            const tone = percentTone(bucket)
-            const badgeTone = tone === 'critical' ? 'failing' : tone === 'warning' ? 'needs-you' : tone === 'ok' ? 'working' : 'neutral'
-            return <div key={name} className="ui-cluster">
-              <dt>{name}</dt>
-              <dd><Badge tone={badgeTone}>{budgetLabel(bucket)}</Badge> · {bucket.remaining} / {bucket.limit} remaining · {resetLabel(bucket.resetAt)}</dd>
-            </div>
-          })}
-        </dl>
-        <small className="ui-text-muted">Updated {new Date(budget.fetchedAt).toLocaleTimeString()}. Refreshes every 60 seconds while this settings view is visible.</small>
-      </>}
+
+    <section className="ui-stack" aria-label={isGitLab ? 'GitLab API budget' : 'GitHub API Budget'} aria-busy={loadingBudget} aria-live="polite">
+      <SectionHeader title={isGitLab ? 'API budget' : 'GitHub API Budget'} />
+      {isGitLab
+        ? <p>API budget is unavailable for GitLab.</p>
+        : isGitHub
+          ? <>
+            <Button disabled={!canRefreshBudget} onClick={() => { void hostingControl.request('budget-refresh') }}>{refreshingBudget ? 'Refreshing…' : 'Refresh budget'}</Button>
+            {worktree && !budget && loadingBudget && <NoticeLine>Loading GitHub API budget…</NoticeLine>}
+            {worktree && !budget && budgetError && <InlineError message={budgetError} />}
+            {budget && <>
+              <dl className="ui-stack">
+                {([['REST', budget.core], ['Search', budget.search], ['GraphQL', budget.graphql]] as const).map(([name, bucket]) => {
+                  const tone = percentTone(bucket)
+                  const badgeTone = tone === 'critical' ? 'failing' : tone === 'warning' ? 'needs-you' : tone === 'ok' ? 'working' : 'neutral'
+                  return <div key={name} className="ui-cluster">
+                    <dt>{name}</dt>
+                    <dd><Badge tone={badgeTone}>{budgetLabel(bucket)}</Badge> · {bucket.remaining} / {bucket.limit} remaining · {resetLabel(bucket.resetAt)}</dd>
+                  </div>
+                })}
+              </dl>
+              <small className="ui-text-muted">Updated {new Date(budget.fetchedAt).toLocaleTimeString()}. Refreshes every 60 seconds while this settings view is visible.</small>
+            </>}
+          </>
+          : <p>API budget is unavailable for this provider.</p>}
     </section>
     </div>
   </main>

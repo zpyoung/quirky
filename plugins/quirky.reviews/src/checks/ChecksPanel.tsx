@@ -73,6 +73,7 @@ export type ChecksPollingTarget = {
   number: number | null
   headOid: string | null
   provider: string
+  repository?: RepoIdentity | null
   reviewState: ReviewData['state'] | null
   checksPresent: boolean
   checksRollup: string | null
@@ -112,7 +113,15 @@ export function createChecksPollingPolicy(): ChecksPollingPolicy {
 }
 
 function pollingIdentity(target: ChecksPollingTarget): string {
-  return [target.worktree, target.branch ?? '', target.number ?? '', target.localHead ?? '', target.headOid ?? '', target.provider].join('|')
+  return JSON.stringify([
+    target.worktree,
+    target.branch,
+    target.number,
+    target.localHead,
+    target.headOid,
+    target.provider,
+    target.repository ?? null,
+  ])
 }
 
 function baseRefreshInterval(target: ChecksPollingTarget): number {
@@ -280,6 +289,10 @@ export function installChecksPolling(initialTarget: ChecksPollingTarget, runtime
 
 function messageOf(error: unknown, fallback = 'The review action failed.'): string {
   return error instanceof Error && error.message.trim() !== '' ? error.message : fallback
+}
+
+function isUnsupportedProviderError(error: unknown): boolean {
+  return isRecord(error) && isRecord(error.data) && error.data.reason === 'unsupported_provider'
 }
 type ReviewsControlAction = { action: string; enabled: boolean }
 
@@ -486,6 +499,7 @@ function pollTarget(state: ReviewsSurfaceProps['state'], worktree: string | null
     ...(positiveInteger(reviewNumber) ? { number: reviewNumber } : {}),
     ...(localHead ? { headOid: localHead } : {})
   }
+  const repository = reviewContext(state, 'checks')?.repo ?? null
   return {
     worktree,
     branch,
@@ -493,6 +507,7 @@ function pollTarget(state: ReviewsSurfaceProps['state'], worktree: string | null
     number: review?.number ?? null,
     headOid,
     provider,
+    repository,
     reviewState: review?.state ?? null,
     checksPresent: checks.checks !== null,
     checksRollup: isRecord(checks.checks) && typeof checks.checks.rollup === 'string' ? checks.checks.rollup : null,
@@ -669,8 +684,25 @@ function retryDelay(lookup: unknown, now: number): number | null {
   return until === null || until <= now ? null : Math.ceil((until - now) / 1_000)
 }
 
+function gitLabAuthMessage(value: unknown): string {
+  if (!isRecord(value)) return 'Set GITLAB_TOKEN or run glab auth login.'
+  if (value.tokenRejected === true) return 'GitLab rejected the configured token.'
+  const missingScopes = Array.isArray(value.missingScopes)
+    ? value.missingScopes.filter((scope): scope is string => typeof scope === 'string')
+    : []
+  if (missingScopes.length > 0) return `Missing GitLab scopes: ${missingScopes.join(', ')}.`
+  if (value.requiredHostAuthenticated === false) return 'Set GITLAB_TOKEN or run glab auth login.'
+  if (value.tokenSource === 'env') return 'GITLAB_TOKEN is available.'
+  if (value.tokenSource === 'glab') return 'glab authentication is available.'
+  return 'Set GITLAB_TOKEN or run glab auth login.'
+}
+
 function diagnosticsCopy(value: unknown): string[] {
   if (!isRecord(value)) return []
+  if (value.provider === 'gitlab') {
+    const message = gitLabAuthMessage(value)
+    return message === 'GITLAB_TOKEN is available.' || message === 'glab authentication is available.' ? [] : [message]
+  }
   const messages: string[] = []
   if (value.ghAvailable === false) messages.push('GitHub CLI (gh) is not installed or unavailable.')
   if (value.requiredHostAuthenticated === false) messages.push(`No authenticated account is available for ${typeof value.requiredHost === 'string' ? value.requiredHost : 'the required GitHub host'}.`)
@@ -719,6 +751,10 @@ function selectStatus(state: ReviewsSurfaceProps['state'], activeWorktree: strin
   const copy = blockerCopy(reason, blocker)
   const authReasons = new Set(['authentication_required', 'auth_required', 'not_authenticated', 'scope_missing', 'permission_denied', 'gh_unavailable'])
   if (reason && authReasons.has(reason)) {
+    const authDiagnostics = lookup?.authDiagnostics ?? eligibility?.authDiagnostics
+    const isGitLab = isRecord(authDiagnostics) && authDiagnostics.provider === 'gitlab'
+      || eligibility?.provider === 'gitlab' || lookup?.provider === 'gitlab'
+    if (isGitLab) return { title: 'GitLab authentication required', message: gitLabAuthMessage(authDiagnostics), action: 'auth' }
     return { title: 'GitHub authentication failed', message: copy.message || 'Check the canonical GitHub CLI diagnostics.', action: 'auth' }
   }
   if (blocker || (eligibility && eligibility.eligible === false && reason !== 'lookup_unavailable')) {
@@ -1169,25 +1205,33 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
   const lookup = active && isRecord(active.lookup) ? active.lookup : null
   const onStoppedAll = () => refreshSitter(sitterIncludeDetail.current)
   const onRefreshSitter = refreshSitter
+  const gitLabReview = currentReview?.provider === 'gitlab'
   const sitterSafetyStrip = sitterState?.available ? <SitterSafetyStrip
     context={context}
     sitterState={sitterState}
     onStoppedAll={onStoppedAll}
   /> : null
-  const sitterRow = sitterState?.available ? <SitterRow
-    context={context}
-    activeWorktree={activeWorktree}
-    review={currentReview}
-    lookup={lookup}
-    sitterState={sitterState}
-    loadingDetail={sitterDetailLoading}
-    onRefreshSitter={onRefreshSitter}
-  /> : null
+  const sitterRow = gitLabReview
+    ? <NoticeLine>PR Sitter is unavailable for GitLab merge requests.</NoticeLine>
+    : sitterState?.available ? <SitterRow
+      context={context}
+      activeWorktree={activeWorktree}
+      review={currentReview}
+      lookup={lookup}
+      sitterState={sitterState}
+      loadingDetail={sitterDetailLoading}
+      onRefreshSitter={onRefreshSitter}
+    /> : null
   const missingOrigin = lookup?.kind === 'unsupported' && lookup.reason === 'missing_origin'
   const eligibility = active && isRecord(active.eligibility) ? active.eligibility : null
   const currentTarget = useMemo(() => pollTarget(state, activeWorktree), [state.checks, activeWorktree])
   const currentTargetRef = useRef<ChecksPollingTarget | null>(currentTarget)
   currentTargetRef.current = currentTarget
+  const currentTargetIdentity = currentTarget === null ? null : pollingIdentity(currentTarget)
+  const currentTargetLease = useRef({ identity: currentTargetIdentity, generation: 0 })
+  if (currentTargetLease.current.identity !== currentTargetIdentity) {
+    currentTargetLease.current = { identity: currentTargetIdentity, generation: currentTargetLease.current.generation + 1 }
+  }
   const pending = currentTarget?.pending ?? false
   const isPanelVisible = Object.values(layout.tools?.open ?? {}).includes(CHECKS_PANEL) && windowVisible
   useEffect(() => {
@@ -1245,17 +1289,25 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
     leaseCurrent?: () => boolean,
   ): Promise<boolean> => {
     if (!worktree) return false
-    const stillActive = () => mounted.current && activeWorktreeRef.current === worktree && (leaseCurrent?.() ?? true)
+    const targetAtStart = currentTargetRef.current
+    const targetGeneration = currentTargetLease.current.generation
+    const stillActive = () => mounted.current && activeWorktreeRef.current === worktree
+      && currentTargetLease.current.generation === targetGeneration && (leaseCurrent?.() ?? true)
     if (!stillActive()) return false
     setActionError(null)
-    const current = currentTargetRef.current
-    const candidate: JsonRecord = current?.worktree === worktree ? current.candidate : { worktree, active: true }
+    const candidate: JsonRecord = targetAtStart?.worktree === worktree ? targetAtStart.candidate : { worktree, active: true }
     try {
-      const queued = await context.call('quirky.hosting/refresh', { candidate, reason, priority: 80 })
+      let queued: unknown = null
+      try {
+        queued = await context.call('quirky.hosting/refresh', { candidate, reason, priority: 80 })
+      } catch (error) {
+        if (!isUnsupportedProviderError(error)) throw error
+      }
       if (!stillActive()) return false
       const queueResult = isRecord(queued) ? queued : null
+      const providerName = currentTargetRef.current?.provider === 'gitlab' ? 'GitLab' : 'GitHub'
       const queuedError = queueResult && (queueResult.kind === 'paused' || queueResult.kind === 'unavailable')
-        ? typeof queueResult.message === 'string' ? queueResult.message : `GitHub refresh ${String(queueResult.kind)}.`
+        ? typeof queueResult.message === 'string' ? queueResult.message : `${providerName} refresh ${String(queueResult.kind)}.`
         : null
       const result = await context.call('quirky.reviews/checksRefresh', { worktree, force: true })
       if (!stillActive()) return false
@@ -1287,11 +1339,15 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       subscribeLayout: (listener) => context.onLayout(() => listener()),
       subscribeConnection: (listener) => context.onConnection(listener),
       async report(candidates) {
-        const result = await context.call('quirky.hosting/visibleRefreshCandidates', {
-          generation: ++visibleCandidateGeneration,
-          candidates
-        })
-        if (!isRecord(result) || result.accepted !== true) throw new Error('GitHub did not accept the Checks visibility candidate set.')
+        try {
+          const result = await context.call('quirky.hosting/visibleRefreshCandidates', {
+            generation: ++visibleCandidateGeneration,
+            candidates
+          })
+          if (!isRecord(result) || result.accepted !== true) throw new Error('GitHub did not accept the Checks visibility candidate set.')
+        } catch (error) {
+          if (!isUnsupportedProviderError(error)) throw error
+        }
       },
       refresh: () => {
         const target = currentTargetRef.current
@@ -1374,6 +1430,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       ? eligibility.authDiagnosticsError
       : null
   const diagnostics = diagnosticsCopy(diagnosticData)
+  const diagnosticProvider = currentReview?.provider === 'gitlab' || eligibility?.provider === 'gitlab' || diagnosticData?.provider === 'gitlab' ? 'GitLab' : 'GitHub'
   const currentReviewOwner = active === null ? null : reviewContext(state, 'checks')
   const lookupGitStatus = statusFromLookup(lookup)
   const blockerReview = eligibility && isRecord(eligibility.review) ? eligibility.review : null
@@ -1433,7 +1490,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       if (!isCurrent()) return
       await refreshRef.current()
       if (!isCurrent()) return
-      if (!isRecord(result)) throw new Error('GitHub returned invalid authentication diagnostics.')
+      if (!isRecord(result)) throw new Error(`${diagnosticProvider} returned invalid authentication diagnostics.`)
       setAuthDiagnostics(result)
       setActionError(null)
     } catch (error) {
@@ -1550,9 +1607,9 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       const text = source === 'review'
         ? currentReview && currentReviewOwner !== null && safeHttpUrl(currentReview.url)
         : source === 'auth-status' && diagnosticData !== null
-          ? 'gh auth status'
+          ? diagnosticProvider === 'GitLab' ? 'glab auth status' : 'gh auth status'
           : null
-      if (typeof text !== 'string' || text === '') throw new Error('Select a current pull request link or GitHub auth status.')
+      if (typeof text !== 'string' || text === '') throw new Error(`Select a current pull request link or ${diagnosticProvider} auth status.`)
       return runReviewOperation(() => copyReviewsText(text), isCurrent, false)
     }
     if (request.action === 'agent-open') {
@@ -1829,10 +1886,10 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
               })
             }}
           >
-            {empty.action === 'open' ? `Open Review #${existingNumber ?? ''}` : empty.action === 'relink' ? `Link PR #${existingNumber ?? ''}` : empty.action === 'publish' ? 'Publish Branch' : empty.action === 'sync' ? 'Sync Branch' : empty.action === 'push' ? 'Push & Create PR' : 'Connect GitHub'}
+            {empty.action === 'open' ? `Open Review #${existingNumber ?? ''}` : empty.action === 'relink' ? `Link PR #${existingNumber ?? ''}` : empty.action === 'publish' ? 'Publish Branch' : empty.action === 'sync' ? 'Sync Branch' : empty.action === 'push' ? 'Push & Create PR' : `Connect ${diagnosticProvider}`}
           </Button>}
-          {diagnostics.length > 0 && <section className="ui-stack" aria-label="GitHub CLI diagnostics"><SectionHeader title="GitHub CLI diagnostics" /><ul className="ui-stack">{diagnostics.map((item) => <li key={item}>{item}</li>)}</ul></section>}
-          {diagnosticData && <section className="ui-stack" aria-label="GitHub account status">
+          {diagnostics.length > 0 && <section className="ui-stack" aria-label={`${diagnosticProvider} authentication diagnostics`}><SectionHeader title={`${diagnosticProvider} authentication diagnostics`} /><ul className="ui-stack">{diagnostics.map((item) => <li key={item}>{item}</li>)}</ul></section>}
+          {diagnosticData && <section className="ui-stack" aria-label={`${diagnosticProvider} account status`}>
             {typeof diagnosticData.requiredHost === 'string' && <p>Required host: <code>{diagnosticData.requiredHost}</code></p>}
             {Array.isArray(diagnosticData.accounts) && diagnosticData.accounts.length > 0 && <ul className="ui-stack">
               {diagnosticData.accounts.filter(isRecord).map((account, index) => (
@@ -1843,11 +1900,13 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
                 </li>
               ))}
             </ul>}
-            {diagnosticData.ghAvailable === false && <p>GitHub CLI (gh) is unavailable. Install it, then retry.</p>}
-            <Button onClick={() => { void requestChecksControl('copy-link', { source: 'auth-status' }) }}>Copy gh auth status</Button>
+            {diagnosticProvider === 'GitHub' && diagnosticData.ghAvailable === false && <p>GitHub CLI (gh) is unavailable. Install it, then retry.</p>}
+            <Button onClick={() => { void requestChecksControl('copy-link', { source: 'auth-status' }) }}>Copy {diagnosticProvider === 'GitLab' ? 'glab' : 'gh'} auth status</Button>
           </section>}
           {reason === 'authentication_required' || reason === 'auth_required' || reason === 'not_authenticated' || reason === 'scope_missing' || reason === 'gh_unavailable'
-            ? <p>Check GitHub access with <code>gh auth status</code>. Sign in with <code>gh auth login</code>; no token is entered or stored here.</p>
+            ? <p>{diagnosticProvider === 'GitLab'
+              ? <>Check GitLab access with <code>glab auth status</code>. Set <code>GITLAB_TOKEN</code> or run <code>glab auth login</code>; no token is entered or stored here.</>
+              : <>Check GitHub access with <code>gh auth status</code>. Sign in with <code>gh auth login</code>; no token is entered or stored here.</>}</p>
             : null}
           {eligibility?.eligible === true && !noReviewEligibility && <p>Eligibility is stale or belongs to a different branch. Refresh to confirm the current workspace.</p>}
           {!createUnavailable && noReviewEligibility && <Button
