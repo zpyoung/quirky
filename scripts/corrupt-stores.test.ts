@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
 import { createIsolatedRuntimeEnvironment } from './ui-review/fixtures'
 import {
+  checkJsonStore,
   classifyStore,
   damageStore,
   installSweepStandIns,
@@ -20,6 +22,13 @@ import {
 
 const roots: string[] = []
 const repoRoot = join(import.meta.dir, '..')
+const MOBILE_PAIRING_PATHS = [
+  'plugin-data/quirky.mobile/e2ee-keypair.json',
+  'plugin-data/quirky.mobile/devices.json'
+] as const
+const REGISTRY_UNAVAILABLE = 'Mobile device registry unavailable'
+const PAIRING_GUIDANCE = 'Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'
+const REGISTRY_UNAVAILABLE_GUIDANCE = `${REGISTRY_UNAVAILABLE}. ${PAIRING_GUIDANCE}`
 
 function temporaryRoot(prefix: string): string {
   const root = mkdtempSync(join(tmpdir(), prefix))
@@ -89,6 +98,58 @@ function healthyResult(): SweepResult {
 }
 
 describe('helpers', () => {
+  test.each([...MOBILE_PAIRING_PATHS])('accepts an absent quarantined mobile pairing path: %s', (path) => {
+    const home = temporaryRoot('quirky-corrupt-stores-mobile-absent-')
+    mkdirSync(join(home, 'plugin-data', 'quirky.mobile'), { recursive: true })
+    expect(checkJsonStore(home, path, [], [])).toEqual({
+      ok: true,
+      detail: 'mobile pairing remains quarantined'
+    })
+  })
+
+  test.each(MOBILE_PAIRING_PATHS.flatMap((path) =>
+    (['regular file', 'directory', 'dangling symlink'] as const).map((kind) => [path, kind] as const)
+  ))('rejects a recreated %s pairing path when it is a %s', (path, kind) => {
+    const home = temporaryRoot('quirky-corrupt-stores-mobile-recreated-')
+    const directory = join(home, 'plugin-data', 'quirky.mobile')
+    mkdirSync(directory, { recursive: true })
+    const entry = join(home, path)
+    if (kind === 'regular file') writeFileSync(entry, 'recreated bytes')
+    else if (kind === 'directory') mkdirSync(entry)
+    else symlinkSync('missing-pairing-target', entry)
+
+    for (const checkedPath of MOBILE_PAIRING_PATHS) {
+      expect(checkJsonStore(home, checkedPath, [], [])).toEqual({
+        ok: false,
+        detail: 'mobile pairing files were recreated after quarantine'
+      })
+    }
+    if (kind === 'regular file') expect(readFileSync(entry, 'utf8')).toBe('recreated bytes')
+    if (kind === 'directory') expect(lstatSync(entry).isDirectory()).toBe(true)
+    if (kind === 'dangling symlink') {
+      expect(lstatSync(entry).isSymbolicLink()).toBe(true)
+      expect(readlinkSync(entry)).toBe('missing-pairing-target')
+    }
+  })
+
+  test.each([...MOBILE_PAIRING_PATHS])('fails closed on a non-ENOENT pairing-path inspection error: %s', (blockedPath) => {
+    const home = temporaryRoot('quirky-corrupt-stores-mobile-inspection-error-')
+    mkdirSync(join(home, 'plugin-data', 'quirky.mobile'), { recursive: true })
+    const blockedFile = join(home, blockedPath)
+    const originalLstatSync = fs.lstatSync
+    const inspection = spyOn(fs, 'lstatSync').mockImplementation(((...args: Parameters<typeof fs.lstatSync>) => {
+      if (args[0] === blockedFile) throw Object.assign(new Error('injected pairing-path inspection failure'), { code: 'EACCES' })
+      return originalLstatSync(...args)
+    }) as typeof fs.lstatSync)
+    let checks: { ok: boolean; detail: string }[]
+    try {
+      checks = MOBILE_PAIRING_PATHS.map((path) => checkJsonStore(home, path, [], []))
+    } finally {
+      inspection.mockRestore()
+    }
+    expect(checks!.map((check) => check.ok)).toEqual([false, false])
+  })
+
   test('stand-ins reject the exact credential and network self-tests', () => {
     const root = temporaryRoot('quirky-corrupt-stores-helpers-')
     const installed = installSweepStandIns(root)
@@ -310,25 +371,50 @@ describe('helpers', () => {
     expect(sweepFailures(damageResult())).toEqual([])
   })
 
-  test.each(['garbage', 'truncate', 'shape'] as const)('tolerates only the exact second-start registry error in %s mode', (mode) => {
+  test.each(
+    (['garbage', 'truncate', 'shape'] as const).flatMap((mode) =>
+      ([REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_GUIDANCE] as const).map((error) => [mode, error] as const)
+    )
+  )('tolerates exact registry refusal at both damaged restarts in %s mode: %s', (mode, error) => {
     const result = Object.assign(damageResult(), {
       mode,
-      mobileListenerHosts: ['127.0.0.1', null, '127.0.0.1'],
-      mobileStateErrors: [null, 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.', null]
+      mobileListenerHosts: ['127.0.0.1', null, null],
+      mobileStateErrors: [null, error, error]
     })
     expect(sweepFailures(result)).toEqual([])
-    result.mobileListenerHosts[1] = '0.0.0.0'
+  })
+
+  test.each(
+    (['garbage', 'truncate', 'shape'] as const).flatMap((mode) =>
+      [0, 1, 2].map((index) => [mode, index] as const)
+    )
+  )('rejects a non-loopback host in %s mode at start %s even with exact registry refusal', (mode, index) => {
+    const result = Object.assign(damageResult(), {
+      mode,
+      mobileListenerHosts: ['127.0.0.1', null, null] as (string | null)[],
+      mobileStateErrors: [null, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE]
+    })
+    result.mobileListenerHosts[index] = '0.0.0.0'
     expect(sweepFailures(result)).toEqual(['listener-host:0.0.0.0'])
   })
 
-  test.each([
-    ['garbage', 0, 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'],
-    ['garbage', 2, 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'],
-    ['healthy', 1, 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'],
-    ['garbage', 1, 'Mobile device registry unavailable'],
-    ['garbage', 1, 'another error'],
-    ['garbage', 1, null]
-  ] as const)('refuses unavailable listener for %s start %s with %s', (mode, index, error) => {
+  const inexactRegistryErrors = [
+    `prefix: ${REGISTRY_UNAVAILABLE}`,
+    `${REGISTRY_UNAVAILABLE} with extra details`,
+    `${REGISTRY_UNAVAILABLE_GUIDANCE} with extra details`,
+    `${REGISTRY_UNAVAILABLE}. Incorrect guidance`,
+    `${REGISTRY_UNAVAILABLE_GUIDANCE}\n`,
+    'another error'
+  ]
+  const unavailableListenerCases = [
+    ...inexactRegistryErrors.flatMap((error) => [1, 2].map((index) => ['garbage', index, error] as const)),
+    ...([REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_GUIDANCE] as const).map((error) => ['garbage', 0, error] as const),
+    ...([['healthy', 1], ['healthy', 2]] as const).flatMap(([mode, index]) =>
+      ([REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_GUIDANCE] as const).map((error) => [mode, index, error] as const)
+    ),
+    ['garbage', 1, null] as const
+  ]
+  test.each(unavailableListenerCases)('refuses null listener for %s start %s with %s', (mode, index, error) => {
     const result = Object.assign(mode === 'healthy' ? healthyResult() : damageResult(), {
       mobileListenerHosts: ['127.0.0.1', '127.0.0.1', '127.0.0.1'] as (string | null)[],
       mobileStateErrors: [null, null, null] as (string | null)[]

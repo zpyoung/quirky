@@ -166,8 +166,10 @@ export function sweepFailures(result: SweepResult): string[] {
     if (!result.stores.some((store) => store.path === spec.path)) failures.push(`missing-store:${spec.path}`)
   }
   for (const [index, host] of result.mobileListenerHosts.entries()) {
-    const pendingRegistry = result.mode !== 'healthy' && index === 1 && host === null &&
-      result.mobileStateErrors?.[index] === 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.'
+    const stateError = result.mobileStateErrors?.[index]
+    const pendingRegistry = result.mode !== 'healthy' && (index === 1 || index === 2) && host === null &&
+      (stateError === 'Mobile device registry unavailable' ||
+        stateError === 'Mobile device registry unavailable. Mobile pairing data was damaged and set aside. Run quirky mobile reset-pairing --confirm to start over; every paired device must pair again.')
     if (host !== '127.0.0.1' && !pendingRegistry) failures.push(`listener-host:${host}`)
   }
   if (result.mode === 'healthy') {
@@ -213,9 +215,20 @@ function reportPlugins(plugins: PluginInfo[]): PluginReportEntry[] {
   }))
 }
 
-function checkJsonStore(home: string, path: string, ownerGrants: unknown, credentialStatus: unknown): { ok: boolean; detail: string } {
+export function checkJsonStore(home: string, path: string, ownerGrants: unknown, credentialStatus: unknown): { ok: boolean; detail: string } {
   try {
     const file = join(home, path)
+    if (path.endsWith('/e2ee-keypair.json') || path.endsWith('/devices.json')) {
+      for (const name of ['e2ee-keypair.json', 'devices.json']) {
+        try {
+          lstatSync(join(dirname(file), name))
+          return { ok: false, detail: 'mobile pairing files were recreated after quarantine' }
+        } catch (error) {
+          if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
+        }
+      }
+      return { ok: true, detail: 'mobile pairing remains quarantined' }
+    }
     if (path.endsWith('/owner-grants.json')) {
       return { ok: !existsSync(file) && Array.isArray(ownerGrants) && ownerGrants.length === 0, detail: 'owner grants are not empty and absent' }
     }
@@ -234,15 +247,6 @@ function checkJsonStore(home: string, path: string, ownerGrants: unknown, creden
         detail: 'invalid browser metadata'
       }
     }
-    if (path.endsWith('/e2ee-keypair.json')) {
-      return {
-        ok: parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) &&
-          Object.keys(parsed).sort().join(',') === 'publicKeyB64,secretKeyB64,v' &&
-          parsed.v === 1 && typeof parsed.publicKeyB64 === 'string' && typeof parsed.secretKeyB64 === 'string',
-        detail: 'invalid mobile encryption identity'
-      }
-    }
-    if (path.endsWith('/devices.json')) return { ok: Array.isArray(parsed) && parsed.length === 0, detail: 'mobile devices are not empty' }
     return {
       ok: Number.isInteger(parsed.port) && parsed.port > 0 && parsed.port <= 65_535 &&
         typeof parsed.token === 'string' && parsed.token.length >= 16 && typeof parsed.hookToken === 'string' && parsed.hookToken.length >= 16,

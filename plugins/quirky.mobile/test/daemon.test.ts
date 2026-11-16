@@ -42,7 +42,7 @@ function trackMobileClient(client: MobileTestClient): MobileTestClient {
   return client
 }
 
-async function boot(home?: string, log?: (message: string) => void): Promise<Harness> {
+async function boot(home?: string, log?: (message: string) => void, options?: { loopbackOnly?: boolean }): Promise<Harness> {
   savedEnvironment ??= new Map(ENV_KEYS.map((key) => [key, process.env[key]]))
   const isolated = home ?? isolatedHome('quirky-mobile-')
   const root = dirname(isolated)
@@ -52,7 +52,8 @@ async function boot(home?: string, log?: (message: string) => void): Promise<Har
   process.env.CLAUDE_CONFIG_DIR = join(userHome, '.claude')
   process.env.XDG_CONFIG_HOME = join(root, 'xdg-config')
   process.env.QUIRKY_MOBILE_PORT = '0'
-  delete process.env.QUIRKY_MOBILE_HOST
+  if (options?.loopbackOnly) process.env.QUIRKY_MOBILE_HOST = '127.0.0.1'
+  else delete process.env.QUIRKY_MOBILE_HOST
   return await startHarness({
     home: isolated,
     builtinPluginsDir: makeBuiltinDir(isolated, {
@@ -607,6 +608,188 @@ describe('mobile daemon integration', () => {
       expect(failure).toBeInstanceOf(Error)
       await stale.close()
     }
+  }, 60_000)
+
+  test('both quarantined pairing files stay unavailable until CLI reset revokes old grants', async () => {
+    const home = isolatedHome('quirky-mobile-quarantined-reset-')
+    const dataDir = join(home, 'plugin-data', 'quirky.mobile')
+    const identityPath = join(dataDir, 'e2ee-keypair.json')
+    const registryPath = join(dataDir, 'devices.json')
+    const ownerPath = join(dataDir, 'owner-grants.json')
+    const seeded = seedPairing(dataDir)
+    const oldOwner = new OwnerGrantStore(dataDir).create('Old owner', 'ws://127.0.0.1:1')
+    const ownerBytes = readFileSync(ownerPath)
+    writeFileSync(identityPath, '{broken', { mode: 0o600 })
+    writeFileSync(registryPath, '{broken', { mode: 0o600 })
+
+    harness = await boot(home, undefined, { loopbackOnly: true })
+    await cleanupHarness(harness)
+    harness = await boot(home, undefined, { loopbackOnly: true })
+    const api = await harness.connect('cli')
+    const quarantineNames = readdirSync(dataDir)
+      .filter((name) => /^devices\.json\.corrupt-\d+-[0-9a-f]{8}$/.test(name) || /^e2ee-keypair\.json\.corrupt-\d+-[0-9a-f]{8}$/.test(name))
+      .sort()
+    expect(quarantineNames).toEqual([
+      expect.stringMatching(/^devices\.json\.corrupt-\d+-[0-9a-f]{8}$/),
+      expect.stringMatching(/^e2ee-keypair\.json\.corrupt-\d+-[0-9a-f]{8}$/)
+    ])
+    expect(existsSync(identityPath)).toBe(false)
+    expect(existsSync(registryPath)).toBe(false)
+    for (const name of quarantineNames) expect(readFileSync(join(dataDir, name), 'utf8')).toBe('{broken')
+
+    expect(await api.callAny('quirky.mobile/pair', { address: '127.0.0.1' })).toEqual({
+      available: false, reason: 'device_registry_unavailable', guidance: RESET_GUIDANCE
+    })
+    const stateFailure = await rpcFailure(api.callAny('quirky.mobile/state', {}))
+    expect(stateFailure.code).toBe(RpcErrorCode.Conflict)
+    expect(stateFailure.message).toContain(`Mobile device registry unavailable. ${RESET_GUIDANCE}`)
+    const devicesFailure = await rpcFailure(api.callAny('quirky.mobile/devices', {}))
+    expect(devicesFailure.code).toBe(RpcErrorCode.Conflict)
+    expect(devicesFailure.message).toContain(`Mobile device registry unavailable. ${RESET_GUIDANCE}`)
+    const ownerPairFailure = await rpcFailure(api.callAny('quirky.mobile/ownerPair', {
+      name: 'Must not be issued', confirm: true, address: '127.0.0.1'
+    }))
+    expect(ownerPairFailure.code).toBe(RpcErrorCode.Conflict)
+    expect(ownerPairFailure.message).toContain('E2EE identity is unavailable')
+    expect(readFileSync(ownerPath)).toEqual(ownerBytes)
+    expect(await api.callAny('quirky.mobile/ownerGrants', {})).toMatchObject([
+      { grantId: oldOwner.grantId, name: 'Old owner', scope: 'owner-cli' }
+    ])
+
+    const reset = await runCli(['--yes', 'mobile', 'reset-pairing', '--confirm', '--json'], { home })
+    expect(reset.code).toBe(0)
+    expect(JSON.parse(reset.stdout)).toEqual({
+      identityCreated: true, unpairedDevices: 0, ownerGrantsRevoked: 1, ownerGrantsRemaining: 0,
+      previousRegistry: null, quarantined: quarantineNames, unsynced: []
+    })
+
+    const assertLoopbackListener = (state: { listener: { available: boolean; host: string | null; port: number | null } }) => {
+      expect(state.listener).toMatchObject({ available: true, host: '127.0.0.1' })
+      expect(state.listener.port).toBeGreaterThan(0)
+    }
+    assertLoopbackListener(await api.callAny('quirky.mobile/state', {}) as { listener: { available: boolean; host: string | null; port: number | null } })
+    const newIdentity = JSON.parse(readFileSync(identityPath, 'utf8')) as { publicKeyB64: string }
+    expect(newIdentity.publicKeyB64).not.toBe(seeded.publicKeyB64)
+    expect(JSON.parse(readFileSync(registryPath, 'utf8'))).toEqual([])
+    expect(JSON.parse(readFileSync(ownerPath, 'utf8'))).toEqual({ version: 1, grants: [] })
+    for (const name of quarantineNames) expect(readFileSync(join(dataDir, name), 'utf8')).toBe('{broken')
+
+    const phoneOfferValue = phoneOffer(await api.callAny('quirky.mobile/pair', { address: '127.0.0.1' }) as MobilePairingResult)
+    expect(phoneOfferValue.publicKeyB64).toBe(newIdentity.publicKeyB64)
+    const phone = trackMobileClient(MobileTestClient.connect(phoneOfferValue.endpoint, phoneOfferValue.publicKeyB64, phoneOfferValue.deviceToken))
+    try {
+      await phone.authenticated
+      const pairedOwner = await api.callAny('quirky.mobile/ownerPair', {
+        name: 'New owner', confirm: true, address: '127.0.0.1'
+      }) as { endpoint: string; offer: string; grant: { grantId: string } }
+      const newOwnerOffer = JSON.parse(Buffer.from(pairedOwner.offer, 'base64url').toString('utf8')) as OwnerCliPairOffer
+      expect(newOwnerOffer.publicKeyB64).toBe(newIdentity.publicKeyB64)
+      assertLoopbackListener(await api.callAny('quirky.mobile/state', {}) as { listener: { available: boolean; host: string | null; port: number | null } })
+      const owner = trackMobileClient(MobileTestClient.connect(pairedOwner.endpoint, newOwnerOffer.publicKeyB64, newOwnerOffer.deviceToken))
+      try {
+        await owner.authenticated
+        expect(await owner.call('status.get')).toMatchObject({ daemonVersion: expect.any(String) })
+
+        for (const token of [oldOwner.token, seeded.token]) {
+          const stale = trackMobileClient(MobileTestClient.connect(phoneOfferValue.endpoint, newIdentity.publicKeyB64, token))
+          const closed = socketCloseCode(stale)
+          try {
+            let failure: unknown
+            try { await stale.authenticated } catch (error) { failure = error }
+            expect(failure).toBeInstanceOf(Error)
+            expect(await closed).toBe(4001)
+          } finally {
+            await stale.close()
+          }
+        }
+      } finally {
+        await owner.close()
+      }
+
+      await cleanupHarness(harness)
+      harness = await boot(home, undefined, { loopbackOnly: true })
+      const restartedApi = await harness.connect('cli')
+      const restartedState = await restartedApi.callAny('quirky.mobile/state', {}) as {
+        listener: { available: boolean; host: string | null; port: number | null }
+      }
+      assertLoopbackListener(restartedState)
+      expect(JSON.parse(readFileSync(identityPath, 'utf8'))).toMatchObject({ publicKeyB64: newIdentity.publicKeyB64 })
+      const restartedOwner = trackMobileClient(MobileTestClient.connect(
+        `ws://127.0.0.1:${restartedState.listener.port}`, newOwnerOffer.publicKeyB64, newOwnerOffer.deviceToken
+      ))
+      try {
+        await restartedOwner.authenticated
+        expect(await restartedOwner.call('status.get')).toMatchObject({ daemonVersion: expect.any(String) })
+      } finally {
+        await restartedOwner.close()
+      }
+    } finally {
+      await phone.close()
+    }
+  }, 60_000)
+
+  test('both quarantined pairing files stay unavailable while owner grants cannot be read', async () => {
+    const home = isolatedHome('quirky-mobile-quarantined-owner-')
+    const dataDir = join(home, 'plugin-data', 'quirky.mobile')
+    const identityPath = join(dataDir, 'e2ee-keypair.json')
+    const registryPath = join(dataDir, 'devices.json')
+    const ownerPath = join(dataDir, 'owner-grants.json')
+    const seeded = seedPairing(dataDir)
+    new OwnerGrantStore(dataDir).create('Old owner', 'ws://127.0.0.1:1')
+    const ownerBytes = readFileSync(ownerPath)
+    writeFileSync(identityPath, '{broken', { mode: 0o600 })
+    writeFileSync(registryPath, '{broken', { mode: 0o600 })
+
+    harness = await boot(home, undefined, { loopbackOnly: true })
+    await cleanupHarness(harness)
+    rmSync(ownerPath)
+    mkdirSync(ownerPath)
+    harness = await boot(home, undefined, { loopbackOnly: true })
+    const api = await harness.connect('cli')
+    const quarantineNames = readdirSync(dataDir)
+      .filter((name) => /^devices\.json\.corrupt-\d+-[0-9a-f]{8}$/.test(name) || /^e2ee-keypair\.json\.corrupt-\d+-[0-9a-f]{8}$/.test(name))
+      .sort()
+    expect(quarantineNames).toEqual([
+      expect.stringMatching(/^devices\.json\.corrupt-\d+-[0-9a-f]{8}$/),
+      expect.stringMatching(/^e2ee-keypair\.json\.corrupt-\d+-[0-9a-f]{8}$/)
+    ])
+
+    expect(await api.callAny('quirky.mobile/pair', { address: '127.0.0.1' })).toEqual({
+      available: false, reason: 'device_registry_unavailable', guidance: RESET_GUIDANCE
+    })
+    expect(existsSync(identityPath)).toBe(false)
+    expect(existsSync(registryPath)).toBe(false)
+    const refusedReset = await rpcFailure(api.callAny('quirky.mobile/resetPairing', { confirm: true, yes: true }))
+    expect(refusedReset.code).toBe(RpcErrorCode.Conflict)
+    expect(refusedReset.message).toContain("owner_grants_unavailable: owner-grants.json is unavailable, so its grants can't be revoked before a new encryption identity is created; nothing was reset. Fix or move owner-grants.json, restart Quirky, then run reset-pairing again")
+    expect(readdirSync(ownerPath)).toEqual([])
+    expect(existsSync(identityPath)).toBe(false)
+    expect(existsSync(registryPath)).toBe(false)
+    for (const name of quarantineNames) expect(readFileSync(join(dataDir, name), 'utf8')).toBe('{broken')
+
+    await cleanupHarness(harness)
+    rmSync(ownerPath, { recursive: true })
+    writeFileSync(ownerPath, ownerBytes, { mode: 0o600 })
+    harness = await boot(home, undefined, { loopbackOnly: true })
+    const restoredApi = await harness.connect('cli')
+    expect(await restoredApi.callAny('quirky.mobile/pair', { address: '127.0.0.1' })).toEqual({
+      available: false, reason: 'device_registry_unavailable', guidance: RESET_GUIDANCE
+    })
+    expect(existsSync(identityPath)).toBe(false)
+    expect(existsSync(registryPath)).toBe(false)
+    expect(readFileSync(ownerPath)).toEqual(ownerBytes)
+
+    const reset = await restoredApi.callAny('quirky.mobile/resetPairing', { confirm: true, yes: true }) as MobilePairingResetResult
+    expect(reset).toMatchObject({ identityCreated: true, unpairedDevices: 0, ownerGrantsRevoked: 1, ownerGrantsRemaining: 0 })
+    const identity = JSON.parse(readFileSync(identityPath, 'utf8')) as { publicKeyB64: string }
+    expect(JSON.parse(readFileSync(ownerPath, 'utf8'))).toEqual({ version: 1, grants: [] })
+    for (const name of quarantineNames) expect(readFileSync(join(dataDir, name), 'utf8')).toBe('{broken')
+    const recoveredState = await restoredApi.callAny('quirky.mobile/state', {}) as {
+      listener: { available: boolean; host: string | null; port: number | null }
+    }
+    expect(recoveredState.listener).toMatchObject({ available: true, host: '127.0.0.1' })
+    expect(recoveredState.listener.port).toBeGreaterThan(0)
+    expect(identity.publicKeyB64).not.toBe(seeded.publicKeyB64)
   }, 60_000)
 
   test('reset-pairing closes phone connections the old registry authorized', async () => {
