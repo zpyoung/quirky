@@ -5,6 +5,9 @@ import { AppContext } from '../src/context'
 import { PluginSlot } from '../src/plugins/PluginSlot'
 import type { HostState, WindowPluginHost } from '../src/plugins/host'
 import { afterEach, describe, expect, test } from 'bun:test'
+import { symlinkSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { makeTempDir } from '../../daemon/test/plugins/fixtures'
 import { bootWindow, closeWindows, installUiPlugin, provide, type WindowEnv } from './fixtures/window-env'
 
 afterEach(closeWindows)
@@ -13,6 +16,7 @@ const SECTION = 'sidebar-section:acme.shell/list'
 const PAGE = 'view:acme.shell/page'
 const OTHER = 'view:acme.shell/other'
 const OUTLINE = 'panel:acme.shell/outline'
+const WORKTREE_VIEW = 'view:quirky.session/worktree'
 
 const slot = (id: string) => `[data-plugin-slot="${id}"]`
 const region = (name: string) => `[data-region="${name}"]`
@@ -237,6 +241,52 @@ test('the window follows view, panel compatibility, and focus APIs through canon
 
   await agent.callAny('ui.view.close', {})
   await win.waitFor(() => win.host.getState().layout.view === null)
+})
+
+test('the Open views row uses underline tabs and closes the active view', async () => {
+  const { win, agent } = await boot()
+  await agent.callAny('ui.view.open', { id: PAGE })
+  await agent.callAny('ui.view.open', { id: OTHER })
+
+  await win.waitFor(() => {
+    const { layout } = win.host.getState()
+    return layout.view?.id === OTHER &&
+      layout.viewTabs?.length === 2 &&
+      win.document.querySelector('[role="tablist"][aria-label="Open views"]') !== null
+  })
+  const tablist = win.document.querySelector<HTMLElement>('[role="tablist"][aria-label="Open views"]')
+  expect(tablist?.classList.contains('ui-tabs--underline')).toBe(true)
+  expect([...tablist!.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Page', 'Other'])
+
+  await win.click('[aria-label="Close active view"]')
+  await win.waitFor(() => {
+    const { layout } = win.host.getState()
+    return layout.view?.id === PAGE &&
+      layout.viewTabs?.length === 1 &&
+      layout.viewTabs?.[0]?.id === PAGE
+  })
+  expect(win.host.getState().layout.viewTabs?.map(({ id }) => id)).toEqual([PAGE])
+})
+
+test('a lone worktree view has no Open views row', async () => {
+  const builtinPlugins = makeTempDir('ui-layout-shell-builtins-')
+  for (const id of ['quirky.repo', 'quirky.worktree', 'quirky.cli', 'quirky.sidebar-extras', 'quirky.ask']) {
+    symlinkSync(resolve(import.meta.dir, '../../../plugins', id), join(builtinPlugins, id))
+  }
+  installUiPlugin(
+    builtinPlugins,
+    'quirky.session',
+    { view: [{ id: 'worktree', title: 'Worktrees' }] },
+    provide(WORKTREE_VIEW, "element.textContent = 'Worktrees'")
+  )
+  const env = await bootWindow(() => {}, { builtinPluginsDir: builtinPlugins })
+  await env.agent.callAny('ui.view.open', { id: WORKTREE_VIEW })
+  await env.win.waitFor(() =>
+    env.win.host.getState().layout.view?.id === WORKTREE_VIEW &&
+    env.win.document.querySelector(slot(WORKTREE_VIEW)) !== null
+  )
+
+  expect(env.win.document.querySelector('[role="tablist"][aria-label="Open views"]')).toBeNull()
 })
 test('a view stays mounted while canonical focus changes', async () => {
   const { win, agent } = await boot()
