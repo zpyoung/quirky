@@ -98,6 +98,8 @@ type Running = {
   ready: boolean
   failed: boolean
   stopped: boolean
+  /** The turn an interrupt ended; its `interrupted` completion is expected and not a failure. */
+  interruptedTurnId: string | null
 }
 
 type Starting = { stopped: boolean; connection?: CodexConnection; run?: Running }
@@ -212,6 +214,32 @@ class CodexRunner implements StructuredRunner {
     return operation
   }
 
+  async interrupt(sessionId: string): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.failed || !run.ready || run.turnStartedAt === null) return
+    const turnId = run.activeTurnId
+    run.activeTurnId = null
+    run.pendingCompletion = null
+    this.flushAssistantDeltas(run)
+    this.closeTurn(run, 'stopped')
+    run.assistantDeltas.clear()
+    run.emittedAssistantIds.clear()
+    run.emittedToolIds.clear()
+    run.toolOutput.clear()
+    if (turnId !== null) {
+      run.interruptedTurnId = turnId
+      try {
+        await run.connection.request('turn/interrupt', { threadId: run.threadId, turnId }, INTERRUPT_TIMEOUT_MS)
+      } catch {
+        run.interruptedTurnId = null
+        await this.stop(sessionId)
+        return
+      }
+    }
+    if (run.stopped || run.failed) return
+    this.context.setStatus(sessionId, 'done')
+  }
+
   async stop(sessionId: string): Promise<void> {
     const inFlight = this.stopping.get(sessionId)
     if (inFlight) {
@@ -317,7 +345,8 @@ class CodexRunner implements StructuredRunner {
       startupFailure: null,
       ready: false,
       failed: false,
-      stopped: false
+      stopped: false,
+      interruptedTurnId: null
     }
     return run
   }
@@ -564,6 +593,10 @@ class CodexRunner implements StructuredRunner {
 
   private completeTurnNotification(run: Running, turn: Record<string, unknown>): void {
     const turnId = turn.id
+    if (turnId === run.interruptedTurnId) {
+      run.interruptedTurnId = null
+      return
+    }
     if (typeof turnId !== 'string' || (run.activeTurnId !== null && turnId !== run.activeTurnId)) return
     if (Array.isArray(turn.items)) {
       for (const item of turn.items) {

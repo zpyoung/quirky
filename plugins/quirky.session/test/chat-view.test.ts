@@ -307,6 +307,13 @@ describe('the chat view', () => {
     expect(buttonNamed('Stop')).toBeDefined()
     expect(buttonNamed('Queue')).toBeDefined()
   })
+
+  test('Stop interrupts the turn instead of stopping the session', async () => {
+    await mountChat({ messages: [user(1, 'go')], session: { status: 'working' }, handlers: { 'quirky.structured/interrupt': () => ({ ok: true }) } })
+    await click(buttonNamed('Stop'))
+    expect(fake.callsTo('quirky.structured/interrupt')[0]!.params).toEqual({ session: 'chat' })
+    expect(fake.callsTo('quirky.structured/stop')).toEqual([])
+  })
 })
 
 describe('the cards', () => {

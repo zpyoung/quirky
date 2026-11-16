@@ -94,7 +94,7 @@ export function Composer({
 
   const stop = async () => {
     try {
-      await context.call('quirky.structured/stop', { session: session.id })
+      await context.call('quirky.structured/interrupt', { session: session.id })
     } catch (error) {
       context.toast('Could not stop', messageOf(error))
     }
@@ -172,7 +172,14 @@ export function Composer({
     }
   }
 
-  if (session.status === 'exited') return <div style={ended} role="status">session ended</div>
+  if (session.status === 'exited') {
+    return (
+      <div style={layout}>
+        <QueuedList context={context} session={session} capabilities={capabilities} />
+        <div style={ended} role="status">session ended</div>
+      </div>
+    )
+  }
 
   return (
     <div

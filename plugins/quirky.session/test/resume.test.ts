@@ -74,6 +74,9 @@ function structuredRunnerFactory(
       send(sessionId, text) {
         return runnerFor(sessionId).send(sessionId, text)
       },
+      interrupt(sessionId) {
+        return runnerFor(sessionId).interrupt(sessionId)
+      },
       stop(sessionId) {
         return runnerFor(sessionId).stop(sessionId)
       }

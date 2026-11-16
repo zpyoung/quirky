@@ -83,6 +83,8 @@ type Running = {
   providerSessionKnown: boolean
   stopped: boolean
   ended: boolean
+  /** An interrupt was issued and its non-success result has not been swallowed yet. */
+  interrupted: boolean
   calls: CallTracker
   stream: ProseStream
   turnStartedAt: number | null
@@ -214,6 +216,7 @@ class ClaudeRunner implements StructuredRunner {
       providerSessionKnown: launchOptions.providerSession !== undefined,
       stopped: false,
       ended: false,
+      interrupted: false,
       calls: new CallTracker(),
       stream: new ProseStream(),
       turnStartedAt: hasPrompt ? Date.now() : null,
@@ -254,6 +257,24 @@ class ClaudeRunner implements StructuredRunner {
     run.turnStartedAt ??= Date.now()
     this.context.setStatus(sessionId, 'working')
     run.input.push(message)
+  }
+
+  async interrupt(sessionId: string): Promise<void> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended || run.turnStartedAt === null) return
+    this.closeTurn(sessionId, run, 'stopped')
+    run.interrupted = true
+    const honoured = await Promise.race([
+      run.query.interrupt().then(() => true, () => false),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), INTERRUPT_TIMEOUT_MS))
+    ])
+    if (!honoured) {
+      run.interrupted = false
+      await this.stop(sessionId)
+      return
+    }
+    if (run.stopped || run.ended || this.running.get(sessionId) !== run) return
+    this.context.setStatus(sessionId, 'done')
   }
 
   async stop(sessionId: string): Promise<void> {
@@ -298,7 +319,7 @@ class ClaudeRunner implements StructuredRunner {
         envelope = null
       } finally {
         pending--
-        if (pending === 0 && this.running.has(sessionId)) this.context.setStatus(sessionId, 'working')
+        if (pending === 0 && this.running.get(sessionId)?.turnStartedAt != null) this.context.setStatus(sessionId, 'working')
       }
       const outcome = approvalOutcome(envelope, true)
       if (outcome.decision === 'allow') return { behavior: 'allow', updatedInput: input }
@@ -391,6 +412,11 @@ class ClaudeRunner implements StructuredRunner {
           await this.context.setProviderSession(sessionId, { id: nativeSessionId, transcriptPath: null })
         }
       }
+    }
+    if (msg?.type === 'result' && run?.interrupted) {
+      run.interrupted = false
+      // the result of the turn that was interrupted is already journaled as stopped
+      if (msg.subtype !== 'success') return
     }
     if (msg?.type === 'assistant') run?.stream.reset()
     const failed = msg?.type === 'result' && (msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error')))

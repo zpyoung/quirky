@@ -76,7 +76,7 @@ afterEach(async () => {
 async function mount(handlers: Record<string, Handler> = {}, props: Props = {}) {
   fake = fakeContext({
     'quirky.structured/send': () => ({ ok: true }),
-    'quirky.structured/stop': () => ({ ok: true }),
+    'quirky.structured/interrupt': () => ({ ok: true }),
     'quirky.structured/queue': () => [],
     'quirky.agents/options': () => OPTIONS,
     ...handlers
@@ -148,11 +148,12 @@ describe('the composer', () => {
     expect(box().value).toBe('keep me')
   })
 
-  test('shows elapsed time and Stop while working, and Stop stops the session', async () => {
+  test('shows elapsed time and Stop while working, and Stop interrupts the turn only', async () => {
     await mount({}, { working: true })
     expect(host!.querySelector('[aria-label="Elapsed time"]')!.textContent).toMatch(/^\d+s$/)
     await click(buttonNamed('Stop'))
-    expect(fake.callsTo('quirky.structured/stop')[0]!.params).toEqual({ session: 's1' })
+    expect(fake.callsTo('quirky.structured/interrupt')[0]!.params).toEqual({ session: 's1' })
+    expect(fake.callsTo('quirky.structured/stop')).toEqual([])
   })
 
   test('shows no Stop while idle', async () => {
@@ -164,6 +165,12 @@ describe('the composer', () => {
     await mount({}, { status: 'exited' })
     expect(host!.textContent).toContain('session ended')
     expect(box()).toBeNull()
+  })
+
+  test('an ended session still lists its queued messages above the notice', async () => {
+    await mount({ 'quirky.structured/queue': () => [queued('q1', 'stranded')] }, { status: 'exited' })
+    expect(byLabel('Queued messages')!.textContent).toContain('stranded')
+    expect(host!.textContent).toContain('session ended')
   })
 })
 

@@ -51,6 +51,8 @@ type LiveSession = {
   ownerPluginId: string | null
   hasSent: boolean
   stopping: boolean
+  /** Set while an interrupt is in flight so the turn it ends does not auto-send the queue. */
+  interrupting: boolean
   lease: { env: Record<string, string>; release(): void } | null
   turnOpen: boolean
   turnStart: Promise<string | null> | null
@@ -385,7 +387,12 @@ export function activate(context: PluginContext): void {
       if (active) context.log(`could not flush the queue of ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
     })
 
-  const finishTurn = async (sessionId: string, entry: LiveSession, start: Promise<string | null> | null): Promise<void> => {
+  const finishTurn = async (
+    sessionId: string,
+    entry: LiveSession,
+    start: Promise<string | null> | null,
+    flush = true
+  ): Promise<void> => {
     if (start !== null) {
       try {
         await enqueueSend(sessionId, () => appendTurnChanges(sessionId, entry, start))
@@ -393,7 +400,7 @@ export function activate(context: PluginContext): void {
         if (active) context.log(`could not record the changes of ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
       }
     }
-    if (active) await flushQueue(sessionId)
+    if (active && flush) await flushQueue(sessionId)
   }
 
   const setStatus = (sessionId: string, status: SessionStatus): void => {
@@ -434,7 +441,7 @@ export function activate(context: PluginContext): void {
       lastAssistantMessage: entry.lastAssistantMessage,
       at: Date.now()
     })
-    if (status === 'done') void finishTurn(sessionId, entry, endedTurn)
+    if (status === 'done') void finishTurn(sessionId, entry, endedTurn, !entry.interrupting)
   }
 
   const cancelAsk = async (askId: string): Promise<void> => {
@@ -887,6 +894,7 @@ export function activate(context: PluginContext): void {
       hasSent: prompt !== undefined && prompt !== '',
       stopping: false,
       lease: null,
+      interrupting: false,
       turnOpen: false,
       turnStart: null,
       viewIds: new Set()
@@ -1034,6 +1042,7 @@ export function activate(context: PluginContext): void {
         hasSent: typeof params.prompt === 'string' && params.prompt !== '',
         stopping: false,
         lease: null,
+        interrupting: false,
         turnOpen: false,
         turnStart: null,
         viewIds: new Set()
@@ -1446,6 +1455,26 @@ export function activate(context: PluginContext): void {
       : { ok: true as const }
   }
 
+  /** Ends the current turn of a live session and leaves it idle, with its queue untouched. */
+  const interrupt: MethodHandler = async (params) => {
+    const request = queuedRequest(params)
+    const session = await requireStructured(request.session)
+    ensureActive()
+    await startTasks.get(session.id)
+    const entry = live.get(session.id)
+    const runner = runnerBySession.get(session.id)
+    if (!entry || !runner || entry.stopping || entry.status === 'exited') {
+      throw context.error('conflict', 'structured session is not active')
+    }
+    entry.interrupting = true
+    try {
+      await Promise.all([runner.interrupt(session.id), cancelPendingAsks(session.id)])
+    } finally {
+      entry.interrupting = false
+    }
+    return { ok: true }
+  }
+
   const stopOwned: MethodHandler = async (params, caller) => {
     if (caller.role !== 'plugin') throw context.error('invalid-params', 'scoped connection cleanup requires an authenticated plugin')
     const key = resourceKey(params.key)
@@ -1497,6 +1526,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/editQueued', editQueued)
   context.provide('method:quirky.structured/steer', steer)
   context.provide('method:quirky.structured/stop', stop)
+  context.provide('method:quirky.structured/interrupt', interrupt)
   context.provide('method:quirky.structured/stopOwned', stopOwned)
 
   context.subscribe((event) => {

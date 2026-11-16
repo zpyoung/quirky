@@ -87,6 +87,37 @@ describe('send when', () => {
     expect(((await chat.call('quirky.structured/queue', { session: session.id })) as QueuedMessage[]).map((m) => m.text)).toEqual(['later'])
   })
 
+  test('interrupt ends the turn and leaves the queue unsent, and the next normal turn end still flushes', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    await chat.call('quirky.structured/send', { session: session.id, text: 'later', when: 'idle' })
+    expect(await chat.call('quirky.structured/interrupt', { session: session.id })).toEqual({ ok: true })
+    expect(chat.runner.interrupted).toEqual([session.id])
+    await Bun.sleep(100)
+    expect(chat.runner.sent).toEqual([])
+    expect(((await chat.call('quirky.structured/queue', { session: session.id })) as QueuedMessage[]).map((m) => m.text)).toEqual(['later'])
+
+    await chat.call('quirky.structured/send', { session: session.id, text: 'next' })
+    chat.runner.finish(session.id)
+    await waitFor(() => chat!.runner.sent.some((sent) => sent.text === 'later'))
+    expect(await chat.call('quirky.structured/queue', { session: session.id })).toEqual([])
+  })
+
+  test('steer still works on a queued message after an interrupt', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    const queued = await chat.call('quirky.structured/send', { session: session.id, text: 'later', when: 'idle' })
+    await chat.call('quirky.structured/interrupt', { session: session.id })
+    await chat.call('quirky.structured/steer', { session: session.id, id: queued.queuedId })
+    expect(chat.runner.sent.map((sent) => sent.text)).toEqual(['later'])
+  })
+
+  test('interrupt rejects unknown params', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    await expect(chat.call('quirky.structured/interrupt', { session: session.id, extra: 1 })).rejects.toMatchObject({ code: RpcErrorCode.InvalidParams })
+  })
+
   test('a repeated operationId does not queue twice', async () => {
     chat = await bootChat()
     const session = await working(chat)

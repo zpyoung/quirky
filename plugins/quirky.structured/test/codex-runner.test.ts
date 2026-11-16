@@ -537,6 +537,38 @@ describe('Codex app-server runner', () => {
     expect(items.at(-2).callId).toBe('command-turn-1')
   })
 
+  test('interrupting mid-turn ends the turn as stopped and keeps the session usable', async () => {
+    await setup.runner.start(setup.session, '[approve] run it')
+    await until(() => setup.asks.length === 1)
+    await setup.runner.interrupt(setup.session.id)
+    const items = setup.messages.map((message) => message.item) as any[]
+    expect(items.slice(-2).map((item) => [item.kind, item.state])).toEqual([['activity', 'stopped'], ['turn-end', 'stopped']])
+    expect(setup.statuses.at(-1)).toBe('done')
+    await Bun.sleep(100)
+    expect(setup.statuses).not.toContain('exited')
+    expect(setup.fixture.requests().some((request) => request.method === 'turn/interrupt')).toBe(true)
+    setup.asks[0]!.resolve({ status: 'declined', askId: 'a1', answers: {}, skipped: ['decision'], summary: '' })
+    await setup.runner.send(setup.session.id, 'again')
+    await until(() => setup.messages.some((message) => message.item?.kind === 'user' && (message.item as any).text === 'again'))
+    expect(setup.statuses).not.toContain('exited')
+  })
+
+  test('interrupting with no open turn does nothing', async () => {
+    await setup.runner.start(setup.session, 'quick')
+    await until(() => setup.statuses.includes('done'))
+    const before = setup.messages.length
+    await setup.runner.interrupt(setup.session.id)
+    expect(setup.messages).toHaveLength(before)
+    expect(setup.fixture.requests().some((request) => request.method === 'turn/interrupt')).toBe(false)
+  })
+
+  test('an interrupt the app-server ignores falls back to a full stop', async () => {
+    await setup.runner.start(setup.session, '[approve] [ignore-interrupt] run it')
+    await until(() => setup.asks.length === 1)
+    await setup.runner.interrupt(setup.session.id)
+    expect(setup.statuses.at(-1)).toBe('exited')
+  })
+
   test('a failed turn ends as failed and journals an error item', async () => {
     await setup.runner.start(setup.session, '[failed]')
     await until(() => setup.statuses.includes('exited'))

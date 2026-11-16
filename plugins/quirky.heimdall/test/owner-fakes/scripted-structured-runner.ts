@@ -113,6 +113,8 @@ export class ScriptedStructuredRunner implements StructuredRunner {
     this.context.setStatus(sessionId, 'working')
   }
 
+  async interrupt(): Promise<void> {}
+
   async stop(sessionId: string): Promise<void> {
     const processState = this.processes.get(sessionId)
     if (!processState || processState.exitCode !== null) return

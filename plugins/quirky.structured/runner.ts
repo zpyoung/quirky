@@ -56,6 +56,12 @@ export type StructuredSendOptions = { images?: string[]; queuedId?: string }
 export interface StructuredRunner {
   start(session: Session, prompt?: string, options?: StructuredStartOptions): Promise<void>
   send(sessionId: string, text: string, options?: StructuredSendOptions): Promise<void>
+  /**
+   * Ends only the current turn: the process and session stay alive and take the next `send`.
+   * Falls back to `stop` when the agent does not honour the interrupt, so the turn always ends.
+   * A session with no open turn is left alone.
+   */
+  interrupt(sessionId: string): Promise<void>
   stop(sessionId: string): Promise<void>
 }
 

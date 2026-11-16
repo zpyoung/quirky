@@ -611,3 +611,63 @@ describe('chat items', () => {
     expect(messages.at(-1)!.item).toEqual({ kind: 'prose', text: 'Hello' })
   })
 })
+
+describe('interrupt', () => {
+  const emit = async (query: FakeQuery, ...events: any[]) => {
+    for (const event of events) query.emit(event)
+    await tick()
+  }
+  const items = () => messages.map((m) => m.item) as any[]
+
+  test('mid-turn it stops running calls, ends the turn as stopped and leaves the session able to send', async () => {
+    const query = await begin()
+    await emit(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'sleep 9' } }] } })
+    await until(() => messages.length === 2)
+    await runner.interrupt('s_1')
+    expect(items().slice(2).map((item) => [item.kind, item.callId, item.state])).toEqual([
+      ['activity', 't1', 'stopped'],
+      ['turn-end', undefined, 'stopped']
+    ])
+    expect(query.interrupted).toBe(1)
+    expect(query.closed).toBe(0)
+    expect(statuses.at(-1)).toBe('done')
+    expect(statuses).not.toContain('exited')
+    await emit(query, { type: 'result', subtype: 'error_during_execution', is_error: true })
+    expect(statuses).not.toContain('exited')
+    await runner.send('s_1', 'again')
+    expect(statuses.at(-1)).toBe('working')
+    expect(query.written.at(-1).message.content).toBeDefined()
+  })
+
+  test('with no open turn it does nothing', async () => {
+    const query = await begin()
+    await emit(query, { type: 'result', subtype: 'success', result: 'ok', is_error: false })
+    await until(() => statuses.includes('done'))
+    const before = messages.length
+    const status = statuses.length
+    await runner.interrupt('s_1')
+    expect(messages).toHaveLength(before)
+    expect(statuses).toHaveLength(status)
+    expect(query.interrupted).toBe(0)
+  })
+
+  test('an interrupt the agent ignores falls back to a full stop', async () => {
+    const query = await begin()
+    query.hangInterrupt = true
+    await runner.interrupt('s_1')
+    expect(query.closed).toBe(1)
+    expect(statuses.at(-1)).toBe('exited')
+    expect(items().at(-1).state).toBe('stopped')
+  })
+
+  test('a pending approval resolving after the interrupt does not flip the session back to working', async () => {
+    const query = await begin()
+    const options = query.params.options as any
+    const decision = options.canUseTool('Bash', { command: 'ls' })
+    await until(() => asks.length === 1)
+    await runner.interrupt('s_1')
+    asks[0]!.resolve(envelope('declined'))
+    await decision
+    expect(statuses.at(-1)).toBe('done')
+  })
+})
