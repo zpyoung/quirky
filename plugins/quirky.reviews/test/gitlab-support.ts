@@ -1,9 +1,10 @@
 import type { PluginCaller } from '@quirky/protocol'
 import { checksMethods } from '../src/checks/methods'
 import { createMethods } from '../src/create/methods'
-import { createReviewsEnv } from '../src/env'
+import { createReviewsEnv, type ActiveReviewsEnv } from '../src/env'
 import { detailMethods } from '../src/detail/methods'
 import type { JsonRecord, ReviewMethodTable, ReviewData } from '../src/contracts'
+import type { GitLabAuthDiagnostics } from '../src/detail/data'
 
 export const GITLAB_WORKTREE = 'w'
 export const GITLAB_HOST = 'gitlab.example.test'
@@ -54,7 +55,7 @@ export const GITLAB_DIAGNOSTICS = {
   hasKeyringFallback: false,
   requiredHost: GITLAB_HOST,
   requiredHostAuthenticated: true,
-}
+} satisfies GitLabAuthDiagnostics
 
 export function gitlabComment(id: number, overrides: Partial<JsonRecord> = {}): JsonRecord {
   return {
@@ -117,17 +118,33 @@ export function deferred<T>(): Deferred<T> {
 }
 
 export type RecordedPublicCall = { method: string; params: JsonRecord | undefined }
-type StandInReply = unknown | ((params: JsonRecord | undefined) => unknown | Promise<unknown>)
-type GitLabMethodHarnessOptions = {
-  replies?: Record<string, StandInReply>
+export type GitLabMethodReply =
+  | JsonRecord
+  | unknown[]
+  | Promise<unknown>
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | ((params: JsonRecord | undefined) => unknown | Promise<unknown>)
+export type GitLabMethodHarnessOptions = {
+  replies?: Record<string, GitLabMethodReply>
   worktree?: { id: string; kind: 'git' | 'folder'; repoId: string; path: string }
+}
+export type GitLabMethodHarness = {
+  env: ActiveReviewsEnv
+  methods: Record<'checks' | 'detail' | 'create', ReviewMethodTable>
+  calls: RecordedPublicCall[]
+  publicCall(method: string, params?: JsonRecord): Promise<unknown>
+  invoke(surface: 'checks' | 'detail' | 'create', method: string, params?: JsonRecord): Promise<unknown>
 }
 
 function unsupported(method: string): Error {
   return Object.assign(new Error(`GitLab hosting does not answer ${method} yet.`), { data: { reason: 'unsupported_provider' } })
 }
 
-export function createGitLabMethodHarness(options: GitLabMethodHarnessOptions = {}) {
+export function createGitLabMethodHarness(options: GitLabMethodHarnessOptions = {}): GitLabMethodHarness {
   const calls: RecordedPublicCall[] = []
   const replies = options.replies ?? {}
   const worktree = options.worktree ?? {
@@ -136,7 +153,7 @@ export function createGitLabMethodHarness(options: GitLabMethodHarnessOptions = 
     repoId: 'fixture-repo',
     path: `/worktrees/${GITLAB_WORKTREE}`,
   }
-  const builtins: Record<string, StandInReply> = {
+  const builtins: Record<string, GitLabMethodReply> = {
     'quirky.worktree/resolve': () => worktree,
     'quirky.hosting/repository': () => ({ provider: 'gitlab', repository: GITLAB_REPOSITORY, worktreeId: worktree.id }),
     'quirky.hosting/diagnoseAuth': () => GITLAB_DIAGNOSTICS,
@@ -174,10 +191,10 @@ export function createGitLabMethodHarness(options: GitLabMethodHarnessOptions = 
     publicCall(method: string, params?: JsonRecord) {
       return env.call(method, params)
     },
-    invoke(surface: keyof typeof methods, method: string, params: JsonRecord = {}) {
+    async invoke(surface: keyof typeof methods, method: string, params: JsonRecord = {}) {
       const handler = methods[surface][method]
       if (!handler) throw new Error(`Unknown ${surface} Reviews method: ${method}`)
-      return handler(params, { role: 'plugin' } as PluginCaller)
+      return await handler(params, { role: 'plugin' } as PluginCaller)
     },
   }
 }

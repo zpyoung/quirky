@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import * as detailData from '../src/detail/data'
 import {
+  isRecord,
+  type GitHubAuthAccount,
+  type GitHubAuthDiagnostics,
+  type GitLabAuthDiagnostics,
+  parseAuthDiagnostics,
   parseCommentsResult,
   parseRepoIdentity,
   parseReviewLookup,
@@ -9,15 +13,25 @@ import {
 } from '../src/detail/data'
 import {
   createGitLabMethodHarness,
+  deferred,
   GITLAB_COMMENTS,
   GITLAB_DIAGNOSTICS,
+  GITLAB_HEAD_OID,
   GITLAB_HOST,
   GITLAB_LOOKUP,
   GITLAB_REPOSITORY,
   GITLAB_REVIEW,
   GITLAB_WORKTREE,
   gitlabComments,
+  type GitLabMethodHarness,
+  type GitLabMethodHarnessOptions,
 } from './gitlab-support'
+import type { JsonRecord, ReviewData } from '../src/contracts'
+import { newChecksEntry } from '../src/env'
+import { checksSpecs } from '../src/checks/methods'
+import { createSpecs } from '../src/create/methods'
+import { detailSpecs, directMergeAllowed, queueMergeAllowed } from '../src/detail/methods'
+
 
 const GITLAB_URL = GITLAB_REVIEW.url
 const GITHUB_URL = 'https://github.com/owner/repo/pull/5'
@@ -25,10 +39,6 @@ const GITHUB_REPOSITORY = { host: 'github.com', owner: 'owner', repo: 'repo' }
 
 function lookup(review: unknown) {
   return { kind: 'found', review, fetchedAt: GITLAB_LOOKUP.fetchedAt }
-}
-const parseAuthDiagnostics = (value: unknown): unknown => {
-  const parser = (detailData as unknown as Record<string, unknown>).parseAuthDiagnostics
-  return typeof parser === 'function' ? parser(value) : null
 }
 
 describe('GitLab shared review data', () => {
@@ -46,6 +56,10 @@ describe('GitLab shared review data', () => {
       .toEqual({ host: '[::1]:8123', owner: 'group/sub', repo: 'proj' })
     expect(parseRepoIdentity({ host: '[::1]:8123', owner: 'group/sub', repo: 'proj' }, 'gitlab'))
       .toEqual({ host: '[::1]:8123', owner: 'group/sub', repo: 'proj' })
+    expect(parseRepoIdentity({ host: '[::1]:443', owner: 'group/sub', repo: 'proj' }, 'gitlab'))
+      .toEqual({ host: '[::1]:443', owner: 'group/sub', repo: 'proj' })
+    expect(repoFromReviewUrl('http://[::1]:443/group/sub/proj/-/merge_requests/5', 5, 'gitlab'))
+      .toEqual({ host: '[::1]:443', owner: 'group/sub', repo: 'proj' })
 
     expect(repoFromReviewUrl(GITHUB_URL, 5, 'github')).toEqual(GITHUB_REPOSITORY)
     expect(repoFromReviewUrl(GITHUB_URL, 5)).toEqual(GITHUB_REPOSITORY)
@@ -92,6 +106,8 @@ describe('GitLab shared review data', () => {
     try {
       const state = harness.env.view(GITLAB_WORKTREE)
       state.detail.target = { worktree: GITLAB_WORKTREE, number: 5, prRepo: GITLAB_REPOSITORY }
+      state.detail.review = null
+      expect(reviewContext(state, 'detail')).toMatchObject({ number: 5, repo: GITLAB_REPOSITORY })
       state.detail.review = GITLAB_REVIEW
       expect(reviewContext(state, 'detail')).toMatchObject({ number: 5, repo: GITLAB_REPOSITORY })
       state.detail.target = { worktree: GITLAB_WORKTREE, number: 5, prRepo: { ...GITLAB_REPOSITORY, repo: 'other' } }
@@ -119,7 +135,7 @@ describe('GitLab shared review data', () => {
         accounts: [],
         envTokenInProcess: false,
         requiredHostAuthenticated: false,
-      }
+      } satisfies GitLabAuthDiagnostics
       expect(parseAuthDiagnostics(missing)).toEqual(missing)
     }
 
@@ -130,7 +146,7 @@ describe('GitLab shared review data', () => {
       activeAccount: null,
       accounts: [],
       requiredHostAuthenticated: false,
-    }
+    } satisfies GitLabAuthDiagnostics
     expect(parseAuthDiagnostics(rejected)).toEqual(rejected)
     expect(parseAuthDiagnostics({ ...GITLAB_DIAGNOSTICS, missingScopes: ['api'], requiredHostAuthenticated: true }))
       .toMatchObject({ missingScopes: ['api'], requiredHostAuthenticated: true })
@@ -139,7 +155,7 @@ describe('GitLab shared review data', () => {
 
     const githubAccount = {
       host: 'github.com', user: 'fixture-user', source: 'env', active: true, bindable: false, scopes: ['repo'],
-    }
+    } satisfies GitHubAuthAccount
     const githubDiagnostics = {
       ghAvailable: true,
       activeAccount: githubAccount,
@@ -150,7 +166,7 @@ describe('GitLab shared review data', () => {
       hasKeyringFallback: false,
       requiredHost: 'github.com',
       requiredHostAuthenticated: true,
-    }
+    } satisfies GitHubAuthDiagnostics
     expect(parseAuthDiagnostics(githubDiagnostics)).toEqual(githubDiagnostics)
     expect(parseAuthDiagnostics({ ...githubDiagnostics, provider: 'github' })).toEqual({ ...githubDiagnostics, provider: 'github' })
     expect(parseAuthDiagnostics({ ...githubDiagnostics, ghAvailable: undefined })).toBeNull()
@@ -183,7 +199,9 @@ describe('GitLab shared review data', () => {
     expect(many?.partialFailures).toContain('reviews_comments_truncated')
 
     const malformedAfterLimit = gitlabComments(101)
-    malformedAfterLimit.comments[100] = { ...malformedAfterLimit.comments[100] as object, body: 42 }
+    const malformedNotes = malformedAfterLimit.comments
+    if (!Array.isArray(malformedNotes) || !isRecord(malformedNotes[100])) throw new Error('fixture note was unavailable')
+    malformedNotes[100] = { ...malformedNotes[100], body: 42 }
     expect(parseCommentsResult(malformedAfterLimit, 5, 'gitlab')).toBeNull()
     expect(parseCommentsResult(gitlabComments(101), 5)).toBeNull()
     expect(parseCommentsResult(gitlabComments(101), 5, 'github')).toBeNull()
@@ -192,6 +210,737 @@ describe('GitLab shared review data', () => {
     const existingPartial = parseCommentsResult(gitlabComments(101, true, ['provider_page_partial']), 5, 'gitlab')
     expect(existingPartial?.partial).toBe(true)
     expect(existingPartial?.partialFailures).toEqual(['provider_page_partial', 'reviews_comments_truncated'])
+  })
+
+})
+type GitLabHarness = GitLabMethodHarness
+
+type HarnessOptions = GitLabMethodHarnessOptions
+
+const GITLAB_STATUS: JsonRecord = {
+  branch: 'feature',
+  head: GITLAB_HEAD_OID,
+  detached: false,
+  operation: 'none',
+  entries: [],
+  files: [],
+  upstreamStatus: {},
+  busy: null,
+  capped: false,
+}
+const GITLAB_CHECKS: JsonRecord = {
+  number: 5,
+  headSha: GITLAB_HEAD_OID,
+  rollup: 'success',
+  checks: [],
+  partial: false,
+  partialFailures: [],
+}
+const GITLAB_FILES: JsonRecord = {
+  number: 5,
+  files: [{
+    path: 'src/a.ts',
+    status: 'modified',
+    additions: 1,
+    deletions: 0,
+    changes: 1,
+    patch: '@@ -9 +10 @@',
+    isBinary: false,
+    patchUnavailable: false,
+    viewed: false,
+    coordinates: [{ line: 10, side: 'RIGHT' }],
+  }],
+  truncated: false,
+  filesUnavailable: false,
+  partialFailures: [],
+  totalCount: 1,
+}
+const CREATE_WORKTREE = {
+  id: GITLAB_WORKTREE,
+  kind: 'git' as const,
+  repoId: 'fixture-repo',
+  path: `/worktrees/${GITLAB_WORKTREE}`,
+  branch: 'feature',
+  head: GITLAB_HEAD_OID,
+}
+const GITLAB_ELIGIBILITY: JsonRecord = {
+  eligible: true,
+  defaultBase: 'main',
+  head: 'feature',
+  title: 'Add x',
+  body: 'body',
+  blockers: [],
+}
+const GIT_BRANCHES: JsonRecord = {
+  refs: [{ name: 'origin/main', kind: 'remote' }],
+  current: 'feature',
+}
+const GITHUB_REPOSITORY_ID = { host: 'github.com', owner: 'owner', repo: 'repo' }
+const GITHUB_DIAGNOSTICS: JsonRecord = {
+  ghAvailable: true,
+  activeAccount: { host: 'github.com', user: 'fixture-user', source: 'env', active: true, bindable: false, scopes: ['repo'] },
+  accounts: [{ host: 'github.com', user: 'fixture-user', source: 'env', active: true, bindable: false, scopes: ['repo'] }],
+  envTokenInProcess: true,
+  missingScopes: [],
+  requiredScopes: ['repo'],
+  hasKeyringFallback: false,
+  requiredHost: 'github.com',
+  requiredHostAuthenticated: true,
+}
+const GITHUB_SETTINGS_REPLIES: Record<string, JsonRecord> = {
+  'quirky.hosting/accounts': {
+    requiredHost: 'github.com',
+    accounts: [{ host: 'github.com', user: 'fixture-user', source: 'env', active: true, bindable: false, scopes: ['repo'] }],
+  },
+  'quirky.hosting/configuration': { worktreeId: GITLAB_WORKTREE, issueSourcePreference: 'auto', account: null },
+  'quirky.hosting/rateLimit': {
+    core: { limit: 5000, remaining: 4999, resetAt: 1 },
+    search: { limit: 30, remaining: 29, resetAt: 1 },
+    graphql: { limit: 5000, remaining: 4999, resetAt: 1 },
+    fetchedAt: 1,
+  },
+}
+
+function selectedGitLabReview(overrides: Partial<ReviewData> = {}): ReviewData {
+  return { ...GITLAB_REVIEW, prRepo: GITLAB_REPOSITORY, ...overrides }
+}
+
+function selectDetail(
+  harness: GitLabHarness,
+  review: ReviewData = selectedGitLabReview(),
+  comments: JsonRecord | null = GITLAB_COMMENTS,
+  files: JsonRecord | null = null,
+): void {
+  harness.env.update((state) => {
+    state.detail.target = { worktree: GITLAB_WORKTREE, number: review.number, tab: 'conversation', prRepo: GITLAB_REPOSITORY }
+    state.detail.review = review
+    state.detail.comments = comments
+    state.detail.files = files
+  })
+}
+
+function selectChecks(harness: GitLabHarness, review: ReviewData = selectedGitLabReview()): void {
+  const entry = newChecksEntry(GITLAB_WORKTREE)
+  entry.review = review
+  entry.comments = GITLAB_COMMENTS
+  harness.env.update((state) => { state.checksByWorktree[GITLAB_WORKTREE] = entry })
+}
+
+function callsFor(harness: GitLabHarness, method: string) {
+  return harness.calls.filter((call) => call.method === method)
+}
+
+async function withHarness<T>(options: HarnessOptions, run: (harness: GitLabHarness) => Promise<T>): Promise<T> {
+  const harness = createGitLabMethodHarness(options)
+  try {
+    return await run(harness)
+  } finally {
+    await harness.env.dispose()
+  }
+}
+
+
+describe('GitLab Reviews daemon methods', () => {
+  test('Checks retains normalized MR metadata and comments when optional checks are unavailable', async () => {
+    await withHarness({ replies: { 'quirky.git/status': GITLAB_STATUS } }, async (harness) => {
+      const result = await harness.invoke('checks', 'checksRefresh', { worktree: GITLAB_WORKTREE }) as JsonRecord
+      const checks = harness.env.view(GITLAB_WORKTREE).checks
+
+      expect(result).toMatchObject({ ok: false, kind: 'found', number: 5 })
+      expect(result.error).toContain('Checks are unavailable for GitLab merge requests.')
+      expect(checks.loading).toBe(false)
+      expect(checks.checks).toBeNull()
+      expect(checks.comments).toMatchObject({
+        number: 5,
+        comments: expect.arrayContaining([
+          expect.objectContaining({ id: 101, body: 'hello' }),
+          expect.objectContaining({ id: 201, body: 'please fix', threadId: 'a'.repeat(40) }),
+        ]),
+      })
+      expect(checks.review).toMatchObject({
+        provider: 'gitlab',
+        number: 5,
+        title: 'Add x',
+        body: 'body',
+        updatedAt: GITLAB_REVIEW.updatedAt,
+        requestedReviewers: ['reviewer'],
+        assignees: [],
+        reviews: [],
+        repository: GITLAB_REPOSITORY,
+        prRepo: GITLAB_REPOSITORY,
+        stack: null,
+        autoMergeRequest: null,
+        mergeMethods: expect.any(Object),
+      })
+      expect(checks.review).not.toHaveProperty('accessToken')
+      expect(callsFor(harness, 'quirky.hosting/reviewStack')).toHaveLength(0)
+    })
+
+    await withHarness({
+      replies: { 'quirky.git/status': GITLAB_STATUS, 'quirky.hosting/checks': GITLAB_CHECKS },
+    }, async (harness) => {
+      const result = await harness.invoke('checks', 'checksRefresh', { worktree: GITLAB_WORKTREE }) as JsonRecord
+      expect(result.ok).toBe(true)
+      expect(harness.env.view(GITLAB_WORKTREE).checks.checks).toMatchObject(GITLAB_CHECKS)
+    })
+  })
+
+  test('Checks by-number links reject wrong IID and same-number repository sources before detail reads', async () => {
+    const wrongNumber = {
+      kind: 'found',
+      review: { ...GITLAB_REVIEW, number: 6, url: GITLAB_URL.replace('/5', '/6') },
+      fetchedAt: GITLAB_LOOKUP.fetchedAt,
+    }
+    await withHarness({ replies: { 'quirky.hosting/review': wrongNumber } }, async (harness) => {
+      await expect(harness.invoke('checks', 'checksLink', { worktree: GITLAB_WORKTREE, number: 5 }))
+        .rejects.toMatchObject({ data: { reason: 'invalid_hosting_response' } })
+      expect(harness.env.read().links[GITLAB_WORKTREE]).toBeUndefined()
+      expect(callsFor(harness, 'quirky.hosting/checks')).toHaveLength(0)
+      expect(callsFor(harness, 'quirky.hosting/comments')).toHaveLength(0)
+    })
+
+    await withHarness({ replies: { 'quirky.hosting/review': GITLAB_LOOKUP } }, async (harness) => {
+      await expect(harness.invoke('checks', 'checksLink', {
+        worktree: GITLAB_WORKTREE,
+        number: 5,
+        prRepo: { ...GITLAB_REPOSITORY, repo: 'another-project' },
+      })).rejects.toMatchObject({ data: { reason: 'repository_mismatch' } })
+      expect(harness.env.read().links[GITLAB_WORKTREE]).toBeUndefined()
+      expect(callsFor(harness, 'quirky.hosting/checks')).toHaveLength(0)
+      expect(callsFor(harness, 'quirky.hosting/comments')).toHaveLength(0)
+      expect(callsFor(harness, 'quirky.hosting/reviewStack')).toHaveLength(0)
+    })
+  })
+
+  test('detail refresh loads GitLab title/body without GitHub-only reads or fabricated details', async () => {
+    const secretReview = selectedGitLabReview({ accessToken: 'never-store-this', providerPayload: { credential: 'private' } })
+    await withHarness({ replies: { 'quirky.hosting/review': lookup(secretReview) } }, async (harness) => {
+      selectDetail(harness, secretReview)
+      const result = await harness.invoke('detail', 'detailRefresh', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
+      }) as JsonRecord
+
+      expect(result).toMatchObject({
+        ok: false,
+        loaded: { review: true, details: false, checks: false, comments: true, files: false },
+      })
+      expect((result.errors as string[]).join(' ')).toContain('Checks are unavailable for GitLab merge requests.')
+      expect((result.errors as string[]).join(' ')).toContain('Changed files are unavailable for GitLab merge requests.')
+      expect(harness.env.read().detail.review).toMatchObject({
+        provider: 'gitlab',
+        title: 'Add x',
+        body: 'body',
+        updatedAt: GITLAB_REVIEW.updatedAt,
+        requestedReviewers: ['reviewer'],
+        assignees: [],
+        reviews: [],
+        repository: GITLAB_REPOSITORY,
+        prRepo: GITLAB_REPOSITORY,
+      })
+      expect(harness.env.read().detail.review).not.toHaveProperty('accessToken')
+      expect(harness.env.read().detail.review).not.toHaveProperty('providerPayload')
+      expect(harness.env.read().detail.details).toBeNull()
+      for (const method of ['quirky.hosting/workItemDetails', 'quirky.hosting/files', 'quirky.hosting/reviewStack']) {
+        expect(callsFor(harness, method)).toHaveLength(0)
+      }
+    })
+  })
+
+  test('detail refresh rejects wrong IID and cross-project sources before dependent reads', async () => {
+    const wrongNumber = {
+      kind: 'found',
+      review: { ...GITLAB_REVIEW, number: 6, url: GITLAB_URL.replace('/5', '/6') },
+      fetchedAt: GITLAB_LOOKUP.fetchedAt,
+    }
+    await withHarness({ replies: { 'quirky.hosting/review': wrongNumber } }, async (harness) => {
+      selectDetail(harness)
+      await expect(harness.invoke('detail', 'detailRefresh', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
+      })).rejects.toMatchObject({ data: { reason: 'invalid_upstream' } })
+      expect(callsFor(harness, 'quirky.hosting/checks')).toHaveLength(0)
+      expect(callsFor(harness, 'quirky.hosting/comments')).toHaveLength(0)
+    })
+
+    await withHarness({}, async (harness) => {
+      harness.env.update((state) => {
+        state.detail.target = {
+          worktree: GITLAB_WORKTREE,
+          number: 5,
+          tab: 'conversation',
+          prRepo: { ...GITLAB_REPOSITORY, repo: 'another-project' },
+        }
+      })
+      await expect(harness.invoke('detail', 'detailRefresh', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
+      })).rejects.toMatchObject({ data: { reason: 'source_mismatch' } })
+      expect(callsFor(harness, 'quirky.hosting/checks')).toHaveLength(0)
+      expect(callsFor(harness, 'quirky.hosting/comments')).toHaveLength(0)
+      expect(callsFor(harness, 'quirky.hosting/files')).toHaveLength(0)
+    })
+  })
+
+  test('GitLab settings refresh reads repository and diagnostics only', async () => {
+    await withHarness({}, async (harness) => {
+      const result = await harness.invoke('create', 'hostingSettingsRefresh', {
+        worktree: GITLAB_WORKTREE,
+        forceBudget: true,
+      }) as JsonRecord
+      const settings = harness.env.read().settings
+
+      expect(result).toMatchObject({ worktree: GITLAB_WORKTREE, refreshed: true })
+      expect(settings).toMatchObject({
+        provider: 'gitlab',
+        repository: GITLAB_REPOSITORY,
+        diagnostics: GITLAB_DIAGNOSTICS,
+        accounts: null,
+        configuration: null,
+        budget: null,
+        loading: false,
+        error: null,
+      })
+      expect(callsFor(harness, 'quirky.hosting/repository')).toHaveLength(1)
+      expect(callsFor(harness, 'quirky.hosting/diagnoseAuth')).toHaveLength(1)
+      for (const method of [
+        'quirky.hosting/accounts',
+        'quirky.hosting/configuration',
+        'quirky.hosting/configure',
+        'quirky.hosting/rateLimit',
+      ]) expect(callsFor(harness, method)).toHaveLength(0)
+    })
+  })
+
+  test('GitLab diagnostics pass through hostingDiagnose, settings refresh, and Checks auth', async () => {
+    const missingDiagnostics = {
+      ...GITLAB_DIAGNOSTICS,
+      tokenSource: null,
+      glabAvailable: false,
+      activeAccount: null,
+      accounts: [],
+      envTokenInProcess: false,
+      requiredHostAuthenticated: false,
+    }
+    await withHarness({
+      replies: { 'quirky.hosting/diagnoseAuth': missingDiagnostics },
+    }, async (harness) => {
+      const diagnostics = await harness.invoke('create', 'hostingDiagnose', { worktree: GITLAB_WORKTREE })
+      expect(diagnostics).toEqual(missingDiagnostics)
+      expect(diagnostics).not.toHaveProperty('ghAvailable')
+      const refreshed = await harness.invoke('create', 'hostingSettingsRefresh', { worktree: GITLAB_WORKTREE }) as JsonRecord
+      expect(refreshed.refreshed).toBe(true)
+      expect(harness.env.read().settings).toMatchObject({
+        provider: 'gitlab',
+        repository: GITLAB_REPOSITORY,
+        diagnostics: missingDiagnostics,
+        accounts: null,
+        configuration: null,
+        budget: null,
+        error: null,
+      })
+    })
+
+    await withHarness({
+      replies: {
+        'quirky.git/status': GITLAB_STATUS,
+        'quirky.hosting/creationEligibility': {
+          eligible: false,
+          defaultBase: 'main',
+          head: 'feature',
+          title: 'Add x',
+          body: 'body',
+          blockers: [{ reason: 'auth_required', nextAction: 'authenticate', message: 'Fixture authentication is missing.' }],
+        },
+        'quirky.hosting/diagnoseAuth': missingDiagnostics,
+      },
+    }, async (harness) => {
+      const refreshed = await harness.invoke('checks', 'checksRefresh', { worktree: GITLAB_WORKTREE, force: true }) as JsonRecord
+      expect(refreshed.ok).toBe(false)
+      expect(harness.env.view(GITLAB_WORKTREE).checks.lookup).toMatchObject({ authDiagnostics: missingDiagnostics })
+      expect(callsFor(harness, 'quirky.hosting/diagnoseAuth')).toHaveLength(1)
+    })
+  })
+
+  test('GitHub-only settings methods use live canonical provider and refuse before dispatch', async () => {
+    const inputs: Array<[string, JsonRecord]> = [
+      ['hostingAccounts', { worktree: GITLAB_WORKTREE }],
+      ['hostingConfiguration', { worktree: GITLAB_WORKTREE }],
+      ['hostingBudget', { worktree: GITLAB_WORKTREE }],
+      ['hostingBindAccount', { worktree: GITLAB_WORKTREE, host: GITLAB_HOST, user: 'fixture-user' }],
+      ['hostingUnbindAccount', { worktree: GITLAB_WORKTREE }],
+    ]
+    for (const [method, params] of inputs) {
+      await withHarness({}, async (harness) => {
+        harness.env.update((state) => {
+          state.settings.worktree = GITLAB_WORKTREE
+          state.settings.provider = 'github'
+          state.settings.repository = GITHUB_REPOSITORY_ID
+        })
+        await expect(harness.invoke('create', method, params))
+          .rejects.toMatchObject({ data: { reason: 'unsupported_provider' } })
+        expect(callsFor(harness, 'quirky.hosting/repository')).toHaveLength(1)
+        for (const unsupported of [
+          'quirky.hosting/accounts',
+          'quirky.hosting/configuration',
+          'quirky.hosting/configure',
+          'quirky.hosting/rateLimit',
+        ]) expect(callsFor(harness, unsupported)).toHaveLength(0)
+      })
+    }
+  })
+
+  test('settings reads are fenced across a same-worktree A→B→A provider replacement', async () => {
+    let repository = { provider: 'github', repository: GITHUB_REPOSITORY_ID }
+    const heldFirstDiagnostics = deferred<unknown>()
+    const firstDiagnosticStarted = deferred<void>()
+    let diagnosticReads = 0
+    const harness = createGitLabMethodHarness({
+      replies: {
+        ...GITHUB_SETTINGS_REPLIES,
+        'quirky.hosting/repository': () => ({ ...repository, worktreeId: GITLAB_WORKTREE }),
+        'quirky.hosting/diagnoseAuth': () => {
+          diagnosticReads += 1
+          if (diagnosticReads === 1) {
+            firstDiagnosticStarted.resolve(undefined)
+            return heldFirstDiagnostics.promise
+          }
+          return repository.provider === 'gitlab' ? GITLAB_DIAGNOSTICS : GITHUB_DIAGNOSTICS
+        },
+      },
+    })
+    try {
+      const oldA = harness.invoke('create', 'hostingSettingsRefresh', { worktree: GITLAB_WORKTREE })
+      await firstDiagnosticStarted.promise
+      const firstGeneration = harness.env.read().settings.generation
+
+      repository = { provider: 'gitlab', repository: GITLAB_REPOSITORY }
+      const b = await harness.invoke('create', 'hostingSettingsRefresh', { worktree: GITLAB_WORKTREE }) as JsonRecord
+      expect(b.refreshed).toBe(true)
+      expect(harness.env.read().settings).toMatchObject({ provider: 'gitlab', repository: GITLAB_REPOSITORY })
+
+      repository = { provider: 'github', repository: GITHUB_REPOSITORY_ID }
+      const newA = await harness.invoke('create', 'hostingSettingsRefresh', { worktree: GITLAB_WORKTREE }) as JsonRecord
+      expect(newA.refreshed).toBe(true)
+      const currentGeneration = harness.env.read().settings.generation
+      expect(currentGeneration).toBeGreaterThan(firstGeneration)
+
+      heldFirstDiagnostics.resolve(GITHUB_DIAGNOSTICS)
+      const oldResult = await oldA as JsonRecord
+      expect(oldResult.stale).toBe(true)
+      expect(harness.env.read().settings).toMatchObject({
+        provider: 'github',
+        repository: GITHUB_REPOSITORY_ID,
+        diagnostics: GITHUB_DIAGNOSTICS,
+        loading: false,
+        error: null,
+      })
+    } finally {
+      heldFirstDiagnostics.resolve(GITHUB_DIAGNOSTICS)
+      await harness.env.dispose()
+    }
+  })
+
+  test('creation eligibility carries canonical GitLab provider and never enables stacking', async () => {
+    const harness = createGitLabMethodHarness({
+      worktree: CREATE_WORKTREE,
+      replies: {
+        'quirky.hosting/creationEligibility': GITLAB_ELIGIBILITY,
+        'quirky.git/branches': GIT_BRANCHES,
+      },
+    })
+    try {
+      const opened = await harness.invoke('create', 'createOpen', { worktree: GITLAB_WORKTREE }) as JsonRecord
+      expect(opened.opened).toBe(true)
+      expect(harness.env.read().creation.eligibility).toMatchObject({
+        provider: 'gitlab',
+        stackSupported: false,
+        stackEnabled: false,
+      })
+      expect(callsFor(harness, 'quirky.hosting/forBranch')).toHaveLength(0)
+    } finally {
+      await harness.env.dispose()
+    }
+  })
+
+  test('GitLab creation forwards settled fields and validates the returned canonical MR URL', async () => {
+    const createReply = { number: 6, url: `https://${GITLAB_HOST}/group/sub/proj/-/merge_requests/6`, existing: false }
+    const harness = createGitLabMethodHarness({
+      worktree: CREATE_WORKTREE,
+      replies: {
+        'quirky.hosting/creationEligibility': GITLAB_ELIGIBILITY,
+        'quirky.git/branches': GIT_BRANCHES,
+        'quirky.hosting/create': createReply,
+      },
+    })
+    try {
+      await harness.invoke('create', 'createOpen', { worktree: GITLAB_WORKTREE })
+      await harness.invoke('create', 'createDraft', {
+        worktree: GITLAB_WORKTREE, title: 'Add x', body: 'body', draft: true, useTemplate: false,
+      })
+      const result = await harness.invoke('create', 'createSubmit', { worktree: GITLAB_WORKTREE }) as JsonRecord
+      expect(result).toMatchObject({ status: 'created', review: { number: 6, url: createReply.url } })
+      expect(harness.env.read().links[GITLAB_WORKTREE]).toEqual({ number: 6, url: createReply.url })
+      expect(callsFor(harness, 'quirky.hosting/create')).toHaveLength(1)
+      expect(callsFor(harness, 'quirky.hosting/create')[0]?.params).toEqual({
+        worktree: GITLAB_WORKTREE, base: 'main', head: 'feature', title: 'Add x', body: 'body', draft: true, useTemplate: false,
+      })
+      expect(callsFor(harness, 'quirky.hosting/createStacked')).toHaveLength(0)
+    } finally {
+      await harness.env.dispose()
+    }
+
+    for (const url of [
+      `https://other.example.test/group/sub/proj/-/merge_requests/6`,
+      `https://${GITLAB_HOST}/group/other/proj/-/merge_requests/6`,
+      `https://${GITLAB_HOST}/group/sub/proj/-/pull/6`,
+      `https://${GITLAB_HOST}/group/sub/proj/-/merge_requests/7`,
+    ]) {
+      const invalidHarness = createGitLabMethodHarness({
+        worktree: CREATE_WORKTREE,
+        replies: {
+          'quirky.hosting/creationEligibility': GITLAB_ELIGIBILITY,
+          'quirky.git/branches': GIT_BRANCHES,
+          'quirky.hosting/create': { number: 6, url },
+        },
+      })
+      try {
+        await invalidHarness.invoke('create', 'createOpen', { worktree: GITLAB_WORKTREE })
+        await invalidHarness.invoke('create', 'createDraft', { worktree: GITLAB_WORKTREE, title: 'Add x' })
+        await expect(invalidHarness.invoke('create', 'createSubmit', { worktree: GITLAB_WORKTREE })).rejects.toThrow()
+        expect(invalidHarness.env.read().links[GITLAB_WORKTREE]).toBeUndefined()
+      } finally {
+        await invalidHarness.env.dispose()
+      }
+    }
+  })
+
+  test('GitLab state changes accept exact idempotent acknowledgements and preserve updated:false', async () => {
+    const cases = [
+      { method: 'detailMarkReady', initial: 'draft', action: 'ready', expected: 'open' },
+      { method: 'detailCloseReview', initial: 'open', action: 'close', expected: 'closed' },
+      { method: 'detailReopenReview', initial: 'closed', action: 'reopen', expected: 'open' },
+    ] as const
+    for (const item of cases) {
+      await withHarness({
+        replies: {
+          'quirky.hosting/updateReview': () => ({ number: 5, state: item.expected, updated: false }),
+        },
+      }, async (harness) => {
+        selectDetail(harness, selectedGitLabReview({ state: item.initial }))
+        const result = await harness.invoke('detail', item.method, {
+          surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
+        }) as JsonRecord
+        expect(result).toEqual({ number: 5, state: item.expected, updated: false })
+        expect(harness.env.read().detail.review?.state).toBe(item.expected)
+        expect(callsFor(harness, 'quirky.hosting/updateReview')[0]?.params).toMatchObject({
+          worktree: GITLAB_WORKTREE, number: 5, prRepo: GITLAB_REPOSITORY, action: item.action,
+        })
+      })
+    }
+  })
+
+  test('GitLab body, comment, numeric reply, and numberless thread writes use exact repository identity', async () => {
+    await withHarness({
+      replies: {
+        'quirky.hosting/updateReview': (params) => ({ number: 5, updated: params?.action === 'edit' }),
+        'quirky.hosting/reviewConversation': (params) => {
+          if (params?.action === 'add') return {
+            number: 5, action: 'add',
+            comment: { kind: 'issue_comment', id: 301, body: params.body, author: 'fixture-user', createdAt: '2026-11-16T00:01:00Z', url: `${GITLAB_URL}#note_301` },
+          }
+          if (params?.action === 'edit') return {
+            number: 5, action: 'edit',
+            comment: { kind: 'issue_comment', id: params.commentId, body: params.body, author: 'fixture-user', createdAt: '2026-11-16T00:00:00Z', url: `${GITLAB_URL}#note_101` },
+          }
+          throw new Error(`Unexpected conversation action: ${String(params?.action)}`)
+        },
+        'quirky.hosting/reviewComment': (params) => ({
+          number: 5,
+          action: 'reply',
+          comment: { id: 302, body: params?.body, path: null, line: null, startLine: null },
+        }),
+        'quirky.hosting/resolveThread': (params) => ({
+          threadId: params?.threadId,
+          action: params?.action,
+          resolved: params?.action === 'resolve',
+        }),
+      },
+    }, async (harness) => {
+      selectDetail(harness)
+      const description = await harness.invoke('detail', 'detailUpdateBody', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5, body: 'edited body',
+      }) as JsonRecord
+      expect(description).toMatchObject({ number: 5, body: 'edited body', updated: true })
+
+      await harness.invoke('detail', 'detailPostComment', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5, body: 'new note',
+      })
+      await harness.invoke('detail', 'detailEditComment', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5, commentId: 101, body: 'edited note',
+      })
+      await harness.invoke('detail', 'detailPostComment', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5, replyToId: 101, body: 'numeric reply',
+      })
+      const threadId = 'a'.repeat(40)
+      const resolved = await harness.invoke('detail', 'detailResolveThread', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5, threadId, resolved: true,
+      })
+      expect(resolved).toEqual({ number: 5, threadId, resolved: true })
+      expect(callsFor(harness, 'quirky.hosting/updateReview')[0]?.params)
+        .toMatchObject({ worktree: GITLAB_WORKTREE, number: 5, prRepo: GITLAB_REPOSITORY, action: 'edit', body: 'edited body' })
+      expect(callsFor(harness, 'quirky.hosting/reviewConversation').map((call) => call.params))
+        .toEqual(expect.arrayContaining([
+          expect.objectContaining({ worktree: GITLAB_WORKTREE, number: 5, prRepo: GITLAB_REPOSITORY, action: 'add', body: 'new note' }),
+          expect.objectContaining({ worktree: GITLAB_WORKTREE, number: 5, prRepo: GITLAB_REPOSITORY, action: 'edit', commentId: 101, body: 'edited note' }),
+        ]))
+      expect(callsFor(harness, 'quirky.hosting/reviewComment')[0]?.params)
+        .toMatchObject({ worktree: GITLAB_WORKTREE, number: 5, prRepo: GITLAB_REPOSITORY, action: 'reply', replyToId: 101 })
+      expect(callsFor(harness, 'quirky.hosting/resolveThread')[0]?.params)
+        .toEqual({ worktree: GITLAB_WORKTREE, number: 5, prRepo: GITLAB_REPOSITORY, threadId, action: 'resolve' })
+    })
+  })
+
+  test('GitLab unsupported writes refuse before optimistic changes or provider dispatch', async () => {
+    const permissive = selectedGitLabReview({
+      state: 'open',
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      mergeMethods: { default: 'merge', allowed: ['merge', 'squash', 'rebase'] },
+      mergeMetadataKnown: true,
+      mergeQueueRequired: true,
+      autoMergeAllowed: true,
+    })
+    expect(directMergeAllowed(permissive)).toBe(false)
+    expect(queueMergeAllowed(permissive)).toBe(false)
+
+    const unsupportedActions: Array<[string, JsonRecord]> = [
+      ['detailMergeConfirmation', { expectedHead: GITLAB_HEAD_OID, method: 'merge', action: 'direct' }],
+      ['detailMerge', { expectedHead: GITLAB_HEAD_OID, method: 'merge', action: 'direct' }],
+      ['detailSetAutoMerge', { expectedHead: GITLAB_HEAD_OID, enabled: true, method: 'merge' }],
+      ['detailSetAutoMerge', { expectedHead: GITLAB_HEAD_OID, enabled: false }],
+      ['detailUpdateReviewers', { action: 'add', logins: ['reviewer-2'] }],
+      ['detailUpdateAssignees', { action: 'set', logins: ['assignee-2'] }],
+      ['detailReact', { subjectId: 'note-101', content: '+1', add: true }],
+      ['detailDeleteComment', { commentId: 101 }],
+      ['detailSetFileViewed', { path: 'src/a.ts', viewed: true }],
+      ['detailInlineComment', { expectedHead: GITLAB_HEAD_OID, path: 'src/a.ts', line: 10, body: 'inline note' }],
+    ]
+    for (const [method, extra] of unsupportedActions) {
+      await withHarness({}, async (harness) => {
+        const comments = {
+          ...GITLAB_COMMENTS,
+          comments: GITLAB_COMMENTS.comments.map((comment) => comment.id === 101
+            ? { ...comment, reactionSubjectId: 'note-101', reactions: [{ content: '+1', count: 1, viewerHasReacted: false }] }
+            : comment),
+        }
+        selectDetail(harness, permissive, comments, GITLAB_FILES)
+        const before = structuredClone({
+          review: harness.env.read().detail.review,
+          comments: harness.env.read().detail.comments,
+          files: harness.env.read().detail.files,
+          pending: harness.env.read().detail.pending,
+        })
+        await expect(harness.invoke('detail', method, {
+          surface: 'detail', worktree: GITLAB_WORKTREE, number: 5, ...extra,
+        })).rejects.toMatchObject({ data: { reason: 'unsupported_provider' } })
+        expect({
+          review: harness.env.read().detail.review,
+          comments: harness.env.read().detail.comments,
+          files: harness.env.read().detail.files,
+          pending: harness.env.read().detail.pending,
+        }).toEqual(before)
+        for (const write of [
+          'quirky.hosting/merge',
+          'quirky.hosting/autoMerge',
+          'quirky.hosting/reviewers',
+          'quirky.hosting/reviewAssignees',
+          'quirky.hosting/reaction',
+          'quirky.hosting/reviewConversation',
+          'quirky.hosting/fileViewed',
+          'quirky.hosting/reviewComment',
+        ]) expect(callsFor(harness, write)).toHaveLength(0)
+      })
+    }
+
+    await withHarness({}, async (harness) => {
+      selectChecks(harness, permissive)
+      await expect(harness.invoke('checks', 'checksSitterArm', {
+        worktree: GITLAB_WORKTREE,
+        capabilities: { updateBranch: 'off', resolveConflicts: 'off', fixChecks: 'off', merge: 'on' },
+        branchUpdateMode: 'merge-base-update',
+        mergeMethod: 'merge',
+        mergeCheckScope: 'all',
+        budgetHours: 1,
+      })).rejects.toMatchObject({ data: { reason: 'unsupported_provider' } })
+      expect(callsFor(harness, 'quirky.heimdall/enroll')).toHaveLength(0)
+    })
+  })
+
+  test('checks title save cannot claim or mutate a replacement across delayed worktree resolution', async () => {
+    await withHarness({}, async (harness) => {
+      selectChecks(harness)
+      const resolvedWorktree = await harness.env.resolve({ worktree: GITLAB_WORKTREE }, { role: 'plugin' } as never)
+      const resolution = deferred<typeof resolvedWorktree>()
+      harness.env.resolve = (() => resolution.promise) as typeof harness.env.resolve
+
+      const oldWrite = harness.invoke('checks', 'checksSaveTitle', {
+        worktree: GITLAB_WORKTREE, number: 5, expectedHead: GITLAB_HEAD_OID, title: 'old title',
+      })
+      const oldGeneration = harness.env.read().checksByWorktree[GITLAB_WORKTREE]!.generation
+      const replacementRepo = { ...GITLAB_REPOSITORY, repo: 'another-project' }
+      const replacementReview = selectedGitLabReview({
+        title: 'replacement',
+        url: `https://${GITLAB_HOST}/group/sub/another-project/-/merge_requests/5`,
+        repository: replacementRepo,
+        prRepo: replacementRepo,
+      })
+      const replacement = newChecksEntry(GITLAB_WORKTREE, oldGeneration + 1)
+      replacement.review = replacementReview
+      replacement.titleDraft = 'keep'
+      replacement.loading = true
+      replacement.error = 'replacement owns this state'
+      harness.env.update((state) => { state.checksByWorktree[GITLAB_WORKTREE] = replacement })
+
+      resolution.resolve(resolvedWorktree)
+      await oldWrite.catch(() => undefined)
+      expect(harness.env.read().checksByWorktree[GITLAB_WORKTREE]).toMatchObject({
+        review: replacementReview,
+        titleDraft: 'keep',
+        loading: true,
+        error: 'replacement owns this state',
+      })
+      expect(callsFor(harness, 'quirky.hosting/updateReview')).toHaveLength(0)
+    })
+  })
+
+  function canonicalSchema(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(canonicalSchema)
+    if (value === null || typeof value !== 'object') return value
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key, entry]) => key !== 'description' && !(key === 'properties' && isRecord(entry) && Object.keys(entry).length === 0))
+      .map(([key, entry]) => [key, canonicalSchema(entry)]))
+  }
+
+  test('method specs, manifest schemas, and required CLI IDs stay aligned', async () => {
+    const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json() as {
+      contributes: {
+        method: Array<{ id: string; params: unknown; result: unknown }>
+        'cli-command': Array<{ id: string; method: string }>
+      }
+    }
+    const sourceSpecs = [...checksSpecs, ...detailSpecs, ...createSpecs]
+    for (const spec of sourceSpecs) {
+      const declarations = manifest.contributes.method.filter((method) => method.id === spec.id)
+      expect(declarations).toHaveLength(1)
+      expect(canonicalSchema(declarations[0]?.params)).toEqual(canonicalSchema(spec.params))
+      expect(canonicalSchema(declarations[0]?.result)).toEqual(canonicalSchema(spec.result))
+    }
+    const cli = new Map(manifest.contributes['cli-command'].map((entry) => [entry.id, entry.method]))
+    for (const [id, method] of [
+      ['create-submit', 'createSubmit'],
+      ['hosting-diagnose', 'hostingDiagnose'],
+      ['hosting-settings-refresh', 'hostingSettingsRefresh'],
+      ['detail-refresh', 'detailRefresh'],
+      ['detail-resolve-thread', 'detailResolveThread'],
+    ]) expect(cli.get(id)).toBe(method)
   })
 
 })

@@ -15,6 +15,13 @@ import {
   type SitterMergeCheckScope,
   type SitterMergeMethod
 } from './data'
+import {
+  parseAuthDiagnostics,
+  parseCommentsResult,
+  parseRepoIdentity as parseCanonicalRepoIdentity,
+  repoFromReviewUrl as parseReviewUrl,
+  sameRepo,
+} from '../detail/data'
 import { newChecksEntry } from '../env'
 import {
   REVIEW_VIEW,
@@ -290,8 +297,13 @@ function requireApplied(env: ReviewsEnv, value: unknown): { kind: 'applied'; app
   return value
 }
 
+type ReviewProvider = 'github' | 'gitlab'
 type RepoIdentity = { host: string; owner: string; repo: string }
-type LookupResult = { kind: 'found' | 'no-review' | 'unavailable'; review?: ReviewData; record: JsonRecord }
+type LookupResult =
+  | { kind: 'found'; review: ReviewData; prRepo: RepoIdentity; record: JsonRecord }
+  | { kind: 'no-review'; record: JsonRecord }
+  | { kind: 'unavailable'; record: JsonRecord }
+type CanonicalRepository = { provider: ReviewProvider; repository: RepoIdentity }
 type GitStatus = {
   branch: string | null
   head: string | null
@@ -341,21 +353,18 @@ function validWebUrl(value: unknown): value is string {
   }
 }
 
-function repoFromUrl(env: ReviewsEnv, value: unknown, number: number): RepoIdentity {
-  if (!validWebUrl(value)) throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid review URL.')
-  const url = new URL(value)
-  const parts = url.pathname.split('/').filter(Boolean)
-  if (parts.length !== 4 || parts[2]?.toLowerCase() !== 'pull' || Number(parts[3]) !== number || !parts[0] || !parts[1]) {
-    throw env.invalid('invalid_hosting_response', 'The hosting provider returned a review URL without a valid repository identity.')
-  }
-  return { host: url.host, owner: parts[0], repo: parts[1] }
+function repoFromUrl(env: ReviewsEnv, value: unknown, number: number, provider?: ReviewProvider): RepoIdentity {
+  const repository = parseReviewUrl(value, number, provider)
+  if (repository === null) throw env.invalid('invalid_hosting_response', 'The hosting provider returned a review URL without a valid repository identity.')
+  return repository
 }
 
-function repoIdentity(env: ReviewsEnv, value: unknown): RepoIdentity {
-  if (!isRecord(value) || !nonEmptyString(value.host) || !nonEmptyString(value.owner) || !nonEmptyString(value.repo)) {
-    throw env.invalid('invalid_input', 'prRepo must include a host, owner, and repository name.')
-  }
-  return { host: value.host, owner: value.owner, repo: value.repo }
+function repoIdentity(env: ReviewsEnv, value: unknown, provider?: ReviewProvider): RepoIdentity {
+  const repository = provider === undefined
+    ? parseCanonicalRepoIdentity(value, 'gitlab') ?? parseCanonicalRepoIdentity(value, 'github')
+    : parseCanonicalRepoIdentity(value, provider)
+  if (repository === null) throw env.invalid('invalid_input', 'prRepo must include a valid host, owner, and repository name.')
+  return repository
 }
 
 function reviewStackSummary(env: ReviewsEnv, value: unknown): JsonRecord | null {
@@ -372,44 +381,112 @@ function reviewStackSummary(env: ReviewsEnv, value: unknown): JsonRecord | null 
   return { ...value, base: { ref: value.base.ref, sha: value.base.sha } }
 }
 
-function reviewData(env: ReviewsEnv, value: unknown): { review: ReviewData; prRepo: RepoIdentity } {
+function reviewData(
+  env: ReviewsEnv,
+  value: unknown,
+  canonical?: CanonicalRepository,
+  expectedNumber?: number,
+): { review: ReviewData; prRepo: RepoIdentity } {
   if (!isRecord(value)) throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid review.')
+  const provider = value.provider
   const number = positiveInteger(value.number) ? value.number : null
+  const title = value.title
+  const body = value.body
+  const url = value.url
   const state = value.state
+  const headRefName = value.headRefName
+  const baseRefName = value.baseRefName
+  const headRefOid = value.headRefOid
+  const baseRefOid = value.baseRefOid
+  const reviewDecision = value.reviewDecision
+  const mergeStateStatus = value.mergeStateStatus
   const mergeable = value.mergeable
   const checksStatus = value.checksStatus
-  if (value.provider !== 'github' || number === null || !validWebUrl(value.url) || typeof value.title !== 'string' ||
-      typeof value.body !== 'string' || (state !== 'open' && state !== 'draft' && state !== 'closed' && state !== 'merged') ||
-      !nonEmptyString(value.headRefName) || !nonEmptyString(value.baseRefName) || !nonEmptyString(value.headRefOid) ||
-      !nonEmptyString(value.baseRefOid) || (mergeable !== 'MERGEABLE' && mergeable !== 'CONFLICTING' && mergeable !== 'UNKNOWN') ||
-      (checksStatus !== 'neutral' && checksStatus !== 'pending' && checksStatus !== 'success' && checksStatus !== 'failure') ||
-      typeof value.reviewDecision !== 'string' || typeof value.mergeStateStatus !== 'string') {
+  if ((provider !== 'github' && provider !== 'gitlab') || number === null
+    || expectedNumber !== undefined && number !== expectedNumber
+    || typeof title !== 'string' || typeof body !== 'string' || typeof url !== 'string'
+    || (state !== 'open' && state !== 'draft' && state !== 'closed' && state !== 'merged')
+    || !nonEmptyString(headRefName) || !nonEmptyString(baseRefName)
+    || !nonEmptyString(headRefOid) || !nonEmptyString(baseRefOid)
+    || typeof reviewDecision !== 'string' || typeof mergeStateStatus !== 'string'
+    || typeof mergeable !== 'string' || typeof checksStatus !== 'string') {
     throw env.invalid('invalid_hosting_response', 'The hosting provider returned incomplete or unsupported pull request details.')
   }
-  const prRepo = repoFromUrl(env, value.url, number)
+  if (provider === 'github') {
+    if ((mergeable !== 'MERGEABLE' && mergeable !== 'CONFLICTING' && mergeable !== 'UNKNOWN')
+      || (checksStatus !== 'neutral' && checksStatus !== 'pending' && checksStatus !== 'success' && checksStatus !== 'failure')) {
+      throw env.invalid('invalid_hosting_response', 'The hosting provider returned incomplete or unsupported pull request details.')
+    }
+  } else if (mergeable !== 'UNKNOWN' || checksStatus !== 'neutral') {
+    throw env.invalid('invalid_hosting_response', 'The hosting provider returned incomplete or unsupported merge-request details.')
+  }
+  const prRepo = repoFromUrl(env, url, number, provider)
+  for (const candidate of [value.repository, value.prRepo]) {
+    if (candidate === undefined) continue
+    const supplied = parseCanonicalRepoIdentity(candidate, provider)
+    if (supplied === null || !sameRepo(supplied, prRepo)) {
+      throw env.invalid('repository_mismatch', 'The review repository does not match its canonical URL identity.')
+    }
+  }
+  if (canonical !== undefined && (provider !== canonical.provider || !sameRepo(prRepo, canonical.repository))) {
+    throw env.invalid('repository_mismatch', 'The linked review resolved to a different repository identity.')
+  }
   const review: ReviewData = {
-    provider: 'github',
+    provider,
     number,
-    url: value.url,
-    title: value.title,
-    body: value.body,
+    url,
+    title,
+    body,
     state,
-    headRefName: value.headRefName,
-    baseRefName: value.baseRefName,
-    headRefOid: value.headRefOid,
-    baseRefOid: value.baseRefOid,
+    headRefName,
+    baseRefName,
+    headRefOid,
+    baseRefOid,
     mergeable,
     checksStatus,
-    reviewDecision: value.reviewDecision,
-    mergeStateStatus: value.mergeStateStatus,
-    autoMergeRequest: value.autoMergeRequest ?? null,
-    stack: reviewStackSummary(env, value.stack),
-    mergeMethods: value.mergeMethods ?? null,
-    prRepo
+    reviewDecision,
+    mergeStateStatus,
+    autoMergeRequest: provider === 'gitlab' ? null : value.autoMergeRequest ?? null,
+    stack: provider === 'gitlab' ? null : reviewStackSummary(env, value.stack),
+    mergeMethods: provider === 'gitlab' ? { default: null, allowed: [] } : value.mergeMethods ?? null,
+    prRepo,
   }
-  if (typeof value.mergeQueueRequired === 'boolean' || value.mergeQueueRequired === null) review.mergeQueueRequired = value.mergeQueueRequired
-  if (typeof value.autoMergeAllowed === 'boolean' || value.autoMergeAllowed === null) review.autoMergeAllowed = value.autoMergeAllowed
-  if (typeof value.mergeMetadataKnown === 'boolean') review.mergeMetadataKnown = value.mergeMetadataKnown
+  if (provider === 'gitlab' || value.repository !== undefined) review.repository = prRepo
+  if (typeof value.updatedAt === 'string' || value.updatedAt === null) review.updatedAt = value.updatedAt
+  for (const field of ['requestedReviewers', 'assignees'] as const) {
+    const entries = value[field]
+    if (entries === undefined) continue
+    if (entries === null) {
+      review[field] = null
+      continue
+    }
+    if (!Array.isArray(entries) || !entries.every((entry) => typeof entry === 'string')) {
+      throw env.invalid('invalid_hosting_response', `The hosting provider returned invalid ${field}.`)
+    }
+    review[field] = [...entries]
+  }
+  if (value.reviews !== undefined) {
+    if (value.reviews !== null && (!Array.isArray(value.reviews) || !value.reviews.every(isRecord))) {
+      throw env.invalid('invalid_hosting_response', 'The hosting provider returned invalid reviews.')
+    }
+    review.reviews = value.reviews === null ? null : value.reviews.map((item) => {
+      const safe: JsonRecord = {}
+      for (const field of ['id', 'author', 'state', 'body', 'submittedAt', 'updatedAt', 'url', 'commitOid']) {
+        const entry = item[field]
+        if (typeof entry === 'string' || typeof entry === 'number' || entry === null) safe[field] = entry
+      }
+      return safe
+    })
+  }
+  if (provider === 'gitlab') {
+    review.mergeQueueRequired = false
+    review.autoMergeAllowed = null
+    review.mergeMetadataKnown = false
+  } else {
+    if (typeof value.mergeQueueRequired === 'boolean' || value.mergeQueueRequired === null) review.mergeQueueRequired = value.mergeQueueRequired
+    if (typeof value.autoMergeAllowed === 'boolean' || value.autoMergeAllowed === null) review.autoMergeAllowed = value.autoMergeAllowed
+    if (typeof value.mergeMetadataKnown === 'boolean') review.mergeMetadataKnown = value.mergeMetadataKnown
+  }
   return { review, prRepo }
 }
 function reviewStackData(env: ReviewsEnv, value: unknown, review: ReviewData): JsonRecord | null {
@@ -478,14 +555,14 @@ function reviewStackData(env: ReviewsEnv, value: unknown, review: ReviewData): J
   }
 }
 
-function lookupResult(env: ReviewsEnv, value: unknown): LookupResult {
+function lookupResult(env: ReviewsEnv, value: unknown, canonical?: CanonicalRepository, expectedNumber?: number): LookupResult {
   if (!isRecord(value) || (value.kind !== 'found' && value.kind !== 'no-review' && value.kind !== 'unavailable') ||
       typeof value.fetchedAt !== 'number' || !Number.isFinite(value.fetchedAt)) {
     throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid review lookup result.')
   }
   if (value.kind === 'found') {
-    const parsed = reviewData(env, value.review)
-    return { kind: 'found', review: parsed.review, record: { ...value, review: parsed.review, prRepo: parsed.prRepo } }
+    const parsed = reviewData(env, value.review, canonical, expectedNumber)
+    return { kind: 'found', review: parsed.review, prRepo: parsed.prRepo, record: { ...value, review: parsed.review, prRepo: parsed.prRepo } }
   }
   if (value.kind === 'unavailable' && (!nonEmptyString(value.reason) || !nonEmptyString(value.message))) {
     throw env.invalid('invalid_hosting_response', 'The hosting provider returned an incomplete unavailable lookup result.')
@@ -520,7 +597,14 @@ function gitStatus(env: ReviewsEnv, value: unknown): GitStatus {
   return { branch, head, detached: value.detached, operation, entries, files, upstreamStatus: { ...upstreamStatus }, busy: typeof value.busy === 'string' ? value.busy : null, capped: value.capped }
 }
 
-function eligibility(env: ReviewsEnv, value: unknown, worktree: Worktree, headOid: string | null, expectedBranch: string | null): JsonRecord {
+function eligibility(
+  env: ReviewsEnv,
+  value: unknown,
+  worktree: Worktree,
+  headOid: string | null,
+  expectedBranch: string | null,
+  canonical?: CanonicalRepository,
+): JsonRecord {
   if (!isRecord(value) || typeof value.eligible !== 'boolean' ||
       !(typeof value.head === 'string' || value.head === null) ||
       !(typeof value.defaultBase === 'string' || value.defaultBase === null) ||
@@ -544,7 +628,7 @@ function eligibility(env: ReviewsEnv, value: unknown, worktree: Worktree, headOi
     worktree: worktree.id,
     headOid
   }
-  if (value.review !== undefined && value.review !== null) result.review = reviewData(env, value.review).review
+  if (value.review !== undefined && value.review !== null) result.review = reviewData(env, value.review, canonical).review
   return result
 }
 
@@ -578,29 +662,10 @@ function checksData(env: ReviewsEnv, value: unknown, number: number, headOid: st
   }
 }
 
-function commentsData(env: ReviewsEnv, value: unknown, number: number): JsonRecord {
-  if (!isRecord(value) || value.number !== number || !Array.isArray(value.comments) || typeof value.partial !== 'boolean' ||
-      !Array.isArray(value.partialFailures)) {
-    throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid comments result.')
-  }
-  const comments: JsonRecord[] = []
-  for (const item of value.comments) {
-    if (!isRecord(item) || !(typeof item.id === 'string' || typeof item.id === 'number') ||
-        (item.kind !== 'issue_comment' && item.kind !== 'review' && item.kind !== 'review_comment') || typeof item.body !== 'string') {
-      throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid review comment.')
-    }
-    comments.push({ ...item })
-  }
-  const partialFailures = value.partialFailures.filter((item): item is string => typeof item === 'string')
-  if (partialFailures.length !== value.partialFailures.length) {
-    throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid comments failure list.')
-  }
-  return {
-    ...value,
-    comments: comments.slice(0, MAX_CHECKS),
-    partialFailures,
-    truncated: comments.length > MAX_CHECKS || partialFailures.some((item) => item.includes('truncated') || item.includes('100-record'))
-  }
+function commentsData(env: ReviewsEnv, value: unknown, number: number, provider: ReviewProvider = 'github'): JsonRecord {
+  const parsed = parseCommentsResult(value, number, provider)
+  if (parsed === null) throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid comments result.')
+  return parsed
 }
 
 function selector(env: ReviewsEnv, params: Record<string, unknown>): string | undefined {
@@ -794,14 +859,38 @@ async function resolveWorktree(env: ReviewsEnv, params: Record<string, unknown>,
   return env.resolve(target ? { worktree: target } : {}, caller)
 }
 
-async function callLookup(env: ReviewsEnv, method: 'forBranch' | 'review', params: JsonRecord): Promise<LookupResult> {
-  const value = await env.call(`quirky.hosting/${method}`, params)
-  return lookupResult(env, value)
+async function canonicalRepository(env: ReviewsEnv, worktree: string): Promise<CanonicalRepository> {
+  const value = await env.call('quirky.hosting/repository', { worktree })
+  if (!isRecord(value)) throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid canonical repository.')
+  const provider = value.provider === undefined ? 'github' : value.provider
+  if (provider !== 'github' && provider !== 'gitlab') {
+    throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid canonical repository.')
+  }
+  const repository = parseCanonicalRepoIdentity(value.repository, provider)
+  if (repository === null) throw env.invalid('invalid_hosting_response', 'The hosting provider returned an invalid canonical repository.')
+  return { provider, repository }
 }
 
-async function callEligibility(env: ReviewsEnv, worktree: Worktree, headOid: string | null, branch: string | null): Promise<JsonRecord> {
+async function callLookup(
+  env: ReviewsEnv,
+  method: 'forBranch' | 'review',
+  params: JsonRecord,
+  canonical?: CanonicalRepository,
+  expectedNumber?: number,
+): Promise<LookupResult> {
+  const value = await env.call(`quirky.hosting/${method}`, params)
+  return lookupResult(env, value, canonical, expectedNumber)
+}
+
+async function callEligibility(
+  env: ReviewsEnv,
+  worktree: Worktree,
+  headOid: string | null,
+  branch: string | null,
+  canonical?: CanonicalRepository,
+): Promise<JsonRecord> {
   const value = await env.call('quirky.hosting/creationEligibility', { worktree: worktree.id })
-  return eligibility(env, value, worktree, headOid, branch)
+  return eligibility(env, value, worktree, headOid, branch, canonical)
 }
 const AUTH_FAILURES: Record<string, true> = {
   auth_required: true,
@@ -838,19 +927,9 @@ function eligibilityMessage(value: JsonRecord): string {
 
 async function authDiagnostics(env: ReviewsEnv, worktree: Worktree): Promise<JsonRecord> {
   const value = await env.call('quirky.hosting/diagnoseAuth', { worktree: worktree.id })
-  if (!isRecord(value) || typeof value.ghAvailable !== 'boolean' || !Array.isArray(value.accounts) ||
-      typeof value.envTokenInProcess !== 'boolean' || !Array.isArray(value.missingScopes) ||
-      !Array.isArray(value.requiredScopes) || typeof value.hasKeyringFallback !== 'boolean' ||
-      typeof value.requiredHostAuthenticated !== 'boolean') {
-    throw env.invalid('invalid_hosting_response', 'The hosting provider returned invalid authentication diagnostics.')
-  }
-  const accounts = value.accounts.filter(isRecord)
-  const missingScopes = value.missingScopes.filter((scope): scope is string => typeof scope === 'string')
-  const requiredScopes = value.requiredScopes.filter((scope): scope is string => typeof scope === 'string')
-  if (accounts.length !== value.accounts.length || missingScopes.length !== value.missingScopes.length || requiredScopes.length !== value.requiredScopes.length) {
-    throw env.invalid('invalid_hosting_response', 'The hosting provider returned malformed authentication diagnostic entries.')
-  }
-  return { ...value, accounts, missingScopes, requiredScopes }
+  const diagnostics = parseAuthDiagnostics(value)
+  if (diagnostics === null) throw env.invalid('invalid_hosting_response', 'The hosting provider returned invalid authentication diagnostics.')
+  return diagnostics as unknown as JsonRecord
 }
 
 function staleResult(worktree: string): JsonRecord {
@@ -859,14 +938,19 @@ function staleResult(worktree: string): JsonRecord {
 
 function replaceReviewData(env: ReviewsEnv, worktree: string, generation: number, lookup: JsonRecord, review: ReviewData | null, status: GitStatus): boolean {
   return updateIfCurrent(env, worktree, generation, (checks, state) => {
-    const previousHead = checks.review?.headRefOid
-    const nextHead = review?.headRefOid
+    const previous = checks.review
+    const previousRepo = (previous?.prRepo as RepoIdentity | undefined) ?? null
+    const nextRepo = (review?.prRepo as RepoIdentity | undefined) ?? null
+    const identityChanged = previous?.number !== review?.number
+      || previous?.provider !== review?.provider
+      || !sameRepo(previousRepo, nextRepo)
+    const headChanged = previous?.headRefOid !== review?.headRefOid
     checks.lookup = lookup
     checks.review = review
     checks.conflicts = conflictState(status, review)
     checks.eligibility = null
     checks.error = null
-    if (previousHead !== nextHead) {
+    if (identityChanged || headChanged) {
       checks.checks = null
       checks.comments = null
       checks.expandedChecks = []
@@ -1021,6 +1105,15 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
     return { ok: true, worktree: worktree.id, kind: 'git-operation', operation: status.operation }
   }
 
+  let canonical: CanonicalRepository
+  try {
+    canonical = await canonicalRepository(env, worktree.id)
+  } catch (error) {
+    if (errorReason(error) === 'missing_origin') return unsupportedMissingOrigin(env, worktree.id, generation)
+    return failure(env, worktree.id, generation, error, 'The canonical hosting repository could not be loaded.')
+  }
+  if (!ownerIsCurrent(env, worktree.id, generation)) return staleResult(worktree.id)
+
   const gitContext: JsonRecord = {
     branch: status.branch,
     head: status.head,
@@ -1043,21 +1136,21 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
         worktree: worktree.id,
         number: target.number,
         prRepo: target.prRepo
-      })
+      }, canonical, target.number)
     } else if (status.branch === null || status.detached) {
       lookup = { kind: 'no-review', record: { kind: 'blocked', reason: status.detached ? 'detached_head' : 'no_current_branch' } }
     } else if (force && known?.review && known.review.headRefName === status.branch) {
       const previous = attachedReview(env, known.review)
       if (!previous) throw env.invalid('invalid_saved_link', 'The current review identity is invalid.')
       explicitRepo = previous.prRepo
-      lookup = await callLookup(env, 'review', { worktree: worktree.id, number: previous.number, prRepo: previous.prRepo })
+      lookup = await callLookup(env, 'review', { worktree: worktree.id, number: previous.number, prRepo: previous.prRepo }, canonical, previous.number)
     } else if (force) {
-      forcedEligibility = await callEligibility(env, worktree, status.head, status.branch)
+      forcedEligibility = await callEligibility(env, worktree, status.head, status.branch, canonical)
       const existing = isRecord(forcedEligibility.review) && forcedEligibility.review !== null
-        ? reviewData(env, forcedEligibility.review).review
+        ? reviewData(env, forcedEligibility.review, canonical)
         : null
       lookup = existing
-        ? { kind: 'found', review: existing, record: { kind: 'found', review: existing, fetchedAt: Date.now() } }
+        ? { kind: 'found', review: existing.review, prRepo: existing.prRepo, record: { kind: 'found', review: existing.review, fetchedAt: Date.now() } }
         : eligibilityLookupUnavailable(forcedEligibility) || eligibilityHasAuthFailure(forcedEligibility)
           ? { kind: 'unavailable', record: { kind: 'unavailable', reason: eligibilityHasAuthFailure(forcedEligibility) ? 'auth_required' : 'upstream_unavailable', message: eligibilityMessage(forcedEligibility), fetchedAt: Date.now() } }
           : { kind: 'no-review', record: { kind: 'no-review', fetchedAt: Date.now() } }
@@ -1066,7 +1159,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
         worktree: worktree.id,
         branch: status.branch,
         ...(status.head ? { headOid: status.head } : {})
-      })
+      }, canonical)
     }
   } catch (error) {
     return failure(env, worktree.id, generation, error, 'The hosted review lookup failed.')
@@ -1078,7 +1171,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
     let eligibilityValue: JsonRecord | null = forcedEligibility
     if (eligibilityValue === null) {
       try {
-        eligibilityValue = await callEligibility(env, worktree, status.head, status.branch)
+        eligibilityValue = await callEligibility(env, worktree, status.head, status.branch, canonical)
       } catch (error) {
         if (errorReason(error) === 'missing_origin') return unsupportedMissingOrigin(env, worktree.id, generation)
         // The unavailable lookup below remains authoritative; failed eligibility is not an empty result.
@@ -1093,7 +1186,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
       }
     }
     const existing = isRecord(eligibilityValue?.review) && eligibilityValue.review !== null
-      ? reviewData(env, eligibilityValue.review).review
+      ? reviewData(env, eligibilityValue.review, canonical).review
       : null
     if (existing !== null) {
       const existingLookup: JsonRecord = { kind: 'found', review: existing, fetchedAt: Date.now(), gitStatus: gitContext, prRepo: existing.prRepo }
@@ -1114,7 +1207,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
   if (lookup.kind === 'no-review') {
     let eligibilityRecord: JsonRecord
     try {
-      eligibilityRecord = forcedEligibility ?? await callEligibility(env, worktree, status.head, status.branch)
+      eligibilityRecord = forcedEligibility ?? await callEligibility(env, worktree, status.head, status.branch, canonical)
     } catch (error) {
       return failure(env, worktree.id, generation, error, 'Creation eligibility could not be confirmed.')
     }
@@ -1167,7 +1260,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
       }
     }
     if (!ownerIsCurrent(env, worktree.id, generation)) return staleResult(worktree.id)
-    const existing = isRecord(eligibilityRecord.review) ? reviewData(env, eligibilityRecord.review).review : null
+    const existing = isRecord(eligibilityRecord.review) ? reviewData(env, eligibilityRecord.review, canonical).review : null
     if (existing !== null) {
       const existingLookup: JsonRecord = { kind: 'found', review: existing, fetchedAt: Date.now(), gitStatus: gitContext, prRepo: existing.prRepo }
       if (!replaceReviewData(env, worktree.id, generation, existingLookup, existing, status)) return staleResult(worktree.id)
@@ -1194,7 +1287,7 @@ async function runRefresh(env: ReviewsEnv, params: Record<string, unknown>, call
 
   const found = lookup.review
   if (!found) return failure(env, worktree.id, generation, env.invalid('invalid_hosting_response', 'The found review result did not include a review.'), 'The hosting provider returned incomplete review data.')
-  if (explicitRepo && JSON.stringify(explicitRepo) !== JSON.stringify(found.prRepo)) {
+  if (explicitRepo && !sameRepo(explicitRepo, lookup.prRepo)) {
     return failure(env, worktree.id, generation, env.invalid('repository_mismatch', 'The linked review resolved to a different repository identity.'), 'The linked review repository changed.')
   }
   if (!replaceReviewData(env, worktree.id, generation, lookupRecord, found, status)) return staleResult(worktree.id)
@@ -1209,16 +1302,19 @@ async function loadReviewDetails(
   force: boolean,
   status: GitStatus
 ): Promise<JsonRecord> {
-  const prRepo = repoIdentity(env, review.prRepo)
+  const prRepo = repoIdentity(env, review.prRepo, review.provider as ReviewProvider)
   const params: JsonRecord = { worktree: worktree.id, number: review.number, prRepo, ...(force ? { noCache: true } : {}) }
   const hasHostedConflict = review.mergeable === 'CONFLICTING' || review.mergeStateStatus === 'DIRTY'
+  const isGitLab = review.provider === 'gitlab'
   const [checksResult, commentsResult, previewResult, stackResult] = await Promise.allSettled([
     env.call('quirky.hosting/checks', params),
     env.call('quirky.hosting/comments', params),
     hasHostedConflict
       ? env.call('quirky.git/mergePreview', { worktree: worktree.id, base: review.baseRefOid, head: review.headRefOid })
       : Promise.resolve(null),
-    env.call('quirky.hosting/reviewStack', { worktree: worktree.id, number: review.number, prRepo, ...(force ? { noCache: true } : {}) })
+    isGitLab
+      ? Promise.resolve(null)
+      : env.call('quirky.hosting/reviewStack', { worktree: worktree.id, number: review.number, prRepo, ...(force ? { noCache: true } : {}) })
   ])
   if (!ownerIsCurrent(env, worktree.id, generation)) return staleResult(worktree.id)
   if (
@@ -1231,7 +1327,7 @@ async function loadReviewDetails(
   let nextComments: JsonRecord | null = null
   let nextPreview: JsonRecord | null = null
   let nextReview = review
-  if (stackResult.status === 'fulfilled') {
+  if (!isGitLab && stackResult.status === 'fulfilled') {
     try {
       nextReview = { ...review, stack: reviewStackData(env, stackResult.value, review) }
     } catch (error) {
@@ -1239,14 +1335,16 @@ async function loadReviewDetails(
       errors.push(message)
       nextReview = { ...review, stack: { available: false, truncated: false, reason: 'stack_unavailable', message } }
     }
-  } else {
+  } else if (!isGitLab) {
     nextReview = {
       ...review,
       stack: {
         available: false,
         truncated: false,
         reason: 'stack_unavailable',
-        message: errorMessage(stackResult.reason, 'Stack membership is unavailable.')
+        message: stackResult.status === 'rejected'
+          ? errorMessage(stackResult.reason, 'Stack membership is unavailable.')
+          : 'Stack membership is unavailable.'
       }
     }
   }
@@ -1257,11 +1355,13 @@ async function loadReviewDetails(
       errors.push(errorMessage(error, 'The checks response could not be validated.'))
     }
   } else {
-    errors.push(errorMessage(checksResult.reason, 'Checks could not be loaded.'))
+    errors.push(isGitLab && errorReason(checksResult.reason) === 'unsupported_provider'
+      ? 'Checks are unavailable for GitLab merge requests.'
+      : errorMessage(checksResult.reason, 'Checks could not be loaded.'))
   }
   if (commentsResult.status === 'fulfilled') {
     try {
-      nextComments = commentsData(env, commentsResult.value, review.number)
+      nextComments = commentsData(env, commentsResult.value, review.number, review.provider as ReviewProvider)
     } catch (error) {
       errors.push(errorMessage(error, 'The comments response could not be validated.'))
     }
@@ -1324,7 +1424,7 @@ function currentReview(env: ReviewsEnv, worktree: string, number?: number): { ch
   if (checks === undefined || checks.review === null || (number !== undefined && checks.review.number !== number)) {
     throw env.invalid('stale_review_target', 'The active checks state no longer belongs to this review. Refresh the panel before acting.')
   }
-  return { checks, review: checks.review, prRepo: repoIdentity(env, checks.review.prRepo) }
+  return { checks, review: checks.review, prRepo: repoIdentity(env, checks.review.prRepo, checks.review.provider as ReviewProvider) }
 }
 
 function sameRepoIdentity(left: RepoIdentity, right: RepoIdentity): boolean {
@@ -1343,7 +1443,7 @@ function assertTitleDraftFence(env: ReviewsEnv, checks: ChecksEntry, currentRepo
     }
   }
   if (params.prRepo !== undefined) {
-    const requestedRepo = repoIdentity(env, params.prRepo)
+    const requestedRepo = repoIdentity(env, params.prRepo, checks.review?.provider as ReviewProvider)
     if (!sameRepoIdentity(currentRepo, requestedRepo)) {
       throw env.invalid('stale_review_target', 'The selected review repository changed before this title draft was updated.')
     }
@@ -1351,11 +1451,16 @@ function assertTitleDraftFence(env: ReviewsEnv, checks: ChecksEntry, currentRepo
 }
 
 async function linkReview(env: ReviewsEnv, worktree: Worktree, number: number, suppliedRepo: RepoIdentity | undefined, caller: PluginCaller): Promise<JsonRecord> {
+  const canonical = await canonicalRepository(env, worktree.id)
+  if (suppliedRepo !== undefined && !sameRepo(suppliedRepo, canonical.repository)) {
+    throw env.invalid('repository_mismatch', 'The requested review repository does not match this workspace origin.')
+  }
+  const prRepo = suppliedRepo ?? canonical.repository
   const lookup = await callLookup(env, 'review', {
     worktree: worktree.id,
     number,
-    ...(suppliedRepo ? { prRepo: suppliedRepo } : {})
-  })
+    prRepo,
+  }, canonical, number)
   if (lookup.kind !== 'found' || lookup.review === undefined) {
     const message = lookup.kind === 'unavailable' && nonEmptyString(lookup.record.message)
       ? lookup.record.message
@@ -1455,10 +1560,10 @@ function agentContext(env: ReviewsEnv, surface: 'checks' | 'detail', params: Rec
   }
   const parsed = reviewData(env, reviewValue)
   if (parsed.review.number !== number) throw env.invalid('stale_review_target', 'The current review number changed.')
-  if (targetRepo !== undefined && JSON.stringify(repoIdentity(env, targetRepo)) !== JSON.stringify(parsed.prRepo)) {
+  if (targetRepo !== undefined && !sameRepo(repoIdentity(env, targetRepo, parsed.review.provider as ReviewProvider), parsed.prRepo)) {
     throw env.invalid('repository_mismatch', 'The review page repository does not match the canonical review URL.')
   }
-  if (params.prRepo !== undefined && JSON.stringify(repoIdentity(env, params.prRepo)) !== JSON.stringify(parsed.prRepo)) {
+  if (params.prRepo !== undefined && !sameRepo(repoIdentity(env, params.prRepo, parsed.review.provider as ReviewProvider), parsed.prRepo)) {
     throw env.invalid('repository_mismatch', 'The agent request repository does not match the selected review.')
   }
   return {
@@ -1523,8 +1628,8 @@ function sameAgentTarget(env: ReviewsEnv, value: unknown, context: AgentContext,
   if (!isRecord(value) || value.action !== action || value.surface !== context.surface || value.headOid !== context.headOid ||
       !isRecord(value.target) || value.target.worktree !== context.worktree || value.target.number !== context.number) return false
   try {
-    const repository = repoIdentity(env, value.target.prRepo)
-    return repository.host === context.prRepo.host && repository.owner === context.prRepo.owner && repository.repo === context.prRepo.repo
+    const repository = repoIdentity(env, value.target.prRepo, context.review.provider as ReviewProvider)
+    return sameRepo(repository, context.prRepo)
   } catch {
     return false
   }
@@ -1797,13 +1902,27 @@ async function launchAgent(env: ReviewsEnv, params: Record<string, unknown>, cal
 }
 
 async function saveTitle(env: ReviewsEnv, params: Record<string, unknown>, caller: PluginCaller): Promise<JsonRecord> {
-  const worktree = await resolveWorktree(env, params, caller)
+  const requestedWorktree = selector(env, params)
+  const candidate = requestedWorktree ? env.read().checksByWorktree[requestedWorktree] : undefined
+  const candidateReview = candidate?.review ?? null
+  const candidateGeneration = candidate?.generation
   const number = params.number
   if (!positiveInteger(number)) throw env.invalid('invalid_input', 'number must be a positive pull request number.')
   const title = textField(env, params, 'title', MAX_TITLE_LENGTH).trim()
   if (title.length === 0) throw env.invalid('invalid_title', 'Enter a non-empty pull request title.')
   const expectedHead = params.expectedHead
   if (!nonEmptyString(expectedHead)) throw env.invalid('invalid_input', 'expectedHead must be the currently reviewed commit SHA.')
+  const worktree = await resolveWorktree(env, params, caller)
+  if (candidate !== undefined) {
+    const current = env.read().checksByWorktree[worktree.id]
+    if (worktree.id !== requestedWorktree || current?.generation !== candidateGeneration
+      || current?.review?.number !== candidateReview?.number
+      || current?.review?.provider !== candidateReview?.provider
+      || current?.review?.headRefOid !== candidateReview?.headRefOid
+      || !sameRepo((current?.review?.prRepo as RepoIdentity | undefined) ?? null, (candidateReview?.prRepo as RepoIdentity | undefined) ?? null)) {
+      return { updated: false, number, title, stale: true, error: 'The review changed before the title could be saved.' }
+    }
+  }
   const { checks, review, prRepo } = currentReview(env, worktree.id, number)
   if (review.headRefOid !== expectedHead) throw env.invalid('head_changed', 'The pull request head changed. Refresh before saving the title.')
   const priorGeneration = checks.generation
@@ -1815,11 +1934,21 @@ async function saveTitle(env: ReviewsEnv, params: Record<string, unknown>, calle
     entry.generation = generation
     entry.loading = true
     entry.error = null
-    entry.titleDraft = title
     started = true
   }, worktree.id)
   if (!started) return { updated: false, number, title, stale: true, error: 'The review changed before the title could be saved.' }
   try {
+    const canonical = await canonicalRepository(env, worktree.id)
+    if (canonical.provider !== review.provider || !sameRepo(canonical.repository, prRepo)) {
+      throw env.invalid('repository_mismatch', 'The selected review no longer matches this workspace origin.')
+    }
+    if (env.read().checksByWorktree[worktree.id]?.generation !== generation) {
+      return { updated: false, number, title, stale: true, error: 'The review changed before the title could be saved.' }
+    }
+    env.update((state) => {
+      const entry = state.checksByWorktree[worktree.id]
+      if (entry?.generation === generation) entry.titleDraft = title
+    }, worktree.id)
     const response = await env.call('quirky.hosting/updateReview', {
       worktree: worktree.id,
       number,
@@ -1829,7 +1958,7 @@ async function saveTitle(env: ReviewsEnv, params: Record<string, unknown>, calle
     })
     if (!isRecord(response) || response.updated !== true) throw env.invalid('title_update_failed', 'The hosting provider did not confirm the title update.')
     const readback = await env.call('quirky.hosting/review', { worktree: worktree.id, number, prRepo })
-    const found = lookupResult(env, readback)
+    const found = lookupResult(env, readback, canonical, number)
     if (found.kind !== 'found' || !found.review || found.review.title !== title) {
       throw env.invalid('title_readback_mismatch', 'The title update was accepted, but the provider did not confirm the saved title.')
     }
@@ -1878,14 +2007,16 @@ async function openReview(env: ReviewsEnv, params: Record<string, unknown>, call
   if (!positiveInteger(number)) throw env.invalid('invalid_input', 'number must be a positive pull request number.')
   const tab = params.tab ?? 'conversation'
   if (tab !== 'conversation' && tab !== 'checks' && tab !== 'files') throw env.invalid('invalid_input', 'tab must be conversation, checks, or files.')
+  const canonical = await canonicalRepository(env, worktree.id)
   let review: ReviewData
   const current = env.read().checksByWorktree[worktree.id]
   if (current?.review && current.review.number === number) {
-    review = current.review
+    review = reviewData(env, current.review, canonical, number).review
   } else {
     const link = env.read().links[worktree.id]
-    const repo = link && link.number === number ? repoFromUrl(env, link.url, number) : undefined
-    const result = await callLookup(env, 'review', { worktree: worktree.id, number, ...(repo ? { prRepo: repo } : {}) })
+    const repo = link && link.number === number ? repoFromUrl(env, link.url, number, canonical.provider) : canonical.repository
+    if (!sameRepo(repo, canonical.repository)) throw env.invalid('repository_mismatch', 'The saved review link does not match this workspace origin.')
+    const result = await callLookup(env, 'review', { worktree: worktree.id, number, prRepo: repo }, canonical, number)
     if (result.kind !== 'found' || !result.review) throw env.invalid(result.kind === 'unavailable' ? 'upstream_unavailable' : 'not_found', 'The selected review is not available for this workspace.')
     review = result.review
   }
@@ -1893,7 +2024,7 @@ async function openReview(env: ReviewsEnv, params: Record<string, unknown>, call
     worktree: worktree.id,
     number,
     tab,
-    prRepo: repoIdentity(env, review.prRepo)
+    prRepo: repoIdentity(env, review.prRepo, review.provider as ReviewProvider)
   })
   return { opened: true, worktree: worktree.id, number, tab, prRepo: review.prRepo }
 }
@@ -1934,6 +2065,15 @@ async function checksSitterArm(
   const worktree = await resolveSitterWorktree(env, params, caller, false)
   if (!worktree) throw env.invalid('missing_worktree', 'A registered worktree is required to arm PR Sitter.')
   if (worktree.kind !== 'git') throw env.invalid('worktree_not_git', 'PR Sitter can only watch a Git worktree.')
+  const canonical = await canonicalRepository(env, worktree.id)
+  const selected = env.read().checksByWorktree[worktree.id]?.review
+  if (canonical.provider === 'gitlab' || selected?.provider === 'gitlab') {
+    throw env.invalid('unsupported_provider', 'PR Sitter is unavailable for GitLab merge requests.')
+  }
+  if (selected !== undefined && selected !== null
+    && (selected.provider !== canonical.provider || !sameRepo(selected.prRepo as RepoIdentity, canonical.repository))) {
+    throw env.invalid('repository_mismatch', 'The selected review does not match this workspace origin.')
+  }
   const capabilityInput = params.capabilities
   if (!isRecord(capabilityInput)) {
     throw env.invalid('invalid_input', 'All four PR Sitter capabilities must be set to Off, Ask, or On.')
@@ -2302,7 +2442,7 @@ export const checksSpecs: MethodSpec[] = [
     result: objectSchema({
       ok: { type: 'boolean' },
       kind: { type: 'string', enum: ['applied'] },
-      appliedAtMs: { type: 'number' }
+      appliedAtMs: { type: 'integer' }
     }, ['ok', 'kind', 'appliedAtMs'])
   },
   {
@@ -2312,7 +2452,7 @@ export const checksSpecs: MethodSpec[] = [
     result: objectSchema({
       ok: { type: 'boolean' },
       kind: { type: 'string', enum: ['applied'] },
-      appliedAtMs: { type: 'number' }
+      appliedAtMs: { type: 'integer' }
     }, ['ok', 'kind', 'appliedAtMs'])
   },
   {
