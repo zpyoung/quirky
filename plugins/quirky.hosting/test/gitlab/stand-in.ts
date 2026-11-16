@@ -7,12 +7,18 @@ export type GitLabRequestRecord = {
   body: unknown
   authorization: string | null
 }
-
 export type GitLabServer = { port: number | undefined; url: URL; stop(closeActiveConnections?: boolean): void }
+export type GitLabTraceFixture = {
+  chunks: Array<string | Uint8Array>
+  status?: number
+  headers?: Record<string, string>
+}
+export type GitLabRetryMode = 'drop-after-mutation' | 'server-error-after-mutation' | 'malformed-after-mutation' | 'output-limit-after-mutation'
 export type GitLabStandIn = {
   server: GitLabServer
   url: string
   host: string
+  project: Record<string, any>
   requests: GitLabRequestRecord[]
   mergeRequests: Record<string, any>[]
   listMergeRequests: Record<string, any>[] | undefined
@@ -20,6 +26,13 @@ export type GitLabStandIn = {
   scopes: string[]
   approvals: Record<string, any>
   failures: Map<string, GitLabFailure>
+  mergeRequestPipelines: Map<string, Record<string, any>[]>
+  pipelines: Record<string, any>[]
+  jobs: Record<string, any>[]
+  traces: Map<string, GitLabTraceFixture>
+  retryModes: Map<string, GitLabRetryMode>
+  responseBarriers: Map<string, () => Promise<void>>
+  nextPages: Map<string, string>
   createMode: GitLabCreateMode
   conflictCandidates: Record<string, any>[]
   close(): void
@@ -66,8 +79,22 @@ export function startGitLab(): GitLabStandIn {
   let conflictCandidates: Record<string, any>[] = []
   let discussions: Record<string, any>[] = []
   let scopes = ['api']
+  let project: Record<string, any> = {
+    id: 42,
+    path: 'proj',
+    path_with_namespace: 'group/sub/proj',
+    name: 'proj',
+    default_branch: 'main'
+  }
   let approvals: Record<string, any> = { approved: false, approvals_left: 1, approved_by: [] }
   let failures = new Map<string, GitLabFailure>()
+  let mergeRequestPipelines = new Map<string, Record<string, any>[]>()
+  let pipelines: Record<string, any>[] = []
+  let jobs: Record<string, any>[] = []
+  let traces = new Map<string, GitLabTraceFixture>()
+  let retryModes = new Map<string, GitLabRetryMode>()
+  let responseBarriers = new Map<string, () => Promise<void>>()
+  let nextPages = new Map<string, string>()
   let createMode: GitLabCreateMode = 'normal'
   let nextNoteId = 1000
   let closed = false
@@ -81,6 +108,64 @@ export function startGitLab(): GitLabStandIn {
 
   function failedResponse(failure: GitLabFailure): Response {
     return json(failure.body ?? { message: 'fixture failure' }, failure.status, failure.headers)
+  }
+  function pageResponse(path: string, query: Record<string, string>, items: Record<string, any>[]): Response {
+    const page = Math.max(1, Number(query.page) || 1)
+    const perPage = Math.max(1, Math.min(100, Number(query.per_page) || 100))
+    const start = (page - 1) * perPage
+    const rows = items.slice(start, start + perPage)
+    const headers = new Headers()
+    const nextPage = nextPages.get(`GET ${path}?page=${page}`)
+    if (nextPage !== undefined) headers.set('X-Next-Page', nextPage)
+    else if (start + rows.length < items.length) headers.set('X-Next-Page', String(page + 1))
+    return json(rows, 200, headers)
+  }
+
+  function traceResponse(jobId: string): Response {
+    const trace = traces.get(jobId) ?? { chunks: [`trace for job ${jobId}\n`] }
+    const headers = new Headers(trace.headers)
+    if (!headers.has('content-type')) headers.set('content-type', 'text/plain; charset=utf-8')
+    const encoder = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of trace.chunks) {
+          controller.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk)
+        }
+        controller.close()
+      }
+    })
+    return new Response(body, { status: trace.status ?? 200, headers })
+  }
+  function retryJob(jobId: string): Response {
+    const index = jobs.findIndex((value) => String(value.id) === jobId)
+    if (index < 0) return json({ message: 'Not Found' }, 404)
+    const original = jobs[index]!
+    const nextId = jobs.reduce((highest, value) => Math.max(highest, Number(value.id) || 0), 0) + 1
+    const originalPipeline = isRecord(original.pipeline) ? original.pipeline : {}
+    const retried = {
+      ...original,
+      id: nextId,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      started_at: null,
+      finished_at: null,
+      web_url: `${apiUrl}/group/sub/proj/-/jobs/${nextId}`,
+      pipeline: { ...originalPipeline, status: 'pending' }
+    }
+    jobs = [...jobs.slice(0, index), ...jobs.slice(index + 1), retried]
+
+    const mode = retryModes.get(jobId)
+    if (mode === 'drop-after-mutation') return lostResponse()
+    if (mode === 'server-error-after-mutation') return json({ message: 'fixture retry response unavailable' }, 500)
+    if (mode === 'malformed-after-mutation') return json({ id: nextId }, 201)
+    if (mode === 'output-limit-after-mutation') {
+      const body = new Uint8Array(4 * 1024 * 1024 + 1).fill(0x78)
+      return new Response(body, {
+        status: 201,
+        headers: { 'content-type': 'application/json', 'content-length': String(4 * 1024 * 1024 + 1) }
+      })
+    }
+    return json(retried, 201)
   }
 
   function lostResponse(): Response {
@@ -277,6 +362,36 @@ export function startGitLab(): GitLabStandIn {
 
     return json({ message: 'Not Found' }, 404)
   }
+  function routePipelineApi(method: string, path: string, query: Record<string, string>, body: unknown): Response {
+    const parts = path.slice(PROJECT_PATH.length).split('/').filter(Boolean)
+    if (parts[0] === 'merge_requests' && parts.length === 3 && parts[2] === 'pipelines') {
+      if (method !== 'GET' || !findMergeRequest(parts[1]!)) return json({ message: 'Not Found' }, 404)
+      return pageResponse(path, query, mergeRequestPipelines.get(parts[1]!) ?? [])
+    }
+    if (parts[0] === 'pipelines' && parts.length === 3 && parts[2] === 'jobs') {
+      if (method !== 'GET') return json({ message: 'Method Not Allowed' }, 405)
+      const rows = jobs.filter((job) => String(job.pipeline?.id) === parts[1])
+      return pageResponse(path, query, rows)
+    }
+    if (parts[0] === 'pipelines' && parts.length === 2 && method === 'GET') {
+      const pipeline = pipelines.find((value) => String(value.id) === parts[1])
+      return pipeline ? json(pipeline) : json({ message: 'Not Found' }, 404)
+    }
+    if (parts[0] === 'jobs' && parts.length === 3 && parts[2] === 'retry' && method === 'POST') {
+      return retryJob(parts[1]!)
+    }
+    if (parts[0] === 'jobs' && parts.length === 3 && parts[2] === 'trace' && method === 'GET') {
+      if (!jobs.some((job) => String(job.id) === parts[1])) return json({ message: 'Not Found' }, 404)
+      return traceResponse(parts[1]!)
+    }
+    if (parts[0] === 'jobs' && parts.length === 2 && method === 'GET') {
+      const job = jobs.find((value) => String(value.id) === parts[1])
+      return job ? json(job) : json({ message: 'Not Found' }, 404)
+    }
+    if (parts[0] === 'merge_requests') return routeMergeRequests(method, path, query, body)
+    return json({ message: 'Not Found' }, 404)
+  }
+
 
   const server = Bun.serve({
     hostname: '127.0.0.1',
@@ -299,7 +414,15 @@ export function startGitLab(): GitLabStandIn {
       requests.push({ method, path, query, body, authorization })
 
       if (authorization !== 'Bearer dummy-gitlab-token') return json({ message: '401 Unauthorized' }, 401)
-      const failure = failures.get(`${method} ${path}`)
+      const pathKey = `${method} ${path}`
+      const pageKey = query.page === undefined ? null : `${pathKey}?page=${query.page}`
+      const barrierKey = pageKey !== null && responseBarriers.has(pageKey) ? pageKey : pathKey
+      const barrier = responseBarriers.get(barrierKey)
+      if (barrier) {
+        responseBarriers.delete(barrierKey)
+        await barrier()
+      }
+      const failure = (pageKey === null ? undefined : failures.get(pageKey)) ?? failures.get(pathKey)
       if (failure) return failedResponse(failure)
 
       if (method === 'GET' && path === '/api/v4/user') {
@@ -308,15 +431,11 @@ export function startGitLab(): GitLabStandIn {
       if (method === 'GET' && path === '/api/v4/personal_access_tokens/self') return json({ scopes: [...scopes] })
       if (method === 'GET' && path === PROJECT_PATH) {
         return json({
-          id: 42,
-          path: 'proj',
-          path_with_namespace: 'group/sub/proj',
-          name: 'proj',
-          default_branch: 'main',
-          web_url: `${apiUrl}/group/sub/proj`
+          ...project,
+          web_url: typeof project.web_url === 'string' ? project.web_url : `${apiUrl}/group/sub/proj`
         })
       }
-      if (path.startsWith(`${PROJECT_PATH}/`)) return routeMergeRequests(method, path, query, body)
+      if (path.startsWith(`${PROJECT_PATH}/`)) return routePipelineApi(method, path, query, body)
       return json({ message: 'Not Found' }, 404)
     }
   })
@@ -327,6 +446,8 @@ export function startGitLab(): GitLabStandIn {
     server,
     url: apiUrl,
     host,
+    get project() { return project },
+    set project(value: Record<string, any>) { project = value },
     get requests() { return requests },
     set requests(value: GitLabRequestRecord[]) { requests = value },
     get mergeRequests() { return mergeRequests },
@@ -341,6 +462,20 @@ export function startGitLab(): GitLabStandIn {
     set approvals(value: Record<string, any>) { approvals = value },
     get failures() { return failures },
     set failures(value: Map<string, GitLabFailure>) { failures = value },
+    get mergeRequestPipelines() { return mergeRequestPipelines },
+    set mergeRequestPipelines(value: Map<string, Record<string, any>[]>) { mergeRequestPipelines = value },
+    get pipelines() { return pipelines },
+    set pipelines(value: Record<string, any>[]) { pipelines = value },
+    get jobs() { return jobs },
+    set jobs(value: Record<string, any>[]) { jobs = value },
+    get retryModes() { return retryModes },
+    set retryModes(value: Map<string, GitLabRetryMode>) { retryModes = value },
+    get traces() { return traces },
+    set traces(value: Map<string, GitLabTraceFixture>) { traces = value },
+    get responseBarriers() { return responseBarriers },
+    set responseBarriers(value: Map<string, () => Promise<void>>) { responseBarriers = value },
+    get nextPages() { return nextPages },
+    set nextPages(value: Map<string, string>) { nextPages = value },
     get createMode() { return createMode },
     get conflictCandidates() { return conflictCandidates },
     set conflictCandidates(value: Record<string, any>[]) { conflictCandidates = value },

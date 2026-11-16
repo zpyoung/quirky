@@ -26,5 +26,5 @@ export function prMethods(env: HostingEnv): Record<string, Handler> {
     ...createPRMutationMethods(env, lookup),
     ...createPRConversationMethods(env, lookup),
     ...createPRStackMethods(env, lookup)
-  })
+  }, { beginReviewSnapshot: lookup.beginReviewSnapshot })
 }

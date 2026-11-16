@@ -30,6 +30,8 @@ export type ServerOptions = {
   deliverHook?: (event: HookReceived, bodyBytes: number) => void
   /** Module URLs to preload from index.html; omitted means none. */
   modulePreloads?: () => readonly string[]
+  /** True once startup plugins have settled and RPC is open; omitted means the server has no startup phase. */
+  startupSettled?: () => boolean
 }
 
 function json(body: unknown, status = 200): Response {
@@ -123,7 +125,12 @@ export function startServer(options: ServerOptions) {
     async fetch(request, server) {
       const url = new URL(request.url)
       if (url.pathname === HEALTH_PATH) {
-        return json({ ok: true, pid: process.pid, daemonVersion: options.daemonVersion })
+        return json({
+          ok: true,
+          pid: process.pid,
+          daemonVersion: options.daemonVersion,
+          startupSettled: options.startupSettled?.() ?? true
+        })
       }
       if (url.pathname === '/favicon.ico') return new Response(null, { status: 204 })
       if (url.pathname === RPC_PATH) {
