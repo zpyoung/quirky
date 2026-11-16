@@ -76,6 +76,9 @@ export type CliFileDomWindow = {
   lines: string[]
   reviewCards: CliFileReviewCard[]
 }
+export type CliFileObservationTiming = { cliCalls: number; cliChildMs: number; harnessMs: number; domWaitMs: number }
+export type CliFilesTiming = CliFileObservationTiming & { setupMs: number; observationsMs: number; teardownMs: number }
+
 export type CliFileObservationEvidence = {
   request: Record<string, unknown>
   public: { before: CliFilePublicWindow[]; after: CliFilePublicWindow[] }
@@ -87,6 +90,7 @@ export type CliFileObservationEvidence = {
   git?: JsonObject
   literal?: JsonObject
   elapsedMs?: number
+  timing?: CliFileObservationTiming
   [key: string]: unknown
 }
 type CliFilesFailureInfo = {
@@ -122,10 +126,11 @@ export type CliFilesReport = {
   cleanup: { ok: boolean; error?: string; evidence?: JsonObject }
   elapsedMs: number
   buildElapsedMs: number
+  timing?: CliFilesTiming
   startup?: CliFilesStartupDiagnostics
   guards?: { denied: string[]; egress: string[]; injected: boolean }
   fixtures?: JsonObject
-  error?: CliFilesFailureInfo & { stage: string }
+  error?: CliFilesFailureInfo & { stage: string; detail?: string }
 }
 export type CliFileNavigationHistory = { worktrees: string[]; index: number }
 
@@ -148,6 +153,70 @@ export function isCliFilesParityComplete(
   return ok && cleanupOk && rows.length === 4 &&
     rows.every((row) => row.disposition === 'covered' && row.status === 'observed')
 }
+
+export function createTimingLedger(now: () => number = Date.now) {
+  const totals: CliFilesTiming = {
+    setupMs: 0,
+    observationsMs: 0,
+    teardownMs: 0,
+    cliCalls: 0,
+    cliChildMs: 0,
+    harnessMs: 0,
+    domWaitMs: 0
+  }
+  let active: { phase: string; startedAt: number; timing: CliFileObservationTiming } | undefined
+  const currentTiming = () => {
+    if (!active) throw new Error('no CLI files timing phase is active')
+    return active.timing
+  }
+  return {
+    begin(phase: string): void {
+      if (active) throw new Error(`CLI files timing phase ${active.phase} has not ended`)
+      active = {
+        phase,
+        startedAt: now(),
+        timing: { cliCalls: 0, cliChildMs: 0, harnessMs: 0, domWaitMs: 0 }
+      }
+    },
+    recordCli(wallMs: number, childMs: number): void {
+      const timing = currentTiming()
+      timing.cliCalls++
+      timing.cliChildMs += Math.max(0, Math.round(childMs))
+      timing.harnessMs += Math.max(0, Math.round(wallMs - childMs))
+    },
+    recordDomWait(ms: number): void {
+      currentTiming().domWaitMs += Math.max(0, Math.round(ms))
+    },
+    end(): CliFileObservationTiming & { elapsedMs: number } {
+      const phase = active
+      if (!phase) throw new Error('no CLI files timing phase is active')
+      active = undefined
+      const elapsedMs = Math.max(0, Math.round(now() - phase.startedAt))
+      if (phase.phase === 'setup') totals.setupMs += elapsedMs
+      else if (phase.phase === 'teardown') totals.teardownMs += elapsedMs
+      else totals.observationsMs += elapsedMs
+      totals.cliCalls += phase.timing.cliCalls
+      totals.cliChildMs += phase.timing.cliChildMs
+      totals.harnessMs += phase.timing.harnessMs
+      totals.domWaitMs += phase.timing.domWaitMs
+      return { ...phase.timing, elapsedMs }
+    },
+    summary(): CliFilesTiming {
+      return { ...totals }
+    }
+  }
+}
+
+export function formatTimingLine(
+  phase: string,
+  status: 'observed' | 'failed' | 'finished',
+  timing: CliFileObservationTiming & { elapsedMs: number }
+): string {
+  const action = status === 'observed' ? 'observed in' : status === 'failed' ? 'failed after' : 'finished in'
+  const seconds = (milliseconds: number) => `${(milliseconds / 1_000).toFixed(1)} s`
+  return `${phase} ${action} ${seconds(timing.elapsedMs)}: ${timing.cliCalls} CLI calls, ${seconds(timing.cliChildMs)} in CLI children, ${seconds(timing.harnessMs)} in harness checks, ${seconds(timing.domWaitMs)} waiting for renderers`
+}
+
 export type CliFilesRunOptions = {
   signal?: AbortSignal
   createWorld?: (options: { signal?: AbortSignal; deadline?: number }) => Promise<CliFilesWorld>
@@ -335,7 +404,7 @@ function sanitizeValue(value: unknown, home: string, tokens: readonly string[], 
   for (const [childKey, child] of Object.entries(value)) result[childKey] = sanitizeValue(child, home, tokens, childKey)
   return result
 }
-function boundedStartupText(text: string): string {
+function boundedDiagnosticTail(text: string): string {
   const bytes = Buffer.from(text)
   let start = Math.max(0, bytes.length - MAX_DIAGNOSTIC_BYTES)
   while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start++
@@ -367,7 +436,7 @@ function startupDiagnostics(value: unknown): CliFilesStartupDiagnostics | undefi
   const logs: CliFilesStartupDiagnostics['logs'] = {}
   for (const key of ['buildTail', 'daemonTail', 'rendererTail'] as const) {
     const text = record(safe.logs, 'startup logs')[key]
-    if (typeof text === 'string') logs[key] = boundedStartupText(text)
+    if (typeof text === 'string') logs[key] = boundedDiagnosticTail(text)
   }
   // Every field was checked above; bounding only removes diagnostic examples.
   const diagnostics = safe as CliFilesStartupDiagnostics
@@ -375,11 +444,11 @@ function startupDiagnostics(value: unknown): CliFilesStartupDiagnostics | undefi
     ...diagnostics,
     renderer: diagnostics.renderer.slice(-64).map(entry => ({
       ...entry,
-      ...(entry.message ? { message: boundedStartupText(entry.message) } : {}),
-      ...(entry.pageErrors ? { pageErrors: entry.pageErrors.slice(-5).map(boundedStartupText) } : {}),
+      ...(entry.message ? { message: boundedDiagnosticTail(entry.message) } : {}),
+      ...(entry.pageErrors ? { pageErrors: entry.pageErrors.slice(-5).map(boundedDiagnosticTail) } : {}),
       ...(entry.failedRequests ? { failedRequests: entry.failedRequests.slice(-5).map(request => ({
-        path: boundedStartupText(request.path.split(/[?#]/, 1)[0]!),
-        message: boundedStartupText(request.message)
+        path: boundedDiagnosticTail(request.path.split(/[?#]/, 1)[0]!),
+        message: boundedDiagnosticTail(request.message)
       })) } : {})
     })),
     logs
@@ -2723,6 +2792,10 @@ function capturePageDom(): CliFileDomWindow {
 
 export class CliFilesRunner {
   readonly startedAt = Date.now()
+  readonly timing = createTimingLedger()
+  activeTimingPhase: string | undefined
+  teardownTimingStarted = false
+  reportedFailure: unknown
   readonly workDeadline = this.startedAt + WORK_LIMIT_MS
   readonly workController = new AbortController()
   readonly cleanupController = new AbortController()
@@ -2759,6 +2832,8 @@ export class CliFilesRunner {
   cleanupTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(readonly options: CliFilesRunOptions) {
+    this.timing.begin('setup')
+    this.activeTimingPhase = 'setup'
     this.workTimer = setTimeout(() => this.workController.abort(new CliFilesFailure('deadline', 'CLI file rehearsal exceeded its 330-second work deadline')),
       Math.max(1, this.workDeadline - Date.now()))
     if (options.signal) {
@@ -2884,6 +2959,7 @@ export class CliFilesRunner {
   }
 
   async execute(argv: string[], options: { id: string; cwd?: string; mutation?: boolean; cleanup?: boolean; signal?: AbortSignal } ): Promise<{ result?: unknown; refusal?: { code: string; message: string; data?: unknown }; receipt: CliReceipt }> {
+    const wallStartedAt = performance.now()
     const cleanup = options.cleanup === true
     const baseSignal = cleanup ? this.cleanupController.signal : this.workController.signal
     const signal = options.signal ? AbortSignal.any([baseSignal, options.signal]) : baseSignal
@@ -2924,11 +3000,23 @@ export class CliFilesRunner {
           }
         }
         this.registerReceipt(receipt)
+        this.timing.recordCli(performance.now() - wallStartedAt, receipt.elapsedMs)
       }
       throw error
     }
-    const parsed = this.safeParse(raw, commandArgs, options.id)
+    const receiptCountBeforeParse = this.receipts.length
+    let parsed: ReturnType<CliFilesRunner['safeParse']>
+    try {
+      parsed = this.safeParse(raw, commandArgs, options.id)
+    } catch (error) {
+      if (this.receipts.length > receiptCountBeforeParse) {
+        const receipt = this.receipts[this.receipts.length - 1]!
+        if (receipt.id === options.id) this.timing.recordCli(performance.now() - wallStartedAt, receipt.elapsedMs)
+      }
+      throw error
+    }
     const receipt = this.receipts.find((entry) => entry.id === options.id)!
+    this.timing.recordCli(performance.now() - wallStartedAt, receipt.elapsedMs)
     if (parsed.refusal) return { refusal: parsed.refusal, receipt }
     return { result: parsed.result, receipt }
   }
@@ -3167,19 +3255,24 @@ export class CliFilesRunner {
   }
 
   async waitForDom(index: number, predicate: (dom: CliFileDomWindow) => boolean, label: string, timeoutMs = 30_000): Promise<CliFileDomWindow> {
-    const until = Math.min(this.workDeadline, Date.now() + timeoutMs)
-    let last: CliFileDomWindow | undefined
-    while (Date.now() < until) {
-      this.failIfStopped()
-      const entry = this.windows[index]
-      if (!entry || entry.page.isClosed()) throw new CliFilesFailure('renderer-disconnected', `${label} renderer closed while waiting`)
-      last = await this.readRenderer(() => entry.page.evaluate(capturePageDom))
-      last.connId = entry.connId
-      if (predicate(last)) return last
-      await Bun.sleep(Math.min(50, Math.max(1, until - Date.now())))
+    const startedAt = performance.now()
+    try {
+      const until = Math.min(this.workDeadline, Date.now() + timeoutMs)
+      let last: CliFileDomWindow | undefined
+      while (Date.now() < until) {
+        this.failIfStopped()
+        const entry = this.windows[index]
+        if (!entry || entry.page.isClosed()) throw new CliFilesFailure('renderer-disconnected', `${label} renderer closed while waiting`)
+        last = await this.readRenderer(() => entry.page.evaluate(capturePageDom))
+        last.connId = entry.connId
+        if (predicate(last)) return last
+        await Bun.sleep(Math.min(50, Math.max(1, until - Date.now())))
+      }
+      if (last && this.activeObservation) this.activeObservation.evidence.timedOutDom = { label, ...last }
+      throw new CliFilesFailure('dom-timeout', `${label} did not appear in the live renderer${last ? ` (selected ${last.selectedTabId ?? 'none'}, path ${last.path ?? 'none'})` : ''}`)
+    } finally {
+      this.timing.recordDomWait(performance.now() - startedAt)
     }
-    if (last && this.activeObservation) this.activeObservation.evidence.timedOutDom = { label, ...last }
-    throw new CliFilesFailure('dom-timeout', `${label} did not appear in the live renderer${last ? ` (selected ${last.selectedTabId ?? 'none'}, path ${last.path ?? 'none'})` : ''}`)
   }
 
   async focusBaseline(index: number, tabId: string): Promise<void> {
@@ -3245,6 +3338,13 @@ export class CliFilesRunner {
 
   async observation(id: string, run: (builder: ObservationBuilder) => Promise<void>): Promise<void> {
     if (this.observations.has(id)) throw new CliFilesFailure('duplicate-observation', `observation ${id} was already executed`)
+    if (this.activeTimingPhase === 'setup') {
+      const setupTiming = this.timing.end()
+      this.activeTimingPhase = undefined
+      this.progress(formatTimingLine('setup', 'finished', setupTiming))
+    }
+    this.timing.begin(id)
+    this.activeTimingPhase = id
     const builder: ObservationBuilder = {
       id,
       startedAt: Date.now(),
@@ -3268,7 +3368,16 @@ export class CliFilesRunner {
       }
       assertCliFileObservation(observation, this.receipts)
       builder.evidence.elapsedMs = Math.max(1, Date.now() - builder.startedAt)
+      const timing = this.timing.end()
+      this.activeTimingPhase = undefined
+      builder.evidence.timing = {
+        cliCalls: timing.cliCalls,
+        cliChildMs: timing.cliChildMs,
+        harnessMs: timing.harnessMs,
+        domWaitMs: timing.domWaitMs
+      }
       this.observations.set(id, observation)
+      this.progress(formatTimingLine(id, 'observed', timing))
     } catch (error) {
       const failure = safeError(error)
       if (builder.before.length > 0) {
@@ -3284,6 +3393,9 @@ export class CliFilesRunner {
           builder.evidence.failureReadbackError = safeError(readbackError)
         }
       }
+      const detail = failure.stderrTail
+        ? boundedDiagnosticTail(sanitizeText(failure.stderrTail, this.home, this.tokenValues))
+        : undefined
       const observation: CliFileObservation = {
         id,
         status: 'failed',
@@ -3297,10 +3409,25 @@ export class CliFilesRunner {
           ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
         }
       }
+      const timing = this.timing.end()
+      this.activeTimingPhase = undefined
+      observation.evidence.timing = {
+        cliCalls: timing.cliCalls,
+        cliChildMs: timing.cliChildMs,
+        harnessMs: timing.harnessMs,
+        domWaitMs: timing.domWaitMs
+      }
       this.observations.set(id, observation)
-      this.primaryFailure ??= { stage: id, ...observation.error! }
+      this.primaryFailure ??= {
+        stage: id,
+        ...observation.error!,
+        ...(detail ? { detail } : {})
+      }
       this.workController.abort(error)
-      this.progress(`${id} failed: ${failure.message}`)
+      this.reportedFailure = error
+      const message = sanitizeText(failure.message, this.home, this.tokenValues)
+      this.progress(`${id} failed: ${message}${detail ? ` (${detail})` : ''}`)
+      this.progress(formatTimingLine(id, 'failed', timing))
     } finally {
       this.activeObservation = undefined
     }
@@ -4291,6 +4418,15 @@ export class CliFilesRunner {
   }
 
   beginCleanup(): number {
+    if (!this.teardownTimingStarted) {
+      if (this.activeTimingPhase) {
+        this.timing.end()
+        this.activeTimingPhase = undefined
+      }
+      this.teardownTimingStarted = true
+      this.timing.begin('teardown')
+      this.activeTimingPhase = 'teardown'
+    }
     const deadline = Math.min(this.startedAt + WORK_LIMIT_MS + TEARDOWN_LIMIT_MS, Date.now() + TEARDOWN_LIMIT_MS)
     this.cleanupTimer ??= setTimeout(() => this.cleanupController.abort(
       new CliFilesFailure('cleanup-deadline', 'CLI file teardown exceeded its 30-second cleanup reserve')
@@ -4334,10 +4470,14 @@ export class CliFilesRunner {
       await this.assertLive(true)
     } catch (error) {
       const failure = safeError(error)
+      const detail = failure.stderrTail
+        ? boundedDiagnosticTail(sanitizeText(failure.stderrTail, this.home, this.tokenValues))
+        : undefined
       this.primaryFailure ??= {
         stage: 'cleanup-liveness',
         kind: failure.kind,
         message: sanitizeText(failure.message, this.home, this.tokenValues),
+        ...(detail ? { detail } : {}),
         ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
       }
       return
@@ -4512,9 +4652,13 @@ export class CliFilesRunner {
     let rows: table.CliTableRow[] = []
     let cleanup = false
     try {
+
       this.progress('starting isolated two-window CLI file observation')
       rows = table.loadCliTable()
       await this.ensureWorld()
+      const setupTiming = this.timing.end()
+      this.activeTimingPhase = undefined
+      this.progress(formatTimingLine('setup', 'finished', setupTiming))
       this.progress('running renderer observations')
       await this.editorScenarios()
       if (!this.primaryFailure) await this.prepareRoutingAndReview()
@@ -4535,14 +4679,30 @@ export class CliFilesRunner {
         }
       }
       const failure = safeError(error)
+      const stage = this.currentStage
+      const detail = failure.stderrTail
+        ? boundedDiagnosticTail(sanitizeText(failure.stderrTail, this.home, this.tokenValues))
+        : undefined
+      const message = sanitizeText(failure.message, this.home, this.tokenValues)
+      const alreadyReported = this.reportedFailure === error
       this.primaryFailure ??= {
-        stage: this.currentStage,
+        stage,
         kind: failure.kind,
-        message: sanitizeText(failure.message, this.home, this.tokenValues),
+        message,
+        ...(detail ? { detail } : {}),
         ...(failure.processInspection ? { processInspection: failure.processInspection } : {})
       }
       if (error && typeof error === 'object' && 'cleanupError' in error && typeof (error as Record<string, unknown>).cleanupError === 'string') {
         this.cleanupFailure = [(error as Record<string, unknown>).cleanupError as string, this.cleanupFailure].filter(Boolean).join('; ')
+      }
+      if (!alreadyReported) {
+        this.progress(`${stage} failed: ${message}${detail ? ` (${detail})` : ''}`)
+        if (this.activeTimingPhase) {
+          const phase = this.activeTimingPhase
+          const timing = this.timing.end()
+          this.activeTimingPhase = undefined
+          this.progress(formatTimingLine(phase, 'failed', timing))
+        }
       }
     } finally {
       clearTimeout(this.workTimer)
@@ -4553,6 +4713,9 @@ export class CliFilesRunner {
       try { if (!this.guardEvidence) await this.captureGuards() }
       catch (error) { this.cleanupFailure = [this.cleanupFailure, safeError(error).message].filter(Boolean).join('; ') }
       await this.cleanupWorld()
+      const teardownTiming = this.timing.end()
+      this.activeTimingPhase = undefined
+      this.progress(formatTimingLine('teardown', this.cleanupFailure ? 'failed' : 'finished', teardownTiming))
       clearTimeout(this.cleanupTimer)
       cleanup = true
     }
@@ -4591,6 +4754,7 @@ export class CliFilesRunner {
         evidence: this.cleanupEvidence
       },
       elapsedMs: Math.max(1, Date.now() - this.startedAt),
+      timing: this.timing.summary(),
       buildElapsedMs: this.buildElapsedMs,
       ...(this.startup ? { startup: this.startup } : {}),
       ...(this.guardEvidence ? { guards: this.guardEvidence } : {}),

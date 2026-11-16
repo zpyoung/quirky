@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createCliFilesWorld, type CliFilesWorld } from './cli-world'
+import { createTimingLedger, formatTimingLine, runCliFilesParity, type CliFileObservationTiming, type CliFilesTiming } from './cli-files'
 
 type WorldFactory = (options?: { signal?: AbortSignal; deadline?: number }, dependencies?: Record<string, unknown>) => Promise<CliFilesWorld>
 const createWorld = createCliFilesWorld as unknown as WorldFactory
@@ -345,5 +346,143 @@ test('an injected window handle without liveness falls back to finish', async ()
     expect(fixture.counts).toEqual({ snapshots: 1, probes: 1, uiState: 1, finish: 1, liveness: 0, cli: 1 })
   } finally {
     await world.cleanup()
+  }
+})
+
+type TimedPhase = CliFileObservationTiming & { elapsedMs: number }
+
+test('timing ledger accounts for child, harness, and DOM-wait time', () => {
+  let now = 0
+  const ledger = createTimingLedger(() => now)
+  ledger.begin('files-review-source')
+  ledger.recordCli(1_000, 700)
+  ledger.recordCli(2_000, 1_500)
+  ledger.recordCli(500, 400)
+  ledger.recordDomWait(250)
+  ledger.recordDomWait(750)
+  now = 4_600
+
+  const timing: TimedPhase = ledger.end()
+  expect(timing).toEqual({ cliCalls: 3, cliChildMs: 2_600, harnessMs: 900, domWaitMs: 1_000, elapsedMs: 4_600 })
+  expect(formatTimingLine('files-review-source', 'observed', timing))
+    .toBe('files-review-source observed in 4.6 s: 3 CLI calls, 2.6 s in CLI children, 0.9 s in harness checks, 1.0 s waiting for renderers')
+  expect(formatTimingLine('files-review-source', 'failed', timing))
+    .toBe('files-review-source failed after 4.6 s: 3 CLI calls, 2.6 s in CLI children, 0.9 s in harness checks, 1.0 s waiting for renderers')
+  expect(formatTimingLine('setup', 'finished', timing))
+    .toBe('setup finished in 4.6 s: 3 CLI calls, 2.6 s in CLI children, 0.9 s in harness checks, 1.0 s waiting for renderers')
+})
+
+test('timing ledger summarizes setup, all observations, teardown, and their work', () => {
+  let now = 0
+  const ledger = createTimingLedger(() => now)
+  ledger.begin('setup')
+  now = 100
+  ledger.end()
+  ledger.begin('files-first')
+  ledger.recordCli(20, 8)
+  ledger.recordDomWait(4)
+  now = 130
+  ledger.end()
+  ledger.begin('files-second')
+  now = 150
+  ledger.end()
+  ledger.begin('teardown')
+  now = 175
+  ledger.end()
+
+  const summary: CliFilesTiming = ledger.summary()
+  expect(summary).toEqual({
+    setupMs: 100, observationsMs: 50, teardownMs: 25,
+    cliCalls: 1, cliChildMs: 8, harnessMs: 12, domWaitMs: 4
+  })
+})
+
+test('setup health failures retain bounded detail in the report and progress', async () => {
+  const detail = JSON.stringify({ probes: 100, windowMs: 5_000, lastProbeMs: 1, daemonState: 'S', runtimeMatches: true })
+  const message = 'owned daemon is not healthy; refusing CLI auto-start'
+  const failure = Object.assign(new Error(message), { kind: 'daemon-exited', stderrTail: detail })
+  const progress: string[] = []
+  const report = await runCliFilesParity({
+    createWorld: async () => { throw failure },
+    onProgress: (line) => { progress.push(line) }
+  })
+  expect(report.error).toEqual({ stage: 'setup', kind: 'daemon-exited', message, detail })
+  expect(progress).toContain(`setup failed: ${message} (${detail})`)
+  expect(progress.some((line) => line.startsWith('setup failed after '))).toBe(true)
+})
+
+test('setup report detail is bounded to the diagnostic limit', async () => {
+  const failure = Object.assign(new Error('injected startup failure'), {
+    kind: 'startup-failed',
+    stderrTail: 'd'.repeat(9_000)
+  })
+  const report = await runCliFilesParity({ createWorld: async () => { throw failure } })
+  expect(Buffer.byteLength(report.error?.detail ?? '')).toBeLessThanOrEqual(8 * 1_024)
+})
+
+test('a run failing after two CLI calls counts exactly its registered receipts', async () => {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-cli-files-timing-')))
+  try {
+    mkdirSync(join(home, 'ui-dist'), { recursive: true })
+    writeFileSync(join(home, 'ui-dist', 'index.html'), '<!doctype html>')
+    writeFileSync(join(home, 'runtime.json'), JSON.stringify({
+      pid: process.pid, port: 43_123, token: 'timing-token', hookToken: 'timing-hook-token',
+      daemonVersion: 'test', protocolVersion: 1, startedAt: Date.now()
+    }))
+    const worktrees = [
+      { id: 'wt-a', path: join(home, 'repos', 'a'), repoId: 'repo-a', name: 'a', isMain: false, status: 'idle' },
+      { id: 'wt-b', path: join(home, 'repos', 'b'), repoId: 'repo-b', name: 'b', isMain: false, status: 'idle' }
+    ]
+    for (const worktree of worktrees) mkdirSync(worktree.path, { recursive: true })
+    const securityLog = join(home, 'security.log')
+    const orcaLog = join(home, 'orca.log')
+    const egressLog = join(home, 'egress.log')
+    writeFileSync(securityLog, '')
+    writeFileSync(orcaLog, '')
+    writeFileSync(egressLog, 'https://cli-parity-guard.invalid/self-test\n')
+    const trackedIdentities = [
+      { kind: 'daemon', pid: process.pid, ppid: process.pid, pgid: process.pid, started: 'daemon', command: 'packages/daemon/src/main.ts', gone: true },
+      { kind: 'browser', pid: process.pid + 1, ppid: process.pid, pgid: process.pid, started: 'browser', command: 'Chromium', gone: true }
+    ]
+    let calls = 0
+    const world = {
+      home,
+      env: { QUIRKY_HOME: home },
+      daemonPid: process.pid,
+      cliEntry: process.execPath,
+      pages: [{ isClosed: () => false }, { isClosed: () => false }],
+      records: [
+        { index: 0, connId: 41, worktree: 'wt-a', open: true, shown: true },
+        { index: 1, connId: 42, worktree: 'wt-b', open: true, shown: true }
+      ],
+      worktrees,
+      tools: { fixtureBin: join(home, 'bin'), fetchPreload: join(home, 'preload.cjs'), securityLog, orcaLog, egressLog },
+      buildElapsedMs: 0,
+      cleanupEvidence: {
+        trackedIdentities,
+        identities: trackedIdentities.map(({ kind, pid, gone }) => ({ kind, pid, gone })),
+        processIdentitiesGone: true,
+        homeRemoved: true
+      },
+      execute: async () => {
+        calls++
+        if (calls === 1) {
+          const stdout = JSON.stringify({ windows: [{ connId: 41 }, { connId: 42 }] })
+          return { stdout, stderr: '', exitCode: 0, stdoutBytes: Buffer.byteLength(stdout), elapsedMs: 10 }
+        }
+        throw Object.assign(new Error('injected failure after two CLI calls'), {
+          kind: 'injected-cli-failure', exitCode: 1, stdoutBytes: 0, elapsedMs: 25, stderrTail: 'injected failure'
+        })
+      },
+      assertLive: async () => { throw new Error('stop cleanup after setup failure') },
+      cleanup: async () => { rmSync(home, { recursive: true, force: true }) }
+    } as unknown as CliFilesWorld
+    const report = await runCliFilesParity({ createWorld: async () => world })
+    expect(calls).toBe(2)
+    const timing: CliFilesTiming | undefined = report.timing
+    expect(timing?.cliCalls).toBe(report.receipts.length)
+    expect(timing?.cliCalls).toBe(2)
+  } finally {
+    rmSync(home, { recursive: true, force: true })
   }
 })
