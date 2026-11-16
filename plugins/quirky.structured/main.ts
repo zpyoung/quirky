@@ -518,7 +518,7 @@ export function activate(context: PluginContext): void {
     return client
   }
 
-  const createAsk = async (spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean }): Promise<AskEnvelope> => {
+  const createAsk = async (spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean; onAsk?: (askId: string) => void }): Promise<AskEnvelope> => {
     const entry = live.get(sessionId)
     if (!askOwnerIsActive(sessionId, entry)) throw new Error('structured session is not active')
     const lease = entry.lease
@@ -565,6 +565,7 @@ export function activate(context: PluginContext): void {
         text: variant === 'question' ? 'Question for you' : 'Approval needed',
         item: { kind: 'ask', askId, variant }
       })
+      options?.onAsk?.(askId)
       const waiter = client
       for (;;) {
         if (!askOwnerIsActive(sessionId, entry)) throw new Error('Structured ask owner is no longer available')

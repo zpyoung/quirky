@@ -32,7 +32,7 @@ export type StructuredContext = {
    * Registers an ask and resolves with its answer, journaling an `ask` item as soon as the ask exists.
    * Native questions use the kernel-issued live lease; ordinary tool approvals retain their existing card path.
    */
-  createAsk(spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean }): Promise<AskEnvelope>
+  createAsk(spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean; onAsk?: (askId: string) => void }): Promise<AskEnvelope>
   /** Cancels a pending ask the runner no longer needs, so its card becomes a dismissed record. */
   cancelAsk(askId: string): Promise<void>
   /** Stores a native provider session ID before the first turn is started. */

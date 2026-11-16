@@ -72,6 +72,8 @@ async function encodeImage(path: string): Promise<EncodedImage> {
 }
 
 const ALLOW_LABEL = /^(allow|yes|approve|accept|ok|proceed|continue|run)\b/i
+type AskTracker = (askId: string) => void
+
 const DENY_LABEL = /^(deny|no|block|reject|decline|cancel|abort|stop|don't|do not)\b/i
 
 type Running = {
@@ -464,10 +466,23 @@ class PiRunner implements StructuredRunner {
     run.pendingDialogs++
     this.context.setStatus(run.sessionId, 'waiting')
     const cancelled = Promise.withResolvers<null>()
-    run.dialogCancels.set(id, () => cancelled.resolve(null))
+    let askId: string | undefined
+    let cancelledByPi = false
+    const cancelOwnAsk = (): void => {
+      if (askId !== undefined) void this.context.cancelAsk(askId).catch(() => undefined)
+    }
+    run.dialogCancels.set(id, () => {
+      cancelledByPi = true
+      cancelOwnAsk()
+      cancelled.resolve(null)
+    })
+    const track = (created: string): void => {
+      askId = created
+      if (cancelledByPi) cancelOwnAsk()
+    }
     let response: PiFrame | null
     try {
-      const answer = this.answer(run, frame)
+      const answer = this.answer(run, frame, track)
       answer.catch(() => undefined)
       response = await Promise.race([answer, cancelled.promise])
     } catch {
@@ -490,18 +505,18 @@ class PiRunner implements StructuredRunner {
     this.sendDenialReasons(run)
   }
 
-  private async ask(run: Running, spec: AskSpec): Promise<AskEnvelope | null> {
+  private async ask(run: Running, spec: AskSpec, track: AskTracker): Promise<AskEnvelope | null> {
     try {
-      return await this.context.createAsk(spec, run.sessionId, { nativeQuestion: true })
+      return await this.context.createAsk(spec, run.sessionId, { nativeQuestion: true, onAsk: track })
     } catch {
       return null
     }
   }
 
-  private async approve(run: Running, question: string): Promise<boolean> {
+  private async approve(run: Running, question: string, track: AskTracker): Promise<boolean> {
     let envelope: AskEnvelope | null = null
     try {
-      envelope = await this.context.createAsk(approvalSpec(oneLine(question, QUESTION_LIMIT)), run.sessionId)
+      envelope = await this.context.createAsk(approvalSpec(oneLine(question, QUESTION_LIMIT)), run.sessionId, { onAsk: track })
     } catch {
       envelope = null
     }
@@ -510,18 +525,18 @@ class PiRunner implements StructuredRunner {
     return outcome.decision !== 'deny'
   }
 
-  private async answer(run: Running, frame: PiFrame): Promise<PiFrame> {
+  private async answer(run: Running, frame: PiFrame, track: AskTracker): Promise<PiFrame> {
     const title = text(frame.title)
     switch (frame.method) {
       case 'confirm':
-        return { confirmed: await this.approve(run, [title, text(frame.message)].filter(Boolean).join(': ') || 'Allow this?') }
+        return { confirmed: await this.approve(run, [title, text(frame.message)].filter(Boolean).join(': ') || 'Allow this?', track) }
       case 'select': {
         const options = (Array.isArray(frame.options) ? frame.options : []).filter((option): option is string => typeof option === 'string')
         const approval = approvalOptions(options)
-        if (approval) return { value: (await this.approve(run, title || 'Allow this?')) ? approval.allow : approval.deny }
+        if (approval) return { value: (await this.approve(run, title || 'Allow this?', track)) ? approval.allow : approval.deny }
         const envelope = await this.ask(run, {
           questions: [{ id: 'answer', type: 'select', question: title || 'Choose one', options: options.map((label, index) => ({ value: `o${index + 1}`, label })) }]
-        })
+        }, track)
         const answer = envelope?.status === 'answered' || envelope?.status === 'partial' ? envelope.answers.answer : undefined
         if (!answer || !('value' in answer) || typeof answer.value !== 'string') return { cancelled: true }
         const index = /^o(\d+)$/.exec(answer.value)?.[1]
@@ -541,19 +556,19 @@ class PiRunner implements StructuredRunner {
               ...(prefill === '' ? {} : { default: prefill })
             }
           ]
-        })
+        }, track)
         const answer = envelope?.status === 'answered' || envelope?.status === 'partial' ? envelope.answers.answer : undefined
         return answer && 'value' in answer && typeof answer.value === 'string' ? { value: answer.value } : { cancelled: true }
       }
       case 'ask':
-        return this.answerQuestions(run, frame)
+        return this.answerQuestions(run, frame, track)
       default:
         return { cancelled: true }
     }
   }
 
   /** Answers omp's multi-question `ask` request; a skipped question fails the whole ask rather than guessing. */
-  private async answerQuestions(run: Running, frame: PiFrame): Promise<PiFrame> {
+  private async answerQuestions(run: Running, frame: PiFrame, track: AskTracker): Promise<PiFrame> {
     const questions = (Array.isArray(frame.questions) ? frame.questions : []).flatMap((entry) => {
       const fields = record(entry)
       if (!fields) return []
@@ -569,7 +584,7 @@ class PiRunner implements StructuredRunner {
     } catch {
       return { cancelled: true }
     }
-    const envelope = await this.ask(run, plan.spec)
+    const envelope = await this.ask(run, plan.spec, track)
     if (envelope?.status !== 'answered' && envelope?.status !== 'partial') return { cancelled: true }
     const answers = []
     for (const { id } of plan.keys) {
