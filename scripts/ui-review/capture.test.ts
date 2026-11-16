@@ -175,6 +175,7 @@ type FakeCaptureRuntimeOptions = {
   stripeVisible?: boolean
   quickOpenVisible?: boolean
   escapeClosesQuickOpen?: boolean
+  escapeSchedulesQuickOpenClose?: boolean
   rpcFailures?: Record<string, string>
 }
 
@@ -189,6 +190,7 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
   ]
   let dialogs = [...(settings.dialogs ?? [])]
   let quickOpenVisible = settings.quickOpenVisible ?? false
+  let quickOpenDismissing = false
   let reloadCount = 0
   let terminalCount = 0
 
@@ -219,7 +221,10 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
         return selector.includes('.tool-shell__stripe') || selector.includes('.shell-workspace')
       },
       async click() {
-        if (selector.includes('quick-open')) quickOpenVisible = false
+        if (selector.includes('quick-open')) {
+          if (quickOpenDismissing) throw new Error('dialog detached while clicking after Escape')
+          quickOpenVisible = false
+        }
       },
       async scrollIntoViewIfNeeded() {},
       getByRole: (role: string, options?: { name?: string }) => locator(`${selector} [role="${role}"] ${options?.name ?? ''}`),
@@ -270,7 +275,8 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
     getByLabel: (label: string) => locator(`[aria-label="${label}"]`),
     keyboard: {
       async press(key: string) {
-        if (key === 'Escape' && settings.escapeClosesQuickOpen !== false) quickOpenVisible = false
+        if (key === 'Escape' && settings.escapeSchedulesQuickOpenClose) quickOpenDismissing = true
+        else if (key === 'Escape' && settings.escapeClosesQuickOpen !== false) quickOpenVisible = false
       }
     },
     async waitForFunction() {
@@ -465,6 +471,17 @@ describe('cell isolation', () => {
     const fake = buildFakeCaptureRuntime({ quickOpenVisible: true, escapeClosesQuickOpen: false })
     try {
       await isolateCell(fake.runtime, target('overlay:quirky.editor/quick-open', 'quirky.editor', 'overlay'), 'dark', false)
+      expect(await fake.page.locator('.qe-quick-open').count()).toBe(0)
+    } finally {
+      fake.cleanup()
+    }
+  })
+
+  test('dismisses quick-open once instead of racing Escape against its close button', async () => {
+    const fake = buildFakeCaptureRuntime({ quickOpenVisible: true, escapeSchedulesQuickOpenClose: true })
+    try {
+      await isolateCell(fake.runtime, target('overlay:quirky.editor/quick-open', 'quirky.editor', 'overlay'), 'dark', false)
+      expect(fake.runtime.manifest.failures).toEqual([])
       expect(await fake.page.locator('.qe-quick-open').count()).toBe(0)
     } finally {
       fake.cleanup()

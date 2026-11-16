@@ -556,7 +556,6 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
   const handoffDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.handoff/dialog"] [role="dialog"]')
   const loopsDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.loops/dialogs"] [role="dialog"]')
 
-  await bounded(runtime.page.keyboard.press('Escape'), runtime.options.timeoutMs, runtime.options.signal, 'close renderer overlay')
   if (hadQuickOpen) {
     if (await quickOpen.isVisible()) {
       const cancel = quickOpenDialog.getByRole('button', { name: 'Cancel', exact: true })
@@ -567,6 +566,7 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
     await bounded(quickOpen.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }),
       runtime.options.timeoutMs, runtime.options.signal, 'close Editor quick-open')
   }
+  await bounded(runtime.page.keyboard.press('Escape'), runtime.options.timeoutMs, runtime.options.signal, 'close renderer overlay')
   if (hadFeedback) {
     await rpc(runtime.client, 'setting.set', { id: 'setting:quirky.feedback/active', value: false }, runtime.options.timeoutMs, runtime.options.signal)
     await bounded(feedbackSurface.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Feedback mode')
