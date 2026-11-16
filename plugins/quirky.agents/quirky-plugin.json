@@ -3143,7 +3143,8 @@
         "launchOptions": {
           "model": {
             "flag": ["--model", "{value}"],
-            "conflicts": [{ "flags": ["--model"] }]
+            "conflicts": [{ "flags": ["--model"] }],
+            "structured": "model"
           },
           "options": [
             {
@@ -3160,7 +3161,8 @@
                 { "value": "max", "label": "Maximum" }
               ],
               "flag": ["--thinking", "{value}"],
-              "conflicts": [{ "flags": ["--thinking"] }]
+              "conflicts": [{ "flags": ["--thinking"] }],
+              "structured": "effort"
             }
           ],
           "models": []
@@ -3228,7 +3230,8 @@
                   "--model"
                 ]
               }
-            ]
+            ],
+            "structured": "model"
           },
           "models": [],
           "extraArgs": {

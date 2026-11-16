@@ -37,6 +37,8 @@ export type StructuredContext = {
   resolveClaudePath(): Promise<string>
   /** The user's `codex` executable, found through their login shell. */
   resolveCodexPath(): Promise<string>
+  /** The user's `pi` or `omp` executable, found through their login shell. */
+  resolvePiPath(variant: 'pi' | 'omp'): Promise<string>
 }
 
 /** The per-session launch inputs: agent picks plus the resolved provider environment patch. */

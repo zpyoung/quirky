@@ -45,7 +45,8 @@ function makeContext(): StructuredContext {
       })
     },
     resolveClaudePath: async () => '/usr/local/bin/claude',
-    resolveCodexPath: async () => '/not-used/codex'
+    resolveCodexPath: async () => '/not-used/codex',
+    resolvePiPath: async () => '/not-used/pi'
   }
 }
 
