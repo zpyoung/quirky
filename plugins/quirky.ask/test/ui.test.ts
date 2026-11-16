@@ -216,7 +216,7 @@ describe('the Questions panel module', () => {
     const fake = fakeContext([selectAsk('ask_1', 'First', 1), selectAsk('ask_2', 'Second', 2)])
     await activated(fake)
 
-    expect([...fake.provided.keys()]).toEqual([PANEL])
+    expect([...fake.provided.keys()]).toEqual([PANEL, 'view:quirky.ask/card'])
     expect(fake.badges.at(-1)).toBe(2)
 
     fake.add(selectAsk('ask_3', 'Third', 3))
