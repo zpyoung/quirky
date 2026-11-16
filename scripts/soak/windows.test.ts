@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import type { FixtureWorktree } from '../ui-review/fixtures'
 import type { WindowRequestObservation } from './contracts.ts'
 import { isPanelRefreshRequest } from './verdict.ts'
-import { assignWorktrees, attachMetrics, chromiumArgs, type WindowStartupObservation } from './windows.ts'
+import { assignWorktrees, attachMetrics, chromiumArgs, type WindowLiveness, type WindowStartupObservation } from './windows.ts'
 
 function fixtureWorktrees(): FixtureWorktree[] {
   return [
@@ -69,6 +69,7 @@ const current = {
   pages: [],
   selected: new Map(),
   events: [],
+  rpcCalls: [],
   observations: [],
   requests: [],
   pidAtNavigation: false,
@@ -239,10 +240,15 @@ const world = {
   runtime: { port, token: 'runtime-secret' },
   env: {},
   fixtures: {
-    worktrees: [
-      { id: 'ready', path: '/ready', repoId: 'repo-a', name: 'ready', isMain: false, status: 'working' },
-      { id: 'retry', path: '/retry', repoId: 'repo-b', name: 'retry', isMain: false, status: 'failing' }
-    ]
+    worktrees: scenario === 'liveness'
+      ? [
+          { id: 'wt-a', path: '/wt-a', repoId: 'repo-a', name: 'wt-a', isMain: false, status: 'working' },
+          { id: 'wt-b', path: '/wt-b', repoId: 'repo-b', name: 'wt-b', isMain: false, status: 'failing' }
+        ]
+      : [
+          { id: 'ready', path: '/ready', repoId: 'repo-a', name: 'ready', isMain: false, status: 'working' },
+          { id: 'retry', path: '/retry', repoId: 'repo-b', name: 'retry', isMain: false, status: 'failing' }
+        ]
   },
   track(pid) {
     current.tracked.push(pid)
@@ -250,6 +256,7 @@ const world = {
   },
   control: {
     async callAny(method, params) {
+      current.rpcCalls.push(method)
       if (method === 'ui.state') return { windows: current.connectionIds.map((connId) => ({ connId })) }
       if (method === 'ui.window.state') {
         
@@ -268,7 +275,7 @@ const world = {
         const worktree = params.worktree.replace(/^id:/, '')
         current.selected.set(connId, worktree)
         const page = current.pagesByConn.get(connId)
-        if (['matching-during-navigation', 'two-windows'].includes(scenario)) sendStatus(page, worktree)
+        if (['matching-during-navigation', 'two-windows', 'liveness'].includes(scenario)) sendStatus(page, worktree)
         if (scenario === 'wrong-worktree') sendStatus(page, 'another-worktree')
         return { worktreeId: worktree }
       }
@@ -281,7 +288,7 @@ const capture = async () => {
   try {
     const windows = await openWindows({
       world,
-      count: scenario === 'two-windows' ? 2 : 1,
+      count: ['two-windows', 'liveness'].includes(scenario) ? 2 : 1,
       executable: '/recording/chromium',
       out: process.env.QUIRKY_OUT,
       signal: controller.signal,
@@ -292,9 +299,40 @@ const capture = async () => {
         failedRequests: observation.failedRequests?.map((request) => ({ ...request }))
       })
     })
+    let liveness
+    let livenessAfterDisconnect
+    let livenessAfterCrash
+    let livenessAfterPageClose
+    let livenessWasSynchronous
+    let livenessRpcCalls
+    if (scenario === 'liveness') {
+      const rpcCallsBeforeLiveness = current.rpcCalls.length
+      liveness = windows.liveness()
+      livenessWasSynchronous = !(liveness instanceof Promise)
+      browser.connected = false
+      livenessAfterDisconnect = windows.liveness()
+      browser.connected = true
+      windows.pages[0].emit('crash', {})
+      livenessAfterCrash = windows.liveness()
+      await windows.pages[1].close()
+      livenessAfterPageClose = windows.liveness()
+      livenessRpcCalls = current.rpcCalls.slice(rpcCallsBeforeLiveness)
+    }
+    const rpcCallsBeforeFinish = current.rpcCalls.length
     const finished = await windows.finish()
+    const finishRpcCalls = current.rpcCalls.slice(rpcCallsBeforeFinish)
     await windows.stop()
-    return { resolved: true, finished }
+    return {
+      resolved: true,
+      finished,
+      liveness,
+      livenessAfterDisconnect,
+      livenessAfterCrash,
+      livenessAfterPageClose,
+      livenessWasSynchronous,
+      livenessRpcCalls,
+      finishRpcCalls
+    }
   } catch (error) {
     return { resolved: false, error: error instanceof Error ? error.message : String(error) }
   }
@@ -372,8 +410,15 @@ type RecordingWindowRun = {
   pidAtClose: boolean
   browserClosed: number
   serverClosed: number
+  liveness?: WindowLiveness[]
+  livenessAfterDisconnect?: WindowLiveness[]
+  livenessAfterCrash?: WindowLiveness[]
+  livenessAfterPageClose?: WindowLiveness[]
+  livenessWasSynchronous?: boolean
+  livenessRpcCalls?: string[]
+  finishRpcCalls?: string[]
   finished?: {
-    records: Array<{ requests: number }>
+    records: Array<{ index: number; connId: number; worktree: string; open: boolean; shown: boolean; requests: number }>
     requests: Array<{ method: string; total: number }>
   }
 }
@@ -391,6 +436,25 @@ test('accepts a matching status request sent before navigation resolves', async 
   })
   expect(result.finished?.records[0]?.requests).toBe(1)
   expect(result.finished?.requests).toContainEqual({ method: 'quirky.git/status', total: 1 })
+})
+test('returns synchronous renderer liveness without RPCs and tracks page and browser state', async () => {
+  const result = await runRecordingWindowScenario('liveness')
+
+  expect(result.resolved).toBe(true)
+  expect(result.livenessWasSynchronous).toBe(true)
+  expect(result.liveness).toEqual([
+    { index: 0, connId: 41, worktree: 'wt-a', open: true },
+    { index: 1, connId: 42, worktree: 'wt-b', open: true }
+  ])
+  expect(result.livenessRpcCalls).toEqual([])
+  expect(result.livenessAfterDisconnect?.map(({ open }) => open)).toEqual([false, false])
+  expect(result.livenessAfterCrash?.map(({ open }) => open)).toEqual([false, true])
+  expect(result.livenessAfterPageClose?.map(({ open }) => open)).toEqual([false, false])
+  expect(result.finishRpcCalls).toEqual(['ui.state', 'ui.window.state', 'ui.window.state'])
+  expect(result.finished?.records).toMatchObject([
+    { index: 0, connId: 41, worktree: 'wt-a', open: false, shown: true },
+    { index: 1, connId: 42, worktree: 'wt-b', open: false, shown: true }
+  ])
 })
 
 test('requires a fresh status request for the actual worktree', async () => {

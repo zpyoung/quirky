@@ -536,6 +536,68 @@ describe('run-shard', () => {
     expect(calls.files.filter((f) => f === 'm1.test.ts')).toHaveLength(2)
   })
 
+  test('run-shard applies test-alone entries to both macOS and Linux jobs', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const linuxFiles = ['linux-a.test.ts', 'linux-alone.test.ts', 'linux-b.test.ts', 'linux-c.test.ts']
+    const macosFiles = ['macos-a.test.ts', 'macos-alone.test.ts', 'macos-b.test.ts']
+    writePlan(planDir, planOf({ linuxShards: [linuxFiles], macos: macosFiles }))
+    put(cwd, 'scripts/test-alone.txt', [
+      '# Files that need an uncontended first attempt.',
+      'linux-alone.test.ts fails beside other files',
+      'macos-alone.test.ts fails beside other files',
+      'not-in-this-job.test.ts ignored when absent'
+    ].join('\n'))
+
+    const linuxCalls: Calls = { files: [], active: 0, maxActive: 0 }
+    const linuxHarness = harness(cwd, {
+      run: fakeRun(Object.fromEntries(linuxFiles.map((file) => [file, [{ ok: 'pass' as const }]])), linuxCalls)
+    })
+    const linuxOut = join(dirOf('out'), 'linux.json')
+    expect(await runCli(['run-shard', '--plan', planDir, '--shard', '0', '--out', linuxOut], linuxHarness.ctx)).toBe(0)
+    expect(linuxCalls.files).toEqual(['linux-alone.test.ts', 'linux-a.test.ts', 'linux-b.test.ts', 'linux-c.test.ts'])
+    expect(readJson<FileResult[]>(linuxOut).map((result) => result.file)).toEqual(linuxFiles)
+    expect(linuxHarness.err).toEqual(['::group::linux-alone.test.ts passed alone\n\n::endgroup::\n'])
+
+    const macosCalls: Calls = { files: [], active: 0, maxActive: 0 }
+    const macosHarness = harness(cwd, {
+      run: fakeRun(Object.fromEntries(macosFiles.map((file) => [file, [{ ok: 'pass' as const }]])), macosCalls)
+    })
+    const macosOut = join(dirOf('out'), 'macos.json')
+    expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', macosOut], macosHarness.ctx)).toBe(0)
+    expect(macosCalls.files).toEqual(['macos-alone.test.ts', 'macos-a.test.ts', 'macos-b.test.ts'])
+    expect(readJson<FileResult[]>(macosOut).map((result) => result.file)).toEqual(macosFiles)
+    expect(macosHarness.err).toEqual(['::group::macos-alone.test.ts passed alone\n\n::endgroup::\n'])
+  })
+
+  test('a missing or empty test-alone list leaves a macOS shard unchanged', async () => {
+    const cwd = dirOf('cwd')
+    const planDir = dirOf('plan')
+    const files = ['m1.test.ts', 'm2.test.ts', 'm3.test.ts', 'm4.test.ts']
+    writePlan(planDir, planOf({ macos: files }))
+    const listPath = join(cwd, 'scripts/test-alone.txt')
+
+    for (const contents of [undefined, '']) {
+      if (contents === undefined) {
+        if (existsSync(listPath)) rmSync(listPath)
+      } else {
+        put(cwd, 'scripts/test-alone.txt', contents)
+      }
+      const calls: Calls = { files: [], active: 0, maxActive: 0 }
+      const { ctx, err } = harness(cwd, {
+        run: fakeRun(Object.fromEntries(files.map((file) => [file, [{ ok: 'pass' as const }]])), calls)
+      })
+      const out = join(dirOf('out'), `macos-${contents === undefined ? 'missing' : 'empty'}.json`)
+
+      expect(await runCli(['run-shard', '--plan', planDir, '--macos', '--out', out], ctx)).toBe(0)
+      expect(calls.files).toEqual(files)
+      expect(calls.maxActive).toBe(3)
+      expect(readJson<FileResult[]>(out).map((result) => result.file)).toEqual(files)
+      expect(err).toEqual([])
+    }
+  })
+
+
   test('a shard index outside the plan is an argument error', async () => {
     const planDir = dirOf('plan')
     writePlan(planDir, planOf())
