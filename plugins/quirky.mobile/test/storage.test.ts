@@ -353,7 +353,7 @@ describe('mobile private store', () => {
     }
   )
 
-  test.each(PAIRING_FILES)('one %s marker blocks startup but is insufficient for reset', (filename) => {
+  test.each([...PAIRING_FILES])('one %s marker blocks startup but is insufficient for reset', (filename) => {
     const dataDir = temporaryDataDir()
     const marker = `${filename}.corrupt-1-aabbccdd`
     writeFileSync(join(dataDir, marker), 'marker bytes')
@@ -367,7 +367,7 @@ describe('mobile private store', () => {
     store.dispose()
   })
 
-  test.each(PAIRING_FILES)('does not overwrite a dangling symlink at %s or create its counterpart', (filename) => {
+  test.each([...PAIRING_FILES])('does not overwrite a dangling symlink at %s or create its counterpart', (filename) => {
     const dataDir = temporaryDataDir()
     const path = join(dataDir, filename)
     const counterpart = join(dataDir, filename === 'devices.json' ? 'e2ee-keypair.json' : 'devices.json')
@@ -387,10 +387,10 @@ describe('mobile private store', () => {
   test('fails closed when the quarantine directory scan throws, then initializes after it is restored', () => {
     const dataDir = temporaryDataDir()
     const originalReaddirSync = fs.readdirSync
-    const scan = spyOn(fs, 'readdirSync').mockImplementation((path) => {
-      if (path === dataDir) throw new Error('injected directory scan failure')
-      return originalReaddirSync(path)
-    })
+    const scan = spyOn(fs, 'readdirSync').mockImplementation(((...args: Parameters<typeof fs.readdirSync>) => {
+      if (args[0] === dataDir) throw new Error('injected directory scan failure')
+      return originalReaddirSync(...args)
+    }) as typeof fs.readdirSync)
     let store: MobileStore
     try {
       store = new MobileStore(dataDir)
@@ -411,10 +411,10 @@ describe('mobile private store', () => {
     const dataDir = temporaryDataDir()
     const identityPath = join(dataDir, 'e2ee-keypair.json')
     const originalLstatSync = fs.lstatSync
-    const inspection = spyOn(fs, 'lstatSync').mockImplementation((path) => {
-      if (path === identityPath) throw Object.assign(new Error('injected presence inspection failure'), { code: 'EACCES' })
-      return originalLstatSync(path)
-    })
+    const inspection = spyOn(fs, 'lstatSync').mockImplementation(((...args: Parameters<typeof fs.lstatSync>) => {
+      if (args[0] === identityPath) throw Object.assign(new Error('injected presence inspection failure'), { code: 'EACCES' })
+      return originalLstatSync(...args)
+    }) as typeof fs.lstatSync)
     let store: MobileStore
     try {
       store = new MobileStore(dataDir)

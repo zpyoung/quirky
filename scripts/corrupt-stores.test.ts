@@ -98,7 +98,7 @@ function healthyResult(): SweepResult {
 }
 
 describe('helpers', () => {
-  test.each(MOBILE_PAIRING_PATHS)('accepts an absent quarantined mobile pairing path: %s', (path) => {
+  test.each([...MOBILE_PAIRING_PATHS])('accepts an absent quarantined mobile pairing path: %s', (path) => {
     const home = temporaryRoot('quirky-corrupt-stores-mobile-absent-')
     mkdirSync(join(home, 'plugin-data', 'quirky.mobile'), { recursive: true })
     expect(checkJsonStore(home, path, [], [])).toEqual({
@@ -132,15 +132,15 @@ describe('helpers', () => {
     }
   })
 
-  test.each(MOBILE_PAIRING_PATHS)('fails closed on a non-ENOENT pairing-path inspection error: %s', (blockedPath) => {
+  test.each([...MOBILE_PAIRING_PATHS])('fails closed on a non-ENOENT pairing-path inspection error: %s', (blockedPath) => {
     const home = temporaryRoot('quirky-corrupt-stores-mobile-inspection-error-')
     mkdirSync(join(home, 'plugin-data', 'quirky.mobile'), { recursive: true })
     const blockedFile = join(home, blockedPath)
     const originalLstatSync = fs.lstatSync
-    const inspection = spyOn(fs, 'lstatSync').mockImplementation((path) => {
-      if (path === blockedFile) throw Object.assign(new Error('injected pairing-path inspection failure'), { code: 'EACCES' })
-      return originalLstatSync(path)
-    })
+    const inspection = spyOn(fs, 'lstatSync').mockImplementation(((...args: Parameters<typeof fs.lstatSync>) => {
+      if (args[0] === blockedFile) throw Object.assign(new Error('injected pairing-path inspection failure'), { code: 'EACCES' })
+      return originalLstatSync(...args)
+    }) as typeof fs.lstatSync)
     let checks: { ok: boolean; detail: string }[]
     try {
       checks = MOBILE_PAIRING_PATHS.map((path) => checkJsonStore(home, path, [], []))
