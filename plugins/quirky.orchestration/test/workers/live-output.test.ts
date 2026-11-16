@@ -1,4 +1,7 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
+import * as supervision from '@quirky/supervision'
+import type { JournalRequest } from '@quirky/supervision'
+
 import type { Session } from '@quirky/protocol'
 import type { DispatchRow } from '../../src/contracts'
 import type { TerminalResource, WorkerObservation, WorkerOutput, WorkerReadResult, WorkerRecord } from '../../src/worker-contracts'
@@ -67,6 +70,45 @@ function makeOutputFixture(options: FixtureOptions = {}): OutputFixture {
     screenCalls, historyCalls,
     setHistoryReader(reader: HistoryReader) { historyReader = reader },
     setScreenReader(reader: ScreenReader) { screenReader = reader }
+  }
+}
+
+type EngineTrace = { readMessages: JournalRequest[]; disposals: number }
+
+async function withEngineSpies<T>(operation: () => Promise<T>): Promise<{
+  value: T
+  factoryCalls: number
+  engines: EngineTrace[]
+}> {
+  const engines: EngineTrace[] = []
+  const methodSpies: Array<{ mockRestore(): void }> = []
+  const createEngine = supervision.createSupervision
+  const factory = spyOn(supervision, 'createSupervision').mockImplementation((context, options) => {
+    const engine = createEngine(context, options)
+    const trace: EngineTrace = { readMessages: [], disposals: 0 }
+    engines.push(trace)
+    const readMessages = engine.readMessages.bind(engine)
+    methodSpies.push(spyOn(engine, 'readMessages').mockImplementation((input) => {
+      trace.readMessages.push(input)
+      return readMessages(input)
+    }))
+    const dispose = engine.dispose.bind(engine)
+    methodSpies.push(spyOn(engine, 'dispose').mockImplementation(() => {
+      trace.disposals++
+      dispose()
+    }))
+    return engine
+  })
+  try {
+    const value = await operation()
+    return {
+      value,
+      factoryCalls: factory.mock.calls.length,
+      engines: engines.map(({ readMessages, disposals }) => ({ readMessages: [...readMessages], disposals }))
+    }
+  } finally {
+    factory.mockRestore()
+    for (const mock of methodSpies) mock.mockRestore()
   }
 }
 
@@ -160,6 +202,126 @@ describe('live worker terminal output', () => {
     expect(explicitEmpty).toMatchObject({ source: 'transcript', fallbackReason: 'transcript_empty' })
     expect(explicitEmptyFixture.screenCalls).toEqual([])
     expect(explicitEmptyFixture.historyCalls).toEqual([])
+  })
+
+  test('uses a short-lived real supervision engine for structured reads and archive capture', async () => {
+    const session = sessionFixture({ kind: 'structured', agent: 'codex', providerSession: null })
+    const rows = [
+      { sessionId: session.id, seq: 1, role: 'assistant', text: 'first', at: 10 },
+      { sessionId: session.id, seq: 2, role: 'user', text: 'second', at: 20 }
+    ]
+    const fixture = makeOutputFixture({ session, record: { mode: 'structured' }, structuredMessages: rows })
+    const traced = await withEngineSpies(async () => {
+      const first = await fixture.output.read({ dispatchId: fixture.dispatch.id, limit: 1 })
+      const second = await fixture.output.read({ dispatchId: fixture.dispatch.id, cursor: first.nextCursor! })
+      const archive = await fixture.output.capture(fixture.dispatch.id)
+      return { first, second, archive }
+    })
+
+    expect(traced.value.first).toMatchObject({
+      source: 'structured', sourceExact: true, content: 'assistant: first',
+      messages: [{ role: 'assistant', text: 'first', seq: 1, at: 10 }]
+    })
+    expect(traced.value.first.nextCursor).not.toBeNull()
+    expect(traced.value.second).toMatchObject({
+      source: 'structured', sourceExact: true, content: 'user: second',
+      messages: [{ role: 'user', text: 'second', seq: 2, at: 20 }], nextCursor: null
+    })
+    expect(traced.value.archive).toMatchObject({
+      kind: 'structured_journal', status: 'captured', content: JSON.stringify(rows)
+    })
+    expect(traced.factoryCalls).toBe(3)
+    expect(traced.engines).toEqual(Array.from({ length: 3 }, () => ({
+      readMessages: [{ session: session.id }], disposals: 1
+    })))
+    expect(fixture.harness.calls.filter(({ method }) => method === 'quirky.structured/messages').map(({ params }) => params))
+      .toEqual(Array.from({ length: 3 }, () => ({ session: session.id })))
+  })
+
+  test('rejects live structured journals with zero, duplicate, or descending sequences', async () => {
+    const invalidJournals = [
+      [{ seq: 0, role: 'assistant', text: 'ZERO', at: 1 }],
+      [
+        { seq: 1, role: 'assistant', text: 'FIRST', at: 1 },
+        { seq: 1, role: 'assistant', text: 'DUPLICATE', at: 2 }
+      ],
+      [
+        { seq: 2, role: 'assistant', text: 'LATER', at: 1 },
+        { seq: 1, role: 'assistant', text: 'EARLIER', at: 2 }
+      ]
+    ]
+    for (const [index, messages] of invalidJournals.entries()) {
+      const session = sessionFixture({ kind: 'structured', agent: 'codex', providerSession: null })
+      const rows = messages.map((message) => ({ sessionId: session.id, ...message }))
+      const fixture = makeOutputFixture({
+        index: index + 1, session, record: { mode: 'structured' }, structuredMessages: rows
+      })
+      const traced = await withEngineSpies(async () => {
+        const result = await fixture.output.read({ dispatchId: fixture.dispatch.id })
+        const archive = await fixture.output.capture(fixture.dispatch.id)
+        return { result, archive }
+      })
+
+      expect(traced.value.result).toMatchObject({
+        sourceExact: false, content: '', messages: [], warnings: ['structured_journal_invalid']
+      })
+      expect(traced.value.archive).toMatchObject({
+        kind: 'structured_journal', status: 'unavailable', content: ''
+      })
+      expect(traced.factoryCalls).toBe(2)
+      expect(traced.engines).toEqual(Array.from({ length: 2 }, () => ({
+        readMessages: [{ session: session.id }], disposals: 1
+      })))
+      expect(fixture.harness.calls.filter(({ method }) => method === 'quirky.structured/messages').map(({ params }) => params))
+        .toEqual(Array.from({ length: 2 }, () => ({ session: session.id })))
+    }
+  })
+
+  test('keeps structured journal transport failures unreadable and disposes the engine', async () => {
+    const session = sessionFixture({ kind: 'structured', agent: 'codex', providerSession: null })
+    const fixture = makeOutputFixture({ session, record: { mode: 'structured' } })
+    const context = fixture.harness.runtime.context
+    const call = context.call.bind(context)
+    context.call = (async (method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'quirky.structured/messages') throw new Error('journal transport failed')
+      return call(method, params)
+    }) as typeof context.call
+    const traced = await withEngineSpies(async () => {
+      const result = await fixture.output.read({ dispatchId: fixture.dispatch.id })
+      const archive = await fixture.output.capture(fixture.dispatch.id)
+      return { result, archive }
+    })
+
+    expect(traced.value.result).toMatchObject({
+      sourceExact: false, content: '', messages: [], warnings: ['structured_journal_unreadable']
+    })
+    expect(traced.value.archive).toMatchObject({ status: 'unavailable', content: '' })
+    expect(traced.factoryCalls).toBe(2)
+    expect(traced.engines).toEqual(Array.from({ length: 2 }, () => ({
+      readMessages: [{ session: session.id }], disposals: 1
+    })))
+  })
+
+  test('withholds structured journal text when the lease changes during the engine read', async () => {
+    const session = sessionFixture({ kind: 'structured', agent: 'codex', providerSession: null })
+    const fixture = makeOutputFixture({
+      session, record: { mode: 'structured' },
+      structuredMessages: [{ sessionId: session.id, seq: 1, role: 'assistant', text: 'SUCCESSOR TEXT', at: 1 }]
+    })
+    const initial = await fixture.harness.runtime.observe(fixture.harness.records[0]!, fixture.dispatch)
+    const changed: WorkerObservation = {
+      status: 'identity_changed', exactWorker: false, reason: 'identity_changed', identity: null, session: null
+    }
+    let observations = 0
+    fixture.harness.runtime.observe = async () => ++observations === 1 ? initial : changed
+    const traced = await withEngineSpies(() => fixture.output.read({ dispatchId: fixture.dispatch.id }))
+
+    expect(traced.value).toMatchObject({
+      sourceExact: false, content: '', messages: [], warnings: ['structured_lease_changed']
+    })
+    expect(observations).toBe(3)
+    expect(traced.factoryCalls).toBe(1)
+    expect(traced.engines).toEqual([{ readMessages: [{ session: session.id }], disposals: 1 }])
   })
 
   test('places paginated history before the viewport and preserves repeated lines and separators', async () => {

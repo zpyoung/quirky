@@ -1,8 +1,9 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { runUiScoreboard } from '../ui-scoreboard'
 import { checkRatchet, parseRatchetConfig } from './ratchet'
+import * as tokens from './tokens'
 import type { Evidence, Inventory, PluginInventory, SourceFile, StaticCheckId } from './contracts'
 
 function plugin(id: string, hasUi = true, sources: SourceFile[] = []): PluginInventory {
@@ -97,6 +98,114 @@ function passingAuditPlugin(ui = auditUi): PluginInventory {
 }
 
 const allStaticChecks = ['compatibility-tokens', 'loading', 'empty', 'error', 'commands'] as const
+
+test('ratchet evaluates each enrolled plugin and host once without evaluating unenrolled debt', () => {
+  const source = inventory({
+    plugins: [
+      passingAuditPlugin(), plugin('acme.daemon', false),
+      plugin('acme.unenrolled', false, [{ file: 'plugins/acme.unenrolled/src/main.ts', content: '"--compat-px-40"' }]),
+    ],
+  })
+  const pluginSpy = spyOn(tokens, 'checkPlugin')
+  const hostSpy = spyOn(tokens, 'checkHostTokens')
+  try {
+    expect(checkRatchet(source, {
+      'acme.app': [...allStaticChecks], 'acme.daemon': [...allStaticChecks], host: ['compatibility-tokens'],
+    })).toEqual({ exitCode: 0, failures: [] })
+    expect(pluginSpy.mock.calls.map(([input, id]) => {
+      expect(input).toBe(source)
+      return id
+    }).sort()).toEqual(['acme.app', 'acme.daemon'])
+    expect(hostSpy.mock.calls).toEqual([[source]])
+  } finally {
+    pluginSpy.mockRestore()
+    hostSpy.mockRestore()
+  }
+})
+
+test('ratchet preserves all failing check evidence in enrollment order with one plugin evaluation', () => {
+  const broken = passingAuditPlugin(`${auditUi}\nconst x="--compat-px-40"`)
+  const coverage = JSON.parse(broken.coverage!.content)
+  broken.coverage!.content = JSON.stringify({ ...coverage, states: [], actions: [] })
+  const source = inventory({ plugins: [broken] })
+  const checks: StaticCheckId[] = ['commands', 'error', 'compatibility-tokens', 'empty', 'loading']
+  const scored = tokens.checkPlugin(source, broken.id)
+  expect(scored.filter(({ status }) => status === 'fail').map(({ id }) => id).sort()).toEqual([...allStaticChecks].sort())
+  const expected = checks.flatMap((id) => scored.find((check) => check.id === id)!.evidence.map((item) => ({
+    ...item, message: `${broken.id} / ${id}: ${item.message}`,
+  })))
+  expect(expected.some(({ source }) => source?.file === 'plugins/acme.app/src/ui.tsx')).toBe(true)
+  const pluginSpy = spyOn(tokens, 'checkPlugin')
+  try {
+    expect(checkRatchet(source, { [broken.id]: checks })).toEqual({ exitCode: 1, failures: expected })
+    expect(pluginSpy.mock.calls).toEqual([[source, broken.id]])
+  } finally {
+    pluginSpy.mockRestore()
+  }
+})
+
+test('ratchet validates the entire input before evaluating plugins or host', () => {
+  const source = inventory({ plugins: [plugin('acme.daemon', false)] })
+  const enrollment = { 'acme.daemon': [...allStaticChecks], host: ['compatibility-tokens' as const] }
+  const pluginSpy = spyOn(tokens, 'checkPlugin')
+  const hostSpy = spyOn(tokens, 'checkHostTokens')
+  try {
+    expect(checkRatchet(source, { ...enrollment, deleted: ['loading'] }).exitCode).toBe(2)
+    expect(checkRatchet(source, { ...enrollment, host: ['screenshots' as StaticCheckId] }).exitCode).toBe(2)
+    expect(checkRatchet({ ...source, failures: [{ code: 'inventory-error', message: 'unreadable source' }] }, enrollment)).toEqual({
+      exitCode: 2, failures: [{ code: 'inventory-error', message: 'unreadable source' }],
+    })
+    expect(pluginSpy.mock.calls).toEqual([])
+    expect(hostSpy.mock.calls).toEqual([])
+  } finally {
+    pluginSpy.mockRestore()
+    hostSpy.mockRestore()
+  }
+})
+
+test('ratchet reports every unavailable host check after one host evaluation', () => {
+  const source = inventory()
+  const hostSpy = spyOn(tokens, 'checkHostTokens')
+  const pluginSpy = spyOn(tokens, 'checkPlugin')
+  try {
+    expect(checkRatchet(source, { host: [...allStaticChecks] })).toEqual({
+      exitCode: 1,
+      failures: ['loading', 'empty', 'error', 'commands'].map((id) => ({
+        code: 'unavailable-ratchet-check', message: `Ratchet check host/${id} is unavailable`,
+      })),
+    })
+    expect(hostSpy.mock.calls).toEqual([[source]])
+    expect(pluginSpy.mock.calls).toEqual([])
+  } finally {
+    hostSpy.mockRestore()
+    pluginSpy.mockRestore()
+  }
+})
+
+test('ratchet reevaluates in-place source changes on every call despite an unchanged digest', () => {
+  const file = { file: 'plugins/acme.daemon/src/main.ts', content: '' }
+  const source = inventory({ plugins: [plugin('acme.daemon', false, [file])] })
+  const enrollment = { 'acme.daemon': [...allStaticChecks] }
+  const pluginSpy = spyOn(tokens, 'checkPlugin')
+  try {
+    const results = ['', 'const x="--compat-px-40"', ''].map((content) => {
+      file.content = content
+      return checkRatchet(source, enrollment)
+    })
+    expect(results.map(({ exitCode }) => exitCode)).toEqual([0, 1, 0])
+    expect(results[0]).toEqual({ exitCode: 0, failures: [] })
+    expect(results[2]).toEqual({ exitCode: 0, failures: [] })
+    expect(results[1]!.failures).toEqual([expect.objectContaining({
+      code: 'compatibility-token',
+      message: expect.stringMatching(/^acme\.daemon \/ compatibility-tokens:/),
+      source: { file: file.file, line: 1, column: 10 },
+    })])
+    expect(source.sourceDigest).toBe('digest')
+    expect(pluginSpy.mock.calls).toEqual(Array.from({ length: 3 }, () => [source, 'acme.daemon']))
+  } finally {
+    pluginSpy.mockRestore()
+  }
+})
 
 test('ratchet accepts all static checks and enforces the enrolled source audit', () => {
   const enrollment = { 'acme.app': [...allStaticChecks] }
