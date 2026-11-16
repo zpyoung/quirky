@@ -2,7 +2,7 @@ import { beforeAll, afterAll, expect, test } from 'bun:test'
 import { accessSync, constants } from 'node:fs'
 import { chromium, type Browser } from 'playwright'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { Button, ControlIcon, ListRow, SectionHeader, Tabs, TextField } from '../src/design-system'
+import { Button, ControlIcon, FormRow, ListRow, SectionHeader, Tabs, TextField } from '../src/design-system'
 import * as capture from '../../../scripts/ui-review/capture'
 
 const candidates = [
@@ -186,6 +186,13 @@ for (const theme of themes) {
         const description = node.querySelector('.ui-list-row__description')!
         return [style.backgroundColor, style.color, getComputedStyle(description).color, style.borderTopWidth, style.paddingTop, style.paddingBottom]
       })).toEqual([theme.accent, theme.rail, theme.rail, '0px', '6px', '6px'])
+      await page.getByRole('textbox').focus()
+      expect(await page.locator('.shell-palette__search').evaluate((node) => {
+        const style = getComputedStyle(node)
+        return [style.outlineStyle, style.outlineWidth, style.outlineColor]
+      })).toEqual(['solid', '2px', theme.accent])
+      expect(await page.getByRole('textbox').evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none')
+      expect(await page.locator('.shell-palette').evaluate((node) => getComputedStyle(node).rowGap)).toBe('12px')
     } finally {
       await page.close()
     }
@@ -194,12 +201,15 @@ for (const theme of themes) {
   test.skipIf(!executable)(`Settings uses compact headings, borderless close and wrapping navigation (${theme.name})`, async () => {
     const page = await styledPage(theme.name, renderToStaticMarkup(
       <div className="ui-dialog">
-        <header className="ui-dialog__header"><h2 className="ui-dialog__title">Settings</h2><button className="ui-dialog__close">Close</button></header>
+        <header className="ui-dialog__header"><h2 className="ui-dialog__title">Settings</h2><button className="ui-dialog__close" aria-label="Close dialog">×</button></header>
         <form id="settings-form" className="ui-stack">
           <section className="ui-stack" role="group" aria-label="Plugin settings">
             <SectionHeader title="Plugin settings" className="ui-settings-group-heading" />
             <div className="ui-stack"><Button>Automations</Button><Button>Browser Settings</Button></div>
           </section>
+          <FormRow label="Sidebar section separators" htmlFor="separators" help="Show dividers">
+            <input id="separators" type="checkbox" defaultChecked />
+          </FormRow>
         </form>
       </div>
     ))
@@ -217,6 +227,17 @@ for (const theme of themes) {
         return [style.flexDirection, style.flexWrap]
       })).toEqual(['row', 'wrap'])
       expect(await page.getByRole('button', { name: 'Automations' }).evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+      expect(await page.locator('.ui-dialog__close').evaluate((node) => {
+        const style = getComputedStyle(node)
+        return [style.width, style.height, style.fontSize]
+      })).toEqual(['26px', '26px', '16px'])
+      const checkbox = page.getByRole('checkbox', { name: 'Sidebar section separators' })
+      expect(await checkbox.evaluate((node) => getComputedStyle(node).accentColor)).toBe(theme.accent)
+      expect(await page.locator('.ui-form-row').evaluate((node) => {
+        const label = node.querySelector('.ui-form-row__label')!.getBoundingClientRect()
+        const control = node.querySelector('input')!.getBoundingClientRect()
+        return Math.abs((label.top + label.bottom) / 2 - (control.top + control.bottom) / 2)
+      })).toBeLessThan(1)
     } finally {
       await page.close()
     }
