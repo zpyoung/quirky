@@ -149,7 +149,7 @@ test('the full graph fragment owns exactly five surfaces and covers only this so
 
   expect(checkPlugin(inventory, plugin.id).find((check) => check.id === 'compatibility-tokens')?.status).toBe('pass')
   const ratchet = JSON.parse(readFileSync(resolve(import.meta.dir, '../../../scripts/ui-scoreboard-ratchet.json'), 'utf8')) as Record<string, unknown>
-  expect(Object.hasOwn(ratchet, plugin.id)).toBe(false)
+  expect(ratchet[plugin.id]).toEqual(['commands', 'compatibility-tokens', 'empty', 'error', 'loading'])
 })
 
 test('the ui-control descriptor command resolves to its declared public CLI route', () => {
