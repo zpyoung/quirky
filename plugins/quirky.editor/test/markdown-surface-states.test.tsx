@@ -1267,9 +1267,15 @@ test('A-B-A path replacement fences an old command and does not open a preview',
     await waitFor(() => surface.calls.some((call) => call.method === 'ui.window.command.run'), 'A command bridge request')
     provided.set(MARKDOWN_UI_CONTROL, original)
     await surface.update({ path: '/tmp/markdown-states/other.md', relativePath: 'other.md' })
-    await waitFor(() => surface.address('source')?.generation !== originalAddress.generation, 'B source registration')
+    const bAddress = await waitFor(() => {
+      const address = surface.address('source')
+      return address && address.generation !== originalAddress.generation ? address : undefined
+    }, 'B source registration')
     await surface.update({ path: originalPath, relativePath: 'sample.md' })
-    await waitFor(() => surface.address('source')?.generation !== originalAddress.generation, 'replacement A source registration')
+    await waitFor(() => {
+      const address = surface.address('source')
+      return address && address.generation !== bAddress.generation ? address : undefined
+    }, 'replacement A source registration')
     gate.resolve()
     expect(await delivered.promise).toEqual({ delivered: false })
     expect(surface.calls.some((call) => call.method === 'quirky.editor/open')).toBe(false)
@@ -1873,9 +1879,10 @@ test('old template completion after unmount performs no replacement UI or delega
   const completion = surface.control('templates', 'create', { title: 'Unmounted' })
   await waitFor(() => creates.length === 1, 'pending template creation')
   await surface.unmount()
+  const callsBeforeResolve = surface.calls.length
   create.resolve({})
   await completion
-  expect(creates).toHaveLength(1)
+  expect(surface.calls).toHaveLength(callsBeforeResolve)
   expect(surface.element.textContent).toBe('')
 })
 
@@ -2154,3 +2161,733 @@ test('an older note write cannot block or unlock a replacement composer write', 
     await first; await second
   }
 })
+
+test('rich unmount flushes typed text before the debounce exactly once', async () => {
+  const surface = await renderSurface('rich', { content: 'alpha' })
+  const editor = await waitFor(() => surface.element.querySelector<HTMLElement>('.ProseMirror'), 'rich editor before unmount flush')
+  await typeRichText(editor, ' before close')
+  await surface.unmount()
+  const apply = await waitFor(() => surface.calls.filter((call) =>
+    call.method === 'quirky.editor/markdown' && call.params.action === 'apply'
+  ).length === 1 ? surface.calls.find((call) =>
+    call.method === 'quirky.editor/markdown' && call.params.action === 'apply'
+  ) : undefined, 'one final rich apply')
+  expect(apply.params.text).toBe('alpha before close')
+  expect(surface.calls.filter((call) => call.method === 'quirky.editor/markdown' && call.params.action === 'apply')).toHaveLength(1)
+})
+
+test('source eligibility remains settled while a typed draft refresh is pending', async () => {
+  const secondRead = deferred<unknown>()
+  let reads = 0
+  const surface = await renderSurface('source', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') {
+      reads += 1
+      return reads === 1 ? { richEligible: true } : secondRead.promise
+    }
+    return {}
+  } })
+  const source = surface.element.querySelector<HTMLElement>('.markdown-surface--source')!
+  await waitFor(() => button(source, 'Rich Editor'), 'settled rich eligibility')
+  const textarea = source.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')!
+  await setValue(textarea, 'typed source')
+  await surface.update({ draft: 'typed source' })
+  await waitFor(() => reads === 2 ? true : undefined, 'draft capability refresh')
+  expect(notice(source, 'Checking rich editor availability…')).toBeNull()
+  expect(button(source, 'Rich Editor')).toBeDefined()
+  expect(surface.address('source')?.actions).toContain('rich')
+  secondRead.resolve({ richEligible: true })
+  await waitFor(() => reads === 2 && !notice(source, 'Checking rich editor availability…') ? true : undefined, 'settled draft capability refresh')
+})
+
+test('preview read errors retain retry and source recovery without advertising dismissal', async () => {
+  let reads = 0
+  const surface = await renderSurface('preview', { call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities' && params.includePreview) {
+      reads += 1
+      if (reads === 1) throw new Error('fixture preview read failed')
+      return { previewAvailable: true, imageUrls: {} }
+    }
+    return {}
+  } })
+  await waitFor(() => errorMessage(surface.element, 'fixture preview read failed'), 'preview read error')
+  const failedAddress = surface.address('preview')!
+  expect(failedAddress.actions).toContain('retry')
+  expect(failedAddress.actions).not.toContain('dismiss-error')
+  expect(failedAddress.actions).not.toContain('dismiss-feedback')
+  expect(button(surface.element, 'Open source')).toBeDefined()
+  expect(await surface.control('preview', 'dismiss-error')).toEqual({ delivered: false })
+  expect(errorMessage(surface.element, 'fixture preview read failed')).not.toBeNull()
+  await surface.control('preview', 'retry')
+  await waitFor(() => surface.element.querySelector('.markdown-preview-body'), 'preview read recovery')
+  expect(surface.address('preview')?.actions).not.toContain('retry')
+  expect(surface.address('preview')?.actions).not.toContain('dismiss-error')
+  expect(surface.address('preview')?.actions).not.toContain('dismiss-feedback')
+})
+
+for (const mode of ['preview', 'rich'] as const) {
+  test(`${mode} replacement keeps its search session when the buffer acknowledgement arrives before the reply`, async () => {
+    const reply = deferred<unknown>()
+    const surface = await renderSurface(mode, {
+      content: 'alpha',
+      buffer: { contentRevision: 7, revision: 7 },
+      call: async (method, params) => {
+        if (method === 'quirky.editor/markdown' && params.action === 'capabilities') {
+          return params.includePreview ? { previewAvailable: true, imageUrls: {} } : { richEligible: true }
+        }
+        if (method === 'quirky.editor/markdown' && params.action === 'search') return searchMarkdown('alpha', String(params.query ?? ''))
+        if (method === 'quirky.editor/markdown' && params.action === 'replace') return reply.promise
+        return {}
+      }
+    })
+    const modeAddress = await waitFor(() => surface.address(mode), `${mode} replacement base address`)
+    await surface.control(mode, 'replace', { query: 'alpha' })
+    const searchAddress = await waitFor(() => surface.address('search'), `${mode} replacement search address`)
+    const replacing = surface.control('search', 'replace-all', { query: 'alpha', text: 'beta' })
+    const request = await waitFor(() => surface.calls.find((call) =>
+      call.method === 'quirky.editor/markdown' && call.params.action === 'replace'
+    ), `${mode} replacement request`)
+    expect(request.params.expectedRevision).toBe(7)
+
+    const updated = makeBuffer(mode, 'beta', { contentRevision: 8, revision: 8 })
+    await surface.update(updated)
+    expect(surface.address(mode)?.generation).toBe(modeAddress.generation)
+    expect(surface.address('search')?.generation).toBe(searchAddress.generation)
+    reply.resolve({ replacements: 1, buffer: updated })
+    await replacing
+    await waitFor(() => [...surface.element.querySelectorAll<HTMLElement>('[role="status"]')]
+      .some((item) => item.textContent?.includes('1 replacement(s)')), `${mode} replacement feedback`)
+    expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(surface.address('search')?.generation).toBe(searchAddress.generation)
+  })
+}
+
+test('rich export errors clear only when that same operation succeeds', async () => {
+  let exports = 0
+  const surface = await renderSurface('rich', { call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'exportPdf') {
+      exports += 1
+      if (exports === 1) throw new Error('fixture export failed')
+      return { path: '/fixture/out.pdf' }
+    }
+    return {}
+  } })
+  await expect(surface.control('rich', 'export-pdf')).rejects.toThrow('fixture export failed')
+  await waitFor(() => errorMessage(surface.element, 'fixture export failed'), 'export operation error')
+  expect(surface.element.querySelectorAll('.ui-inline-error__message')).toHaveLength(1)
+  await surface.control('rich', 'export-pdf')
+  expect(errorMessage(surface.element, 'fixture export failed')).toBeNull()
+  expect([...surface.element.querySelectorAll<HTMLElement>('[role="status"]')]
+    .some((item) => item.textContent?.includes('Exported PDF to /fixture/out.pdf.'))).toBe(true)
+})
+
+test('a failed Add note flush has one owning InlineError', async () => {
+  const surface = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') throw new Error('fixture note flush failed')
+    return {}
+  } })
+  const editor = await waitFor(() => surface.element.querySelector<HTMLElement>('.ProseMirror'), 'rich editor before note flush failure')
+  await typeRichText(editor, ' before note')
+  const dialog = await notesOpenAdd(surface)
+  await setValue(dialog.querySelector<HTMLTextAreaElement>('textarea[aria-label="Add note for the AI"]')!, 'comment')
+  await expect(surface.control('note', 'submit')).rejects.toThrow('fixture note flush failed')
+  await waitFor(() => errorMessage(surface.element, 'fixture note flush failed'), 'note flush InlineError')
+  expect([...surface.element.querySelectorAll<HTMLElement>('.ui-inline-error__message')]
+    .filter((message) => message.textContent === 'fixture note flush failed')).toHaveLength(1)
+  expect(notesCalls(surface, 'quirky.editor/notes', 'add')).toHaveLength(0)
+})
+
+test('review notes reload when an acknowledged rich content revision advances', async () => {
+  let reads = 0
+  const surface = await renderSurface('rich', { content: 'alpha', buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') {
+      reads += 1
+      return { notes: [] }
+    }
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') return {
+      sourcePreserved: true, buffer: { contentRevision: 8, revision: 8 }
+    }
+    return {}
+  } })
+  await waitFor(() => reads === 1 ? true : undefined, 'initial notes read')
+  await selectRichText(surface, 'alpha')
+  await surface.control('selection', 'format', { value: 'bold' })
+  await surface.update({ contentRevision: 8, revision: 8 })
+  await waitFor(() => reads === 2 ? true : undefined, 'notes read for acknowledged content revision')
+  expect(notesCalls(surface, 'quirky.editor/notes', 'list')).toHaveLength(2)
+})
+
+test('feedback dismissal and unrelated success preserve the owning operation error', async () => {
+  const previousClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText() {} } })
+  const surface = await renderSurface('rich', { call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'exportPdf') throw new Error('fixture export failed')
+    if (method === 'quirky.editor/notes' && params.action === 'copy') return { text: '', count: 0 }
+    return {}
+  } })
+  try {
+    await expect(surface.control('rich', 'export-pdf')).rejects.toThrow('fixture export failed')
+    await waitFor(() => errorMessage(surface.element, 'fixture export failed'), 'owning export error')
+    await surface.control('rich', 'copy-notes')
+    expect(errorMessage(surface.element, 'fixture export failed')).not.toBeNull()
+    expect([...surface.element.querySelectorAll<HTMLElement>('[role="status"]')]
+      .some((item) => item.textContent?.includes('No review notes to copy.'))).toBe(true)
+
+    await surface.control('rich', 'dismiss-feedback')
+    expect(errorMessage(surface.element, 'fixture export failed')).not.toBeNull()
+    expect([...surface.element.querySelectorAll('[role="status"]')]
+      .some((item) => item.textContent?.includes('No review notes to copy.'))).toBe(false)
+
+    await surface.control('rich', 'copy-notes')
+    await surface.control('rich', 'dismiss-error')
+    expect(errorMessage(surface.element, 'fixture export failed')).toBeNull()
+    expect([...surface.element.querySelectorAll<HTMLElement>('[role="status"]')]
+      .some((item) => item.textContent?.includes('No review notes to copy.'))).toBe(true)
+  } finally {
+    if (previousClipboard) Object.defineProperty(navigator, 'clipboard', previousClipboard)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+test('rich eligibility stays settled while an acknowledged draft refresh is pending', async () => {
+  const secondRead = deferred<unknown>()
+  let reads = 0
+  const surface = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') {
+      reads += 1
+      return reads === 1
+        ? { richEligible: false, richReason: 'This document exceeds 600 MB.' }
+        : secondRead.promise
+    }
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') {
+      return { sourcePreserved: true, buffer: { contentRevision: 2, revision: 2 } }
+    }
+    return {}
+  } })
+  const editor = await waitFor(() => surface.element.querySelector<HTMLElement>('.ProseMirror'), 'rich editor for eligibility acknowledgement')
+  await waitFor(() => button(surface.element, 'Open anyway'), 'settled rich override advisory')
+  const generation = (await waitFor(() => surface.address('rich'), 'rich eligibility control')).generation
+  await typeRichText(editor, ' typed')
+  await surface.control('rich', 'retry-flush')
+  const apply = surface.calls.find((call) => call.method === 'quirky.editor/markdown' && call.params.action === 'apply')!
+  await surface.update({ draft: String(apply.params.text), contentRevision: 2, revision: 2 })
+  await waitFor(() => reads === 2 ? true : undefined, 'acknowledged rich eligibility refresh')
+  expect(notice(surface.element, 'Checking rich editing availability…')).toBeNull()
+  expect(button(surface.element, 'Open anyway')).toBeDefined()
+  expect(surface.address('rich')?.generation).toBe(generation)
+  expect(surface.address('rich')?.actions).toContain('open-anyway')
+  secondRead.resolve({ richEligible: true })
+  await waitFor(() => button(surface.element, 'Open anyway') === undefined ? true : undefined, 'settled rich eligibility replacement')
+})
+
+async function g353PressRichKey(editor: HTMLElement, key: string, init: KeyboardEventInit = {}): Promise<boolean> {
+  const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
+  await act(async () => { editor.dispatchEvent(event) })
+  return event.defaultPrevented
+}
+
+function g353RoutedArgs(surface: MountedSurface, target: string, action: string): Record<string, unknown> | undefined {
+  return surface.calls
+    .filter((call) => call.method === 'ui.window.command.run')
+    .map((call) => call.params.args)
+    .find((args): args is Record<string, unknown> =>
+      typeof args === 'object' && args !== null && !Array.isArray(args) &&
+      (args as Record<string, unknown>).target === target && (args as Record<string, unknown>).action === action)
+}
+
+test('preview capability failures from a replaced source cannot replace the current preview', async () => {
+  const obsolete = deferred<unknown>()
+  let reads = 0
+  const surface = await renderSurface('preview', { call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities' && params.includePreview) {
+      if (++reads === 1) return obsolete.promise
+      return { previewAvailable: true, imageUrls: {} }
+    }
+    return {}
+  } })
+  await waitFor(() => reads === 1 ? reads : undefined, 'initial pending preview capability read')
+  await surface.update({
+    path: '/tmp/markdown-states/replacement.md', relativePath: 'replacement.md', name: 'replacement.md',
+    content: '# Replacement document', contentRevision: 2, revision: 2
+  })
+  await waitFor(() => reads === 2 ? reads : undefined, 'replacement preview capability read')
+  const preview = await waitFor(() => {
+    const article = surface.element.querySelector<HTMLElement>('.markdown-preview-body')
+    return article?.textContent?.includes('Replacement document') ? article : undefined
+  }, 'replacement preview content')
+  await act(async () => { obsolete.reject(new Error('obsolete preview failure')); await Bun.sleep(10) })
+  expect(preview.textContent).toContain('Replacement document')
+  expect(errorMessage(surface.element, 'obsolete preview failure')).toBeNull()
+  expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+})
+
+test('unmounting a preview fences a pending capability failure', async () => {
+  const pending = deferred<unknown>()
+  let reads = 0
+  const surface = await renderSurface('preview', { call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities' && params.includePreview) {
+      reads += 1
+      return pending.promise
+    }
+    return {}
+  } })
+  await waitFor(() => notice(surface.element, 'Preparing preview…'), 'pending preview state before unmount')
+  await waitFor(() => reads === 1 ? reads : undefined, 'in-flight preview capability request')
+  await surface.unmount()
+  await act(async () => { pending.reject(new Error('late preview failure')); await Bun.sleep(10) })
+  expect(surface.element.textContent).toBe('')
+  expect(reads).toBe(1)
+  expect(surface.calls.filter((call) => call.method === 'quirky.editor/markdown' && call.params.action === 'capabilities' && call.params.includePreview)).toHaveLength(1)
+})
+test('missing Markdown anchors use InlineError in preview and rich modes', async () => {
+  for (const scenario of [
+    { mode: 'preview' as const, message: 'No Markdown preview heading or HTML anchor matches “missing-anchor”.' },
+    { mode: 'rich' as const, message: 'No Markdown heading matches “missing-anchor”.' }
+  ]) {
+    const surface = await renderSurface(scenario.mode, { buffer: { view: { markdownAnchor: 'missing-anchor' } } })
+    const content = scenario.mode === 'preview'
+      ? await waitFor(() => surface.element.querySelector('.markdown-preview-body'), 'preview document before missing-anchor resolution')
+      : await waitFor(() => surface.element.querySelector('.ProseMirror'), 'rich document before missing-anchor resolution')
+    expect(content).toBeDefined()
+    const failure = await waitFor(() => errorMessage(surface.element, scenario.message), `${scenario.mode} missing-anchor error`)
+    expect(failure.textContent).toBe(scenario.message)
+    expect([...surface.element.querySelectorAll<HTMLElement>('[role="status"]')].some((item) => item.textContent?.includes(scenario.message))).toBe(false)
+  }
+})
+
+test('source-preservation flush failures expose Retry and Open source recovery', async () => {
+  let retryAttempts = 0
+  const retry = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') {
+      retryAttempts += 1
+      return retryAttempts === 1 ? { sourcePreserved: false } : { sourcePreserved: true }
+    }
+    return {}
+  } })
+  await waitFor(() => retry.element.querySelector('.ProseMirror'), 'rich editor for flush retry')
+  await selectRichText(retry, 'alpha')
+  await expect(retry.control('selection', 'format', { value: 'bold' })).rejects.toThrow('Rich Markdown update did not preserve its source bytes.')
+  await waitFor(() => errorMessage(retry.element, 'Rich Markdown update did not preserve its source bytes.'), 'source-preservation InlineError')
+  expect(retry.address('rich')?.actions).toContain('retry-flush')
+  expect(await retry.control('rich', 'retry-flush')).toEqual({ delivered: true })
+  expect(retryAttempts).toBe(2)
+  expect(errorMessage(retry.element, 'Rich Markdown update did not preserve its source bytes.')).toBeNull()
+  expect(retry.calls.filter((call) => call.method === 'quirky.editor/markdown' && call.params.action === 'apply')).toHaveLength(2)
+
+  let sourceAttempts = 0
+  const source = await renderSurface('rich', { content: 'alpha', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') {
+      sourceAttempts += 1
+      return { sourcePreserved: false }
+    }
+    return {}
+  } })
+  await waitFor(() => source.element.querySelector('.ProseMirror'), 'rich editor for source recovery')
+  await selectRichText(source, 'alpha')
+  await expect(source.control('selection', 'format', { value: 'bold' })).rejects.toThrow('Rich Markdown update did not preserve its source bytes.')
+  await waitFor(() => errorMessage(source.element, 'Rich Markdown update did not preserve its source bytes.'), 'failed flush before Open source')
+  await click(source.element, 'Open source')
+  await waitFor(() => source.calls.find((call) => call.method === 'quirky.editor/view' && call.params.action === 'update'), 'Open source view update')
+  expect(sourceAttempts).toBe(2)
+  expect(source.calls.find((call) => call.method === 'quirky.editor/view' && call.params.action === 'update')?.params).toMatchObject({
+    bufferId: 'buffer-markdown-states', tabId: 'tab-markdown-states', patch: { mode: 'source' }
+  })
+})
+
+test('link and code copying show their successful non-error status messages', async () => {
+  const previous = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const writes: string[] = []
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText(text: string) { writes.push(text) } } })
+  try {
+    const link = await renderSurface('rich', { content: 'alpha' })
+    await waitFor(() => link.element.querySelector('.ProseMirror'), 'link-copy editor')
+    await selectRichText(link, 'alpha')
+    expect(await link.control('selection', 'format', { value: 'link' })).toEqual({ delivered: true })
+    await waitFor(() => link.address('link'), 'registered link actions')
+    expect(await link.control('link', 'copy', { target: 'https://fixture.invalid/docs' })).toEqual({ delivered: true })
+    const copiedLink = await waitFor(() => [...link.element.querySelectorAll<HTMLElement>('[role="status"]')].find((item) => item.textContent?.includes('Copied link')), 'Copied link status')
+    expect(copiedLink.textContent).toContain('Copied link')
+    expect(link.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(link.element.querySelector('[role="alert"]')).toBeNull()
+
+    const code = await renderSurface('rich', { content: '```python\nalpha\n```' })
+    await waitFor(() => code.element.querySelector('.ProseMirror'), 'code-copy editor')
+    await selectRichText(code, 'alpha')
+    expect(await code.control('selection', 'copy-code')).toEqual({ delivered: true })
+    const copiedCode = await waitFor(() => [...code.element.querySelectorAll<HTMLElement>('[role="status"]')].find((item) => item.textContent?.includes('Copied code')), 'Copied code status')
+    expect(copiedCode.textContent).toContain('Copied code')
+    expect(code.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(code.element.querySelector('[role="alert"]')).toBeNull()
+    expect(writes).toEqual(['https://fixture.invalid/docs', 'alpha'])
+  } finally {
+    if (previous) Object.defineProperty(navigator, 'clipboard', previous)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+test('copying an empty review-note set reports a non-error status', async () => {
+  const previous = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const writes: string[] = []
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText(text: string) { writes.push(text) } } })
+  try {
+    const surface = await renderSurface('rich', { call: async (method, params) => {
+      if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [] }
+      if (method === 'quirky.editor/notes' && params.action === 'copy') return { text: '', count: 0 }
+      return {}
+    } })
+    await notesOpenNotes(surface)
+    expect(await surface.control('rich', 'copy-notes')).toEqual({ delivered: true })
+    const status = await waitFor(() => [...surface.element.querySelectorAll<HTMLElement>('[role="status"]')].find((item) => item.textContent?.includes('No review notes to copy.')), 'empty notes copy status')
+    expect(status.textContent).toContain('No review notes to copy.')
+    expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+    expect(surface.element.querySelector('[role="alert"]')).toBeNull()
+    expect(writes).toEqual([''])
+  } finally {
+    if (previous) Object.defineProperty(navigator, 'clipboard', previous)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+test('successful delivery of two review notes is reported as non-error feedback', async () => {
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [] }
+    if (method === 'quirky.session/list') return notesSessionInventory
+    if (method === 'quirky.agents/list') return notesAgentInventory
+    if (method === 'quirky.editor/notes' && params.action === 'send') return { deletedNoteIds: ['n1', 'n2'] }
+    return {}
+  } })
+  await notesOpenSend(surface)
+  expect(await surface.control('send', 'send', { target: 'new', agent: 'agent2' })).toEqual({ delivered: true })
+  const status = await waitFor(() => [...surface.element.querySelectorAll<HTMLElement>('[role="status"]')].find((item) => item.textContent?.includes('2 note(s) delivered.')), 'two-note delivery status')
+  expect(status.textContent).toContain('2 note(s) delivered.')
+  expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+  expect(surface.element.querySelector('[role="alert"]')).toBeNull()
+  expect(notesCalls(surface, 'quirky.editor/notes', 'send').map((call) => call.params)).toEqual([
+    { bufferId: 'b1', action: 'send', target: 'new', agent: 'agent2' }
+  ])
+  expect(surface.address('send')).toBeUndefined()
+})
+
+test('custom strike and link shortcuts dispatch their registered selection operations', async () => {
+  const strike = await renderSurface('rich', { content: 'alpha' })
+  const strikeEditor = await waitFor(() => strike.element.querySelector<HTMLElement>('.ProseMirror'), 'strike shortcut editor')
+  await selectRichText(strike, 'alpha')
+  const strikeSelection = await waitFor(() => strike.address('selection'), 'strike selection address')
+  expect(await g353PressRichKey(strikeEditor, 'x', { ctrlKey: true, shiftKey: true })).toBe(true)
+  await waitFor(() => strikeEditor.querySelector('s')?.textContent === 'alpha' ? strikeEditor.querySelector('s') : undefined, 'strike shortcut formatting')
+  expect(g353RoutedArgs(strike, strikeSelection.target, 'format')).toMatchObject({ data: { value: 'strike' } })
+
+  const link = await renderSurface('rich', { content: 'alpha' })
+  const linkEditor = await waitFor(() => link.element.querySelector<HTMLElement>('.ProseMirror'), 'link shortcut editor')
+  await selectRichText(link, 'alpha')
+  const linkSelection = await waitFor(() => link.address('selection'), 'link selection address')
+  expect(await g353PressRichKey(linkEditor, 'k', { ctrlKey: true })).toBe(true)
+  const linkAddress = await waitFor(() => link.address('link'), 'link shortcut popup')
+  expect(linkAddress.actions).toContain('save')
+  expect(g353RoutedArgs(link, linkSelection.target, 'format')).toMatchObject({ data: { value: 'link' } })
+})
+
+test('slash and document completion Enter and Tab accept through their addressed choices', async () => {
+  for (const key of ['Enter', 'Tab']) {
+    const slash = await renderSurface('rich', { content: '' })
+    const slashEditor = await waitFor(() => slash.element.querySelector<HTMLElement>('.ProseMirror'), `${key} slash editor`)
+    await typeRichText(slashEditor, '/quote')
+    const slashAddress = await waitFor(() => slash.address('slash'), `${key} slash menu`)
+    await waitFor(() => {
+      const dialog = slash.element.querySelector('[role="dialog"][aria-label="Slash commands"]')
+      return dialog ? button(dialog, 'Basic blocks: Quote') : undefined
+    }, `${key} current quote result`)
+    expect(await g353PressRichKey(slashEditor, key)).toBe(true)
+    await waitFor(() => slashEditor.querySelector('blockquote'), `${key} slash quote insertion`)
+    expect(slash.address('slash')).toBeUndefined()
+    expect(g353RoutedArgs(slash, slashAddress.target, 'choose')).toMatchObject({ data: { id: 'quote' } })
+
+    const documents = await renderSurface('rich', { content: '', call: async (method, params) => {
+      if (method === 'quirky.editor/markdown' && params.action === 'documents') {
+        return { documents: [{ relativePath: 'docs/Guide.md', name: 'Guide.md' }], total: 1, truncated: false }
+      }
+      return {}
+    } })
+    const documentEditor = await waitFor(() => documents.element.querySelector<HTMLElement>('.ProseMirror'), `${key} document-completion editor`)
+    await typeRichText(documentEditor, '[[Gui')
+    const documentAddress = await waitFor(() => documents.address('documents'), `${key} document menu`)
+    await waitFor(() => {
+      const dialog = documents.element.querySelector('[role="dialog"][aria-label="Markdown document links"]')
+      return dialog ? button(dialog, 'docs/Guide.md') : undefined
+    }, `${key} current document result`)
+    expect(await g353PressRichKey(documentEditor, key)).toBe(true)
+    const atom = await waitFor(() => documentEditor.querySelector<HTMLElement>('[data-markdown-document-link]'), `${key} document-link insertion`)
+    expect(atom.getAttribute('data-target')).toBe('docs/Guide')
+    expect(documents.address('documents')).toBeUndefined()
+    expect(g353RoutedArgs(documents, documentAddress.target, 'choose')).toMatchObject({ data: { path: 'docs/Guide.md' } })
+  }
+})
+
+test('Escape closes slash and document completion popups without accepting a result', async () => {
+  const slash = await renderSurface('rich', { content: '' })
+  const slashEditor = await waitFor(() => slash.element.querySelector<HTMLElement>('.ProseMirror'), 'slash Escape editor')
+  await typeRichText(slashEditor, '/quote')
+  const slashAddress = await waitFor(() => slash.address('slash'), 'slash menu before Escape')
+  expect(await g353PressRichKey(slashEditor, 'Escape')).toBe(true)
+  await waitFor(() => slash.address('slash') === undefined ? slashEditor : undefined, 'slash popup close')
+  expect(slashEditor.textContent).toContain('/quote')
+  expect(g353RoutedArgs(slash, slashAddress.target, 'choose')).toBeUndefined()
+
+  const documents = await renderSurface('rich', { content: '', call: async (method, params) => {
+    if (method === 'quirky.editor/markdown' && params.action === 'documents') {
+      return { documents: [{ relativePath: 'docs/Guide.md', name: 'Guide.md' }], total: 1, truncated: false }
+    }
+    return {}
+  } })
+  const editor = await waitFor(() => documents.element.querySelector<HTMLElement>('.ProseMirror'), 'document Escape editor')
+  await typeRichText(editor, '[[Gui')
+  const documentAddress = await waitFor(() => documents.address('documents'), 'document menu before Escape')
+  await waitFor(() => {
+    const dialog = documents.element.querySelector('[role="dialog"][aria-label="Markdown document links"]')
+    return dialog ? button(dialog, 'docs/Guide.md') : undefined
+  }, 'current document result before Escape')
+  expect(await g353PressRichKey(editor, 'Escape')).toBe(true)
+  await waitFor(() => documents.address('documents') === undefined ? editor : undefined, 'document popup close')
+  expect(editor.textContent).toContain('[[Gui')
+  expect(editor.querySelector('[data-markdown-document-link]')).toBeNull()
+  expect(g353RoutedArgs(documents, documentAddress.target, 'choose')).toBeUndefined()
+})
+
+test('code-block Tab and Shift+Tab invoke registered indent and outdent operations', async () => {
+  const surface = await renderSurface('rich', { content: '```text\nalpha\nbeta\n```' })
+  const editor = await waitFor(() => surface.element.querySelector<HTMLElement>('.ProseMirror'), 'code indentation editor')
+  await selectRichText(surface, 'alpha')
+  expect(await g353PressRichKey(editor, 'Tab')).toBe(true)
+  await waitFor(() => editor.querySelector('pre code')?.textContent?.startsWith('  alpha') ? editor.querySelector('pre code') : undefined, 'indented code selection')
+  await selectRichText(surface, '  alpha')
+  expect(await g353PressRichKey(editor, 'Tab', { shiftKey: true })).toBe(true)
+  await waitFor(() => editor.querySelector('pre code')?.textContent?.startsWith('alpha') ? editor.querySelector('pre code') : undefined, 'outdented code selection')
+  const operations = surface.calls
+    .filter((call) => call.method === 'ui.window.command.run')
+    .map((call) => call.params.args as Record<string, unknown>)
+    .filter((args) => args.action === 'code-indent')
+  expect(operations.map((args) => args.data)).toEqual([{ outdent: false }, { outdent: true }])
+})
+
+test('empty code-language value is accepted and updates the active code block', async () => {
+  const surface = await renderSurface('rich', { content: '```python\nalpha\n```' })
+  const editor = await waitFor(() => surface.element.querySelector<HTMLElement>('.ProseMirror'), 'plain-text language editor')
+  await selectRichText(surface, 'alpha')
+  expect(await surface.control('selection', 'code-language', { value: '' })).toEqual({ delivered: true })
+  const language = await waitFor(() => {
+    const select = surface.element.querySelector<HTMLSelectElement>('select[aria-label="Code language"]')
+    return select?.value === '' ? select : undefined
+  }, 'Plain text language selection')
+  expect(language.value).toBe('')
+  expect(editor.querySelector('pre code')).not.toBeNull()
+})
+
+test('multibyte selection over 32,768 UTF-8 bytes cannot open an Add note composer', async () => {
+  const text = 'é'.repeat(16_385)
+  expect(new TextEncoder().encode(text).byteLength).toBeGreaterThan(32_768)
+  const surface = await renderSurface('rich', { content: text, buffer: notesBufferA })
+  await waitFor(() => surface.address('rich'), 'rich control for multibyte selection limit')
+  await waitFor(() => surface.element.querySelector('.ProseMirror'), 'real TipTap editor for multibyte selection')
+  await selectRichText(surface, text)
+  expect(await surface.control('selection', 'add-review-note')).toEqual({ delivered: false })
+  expect(surface.address('note')).toBeUndefined()
+  expect(surface.element.querySelector('[role="dialog"][aria-label="Add note for the AI"]')).toBeNull()
+  expect(notesCalls(surface, 'quirky.editor/notes', 'add')).toHaveLength(0)
+})
+
+test('forged note IDs and TOC levels outside 1–5 are refused without delegated effects', async () => {
+  const surface = await renderSurface('rich', { buffer: notesBufferA, call: async (method, params) => {
+    if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [notesNote()] }
+    if (method === 'quirky.editor/markdown' && params.action === 'toc') {
+      return { headings: [{ id: 'heading-1', text: 'Heading', line: 1, level: 1 }] }
+    }
+    return {}
+  } })
+  const notes = await notesOpenNotes(surface)
+  await waitFor(() => notes.textContent?.includes('existing note') ? notes : undefined, 'current note inventory')
+  await surface.control('rich', 'toc', { open: true })
+  await waitFor(() => surface.element.querySelector('[aria-label="Table of Contents"]'), 'current TOC')
+  const callsBeforeInvalid = surface.calls.length
+  expect(await surface.control('rich', 'edit-note', { noteId: 'forged-note-id' })).toEqual({ delivered: false })
+  expect(await surface.control('rich', 'delete-note', { noteId: 'forged-note-id' })).toEqual({ delivered: false })
+  expect(await surface.control('rich', 'toc-level', { level: 0, visible: false })).toEqual({ delivered: false })
+  expect(await surface.control('rich', 'toc-level', { level: 6, visible: false })).toEqual({ delivered: false })
+  expect(surface.calls).toHaveLength(callsBeforeInvalid)
+  expect(notesCalls(surface, 'quirky.editor/notes', 'edit')).toHaveLength(0)
+  expect(notesCalls(surface, 'quirky.editor/notes', 'delete')).toHaveLength(0)
+  expect(notes.textContent).toContain('existing note')
+  expect(surface.address('note')).toBeUndefined()
+  expect(surface.element.querySelector('.ui-inline-error')).toBeNull()
+})
+
+test('source replacement fences an old emoji import failure from the reopened picker', async () => {
+  const child = Bun.spawn([process.execPath, '-'], { cwd: resolve(import.meta.dir, '..'),
+    stdin: new TextEncoder().encode(String.raw`import assert from 'node:assert/strict'
+import React, { act } from 'react'
+import { mock } from 'bun:test'
+import { GlobalRegistrator } from '@happy-dom/global-registrator'
+GlobalRegistrator.register(); globalThis.IS_REACT_ACT_ENVIRONMENT = true
+const firstImport = Promise.withResolvers(); let importReads = 0
+mock.module('emoji-picker-react', () => { importReads += 1; return firstImport.promise })
+const { createRoot } = await import('react-dom/client')
+const { MarkdownSurface } = await import('./src/markdown/MarkdownSurface')
+const ui = await import('./src/ui'), controls = await import('./src/window/uiControl')
+const provided = new Map()
+const context = {
+  pluginId: 'quirky.editor', provide(id, handler) { provided.set(id, handler) },
+  async call(method, params = {}) {
+    if (method === 'ui.window.self') return { connId: 22 }
+    if (method === 'ui.window.command.run') return { result: await provided.get(params.id)(params.args) }
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return { richEligible: true }
+    if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [] }
+    return {}
+  },
+  subscribe() { return () => {} }, onConnection() { return () => {} }, getSetting() { return 300 }, getLayout() { return {} }, toast() {}
+}
+ui.activate(context)
+let buffer = { id: 'emoji-stale-import', worktreeId: 'wt', root: '/tmp', path: '/tmp/emoji-stale-import.md', relativePath: 'emoji-stale-import.md', name: 'emoji-stale-import.md', kind: 'markdown', content: 'alpha', draft: null, baseline: null, size: 5, readOnly: false, dirty: false, external: null, mode: 'rich', tabId: 'tab-emoji-stale-import', preview: false, pinned: false, untitled: false, revision: 1, contentRevision: 1, view: {}, error: null, diskContentLength: null, diskContentBytes: null, diskSignature: null }
+const host = document.createElement('div'); document.body.append(host)
+const root = createRoot(host); let report = {}
+const scope = controls.createEditorUiControlReportScope(value => { report = value }, { surface: 'view:quirky.editor/document', context })
+scope.report({ mounted: true, bufferId: buffer.id, tabId: buffer.tabId, mode: 'rich' })
+const props = { context, fontSize: 13, onDraft() {}, onAction: (method, params) => context.call(method, params), onView() {}, registerCommandHandlers() { return () => {} } }
+const render = () => React.createElement(controls.EditorUiControlProvider, { scope }, React.createElement(MarkdownSurface, { ...props, buffer }))
+const wait = async predicate => { for (let i = 0; i < 400; i++) { const value = predicate(); if (value) return value; await Bun.sleep(5) } throw Error('fixture timed out: ' + predicate.toString()) }
+const address = kind => report.uiControls?.find(item => item.target.startsWith('markdown-' + kind + ':'))
+const sendAddress = async (item, action, data) => {
+  const identity = await context.call('ui.window.self', {})
+  return context.call('ui.window.command.run', { connId: identity.connId, id: 'command:quirky.editor/ui-control', args: { surface: item.surface, target: item.target, generation: item.generation, action, ...(data === undefined ? {} : { data }) } })
+}
+const send = async (kind, action, data) => {
+  const item = await wait(() => address(kind))
+  let result
+  await act(async () => { result = await sendAddress(item, action, data) })
+  return result
+}
+try {
+  await act(async () => root.render(render()))
+  await wait(() => host.querySelector('.ProseMirror'))
+  await send('rich', 'more', { open: true }); await send('more', 'choose', { value: 'emoji' })
+  await wait(() => address('emoji'))
+  await wait(() => host.querySelector('[role="dialog"][aria-label="Emoji picker"] .ui-notice-line') && importReads === 1)
+  mock.module('emoji-picker-react', () => { importReads += 1; return { default: () => React.createElement('span', null, 'native picker ready'), EmojiStyle: { NATIVE: 'native' } } })
+  buffer = { ...buffer, id: 'emoji-stale-import-replacement', path: '/tmp/emoji-stale-import-replacement.md', relativePath: 'emoji-stale-import-replacement.md', name: 'emoji-stale-import-replacement.md', tabId: 'tab-emoji-stale-import-replacement', content: 'beta', size: 4, revision: 2, contentRevision: 2 }
+  scope.report({ mounted: true, bufferId: buffer.id, tabId: buffer.tabId, mode: 'rich' })
+  await act(async () => root.render(render()))
+  await wait(() => !address('emoji'))
+  await wait(() => {
+    const item = address('rich')
+    return item && item.target.includes('emoji-stale-import-replacement') ? item : undefined
+  })
+  await send('rich', 'more', { open: true }); await send('more', 'choose', { value: 'emoji' })
+  const currentAddress = await wait(() => address('emoji'))
+  await wait(() => host.textContent.includes('native picker ready') && importReads === 2)
+  firstImport.reject(new Error('obsolete emoji import failed'))
+  await act(async () => { await Bun.sleep(10) })
+  assert.equal(address('emoji').generation, currentAddress.generation)
+  assert.ok(host.textContent.includes('native picker ready'), 'the replacement picker stays ready')
+  assert.equal(host.querySelector('.ui-inline-error'), null, 'the obsolete failure does not surface in the source-replaced picker')
+  assert.ok(host.querySelector('.ProseMirror')?.textContent?.includes('beta'), 'the replacement document remains mounted')
+  assert.equal(address('emoji').generation, currentAddress.generation)
+  assert.equal(host.querySelector('.ui-inline-error'), null)
+} finally {
+  firstImport.resolve({ default: () => React.createElement('span', null, 'native picker ready'), EmojiStyle: { NATIVE: 'native' } })
+  await act(async () => root.unmount()); scope.dispose(); host.remove()
+  ui.deactivate(); await GlobalRegistrator.unregister()
+}
+`), stdout: 'pipe', stderr: 'pipe'
+  })
+  const killTimer = setTimeout(() => child.kill(), 25_000)
+  try {
+    const [status, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()])
+    if (status !== 0) throw new Error(`Isolated stale emoji import scenario failed (${status}):\n${stdout}\n${stderr}`)
+  } finally {
+    clearTimeout(killTimer)
+    if (child.exitCode === null) { child.kill(); await child.exited }
+  }
+}, 30_000)
+
+test('emoji insertion flushes through the apply queue and closes only its own popup', async () => {
+  const child = Bun.spawn([process.execPath, '-'], { cwd: resolve(import.meta.dir, '..'),
+    stdin: new TextEncoder().encode(String.raw`import assert from 'node:assert/strict'
+import React, { act } from 'react'
+import { mock } from 'bun:test'
+import { GlobalRegistrator } from '@happy-dom/global-registrator'
+GlobalRegistrator.register(); globalThis.IS_REACT_ACT_ENVIRONMENT = true
+mock.module('emoji-picker-react', () => ({ default: () => React.createElement('span', null, 'native picker ready'), EmojiStyle: { NATIVE: 'native' } }))
+const { createRoot } = await import('react-dom/client')
+const { MarkdownSurface } = await import('./src/markdown/MarkdownSurface')
+const ui = await import('./src/ui'), controls = await import('./src/window/uiControl')
+const provided = new Map(), calls = []
+const context = {
+  pluginId: 'quirky.editor', provide(id, handler) { provided.set(id, handler) },
+  async call(method, params = {}) {
+    calls.push({ method, params })
+    if (method === 'ui.window.self') return { connId: 22 }
+    if (method === 'ui.window.command.run') return { result: await provided.get(params.id)(params.args) }
+    if (method === 'quirky.editor/markdown' && params.action === 'capabilities') return { richEligible: true }
+    if (method === 'quirky.editor/notes' && params.action === 'list') return { notes: [] }
+    if (method === 'quirky.editor/markdown' && params.action === 'apply') return { changed: true, sourcePreserved: true }
+    return {}
+  },
+  subscribe() { return () => {} }, onConnection() { return () => {} }, getSetting() { return 300 }, getLayout() { return {} }, toast() {}
+}
+ui.activate(context)
+const makeSurface = id => {
+  const buffer = { id, worktreeId: 'wt', root: '/tmp', path: '/tmp/' + id + '.md', relativePath: id + '.md', name: id + '.md', kind: 'markdown', content: 'alpha', draft: null, baseline: null, size: 5, readOnly: false, dirty: false, external: null, mode: 'rich', tabId: 'tab-' + id, preview: false, pinned: false, untitled: false, revision: 1, contentRevision: 1, view: {}, error: null, diskContentLength: null, diskContentBytes: null, diskSignature: null }
+  const host = document.createElement('div'); document.body.append(host)
+  const root = createRoot(host); let report = {}
+  const scope = controls.createEditorUiControlReportScope(value => { report = value }, { surface: 'view:quirky.editor/document', context })
+  scope.report({ mounted: true, bufferId: id, tabId: buffer.tabId, mode: 'rich' })
+  const props = { context, buffer, fontSize: 13, onDraft() {}, onAction: (method, params) => context.call(method, params), onView() {}, registerCommandHandlers() { return () => {} } }
+  const render = () => React.createElement(controls.EditorUiControlProvider, { scope }, React.createElement(MarkdownSurface, props))
+  return { id, host, root, scope, report: () => report, render }
+}
+const wait = async predicate => { for (let i = 0; i < 400; i++) { const value = predicate(); if (value) return value; await Bun.sleep(5) } throw Error('fixture timed out') }
+const address = (surface, kind) => surface.report().uiControls?.find(item => item.target.startsWith('markdown-' + kind + ':'))
+const sendAddress = async (item, action, data) => {
+  const identity = await context.call('ui.window.self', {})
+  return context.call('ui.window.command.run', { connId: identity.connId, id: 'command:quirky.editor/ui-control', args: { surface: item.surface, target: item.target, generation: item.generation, action, ...(data === undefined ? {} : { data }) } })
+}
+const send = async (surface, kind, action, data) => {
+  const item = await wait(() => address(surface, kind))
+  let result
+  await act(async () => { result = await sendAddress(item, action, data) })
+  return result
+}
+let first, second
+try {
+  first = makeSurface('emoji-first'); second = makeSurface('emoji-second')
+  await act(async () => { first.root.render(first.render()); second.root.render(second.render()) })
+  await wait(() => first.host.querySelector('.ProseMirror') && second.host.querySelector('.ProseMirror'))
+  await send(first, 'rich', 'more', { open: true }); await send(first, 'more', 'choose', { value: 'emoji' })
+  await wait(() => first.host.textContent.includes('native picker ready'))
+  await send(second, 'rich', 'more', { open: true }); await send(second, 'more', 'choose', { value: 'emoji' })
+  const secondPopup = await wait(() => address(second, 'emoji'))
+  await wait(() => second.host.textContent.includes('native picker ready'))
+  const inserted = await send(first, 'emoji', 'insert', { value: '🙂' })
+  assert.deepEqual(inserted, { result: { delivered: true } })
+  await wait(() => !address(first, 'emoji'))
+  assert.equal(address(first, 'emoji'), undefined, 'the insertion closes its originating picker')
+  assert.equal(address(second, 'emoji')?.generation, secondPopup.generation, 'the other live picker keeps its own generation')
+  assert.ok(second.host.querySelector('[role="dialog"][aria-label="Emoji picker"]'), 'the other popup remains visible')
+  assert.ok(first.host.querySelector('.ProseMirror')?.textContent?.includes('🙂'))
+  const applies = calls.filter(call => call.method === 'quirky.editor/markdown' && call.params.action === 'apply')
+  assert.equal(applies.length, 1, 'emoji insertion passes through the serialized apply queue')
+  assert.equal(applies[0].params.bufferId, 'emoji-first')
+  assert.ok(String(applies[0].params.text).includes('🙂'))
+} finally {
+  if (first) { await act(async () => first.root.unmount()); first.scope.dispose(); first.host.remove() }
+  if (second) { await act(async () => second.root.unmount()); second.scope.dispose(); second.host.remove() }
+  ui.deactivate(); await GlobalRegistrator.unregister()
+}
+`), stdout: 'pipe', stderr: 'pipe'
+  })
+  const killTimer = setTimeout(() => child.kill(), 25_000)
+  try {
+    const [status, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()])
+    if (status !== 0) throw new Error(`Isolated emoji apply-queue scenario failed (${status}):\n${stdout}\n${stderr}`)
+  } finally {
+    clearTimeout(killTimer)
+    if (child.exitCode === null) { child.kill(); await child.exited }
+  }
+}, 30_000)

@@ -91,7 +91,7 @@ function controlData(data: unknown, allowed: readonly string[], required: readon
 function useMarkdownControl(
   props: SurfaceProps, kind: string, generation: string, active: boolean, actions: string[],
   handler: (control: EditorUiControl) => Promise<boolean | void> | boolean | void,
-  onError: (error: Error) => void
+  onError: (error: Error, action?: string) => void
 ) {
   const address = active && actions.length > 0 ? {
     surface: 'view:quirky.editor/document',
@@ -100,6 +100,7 @@ function useMarkdownControl(
   } : null
   const origin = useRef(address)
   const errorHandler = useRef(onError)
+  const handledErrors = useRef(new Map<string, number>())
   const mounted = useRef(true)
   origin.current = address
   errorHandler.current = onError
@@ -109,7 +110,12 @@ function useMarkdownControl(
     async handler(control) {
       if (!mounted.current || origin.current?.generation !== control.generation || origin.current?.target !== control.target || !origin.current?.actions.includes(control.action)) return { delivered: false }
       try { return { delivered: await handler(control) !== false } }
-      catch (cause) { onError(cause instanceof Error ? cause : new Error(errorText(cause))); throw cause }
+      catch (cause) {
+        const error = cause instanceof Error ? cause : new Error(errorText(cause))
+        errorHandler.current(error, control.action)
+        handledErrors.current.set(control.action, (handledErrors.current.get(control.action) ?? 0) + 1)
+        throw error
+      }
     },
     onError
   })
@@ -117,13 +123,15 @@ function useMarkdownControl(
     const current = origin.current
     if (!current || !current.actions.includes(action) || !registration.isCurrent()) return { delivered: false }
     const args: EditorUiControl = { surface: current.surface, target: current.target, generation: current.generation, action, ...(data === undefined ? {} : { data }) }
+    const errorsBefore = handledErrors.current.get(action) ?? 0
     const live = () => mounted.current && origin.current?.generation === current.generation && origin.current?.target === current.target
     try {
       const result = await requestEditorUiControl(props.context, args)
-      if (!result.delivered && live()) errorHandler.current(new Error('The editor control is no longer available.'))
+      if (!result.delivered && live()) errorHandler.current(new Error('The editor control is no longer available.'), action)
       return result
     } catch (cause) {
-      if (live()) errorHandler.current(cause instanceof Error ? cause : new Error(errorText(cause)))
+      const error = cause instanceof Error ? cause : new Error(errorText(cause))
+      if (live() && (handledErrors.current.get(action) ?? 0) === errorsBefore) errorHandler.current(error, action)
       return { delivered: false }
     }
   }
@@ -573,20 +581,27 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     error: null
   })
   const [actionError, setActionError] = useState<{ scope: string; message: string } | null>(null)
-  const [busy, setBusy] = useState(false)
   const readRequest = useRef(0)
+  const readFailure = useRef<{ scope: string; message: string } | null>(null)
   const currentRead = read.scope === scope ? read : { scope, status: 'loading' as const, eligibility: null, error: null }
 
   const refresh = useCallback(async (raise = false) => {
     const request = ++readRequest.current
     const requestScope = scope
-    setRead({ scope: requestScope, status: 'loading', eligibility: null, error: null })
+    readFailure.current = null
+    setRead((previous) => ({
+      scope: requestScope,
+      status: 'loading',
+      eligibility: previous.scope === requestScope ? previous.eligibility : null,
+      error: null
+    }))
     try {
       const raw = await props.context.call(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'capabilities' }))
       if (!isCurrent(requestScope) || request !== readRequest.current) return
       const result = raw && typeof raw === 'object'
         ? raw as { richEligible?: boolean; richReason?: string | null; openAnywayAvailable?: boolean }
         : {}
+      readFailure.current = null
       setRead({
         scope: requestScope,
         status: 'ready',
@@ -599,7 +614,14 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       })
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== readRequest.current) return
-      setRead({ scope: requestScope, status: 'error', eligibility: null, error: errorText(cause) })
+      const message = errorText(cause)
+      readFailure.current = { scope: requestScope, message }
+      setRead((previous) => ({
+        scope: requestScope,
+        status: 'error',
+        eligibility: previous.scope === requestScope ? previous.eligibility : null,
+        error: message
+      }))
       if (raise) throw cause
     }
   }, [isCurrent, props.buffer.contentRevision, props.buffer.draft, props.buffer.id, props.context, scope])
@@ -609,6 +631,7 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     return () => { readRequest.current += 1 }
   }, [refresh])
 
+  const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
   useEffect(() => { busyRef.current = false; setBusy(false) }, [scope])
   const eligibility = currentRead.eligibility
@@ -616,13 +639,13 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const canOverride = eligibility?.reason?.includes('600') && eligibility.openAnywayAvailable
   const controls = useMarkdownControl(props, 'source', scope, true, [
     'preview', ...(eligibility?.richEligible || canOverride ? ['rich'] : []),
-    ...(currentRead.status === 'error' ? ['retry'] : []), ...(error ? ['dismiss-error'] : [])
+    ...(currentRead.status === 'error' ? ['retry'] : []), ...(actionError?.scope === scope ? ['dismiss-error'] : [])
   ], async ({ action, data = {} }) => {
     if (!isCurrent(scope) || !controlData(data, action === 'rich' ? ['openAnyway'] : []) ||
       (Object.hasOwn(data, 'openAnyway') && typeof data.openAnyway !== 'boolean')) return false
     if (action === 'dismiss-error') {
-      if (actionError?.scope === scope) setActionError(null)
-      else setRead((value) => ({ ...value, error: null, status: 'ready' }))
+      if (actionError?.scope !== scope) return false
+      setActionError(null)
       return
     }
     if (busyRef.current) return false
@@ -647,13 +670,13 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         await updateMarkdownView(props, { mode: 'rich', markdownOpenAnyway: openAnyway })
         if (isCurrent(scope)) setActionError(value => value === actionError ? null : value)
       } else return false
-    } catch (cause) {
-      if (isCurrent(scope) && action !== 'retry') setActionError({ scope, message: errorText(cause) })
-      throw cause
     } finally {
       if (isCurrent(scope)) { busyRef.current = false; setBusy(false) }
     }
-  }, (cause) => { if (isCurrent(scope)) setActionError({ scope, message: cause.message }) })
+  }, (cause, action) => {
+    if (!isCurrent(scope) || (action === 'retry' && readFailure.current?.scope === scope && readFailure.current.message === cause.message)) return
+    setActionError({ scope, message: cause.message })
+  })
 
   return (
     <div className="markdown-surface markdown-surface--source">
@@ -662,15 +685,15 @@ function SourceSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
           ? <Button type="button" disabled={busy} onClick={() => { void controls.run('rich') }}>Rich Editor</Button>
           : eligibility?.reason?.includes('600') && eligibility.openAnywayAvailable
             ? <Button type="button" disabled={busy} onClick={() => { void controls.run('rich', { openAnyway: true }) }}>Open anyway</Button>
-            : currentRead.status === 'ready' && eligibility && <span>Rich editing unavailable</span>}
+          : eligibility && !eligibility.richEligible && !canOverride && <span>Rich editing unavailable</span>}
         <Button type="button" disabled={busy} onClick={() => { void controls.run('preview') }}>Open Markdown Preview</Button>
         <span>Source mode</span>
         {eligibility?.reason && <span role="status" className="markdown-inline-status">{eligibility.reason}</span>}
       </div>
-      {currentRead.status === 'loading' && <div role="status" className="markdown-status"><NoticeLine>Checking rich editor availability…</NoticeLine></div>}
+      {currentRead.status === 'loading' && !eligibility && <div role="status" className="markdown-status"><NoticeLine>Checking rich editor availability…</NoticeLine></div>}
       {error && <InlineError message={error}
         action={currentRead.status === 'error' ? { label: 'Retry', onAction: () => { void controls.run('retry') } } : undefined}
-        onDismiss={() => { void controls.run('dismiss-error') }}
+        onDismiss={actionError?.scope === scope ? () => { void controls.run('dismiss-error') } : undefined}
       />}
       <textarea
         aria-label="Markdown source"
@@ -706,12 +729,13 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const setActionError = useCallback((message: string | null) => setActionFailure(message === null ? null : { scope, message }), [scope])
   const setFeedback = useCallback((message: string | null) => setFeedbackState(message === null ? null : { scope, message }), [scope])
   const [searchOpen, setSearchOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
   const searchOpener = useRef<HTMLElement | null>(null)
   const previewArticle = useRef<HTMLElement | null>(null)
   const previewRequest = useRef(0)
+  const previewReadFailure = useRef<{ scope: string; message: string } | null>(null)
   const searchRequest = useRef(0)
-  const [query, setQuery] = useState('')
   const [searchStatus, setSearchStatus] = useState<'idle' | 'loading' | 'ready'>('idle')
   const [searchScope, setSearchScope] = useState(scope)
   const [searchResult, setSearchResult] = useState<{ total: number; matches: { from: number; to: number; line: number; text: string }[] } | null>(null)
@@ -730,6 +754,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const refresh = useCallback(async (raise = false) => {
     const request = ++previewRequest.current
     const requestScope = scope
+    previewReadFailure.current = null
     setPreviewRead({ scope: requestScope, status: 'loading' })
     try {
       const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'capabilities', includePreview: true })) as {
@@ -747,6 +772,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         })
         return
       }
+      previewReadFailure.current = null
       setPreviewRead({
         scope: requestScope,
         status: 'ready',
@@ -754,7 +780,9 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       })
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== previewRequest.current) return
-      setPreviewRead({ scope: requestScope, status: 'error', error: errorText(cause) })
+      const message = errorText(cause)
+      previewReadFailure.current = { scope: requestScope, message }
+      setPreviewRead({ scope: requestScope, status: 'error', error: message })
       if (raise) throw cause
     }
   }, [isCurrent, props.buffer.id, props.buffer.contentRevision, props.buffer.draft, props.onAction, scope])
@@ -769,45 +797,40 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 
   const openLink = useCallback(async (href: string, event?: LinkModifiers) => {
     const requestScope = scope
-    try {
-      const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'links', target: href })) as {
-        safe?: boolean; kind?: string; resolved?: string | null; anchor?: string | null; ambiguous?: boolean
-      }
-      if (!isCurrent(requestScope)) return
-      if (result.ambiguous) throw new Error('This document link is ambiguous; use its relative path.')
-      if (!result.safe) throw new Error('This link is unsafe or unavailable.')
-      if (result.kind === 'anchor') {
-        props.onView({ markdownAnchor: result.anchor ?? null })
-        return
-      }
-      if (result.kind === 'document' && result.resolved && !result.ambiguous) {
-        const opened = await props.context.call('quirky.editor/open', {
-          worktree: `id:${props.buffer.worktreeId}`,
-          path: result.resolved,
-          mode: 'preview',
-          focus: true
-        }) as { id?: string; openedTabId?: string }
-        if (!isCurrent(requestScope)) return
-        if (result.anchor) {
-          if (!opened.id || !opened.openedTabId) throw new Error('The editor did not return the preview tab identity needed to reveal this heading.')
-          await props.context.call('quirky.editor/view', {
-            bufferId: opened.id,
-            tabId: opened.openedTabId,
-            action: 'update',
-            patch: { markdownAnchor: result.anchor }
-          })
-        }
-        return
-      }
-      if (result.kind === 'file' && result.resolved) {
-        await props.context.call('quirky.editor/open', { worktree: `id:${props.buffer.worktreeId}`, path: result.resolved, focus: true })
-        return
-      }
-      if (result.kind === 'external') await openExternalTarget(props.context, href, props.buffer.worktreeId, event, () => isCurrent(requestScope))
-    } catch (cause) {
-      if (isCurrent(requestScope)) setActionError(errorText(cause))
-      throw cause
+    const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'links', target: href })) as {
+      safe?: boolean; kind?: string; resolved?: string | null; anchor?: string | null; ambiguous?: boolean
     }
+    if (!isCurrent(requestScope)) return
+    if (result.ambiguous) throw new Error('This document link is ambiguous; use its relative path.')
+    if (!result.safe) throw new Error('This link is unsafe or unavailable.')
+    if (result.kind === 'anchor') {
+      props.onView({ markdownAnchor: result.anchor ?? null })
+      return
+    }
+    if (result.kind === 'document' && result.resolved && !result.ambiguous) {
+      const opened = await props.context.call('quirky.editor/open', {
+        worktree: `id:${props.buffer.worktreeId}`,
+        path: result.resolved,
+        mode: 'preview',
+        focus: true
+      }) as { id?: string; openedTabId?: string }
+      if (!isCurrent(requestScope)) return
+      if (result.anchor) {
+        if (!opened.id || !opened.openedTabId) throw new Error('The editor did not return the preview tab identity needed to reveal this heading.')
+        await props.context.call('quirky.editor/view', {
+          bufferId: opened.id,
+          tabId: opened.openedTabId,
+          action: 'update',
+          patch: { markdownAnchor: result.anchor }
+        })
+      }
+      return
+    }
+    if (result.kind === 'file' && result.resolved) {
+      await props.context.call('quirky.editor/open', { worktree: `id:${props.buffer.worktreeId}`, path: result.resolved, focus: true })
+      return
+    }
+    if (result.kind === 'external') await openExternalTarget(props.context, href, props.buffer.worktreeId, event, () => isCurrent(requestScope))
   }, [isCurrent, props.buffer.id, props.buffer.worktreeId, props.context, props.onAction, props.onView, scope])
 
   const movePreviewSearch = useCallback((delta: number) => {
@@ -822,38 +845,35 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     if (requestedQuery === '') throw new Error('query is required for Markdown replace.')
     if (utf8Bytes(requestedQuery) > 2048) throw new Error('Markdown find queries are limited to 2 KiB.')
     const popupGeneration = searchPopup.generation
+    const expectedRevision = revision.current
+    revision.current = expectedRevision + 1
     try {
       const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
         action: 'replace',
-        expectedRevision: revision.current,
+        expectedRevision,
         query: requestedQuery,
         text,
         matchCase,
         wholeWord,
         all
       })) as { replacements?: number; buffer?: SurfaceProps['buffer'] }
+      revision.current = Math.max(result.buffer?.contentRevision ?? observedRevision.current, observedRevision.current)
       if (!isCurrent(requestScope) || !searchPopup.isCurrent() || searchPopup.generation !== popupGeneration) return
-      if (result.buffer) revision.current = result.buffer.contentRevision
       setSearchScope(requestScope)
       setSearchResult(null)
       setSearchStatus('idle')
       setFeedback(`${result.replacements ?? 0} replacement(s)`)
     } catch (cause) {
-      if (isCurrent(requestScope) && searchPopup.isCurrent()) setActionError(errorText(cause))
+      revision.current = expectedRevision
       throw cause
     }
   }, [isCurrent, matchCase, props.buffer.contentRevision, props.buffer.id, props.onAction, query, replaceText, scope, wholeWord, searchPopup.generation])
 
   const exportPdf = useCallback(async () => {
     const requestScope = scope
-    try {
-      const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'exportPdf' })) as { path?: string; cancelled?: boolean }
-      if (!isCurrent(requestScope)) return
-      if (!result.cancelled) setFeedback(`Exported PDF to ${result.path ?? 'the selected location'}.`)
-    } catch (cause) {
-      if (isCurrent(requestScope)) setActionError(errorText(cause))
-      throw cause
-    }
+    const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, { action: 'exportPdf' })) as { path?: string; cancelled?: boolean }
+    if (!isCurrent(requestScope)) return
+    if (!result.cancelled) setFeedback(`Exported PDF to ${result.path ?? 'the selected location'}.`)
   }, [isCurrent, props.buffer.id, props.onAction, scope])
 
   const closeSearch = useCallback(() => {
@@ -892,41 +912,33 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     const requestScope = scope
     setSearchResult(null)
     setSearchStatus('loading')
-    try {
-      const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
-        action: 'search',
-        query: requestedQuery,
-        matchCase,
-        wholeWord
-      })) as { total: number; matches: { from: number; to: number; line: number; text: string }[] }
-      if (isCurrent(requestScope) && request === searchRequest.current) {
-        setSearchResult(result)
-        setSearchStatus('ready')
-        setSearchIndex(0)
-      }
-      return { opened: true, replace, query: requestedQuery, total: result.total }
-    } catch (cause) {
-      if (isCurrent(requestScope) && request === searchRequest.current) {
-        setSearchStatus('idle')
-        setActionError(errorText(cause))
-      }
-      throw cause
+    const result = await props.onAction(MARKDOWN_METHOD, methodParams(props.buffer.id, {
+      action: 'search',
+      query: requestedQuery,
+      matchCase,
+      wholeWord
+    })) as { total: number; matches: { from: number; to: number; line: number; text: string }[] }
+    if (isCurrent(requestScope) && request === searchRequest.current) {
+      setSearchResult(result)
+      setSearchStatus('ready')
+      setSearchIndex(0)
     }
+    return { opened: true, replace, query: requestedQuery, total: result.total }
   }, [isCurrent, matchCase, wholeWord, props.buffer.id, props.onAction, scope, searchOpen])
-  useEffect(() => props.registerCommandHandlers({
-    find: (args) => openSearch(false, args),
-    replace: (args) => openSearch(true, args)
-  }), [openSearch, props.registerCommandHandlers])
-
-  const openSource = useCallback(async () => {
-    const requestScope = scope
-    try {
-      await updateMarkdownView(props, { mode: 'source' })
-    } catch (cause) {
-      if (isCurrent(requestScope)) setActionError(errorText(cause))
+  const runActiveSearch = useCallback(async (replace: boolean, args?: Record<string, unknown>) => {
+    try { return await openSearch(replace, args) }
+    catch (cause) {
+      if (isCurrent(scope)) setActionError(errorText(cause))
       throw cause
     }
-  }, [isCurrent, props.buffer.id, props.context, scope])
+  }, [isCurrent, openSearch, scope])
+  useEffect(() => props.registerCommandHandlers({
+    find: (args) => runActiveSearch(false, args),
+    replace: (args) => runActiveSearch(true, args)
+  }), [props.registerCommandHandlers, runActiveSearch])
+  const openSource = useCallback(async () => {
+    await updateMarkdownView(props, { mode: 'source' })
+  }, [props.buffer.id, props.context])
   const onMissingAnchor = useCallback((anchor: string) => {
     if (isCurrent(scope)) setActionError(`No Markdown preview heading or HTML anchor matches “${anchor}”.`)
   }, [isCurrent, scope])
@@ -948,8 +960,8 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     } else {
       if (!controlData(data, [])) return false
       if (action === 'dismiss-error') {
-        if (actionError) setActionError(null)
-        else setPreviewRead((value) => ({ ...value, error: undefined }))
+        if (!actionError) return false
+        setActionError(null)
       } else if (action === 'dismiss-feedback') setFeedback(null)
       else if (action === 'source') await openSource()
       else if (action === 'retry') {
@@ -965,9 +977,13 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       } else return false
     }
   }
-  const controls = useMarkdownControl(props, 'preview', scope, true,
-    ['retry', 'source', 'export-pdf', 'find', 'replace', 'open-link', 'dismiss-error', 'dismiss-feedback'],
-    handlePreviewControl, (cause) => { if (isCurrent(scope)) setActionError(cause.message) })
+  const controls = useMarkdownControl(props, 'preview', scope, true, [
+    'source', 'export-pdf', 'find', 'replace', 'open-link', ...(currentPreviewRead.status === 'error' ? ['retry'] : []),
+    ...(actionError ? ['dismiss-error'] : []), ...(feedback ? ['dismiss-feedback'] : [])
+  ], handlePreviewControl, (cause, action) => {
+    if (!isCurrent(scope) || (action === 'retry' && previewReadFailure.current?.scope === scope && previewReadFailure.current.message === cause.message)) return
+    setActionError(cause.message)
+  })
   const searchControls = useMarkdownControl(props, 'search', searchPopup.generation, searchOpen,
     ['find', 'previous', 'next', 'close', 'replace-toggle', 'options', ...(!props.buffer.readOnly ? ['replace-one', 'replace-all'] : [])],
     async ({ action, data = {} }) => {
@@ -1045,7 +1061,7 @@ function PreviewSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         <InlineError
           message={actionError ?? currentPreviewRead.error ?? ''}
           action={currentPreviewRead.status === 'error' ? { label: 'Retry', onAction: () => { void controls.run('retry') } } : undefined}
-          onDismiss={() => { void controls.run('dismiss-error') }}
+          onDismiss={actionError ? () => { void controls.run('dismiss-error') } : undefined}
         />
         <Button type="button" onClick={() => { void controls.run('source') }}>Open source</Button>
       </div>}
@@ -1167,6 +1183,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const emojiRequestRef = useRef(0)
   const emojiOpenRef = useRef(false)
   const eligibilityRequestRef = useRef(0)
+  const panelReadFailures = useRef(new Map<string, { scope: string; message: string }>())
   const notesRequestRef = useRef(0)
   const tocRequestRef = useRef(0)
   const templateRequestRef = useRef(0)
@@ -1214,7 +1231,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   const docRangeRef = useRef<{ from: number; to: number } | null>(null)
   const docRequestRef = useRef(0)
   const docScopeRef = useRef(scope)
-  const flushRef = useRef<() => Promise<void>>(async () => {})
+  const flushRef = useRef<(allowUnmount?: boolean) => Promise<void>>(async () => {})
   const editorRef = useRef<Editor | null>(null)
   const updateCompletionsRef = useRef<(current: Editor) => void>(() => {})
   const runSlashRef = useRef<EditorUiControlActions | null>(null)
@@ -1451,7 +1468,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     if (editor) updateCompletions(editor)
   }, [editor, updateCompletions])
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async (allowUnmount = false) => {
     if (!editor) return
     if (timer.current) {
       clearTimeout(timer.current)
@@ -1461,7 +1478,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     const markdown = editor.getMarkdown()
     if (markdown === lastAcknowledged.current && pendingText.current === null) return
     const work = queue.current.then(async () => {
-      if (!isCurrent(requestScope) || markdown === lastAcknowledged.current) return
+      if ((!allowUnmount && !isCurrent(requestScope)) || markdown === lastAcknowledged.current) return
       applying.current = { text: markdown, prefix: split.prefix }
       try {
         const result = await onAction(MARKDOWN_METHOD, methodParams(buffer.id, {
@@ -1563,17 +1580,24 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current)
-    void flushRef.current().catch(() => {})
+    void flushRef.current(true).catch(() => {})
   }, [])
 
   const loadEligibility = useCallback(async (raise = false) => {
     const request = ++eligibilityRequestRef.current
     const requestScope = scope
-    setEligibilityRead({ scope: requestScope, status: 'loading', eligibility: null, error: null })
+    panelReadFailures.current.delete('eligibility')
+    setEligibilityRead((previous) => ({
+      scope: requestScope,
+      status: 'loading',
+      eligibility: previous.scope === requestScope ? previous.eligibility : null,
+      error: null
+    }))
     try {
       const raw = await onAction(MARKDOWN_METHOD, methodParams(buffer.id, { action: 'capabilities', openAnyway }))
       if (!isCurrent(requestScope) || request !== eligibilityRequestRef.current) return
       const result = raw as { richEligible?: boolean; richReason?: string | null }
+      panelReadFailures.current.delete('eligibility')
       setEligibilityRead({
         scope: requestScope,
         status: 'ready',
@@ -1582,49 +1606,65 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       })
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== eligibilityRequestRef.current) return
-      setEligibilityRead({ scope: requestScope, status: 'error', eligibility: null, error: errorText(cause) })
+      const message = errorText(cause)
+      panelReadFailures.current.set('eligibility', { scope: requestScope, message })
+      setEligibilityRead((previous) => ({
+        scope: requestScope,
+        status: 'error',
+        eligibility: previous.scope === requestScope ? previous.eligibility : null,
+        error: message
+      }))
       if (raise) throw cause
     }
   }, [buffer.draft, buffer.id, isCurrent, onAction, openAnyway, scope])
+
   useEffect(() => {
     void loadEligibility()
     return () => { eligibilityRequestRef.current += 1 }
-  }, [loadEligibility])
+  }, [buffer.contentRevision, loadEligibility])
 
   const call = useCallback((method: string, params: Record<string, unknown> = {}) => onAction(method, methodParams(buffer.id, params)), [buffer.id, onAction])
 
   const loadNotes = useCallback(async (raise = false) => {
     const request = ++notesRequestRef.current
     const requestScope = scope
+    panelReadFailures.current.delete('notes')
     setNotesRead({ scope: requestScope, status: 'loading', error: null })
     try {
       const result = await call(NOTES_METHOD, { action: 'list' }) as { notes?: MarkdownReviewNote[] }
       if (!isCurrent(requestScope) || request !== notesRequestRef.current) return
+      panelReadFailures.current.delete('notes')
       setNotes(result.notes ?? [])
       setNotesRead({ scope: requestScope, status: 'ready', error: null })
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== notesRequestRef.current) return
-      setNotesRead({ scope: requestScope, status: 'error', error: errorText(cause) })
+      const message = errorText(cause)
+      panelReadFailures.current.set('notes', { scope: requestScope, message })
+      setNotesRead({ scope: requestScope, status: 'error', error: message })
       if (raise) throw cause
     }
   }, [call, isCurrent, scope])
   useEffect(() => {
     void loadNotes()
     return () => { notesRequestRef.current += 1 }
-  }, [loadNotes])
+  }, [buffer.contentRevision, loadNotes])
 
   const loadToc = useCallback(async (raise = false) => {
     const request = ++tocRequestRef.current
     const requestScope = scope
+    panelReadFailures.current.delete('headings')
     setTocRead({ scope: requestScope, status: 'loading', error: null })
     try {
       const result = await call(MARKDOWN_METHOD, { action: 'toc' }) as { headings?: MarkdownHeading[] }
       if (!isCurrent(requestScope) || request !== tocRequestRef.current) return
+      panelReadFailures.current.delete('headings')
       setToc(result.headings ?? [])
       setTocRead({ scope: requestScope, status: 'ready', error: null })
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== tocRequestRef.current) return
-      setTocRead({ scope: requestScope, status: 'error', error: errorText(cause) })
+      const message = errorText(cause)
+      panelReadFailures.current.set('headings', { scope: requestScope, message })
+      setTocRead({ scope: requestScope, status: 'error', error: message })
       if (raise) throw cause
     }
   }, [call, isCurrent, scope])
@@ -1641,15 +1681,19 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
     if (!templateOpenRef.current || session !== templateSessionRef.current) return
     const request = ++templateRequestRef.current
     const requestScope = scope
+    panelReadFailures.current.delete('templates')
     setTemplateRead({ scope: requestScope, status: 'loading', error: null })
     try {
       const result = await call(MARKDOWN_METHOD, { action: 'templates', worktree: `id:${buffer.worktreeId}` }) as { templates?: { relativePath: string; title: string }[] }
       if (!isCurrent(requestScope) || request !== templateRequestRef.current || session !== templateSessionRef.current || !templateOpenRef.current) return
+      panelReadFailures.current.delete('templates')
       setTemplateOptions(result.templates ?? [])
       setTemplateRead({ scope: requestScope, status: 'ready', error: null })
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== templateRequestRef.current || session !== templateSessionRef.current || !templateOpenRef.current) return
-      setTemplateRead({ scope: requestScope, status: 'error', error: errorText(cause) })
+      const message = errorText(cause)
+      panelReadFailures.current.set('templates', { scope: requestScope, message })
+      setTemplateRead({ scope: requestScope, status: 'error', error: message })
       if (raise) throw cause
     }
   }, [buffer.worktreeId, call, isCurrent, scope])
@@ -1921,47 +1965,42 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
   }, [buffer.view.markdownAnchor, editor, isCurrent, jumpToHeading, onView, reportError, scope, source])
 
   const openExternal = useCallback(async (target: string, event?: LinkModifiers, live: () => boolean = () => isCurrent(scope)) => {
-    const requestScope = scope
-    try {
+    if (!live()) return
+    const result = await checkLink(target)
+    if (!live()) return
+    if (result.kind === 'document' && result.resolved) {
+      const opened = await context.call('quirky.editor/open', {
+        worktree: `id:${buffer.worktreeId}`,
+        path: result.resolved,
+        mode: 'preview',
+        focus: true
+      }) as { id?: string; openedTabId?: string }
       if (!live()) return
-      const result = await checkLink(target)
-      if (!live()) return
-      if (result.kind === 'document' && result.resolved) {
-        const opened = await context.call('quirky.editor/open', {
-          worktree: `id:${buffer.worktreeId}`,
-          path: result.resolved,
-          mode: 'preview',
-          focus: true
-        }) as { id?: string; openedTabId?: string }
-        if (!live()) return
-        if (result.anchor) {
-          if (!opened.id || !opened.openedTabId) throw new Error('The editor did not return the preview tab identity needed to reveal this heading.')
-          await context.call('quirky.editor/view', {
-            bufferId: opened.id,
-            tabId: opened.openedTabId,
-            action: 'update',
-            patch: { markdownAnchor: result.anchor }
-          })
-        }
-      } else if (result.kind === 'file' && result.resolved) {
-        await context.call('quirky.editor/open', { worktree: `id:${buffer.worktreeId}`, path: result.resolved, focus: true })
-      } else if (result.kind === 'anchor') {
-        onView({ markdownAnchor: result.anchor ?? null })
-      } else if (result.kind === 'external') {
-        await openExternalTarget(context, target, buffer.worktreeId, event, live)
+      if (result.anchor) {
+        if (!opened.id || !opened.openedTabId) throw new Error('The editor did not return the preview tab identity needed to reveal this heading.')
+        await context.call('quirky.editor/view', {
+          bufferId: opened.id,
+          tabId: opened.openedTabId,
+          action: 'update',
+          patch: { markdownAnchor: result.anchor }
+        })
       }
-      if (live()) clearError('open-link')
-    } catch (cause) {
-      if (live()) reportError('open-link', cause)
-      throw cause
+    } else if (result.kind === 'file' && result.resolved) {
+      await context.call('quirky.editor/open', { worktree: `id:${buffer.worktreeId}`, path: result.resolved, focus: true })
+    } else if (result.kind === 'anchor') {
+      onView({ markdownAnchor: result.anchor ?? null })
+    } else if (result.kind === 'external') {
+      await openExternalTarget(context, target, buffer.worktreeId, event, live)
     }
-  }, [buffer.worktreeId, checkLink, clearError, context, isCurrent, onView, reportError, scope])
+    if (live()) clearError('open-link')
+  }, [buffer.worktreeId, checkLink, clearError, context, isCurrent, onView, scope])
 
   
 
   const loadSendTargets = useCallback(async (session: number, raise = false) => {
     const request = ++sendRequestRef.current
     const requestScope = scope
+    panelReadFailures.current.delete('send')
     setSendRead({ scope: requestScope, status: 'loading', error: null })
     try {
       const [sessionRows, agentRows] = await Promise.all([
@@ -1969,6 +2008,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         context.call('quirky.agents/list', {}) as Promise<{ id: string; label: string }[]>
       ])
       if (!isCurrent(requestScope) || request !== sendRequestRef.current || session !== sendSessionRef.current) return
+      panelReadFailures.current.delete('send')
       setAgentTargets({
         sessions: sessionRows.filter((row) => row.kind === 'terminal' && row.status !== 'exited').map(({ id, agent, title }) => ({ id, agent, title })),
         agents: agentRows.map(({ id, label }) => ({ id, label }))
@@ -1976,7 +2016,9 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       setSendRead({ scope: requestScope, status: 'ready', error: null })
     } catch (cause) {
       if (!isCurrent(requestScope) || request !== sendRequestRef.current || session !== sendSessionRef.current) return
-      setSendRead({ scope: requestScope, status: 'error', error: errorText(cause) })
+      const message = errorText(cause)
+      panelReadFailures.current.set('send', { scope: requestScope, message })
+      setSendRead({ scope: requestScope, status: 'error', error: message })
       if (raise) throw cause
     }
   }, [buffer.worktreeId, context, isCurrent, scope])
@@ -2032,61 +2074,44 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
 
   const copyNotes = useCallback(async () => {
     const requestScope = scope
-    try {
-      const result = await call(NOTES_METHOD, { action: 'copy' }) as { text: string; count: number }
-      if (!isCurrent(requestScope)) return
-      await navigator.clipboard.writeText(result.text)
-      if (!isCurrent(requestScope)) return
-      clearError('copy-notes')
-      setFeedback(result.count === 0 ? 'No review notes to copy.' : 'Copied notes for agent.')
-    } catch (cause) {
-      if (isCurrent(requestScope)) reportError('copy-notes', cause)
-      throw cause
-    }
-  }, [call, clearError, isCurrent, reportError, scope])
+    const result = await call(NOTES_METHOD, { action: 'copy' }) as { text: string; count: number }
+    if (!isCurrent(requestScope)) return
+    await navigator.clipboard.writeText(result.text)
+    if (!isCurrent(requestScope)) return
+    clearError('copy-notes')
+    setFeedback(result.count === 0 ? 'No review notes to copy.' : 'Copied notes for agent.')
+  }, [call, clearError, isCurrent, scope])
 
   const exportPdf = useCallback(async () => {
     const requestScope = scope
     await flush()
     if (!isCurrent(requestScope)) return
-    try {
-      const result = await call(MARKDOWN_METHOD, { action: 'exportPdf' }) as { path?: string; cancelled?: boolean }
-      if (!isCurrent(requestScope)) return
-      if (!result.cancelled) {
-        clearError('export-pdf')
-        setFeedback(`Exported PDF to ${result.path ?? 'the selected location'}.`)
-      }
-    } catch (cause) {
-      if (isCurrent(requestScope)) reportError('export-pdf', cause)
-      throw cause
+    const result = await call(MARKDOWN_METHOD, { action: 'exportPdf' }) as { path?: string; cancelled?: boolean }
+    if (!isCurrent(requestScope)) return
+    if (!result.cancelled) {
+      clearError('export-pdf')
+      setFeedback(`Exported PDF to ${result.path ?? 'the selected location'}.`)
     }
-  }, [call, clearError, flush, isCurrent, reportError, scope])
+  }, [call, clearError, flush, isCurrent, scope])
 
   const openPreview = useCallback(async () => {
     const requestScope = scope
     await flush()
     if (!isCurrent(requestScope)) return
-    try {
-      await context.call('quirky.editor/open', { worktree: `id:${buffer.worktreeId}`, path: buffer.relativePath, mode: 'preview', focus: false })
-      clearError('open-preview')
-    } catch (cause) {
-      if (isCurrent(requestScope)) reportError('open-preview', cause)
-      throw cause
-    }
-  }, [buffer.relativePath, buffer.worktreeId, clearError, context, flush, isCurrent, reportError, scope])
+    await context.call('quirky.editor/open', { worktree: `id:${buffer.worktreeId}`, path: buffer.relativePath, mode: 'preview', focus: false })
+    clearError('open-preview')
+  }, [buffer.relativePath, buffer.worktreeId, clearError, context, flush, isCurrent, scope])
 
   const openSource = useCallback(async () => {
     const requestScope = scope
     await flush().catch(() => {})
     if (!isCurrent(requestScope)) return
-    try {
-      await updateMarkdownView(props, { mode: 'source' })
-      clearError('open-source')
-    } catch (cause) {
-      if (isCurrent(requestScope)) reportError('open-source', cause)
-      throw cause
-    }
-  }, [buffer.id, clearError, context, flush, isCurrent, reportError, scope])
+    await context.call('quirky.editor/view', {
+      bufferId: buffer.id, ...(buffer.tabId === null ? {} : { tabId: buffer.tabId }),
+      action: 'update', patch: { mode: 'source' }
+    })
+    clearError('open-source')
+  }, [buffer.id, buffer.tabId, clearError, context, flush, isCurrent, scope])
 
   const openNewDocument = useCallback(() => {
     const session = ++templateSessionRef.current
@@ -2297,8 +2322,14 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         if (action === 'format') await applyFormat({ id: String(data.value), format: data.value as MarkdownFormat })
         else if (action === 'copy-context') await copyMarkdownContext()
         else if (action === 'add-review-note') startReviewNote()
-        else if (action === 'copy-code') { const text = editor!.state.selection.$from.parent.textContent; await navigator.clipboard.writeText(text); if (live() && selectionIsCurrent()) setFeedback('Copied code') }
-        else {
+        else if (action === 'copy-code') {
+          const text = editor!.state.selection.$from.parent.textContent
+          await navigator.clipboard.writeText(text)
+          if (live() && selectionIsCurrent()) {
+            clearError('copy-code')
+            setFeedback('Copied code')
+          }
+        } else {
           if (action === 'table') {
             const chain = editor!.chain().focus()
             switch (data.operation) {
@@ -2327,22 +2358,34 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         emojiPopup.invalidate(); closeEmoji(); await flush()
       } else if (kind === 'link') {
         const target = typeof data.target === 'string' ? data.target : linkValue
-        if (action === 'copy') { await navigator.clipboard.writeText(target); if (live()) setFeedback('Copied link') }
-        else if (action === 'open') await openExternal(target, undefined, live)
+        if (action === 'copy') {
+          await navigator.clipboard.writeText(target)
+          if (live()) { clearError('copy'); setFeedback('Copied link') }
+        } else if (action === 'open') await openExternal(target, undefined, live)
         else {
           if (action === 'save' && target.trim() !== '') { await checkLink(target.trim()); if (!live() || !selectionIsCurrent() || currentBuffer.current.readOnly) return }
           if (action === 'remove' || target.trim() === '') editor!.chain().focus().extendMarkRange('link').unsetLink().run()
           else editor!.chain().focus().extendMarkRange('link').setLink({ href: target.trim() }).run()
-          linkPopup.invalidate(); setLinkBubble(false); await flush()
+          linkPopup.invalidate(); setLinkBubble(false); await flush(); clearError(action)
         }
       } else if (kind === 'search') {
         const query = typeof data.query === 'string' ? data.query : searchQuery
         const text = typeof data.text === 'string' ? data.text : replaceText
         if (query === '') throw new Error('query is required for Markdown replace.')
         if (utf8Bytes(query) > 2048) throw new Error('Markdown find queries are limited to 2 KiB.')
-        const result = await call(MARKDOWN_METHOD, { action: 'replace', expectedRevision: revision.current, query, text, matchCase, wholeWord, all: action === 'replace-all' }) as { buffer?: SurfaceProps['buffer']; replacements?: number }
-        if (!live()) return
-        updateBufferFromApi(result.buffer); setSearchResult(null); setFeedback(`${result.replacements ?? 0} replacement(s)`)
+        const expectedRevision = revision.current
+        revision.current = expectedRevision + 1
+        try {
+          const result = await call(MARKDOWN_METHOD, { action: 'replace', expectedRevision, query, text, matchCase, wholeWord, all: action === 'replace-all' }) as { buffer?: SurfaceProps['buffer']; replacements?: number }
+          if (!live()) return
+          updateBufferFromApi(result.buffer)
+          if (!result.buffer) revision.current = currentBuffer.current.contentRevision
+          setSearchResult(null)
+          setFeedback(`${result.replacements ?? 0} replacement(s)`)
+        } catch (cause) {
+          revision.current = expectedRevision
+          throw cause
+        }
       } else if (kind === 'note') {
         const captured = noteSelection.current
         const editing = noteEdit
@@ -2357,6 +2400,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         if (!live()) return
         notePopup.invalidate(); setNoteComposer(false); setNoteBody(''); setNoteEdit(null); noteSelection.current = null
         await loadNotes(true)
+        clearError('note')
       } else if (kind === 'send') {
         const selected = data.target === 'existing' ? agentTargets.sessions.find(value => value.id === (data.sessionId ?? sendTarget)) : null
         if (selected) setSendTarget(selected.id)
@@ -2368,6 +2412,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         if (result.error) throw new Error(result.error)
         await loadNotes(true)
         if (!live()) return
+        clearError('send')
         setFeedback(`${result.deletedNoteIds.length} note(s) delivered.`); sendPopup.invalidate(); closeSendMenu()
       } else if (kind === 'templates') {
         const title = typeof data.title === 'string' ? data.title : templateTitle
@@ -2387,12 +2432,6 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
         else if (action === 'delete-note') { await call(NOTES_METHOD, { action: 'delete', noteId: data.noteId }); if (live()) await loadNotes() }
         else if (action === 'open-link') await openExternal(String(data.target), { metaKey: CHORD_PLATFORM === 'darwin' && data.modifier === true, ctrlKey: CHORD_PLATFORM !== 'darwin' && data.modifier === true, shiftKey: data.shift === true })
       }
-    } catch (cause) {
-      if (live() && errorText(cause) !== flushFailure.current) {
-        if (kind === 'templates') setTemplateCreateError(errorText(cause))
-        else reportError(kind, cause)
-      }
-      throw cause
     } finally {
       if (controlBusy.get(owner) === token) controlBusy.delete(owner)
       if (isCurrent(scope) && pendingGeneration) setPendingControl(value => value?.generation === pendingGeneration ? null : value)
@@ -2411,28 +2450,68 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       if (action === 'dismiss-feedback') return !!feedback
       return true
     }),
-    control => handleMarkdownControl('rich', control), cause => { if (isCurrent(scope) && cause.message !== flushFailure.current) reportError('bridge', cause) })
+    control => handleMarkdownControl('rich', control), (cause, action) => {
+      if (!isCurrent(scope) || cause.message === flushFailure.current) return
+      const readKey = action === 'retry-capabilities' ? 'eligibility'
+        : action === 'refresh-notes' || action === 'send' ? 'notes'
+          : action === 'refresh-headings' ? 'headings'
+            : null
+      const readFailure = readKey === null ? undefined : panelReadFailures.current.get(readKey)
+      if (readFailure?.scope === scope && readFailure.message === cause.message) return
+      reportError(action === 'source' ? 'open-source' : action === 'preview' ? 'open-preview' : action ?? 'rich', cause)
+    })
   const currentSelection = editor ? selectionForReview(editor) : null
   const selectionControls = useMarkdownControl(props, 'selection', selectionGeneration, !!editor,
     [...(!readOnly ? ['format', ...(editor?.isActive('table') ? ['table'] : []), ...(editor?.isActive('codeBlock') ? ['code-language','code-indent'] : []), ...(currentSelection ? ['add-review-note'] : [])] : []), ...(editor?.isActive('codeBlock') ? ['copy-code'] : []), ...(currentSelection ? ['copy-context'] : [])],
-    control => handleMarkdownControl('selection', control), cause => { if (selectionIsCurrent()) reportError('selection', cause) })
+    control => handleMarkdownControl('selection', control), (cause, action) => {
+      if (selectionIsCurrent() && cause.message !== flushFailure.current) reportError(action ?? 'selection', cause)
+    })
   const searchControls = useMarkdownControl(props, 'search', searchPopup.generation, searchOpen,
     ['find','previous','next','close','replace-toggle','options', ...(!readOnly ? ['replace-one','replace-all'] : [])],
-    control => handleMarkdownControl('search', control), cause => { if (isCurrent(scope) && searchPopup.isCurrent()) reportError('search', cause) })
-  const moreControls = useMarkdownControl(props, 'more', morePopup.generation, moreOpen, ['choose','close'], control => handleMarkdownControl('more', control), cause => { if (morePopup.isCurrent()) reportError('more', cause) })
-  const slashControls = useMarkdownControl(props, 'slash', slashPopup.generation, slash !== null, ['choose','close'], control => handleMarkdownControl('slash', control), cause => { if (slashPopup.isCurrent()) reportError('slash', cause) })
-  const documentsControls = useMarkdownControl(props, 'documents', documentsPopup.generation, docMenu?.scope === scope, ['choose','close', ...(docMenu?.status === 'error' ? ['retry'] : [])], control => handleMarkdownControl('documents', control), cause => { if (documentsPopup.isCurrent()) reportError('documents', cause) })
-  const linkControls = useMarkdownControl(props, 'link', linkPopup.generation, linkBubble, ['open','copy','close', ...(!readOnly ? ['save','remove'] : [])], control => handleMarkdownControl('link', control), cause => { if (linkPopup.isCurrent()) reportError('link', cause) })
-  const emojiControls = useMarkdownControl(props, 'emoji', emojiPopup.generation, emojiOpen, ['close', ...(currentEmojiRead.status === 'error' ? ['retry'] : []), ...(!readOnly && currentEmojiRead.status === 'ready' ? ['insert'] : [])], control => handleMarkdownControl('emoji', control), cause => { if (emojiPopup.isCurrent()) reportError('emoji', cause) })
+    control => handleMarkdownControl('search', control), (cause, action) => {
+      if (isCurrent(scope) && searchPopup.isCurrent()) reportError(action ?? 'search', cause)
+    })
+  const moreControls = useMarkdownControl(props, 'more', morePopup.generation, moreOpen, ['choose','close'], control => handleMarkdownControl('more', control), (cause, action) => {
+    if (morePopup.isCurrent() && cause.message !== flushFailure.current) reportError(action ?? 'more', cause)
+  })
+  const slashControls = useMarkdownControl(props, 'slash', slashPopup.generation, slash !== null, ['choose','close'], control => handleMarkdownControl('slash', control), (cause, action) => {
+    if (slashPopup.isCurrent() && cause.message !== flushFailure.current) reportError(action ?? 'slash', cause)
+  })
+  const documentsControls = useMarkdownControl(props, 'documents', documentsPopup.generation, docMenu?.scope === scope, ['choose','close', ...(docMenu?.status === 'error' ? ['retry'] : [])], control => handleMarkdownControl('documents', control), (cause, action) => {
+    if (documentsPopup.isCurrent() && cause.message !== flushFailure.current) reportError(action ?? 'documents', cause)
+  })
+  const linkControls = useMarkdownControl(props, 'link', linkPopup.generation, linkBubble, ['open','copy','close', ...(!readOnly ? ['save','remove'] : [])], control => handleMarkdownControl('link', control), (cause, action) => {
+    if (linkPopup.isCurrent() && cause.message !== flushFailure.current) reportError(action === 'open' ? 'open-link' : action ?? 'link', cause)
+  })
+  const emojiControls = useMarkdownControl(props, 'emoji', emojiPopup.generation, emojiOpen, ['close', ...(currentEmojiRead.status === 'error' ? ['retry'] : []), ...(!readOnly && currentEmojiRead.status === 'ready' ? ['insert'] : [])], control => handleMarkdownControl('emoji', control), (cause, action) => {
+    if (emojiPopup.isCurrent() && cause.message !== flushFailure.current) reportError(action ?? 'emoji', cause)
+  })
   const noteControls = useMarkdownControl(props, 'note', notePopup.generation, notesOpen && noteComposer,
     ['cancel', ...(!readOnly && pendingControl?.generation !== notePopup.generation ? ['submit'] : [])],
-    control => handleMarkdownControl('note', control), cause => { if (isCurrent(scope) && notePopup.isCurrent()) reportError('note', cause) })
+    control => handleMarkdownControl('note', control), (cause, action) => {
+      const readFailure = panelReadFailures.current.get('notes')
+      if (!isCurrent(scope) || !notePopup.isCurrent() || cause.message === flushFailure.current ||
+        (action === 'submit' && readFailure?.scope === scope && readFailure.message === cause.message)) return
+      reportError(action === 'submit' ? 'note' : action ?? 'note', cause)
+    })
   const sendControls = useMarkdownControl(props, 'send', sendPopup.generation, notesOpen && sendMenu,
     ['cancel', ...(operationError?.scope === scope && operationError.key === 'send' ? ['dismiss-error'] : []), ...(sendRead.status === 'error' ? ['retry'] : []), ...(!readOnly && sendRead.status === 'ready' && pendingControl?.generation !== sendPopup.generation ? ['send'] : [])],
-    control => handleMarkdownControl('send', control), cause => { if (isCurrent(scope) && sendPopup.isCurrent()) reportError('send', cause) })
+    control => handleMarkdownControl('send', control), (cause, action) => {
+      const readFailure = panelReadFailures.current.get('send')
+      const notesFailure = panelReadFailures.current.get('notes')
+      if (!isCurrent(scope) || !sendPopup.isCurrent() ||
+        (action === 'retry' && readFailure?.scope === scope && readFailure.message === cause.message) ||
+        (action === 'send' && notesFailure?.scope === scope && notesFailure.message === cause.message)) return
+      reportError(action ?? 'send', cause)
+    })
   const templatesControls = useMarkdownControl(props, 'templates', templatesPopup.generation, templatesOpen,
     ['cancel', ...(currentTemplateRead.status === 'error' ? ['retry'] : []), ...(pendingControl?.generation !== templatesPopup.generation ? ['create'] : [])],
-    control => handleMarkdownControl('templates', control), cause => { if (isCurrent(scope) && templatesPopup.isCurrent()) setTemplateCreateError(cause.message) })
+    control => handleMarkdownControl('templates', control), (cause, action) => {
+      const readFailure = panelReadFailures.current.get('templates')
+      if (!isCurrent(scope) || !templatesPopup.isCurrent() ||
+        (action === 'retry' && readFailure?.scope === scope && readFailure.message === cause.message)) return
+      setTemplateCreateError(cause.message)
+    })
   selectionRun.current = selectionControls
   runSlashRef.current = slashControls
   chooseDocumentRef.current = documentsControls
@@ -2508,7 +2587,7 @@ function RichSurface({ props }: { props: SurfaceProps }): React.JSX.Element {
       {moreOpen && <div className="markdown-popover markdown-popover--menu" role="menu" aria-label="More Markdown blocks">
         {[['Heading 4', 'heading4'], ['Heading 5', 'heading5'], ['Collapsible section', 'details'], ['Code block', 'codeBlock'], ['Table', 'table'], ['Divider', 'divider'], ['Mermaid diagram', 'mermaid'], ['Inline math', 'inlineMath'], ['Math block', 'blockMath'], ['Emoji', 'emoji']].map(([label, format]) => <Button key={format} type="button" role="menuitem" disabled={readOnly} onClick={() => { void moreControls.run('choose', { value: format }) }}>{label}</Button>)}</div>}
 
-      {eligibilityRead.scope === scope && eligibilityRead.status === 'loading' && <div role="status" className="markdown-status"><NoticeLine>Checking rich editing availability…</NoticeLine></div>}
+      {eligibilityRead.scope === scope && eligibilityRead.status === 'loading' && !eligibility && <div role="status" className="markdown-status"><NoticeLine>Checking rich editing availability…</NoticeLine></div>}
       {eligibilityRead.scope === scope && eligibilityRead.status === 'error' && eligibilityRead.error && <InlineError
         message={eligibilityRead.error}
         action={{ label: 'Retry', onAction: () => { void richControls.run('retry-capabilities') } }}
