@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test'
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
@@ -993,7 +993,11 @@ test('replacement readiness preserves exit, abort, and bounded timeout failures'
 })
 
 test('browser restart forwards SIGKILL and captures the old Chrome tree before orphan observation', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'browser-restart-receipt-'))
+  const fixtureHome = mkdtempSync(join(tmpdir(), 'browser-restart-receipt-'))
+  const target = join(fixtureHome, 'target')
+  const home = join(fixtureHome, 'alias')
+  mkdirSync(target)
+  symlinkSync(target, home)
   try {
     const profilesRoot = join(home, 'plugin-data', 'quirky.browser', 'profiles')
     mkdirSync(profilesRoot, { recursive: true })
@@ -1063,6 +1067,6 @@ test('browser restart forwards SIGKILL and captures the old Chrome tree before o
       [201, { ...after.get(201)!, started: 'reused' }]
     ]))).toBe(true)
   } finally {
-    rmSync(home, { recursive: true, force: true })
+    rmSync(fixtureHome, { recursive: true, force: true })
   }
 })
