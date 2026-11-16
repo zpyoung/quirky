@@ -72,7 +72,7 @@ function lastEnabled(items: readonly { disabled?: boolean }[]): number {
   return -1
 }
 
-export function Tabs({ label, items, value, onChange }: TabsProps) {
+export function Tabs({ label, items, value, onChange, variant }: TabsProps) {
   const generatedId = useId()
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const selectedIndex = items.findIndex((item) => item.id === value)
@@ -98,7 +98,7 @@ export function Tabs({ label, items, value, onChange }: TabsProps) {
   }
 
   return (
-    <div className="ui-tabs" role="tablist" aria-label={label}>
+    <div className={variant === 'underline' ? 'ui-tabs ui-tabs--underline' : 'ui-tabs'} role="tablist" aria-label={label}>
       {items.map((item, index) => (
         <button
           key={item.id}

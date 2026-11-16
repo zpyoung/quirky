@@ -2,12 +2,14 @@ import { afterAll, afterEach, beforeAll, expect, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { act, createElement as h } from 'react'
 import type { Root } from 'react-dom/client'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { ControlIcon } from '../src/design-system'
 import type { QuirkyEvent, UiLayout, UiModel, Worktree } from '@quirky/protocol'
 import type { Connection } from '../src/connection'
 import { AppContext, type AppContextValue } from '../src/context'
 import type { HostState, WindowPluginHost } from '../src/plugins/host'
 import { CommandPalette } from '../src/plugins/CommandPalette'
-import { encodeFileId } from '../src/plugins/palette'
+import { encodeFileId, PALETTE_SEARCH_LABEL } from '../src/plugins/palette'
 import editorPlugin from '../../../plugins/quirky.editor/quirky-plugin.json'
 import gitPlugin from '../../../plugins/quirky.git/quirky-plugin.json'
 
@@ -606,4 +608,39 @@ test('each entry kind draws its icon', async () => {
   expect(icon('Build project')?.getAttribute('class')).toBe('ui-control-icon')
   expect(icon('Overview page')?.getAttribute('class')).toBe('ui-control-icon')
   expect(icon('Terminal')?.outerHTML).not.toBe(icon('alpha-tree')?.outerHTML)
+})
+
+test('the palette keeps its accessible dialog and search names', async () => {
+  const palette = await mount()
+  const dialog = container!.querySelector<HTMLElement>('[role="dialog"]')!
+  const labelledBy = dialog.getAttribute('aria-labelledby')
+  const dialogName = dialog.getAttribute('aria-label') ??
+    (labelledBy ?? '').split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ').trim()
+
+  expect(dialogName).toBe('Command palette')
+  expect(palette.input().getAttribute('aria-label')).toBe(PALETTE_SEARCH_LABEL)
+})
+
+test('the palette search wrapper starts with its magnifying-glass control icon', async () => {
+  const palette = await mount()
+  const shellPalette = container!.querySelector<HTMLElement>('.shell-palette')
+  const search = shellPalette?.querySelector<HTMLElement>('.shell-palette__search')
+  const icon = search?.firstElementChild
+
+  expect(search?.contains(palette.input())).toBe(true)
+  expect(search?.firstChild).toBe(icon)
+  expect(icon?.tagName.toLowerCase()).toBe('svg')
+  const expected = document.createElement('div')
+  expected.innerHTML = renderToStaticMarkup(h(ControlIcon, { name: 'magnifying-glass' }))
+  expect(icon?.innerHTML).toBe(expected.firstElementChild!.innerHTML)
+})
+
+test('the palette scope tabs and results are inside the palette shell', async () => {
+  const palette = await mount()
+  const shellPalette = container!.querySelector<HTMLElement>('.shell-palette')
+  const tablist = shellPalette?.querySelector<HTMLElement>('[role="tablist"][aria-label="Search scope"]')
+  const results = shellPalette?.querySelector<HTMLElement>('.ui-option-list')
+
+  expect(tablist?.classList.contains('ui-tabs--underline')).toBe(true)
+  expect(results).not.toBeNull()
 })
