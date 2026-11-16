@@ -369,6 +369,8 @@ function commandHandlers(context: UiPluginContext): Record<string, (args?: unkno
     },
     find: (args?: unknown) => runActiveDocumentCommand('find', args),
     replace: (args?: unknown) => runActiveDocumentCommand('replace', args),
+    'go-to-definition': (args?: unknown) => runActiveDocumentCommand('go-to-definition', args),
+    'find-references': (args?: unknown) => runActiveDocumentCommand('find-references', args),
     'markdown-preview': (args?: unknown) => runActiveDocumentCommand('markdown-preview', args),
     'toggle-word-wrap': (args?: unknown) => runActiveDocumentCommand('toggle-word-wrap', args),
     'copy-context': (args?: unknown) => runActiveDocumentCommand('copy-context', args),

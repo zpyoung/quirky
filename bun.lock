@@ -116,6 +116,13 @@
         "@xterm/headless": "6.0.0",
       },
     },
+    "packages/supervision": {
+      "name": "@quirky/supervision",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quirky/protocol": "workspace:*",
+      },
+    },
     "packages/ui": {
       "name": "@quirky/ui",
       "version": "0.1.0",
@@ -216,6 +223,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/supervision": "workspace:*",
         "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
@@ -397,6 +405,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/supervision": "workspace:*",
         "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
@@ -435,6 +444,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/supervision": "workspace:*",
         "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
@@ -499,6 +509,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@quirky/protocol": "workspace:*",
+        "@quirky/supervision": "workspace:*",
         "@quirky/ui": "workspace:*",
         "react": "19.2.0",
         "react-dom": "19.2.0",
@@ -1222,6 +1233,8 @@
     "@quirky/protocol": ["@quirky/protocol@workspace:packages/protocol"],
 
     "@quirky/pty-host": ["@quirky/pty-host@workspace:packages/pty-host"],
+
+    "@quirky/supervision": ["@quirky/supervision@workspace:packages/supervision"],
 
     "@quirky/ui": ["@quirky/ui@workspace:packages/ui"],
 

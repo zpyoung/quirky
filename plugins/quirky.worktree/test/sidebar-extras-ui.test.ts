@@ -658,15 +658,16 @@ function setup(
         case 'ui.window.self':
           return { connId: 1 }
         case 'ui.window.command.run': {
+          if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
           const args = params.args
-          const scoped = params.id === UI_CONTROL_COMMAND && typeof args === 'object' && args !== null && 'scope' in args
-          if (scoped) {
-            if (params.connId !== 1) throw new Error(`no live UI window ${String(params.connId)}`)
-            return { result: dispatchUiControl(context, args) }
-          }
           const handler = provided.get(String(params.id))
-          if (typeof handler !== 'function') throw new Error(`unexpected command ${String(params.id)}`)
-          return { result: await (handler as (args: unknown) => unknown)(args) }
+          if (typeof handler === 'function') {
+            return { result: await (handler as (args: unknown) => unknown)(args) }
+          }
+          const scoped = params.id === UI_CONTROL_COMMAND &&
+            typeof args === 'object' && args !== null && !Array.isArray(args) && 'scope' in args
+          if (scoped) return { result: dispatchUiControl(context, args) }
+          throw new Error(`unexpected command ${String(params.id)}`)
         }
         case 'quirky.worktree/views':
           return { views: [], needsYouHidden: false, rowFact: 'last-activity' }
@@ -686,7 +687,7 @@ function setup(
       return () => void eventListeners.delete(listener)
     },
     getSetting: () => undefined,
-    executeCommand: async () => {},
+    executeCommand: async () => { throw new Error('executeCommand must not be used for UI controls') },
     openView(id: string, input?: unknown) {
       const viewWorktree = typeof input === 'object' && input !== null && 'worktree' in input
         ? input.worktree

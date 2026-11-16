@@ -3,6 +3,8 @@ import type { EditorKind, EditorMode } from '../types'
 export type ActiveDocumentCommand =
   | 'find'
   | 'replace'
+  | 'go-to-definition'
+  | 'find-references'
   | 'copy-context'
   | 'add-review-note'
   | 'zoom-in'

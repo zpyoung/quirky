@@ -1,4 +1,4 @@
-import { closeSync, chmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, chmodSync, constants, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { basename, dirname, join } from 'node:path'
 
@@ -39,6 +39,76 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
 function missingPath(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
+
+type FileIdentity = { dev: number; ino: number }
+type OwnerGrantRecoveryHooks = {
+  beforeIdentityCheck?(): void
+  beforeRename?(): void
+}
+type QuarantineResult =
+  | { outcome: 'quarantined'; path: string }
+  | { outcome: 'changed' }
+  | { outcome: 'moved-unexpected'; path: string }
+  | { outcome: 'occupied' | 'failed' }
+
+let recoveryHooksForTests: OwnerGrantRecoveryHooks | null = null
+
+/** Test-only: installs callbacks inside owner-grant recovery. */
+export function setOwnerGrantRecoveryHooksForTests(hooks: OwnerGrantRecoveryHooks | null): void {
+  recoveryHooksForTests = hooks
+}
+
+function guardedQuarantine(path: string, identity: FileIdentity): QuarantineResult {
+  let destination: string | null = null
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const candidate = `${path}.corrupt-${Date.now()}-${randomBytes(4).toString('hex')}`
+    try {
+      lstatSync(candidate)
+    } catch (error) {
+      if (missingPath(error)) {
+        destination = candidate
+        break
+      }
+    }
+  }
+  if (!destination) return { outcome: 'occupied' }
+
+  recoveryHooksForTests?.beforeIdentityCheck?.()
+  let current
+  try {
+    current = lstatSync(path)
+  } catch {
+    return { outcome: 'changed' }
+  }
+  if (!current.isFile() || current.isSymbolicLink() || current.dev !== identity.dev || current.ino !== identity.ino) {
+    return { outcome: 'changed' }
+  }
+
+  recoveryHooksForTests?.beforeRename?.()
+  try {
+    renameSync(path, destination)
+  } catch {
+    return { outcome: 'failed' }
+  }
+
+  try {
+    const moved = lstatSync(destination)
+    return moved.isFile() && !moved.isSymbolicLink() && moved.dev === identity.dev && moved.ino === identity.ino
+      ? { outcome: 'quarantined', path: destination }
+      : { outcome: 'moved-unexpected', path: destination }
+  } catch {
+    return { outcome: 'moved-unexpected', path: destination }
+  }
+}
+
+function recoveryDiagnostic(result: Exclude<QuarantineResult, { outcome: 'quarantined' }>): string {
+  if (result.outcome === 'changed') return `${STORE_FILENAME} changed during recovery; nothing was moved`
+  if (result.outcome === 'moved-unexpected') {
+    return `${STORE_FILENAME} changed during recovery; a file was set aside as ${basename(result.path)}`
+  }
+  return `${STORE_FILENAME} could not be set aside`
+}
+
 
 function validEndpoint(value: string): boolean {
   try {
@@ -114,18 +184,28 @@ function summary(grant: OwnerGrantRecord): OwnerGrantSummary {
   }
 }
 
-/** Durable authority for full-owner CLI grants; corruption disables this registry until repaired. */
+/** Durable authority for full-owner CLI grants; malformed data is quarantined so owners can pair again. */
 export class OwnerGrantStore {
   readonly path: string
   private grantsValue: OwnerGrantRecord[] = []
+  private recoveredFromValue: string | null = null
+  private recoveryDiagnosticValue: string | null = null
   registryAvailable = false
+
+  get recoveredFrom(): string | null {
+    return this.recoveredFromValue
+  }
+
+  get recoveryDiagnostic(): string | null {
+    return this.recoveryDiagnosticValue
+  }
 
   constructor(dataDir: string) {
     this.path = join(dataDir, STORE_FILENAME)
     try {
       mkdirSync(dataDir, { recursive: true, mode: 0o700 })
-      chmodSync(dataDir, 0o700)
       this.load()
+      if (this.registryAvailable) chmodSync(dataDir, 0o700)
     } catch {
       this.grantsValue = []
       this.registryAvailable = false
@@ -197,24 +277,63 @@ export class OwnerGrantStore {
       throw error
     }
     if (!info.isFile() || info.isSymbolicLink()) throw new Error('Owner grant registry is not a regular file')
-    chmodSync(this.path, 0o600)
-    const raw = JSON.parse(readFileSync(this.path, 'utf8')) as unknown
-    if (!isRecord(raw) || !exactKeys(raw, ['version', 'grants']) || raw.version !== STORE_VERSION || !Array.isArray(raw.grants)) {
-      throw new Error('Owner grant registry is invalid')
+
+    const descriptor = openSync(this.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
+    try {
+      const opened = fstatSync(descriptor)
+      if (!opened.isFile() || opened.dev !== info.dev || opened.ino !== info.ino) {
+        throw new Error('Owner grant registry changed while opening')
+      }
+      const identity = { dev: opened.dev, ino: opened.ino }
+      const content = readFileSync(descriptor, 'utf8')
+      let raw: unknown
+      try {
+        raw = JSON.parse(content) as unknown
+      } catch {
+        this.recover(identity)
+        return
+      }
+
+      if (isRecord(raw) && typeof raw.version === 'number' && Number.isInteger(raw.version) && raw.version > STORE_VERSION) return
+
+      let grants: OwnerGrantRecord[]
+      try {
+        if (!isRecord(raw) || !exactKeys(raw, ['version', 'grants']) || raw.version !== STORE_VERSION || !Array.isArray(raw.grants)) {
+          throw new Error('Owner grant registry is invalid')
+        }
+        grants = raw.grants.map(parseGrant)
+        const ids = new Set<string>()
+        const tokens = new Set<string>()
+        const names = new Set<string>()
+        for (const grant of grants) {
+          const normalizedName = grant.name.toLocaleLowerCase('en-US')
+          if (ids.has(grant.grantId) || tokens.has(grant.token) || names.has(normalizedName)) throw new Error('Owner grant identities are ambiguous')
+          ids.add(grant.grantId)
+          tokens.add(grant.token)
+          names.add(normalizedName)
+        }
+      } catch {
+        this.recover(identity)
+        return
+      }
+
+      fchmodSync(descriptor, 0o600)
+      this.grantsValue = grants
+      this.registryAvailable = true
+    } finally {
+      closeSync(descriptor)
     }
-    const grants = raw.grants.map(parseGrant)
-    const ids = new Set<string>()
-    const tokens = new Set<string>()
-    const names = new Set<string>()
-    for (const grant of grants) {
-      const normalizedName = grant.name.toLocaleLowerCase('en-US')
-      if (ids.has(grant.grantId) || tokens.has(grant.token) || names.has(normalizedName)) throw new Error('Owner grant identities are ambiguous')
-      ids.add(grant.grantId)
-      tokens.add(grant.token)
-      names.add(normalizedName)
+  }
+
+  private recover(identity: FileIdentity): void {
+    const result = guardedQuarantine(this.path, identity)
+    if (result.outcome === 'quarantined') {
+      this.recoveredFromValue = result.path
+      this.grantsValue = []
+      this.registryAvailable = true
+      return
     }
-    this.grantsValue = grants
-    this.registryAvailable = true
+    this.recoveryDiagnosticValue = recoveryDiagnostic(result)
   }
 
   private persist(grants: OwnerGrantRecord[]): void {

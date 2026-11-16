@@ -36,6 +36,91 @@ type WorkspaceMenuActionArgs =
 const WORKSPACE_MENU_ACTIONS = ['copy-id', 'choose-agent', 'hidden-tabs', 'run-group-command'] as const
 const WORKSPACE_MENU_KINDS = ['tab', 'pane', 'session'] as const
 
+type WorkspaceDialogKind = 'close-running' | 'close-pinned' | 'new-session' | 'switch-tabs'
+type WorkspaceViewActionArgs =
+  | { workspace: string; action: 'open-pane-menu'; pane: string; x: number; y: number }
+  | { workspace: string; action: 'close-menu' }
+  | { workspace: string; action: 'cancel-dialog'; kind: WorkspaceDialogKind; generation: string }
+  | { workspace: string; action: 'confirm-close'; kind: 'close-running' | 'close-pinned'; generation: string; dontAskAgain?: boolean }
+  | { workspace: string; action: 'submit-session'; kind: 'new-session'; generation: string; prompt: string }
+  | { workspace: string; action: 'activate-switcher'; kind: 'switch-tabs'; generation: string; tab?: string }
+
+const WORKSPACE_VIEW_ACTIONS = ['open-pane-menu', 'close-menu', 'cancel-dialog', 'confirm-close', 'submit-session', 'activate-switcher'] as const
+const WORKSPACE_DIALOG_KINDS = ['close-running', 'close-pinned', 'new-session', 'switch-tabs'] as const
+
+function parseWorkspaceViewActionArgs(raw: unknown): WorkspaceViewActionArgs | CommandFailure {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return failure('invalid workspace view arguments')
+  const args = raw as Args
+  if (typeof args.workspace !== 'string' || args.workspace === '') return failure('workspace is required')
+  if (typeof args.action !== 'string' || !WORKSPACE_VIEW_ACTIONS.includes(args.action as typeof WORKSPACE_VIEW_ACTIONS[number])) {
+    return failure(`action must be one of ${WORKSPACE_VIEW_ACTIONS.join(', ')}`)
+  }
+
+  switch (args.action) {
+    case 'open-pane-menu': {
+      if (!hasOnlyKeys(args, ['workspace', 'action', 'pane', 'x', 'y'])) return failure('invalid workspace view arguments')
+      if (typeof args.pane !== 'string' || args.pane === '') return failure('pane is required')
+      if (typeof args.x !== 'number' || !Number.isFinite(args.x) || typeof args.y !== 'number' || !Number.isFinite(args.y)) {
+        return failure('x and y must be finite numbers')
+      }
+      return { workspace: args.workspace, action: args.action, pane: args.pane, x: args.x, y: args.y }
+    }
+    case 'close-menu':
+      return hasOnlyKeys(args, ['workspace', 'action'])
+        ? { workspace: args.workspace, action: args.action }
+        : failure('invalid workspace view arguments')
+    case 'cancel-dialog':
+    case 'confirm-close':
+    case 'submit-session':
+    case 'activate-switcher': {
+      const fields = args.action === 'confirm-close'
+        ? ['workspace', 'action', 'kind', 'generation', 'dontAskAgain']
+        : args.action === 'submit-session'
+          ? ['workspace', 'action', 'kind', 'generation', 'prompt']
+          : args.action === 'activate-switcher'
+            ? ['workspace', 'action', 'kind', 'generation', 'tab']
+            : ['workspace', 'action', 'kind', 'generation']
+      if (!hasOnlyKeys(args, fields)) return failure('invalid workspace view arguments')
+      if (typeof args.generation !== 'string' || args.generation === '') return failure('generation is required')
+      if (typeof args.kind !== 'string' || !WORKSPACE_DIALOG_KINDS.includes(args.kind as WorkspaceDialogKind)) {
+        return failure('invalid workspace view arguments')
+      }
+      if (args.action === 'cancel-dialog') {
+        return { workspace: args.workspace, action: args.action, kind: args.kind as WorkspaceDialogKind, generation: args.generation }
+      }
+      if (args.action === 'confirm-close') {
+        if (args.kind !== 'close-running' && args.kind !== 'close-pinned') return failure('invalid workspace view arguments')
+        if (Object.prototype.hasOwnProperty.call(args, 'dontAskAgain') && typeof args.dontAskAgain !== 'boolean') {
+          return failure('invalid workspace view arguments')
+        }
+        return {
+          workspace: args.workspace,
+          action: args.action,
+          kind: args.kind,
+          generation: args.generation,
+          ...(typeof args.dontAskAgain === 'boolean' ? { dontAskAgain: args.dontAskAgain } : {})
+        }
+      }
+      if (args.action === 'submit-session') {
+        if (args.kind !== 'new-session' || typeof args.prompt !== 'string') return failure('invalid workspace view arguments')
+        return { workspace: args.workspace, action: args.action, kind: args.kind, generation: args.generation, prompt: args.prompt }
+      }
+      if (args.kind !== 'switch-tabs') return failure('invalid workspace view arguments')
+      if (Object.prototype.hasOwnProperty.call(args, 'tab') && typeof args.tab !== 'string') {
+        return failure('invalid workspace view arguments')
+      }
+      return {
+        workspace: args.workspace,
+        action: args.action,
+        kind: args.kind,
+        generation: args.generation,
+        ...(typeof args.tab === 'string' ? { tab: args.tab } : {})
+      }
+    }
+  }
+  return failure('invalid workspace view arguments')
+}
+
 
 function hasOnlyKeys(args: Args, keys: readonly string[]): boolean {
   return Object.keys(args).every((key) => keys.includes(key))
@@ -378,6 +463,69 @@ async function workspaceMenuActionCommand(context: UiPluginContext, raw: unknown
     return failure(errorMessage(error))
   }
 }
+
+async function workspaceViewActionCommand(raw: unknown): Promise<{ ok: true } | CommandFailure> {
+  const args = parseWorkspaceViewActionArgs(raw)
+  if ('ok' in args) return args
+
+  try {
+    const controller = controllerFor(args.workspace)
+    if (!controller || controller.workspaceId !== args.workspace) {
+      return failure(`no mounted terminal workspace ${args.workspace}`)
+    }
+
+    if (args.action === 'open-pane-menu') {
+      const workspace = controller.getSnapshot().workspace
+      if (!workspace || !locatePane(workspace, args.pane)) return failure(`pane ${args.pane} is not in workspace ${args.workspace}`)
+      controller.openMenu('pane', args.pane, { x: args.x, y: args.y })
+      return OK
+    }
+    if (args.action === 'close-menu') {
+      controller.closeMenu()
+      return OK
+    }
+
+    const dialog = controller.getSnapshot().dialog
+    if (!dialog || dialog.generation !== args.generation) {
+      return failure(`dialog ${args.generation} is no longer open in ${args.workspace}`)
+    }
+    if (dialog.kind !== args.kind) return failure(`no ${args.kind} dialog is open in ${args.workspace}`)
+
+    if (args.action === 'cancel-dialog') {
+      if (dialog.kind === 'new-session' && dialog.pending) return failure('session request is pending')
+      if (args.kind === 'close-running' || args.kind === 'close-pinned') await controller.answerCloseDialog(false)
+      else if (args.kind === 'new-session') await controller.submitNewSession(null)
+      else await controller.endSwitcher(false)
+      return OK
+    }
+    if (args.action === 'confirm-close') {
+      await controller.answerCloseDialog(true, args.dontAskAgain ?? false)
+      return OK
+    }
+    if (args.action === 'submit-session') {
+      if (dialog.kind !== 'new-session') return failure(`no ${args.kind} dialog is open in ${args.workspace}`)
+      if (dialog.pending) return failure('session request is pending')
+      if (dialog.request.background && !dialog.startedSession && args.prompt.trim() === '') {
+        return failure('a background session requires a prompt')
+      }
+      await controller.submitNewSession(args.prompt)
+      return OK
+    }
+    if (dialog.kind !== 'switch-tabs') return failure(`no ${args.kind} dialog is open in ${args.workspace}`)
+    if (args.tab !== undefined) {
+      const index = dialog.order.indexOf(args.tab)
+      const workspace = controller.getSnapshot().workspace
+      if (index < 0 || !workspace || !locateTab(workspace, args.tab)) {
+        return failure(`tab ${args.tab} is not in the open switcher`)
+      }
+      controller.setSwitcherIndex(index)
+    }
+    await controller.endSwitcher(true)
+    return OK
+  } catch (error) {
+    return failure(errorMessage(error))
+  }
+}
 async function forkAgentSessionCommand(context: UiPluginContext, raw: unknown): Promise<CommandFailure | typeof OK> {
   const sessionId = textArg(argsOf(raw), 'session')
   if (sessionId === undefined) throw new Error('session is required')
@@ -466,6 +614,7 @@ export function terminalCommands(context: UiPluginContext): Record<string, Comma
     'focus-previous-pane': on(context, 'pane', (controller) => controller.focusPrevious()),
     'run-menu-item': (args) => runMenuItemCommand(context, args),
     'workspace-menu-action': (args) => workspaceMenuActionCommand(context, args),
+    'workspace-view-action': (args) => workspaceViewActionCommand(args),
     'open-session': (args) => openSessionCommand(context, args),
     'fork-agent-session': (args) => forkAgentSessionCommand(context, args),
     'toggle-expand-pane': onPane(context, (controller, pane) => controller.toggleExpand(pane)),

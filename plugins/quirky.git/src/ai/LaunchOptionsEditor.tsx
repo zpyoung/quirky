@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import type { RecipeLaunchOptions } from '../daemon/recipe-options'
-import { Button, FormRow } from '@quirky/ui'
+import { messageOf } from '../panel/format'
+import { Button, FormRow, InlineError, NoticeLine } from '@quirky/ui'
 
 type Choice = { value: string; label: string }
 type Option = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null }
@@ -14,7 +15,7 @@ type Catalog = {
   unlistedOptions: Option[]
   extraArgs: { allowed: string | null } | null
 }
-type CatalogState = { agent: string; host: string; info: Catalog | null; loading: boolean }
+type CatalogState = { agent: string; host: string; info: Catalog | null; loading: boolean; error: string | null }
 
 type Props = {
   context: UiPluginContext
@@ -121,67 +122,125 @@ function optionAllows(option: Option, value: string | boolean): boolean {
 function fieldName(prefix: string, name: string): string {
   return prefix === '' ? name : `${prefix} ${name.toLowerCase()}`
 }
+async function readCatalog(
+  context: UiPluginContext,
+  agent: string,
+  host: string,
+  latest: MutableRefObject<number>,
+  setState: Dispatch<SetStateAction<CatalogState>>
+): Promise<void> {
+  const request = ++latest.current
+  setState({ agent, host, info: null, loading: true, error: null })
+  try {
+    const info = (await context.call('quirky.agents/options', { agent, host })) as Catalog
+    if (request === latest.current) setState({ agent, host, info, loading: false, error: null })
+  } catch (error) {
+    if (request === latest.current) setState({ agent, host, info: null, loading: false, error: messageOf(error) })
+  }
+}
+
+function optionsFrom(model: string, optionValues: Record<string, string | boolean>): RecipeLaunchOptions {
+  const trimmedModel = model.trim()
+  return {
+    ...(trimmedModel === '' ? {} : { model: trimmedModel }),
+    ...(Object.keys(optionValues).length === 0 ? {} : { optionValues })
+  }
+}
+
+function optionsForModelChange(catalog: Catalog, optionValues: Record<string, string | boolean>, model: string): RecipeLaunchOptions {
+  const supported = optionsFor(catalog, model)
+  const retained = Object.fromEntries(Object.entries(optionValues).filter(([id, selected]) => {
+    const option = supported.find((candidate) => candidate.id === id)
+    return option !== undefined && optionAllows(option, selected)
+  })) as Record<string, string | boolean>
+  return optionsFrom(model, retained)
+}
+
+function optionsForValueChange(
+  model: string,
+  optionValues: Record<string, string | boolean>,
+  option: Option,
+  selected: string
+): RecipeLaunchOptions {
+  const selectedValue = option.type === 'boolean' ? selected === 'true' : selected
+  const exists = Object.hasOwn(optionValues, option.id)
+  const updated = Object.entries(optionValues)
+    .map(([id, value]): [string, string | boolean] =>
+      id === option.id && selected !== '' ? [id, selectedValue] : [id, value]
+    )
+    .filter(([id]) => selected !== '' || id !== option.id)
+  const entries: Array<[string, string | boolean]> = exists || selected === '' ? updated : [...updated, [option.id, selectedValue]]
+  return optionsFrom(model, Object.fromEntries(entries) as Record<string, string | boolean>)
+}
 
 export function LaunchOptionsEditor({ context, agent, host, value, args, labelPrefix = '', resetLabel, onChange }: Props) {
-  const [state, setState] = useState<CatalogState>({ agent: '', host: '', info: null, loading: false })
+  const [state, setState] = useState<CatalogState>({ agent: '', host: '', info: null, loading: false, error: null })
   const [refreshing, setRefreshing] = useState(false)
   const [refreshMessage, setRefreshMessage] = useState<string | null>(null)
-  const alive = useRef(true)
+  const [refreshError, setRefreshError] = useState<string | null>(null)
+  const latestCatalog = useRef(0)
   const listId = useId()
+  function retryCatalog(): void {
+    void readCatalog(context, agent, host, latestCatalog, setState)
+  }
   useEffect(() => {
-    alive.current = true
     setRefreshing(false)
     setRefreshMessage(null)
+    setRefreshError(null)
     if (agent === '' || agent === 'custom') {
-      setState({ agent, host, info: null, loading: false })
+      latestCatalog.current += 1
+      setState({ agent, host, info: null, loading: false, error: null })
       return () => {
-        alive.current = false
+        latestCatalog.current += 1
       }
     }
-    setState({ agent, host, info: null, loading: true })
-    void context
-      .call('quirky.agents/options', { agent, host })
-      .then((info) => {
-        if (alive.current) setState({ agent, host, info: info as Catalog, loading: false })
-      })
-      .catch(() => {
-        if (alive.current) setState({ agent, host, info: null, loading: false })
-      })
+    void readCatalog(context, agent, host, latestCatalog, setState)
     return () => {
-      alive.current = false
+      latestCatalog.current += 1
     }
-  }, [context, agent, host])
+  }, [context, agent, host, latestCatalog, setState])
 
-  const catalog = state.agent === agent && state.host === host ? state.info : null
+  const currentCatalog = state.agent === agent && state.host === host
+  const catalog = currentCatalog ? state.info : null
+  const catalogLoading = currentCatalog ? state.loading : agent !== '' && agent !== 'custom'
+  const catalogError = currentCatalog ? state.error : null
   const model = value?.model ?? ''
   const optionValues = value?.optionValues ?? {}
-  const commit = (nextModel: string, nextValues: Record<string, string | boolean>) => {
-    const next: RecipeLaunchOptions = {}
-    if (nextModel.trim() !== '') next.model = nextModel.trim()
-    if (Object.keys(nextValues).length > 0) next.optionValues = nextValues
-    onChange(next)
-  }
-  const refreshModels = async () => {
+  async function refreshModels(): Promise<void> {
     if (!catalog?.discoverable || refreshing) return
+    const request = latestCatalog.current
     setRefreshing(true)
     setRefreshMessage(null)
+    setRefreshError(null)
     try {
       const result = (await context.call('quirky.agents/discoverModels', { agent, host })) as { authoritative?: boolean; reason?: string }
-      if (!alive.current) return
+      if (latestCatalog.current !== request) return
       const refreshed = (await context.call('quirky.agents/options', { agent, host })) as Catalog
-      if (!alive.current) return
-      setState({ agent, host, info: refreshed, loading: false })
+      if (latestCatalog.current !== request) return
+      setState({ agent, host, info: refreshed, loading: false, error: null })
       if (!result.authoritative) setRefreshMessage(result.reason ?? 'No authoritative model list was returned; saved choices were kept.')
     } catch (error) {
-      if (alive.current) setRefreshMessage(error instanceof Error ? error.message : String(error))
+      if (latestCatalog.current === request) setRefreshError(messageOf(error))
     } finally {
-      if (alive.current) setRefreshing(false)
+      if (latestCatalog.current === request) setRefreshing(false)
     }
   }
 
   if (agent === 'custom') return <p className="ui-text-muted">Custom command does not support catalog model or option picks.</p>
   if (agent === '') return <p className="ui-text-muted">Choose an agent to see its model and effort choices.</p>
-  if (catalog === null) return <p className="ui-text-muted">{state.loading ? 'Loading model and effort choices…' : 'Could not load this agent’s launch choices.'}</p>
+  if (catalogError !== null) {
+    return (
+      <InlineError
+        message={`Could not load this agent’s launch choices: ${catalogError}`}
+        action={{ label: 'Retry', onAction: retryCatalog }}
+      />
+    )
+  }
+  if (catalog === null) {
+    return catalogLoading
+      ? <div role="status"><NoticeLine>Loading model and effort choices…</NoticeLine></div>
+      : <InlineError message="Could not load this agent’s launch choices." action={{ label: 'Retry', onAction: retryCatalog }} />
+  }
   if (!catalog.supported) return <p className="ui-text-muted">This agent does not offer catalog-backed model or option choices.</p>
 
   const options = optionsFor(catalog, model)
@@ -203,15 +262,7 @@ export function LaunchOptionsEditor({ context, agent, host, value, args, labelPr
               placeholder="Agent default"
               value={model}
               disabled={modelShadowed}
-              onChange={(event) => {
-                const selected = event.target.value
-                const supported = optionsFor(catalog, selected)
-                const retained = Object.fromEntries(Object.entries(optionValues).filter(([id, selectedValue]) => {
-                  const option = supported.find((candidate) => candidate.id === id)
-                  return option !== undefined && optionAllows(option, selectedValue)
-                })) as Record<string, string | boolean>
-                commit(selected, retained)
-              }}
+              onChange={(event) => onChange(optionsForModelChange(catalog, optionValues, event.target.value))}
             />
             <datalist id={`${listId}-models`}>
               {catalog.models.map((listed) => <option key={listed.id} value={listed.id} label={listed.label} />)}
@@ -224,15 +275,7 @@ export function LaunchOptionsEditor({ context, agent, host, value, args, labelPr
             aria-label={fieldName(labelPrefix, 'Model')}
             value={model}
             disabled={modelShadowed}
-            onChange={(event) => {
-              const selected = event.target.value
-              const supported = optionsFor(catalog, selected)
-              const retained = Object.fromEntries(Object.entries(optionValues).filter(([id, selectedValue]) => {
-                const option = supported.find((candidate) => candidate.id === id)
-                return option !== undefined && optionAllows(option, selectedValue)
-              })) as Record<string, string | boolean>
-              commit(selected, retained)
-            }}
+            onChange={(event) => onChange(optionsForModelChange(catalog, optionValues, event.target.value))}
           >
             <option value="">Agent default</option>
             {staleModel && <option value={model}>{model} (unavailable)</option>}
@@ -245,6 +288,7 @@ export function LaunchOptionsEditor({ context, agent, host, value, args, labelPr
           {refreshing ? 'Refreshing models…' : 'Refresh models'}
         </Button>
       )}
+      {refreshError !== null && <InlineError message={refreshError} />}
       {staleModel && <p className="ui-text-muted">Saved model {model} is no longer available.</p>}
       {refreshMessage && <p className="ui-text-muted">{refreshMessage}</p>}
       {modelShadowed && <p className="ui-text-muted">Set by CLI arguments</p>}
@@ -261,13 +305,7 @@ export function LaunchOptionsEditor({ context, agent, host, value, args, labelPr
               aria-label={label}
               value={selected === undefined ? '' : String(selected)}
               disabled={shadowed}
-              onChange={(event) => {
-                const next = { ...optionValues }
-                const picked = event.target.value
-                if (picked === '') delete next[option.id]
-                else next[option.id] = option.type === 'boolean' ? picked === 'true' : picked
-                commit(model, next)
-              }}
+              onChange={(event) => onChange(optionsForValueChange(model, optionValues, option, event.target.value))}
             >
               <option value="">Agent default</option>
               {option.type === 'boolean' ? (

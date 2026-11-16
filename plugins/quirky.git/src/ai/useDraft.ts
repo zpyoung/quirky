@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from 'react'
  * one after another in the order made, and the field takes `value` again only when none is
  * pending, so a refresh in the middle of typing cannot overwrite the text.
  *
- * `change(shown, sent)` shows `shown` and saves `sent` (default: the same text), for a reset
- * that sends an empty value yet shows the default.
+ * `change(shown, save, sent)` shows `shown` and saves `sent` (default: the same text), for a
+ * reset that sends an empty value yet shows the default. Each edit supplies its own save route.
  */
-export function useDraft(value: string, save: (next: string) => Promise<void>): [string, (shown: string, sent?: string) => void] {
+export function useDraft(value: string): [string, (shown: string, save: (next: string) => Promise<void>, sent?: string) => void] {
   const [text, setText] = useState(value)
   const [idle, setIdle] = useState(0)
   const pending = useRef(0)
@@ -18,7 +18,7 @@ export function useDraft(value: string, save: (next: string) => Promise<void>): 
     if (pending.current === 0) setText(value)
   }, [value, idle])
 
-  const change = (shown: string, sent: string = shown) => {
+  const change = (shown: string, save: (next: string) => Promise<void>, sent: string = shown) => {
     setText(shown)
     pending.current += 1
     tail.current = tail.current

@@ -13,6 +13,10 @@ export type CoreOptions = {
   startedAt: number
   hookToken: string
   hookUrl: () => string
+  /** Authenticated loopback browser entry URL, late-bound to the port actually selected by Bun. */
+  browserUiUrl?: () => string
+  /** Resolved built UI index path; handlers check it at request time. */
+  browserUiIndexPath?: string
   /** True when the daemon runs in safe mode; reported by `status`. */
   safeMode?: boolean
   /** The unix socket path the daemon listens on, or null; reported by `status`. */
@@ -43,6 +47,13 @@ export class Core {
   /** The loopback URL agents post hooks to, as the daemon is listening now. */
   get hookUrl(): string {
     return this.options.hookUrl()
+  }
+  get browserUiUrl(): string | undefined {
+    return this.options.browserUiUrl?.()
+  }
+
+  get browserUiIndexPath(): string | undefined {
+    return this.options.browserUiIndexPath
   }
 
   get pty(): PtyClient {

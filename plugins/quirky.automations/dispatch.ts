@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer'
 import type { Session, StructuredMessage, WorktreeCreateResult } from '@quirky/protocol'
+import { createSupervision, SupervisionError } from '@quirky/supervision'
 import type {
   AutomationDefinition,
   AutomationRun,
@@ -15,7 +16,6 @@ import {
   type AutomationTargetResolution
 } from './dispatch-contract'
 
-const OBSERVATION_INTERVAL_MS = 1_000
 const OBSERVATION_DEADLINE_MS = 6 * 60 * 60 * 1_000
 const SETUP_POLL_INTERVAL_MS = 1_000
 const MAX_OUTPUT_BYTES = 256 * 1024
@@ -181,12 +181,6 @@ function sessionIsStructured(value: unknown): value is Session {
     typeof session.worktreeId === 'string' && typeof session.status === 'string'
 }
 
-function messageList(value: unknown): StructuredMessage[] {
-  return Array.isArray(value) ? value.filter((message): message is StructuredMessage => {
-    const candidate = record(message)
-    return candidate !== null && typeof candidate.seq === 'number' && typeof candidate.role === 'string' && typeof candidate.text === 'string'
-  }) : []
-}
 
 function postCursorResult(messages: StructuredMessage[], cursor: number, agentId: string): ProviderResult | null {
   const results = messages.filter((message) => message.seq > cursor && message.role === 'result')
@@ -370,10 +364,9 @@ function setupError(result: WorktreeCreateResult, decision: 'run' | 'skip'): str
 }
 
 export function createAutomationDispatcher(context: AutomationDispatchContext, hooks: AutomationDispatchHooks): AutomationDispatcher {
-  const observers = new Map<string, ReturnType<typeof setInterval>>()
-  const observing = new Set<string>()
+  const engine = createSupervision(context)
+  const watches = new Map<string, AbortController>()
   const setupDelays = new Map<ReturnType<typeof setTimeout>, () => void>()
-  const activeChecks = new Set<string>()
   const activeProvenanceCapabilities = new Set<string>()
   const revokeProvenanceCapability = (dispatchToken: string): void => {
     if (!activeProvenanceCapabilities.delete(dispatchToken)) return
@@ -381,22 +374,22 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
   }
   let disposed = false
   let startTask: Promise<void> | null = null
-  let unsubscribe: (() => void) | undefined
 
-  const stopObserving = (runId: string): void => {
-    const timer = observers.get(runId)
-    if (timer !== undefined) clearInterval(timer)
-    observers.delete(runId)
-    observing.delete(runId)
+  const stopWatching = (runId: string): void => {
+    const controller = watches.get(runId)
+    if (!controller) return
+    watches.delete(runId)
+    controller.abort()
   }
 
-  const update = (runId: string, patch: AutomationRunPatch): AutomationRun | null => {
+  const update = (runId: string, patch: AutomationRunPatch, options?: { allowAfterDisposal: boolean }): AutomationRun | null => {
+    if (disposed && !options?.allowAfterDisposal) return null
     const before = hooks.store.getRun(runId)
     if (!before || !hooks.store.get(before.automationId)) return null
     if (finalStatus(before.status)) return before
     try {
       const result = hooks.store.updateRun(runId, patch, hooks.clock())
-      hooks.changed(result.automationId, result.id)
+      if (!disposed) hooks.changed(result.automationId, result.id)
       return result
     } catch (error) {
       const current = hooks.store.getRun(runId)
@@ -411,6 +404,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     error: string | null,
     patch: AutomationRunPatch = {}
   ): AutomationRun | null => {
+    if (disposed) return null
     const current = hooks.store.getRun(runId)
     if (!current || !hooks.store.get(current.automationId)) return null
     if (finalStatus(current.status)) return current
@@ -422,7 +416,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       collectedAt: hooks.clock()
     }
     const completed = update(runId, { ...patch, status, error, usage })
-    if (!completed || finalStatus(completed.status)) stopObserving(runId)
+    if (!completed || finalStatus(completed.status)) stopWatching(runId)
     return completed
   }
 
@@ -464,9 +458,8 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
   const runPrecheck = async (runId: string, definition: AutomationDefinition, target: AutomationTarget): Promise<CheckEvidence> => {
     const command = definition.precheck!.command
     const startedAt = hooks.clock()
-    activeChecks.add(runId)
     try {
-      const result = await context.call('quirky.checks/run', {
+      const result = await engine.runCheck({
         command,
         cwd: target.repoPath,
         timeoutSeconds: definition.precheck!.timeoutSeconds,
@@ -475,8 +468,6 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       return checkEvidence(command, startedAt, hooks.clock(), result)
     } catch (error) {
       return parsePrecheckError(command, startedAt, hooks.clock(), error)
-    } finally {
-      activeChecks.delete(runId)
     }
   }
 
@@ -535,7 +526,9 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
   ): Promise<{ kind: 'sent'; run: AutomationRun } | { kind: 'not-eligible' } | { kind: 'deleted' } | { kind: 'failed'; run: AutomationRun | null } | { kind: 'changed'; run: AutomationRun | null }> => {
     const sessionId = prior.sessionId!
     return hooks.inLane(sessionId, async () => {
+      if (disposed) return { kind: 'deleted' }
       let verifyResult = await verify(runId, snapshot, baseTarget)
+      if (disposed) return { kind: 'deleted' }
       if (verifyResult.kind !== 'ok') {
         if (verifyResult.kind === 'deleted') return { kind: 'deleted' }
         const failed = applyVerifyFailure(runId, verifyResult) ?? null
@@ -545,9 +538,12 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       try {
         session = await context.call('quirky.session/get', { session: sessionId }) as Session
       } catch {
+        if (disposed) return { kind: 'deleted' }
         return { kind: 'not-eligible' }
       }
+      if (disposed) return { kind: 'deleted' }
       verifyResult = await verify(runId, snapshot, baseTarget)
+      if (disposed) return { kind: 'deleted' }
       if (verifyResult.kind !== 'ok') {
         if (verifyResult.kind === 'deleted') return { kind: 'deleted' }
         const failed = applyVerifyFailure(runId, verifyResult) ?? null
@@ -558,16 +554,24 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
 
       let beforeMessages: StructuredMessage[]
       try {
-        beforeMessages = messageList(await context.call('quirky.structured/messages', { session: sessionId }))
-      } catch {
+        beforeMessages = await engine.readMessages({ session: sessionId })
+      } catch (error) {
+        if (disposed) return { kind: 'deleted' }
+        if (error instanceof SupervisionError && error.code === 'invalid-response') {
+          const failed = finish(runId, 'dispatch_failed', `Structured runner returned invalid journal evidence: ${messageOf(error)}`)
+          return { kind: 'failed', run: failed }
+        }
         return { kind: 'not-eligible' }
       }
       try {
         session = await context.call('quirky.session/get', { session: sessionId }) as Session
       } catch {
+        if (disposed) return { kind: 'deleted' }
         return { kind: 'not-eligible' }
       }
+      if (disposed) return { kind: 'deleted' }
       verifyResult = await verify(runId, snapshot, baseTarget)
+      if (disposed) return { kind: 'deleted' }
       if (verifyResult.kind !== 'ok') {
         if (verifyResult.kind === 'deleted') return { kind: 'deleted' }
         const failed = applyVerifyFailure(runId, verifyResult) ?? null
@@ -600,8 +604,9 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       })
       if (!beforeSend) return { kind: 'deleted' }
       try {
-        await context.call('quirky.structured/send', { session: sessionId, text: verifyResult.definition.prompt })
+        await engine.send({ session: sessionId, text: verifyResult.definition.prompt })
       } catch (error) {
+        if (disposed) return { kind: 'failed', run: hooks.store.getRun(runId) }
         const failed = finish(runId, 'dispatch_failed', `Structured prompt submission failed ambiguously: ${messageOf(error)}`, {
           sessionId,
           launchSettings: prior.launchSettings,
@@ -612,53 +617,70 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       const current = hooks.store.getRun(runId)
       if (!current || !hooks.store.get(current.automationId)) return { kind: 'deleted' }
       if (finalStatus(current.status)) return { kind: 'sent', run: current }
-      const dispatched = update(runId, { status: 'dispatched' })
+      const dispatched = update(runId, { status: 'dispatched' }, { allowAfterDisposal: true })
       return dispatched ? { kind: 'sent', run: dispatched } : { kind: 'deleted' }
     })
   }
 
-  const observe = async (runId: string): Promise<void> => {
-    if (disposed || observing.has(runId)) return
-    observing.add(runId)
-    try {
-      const run = hooks.store.getRun(runId)
-      if (!run || run.status !== 'dispatched' || !run.sessionId || !run.dispatchState) {
-        if (!run || finalStatus(run.status)) stopObserving(runId)
-        return
-      }
-      await hooks.inLane(run.automationId, async () => {
+  const watch = (runId: string): void => {
+    if (disposed || watches.has(runId)) return
+    const run = hooks.store.getRun(runId)
+    if (!run || run.status !== 'dispatched' || !run.sessionId || !run.dispatchState) return
+    const definition = hooks.store.get(run.automationId)
+    if (!definition) return
+    const sessionId = run.sessionId
+    const initialCursor = run.dispatchState.messageCursor
+    const target = {
+      sessionId,
+      worktreeId: run.workspaceId ?? '',
+      agent: typeof run.launchSettings?.agent === 'string' ? run.launchSettings.agent : definition.agentId
+    }
+    const controller = new AbortController()
+    const done = { kind: 'done' as const, value: undefined }
+    watches.set(runId, controller)
+    void engine.watchStructured({
+      target,
+      signal: controller.signal,
+      journal: () => {
+        const current = hooks.store.getRun(runId)
+        return { afterSeq: current?.dispatchState?.messageCursor ?? initialCursor }
+      },
+      onSample: (sample, signal) => hooks.inLane(run.automationId, async () => {
+        if (disposed || signal.aborted) return done
         const current = hooks.store.getRun(runId)
         if (!current || current.status !== 'dispatched' || !current.sessionId || !current.dispatchState) {
-          if (!current || (current && finalStatus(current.status))) stopObserving(runId)
-          return
+          if (!current || finalStatus(current.status)) stopWatching(runId)
+          return done
         }
-        const definition = hooks.store.get(current.automationId)
-        if (!definition) return
-        let session: Session
-        let messages: StructuredMessage[]
-        try {
-          ;[session, messages] = await Promise.all([
-            context.call('quirky.session/get', { session: current.sessionId }) as Promise<Session>,
-            context.call('quirky.structured/messages', { session: current.sessionId, afterSeq: current.dispatchState.messageCursor }).then(messageList)
-          ])
-        } catch (error) {
-          finish(runId, 'dispatch_failed', `Structured runner was lost while observing this run: ${messageOf(error)}`)
-          return
+        const currentDefinition = hooks.store.get(current.automationId)
+        if (!currentDefinition) {
+          stopWatching(runId)
+          return done
         }
-        const afterRead = hooks.store.getRun(runId)
-        if (!afterRead || finalStatus(afterRead.status) || afterRead.status !== 'dispatched') {
-          if (!afterRead || (afterRead && finalStatus(afterRead.status))) stopObserving(runId)
-          return
-        }
-        const agentId = typeof afterRead.launchSettings?.agent === 'string' ? afterRead.launchSettings.agent : definition.agentId
-        if (!sessionIsStructured(session) || session.id !== afterRead.sessionId || session.agent !== agentId || session.worktreeId !== afterRead.workspaceId) {
+        if (current.sessionId !== sessionId) {
           finish(runId, 'dispatch_failed', 'Structured session identity no longer matches the dispatched run.')
-          return
+          return done
         }
-        const providerResult = postCursorResult(messages, afterRead.dispatchState!.messageCursor, agentId)
-        const output = latestOutput(messages, afterRead.dispatchState!.messageCursor, providerResult)
+        if (!sample.session.ok) {
+          finish(runId, 'dispatch_failed', `Structured runner was lost while observing this run: ${messageOf(sample.session.error)}`)
+          return done
+        }
+        if (!sample.journal.ok) {
+          finish(runId, 'dispatch_failed', `Structured runner was lost while observing this run: ${messageOf(sample.journal.error)}`)
+          return done
+        }
+        const session = sample.session.value
+        const messages = sample.journal.value.messages
+        const state = current.dispatchState
+        const agentId = typeof current.launchSettings?.agent === 'string' ? current.launchSettings.agent : currentDefinition.agentId
+        if (!sessionIsStructured(session) || session.id !== current.sessionId || session.agent !== agentId || session.worktreeId !== current.workspaceId) {
+          finish(runId, 'dispatch_failed', 'Structured session identity no longer matches the dispatched run.')
+          return done
+        }
+        const providerResult = postCursorResult(messages, state.messageCursor, agentId)
+        const output = latestOutput(messages, state.messageCursor, providerResult)
         if (providerResult) {
-          const usage = collectedUsage(afterRead, messages, providerResult, agentId, session, hooks.clock())
+          const usage = collectedUsage(current, messages, providerResult, agentId, session, hooks.clock())
           const outputSnapshot = output ? {
             format: 'plain_text' as const,
             content: output.content,
@@ -674,49 +696,57 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
               ...(outputSnapshot ? { outputSnapshot } : {}), ...(usage ? { usage } : {})
             })
           }
-          return
+          return done
         }
         if (session.status === 'waiting') {
           finish(runId, 'dispatch_failed', 'Structured provider is waiting for approval or user input; unattended automations cannot answer it.', {
             ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
           })
-          try { await context.call('quirky.structured/stop', { session: session.id }) } catch { /* Final state is already durable. */ }
-          return
+          if (!disposed) {
+            try { await engine.stop({ kind: 'structured', session: session.id }) } catch {}
+          }
+          return done
         }
         if (session.status === 'exited') {
           finish(runId, 'dispatch_failed', 'Structured runner exited without a successful post-dispatch provider result.', {
             ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
           })
-          return
+          return done
         }
-        if (hooks.clock() - afterRead.dispatchState!.observationStartedAt >= OBSERVATION_DEADLINE_MS) {
+        if (hooks.clock() - state.observationStartedAt >= OBSERVATION_DEADLINE_MS) {
           finish(runId, 'dispatch_failed', 'Structured run exceeded the six-hour observation deadline.', {
             ...(output ? { outputSnapshot: { format: 'plain_text', content: output.content, capturedAt: hooks.clock(), truncated: output.truncated } } : {})
           })
-          try { await context.call('quirky.structured/stop', { session: session.id }) } catch { /* Final state is already durable. */ }
-          return
+          if (!disposed) {
+            try { await engine.stop({ kind: 'structured', session: session.id }) } catch {}
+          }
+          return done
         }
-        if (session.status === 'working' && !afterRead.dispatchState!.observedWorking) {
-          update(runId, { dispatchState: { ...afterRead.dispatchState!, observedWorking: true } })
+        if (session.status === 'working' && !state.observedWorking) {
+          update(runId, { dispatchState: { ...state, observedWorking: true } })
         }
+        return { kind: 'continue' }
       })
-    } catch (error) {
+    }).catch(async (error: unknown) => {
+      if (disposed || controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return
       const current = hooks.store.getRun(runId)
-      if (current && current.status === 'dispatched') finish(runId, 'dispatch_failed', `Could not reconcile structured run: ${messageOf(error)}`)
-    } finally {
-      observing.delete(runId)
-    }
-  }
-
-  const watch = (runId: string): void => {
-    if (disposed || observers.has(runId)) return
-    void observe(runId)
-    observers.set(runId, setInterval(() => { void observe(runId) }, OBSERVATION_INTERVAL_MS))
+      if (!current) return
+      try {
+        await hooks.inLane(current.automationId, () => {
+          const latest = hooks.store.getRun(runId)
+          if (disposed || !latest || latest.status !== 'dispatched' || !hooks.store.get(latest.automationId)) return
+          finish(runId, 'dispatch_failed', `Could not reconcile structured run: ${messageOf(error)}`)
+        })
+      } catch {}
+    }).finally(() => {
+      if (watches.get(runId) === controller) watches.delete(runId)
+    }).catch(() => {})
   }
 
   const verifyOrFinish = async (runId: string, snapshot: Snapshot, target: AutomationTarget): Promise<VerifyResult | null> => {
     if (disposed) return null
     const verified = await verify(runId, snapshot, target)
+    if (disposed) return null
     if (verified.kind !== 'ok') applyVerifyFailure(runId, verified)
     return verified
   }
@@ -819,7 +849,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       if (typeof id !== 'string' || id.length === 0) return finish(runId, 'dispatch_failed', 'Workspace creation returned no workspace identity.')
       const existing = hooks.store.getRun(runId)
       if (!existing || !hooks.store.get(existing.automationId)) return null
-      const recorded = update(runId, { workspaceId: id, workspaceDisplayName: displayName })
+      const recorded = update(runId, { workspaceId: id, workspaceDisplayName: displayName }, { allowAfterDisposal: true })
       if (!recorded) return null
       workspaceId = id
       workspaceDisplayName = displayName
@@ -854,7 +884,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     if (reuse) {
       const reused = await markReuseDispatch(runId, snapshot, baseTarget, reuse, workspaceId)
       if (reused.kind === 'sent') {
-        watch(runId)
+        void watch(runId)
         return hooks.store.getRun(runId)
       }
       if (reused.kind === 'deleted') return null
@@ -873,6 +903,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
           structured: true
         }))
       } catch (error) {
+        if (disposed) return hooks.store.getRun(runId)
         return finish(runId, 'dispatch_failed', `Saved structured launch picks are no longer valid: ${messageOf(error)}`)
       }
     }
@@ -894,20 +925,24 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     }
     if (current.status !== 'dispatching' || disposed) return hooks.store.getRun(runId)
 
-    let session: Session
+    let rawSession: unknown
     try {
-      session = await context.call('quirky.structured/create', createParams) as Session
+      rawSession = await engine.create(createParams)
     } catch (error) {
+      if (disposed) return hooks.store.getRun(runId)
       return finish(runId, 'dispatch_failed', `Structured launch failed: ${messageOf(error)}`)
     }
+    const rawSessionRecord = record(rawSession)
+    const createdSessionId = typeof rawSessionRecord?.id === 'string' ? rawSessionRecord.id : null
     const afterLaunch = hooks.store.getRun(runId)
-    if (!afterLaunch || !hooks.store.get(afterLaunch.automationId)) {
-      if (session && typeof session.id === 'string') {
-        try { await context.call('quirky.structured/stop', { session: session.id }) } catch { /* The automation has been deleted. */ }
+    const deleted = !afterLaunch || !hooks.store.get(afterLaunch.automationId)
+    if (disposed || deleted) {
+      if (createdSessionId) {
+        try { await engine.stop({ kind: 'structured', session: createdSessionId }) } catch {}
       }
-      return null
+      return deleted ? null : hooks.store.getRun(runId)
     }
-    if (disposed) return afterLaunch
+    const session = rawSession as Session
     if (!sessionIsStructured(session) || session.agent !== definition.agentId || session.worktreeId !== workspaceId) {
       return finish(runId, 'dispatch_failed', 'Structured launch returned a session for a different provider or workspace.')
     }
@@ -926,7 +961,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
       dispatchState: state
     })
     if (!dispatched) return null
-    watch(runId)
+    void watch(runId)
     return hooks.store.getRun(runId)
   }
 
@@ -935,7 +970,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     if (!run) return Promise.resolve(null)
     return hooks.inLane(run.automationId, () => dispatchInLane(runId)).catch((error: unknown) => {
       const current = hooks.store.getRun(runId)
-      if (!current || finalStatus(current.status)) return current
+      if (disposed || !current || finalStatus(current.status)) return current
       return finish(runId, 'dispatch_failed', `Automation dispatch failed: ${messageOf(error)}`)
     })
   }
@@ -953,7 +988,7 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
         }
         if (run.status === 'dispatched') {
           const current = hooks.store.getRun(run.id)
-          if (current?.status === 'dispatched' && current.sessionId && current.dispatchState) watch(current.id)
+          if (current?.status === 'dispatched' && current.sessionId && current.dispatchState) void watch(current.id)
           else if (current?.status === 'dispatched') {
             await hooks.inLane(run.automationId, () => finish(run.id, 'dispatch_failed', 'Dispatched run has no durable message cursor; it cannot be safely reconciled.'))
           }
@@ -972,38 +1007,21 @@ export function createAutomationDispatcher(context: AutomationDispatchContext, h
     return startTask
   }
 
-  unsubscribe = context.subscribe((event) => {
-    if (disposed || (event.type !== 'quirky.structured/message' && event.type !== 'quirky.session/changed')) return
-    const data = record(event.data)
-    const message = record(data?.message)
-    const session = record(data?.session)
-    const sessionId = typeof message?.sessionId === 'string' ? message.sessionId : typeof session?.id === 'string' ? session.id : null
-    if (!sessionId) return
-    for (const [runId] of observers) {
-      if (hooks.store.getRun(runId)?.sessionId === sessionId) void observe(runId)
-    }
-  })
 
   const dispose = (): void => {
     if (disposed) return
     disposed = true
-    unsubscribe?.()
-    unsubscribe = undefined
-    for (const timer of observers.values()) clearInterval(timer)
-    observers.clear()
+    for (const controller of watches.values()) controller.abort()
+    watches.clear()
+    engine.dispose()
     for (const [timer, resolve] of setupDelays) {
       clearTimeout(timer)
       resolve()
     }
     setupDelays.clear()
-    observing.clear()
     for (const dispatchToken of [...activeProvenanceCapabilities]) {
       revokeProvenanceCapability(dispatchToken)
     }
-    for (const checkId of activeChecks) {
-      void context.call('quirky.checks/cancel', { checkId }).catch(() => {})
-    }
-    activeChecks.clear()
   }
 
   return { dispatch, start, dispose }
