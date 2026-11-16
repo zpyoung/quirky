@@ -317,7 +317,6 @@ function panelRefreshPeak(records: PanelRefreshRecord[], index: number, worktree
   return best
 }
 
-
 function panelRequestPeak(records: PanelRequestRecord[]): number {
   const chronological = [...records].sort((left, right) => left.at - right.at)
   let first = 0

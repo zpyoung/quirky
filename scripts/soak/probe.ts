@@ -33,8 +33,6 @@ type ActiveGitAttempt = ActiveClockAttempt & { worktree: string }
 
 class ProbeTimeoutError extends Error {}
 
-
-
 function secondsSince(startedAt: number, now: number): number {
   return Number(((now - startedAt) / 1000).toFixed(3))
 }
@@ -258,7 +256,6 @@ export function startProbe(options: StartProbeOptions): Probe {
       worktree
     })
   }
-
 
   const pauseAfterSettle = (delayMs: number): Promise<void> => {
     if (stopped || delayMs <= 0) return Promise.resolve()

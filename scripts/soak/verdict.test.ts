@@ -1537,11 +1537,16 @@ test('scenario 6: reports omitted phases, duplicate identities, unscheduled reco
   }), config()).checks.day
   expect(unscheduled.unscheduled).toEqual(['switch:0:1000'])
 
-  const wrong = judge(evidence({
+  const wrongSwitchTarget = judge(evidence({
     switches: [{ ...firstSwitch, requested: 'wrong-target' }, ...complete.switches.slice(1)],
+  }), config()).checks.day
+  const wrongPhase = judge(evidence({
     phases: [{ ...complete.phases[0]!, phase: 0 }, ...complete.phases.slice(1)],
   }), config()).checks.day
-  expect(wrong.wrongTarget).toEqual(['switch:0:0', 'phase:1'])
+  expect(wrongSwitchTarget.ok).toBe(false)
+  expect(wrongSwitchTarget.wrongTarget).toEqual(['switch:0:0'])
+  expect(wrongPhase.ok).toBe(false)
+  expect(wrongPhase.wrongTarget).toEqual(['phase:1'])
 })
 
 test('scenario 6: disabled and absent day instrumentation fail normal runs', () => {
