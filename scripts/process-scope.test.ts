@@ -14,6 +14,157 @@ const scopeTestProcesses: ProcessIdentity[] = []
 type ProcessIdentity = { pid: number; started: string; command: string }
 type IsolatedSubprocess = Bun.Subprocess<'ignore', 'ignore', 'ignore'>
 type DetachedSpawnOptions = Bun.SpawnOptions.OptionsObject<'ignore', 'ignore', 'ignore'> & { detached: true }
+type RecordedSpawn = { command: string[]; options: unknown; processEnvSentinel: string | undefined }
+let restoreRecordedProcessApis: (() => void) | undefined
+
+const PROCESS_ENV_SENTINEL = 'QUIRKY_PROCESS_SCOPE_CLEANUP_ENV_SENTINEL'
+const PROCESS_ENV_SENTINEL_VALUE = 'current-process-env'
+
+function recordProcessScopeRuntime() {
+  const originalSpawnSync = Bun.spawnSync
+  const originalSleep = Bun.sleep
+  const originalDateNow = Date.now
+  const calls: RecordedSpawn[] = []
+  let now = originalDateNow()
+  const { promise: firstSleep, resolve: resumeFirstSleep } = Promise.withResolvers<void>()
+  let sleeping = false
+
+  Date.now = () => now
+  Bun.sleep = async () => {
+    if (sleeping) return
+    sleeping = true
+    await firstSleep
+    now += 5_000
+  }
+  Bun.spawnSync = new Proxy(originalSpawnSync, {
+    apply(_target, _receiver, args: unknown[]) {
+      const command = args[0] as string[]
+      calls.push({ command: [...command], options: args[1], processEnvSentinel: process.env[PROCESS_ENV_SENTINEL] })
+      if (command[0] === 'ps') {
+        const started = new Date(now).toString().split(' ').slice(0, 5).join(' ')
+        return {
+          exitCode: 0,
+          stdout: Buffer.from(`${process.pid} 1 ${process.pid} ${started} ${process.execPath}\n`),
+          stderr: Buffer.alloc(0),
+          success: true,
+          signalCode: null,
+          pid: process.pid
+        }
+      }
+      if (command[2] === '--bootstrap') {
+        return {
+          exitCode: 0,
+          stdout: Buffer.alloc(0),
+          stderr: Buffer.alloc(0),
+          success: true,
+          signalCode: null,
+          pid: process.pid
+        }
+      }
+      throw new Error(`unexpected recording subprocess: ${command.join(' ')}`)
+    }
+  })
+
+  restoreRecordedProcessApis = () => {
+    Bun.spawnSync = originalSpawnSync
+    Bun.sleep = originalSleep
+    Date.now = originalDateNow
+  }
+  return {
+    calls,
+    get sleeping() { return sleeping },
+    resumeCleanup() { resumeFirstSleep() }
+  }
+}
+
+const PROCESS_TABLE_COMMAND = ['ps', '-A', '-o', 'pid=,ppid=,pgid=,lstart=,command=']
+
+function processTableCalls(calls: RecordedSpawn[]): RecordedSpawn[] {
+  return calls.filter(({ command }) => command[0] === 'ps' && command[1] === '-A')
+}
+
+function expectInheritedEnvironmentProcessTableCalls(calls: RecordedSpawn[]): void {
+  const matches = calls.length > 0 && calls.every(call =>
+    JSON.stringify(call.command) === JSON.stringify(PROCESS_TABLE_COMMAND) &&
+    call.options === undefined &&
+    call.processEnvSentinel === PROCESS_ENV_SENTINEL_VALUE)
+  expect(matches).toBe(true)
+}
+function expectCleanupProcessTableCalls(calls: RecordedSpawn[], expectedEnv: Record<string, unknown>): void {
+  const matches = calls.length > 0 && calls.every(call => {
+    if (JSON.stringify(call.command) !== JSON.stringify(PROCESS_TABLE_COMMAND)) return false
+    if (typeof call.options !== 'object' || call.options === null || !('env' in call.options)) return false
+    const actualEnv = call.options.env
+    if (typeof actualEnv !== 'object' || actualEnv === null) return false
+    const expectedEntries = Object.entries(expectedEnv)
+    const actualEntries = Object.entries(actualEnv)
+    const actualValues = new Map(actualEntries)
+    return actualEntries.length === expectedEntries.length &&
+      expectedEntries.every(([key, value]) => actualValues.get(key) === value)
+  })
+  expect(matches).toBe(true)
+}
+test('cleanup continuation after caller timeout uses its explicit env for ps', async () => {
+  const recording = recordProcessScopeRuntime()
+  const scope = createProcessScope()
+  scopes.push(scope)
+  const env = { QUIRKY_HOME: scope.home, QUIRKY_TEST_SCOPE: 'explicit-cleanup-env', CLEANUP_ENV_SENTINEL: 'explicit' }
+  const callStart = recording.calls.length
+  let processTableCallsAtTimeout = 0
+  const cleanup = scope.cleanup(env)
+
+  try {
+    const callerResult = await Promise.race([
+      cleanup.then(() => 'cleanup completed'),
+      Promise.resolve('caller timed out')
+    ])
+    expect(callerResult).toBe('caller timed out')
+    expect(recording.sleeping).toBe(true)
+    processTableCallsAtTimeout = processTableCalls(recording.calls.slice(callStart)).length
+  } finally {
+    recording.resumeCleanup()
+  }
+
+  await cleanup
+  const cleanupProcessTableCalls = processTableCalls(recording.calls.slice(callStart))
+  expect(cleanupProcessTableCalls.length > processTableCallsAtTimeout).toBe(true)
+  expectCleanupProcessTableCalls(cleanupProcessTableCalls.slice(processTableCallsAtTimeout), env)
+})
+
+test('cleanup without an env uses process.env for ps with the process-table command', async () => {
+  const recording = recordProcessScopeRuntime()
+  const scope = createProcessScope()
+  scopes.push(scope)
+  const previousSentinel = process.env[PROCESS_ENV_SENTINEL]
+  process.env[PROCESS_ENV_SENTINEL] = PROCESS_ENV_SENTINEL_VALUE
+  const restoreApis = restoreRecordedProcessApis!
+  restoreRecordedProcessApis = () => {
+    restoreApis()
+    if (previousSentinel === undefined) delete process.env[PROCESS_ENV_SENTINEL]
+    else process.env[PROCESS_ENV_SENTINEL] = previousSentinel
+  }
+  const callStart = recording.calls.length
+  let processTableCallsAtTimeout = 0
+  const cleanup = scope.cleanup()
+
+  try {
+    const callerResult = await Promise.race([
+      cleanup.then(() => 'cleanup completed'),
+      Promise.resolve('caller timed out')
+    ])
+    expect(callerResult).toBe('caller timed out')
+    expect(recording.sleeping).toBe(true)
+    processTableCallsAtTimeout = processTableCalls(recording.calls.slice(callStart)).length
+  } finally {
+    recording.resumeCleanup()
+  }
+
+  await cleanup
+  const cleanupProcessTableCalls = processTableCalls(recording.calls.slice(callStart))
+  expect(cleanupProcessTableCalls.length > processTableCallsAtTimeout).toBe(true)
+  expectInheritedEnvironmentProcessTableCalls(cleanupProcessTableCalls.slice(processTableCallsAtTimeout))
+})
+
 
 function spawnDetached(command: string[], options: DetachedSpawnOptions): IsolatedSubprocess {
   const { detached, ...nativeOptions } = options
@@ -252,6 +403,8 @@ afterEach(async () => {
   }
   for (const home of homes) rmSync(home, { recursive: true, force: true })
   homes.clear()
+  restoreRecordedProcessApis?.()
+  restoreRecordedProcessApis = undefined
 })
 
 test('cleanup stops the full process tree and guardian after caller-home removal', async () => {
