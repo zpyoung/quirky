@@ -689,7 +689,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       let worktreeId = plan.worktreeId
       let session: Session
       let created = false
-      let createdTerminalSessionId: string | null = null
+      let createdSessionId: string | null = null
       let terminalTabId: string | null = null
 
       try {
@@ -764,6 +764,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
               deferStart: true,
             }) as Session
             created = true
+            createdSessionId = session.id
             effects.push(effect('terminal', 'created', 'agent', session.id))
             ensureActive()
           } else {
@@ -800,7 +801,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
             const result = asRecord(createdTab)
             const sessionId = nonEmptyString(result.session) ? result.session : null
             const tabId = nonEmptyString(result.tab) ? result.tab : null
-            createdTerminalSessionId = sessionId
+            createdSessionId = sessionId
             terminalTabId = tabId
             if (sessionId !== null) {
               created = true
@@ -820,9 +821,11 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
               sessionValue = await call<unknown>(context, 'quirky.session/get', { session: sessionId })
               ensureActive()
             } catch (cause) {
-              ensureActive()
+              const placementError = codeOf(cause) === 'runtime_inactive'
+                ? cause
+                : failure('operation_unknown', `The created session ${sessionId} could not be read: ${messageOf(cause)}`)
               throw attachPlacementData(
-                failure('operation_unknown', `The created session ${sessionId} could not be read: ${messageOf(cause)}`),
+                placementError,
                 effects,
                 residualForTerminal(worktreeId, 'identity_unverifiable', sessionId, tabId),
               )
@@ -861,15 +864,13 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
           identity = await getIdentityActive(context, session.id, ensureActive)
           ensureActive()
         } catch (cause) {
-          ensureActive()
+          const identityError = codeOf(cause) === 'runtime_inactive'
+            ? cause
+            : failure('operation_unknown', `The exact identity of created session ${session.id} could not be established: ${messageOf(cause)}`)
           const identityResidual = terminalTabId === null
             ? [{ kind: 'session', id: session.id, state: 'identity_unverifiable' }]
             : residualForTerminal(worktreeId, 'identity_unverifiable', session.id, terminalTabId)
-          throw attachPlacementData(
-            failure('operation_unknown', `The exact identity of created session ${session.id} could not be established: ${messageOf(cause)}`),
-            effects,
-            identityResidual,
-          )
+          throw attachPlacementData(identityError, effects, identityResidual)
         }
         if (expectedIdentity && (
           !identity.live
@@ -888,8 +889,11 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
             await call(context, 'quirky.terminal/renameTab', { tab: terminalTabId, title: session.title })
             ensureActive()
           } catch (cause) {
+            const renameError = codeOf(cause) === 'runtime_inactive'
+              ? cause
+              : failure('operation_unknown', `Worker session ${session.id} was created but its tab title could not be set: ${messageOf(cause)}`)
             throw attachPlacementData(
-              failure('operation_unknown', `Worker session ${session.id} was created but its tab title could not be set: ${messageOf(cause)}`),
+              renameError,
               effects,
               residualForTerminal(worktreeId, 'created', session.id, terminalTabId),
             )
@@ -897,11 +901,11 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         }
         return placement
       } catch (cause) {
-        ensureActive()
-        if (cause instanceof Error && 'data' in cause && cause.data) throw cause
+        const causeData = asRecord(asRecord(cause).data)
+        if (causeData.effects === effects && Array.isArray(causeData.residualResources)) throw cause
         const residual = worktreeId
-          ? createdTerminalSessionId !== null || terminalTabId !== null
-            ? residualForTerminal(worktreeId, 'created', createdTerminalSessionId ?? undefined, terminalTabId ?? undefined)
+          ? createdSessionId !== null || terminalTabId !== null
+            ? residualForTerminal(worktreeId, 'created', createdSessionId ?? undefined, terminalTabId ?? undefined)
             : residualForWorktree(worktreeId, null)
           : []
         throw attachPlacementData(cause, effects, residual)
@@ -1152,12 +1156,10 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
           session: resource.sessionId,
           expectedIncarnation: resource.processIncarnation,
         }))
-        ensureActive()
         const positivelyClosed = result.ok === true && result.closed === true
           && result.sessionId === resource.sessionId && result.processIncarnation === resource.processIncarnation
         return positivelyClosed ? { closed: true } : { closed: false, reason: typeof result.reason === 'string' ? result.reason : 'The guarded close did not positively confirm the exact session was closed.' }
       } catch (cause) {
-        ensureActive()
         return { closed: false, reason: messageOf(cause) }
       }
     },
@@ -1285,6 +1287,9 @@ async function observeStructured(
     })
     ensureActive()
     return result
+  } catch (cause) {
+    if (controller.signal.aborted && cause instanceof Error && cause.name === 'AbortError') return 'unobserved'
+    throw cause
   } finally {
     clearTimeout(deadlineTimer)
     runtimeSignal.removeEventListener('abort', abortForRuntime)

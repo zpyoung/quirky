@@ -64,7 +64,6 @@ interface TestScope {
 
 let activeScope: TestScope | null = null
 
-
 afterEach(() => {
   activeScope?.restore()
   activeScope = null
@@ -374,6 +373,86 @@ function newScope(startAt?: number): TestScope {
 }
 
 describe('worker runtime supervision adapter', () => {
+  test('retains worktree and setup custody when setup polling is cancelled', async () => {
+    const scope = newScope()
+    const harness = scope.makeHarness()
+    const coordinator = makeSession('terminal', 'running', { id: 'coordinator', worktreeId: 'parent-wt' })
+    const setup = makeSession('terminal', 'running', { id: 'setup-1', worktreeId: 'child-wt' })
+    harness.handlers.set('quirky.session/list', () => [coordinator, setup])
+    harness.handlers.set('quirky.worktree/show', () => ({ id: 'parent-wt', repoId: 'repo-1', path: '/repo', kind: 'git' }))
+    harness.handlers.set('quirky.repo/list', () => [{ id: 'repo-1', name: 'repo', path: '/repo', kind: 'git' }])
+    harness.handlers.set('quirky.worktree/create', () => ({
+      worktree: { id: 'child-wt', repoId: 'repo-1', path: '/repo/child', kind: 'git' },
+      setup: { ran: 'terminal', sessionId: 'setup-1' },
+    }))
+    harness.handlers.set('quirky.repo/hooks', () => ({
+      setup: { text: 'run setup', source: 'repo' }, agentStartup: 'wait-for-setup',
+    }))
+    const params = workerParams('structured', { worktree: 'new-child', timeoutMs: 5_000 })
+    const pending = harness.runtime.place(
+      params,
+      { id: 'task-1', displayName: 'task-1', taskTitle: 'task-1' } as unknown as TaskRow,
+      {} as DispatchRow,
+      { runtimeSessionId: 'coordinator', callerSessionId: 'coordinator' } as unknown as CoordinatorEvidence,
+      () => undefined,
+    ).then(() => null, cause => cause)
+    await scope.flush()
+
+    expect(harness.getCalls('quirky.worktree/create')).toHaveLength(1)
+    expect(scope.timersPending).toBe(1)
+    harness.runtime.dispose()
+    await scope.advance(1_000)
+
+    const cause = await pending
+    expect(errorCode(cause)).toBe('runtime_inactive')
+    expect(cause).toMatchObject({
+      data: {
+        effects: [
+          { kind: 'worktree', action: 'created', role: 'agent', id: 'child-wt' },
+          { kind: 'setup', action: 'started', role: 'setup', id: 'setup-1' },
+        ],
+        residualResources: [{ kind: 'worktree', id: 'child-wt', state: 'created' }],
+      },
+    })
+  })
+
+  test('retains structured session custody when disposed after create resolves', async () => {
+    const scope = newScope()
+    const harness = scope.makeHarness()
+    let releaseCreate!: (session: Session) => void
+    let createStarted = false
+    harness.handlers.set('quirky.structured/create', () => {
+      createStarted = true
+      const held = Promise.withResolvers<Session>()
+      releaseCreate = held.resolve
+      return held.promise
+    })
+    const pending = harness.runtime.place(
+      workerParams('structured'),
+      { id: 'task-1', displayName: 'task-1', taskTitle: 'task-1' } as unknown as TaskRow,
+      {} as DispatchRow,
+      SERVICE_CALLER,
+      () => undefined,
+    ).then(() => null, cause => cause)
+    await scope.flush()
+    expect(createStarted).toBe(true)
+
+    releaseCreate(makeSession('structured', 'starting'))
+    harness.runtime.dispose()
+
+    const cause = await pending
+    expect(errorCode(cause)).toBe('runtime_inactive')
+    expect(cause).toMatchObject({
+      data: {
+        effects: [{ kind: 'terminal', action: 'created', role: 'agent', id: SESSION_ID }],
+        residualResources: [
+          { kind: 'worktree', id: WORKTREE_ID, state: 'created' },
+          { kind: 'terminal', id: SESSION_ID, state: 'created', worktreeId: WORKTREE_ID },
+        ],
+      },
+    })
+  })
+
   test('creates structured sessions deferred through the engine and submits once from its journal baseline', async () => {
     const scope = newScope()
     const harness = scope.makeHarness()
@@ -405,7 +484,24 @@ describe('worker runtime supervision adapter', () => {
     expect(watch.target).toEqual({ sessionId: SESSION_ID, worktreeId: WORKTREE_ID, agent: 'codex' })
     expect(watch.journal()).toEqual({ afterSeq: 7 })
     expect(harness.getCalls('quirky.structured/messages').map(call => call.params.afterSeq)).toEqual([undefined, 7])
+    expect(scope.timersPending).toBe(0)
   })
+  test('rejects structured turn evidence if identity changes after observation', async () => {
+    const scope = newScope()
+    const harness = scope.makeHarness()
+    const placement = await placeWorker(harness)
+    let identityReads = 0
+    const current = harness.identities.get(SESSION_ID)!
+    harness.handlers.set('quirky.session/identity', () => {
+      identityReads++
+      return identityReads >= 2 ? { ...current, processIncarnation: 'inc-2' } : current
+    })
+    harness.journalResponses.push([message(7, 'user', 'prior')], [message(8, 'assistant', 'started')])
+
+    expect(await harness.runtime.submit(placement, 'prompt', 'operation-1', scope.now + 5_000)).toBe('unobserved')
+    expect(identityReads).toBe(2)
+  })
+
   test('accepts tool and result rows as structured turn evidence', async () => {
     const scope = newScope()
     for (const [index, role] of ['tool', 'result'].entries()) {
@@ -415,7 +511,6 @@ describe('worker runtime supervision adapter', () => {
       expect(await harness.runtime.submit(placement, 'prompt', `operation-${index}`, scope.now + 5_000)).toBe('observed')
     }
   })
-
 
   test('maps an invalid baseline journal to invalid_runtime_response before the pointer is accepted', async () => {
     const scope = newScope()
@@ -535,6 +630,23 @@ describe('worker runtime supervision adapter', () => {
     expect(await submission).toBe('observed')
     expect(waits).toBe(2)
     expect(scope.timersPending).toBe(0)
+    expect(harness.getEngineCalls('waitTerminal')).toHaveLength(1)
+  })
+  test('returns unobserved when stale idle evidence persists to the terminal deadline', async () => {
+    const scope = newScope()
+    const harness = scope.makeHarness()
+    const placement = await placeWorker(harness, 'terminal')
+    const session = harness.sessions.get(SESSION_ID)!
+    ;(session as unknown as { agentStatus: { evidenceAt: number } }).agentStatus = { evidenceAt: 10_000 }
+    harness.handlers.set('quirky.agent-status/wait', () => ({ status: 'matched', state: 'idle' }))
+    const submission = harness.runtime.submit(placement, 'prompt', 'operation-1', scope.now + 5_000)
+    await scope.flush()
+
+    expect(harness.getEngineCalls('waitTerminal')).toHaveLength(1)
+    await scope.advance(5_000)
+
+    expect(await submission).toBe('unobserved')
+    expect(harness.getEngineCalls('waitTerminal')).toHaveLength(1)
   })
 
   test('maps terminal turn observation categories and never waits past an expired deadline', async () => {
@@ -550,10 +662,15 @@ describe('worker runtime supervision adapter', () => {
     )
 
     expect(await harness.runtime.submit(placement, 'one', 'operation-1', scope.now + 5_000)).toBe('observed')
+    expect(harness.getEngineCalls('waitTerminal')).toHaveLength(1)
     expect(await harness.runtime.submit(placement, 'two', 'operation-2', scope.now + 5_000)).toBe('permission')
+    expect(harness.getEngineCalls('waitTerminal')).toHaveLength(2)
     expect(await harness.runtime.submit(placement, 'three', 'operation-3', scope.now + 5_000)).toBe('unsupported')
+    expect(harness.getEngineCalls('waitTerminal')).toHaveLength(3)
     expect(await harness.runtime.submit(placement, 'four', 'operation-4', scope.now + 5_000)).toBe('unsupported')
+    expect(harness.getEngineCalls('waitTerminal')).toHaveLength(4)
     expect(await harness.runtime.submit(placement, 'five', 'operation-5', scope.now + 5_000)).toBe('unobserved')
+    expect(harness.getEngineCalls('waitTerminal')).toHaveLength(5)
     const beforeExpired = harness.getEngineCalls('waitTerminal').length
     expect(await harness.runtime.submit(placement, 'six', 'operation-6', scope.now)).toBe('unobserved')
 
@@ -644,8 +761,9 @@ describe('worker runtime supervision adapter', () => {
   test('aborts a held structured journal probe at the absolute deadline and clears its timer', async () => {
     const scope = newScope()
     const harness = scope.makeHarness()
+    const logs: string[] = []
+    Object.assign(harness.context, { log: (entry: string) => logs.push(entry) })
     const placement = await placeWorker(harness)
-    harness.journalResponses.push([message(7, 'user', 'prior')])
     let releaseRead!: (rows: StructuredMessage[]) => void
     let readStarted = false
     harness.handlers.set('quirky.structured/messages', params => {
@@ -668,6 +786,30 @@ describe('worker runtime supervision adapter', () => {
     expect(harness.getCalls('quirky.structured/messages')).toHaveLength(callsAtDeadline)
     expect(harness.getCalls('quirky.session/pointer')).toHaveLength(1)
     expect(scope.timersPending).toBe(0)
+    expect(logs).toEqual([])
+  })
+  test('logs provider AbortErrors while the structured watch is still active', async () => {
+    const scope = newScope()
+    const harness = scope.makeHarness()
+    const logs: string[] = []
+    Object.assign(harness.context, { log: (entry: string) => logs.push(entry) })
+    const placement = await placeWorker(harness)
+    const current = harness.identities.get(SESSION_ID)!
+    let identityReads = 0
+    const providerAbort = new Error('provider callback aborted')
+    providerAbort.name = 'AbortError'
+    harness.handlers.set('quirky.session/identity', () => {
+      identityReads++
+      if (identityReads >= 2) throw providerAbort
+      return current
+    })
+    harness.journalResponses.push(
+      [message(7, 'user', 'prior')],
+      [message(8, 'user', 'prompt', { method: 'turn/start', threadId: THREAD_ID })],
+    )
+
+    expect(await harness.runtime.submit(placement, 'prompt', 'operation-1', scope.now + 5_000)).toBe('unobserved')
+    expect(logs).toEqual([`Turn-start observation for ${SESSION_ID} was inconclusive: provider callback aborted`])
   })
 
   test('disposal fences a late terminal readiness reply and disposes the engine once', async () => {
@@ -700,8 +842,9 @@ describe('worker runtime supervision adapter', () => {
   test('disposal after pointer acceptance returns unobserved without replaying or trusting a late journal row', async () => {
     const scope = newScope()
     const harness = scope.makeHarness()
+    const logs: string[] = []
+    Object.assign(harness.context, { log: (entry: string) => logs.push(entry) })
     const placement = await placeWorker(harness)
-    harness.journalResponses.push([message(7, 'user', 'prior')])
     let releaseRead!: (rows: StructuredMessage[]) => void
     let readStarted = false
     harness.handlers.set('quirky.structured/messages', params => {
@@ -725,6 +868,7 @@ describe('worker runtime supervision adapter', () => {
     expect(harness.calls).toHaveLength(callsAfterAbort)
     expect(harness.getEngineCalls('dispose')).toHaveLength(1)
     expect(scope.timersPending).toBe(0)
+    expect(logs).toEqual([])
   })
 
   test('rechecks cancellation after structured readiness identity awaits', async () => {
@@ -772,9 +916,19 @@ describe('worker runtime supervision adapter', () => {
     })))
 
     const beforeMismatch = harness.getEngineCalls('stop').length
+    const beforeMismatchRpc = harness.getCalls('quirky.structured/stop').length
     harness.identities.set(SESSION_ID, makeIdentity('structured', { processIncarnation: 'other-incarnation' }))
     expect((await harness.runtime.close(terminalResource('structured'))).closed).toBe(false)
     expect(harness.getEngineCalls('stop')).toHaveLength(beforeMismatch)
+    expect(harness.getCalls('quirky.structured/stop')).toHaveLength(beforeMismatchRpc)
+
+    harness.identities.set(SESSION_ID, makeIdentity('structured', { live: false }))
+    expect((await harness.runtime.close(terminalResource('structured'))).closed).toBe(false)
+    expect(harness.getCalls('quirky.structured/stop')).toHaveLength(beforeMismatchRpc)
+
+    harness.identities.set(SESSION_ID, makeIdentity('structured', { worktreeId: 'other-worktree' }))
+    expect((await harness.runtime.close(terminalResource('structured'))).closed).toBe(false)
+    expect(harness.getCalls('quirky.structured/stop')).toHaveLength(beforeMismatchRpc)
 
     harness.identities.set(SESSION_ID, makeIdentity('terminal'))
     harness.handlers.set('quirky.session/close', (_params) => exactCloseReceipt(SESSION_ID, INCARNATION))
@@ -782,6 +936,27 @@ describe('worker runtime supervision adapter', () => {
     expect(harness.getEngineCalls('stop').at(-1)!.input).toEqual({
       kind: 'terminal', session: SESSION_ID, expectedIncarnation: INCARNATION,
     })
+  })
+  test('returns an exact guarded close receipt after disposal', async () => {
+    const scope = newScope()
+    const harness = scope.makeHarness()
+    harness.identities.set(SESSION_ID, makeIdentity('structured'))
+    let releaseStop!: (receipt: unknown) => void
+    let stopStarted = false
+    harness.handlers.set('quirky.structured/stop', () => {
+      stopStarted = true
+      const held = Promise.withResolvers<unknown>()
+      releaseStop = held.resolve
+      return held.promise
+    })
+
+    const closing = harness.runtime.close(terminalResource('structured'))
+    for (let turn = 0; turn < 30 && !stopStarted; turn++) await Promise.resolve()
+    expect(stopStarted).toBe(true)
+    harness.runtime.dispose()
+    releaseStop(exactCloseReceipt(SESSION_ID, INCARNATION))
+
+    expect(await closing).toEqual({ closed: true })
   })
 
   test('inspects live worker state with one zero-time engine wait and preserves observation categories', async () => {
