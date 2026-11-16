@@ -32,6 +32,7 @@ import type {
   StructuredLaunchOptions,
   StructuredRunner,
   StructuredRunnerFactory,
+  StructuredSettings,
   StructuredStartOptions
 } from './runner'
 
@@ -374,10 +375,16 @@ export function activate(context: PluginContext): void {
         const runner = runnerBySession.get(sessionId) ?? runnerFor(entry.agent)
         entry.hasSent = true
         const images = revalidatedImages(sessionId, next.images)
-        await runner.send(sessionId, next.text, {
-          ...(images === undefined ? {} : { images }),
-          queuedId: next.id
-        })
+        const undo = await openTurnBaseline(sessionId)
+        try {
+          await runner.send(sessionId, next.text, {
+            ...(images === undefined ? {} : { images }),
+            queuedId: next.id
+          })
+        } catch (error) {
+          undo()
+          throw error
+        }
       } catch (error) {
         queue.restore(sessionId, taken)
         emitQueue(sessionId)
@@ -386,6 +393,24 @@ export function activate(context: PluginContext): void {
     }).catch((error: unknown) => {
       if (active) context.log(`could not flush the queue of ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
     })
+
+  /**
+   * Takes the turn's baseline snapshot before the message reaches the agent, so early agent edits
+   * cannot land in it. Returns an undo for a send that then fails, so no turn stays open without one.
+   */
+  const openTurnBaseline = async (sessionId: string): Promise<() => void> => {
+    const entry = live.get(sessionId)
+    if (!entry || entry.turnOpen) return () => {}
+    entry.turnOpen = true
+    const start = snapshotTree(entry)
+    entry.turnStart = start
+    await start
+    return () => {
+      if (entry.turnStart !== start || entry.status === 'working') return
+      entry.turnOpen = false
+      entry.turnStart = null
+    }
+  }
 
   const finishTurn = async (
     sessionId: string,
@@ -628,6 +653,7 @@ export function activate(context: PluginContext): void {
     appendMessage,
     setStatus,
     createAsk,
+    cancelAsk,
     async setProviderSession(sessionId, providerSession) {
       await persistProviderSession(sessionId, providerSession)
     },
@@ -777,7 +803,13 @@ export function activate(context: PluginContext): void {
       .then(async () => {
         const entry = live.get(session.id)
         if (!active || !entry || entry.stopping) return
-        await runner.start(session, prompt, options)
+        const undo = prompt === undefined || prompt === '' ? () => {} : await openTurnBaseline(session.id)
+        try {
+          await runner.start(session, prompt, options)
+        } catch (error) {
+          undo()
+          throw error
+        }
       })
       .catch((error: unknown) => startupFailed(session.id, token, error))
     startTasks.set(session.id, task)
@@ -1212,8 +1244,14 @@ export function activate(context: PluginContext): void {
     }
     if (entry) entry.hasSent = true
     const runner = runnerBySession.get(session.id) ?? runnerFor(session.agent)
-    if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, text)
-    else await runner.send(session.id, text, { images: extras.images })
+    const undo = await openTurnBaseline(session.id)
+    try {
+      if (extras.images === undefined || extras.images.length === 0) await runner.send(session.id, text)
+      else await runner.send(session.id, text, { images: extras.images })
+    } catch (error) {
+      undo()
+      throw error
+    }
     if (receipt) journal.completeSendReceipt(receipt.operationId, Date.now())
     return { ok: true }
   })
@@ -1312,6 +1350,51 @@ export function activate(context: PluginContext): void {
     return found
   }
 
+  const configure: MethodHandler = async (params) => {
+    const unsupported = Object.keys(params).find((key) => !['session', 'model', 'effort', 'permissionMode', 'planMode'].includes(key))
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured configure does not support ${unsupported}`)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    for (const key of ['model', 'effort', 'permissionMode'] as const) {
+      const value = params[key]
+      if (value !== undefined && (typeof value !== 'string' || value === '' || value.length > 128)) {
+        throw context.error('invalid-params', `${key} must be a string of 1 to 128 characters`)
+      }
+    }
+    if (params.planMode !== undefined && typeof params.planMode !== 'boolean') throw context.error('invalid-params', 'planMode must be a boolean')
+    const session = await requireStructured(params.session)
+    if (!isStructuredAgent(session.agent)) throw context.error('conflict', `structured sessions cannot configure provider ${session.agent}`)
+    const support = capabilitiesFor(session.agent)!
+    const refuse = (capability: { ok: boolean; reason?: string }, name: string): void => {
+      if (!capability.ok) throw context.error('conflict', capability.reason ?? `${session.agent} cannot change ${name}`)
+    }
+    if (params.model !== undefined) refuse(support.model, 'model')
+    if (params.effort !== undefined) refuse(support.effort, 'effort')
+    if (params.planMode !== undefined) refuse(support.planMode, 'plan mode')
+    if (params.permissionMode !== undefined) {
+      refuse(support.permissionModes, 'permission mode')
+      if (support.permissionModes.ok && !support.permissionModes.modes.includes(params.permissionMode as string)) {
+        throw context.error('invalid-params', `permissionMode must be one of ${support.permissionModes.modes.join(', ')}`)
+      }
+    }
+    await startTasks.get(session.id)
+    ensureActive()
+    const entry = live.get(session.id)
+    const runner = runnerBySession.get(session.id)
+    if (!entry || entry.stopping || entry.status === 'exited' || !runner) throw context.error('conflict', 'structured session is not active')
+    if (!runner.configure) throw context.error('conflict', `${session.agent} cannot change settings after it starts`)
+    const picks: StructuredSettings = {
+      ...(params.model === undefined ? {} : { model: params.model as string }),
+      ...(params.effort === undefined ? {} : { effort: params.effort as string }),
+      ...(params.permissionMode === undefined ? {} : { permissionMode: params.permissionMode as string }),
+      ...(params.planMode === undefined ? {} : { planMode: params.planMode as boolean })
+    }
+    try {
+      return { ok: true, settings: await runner.configure(session.id, picks) }
+    } catch (error) {
+      throw context.error('conflict', error instanceof Error ? error.message : String(error))
+    }
+  }
+
   const queuedRequest = (params: Record<string, unknown>, extra: string[] = []): { session: string; id?: string } => {
     const unsupported = Object.keys(params).find((key) => key !== 'session' && !extra.includes(key))
     if (unsupported !== undefined) throw context.error('invalid-params', `structured queue does not support ${unsupported}`)
@@ -1368,10 +1451,16 @@ export function activate(context: PluginContext): void {
         const runner = runnerBySession.get(session.id) ?? runnerFor(entry.agent)
         entry.hasSent = true
         const images = revalidatedImages(session.id, taken.message.images)
-        await runner.send(session.id, taken.message.text, {
-          ...(images === undefined ? {} : { images }),
-          queuedId: taken.message.id
-        })
+        const undo = await openTurnBaseline(session.id)
+        try {
+          await runner.send(session.id, taken.message.text, {
+            ...(images === undefined ? {} : { images }),
+            queuedId: taken.message.id
+          })
+        } catch (error) {
+          undo()
+          throw error
+        }
       } catch (error) {
         queue.restore(session.id, taken)
         emitQueue(session.id)
@@ -1525,6 +1614,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/dequeue', dequeue)
   context.provide('method:quirky.structured/editQueued', editQueued)
   context.provide('method:quirky.structured/steer', steer)
+  context.provide('method:quirky.structured/configure', configure)
   context.provide('method:quirky.structured/stop', stop)
   context.provide('method:quirky.structured/interrupt', interrupt)
   context.provide('method:quirky.structured/stopOwned', stopOwned)

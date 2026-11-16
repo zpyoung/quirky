@@ -70,6 +70,7 @@ function makeSetup(): Setup {
     setStatus(_sessionId, status) {
       statuses.push(status)
     },
+    async cancelAsk() {},
     createAsk(spec, sessionId) {
       const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
       asks.push({ spec, sessionId, resolve })
@@ -270,6 +271,17 @@ describe('Codex app-server runner', () => {
       { threadId: 'scripted-thread', input: [{ type: 'text', text: 'second' }], model: 'gpt-5.5', effort: 'xhigh' }
     ])
   })
+  test('the next turn carries the model and effort picked while the session runs', async () => {
+    await setup.runner.start(setup.session, 'first', { model: 'gpt-5.5', effort: 'low' })
+    await until(() => setup.statuses.includes('done'))
+    const result = await setup.runner.configure!(setup.session.id, { model: 'gpt-5.6', effort: 'high' })
+    expect(result).toEqual({ model: 'gpt-5.6', effort: 'high' })
+    await setup.runner.send(setup.session.id, 'second')
+    await until(() => setup.fixture.requests().filter((request) => request.method === 'turn/start').length === 2)
+    const second = setup.fixture.requests().filter((request) => request.method === 'turn/start')[1]!
+    expect(second.params).toMatchObject({ model: 'gpt-5.6', effort: 'high' })
+  })
+
   test('starts a native thread without an initial turn until the caller is attached', async () => {
     await setup.runner.start(setup.session, undefined)
     expect(setup.fixture.requests().map((request) => request.method)).toEqual([

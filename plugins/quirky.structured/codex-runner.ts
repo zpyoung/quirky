@@ -18,6 +18,7 @@ import type {
   StructuredLaunchOptions,
   StructuredRunner,
   StructuredSendOptions,
+  StructuredSettings,
   StructuredStartOptions
 } from './runner'
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan, type NativeQuestionPlan } from './native-questions'
@@ -200,6 +201,17 @@ class CodexRunner implements StructuredRunner {
       throw new Error(`${failure.message}; stderr: ${stderrTail}`, { cause: failure })
     } finally {
       if (this.starting.get(session.id) === startup) this.starting.delete(session.id)
+    }
+  }
+
+  async configure(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.failed) throw new Error('session is not running')
+    if (settings.model !== undefined) run.options = { ...run.options, model: settings.model }
+    if (settings.effort !== undefined) run.options = { ...run.options, effort: settings.effort }
+    return {
+      ...(run.options.model === undefined ? {} : { model: run.options.model }),
+      ...(run.options.effort === undefined ? {} : { effort: run.options.effort })
     }
   }
 

@@ -12,6 +12,7 @@ const OK = { ok: true } as const
 const CLAUDE: AgentCapabilities = {
   agent: 'claude',
   steer: OK,
+  model: OK,
   planMode: OK,
   permissionModes: { ok: true, modes: ['default'] },
   images: OK,
@@ -22,6 +23,7 @@ const CLAUDE: AgentCapabilities = {
 const PI: AgentCapabilities = {
   agent: 'pi',
   steer: { ok: false, reason: 'pi steers only between tool calls' },
+  model: { ok: false, reason: 'Set when the chat starts' },
   planMode: { ok: false, reason: 'pi has no plan mode' },
   permissionModes: { ok: false, reason: 'pi has no permission modes' },
   images: OK,

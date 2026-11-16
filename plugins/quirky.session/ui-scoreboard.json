@@ -404,6 +404,22 @@
       "state": "error",
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "context.toast('Could not change the setting', messageOf(error))"
+      },
+      "anchor": "context.toast(",
+      "render": {
+        "component": "toast",
+        "call": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.toast('Could not change the setting', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
         "quote": "context.toast('Could not attach', unsupported)"
       },
       "anchor": "context.toast(",
@@ -1753,11 +1769,22 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "onPicks={(next) => {"
+        "quote": "onPicks={(next) => void pick(next)}"
       },
       "anchor": "onPicks",
-      "transient": "draft",
-      "reason": "Records the unsent model, effort, mode and plan picks for the next turn."
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/configure', { session: session.id, ...changes })"
+        },
+        "target": "quirky.structured/configure",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "  const pick = async (next: Picks) => {\n    const before = picks\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),\n      ...(next.plan !== before.plan ? { planMode: next.plan } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settings = result?.settings\n      if (settings) {\n        setPicks((current) => ({\n          model: settings.model ?? current.model,\n          effort: settings.effort ?? current.effort,\n          mode: settings.permissionMode ?? current.mode,\n          plan: settings.planMode ?? current.plan\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      context.toast('Could not change the setting', messageOf(error))\n    }\n  }"
+          }
+        ]
+      }
     },
     {
       "site": {

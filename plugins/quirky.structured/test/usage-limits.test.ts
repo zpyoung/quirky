@@ -81,6 +81,7 @@ function contextFor(options: { codexPath?: string; claudePath?: string } = {}) {
     setStatus(_sessionId, status) {
       statuses.push(status)
     },
+    async cancelAsk() {},
     async createAsk() {
       throw new Error('no approval expected in usage-limit tests')
     },

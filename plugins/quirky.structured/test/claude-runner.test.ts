@@ -37,6 +37,7 @@ function makeContext(): StructuredContext {
     setStatus(_id, status) {
       statuses.push(status)
     },
+    async cancelAsk() {},
     createAsk(spec, sessionId) {
       const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
       asks.push({ spec, sessionId, resolve })
@@ -110,6 +111,29 @@ async function begin(prompt = 'hello') {
   await runner.start(session, prompt)
   return queries[0]
 }
+
+describe('configure', () => {
+  test('plan mode, model and effort reach the running query', async () => {
+    const query = await begin()
+    const result = await runner.configure!(session.id, { planMode: true, model: 'opus', effort: 'high' })
+    expect(query.permissionModes).toEqual(['plan'])
+    expect(query.models).toEqual(['opus'])
+    expect(query.flagSettings).toEqual([{ effortLevel: 'high' }])
+    expect(result).toMatchObject({ model: 'opus', effort: 'high', planMode: true })
+  })
+
+  test('turning plan mode off restores the picked permission mode', async () => {
+    const query = await begin()
+    await runner.configure!(session.id, { permissionMode: 'acceptEdits' })
+    await runner.configure!(session.id, { planMode: true })
+    await runner.configure!(session.id, { planMode: false })
+    expect(query.permissionModes).toEqual(['acceptEdits', 'plan', 'acceptEdits'])
+  })
+
+  test('a session that is not running refuses', async () => {
+    await expect(runner.configure!('s_none', { planMode: true })).rejects.toThrow('session is not running')
+  })
+})
 
 describe('start', () => {
   test('runs the query with the worktree and resolved executable', async () => {

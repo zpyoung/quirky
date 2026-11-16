@@ -7,6 +7,9 @@ export class FakeQuery implements ClaudeQuery {
   /** Makes `interrupt` never settle, like an agent that ignores it. */
   hangInterrupt = false
   closed = 0
+  permissionModes: string[] = []
+  models: (string | undefined)[] = []
+  flagSettings: Record<string, unknown>[] = []
   private buffer: any[] = []
   private waiting: { resolve: (r: IteratorResult<any>) => void; reject: (e: Error) => void } | null = null
   private failure: Error | null = null
@@ -40,6 +43,18 @@ export class FakeQuery implements ClaudeQuery {
   async interrupt() {
     this.interrupted++
     if (this.hangInterrupt) await new Promise(() => {})
+  }
+
+  async setPermissionMode(mode: string) {
+    this.permissionModes.push(mode)
+  }
+
+  async setModel(model?: string) {
+    this.models.push(model)
+  }
+
+  async applyFlagSettings(settings: Record<string, unknown>) {
+    this.flagSettings.push(settings)
   }
 
   close() {

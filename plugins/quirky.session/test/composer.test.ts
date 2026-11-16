@@ -12,6 +12,7 @@ const OK = { ok: true } as const
 const CLAUDE: AgentCapabilities = {
   agent: 'claude',
   steer: OK,
+  model: OK,
   planMode: OK,
   permissionModes: { ok: true, modes: ['default', 'acceptEdits'] },
   images: OK,
@@ -22,6 +23,7 @@ const CLAUDE: AgentCapabilities = {
 const PI: AgentCapabilities = {
   agent: 'pi',
   steer: { ok: false, reason: 'pi steers only between tool calls' },
+  model: { ok: false, reason: 'Set when the chat starts' },
   planMode: { ok: false, reason: 'pi has no plan mode' },
   permissionModes: { ok: false, reason: 'pi has no permission modes' },
   images: OK,
@@ -255,7 +257,8 @@ describe('the composer controls', () => {
     expect(effort.disabled).toBe(true)
     expect(effort.title).toBe('pi takes no effort setting')
     expect(buttonNamed('Attach images')!.disabled).toBe(false)
-    expect(control('Model')!.disabled).toBe(false)
+    expect(control('Model')!.disabled).toBe(true)
+    expect(control('Model')!.title).toBe('Set when the chat starts')
     for (const disabled of host!.querySelectorAll<HTMLElement>('select:disabled, button:disabled')) {
       if (disabled.getAttribute('aria-label') === 'Send') continue
       if (disabled.textContent?.trim() === 'Send') continue
@@ -287,11 +290,33 @@ describe('the composer controls', () => {
   })
 
   test('toggles plan mode', async () => {
-    await mount()
+    await mount({ 'quirky.structured/configure': () => ({ ok: true, settings: { planMode: true } }) })
     const plan = buttonNamed('Plan mode')!
     expect(plan.getAttribute('aria-pressed')).toBe('false')
     await click(plan)
     expect(plan.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  test('changing plan mode tells the daemon and keeps the pick across re-renders', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true, settings: { planMode: true, permissionMode: 'default' } }) })
+    await click(buttonNamed('Plan mode'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure')).toEqual([
+      { method: 'quirky.structured/configure', params: { session: 's1', planMode: true } }
+    ])
+    expect(buttonNamed('Plan mode')!.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  test('a refused change toasts and puts the pick back', async () => {
+    await mount({
+      'quirky.structured/configure': () => {
+        throw new Error('not now')
+      }
+    })
+    await click(buttonNamed('Plan mode'))
+    await settle()
+    expect(buttonNamed('Plan mode')!.getAttribute('aria-pressed')).toBe('false')
+    expect(fake.toasts).toEqual([{ title: 'Could not change the setting', body: 'not now' }])
   })
 
   const dropOn = async (target: Element, files: File[], types: string[] = ['Files']) => {

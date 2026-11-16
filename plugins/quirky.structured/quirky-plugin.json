@@ -287,6 +287,38 @@
         "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
       },
       {
+        "id": "configure",
+        "description": "Applies composer picks to a running session: model and effort, permission mode, plan mode. Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session": { "type": "string" },
+            "model": { "type": "string" },
+            "effort": { "type": "string" },
+            "permissionMode": { "type": "string" },
+            "planMode": { "type": "boolean" }
+          },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": { "type": "boolean" },
+            "settings": {
+              "type": "object",
+              "properties": {
+                "model": { "type": "string" },
+                "effort": { "type": "string" },
+                "permissionMode": { "type": "string" },
+                "planMode": { "type": "boolean" }
+              }
+            }
+          },
+          "required": ["ok", "settings"]
+        }
+      },
+      {
         "id": "steer",
         "description": "Removes a queued message and sends it now. An agent that cannot be steered fails with conflict (reason steer-unsupported); an id that is not queued fails with not-found.",
         "params": {
