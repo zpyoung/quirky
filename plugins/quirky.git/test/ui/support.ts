@@ -122,6 +122,12 @@ export function fakeContext(layout: UiLayout = layoutFor(null)): Fake {
       mountView: () => () => {}
     }
   }
+  fake.handlers['ui.window.self'] = () => ({ connId: 1 })
+  fake.handlers['ui.window.command.run'] = async (params) => {
+    const handler = fake.provided.get(String(params.id))
+    if (typeof handler !== 'function') throw new Error(`no command ${String(params.id)}`)
+    return { result: await handler(params.args) }
+  }
   void activate(fake.context)
   return fake
 }

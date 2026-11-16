@@ -1,11 +1,29 @@
 import { expect, test } from 'bun:test'
-import { existsSync, mkdirSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { createProcessScope } from '../test-support/process-scope'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 
 const root = resolve(import.meta.dir, '../..')
+function sourceOutputs(): unknown[] {
+  const entries: unknown[] = []
+  const visit = (path: string) => {
+    const stat = lstatSync(path, { throwIfNoEntry: false })
+    if (!stat) { entries.push([path, 'absent']); return }
+    entries.push([path, stat.mode, stat.size, stat.mtimeMs, stat.ctimeMs,
+      stat.isSymbolicLink() ? readlinkSync(path) : stat.isFile() ? createHash('sha256').update(readFileSync(path)).digest('hex') : 'directory'])
+    if (stat.isDirectory()) for (const name of readdirSync(path).sort()) visit(join(path, name))
+  }
+  visit(join(root, 'packages/ui/dist'))
+  for (const plugin of readdirSync(join(root, 'plugins')).sort()) {
+    if (statSync(join(root, 'plugins', plugin)).isDirectory()) visit(join(root, 'plugins', plugin, 'dist'))
+  }
+  return entries
+}
+
 test('the real two-window CLI rehearsal observes file placement and cleans its owned processes', async () => {
+  const before = sourceOutputs()
   const scope = createProcessScope()
   const env = createIsolatedRuntimeEnvironment(scope.home, { repoRoot: root })
   mkdirSync(env.TMPDIR!, { recursive: true })
@@ -20,10 +38,21 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
     console.info(JSON.stringify({
       elapsedMs: report.elapsedMs,
       buildElapsedMs: report.buildElapsedMs,
+      startup: report.startup,
+      cleanup: report.cleanup,
       observationElapsedMs: Object.fromEntries(report.observations.map((entry: { id: string; evidence: { elapsedMs: number } }) => [entry.id, entry.evidence.elapsedMs]))
     }))
     expect(report.parityComplete).toBe(true)
     expect(report).toMatchObject({ schemaVersion: 1, scope: 'goal-11-cli-files', ok: true, cleanup: { ok: true } })
+    expect(report.startup.phase).toBe('ready')
+    expect(report.startup.buildElapsedMs).toBe(report.buildElapsedMs)
+    expect(report.startup.assets).toEqual({ uiDir: '<cli-home>/ui-dist', pluginsDir: '<cli-home>/builtin-plugins' })
+    const ready = report.startup.renderer.filter((entry: { stage: string }) => entry.stage === 'ready')
+    expect(ready.map((entry: { index: number; connId: number; worktree: string }) =>
+      [entry.index, entry.connId, entry.worktree])).toEqual(
+      report.observations[0].before.map((entry: { connId: number; windowWorktree: string }, index: number) =>
+        [index, entry.connId, entry.windowWorktree]))
+    expect(report.cleanup.evidence.homeRemoved).toBe(true)
     expect(report.error).toBeUndefined()
     expect(report.rows.map((row: { id: string }) => row.id)).toEqual(['file-diff', 'file-open', 'file-open-changed', 'file-open-render'])
     const expectedObservations: Record<string, string[]> = {
@@ -312,9 +341,13 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
     expect(sentinel.exitCode).toBeNull()
   } finally {
     clearTimeout(watchdog)
-    sentinel.kill('SIGKILL')
-    await sentinel.exited
-    await scope.cleanup()
+    try {
+      sentinel.kill('SIGKILL')
+      await sentinel.exited
+      await scope.cleanup()
+    } finally {
+      expect(sourceOutputs()).toEqual(before)
+    }
   }
 }, 380_000)
 

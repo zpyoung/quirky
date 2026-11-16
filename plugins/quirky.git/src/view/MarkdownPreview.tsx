@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { EmptyState, StatusDot } from '@quirky/ui'
+import { InlineError, NoticeLine } from '@quirky/ui'
 import type { UiPluginContext } from '@quirky/protocol'
 
 import { messageOf } from './data'
@@ -73,14 +73,14 @@ export function MarkdownPreview({ context, worktree, path, revision, textOf }: M
     }
   }, [context, worktree, path, revision])
 
-  if (rendered.status === 'failed') {
+  if (rendered.status === 'failed') return <InlineError message={`Markdown preview unavailable: ${rendered.message}`} />
+  if (rendered.status === 'rendering') {
     return (
-      <div role="alert">
-        <EmptyState message={`Markdown preview unavailable: ${rendered.message}`} icon={<StatusDot status="failing" />} />
+      <div role="status">
+        <NoticeLine>Rendering Markdown...</NoticeLine>
       </div>
     )
   }
-  if (rendered.status === 'rendering') return <p className="ui-text-muted git-review__notice">Rendering Markdown...</p>
   return (
     <div
       data-markdown-preview

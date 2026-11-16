@@ -159,12 +159,19 @@ export const bodyAgainst = (ui: CardUi): 'base' | 'reviewed' => (ui.mark === 'ch
  * so storing the result does not render again.
  */
 export function reconcileCards(ui: Record<string, CardUi>, items: readonly Pick<ReviewItem, 'key' | 'mark'>[]): Record<string, CardUi> {
-  let next: Record<string, CardUi> | null = null
-  for (const item of items) {
-    const stored = ui[item.key]
-    if (stored !== undefined && stored.mark !== item.mark) (next ??= { ...ui })[item.key] = freshCard(item.mark)
-  }
-  return next ?? ui
+  const marks = new Map(items.map((item) => [item.key, item.mark]))
+  let changed = false
+  const next = Object.fromEntries(
+    Object.entries(ui).map(([key, stored]) => {
+      const mark = marks.get(key)
+      if (mark !== undefined && stored.mark !== mark) {
+        changed = true
+        return [key, freshCard(mark)]
+      }
+      return [key, stored]
+    })
+  )
+  return changed ? next : ui
 }
 
 /**

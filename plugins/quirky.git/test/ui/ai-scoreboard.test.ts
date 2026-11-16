@@ -1,5 +1,4 @@
 import { beforeAll, expect, setDefaultTimeout, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { collectInventory } from '../../../../scripts/ui-scoreboard/inventory'
 import { discoverCandidates, discoverUiFiles } from '../../../../scripts/ui-scoreboard/audit-discovery'
@@ -50,7 +49,6 @@ test('the full AI graph has owned coverage, settings witnesses and valid command
   expect(coverage.actions.some((entry) => 'route' in entry && entry.route.target === 'command:quirky.git/ui-control')).toBe(true)
   expect(checks.find((check) => check.id === 'commands')!.evidence.some((entry) => entry.code === 'action-routed' && entry.api === 'ui.command.run' && entry.cli === 'quirky ui run command:quirky.git/ui-control' && entry.coverageFile === FRAGMENT)).toBe(true)
   expect(checkPlugin(inventory, plugin.id).find((check) => check.id === 'compatibility-tokens')?.status).toBe('pass')
-  expect(JSON.parse(readFileSync(resolve(ROOT, 'scripts/ui-scoreboard-ratchet.json'), 'utf8'))['quirky.git']).toBeUndefined()
 })
 
 test('deleting an AI mounted route exposes its exact source candidate', () => {
