@@ -1,4 +1,14 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
+import * as supervision from '@quirky/supervision'
+import type {
+  CreateInput,
+  JournalRequest,
+  ResumeInput,
+  SendInput,
+  StopInput,
+  StructuredWatch,
+  SupervisionEngine
+} from '@quirky/supervision'
 import { mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -26,6 +36,20 @@ type FakeCalls = {
   stops: string[]
   ownedStops: { key: string; stopped: string[]; unknown: string[] }[]
 }
+type EngineCalls = {
+  creates: CreateInput[]
+  resumes: ResumeInput[]
+  sends: SendInput[]
+  reads: JournalRequest[]
+  watches: number
+  stops: StopInput[]
+  ownedStops: { key: string }[]
+  disposals: number
+}
+type EngineSpy = {
+  calls: EngineCalls
+  restore: () => void
+}
 type Fixture = {
   root: string
   reportDirectory: string
@@ -34,6 +58,8 @@ type Fixture = {
   calls: FakeCalls
   controller: OwnerController
   controllers: OwnerController[]
+  engines: EngineSpy[]
+  engineEvents: string[]
   now: () => number
   setNow: (value: number) => void
   snapshot: Snapshot
@@ -43,14 +69,92 @@ type Fixture = {
   parks: { escalationId: string; detail: string }[]
   loseNextCreateReply: () => void
   loseNextSendReply: () => void
+  setNextCreateReply: (reply: unknown) => void
+  setNextSendReply: (reply: unknown) => void
   breakNativeIdentity: (sessionId: string) => void
+  setSessionStatus: (sessionId: string, status: Session['status']) => void
+  delayNextCreate: () => { entered: Promise<void>; release: () => void }
+  delayNextResume: () => { entered: Promise<void>; release: () => void }
   delayNextSend: () => { entered: Promise<void>; release: () => void }
+  delayNextOwnedStop: () => { entered: Promise<void>; release: () => void }
   setDispatchAllowed: (allowed: boolean) => void
   restart: () => OwnerController
   addWatcher: (watcherId: string) => OwnerEnrollment
   removeWatcher: (watcherId: string) => void
   createIndependentSession: () => Promise<string>
   setNextOwnedStopReply: (reply: unknown) => void
+}
+
+function spyOnOwnerEngine(engine: SupervisionEngine, events: string[]): EngineSpy {
+  const calls: EngineCalls = { creates: [], resumes: [], sends: [], reads: [], watches: 0, stops: [], ownedStops: [], disposals: 0 }
+  const restores: { mockRestore(): void }[] = []
+  const create = engine.create.bind(engine)
+  restores.push(spyOn(engine, 'create').mockImplementation((input) => {
+    calls.creates.push(input)
+    events.push('engine.create')
+    return create(input)
+  }))
+  const resume = engine.resume.bind(engine)
+  restores.push(spyOn(engine, 'resume').mockImplementation((input) => {
+    calls.resumes.push(input)
+    events.push('engine.resume')
+    return resume(input)
+  }))
+  const send = engine.send.bind(engine)
+  restores.push(spyOn(engine, 'send').mockImplementation((input) => {
+    calls.sends.push(input)
+    events.push('engine.send')
+    return send(input)
+  }))
+  const readMessages = engine.readMessages.bind(engine)
+  restores.push(spyOn(engine, 'readMessages').mockImplementation((input) => {
+    calls.reads.push(input)
+    events.push('engine.readMessages')
+    return readMessages(input)
+  }))
+  const watchStructured = engine.watchStructured.bind(engine)
+  restores.push(spyOn(engine, 'watchStructured').mockImplementation(<T>(input: StructuredWatch<T>) => {
+    calls.watches++
+    events.push('engine.watchStructured')
+    return watchStructured(input)
+  }))
+  const stop = engine.stop.bind(engine)
+  restores.push(spyOn(engine, 'stop').mockImplementation((input) => {
+    calls.stops.push(input)
+    events.push('engine.stop')
+    return stop(input)
+  }))
+  const stopOwned = engine.stopOwned.bind(engine)
+  restores.push(spyOn(engine, 'stopOwned').mockImplementation((input) => {
+    calls.ownedStops.push(input)
+    events.push('engine.stopOwned')
+    return stopOwned(input)
+  }))
+  const dispose = engine.dispose.bind(engine)
+  restores.push(spyOn(engine, 'dispose').mockImplementation(() => {
+    calls.disposals++
+    events.push('engine.dispose')
+    return dispose()
+  }))
+  return { calls, restore: () => { for (const spy of restores.reverse()) spy.mockRestore() } }
+}
+
+function createControllerWithEngineSpies(
+  host: OwnerRuntimeHost,
+  engines: EngineSpy[],
+  events: string[]
+): OwnerController {
+  const createEngine = supervision.createSupervision
+  const factory = spyOn(supervision, 'createSupervision').mockImplementation((context, options) => {
+    const engine = createEngine(context, options)
+    engines.push(spyOnOwnerEngine(engine, events))
+    return engine
+  })
+  try {
+    return createOwnerController(host)
+  } finally {
+    factory.mockRestore()
+  }
 }
 
 let testHome = ''
@@ -73,6 +177,7 @@ beforeEach(async () => {
 afterEach(async () => {
   for (const fixture of fixtures.splice(0)) {
     for (const controller of fixture.controllers) await controller.shutdown().catch(() => undefined)
+    for (const engine of fixture.engines) engine.restore()
   }
   if (testHome !== '') await rm(testHome, { recursive: true, force: true })
   if (previousHome === undefined) delete process.env.HOME
@@ -136,10 +241,26 @@ function makeFixture(): Fixture {
   let loseCreateReply = false
   let loseSendReply = false
   let dispatchAllowed = true
-  let sendGate: { signalEntered: () => void; wait: Promise<void> } | null = null
+  type Gate = { signalEntered: () => void; wait: Promise<void> }
+  let createGate: Gate | null = null
+  let resumeGate: Gate | null = null
+  let sendGate: Gate | null = null
+  let ownedStopGate: Gate | null = null
+  let nextCreateReply: unknown
+  let hasNextCreateReply = false
+  let nextSendReply: unknown
+  let hasNextSendReply = false
   let nextOwnedStopReply: unknown
   let hasNextOwnedStopReply = false
   const calls: FakeCalls = { creates: [], sends: [], resumes: [], gets: [], stops: [], ownedStops: [] }
+  const engineEvents: string[] = []
+  const engines: EngineSpy[] = []
+  const makeGate = (set: (gate: Gate) => void) => {
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    set({ signalEntered: () => entered.resolve(), wait: release.promise })
+    return { entered: entered.promise, release: () => release.resolve() }
+  }
   const session = (values: Partial<Session> = {}): Session => {
     sessionCounter += 1
     const id = `owner-session-${sessionCounter}`
@@ -152,6 +273,7 @@ function makeFixture(): Fixture {
   }
   const context = {
     call: async (method: string, params: Record<string, unknown> = {}): Promise<unknown> => {
+      engineEvents.push(method)
       if (method === 'quirky.structured/create') {
         const created = session()
         sessions.set(created.id, created)
@@ -160,9 +282,19 @@ function makeFixture(): Fixture {
         if (params.lifetime === 'plugin' && typeof params.lifetimeKey === 'string') {
           ownerKeyBySession.set(created.id, params.lifetimeKey)
         }
+        const gate = createGate
+        if (gate) {
+          createGate = null
+          gate.signalEntered()
+          await gate.wait
+        }
         if (loseCreateReply) {
           loseCreateReply = false
           throw new Error('create completed but its reply was lost')
+        }
+        if (hasNextCreateReply) {
+          hasNextCreateReply = false
+          return nextCreateReply
         }
         return created
       }
@@ -180,6 +312,10 @@ function makeFixture(): Fixture {
         if (loseSendReply) {
           loseSendReply = false
           throw new Error('send may have reached the owner but its reply was lost')
+        }
+        if (hasNextSendReply) {
+          hasNextSendReply = false
+          return nextSendReply
         }
         return { ok: true }
       }
@@ -199,8 +335,13 @@ function makeFixture(): Fixture {
         if (params.lifetime === 'plugin' && typeof params.lifetimeKey === 'string') {
           ownerKeyBySession.set(resumed.id, params.lifetimeKey)
         }
-        conversation.set(resumed.id, [...(conversation.get(oldId) ?? []), String(params.prompt ?? '')])
         calls.resumes.push({ params, session: resumed.id })
+        const gate = resumeGate
+        if (gate) {
+          resumeGate = null
+          gate.signalEntered()
+          await gate.wait
+        }
         return resumed
       }
       if (method === 'quirky.structured/stop') {
@@ -226,6 +367,12 @@ function makeFixture(): Fixture {
           }
         }
         calls.ownedStops.push({ key, stopped, unknown })
+        const gate = ownedStopGate
+        if (gate) {
+          ownedStopGate = null
+          gate.signalEntered()
+          await gate.wait
+        }
         if (hasNextOwnedStopReply) {
           hasNextOwnedStopReply = false
           return nextOwnedStopReply
@@ -250,9 +397,9 @@ function makeFixture(): Fixture {
     park: (_enrollment, escalationId, detail) => parks.push({ escalationId, detail }),
     wake: (watcherId) => wakeCalls.push(watcherId)
   }
-  const controller = createOwnerController(host)
+  const controller = createControllerWithEngineSpies(host, engines, engineEvents)
   const fixture: Fixture = {
-    root, reportDirectory, enrollment, store, calls, controller, controllers: [controller], now, setNow,
+    root, reportDirectory, enrollment, store, calls, controller, controllers: [controller], engines, engineEvents, now, setNow,
     snapshot, applyCalls, applyResults, wakeCalls, parks,
     addWatcher: (watcherId) => {
       const next = { ...enrollment, watcherId, coordinator: { ...enrollment.coordinator } }
@@ -272,19 +419,29 @@ function makeFixture(): Fixture {
     },
     setDispatchAllowed: (allowed) => { dispatchAllowed = allowed },
     loseNextCreateReply: () => { loseCreateReply = true },
-    delayNextSend: () => {
-      const entered = Promise.withResolvers<void>()
-      const send = Promise.withResolvers<void>()
-      sendGate = { signalEntered: () => entered.resolve(), wait: send.promise }
-      return { entered: entered.promise, release: () => send.resolve() }
+    setNextCreateReply: (reply) => {
+      nextCreateReply = reply
+      hasNextCreateReply = true
     },
+    setNextSendReply: (reply) => {
+      nextSendReply = reply
+      hasNextSendReply = true
+    },
+    delayNextCreate: () => makeGate((gate) => { createGate = gate }),
+    delayNextResume: () => makeGate((gate) => { resumeGate = gate }),
+    delayNextOwnedStop: () => makeGate((gate) => { ownedStopGate = gate }),
+    delayNextSend: () => makeGate((gate) => { sendGate = gate }),
     loseNextSendReply: () => { loseSendReply = true },
     breakNativeIdentity: (sessionId) => {
       const existing = sessions.get(sessionId)
       if (existing) sessions.set(sessionId, { ...existing, providerSession: null })
     },
+    setSessionStatus: (sessionId, status) => {
+      const existing = sessions.get(sessionId)
+      if (existing) sessions.set(sessionId, { ...existing, status })
+    },
     restart: () => {
-      const next = createOwnerController(host)
+      const next = createControllerWithEngineSpies(host, engines, engineEvents)
       fixture.controllers.push(next)
       return next
     },
@@ -597,6 +754,12 @@ describe('owner runtime journal and conversation', () => {
     const restarted = fixture.restart()
     await restarted.step(fixture.enrollment, fixture.snapshot, [])
     const pending = restarted.inspect(fixture.enrollment.watcherId).pending as OwnerPending & { contentIdentity: string }
+    expect(fixture.engines).toHaveLength(2)
+    expect(fixture.engines[0]?.calls.creates).toEqual([fixture.calls.creates[0]?.params as unknown as CreateInput])
+    expect(fixture.engines[1]?.calls.creates).toHaveLength(0)
+    expect(fixture.engines[1]?.calls.resumes).toEqual([fixture.calls.resumes[0]?.params as unknown as ResumeInput])
+    expect(fixture.engineEvents.indexOf('quirky.session/get')).toBeLessThan(fixture.engineEvents.indexOf('engine.resume'))
+    expect(fixture.engines[0]?.calls.disposals).toBe(1)
     expect(fixture.calls.creates).toHaveLength(1)
     expect(fixture.calls.resumes).toHaveLength(1)
     expect(pending.reportKey).not.toBe(old.reportKey)
@@ -604,7 +767,42 @@ describe('owner runtime journal and conversation', () => {
     expect(fixture.calls.resumes[0]?.params.prompt).toContain(pending.reportPath)
     expect(fixture.calls.ownedStops).toHaveLength(0)
     expect(fixture.calls.resumes[0]?.params).toMatchObject({ lifetime: 'plugin', lifetimeKey: fixture.enrollment.watcherId })
+    expect(fixture.engines[0]?.calls.creates[0]).toEqual({
+      lifetime: 'plugin',
+      lifetimeKey: fixture.enrollment.watcherId,
+      worktree: 'id:worktree-1',
+      agent: 'claude',
+      prompt: fixture.calls.creates[0]?.params.prompt,
+      model: 'claude-sonnet-4',
+      options: { effort: 'high' }
+    })
+    expect(fixture.engines[1]?.calls.resumes[0]).toEqual({
+      session: fixture.calls.resumes[0]?.params.session,
+      prompt: fixture.calls.resumes[0]?.params.prompt,
+      lifetime: 'plugin',
+      lifetimeKey: fixture.enrollment.watcherId
+    })
   })
+  test('sends the next owner report through the shared engine to the persisted session', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:first-report'))
+    const firstSession = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    const firstPending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    await writeReport(fixture, { kind: 'continue' })
+    expect(await fixture.controller.ready(fixture.enrollment.watcherId, firstPending.reportKey)).toEqual({ kind: 'accepted' })
+    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+
+    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [deviation('check:follow-up')])
+
+    expect(fixture.engines).toHaveLength(1)
+    expect(fixture.engines[0]?.calls.creates).toHaveLength(1)
+    expect(fixture.engines[0]?.calls.resumes).toHaveLength(0)
+    expect(fixture.engines[0]?.calls.sends).toEqual([fixture.calls.sends[0]?.params as unknown as SendInput])
+    expect(fixture.engines[0]?.calls.sends[0]?.session).toBe(firstSession)
+    expect(fixture.calls.sends).toHaveLength(1)
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId).sessionId).toBe(firstSession)
+  })
+
 
   test('owner config changes release the old conversation before issuing a fresh snapshot-bound turn', async () => {
     const fixture = makeFixture()
@@ -674,12 +872,60 @@ describe('owner runtime journal and conversation', () => {
     expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.reportKey).toBe(next.reportKey)
   })
 
+  test('journals a returned owner ID before rejecting its invalid session shape', async () => {
+    const fixture = makeFixture()
+    fixture.setNextCreateReply({ id: 'owner-session-1', kind: 'terminal', agent: 'codex' })
+
+    await issue(fixture, deviation('check:invalid-create-session'))
+
+    expect(fixture.store.journal(fixture.enrollment.watcherId).filter((entry) => entry.kind === 'owner-session')).toEqual([
+      expect.objectContaining({ sessionId: 'owner-session-1', agent: 'claude' })
+    ])
+    const journal = fixture.store.journal(fixture.enrollment.watcherId)
+    expect(journal.findIndex((entry) => entry.kind === 'owner-session')).toBeLessThan(
+      journal.findIndex((entry) => entry.kind === 'owner-error')
+    )
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId)).toMatchObject({
+      sessionId: 'owner-session-1',
+      pending: { phase: 'indeterminate' }
+    })
+    expect(fixture.engines[0]?.calls.creates).toHaveLength(1)
+    await fixture.controller.shutdown()
+    expect(fixture.engines[0]?.calls.stops).toEqual([{ kind: 'structured', session: 'owner-session-1' }])
+  })
+
+  test('engine send refusals and malformed receipts become indeterminate without replay', async () => {
+    for (const receipt of [
+      { ok: false, reason: 'recipient_gone' },
+      { ok: true, unexpected: true }
+    ]) {
+      const fixture = makeFixture()
+      await issue(fixture, deviation(`check:send-receipt-${String(receipt.ok)}`))
+      const firstPending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+      await writeReport(fixture, { kind: 'continue' })
+      await fixture.controller.ready(fixture.enrollment.watcherId, firstPending.reportKey)
+      await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+      fixture.setNextSendReply(receipt)
+
+      await fixture.controller.step(fixture.enrollment, fixture.snapshot, [deviation('check:send-receipt-follow-up')])
+      await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+
+      expect(fixture.engines[0]?.calls.sends).toHaveLength(1)
+      expect(fixture.calls.sends).toHaveLength(1)
+      expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.phase).toBe('indeterminate')
+      expect(fixture.store.journal(fixture.enrollment.watcherId).some((entry) =>
+        entry.kind === 'owner-error' && entry.uncertainty === true
+      )).toBe(true)
+    }
+  })
+
   test('records ambiguous create and send outcomes without blindly retrying', async () => {
     const lostCreate = makeFixture()
     lostCreate.loseNextCreateReply()
     await issue(lostCreate, deviation('check:create-lost'))
     await lostCreate.controller.step(lostCreate.enrollment, lostCreate.snapshot, [])
     expect(lostCreate.calls.creates).toHaveLength(1)
+    expect(lostCreate.engines[0]?.calls.creates).toHaveLength(1)
     expect(lostCreate.controller.inspect(lostCreate.enrollment.watcherId).pending?.phase).toBe('indeterminate')
     expect(lostCreate.store.journal(lostCreate.enrollment.watcherId).some((entry) => entry.kind === 'owner-error' && entry.uncertainty === true)).toBe(true)
 
@@ -709,6 +955,7 @@ describe('owner runtime journal and conversation', () => {
       .at(-1)
     expect(close).toMatchObject({ intervalId, reason: 'contact-lost', checkpointAtMs: 10, atMs: 100 })
     expect(lostSend.calls.sends).toHaveLength(1)
+    expect(lostSend.engines[0]?.calls.sends).toHaveLength(1)
     expect(lostSend.controller.inspect(lostSend.enrollment.watcherId).pending?.phase).toBe('indeterminate')
   })
 
@@ -723,23 +970,46 @@ describe('owner runtime journal and conversation', () => {
     expect(fixture.calls.creates).toHaveLength(1)
     expect(fixture.calls.resumes).toHaveLength(0)
     expect(restarted.inspect(fixture.enrollment.watcherId).pending?.phase).toBe('indeterminate')
+    expect(fixture.engines).toHaveLength(2)
+    expect(fixture.engines[1]?.calls.creates).toHaveLength(0)
+    expect(fixture.engines[1]?.calls.resumes).toHaveLength(0)
+    expect(fixture.calls.gets).toContain(originalSession)
+  })
+
+  test('an idle owner session cannot apply an intervention without the ready report', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:idle-no-report'))
+    const sessionId = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    fixture.setSessionStatus(sessionId, 'idle')
+
+    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+
+    expect(fixture.applyCalls).toHaveLength(0)
+    expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.phase).toBe('waiting')
+    expect(fixture.calls.gets).toHaveLength(0)
+    expect(fixture.engines[0]?.calls.reads).toEqual([])
+    expect(fixture.engines[0]?.calls.watches).toBe(0)
   })
 
   test('sends one silence reminder and parks once after the second interval', async () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:silence'))
     fixture.setNow(10_000 + 900_000 - 1)
-    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    const beforeReminder = await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    expect(beforeReminder.nextCheckAtMs).toBe(910_000)
     expect(fixture.calls.sends).toHaveLength(0)
     fixture.setNow(10_000 + 900_000)
     fixture.setDispatchAllowed(false)
-    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    const dispatchFenced = await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    expect(dispatchFenced.reason).toBe('owner-dispatch-fenced')
     expect(fixture.calls.sends).toHaveLength(0)
     fixture.setDispatchAllowed(true)
-    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    const reminded = await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    expect(reminded.nextCheckAtMs).toBe(1_810_000)
     expect(fixture.calls.sends).toHaveLength(1)
     fixture.setNow(10_000 + 1_800_000 - 1)
-    await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    const beforeParking = await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
+    expect(beforeParking.nextCheckAtMs).toBe(1_810_000)
     expect(fixture.parks).toHaveLength(0)
     fixture.setNow(10_000 + 1_800_000)
     await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
@@ -751,6 +1021,8 @@ describe('owner runtime journal and conversation', () => {
       intervalId, reason: 'contact-lost'
     })
     expect(fixture.calls.sends).toHaveLength(1)
+    expect(fixture.engines[0]?.calls.sends).toEqual([fixture.calls.sends[0]?.params as unknown as SendInput])
+    expect(fixture.engines[0]?.calls.sends[0]?.session).toBe(fixture.controller.inspect(fixture.enrollment.watcherId).sessionId)
   })
 
   test('accepts only the exact parked escalation answer and sends its body to the same conversation', async () => {
@@ -765,9 +1037,13 @@ describe('owner runtime journal and conversation', () => {
     expect(escalationId).toBeTruthy()
     expect(await fixture.controller.answer(fixture.enrollment.watcherId, `${escalationId}-wrong`, 'wrong answer')).toMatchObject({ handled: false })
     expect(fixture.calls.sends).toHaveLength(1)
+    expect(fixture.engines[0]?.calls.sends).toHaveLength(1)
     const answer = 'Keep the current plan; do not alter unrelated workers.'
     expect(await fixture.controller.answer(fixture.enrollment.watcherId, escalationId!, answer)).toMatchObject({ handled: true })
     expect(fixture.calls.sends).toHaveLength(2)
+    expect(fixture.engines[0]?.calls.sends).toEqual(fixture.calls.sends.map((call) => call.params as unknown as SendInput))
+    expect(fixture.engines[0]?.calls.sends[1]?.session).toBe(fixture.controller.inspect(fixture.enrollment.watcherId).sessionId)
+    expect(fixture.engines[0]?.calls.sends[1]?.text).toContain(answer)
     expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.phase).toBe('waiting')
     expect(fixture.controller.inspect(fixture.enrollment.watcherId).pending?.reportKey).not.toBe(before.pending?.reportKey)
   })
@@ -814,6 +1090,9 @@ describe('owner runtime journal and conversation', () => {
 
     await fixture.controller.release(fixture.enrollment.watcherId)
     expect(fixture.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId, stopped: [firstSession], unknown: [] }])
+    expect(fixture.engines).toHaveLength(1)
+    expect(fixture.engines[0]?.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId }])
+    expect(fixture.engines[0]?.calls.stops).toEqual([])
     expect(fixture.calls.stops).toEqual([])
     expect(fixture.calls.ownedStops[0]?.stopped).not.toContain(secondSession)
     expect(fixture.calls.ownedStops[0]?.stopped).not.toContain(independentSession)
@@ -844,6 +1123,7 @@ describe('owner runtime journal and conversation', () => {
     expect(fixture.store.journal(fixture.enrollment.watcherId)).toHaveLength(0)
     await fixture.controller.release(fixture.enrollment.watcherId)
     expect(fixture.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId, stopped: [sessionId], unknown: [] }])
+    expect(fixture.engines[0]?.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId }])
     expect(await Bun.file(pending.reportPath).exists()).toBe(false)
     expect(fixture.store.journal(fixture.enrollment.watcherId)).toHaveLength(0)
     expect(fixture.controller.inspect(fixture.enrollment.watcherId)).toMatchObject({ sessionId: null, pending: null })
@@ -862,8 +1142,97 @@ describe('owner runtime journal and conversation', () => {
     await fixture.controller.release(fixture.enrollment.watcherId)
     expect(fixture.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId, stopped: [createdSession!], unknown: [] }])
     expect(fixture.calls.stops).toEqual([])
+    expect(fixture.engines[0]?.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId }])
     expect(fixture.controller.inspect(fixture.enrollment.watcherId)).toMatchObject({ sessionId: null, pending: null })
   })
+
+  test('concurrent watcher releases coalesce into one keyed engine stop', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:release-coalesced'))
+    const stopGate = fixture.delayNextOwnedStop()
+
+    const first = fixture.controller.release(fixture.enrollment.watcherId)
+    await stopGate.entered
+    const second = fixture.controller.release(fixture.enrollment.watcherId)
+    stopGate.release()
+    await Promise.all([first, second])
+
+    expect(fixture.engines[0]?.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId }])
+    expect(fixture.calls.ownedStops).toHaveLength(1)
+  })
+
+  test('late create acknowledgement after release uses keyed engine cleanup without journaling its ID', async () => {
+    const fixture = makeFixture()
+    const createGate = fixture.delayNextCreate()
+    const launching = fixture.controller.step(fixture.enrollment, fixture.snapshot, [deviation('check:late-create')])
+    await createGate.entered
+    const releasing = fixture.controller.release(fixture.enrollment.watcherId)
+    // owner release uses the platform clock; this watchdog bounds the real-timer integration check.
+    const timeout = Promise.withResolvers<never>()
+    const watchdog = setTimeout(() => timeout.reject(new Error('late create release did not respect its deadline')), 2_500)
+
+    try {
+      await Promise.race([releasing, timeout.promise])
+      const journal = structuredClone(fixture.store.journal(fixture.enrollment.watcherId))
+      expect(fixture.engines[0]?.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId }])
+      expect((fixture.controller.inspect(fixture.enrollment.watcherId) as unknown as Record<string, unknown>).releaseUncertain).toBe(true)
+
+      createGate.release()
+      await launching
+
+      expect(fixture.engines[0]?.calls.ownedStops).toEqual([
+        { key: fixture.enrollment.watcherId },
+        { key: fixture.enrollment.watcherId }
+      ])
+      expect(fixture.store.journal(fixture.enrollment.watcherId)).toEqual(journal)
+      expect(fixture.store.journal(fixture.enrollment.watcherId).filter((entry) => entry.kind === 'owner-session')).toHaveLength(0)
+    } finally {
+      clearTimeout(watchdog)
+      createGate.release()
+      await Promise.allSettled([launching, releasing])
+    }
+  })
+
+  test('late resume acknowledgement after release uses keyed cleanup without replacing inventory', async () => {
+    const fixture = makeFixture()
+    await issue(fixture, deviation('check:late-resume'))
+    const originalSession = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
+    await fixture.controller.shutdown()
+    const restarted = fixture.restart()
+    const resumeGate = fixture.delayNextResume()
+    const resuming = restarted.step(fixture.enrollment, fixture.snapshot, [])
+    await resumeGate.entered
+    const releasing = restarted.release(fixture.enrollment.watcherId)
+    // owner release uses the platform clock; this watchdog bounds the real-timer integration check.
+    const timeout = Promise.withResolvers<never>()
+    const watchdog = setTimeout(() => timeout.reject(new Error('late resume release did not respect its deadline')), 2_500)
+
+    try {
+      await Promise.race([releasing, timeout.promise])
+      const journal = structuredClone(fixture.store.journal(fixture.enrollment.watcherId))
+      expect(fixture.engines[1]?.calls.resumes).toHaveLength(1)
+      expect(fixture.engines[1]?.calls.creates).toHaveLength(0)
+      expect(fixture.engines[1]?.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId }])
+
+      resumeGate.release()
+      await resuming
+
+      expect(fixture.engines[1]?.calls.ownedStops).toEqual([
+        { key: fixture.enrollment.watcherId },
+        { key: fixture.enrollment.watcherId }
+      ])
+      expect(fixture.store.journal(fixture.enrollment.watcherId)).toEqual(journal)
+      expect(fixture.store.journal(fixture.enrollment.watcherId)
+        .filter((entry) => entry.kind === 'owner-session')
+        .map((entry) => entry.sessionId)).toEqual([originalSession])
+      expect((restarted.inspect(fixture.enrollment.watcherId) as unknown as Record<string, unknown>).releaseUncertain).toBe(true)
+    } finally {
+      clearTimeout(watchdog)
+      resumeGate.release()
+      await Promise.allSettled([resuming, releasing])
+    }
+  })
+
 
   test('unknown or malformed keyed release results remain uncertain and block replacement owners', async () => {
     for (const stopReply of [
@@ -879,9 +1248,13 @@ describe('owner runtime journal and conversation', () => {
       expect(fixture.store.journal(fixture.enrollment.watcherId).some((entry) =>
         entry.kind === 'owner-error' && entry.operation === 'release-owner' && entry.uncertainty === true
       )).toBe(true)
+      expect(fixture.engines[0]?.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId }])
       fixture.enrollment.owner = { agent: 'claude', model: 'claude-opus-4', effort: 'low' }
       await fixture.controller.step(fixture.enrollment, fixture.snapshot, [])
       expect(fixture.calls.creates).toHaveLength(1)
+      await fixture.controller.release(fixture.enrollment.watcherId)
+      expect(fixture.engines[0]?.calls.ownedStops).toHaveLength(2)
+      expect((fixture.controller.inspect(fixture.enrollment.watcherId) as unknown as Record<string, unknown>).releaseUncertain).toBe(false)
     }
   })
 
@@ -914,7 +1287,13 @@ describe('owner runtime journal and conversation', () => {
     const fixture = makeFixture()
     await issue(fixture, deviation('check:shutdown'))
     const pending = fixture.controller.inspect(fixture.enrollment.watcherId).pending!
+    const sessionId = fixture.controller.inspect(fixture.enrollment.watcherId).sessionId!
     await fixture.controller.shutdown()
+    expect(fixture.engines[0]?.calls.stops).toEqual([{ kind: 'structured', session: sessionId }])
+    expect(fixture.engines[0]?.calls.disposals).toBe(1)
+    expect(fixture.engineEvents.indexOf('engine.dispose')).toBeLessThan(fixture.engineEvents.indexOf('engine.stop'))
+    await fixture.controller.shutdown()
+    expect(fixture.engines[0]?.calls.disposals).toBe(1)
     const intervalId = fixture.store.journal(fixture.enrollment.watcherId).find((entry) => entry.kind === 'interval-open')?.intervalId
     expect(fixture.store.journal(fixture.enrollment.watcherId).filter((entry) => entry.kind === 'interval-close').at(-1)).toMatchObject({
       intervalId, reason: 'shutdown'
@@ -951,6 +1330,31 @@ describe('owner runtime journal and conversation', () => {
       clearTimeout(watchdog)
       delayed.release()
       await tick
+    }
+  })
+
+  test('late create acknowledgement after shutdown is stopped through the disposed engine', async () => {
+    const fixture = makeFixture()
+    const createGate = fixture.delayNextCreate()
+    const launching = fixture.controller.step(fixture.enrollment, fixture.snapshot, [deviation('check:shutdown-late-create')])
+    await createGate.entered
+
+    try {
+      await fixture.controller.shutdown()
+      const journal = structuredClone(fixture.store.journal(fixture.enrollment.watcherId))
+      expect(fixture.engines[0]?.calls.disposals).toBe(1)
+      expect(fixture.engines[0]?.calls.ownedStops).toHaveLength(0)
+
+      createGate.release()
+      await launching
+
+      expect(fixture.engines[0]?.calls.ownedStops).toEqual([{ key: fixture.enrollment.watcherId }])
+      expect(fixture.engineEvents.indexOf('engine.dispose')).toBeLessThan(fixture.engineEvents.lastIndexOf('engine.stopOwned'))
+      expect(fixture.store.journal(fixture.enrollment.watcherId)).toEqual(journal)
+      expect(fixture.store.journal(fixture.enrollment.watcherId).filter((entry) => entry.kind === 'owner-session')).toHaveLength(0)
+    } finally {
+      createGate.release()
+      await launching
     }
   })
 
