@@ -23,11 +23,16 @@ async function childRun(command: string[], timeout: number): Promise<{ code: num
     const stdout = new Response(child.stdout).text()
     const stderr = new Response(child.stderr).text()
     const code = await Promise.race([child.exited, deadline.promise])
-    const report: BrowserParityReport = JSON.parse(await stdout)
+    const [output, diagnostics] = await Promise.all([stdout, stderr])
+    let report: BrowserParityReport
+    try { report = JSON.parse(output) }
+    catch (error) {
+      throw new Error(`invalid browser parity JSON (exit code ${code}, stdout ${Buffer.byteLength(output)} bytes): ${error instanceof Error ? error.message : String(error)}\nstdout tail: ${JSON.stringify(output.slice(-4_096))}\nstderr: ${diagnostics}`)
+    }
     expect(sentinel.exitCode).toBeNull()
     process.kill(sentinel.pid, 0)
     expect(report.cleanup.ok).toBe(true)
-    return { code, report, stderr: await stderr }
+    return { code, report, stderr: diagnostics }
   } finally {
     clearTimeout(watchdog)
     sentinel.kill('SIGTERM')
@@ -35,6 +40,24 @@ async function childRun(command: string[], timeout: number): Promise<{ code: num
     await scope.cleanup()
   }
 }
+
+test('malformed child reports include exit status, stdout bytes and tail, and stderr', async () => {
+  const output = '{"evidence":"' + 'x'.repeat(8_192) + 'truncated-🦊'
+  const diagnostic = 'owned child diagnostic\n'
+  const source = `
+    await Bun.write(Bun.stdout, ${JSON.stringify(output)});
+    await Bun.write(Bun.stderr, ${JSON.stringify(diagnostic)});
+    process.exitCode = 7;
+  `
+  let failure: unknown
+  try { await childRun([process.execPath, '-e', source], 20_000) }
+  catch (error) { failure = error }
+  expect(failure).toBeInstanceOf(Error)
+  const message = (failure as Error).message
+  expect(message).toContain(`exit code 7, stdout ${Buffer.byteLength(output)} bytes`)
+  expect(message).toContain(`stdout tail: ${JSON.stringify(output.slice(-4_096))}`)
+  expect(message).toContain(`stderr: ${diagnostic}`)
+}, 25_000)
 
 test('one isolated real CLI run records every browser command and removes its process identities', async () => {
   const { code, report, stderr } = await childRun([process.execPath, 'scripts/parity/browser.ts', '--json'], 490_000)
