@@ -11,6 +11,39 @@
     {"surface":"sidebar-section:quirky.worktree/worktrees","state":"error","site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"error: unknown) => {\n      context.toast('Could not open automation "},"anchor":"context.toast(","render":{"component":"toast","call":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"context.toast('Could not open automation run', error instanceof Error ? error.message : String(error))"}}},
     {"surface":"sidebar-section:quirky.worktree/worktrees","state":"loading","site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"(definitionStatus === 'checking' || runHistoryStatus === 'checking') &&"},"anchor":"(definitionStatus === 'checking' || runHistoryStatus === 'checking') &&","render":{"component":"NoticeLine","element":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"<NoticeLine>Checking automation availability...</NoticeLine>"},"import":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, InlineError, NoticeLine, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'"}}},
     {"surface":"sidebar-section:quirky.worktree/worktrees","state":"error","site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"(definitionStatus === 'error' || runHistoryStatus === 'error') &&"},"anchor":"(definitionStatus === 'error' || runHistoryStatus === 'error') &&","render":{"component":"InlineError","element":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"<InlineError message=\"Automation availability could not be checked.\" />"},"import":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, InlineError, NoticeLine, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'"}}},
+    {
+      "surface": "sidebar-section:quirky.worktree/worktrees",
+      "state": "error",
+      "site": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "definitionStatus === 'missing' &&"},
+      "anchor": "definitionStatus === 'missing' &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "<NoticeLine>Automation no longer available.</NoticeLine>"},
+        "import": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, InlineError, NoticeLine, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'"}
+      }
+    },
+    {
+      "surface": "sidebar-section:quirky.worktree/worktrees",
+      "state": "error",
+      "site": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "runHistoryStatus === 'missing' &&"},
+      "anchor": "runHistoryStatus === 'missing' &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "<NoticeLine>Run history no longer available.</NoticeLine>"},
+        "import": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, InlineError, NoticeLine, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'"}
+      }
+    },
+    {
+      "surface": "sidebar-section:quirky.worktree/worktrees",
+      "state": "error",
+      "site": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') &&"},
+      "anchor": "(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "<NoticeLine>Automations plugin unavailable.</NoticeLine>"},
+        "import": {"file": "plugins/quirky.worktree/src/Tree.tsx", "quote": "import { ActivityMark, Badge, Button, ContextMenu, HoverCard, IconButton, InlineError, NoticeLine, ProjectTile, SectionHeader, StatusDot as UiStatusDot, TagChips, type ContextMenuItem, type UiStatus } from '@quirky/ui'"}
+      }
+    },
     {"surface":"sidebar-section:quirky.worktree/worktrees","state":"error","site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":">\n          context.toast(`Could not o"},"anchor":"context.toast(","render":{"component":"toast","call":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"context.toast(`Could not open ${target}`, error instanceof Error ? error.message : String(error))"}}},
     {"surface":"sidebar-section:quirky.worktree/worktrees","state":"error","site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":">\n          context.toast(`Could not $"},"anchor":"context.toast(","render":{"component":"toast","call":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"context.toast(`Could not ${archived ? 'archive' : 'unarchive'} worktree`, error instanceof Error ? error.message : String(error))"}}},
     {"surface":"sidebar-section:quirky.worktree/worktrees","state":"error","site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"\n        context.toast('Could no"},"anchor":"context.toast(","render":{"component":"toast","call":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"context.toast('Could not open worktree', error instanceof Error ? error.message : String(error))"}}},
@@ -42,18 +75,15 @@
     {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":" {!renaming && ("},"anchor":"!renaming &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
     {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"      {renaming &&"},"anchor":"renaming &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
     {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"      {renaming && <p className=\"worktree-rename-hint\">Enter to save, Esc to cancel. The branch stays {worktree.branch ??"},"anchor":"worktree.branch ??","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"provenance && automationExpanded &&"},"anchor":"provenance && automationExpanded &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"            <div role=\"status\""},"anchor":"role=\"status\"","reason":"This status role wraps advisory automation availability copy; it is not a shared loading or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"definitionStatus === 'available' &&"},"anchor":"definitionStatus === 'available' &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"          {definitionStatus === 'available' && <p className=\"ui-text-muted\" role=\"status\""},"anchor":"role=\"status\"","reason":"This status role wraps advisory automation availability copy; it is not a shared loading or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"runHistoryStatus === 'available' &&"},"anchor":"runHistoryStatus === 'available' &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"          {runHistoryStatus === 'available' && <p className=\"ui-text-muted\" role=\"status\""},"anchor":"role=\"status\"","reason":"This status role wraps advisory automation availability copy; it is not a shared loading or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"definitionStatus === 'missing' &&"},"anchor":"definitionStatus === 'missing' &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"          {definitionStatus === 'missing' && <p className=\"ui-text-muted\" role=\"status\""},"anchor":"role=\"status\"","reason":"This status role wraps advisory automation availability copy; it is not a shared loading or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"runHistoryStatus === 'missing' &&"},"anchor":"runHistoryStatus === 'missing' &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"          {runHistoryStatus === 'missing' && <p className=\"ui-text-muted\" role=\"status\""},"anchor":"role=\"status\"","reason":"This status role wraps advisory automation availability copy; it is not a shared loading or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') &&"},"anchor":"(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
-    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"            <p className=\"ui-text-muted\" role=\"status\""},"anchor":"role=\"status\"","reason":"This status role wraps advisory automation availability copy; it is not a shared loading or error state."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"provenance && automationExpanded &&"},"anchor":"provenance && automationExpanded &&","reason":"This guard shows saved automation details only for a row with provenance when expanded; nested availability outcomes are classified separately."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"            <div role=\"status\"><NoticeLine>Checking automation availability...</NoticeLine></div>"},"anchor":"role=\"status\"","reason":"This status wrapper labels the shared checking NoticeLine; the checking condition is classified as loading."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"definitionStatus === 'available' &&"},"anchor":"definitionStatus === 'available' &&","reason":"A confirmed available automation is positive metadata, not a pending or failed read."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"          {definitionStatus === 'available' && <p className=\"ui-text-muted\" role=\"status\""},"anchor":"role=\"status\"","reason":"This status role labels the positive Automation available metadata caption."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"runHistoryStatus === 'available' &&"},"anchor":"runHistoryStatus === 'available' &&","reason":"A confirmed available run history is positive metadata, not a pending or failed read."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"          {runHistoryStatus === 'available' && <p className=\"ui-text-muted\" role=\"status\""},"anchor":"role=\"status\"","reason":"This status role labels the positive Run history available metadata caption."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"role=\"status\"><NoticeLine>Automation no longer available."},"anchor":"role=\"status\"","reason":"This live-region wrapper contains the missing-automation NoticeLine classified by definitionStatus === 'missing'."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"role=\"status\"><NoticeLine>Run history no longer available."},"anchor":"role=\"status\"","reason":"This live-region wrapper contains the missing-run-history NoticeLine classified by runHistoryStatus === 'missing'."},
+    {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"role=\"status\"><NoticeLine>Automations plugin unavailable."},"anchor":"role=\"status\"","reason":"This live-region wrapper contains the unavailable-plugin NoticeLine classified by either unavailable status."},
     {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"if (hidden)"},"anchor":"if (hidden)","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
     {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"props.count > 0 &&"},"anchor":"props.count > 0 &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
     {"site":{"file":"plugins/quirky.worktree/src/Tree.tsx","quote":"s\">\n              {previewing && <Badge tone=\"accen"},"anchor":"previewing &&","reason":"This branch, row detail, preview, or pending item is presentation content rather than a loading, empty, or error state."},
