@@ -1,6 +1,6 @@
-import type { OrchestrationSubmission, PluginCaller, PluginContext } from '@quirky/protocol'
+import type { OrchestrationSubmission, PluginActivationDisposer, PluginCaller, PluginContext } from '@quirky/protocol'
 import type { OrchestrationMethod } from './src/contracts'
-import { createOrchestration, type ComposedOrchestrationService } from './src/service'
+import { createOrchestration } from './src/service'
 import { migrations, policyMigration } from './src/store'
 import { createSetup } from './src/setup'
 import { createTaskNavigation } from './src/navigation'
@@ -51,13 +51,8 @@ const methods = [
   'serviceRegisterSubmissionPreflight'
 ] as const satisfies readonly OrchestrationMethod[]
 
-let activeService: ComposedOrchestrationService | undefined
-let activeWorkers: WorkerComponents | undefined
-let activePeers: PeerManager | undefined
-let activeFederation: FederationEnginePort | undefined
-let activeMail: FederationMailComponent | undefined
-
-export async function activate(context: PluginContext): Promise<void> {
+/** Activates orchestration and returns a disposer that releases only this activation's components. */
+export async function activate(context: PluginContext): Promise<PluginActivationDisposer> {
   const store = context.openStore([
     ...migrations,
     ...workerMigrations,
@@ -124,11 +119,6 @@ export async function activate(context: PluginContext): Promise<void> {
       summary.query(params as SummaryParams)
     )
     await peers.restore()
-    activeService = service
-    activeWorkers = workers
-    activePeers = peers
-    activeFederation = engine
-    activeMail = mail
   } catch (error) {
     try { await engine?.dispose() } catch (cleanupError) { context.log(`activation cleanup failed: ${String(cleanupError)}`) }
     try { await peers.dispose() } catch (cleanupError) { context.log(`activation cleanup failed: ${String(cleanupError)}`) }
@@ -137,22 +127,11 @@ export async function activate(context: PluginContext): Promise<void> {
     try { await service.dispose() } catch (cleanupError) { context.log(`activation cleanup failed: ${String(cleanupError)}`) }
     throw error
   }
-}
-
-export async function deactivate(): Promise<void> {
-  const service = activeService
-  const workers = activeWorkers
-  const peers = activePeers
-  const engine = activeFederation
-  const mail = activeMail
-  activeService = undefined
-  activeWorkers = undefined
-  activePeers = undefined
-  activeFederation = undefined
-  activeMail = undefined
-  try { await engine?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
-  try { await peers?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
-  try { await mail?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
-  try { await workers?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
-  try { await service?.dispose() } catch (error) { service?.core.context.log(`deactivation cleanup failed: ${String(error)}`) }
+  return async () => {
+    try { await engine?.dispose() } catch (error) { context.log(`deactivation cleanup failed: ${String(error)}`) }
+    try { await peers.dispose() } catch (error) { context.log(`deactivation cleanup failed: ${String(error)}`) }
+    try { await mail?.dispose() } catch (error) { context.log(`deactivation cleanup failed: ${String(error)}`) }
+    try { await workers?.dispose() } catch (error) { context.log(`deactivation cleanup failed: ${String(error)}`) }
+    try { await service.dispose() } catch (error) { context.log(`deactivation cleanup failed: ${String(error)}`) }
+  }
 }
