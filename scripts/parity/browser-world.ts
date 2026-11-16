@@ -2,11 +2,14 @@ import { accessSync, chmodSync, constants, existsSync, lstatSync, mkdirSync, rea
 import { delimiter, join, resolve } from 'node:path'
 import { checkSchemaDeclaration, validateValue, type Schema } from '@quirky/protocol'
 import { isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
+import { daemonStatus } from './daemon-status'
 import { resolveHelperBinary } from '../../plugins/quirky.browser/src/runtime/native'
 import { createProcessScope, type ProcessScope } from '../test-support/process-scope'
 import { stageBuiltinPlugins, startWorld, type SoakWorld } from '../soak/world'
 import { createIsolatedRuntimeEnvironment } from '../ui-review/fixtures'
 import { startBrowserFixture, type BrowserFixture } from './browser-fixture'
+export { daemonStatus }
+export type { DaemonStatusOptions } from './daemon-status'
 
 const MAX_DIAGNOSTIC_BYTES = 8 * 1024
 const MAX_CLI_OUTPUT_BYTES = 48 * 1024 * 1024
@@ -650,62 +653,6 @@ function withinDeadline<T>(operation: Promise<T>, signal: AbortSignal | undefine
   return promise
 }
 
-type DaemonStatusOptions = {
-  signal?: AbortSignal
-  readRuntime?: typeof readRuntime
-  isDaemonAlive?: typeof isDaemonAlive
-  sleep?: (milliseconds: number) => Promise<void>
-  now?: () => number
-}
-
-export async function daemonStatus(
-  home: string,
-  daemon: Pick<PipeChild, 'pid' | 'exited'>,
-  deadline: number,
-  options: DaemonStatusOptions = {}
-): Promise<boolean> {
-  const now = options.now ?? Date.now
-  const readOwnedRuntime = options.readRuntime ?? readRuntime
-  const probe = options.isDaemonAlive ?? isDaemonAlive
-  const sleep = options.sleep ?? ((milliseconds) => Bun.sleep(milliseconds))
-  const retryDeadline = Math.min(deadline, now() + 5_000)
-  let exited = false
-  let aborted = options.signal?.aborted ?? false
-  const stopped = Promise.withResolvers<void>()
-  const onAbort = () => {
-    aborted = true
-    stopped.resolve()
-  }
-  const onExit = () => {
-    exited = true
-    stopped.resolve()
-  }
-  daemon.exited.then(onExit, onExit)
-  options.signal?.addEventListener('abort', onAbort, { once: true })
-  try {
-    while (now() < retryDeadline) {
-      if (aborted || exited || options.signal?.aborted) return false
-      const runtime = readOwnedRuntime(home)
-      if (!runtime || runtime.pid !== daemon.pid) return false
-      const remaining = retryDeadline - now()
-      if (remaining <= 0) return false
-      const alive = await Promise.race([
-        probe(runtime, Math.max(1, Math.min(300, remaining))),
-        stopped.promise.then(() => false)
-      ])
-      if (aborted || exited || options.signal?.aborted || now() >= retryDeadline) return false
-      const afterProbe = readOwnedRuntime(home)
-      if (!afterProbe || afterProbe.pid !== daemon.pid) return false
-      if (alive) return true
-      const pause = Math.min(50, retryDeadline - now())
-      if (pause <= 0) return false
-      await Promise.race([sleep(pause), stopped.promise])
-    }
-    return false
-  } finally {
-    options.signal?.removeEventListener('abort', onAbort)
-  }
-}
 
 async function waitForDaemon(
   home: string,
