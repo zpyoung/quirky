@@ -126,7 +126,7 @@ test('advisory and routed control classifications are required, not decorative c
 })
 
 test('wrong shared render kinds, undeclared targets and stale complete witnesses fail closed', () => {
-  for (const [kind, component] of [['loading', 'InlineError'], ['error', 'NoticeLine']] as const) {
+  for (const [kind, component] of [['loading', 'InlineError'], ['error', 'EmptyState']] as const) {
     const value = structuredClone(coverage)
     const entry = value.states.find((entry) => entry.state === kind && entry.render.component !== 'toast')!
     entry.render = { ...entry.render, component } as typeof entry.render

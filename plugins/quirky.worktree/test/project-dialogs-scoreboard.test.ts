@@ -103,7 +103,7 @@ test('the fragment adds only worktrees dialog evidence without redeclaring inher
     .every((entry) => entry.render.component === 'EmptyState')).toBe(true)
   expect(coverage.states.filter((entry) => entry.state === 'error').length).toBeGreaterThan(0)
   expect(coverage.states.filter((entry) => entry.state === 'error')
-    .every((entry) => ['InlineError', 'FormRow', 'toast'].includes(entry.render.component))).toBe(true)
+    .every((entry) => ['InlineError', 'FormRow', 'toast', 'NoticeLine'].includes(entry.render.component))).toBe(true)
   expect(coverage.notState.length).toBeGreaterThan(0)
   expect(coverage.actions.length).toBeGreaterThan(0)
   for (const entry of [...coverage.states, ...coverage.notState, ...coverage.actions]) {
@@ -180,7 +180,7 @@ test('wrong shared-state components and an unknown command route fail audit', ()
   const errorIndex = wrongError.states.findIndex((entry) => entry.state === 'error' && entry.render.component === 'InlineError')
   expect(errorIndex).toBeGreaterThanOrEqual(0)
   const error = wrongError.states[errorIndex]!
-  error.render = { ...error.render, component: 'NoticeLine' } as CoverageFile['states'][number]['render']
+  error.render = { ...error.render, component: 'EmptyState' } as CoverageFile['states'][number]['render']
   expect(ownedFailures(withCoverage(wrongError)).some(({ code }) => code === 'render-not-accepted')).toBe(true)
 
   const unknownCommand = cloneCoverage()

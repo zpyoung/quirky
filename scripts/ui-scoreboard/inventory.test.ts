@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import type { Inventory } from './contracts'
 import { collectInventory } from './inventory'
 
@@ -596,6 +596,104 @@ describe('collectInventory', () => {
       'plugins/acme.visible/src/untracked.mjs'
     )
   })
+  test('projects the five production tool mappings while retaining every declaration', () => {
+    const root = createRepository({ plugins: false })
+    const pairs = [
+      { plugin: 'quirky.mobile', declaration: 'mobile', bodyKind: 'view', body: 'page', toolId: 'sidebar-section:quirky.mobile/mobile' },
+      { plugin: 'quirky.editor', declaration: 'explorer', bodyKind: 'panel', body: 'explorer', toolId: 'panel:quirky.editor/explorer' },
+      { plugin: 'quirky.automations', declaration: 'automations', bodyKind: 'view', body: 'automations', toolId: 'sidebar-section:quirky.automations/automations' },
+      { plugin: 'quirky.heimdall', declaration: 'navigation', bodyKind: 'view', body: 'fleet', toolId: 'sidebar-section:quirky.heimdall/navigation' },
+      { plugin: 'quirky.ledger', declaration: 'ledger', bodyKind: 'panel', body: 'ledger', toolId: 'panel:quirky.ledger/ledger' }
+    ] as const
+    for (const pair of pairs) {
+      addPlugin(root, pair.plugin, pair.plugin, {
+        ui: 'dist/ui.js',
+        contributes: {
+          'sidebar-section': [{ id: pair.declaration, title: `${pair.plugin} navigation` }],
+          [pair.bodyKind]: [{ id: pair.body, title: `${pair.plugin} body` }]
+        },
+        sources: { 'src/ui.ts': 'export const ui = true\n' }
+      })
+    }
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'tool projection fixture')
+    const inventory = collect(root)
+    const declarations = pairs.flatMap(({ plugin, declaration, bodyKind, body }) => [
+      `sidebar-section:${plugin}/${declaration}`,
+      `${bodyKind}:${plugin}/${body}`
+    ]).sort()
+    const bodyTargets = pairs.map(({ plugin, bodyKind, body }) => `${bodyKind}:${plugin}/${body}`).sort()
+    const expectedAliases = pairs.map(({ plugin, declaration, bodyKind, body, toolId }) => ({
+      declarationId: `sidebar-section:${plugin}/${declaration}`,
+      toolId,
+      renderedTargetId: `${bodyKind}:${plugin}/${body}`,
+      plugin,
+      reason: 'tool-navigation-alias' as const
+    })).sort((left, right) => left.declarationId.localeCompare(right.declarationId))
+
+    expect(inventory.failures).toEqual([])
+    expect(inventory.plugins.map(({ id }) => id)).toEqual(pairs.map(({ plugin }) => plugin).sort())
+    expect(inventory.plugins.flatMap(({ targets }) => targets).sort()).toEqual(declarations)
+    expect(inventory.plugins.flatMap(({ sources }) => sources.map(({ file }) => file).filter((file) => file.endsWith('/src/ui.ts')))).toHaveLength(5)
+    expect(inventory.targets.filter(({ plugin }) => plugin !== null).map(({ id }) => id).sort()).toEqual(bodyTargets)
+    expect(inventory.targets.filter(({ kind }) => kind === 'host').map(({ id }) => id).sort()).toEqual(hostTargetIds.slice().sort())
+    expect(inventory.contributionInventory?.declaredTargets.filter(({ kind }) => kind === 'host').map(({ id }) => id).sort()).toEqual(hostTargetIds.slice().sort())
+    expect(inventory.contributionInventory?.declaredTargets.filter(({ plugin }) => plugin !== null).map(({ id }) => id).sort()).toEqual(declarations)
+    expect(inventory.contributionInventory?.toolAliases.map(({ declaration, toolId, renderedTarget, reason }) => ({
+      declarationId: declaration.id,
+      toolId,
+      renderedTargetId: renderedTarget.id,
+      plugin: declaration.plugin,
+      reason
+    }))).toEqual(expectedAliases)
+  })
+
+  test('does not project a navigation alias when the manifest has no UI module', () => {
+    const root = createRepository({ plugins: false })
+    addPlugin(root, 'quirky.mobile', 'quirky.mobile', {
+      contributes: {
+        'sidebar-section': [{ id: 'mobile', title: 'Mobile navigation' }],
+        view: [{ id: 'page', title: 'Mobile body' }]
+      },
+      sources: { 'src/ui.ts': 'export const ui = true\n' }
+    })
+    git(root, 'add', '--all')
+    git(root, 'commit', '--quiet', '-m', 'module-less tool fixture')
+    const inventory = collect(root)
+
+    expect(inventory.plugins.find(({ id }) => id === 'quirky.mobile')?.targets).toEqual([
+      'sidebar-section:quirky.mobile/mobile',
+      'view:quirky.mobile/page'
+    ])
+    expect(inventory.targets.filter(({ plugin }) => plugin === 'quirky.mobile').map(({ id }) => id).sort()).toEqual([
+      'sidebar-section:quirky.mobile/mobile',
+      'view:quirky.mobile/page'
+    ])
+    expect(inventory.contributionInventory?.toolAliases).toEqual([])
+  })
+
+  test('matches the production tool aliases against real plugin declarations', () => {
+    const inventory = collect(resolve(import.meta.dir, '../..'))
+    const expected = [
+      { declarationId: 'sidebar-section:quirky.mobile/mobile', toolId: 'sidebar-section:quirky.mobile/mobile', renderedTargetId: 'view:quirky.mobile/page' },
+      { declarationId: 'sidebar-section:quirky.editor/explorer', toolId: 'panel:quirky.editor/explorer', renderedTargetId: 'panel:quirky.editor/explorer' },
+      { declarationId: 'sidebar-section:quirky.automations/automations', toolId: 'sidebar-section:quirky.automations/automations', renderedTargetId: 'view:quirky.automations/automations' },
+      { declarationId: 'sidebar-section:quirky.heimdall/navigation', toolId: 'sidebar-section:quirky.heimdall/navigation', renderedTargetId: 'view:quirky.heimdall/fleet' },
+      { declarationId: 'sidebar-section:quirky.ledger/ledger', toolId: 'panel:quirky.ledger/ledger', renderedTargetId: 'panel:quirky.ledger/ledger' }
+    ].sort((left, right) => left.declarationId.localeCompare(right.declarationId))
+
+    expect(inventory.contributionInventory?.toolAliases.map(({ declaration, toolId, renderedTarget }) => ({
+      declarationId: declaration.id,
+      toolId,
+      renderedTargetId: renderedTarget.id
+    }))).toEqual(expected)
+    for (const { declarationId } of expected) {
+      const plugin = inventory.plugins.find(({ targets }) => targets.includes(declarationId))
+      expect(plugin).toBeDefined()
+      expect(plugin?.sources.length).toBeGreaterThan(0)
+    }
+  })
+
 
   test('fails when the immediate plugin inventory is empty', () => {
     const inventory = collect(createRepository({ plugins: false }))

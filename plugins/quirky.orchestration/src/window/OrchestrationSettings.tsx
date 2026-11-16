@@ -245,7 +245,7 @@ export function OrchestrationSettings({ context, signals }: { context: UiPluginC
       >
         <p>Enables agents to coordinate supervised work through Quirky's durable Runs, Tasks, Dispatches, and mailbox.</p>
         <div aria-live="polite" data-orchestration-skill-summary>
-          {loadingSetup ? <NoticeLine>Checking skill coverage…</NoticeLine> : <p className="ui-text-muted">{status?.text ?? 'Skill coverage is unavailable.'}</p>}
+          {loadingSetup ? <NoticeLine>Checking skill coverage…</NoticeLine> : status ? <p className="ui-text-muted">{status.text}</p> : <InlineError message="Skill coverage is unavailable." />}
         </div>
         <InstallCommandControl
           installCommand={installCommand}
@@ -282,13 +282,13 @@ export function OrchestrationSettings({ context, signals }: { context: UiPluginC
                     </div>
                   ))}
                 </div>
-              : <p className="ui-text-muted">Agent coverage is unavailable.</p>}
+              : <InlineError message="Agent coverage is unavailable." />}
       </ToolPanelFrame>
 
       <ToolPanelFrame title="Nested worker depth">
         <p className="ui-text-muted">Maximum worker generations allowed to dispatch another worker. The default is 1; a coordinator is depth 0.</p>
         {policy === null ? (
-          checking ? <NoticeLine>Checking nested worker depth…</NoticeLine> : <p className="ui-text-muted">Nested worker depth is unavailable.</p>
+          checking ? <NoticeLine>Checking nested worker depth…</NoticeLine> : <InlineError message="Nested worker depth is unavailable." />
         ) : policy.canChange ? (
           <div className="ui-stack">
             <TextField

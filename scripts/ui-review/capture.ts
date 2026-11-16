@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { chromium, type Browser, type BrowserServer, type Locator, type Page } from 'playwright'
-import { type UiModel, type UiSlotEntry, type UiToolEntry, type ThemeInfo } from '@quirky/protocol'
+import { type UiModel, type UiToolEntry, type ThemeInfo } from '@quirky/protocol'
 import { connectDaemon, isDaemonAlive, readRuntime, type RuntimeInfo } from '@quirky/protocol/node'
 import { createProcessScope, type ProcessScope } from '../test-support/process-scope'
 import {
@@ -27,6 +27,8 @@ import { CHECKS_FIXTURE_BRANCH } from './tasks-fixture'
 import { createRemoteFixtures, type RemoteFixtures } from './remote-fixtures'
 import { captureBrowserExecutable } from './browser'
 import { PALETTE_SEARCH_LABEL } from '../../packages/ui/src/plugins/palette'
+import { enableCaptureVisibilitySettings, projectCaptureInventory, scopeCaptureInventory } from './contribution-inventory'
+export { discoverCaptureTargets } from './contribution-inventory'
 import {
   CAPTURE_SCHEMA_VERSION,
   THEMES,
@@ -35,6 +37,7 @@ import {
   type CaptureOptions,
   type CaptureTarget,
   type CaptureTheme,
+  type ContributionInventory,
   type ImageEvidence
 } from './contracts'
 import { clearScene, newSceneState, populateShell, raiseNeedsYouToast, scopeToProject, showPopupsTogether, type SceneState } from './shell-scenes'
@@ -189,41 +192,13 @@ function evidence(path: string, bytes: Uint8Array): ImageEvidence {
   return { path: resolve(path), sha256: sha256(bytes) }
 }
 
-export function discoverCaptureTargets(model: UiModel): CaptureTarget[] {
-  const toTarget = (entry: UiSlotEntry, kind: CaptureTarget['kind']): CaptureTarget => {
-    const separator = entry.id.indexOf(':')
-    const slash = entry.id.indexOf('/', separator + 1)
-    const plugin = separator >= 0 && slash > separator
-      ? entry.id.slice(separator + 1, slash)
-      : entry.plugin
-    return { id: entry.id, plugin, title: entry.title, kind }
-  }
-  const targets = [
-    { id: 'host:shell', plugin: null, title: 'Quirky', kind: 'host' as const },
-    { id: 'host:scoped', plugin: null, title: 'Quirky scoped to one project', kind: 'host' as const },
-    { id: 'host:popups', plugin: null, title: 'Quirky with its popups open', kind: 'host' as const },
-    ...model.views.map((entry) => toTarget(entry, 'view')),
-    ...model.panels.map((entry) => toTarget(entry, 'panel')),
-    ...model.sidebarSections.map((entry) => toTarget(entry, 'sidebar-section')),
-    ...model.activityItems.map((entry) => toTarget(entry, 'activity-item')),
-    ...model.statusBars.map((entry) => toTarget(entry, 'status-bar')),
-    ...model.overlays.map((entry) => toTarget(entry, 'overlay')),
-    ...model.settingsSections.map((entry) => toTarget(entry, 'settings-section')),
-    { id: 'host:settings', plugin: null, title: 'Settings', kind: 'host' as const },
-    { id: 'host:palette', plugin: null, title: 'Command palette', kind: 'host' as const }
-  ]
-  const seen = new Set<string>()
-  for (const target of targets) {
-    if (seen.has(target.id)) throw new Error(`duplicate UI capture target ID ${target.id}`)
-    seen.add(target.id)
-  }
-  return targets
-}
 
-export function selectCaptureTargets(targets: CaptureTarget[], selectors: string[]): CaptureTarget[] {
+export function selectCaptureTargets(targets: CaptureTarget[], selectors: string[], inventory?: ContributionInventory): CaptureTarget[] {
   if (selectors.length === 0) return targets
   const selected = new Set<string>()
   for (const selector of selectors) {
+    const alias = inventory?.toolAliases.find((entry) => entry.declaration.id === selector)
+    if (alias) throw new Error(`${alias.declaration.id} is not mounted; tool ${alias.toolId} renders ${alias.renderedTarget.id}`)
     if (selector.trim().length === 0) throw new Error('empty capture selector is not allowed')
     const matches = targets.filter((target) => target.id === selector || target.plugin === selector)
     if (matches.length === 0) throw new Error(`unknown capture selector ${JSON.stringify(selector)}`)
@@ -905,6 +880,11 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
       }
       throw new Error(`unsupported host target ${target.id}`)
     case 'view': {
+      const toolId = hostingToolFor(runtime.model, target)
+      if (toolId !== null) {
+        await rpc(runtime.client, 'ui.tool.open', { id: toolId }, runtime.options.timeoutMs, runtime.options.signal)
+        return
+      }
       if (target.id === 'view:quirky.accounts/session-accessory') {
         await openLocalWorktreeContext(runtime)
         await prepareAccountsStaleSession(runtime, 'codex')
@@ -1057,22 +1037,29 @@ async function openTarget(runtime: CaptureRuntime, target: CaptureTarget): Promi
 }
 
 /**
- * The tool that hosts a sidebar section or activity item, or null for a surface that always shows,
- * such as a status bar item. Throws when no registered tool lists the target.
+ * Resolves independently mounted stripe/sidebar targets and canonical view bodies to their production tools.
+ * Ordinary views and always-visible surfaces need no tool.
  */
-export function hostingToolFor(model: Pick<UiModel, 'tools'>, target: CaptureTarget): string | null {
+export function hostingToolFor(model: UiModel, target: CaptureTarget): string | null {
+  if (target.kind === 'view') {
+    const hasSidebarAlias = model.tools?.some((tool) => tool.contributionId === target.id &&
+      model.sidebarSections.some((entry) => tool.id === entry.id || tool.aliases.includes(entry.id)))
+    if (!hasSidebarAlias) return null
+    return projectCaptureInventory(model).contributionInventory.toolAliases
+      .find((alias) => alias.renderedTarget.id === target.id)?.toolId ?? null
+  }
   if (target.kind !== 'sidebar-section' && target.kind !== 'activity-item') return null
   const tool = findHostingTool(model, target)
   return tool.id
 }
 
 function findHostingTool(model: Pick<UiModel, 'tools'>, target: CaptureTarget): UiToolEntry {
-  const tool = model.tools?.find((candidate) => candidate.id === target.id || candidate.aliases.includes(target.id))
+  const tool = model.tools?.find((candidate) => candidate.contributionId === target.id || candidate.id === target.id || candidate.aliases.includes(target.id))
   if (!tool) throw new Error(`no tool hosts ${target.id}`)
   return tool
 }
 
-/** Opens the tool a sidebar section or activity item lives in, through `ui.tool.open`; a status bar item needs none. */
+/** Opens a target's production tool without redirecting non-mounted sidebar declarations to another body. */
 export async function openSurfaceTool(runtime: Pick<CaptureRuntime, 'client' | 'model' | 'options'>, target: CaptureTarget): Promise<void> {
   const id = hostingToolFor(runtime.model, target)
   if (id === null) return
@@ -1083,7 +1070,7 @@ export async function openSurfaceTool(runtime: Pick<CaptureRuntime, 'client' | '
   await rpc(runtime.client, 'ui.tool.open', { id }, runtime.options.timeoutMs, runtime.options.signal)
 }
 
-export async function waitForStateShown(runtime: Pick<CaptureRuntime, 'client' | 'options'>, target: CaptureTarget): Promise<void> {
+export async function waitForStateShown(runtime: Pick<CaptureRuntime, 'client' | 'options'>, target: CaptureTarget, toolId?: string | null): Promise<void> {
   if (target.kind === 'host' || target.kind === 'settings-section' || target.kind === 'overlay') return
   const deadline = Date.now() + runtime.options.timeoutMs
   while (Date.now() < deadline) {
@@ -1091,10 +1078,11 @@ export async function waitForStateShown(runtime: Pick<CaptureRuntime, 'client' |
     const state = record(await rpc(runtime.client, 'ui.state', {}, runtime.options.timeoutMs, runtime.options.signal))
     const slots = Array.isArray(state.slots) ? state.slots : []
     const slot = slots.map(record).find((entry) => entry.id === target.id)
-    if (slot?.shown === true) return
+    const open = record(record(record(state.layout).tools).open)
+    if (slot?.shown === true && (!toolId || Object.values(open).includes(toolId))) return
     await Bun.sleep(75)
   }
-  throw new Error(`public UI state did not show ${target.id}`)
+  throw new Error(`public UI state did not show ${target.id}${toolId ? ` in tool ${toolId}` : ''}`)
 }
 
 /** True when the open Command palette dialog contains its search field. */
@@ -1104,7 +1092,9 @@ export async function paletteFieldMounted(page: Page): Promise<boolean> {
 }
 
 async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): Promise<void> {
-  await waitForStateShown(runtime, target)
+  const aliases = runtime.manifest.contributionInventory?.toolAliases.filter((alias) => alias.renderedTarget.id === target.id) ?? []
+  const toolId = aliases[0]?.toolId ?? (target.kind === 'sidebar-section' ? hostingToolFor(runtime.model, target) : null)
+  await waitForStateShown(runtime, target, toolId)
   if (target.id === 'view:quirky.browser/page') {
     await Promise.all([
       bounded(runtime.page.locator('.qbp-toolbar').waitFor({ state: 'visible', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'browser toolbar'),
@@ -1137,6 +1127,15 @@ async function inspectSurface(runtime: CaptureRuntime, target: CaptureTarget): P
 
   await bounded(root.waitFor({ state: 'attached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, `slot ${target.id} mount`)
   if (await root.count() !== 1) throw new Error(`slot ${target.id} did not mount in the renderer DOM`)
+  if (toolId !== null) {
+    const actualTool = await root.evaluate((node) => node.closest('[data-tool-panel]')?.getAttribute('data-tool-panel') ?? null)
+    if (actualTool !== toolId) throw new Error(`slot ${target.id} is not inside tool ${toolId}`)
+    for (const alias of aliases) {
+      if (await runtime.page.locator(targetSlotSelector(alias.declaration)).count() !== 0) {
+        throw new Error(`non-mounted alias ${alias.declaration.id} appeared in the renderer DOM`)
+      }
+    }
+  }
   const readinessTimeout = Math.min(target.kind === 'overlay' ? 1_500 : 10_000, runtime.options.timeoutMs)
   try {
     await bounded(runtime.page.waitForFunction((slotSelector) => {
@@ -1680,13 +1679,16 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
     fixtures = await registerCaptureFixtures(activeClient, prepared, { timeoutMs: options.timeoutMs, signal: options.signal })
     const activeFixtures = fixtures
     await seedWorktreeStatuses(activeClient, activeFixtures, { port: runtime.port, hookToken: runtime.hookToken }, { timeoutMs: options.timeoutMs, signal: options.signal })
-    const model = record(await rpc(activeClient, 'ui.contributions', {}, options.timeoutMs, options.signal)) as unknown as UiModel
+    const initialModel = record(await rpc(activeClient, 'ui.contributions', {}, options.timeoutMs, options.signal)) as unknown as UiModel
+    const { model, activatedVisibilitySettings } = await enableCaptureVisibilitySettings(initialModel,
+      (method, params) => rpc(activeClient, method, params, options.timeoutMs, options.signal))
     if (!Array.isArray(model.views) || !Array.isArray(model.panels) || !Array.isArray(model.sidebarSections) ||
       !Array.isArray(model.activityItems) || !Array.isArray(model.statusBars) || !Array.isArray(model.overlays) ||
       !Array.isArray(model.settingsSections) || !model.modules || typeof model.modules !== 'object') {
       throw new Error('ui.contributions returned an invalid surface inventory')
     }
-    const targets = selectCaptureTargets(discoverCaptureTargets(model), options.only)
+    const projection = projectCaptureInventory(model)
+    const targets = selectCaptureTargets(projection.targets, options.only, projection.contributionInventory)
     cells = captureCells(targets, selectedThemes)
     const commit = (await runOwnedCommand(scope, ['git', '-C', repoRoot, 'rev-parse', 'HEAD'], repoRoot, env, options.timeoutMs, options.signal)).stdout
     if (!/^[0-9a-f]{40,64}$/i.test(commit)) throw new Error('could not identify the repository commit for the capture manifest')
@@ -1703,6 +1705,8 @@ export async function captureApplication(options: CaptureOptions): Promise<Captu
       scope: options.only.length === 0 ? 'full' : 'filtered',
       selectors: [...options.only],
       targets,
+      contributionInventory: scopeCaptureInventory(projection.contributionInventory, targets),
+      activatedVisibilitySettings,
       captures: [],
       failures: []
     }

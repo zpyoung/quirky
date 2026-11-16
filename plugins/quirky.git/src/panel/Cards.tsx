@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GitOperation } from '@quirky/protocol'
-import { Button, InlineAgentCard } from '@quirky/ui'
+import { Button, InlineAgentCard, InlineError } from '@quirky/ui'
 import { FixSplitButton, type FixButtonProps } from '../ai/FixSplitButton'
 
 type OperationName = Exclude<GitOperation, 'none'>
@@ -115,7 +115,7 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
   if (!standalone) {
     return (
       <div className="ui-stack" role="status">
-        <p>{message}</p>
+        <InlineError message={message} />
         {controls}
       </div>
     )
@@ -127,7 +127,7 @@ export function CompareUnavailable({ message, standalone, onChangeBase, onRetry 
         status="failing"
         description={
           <div className="ui-stack">
-            <p>{message}</p>
+            <InlineError message={message} />
             {controls}
           </div>
         }

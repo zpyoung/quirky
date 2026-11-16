@@ -95,7 +95,7 @@ test('removing advisory, decisive parent and tab-menu coverage exposes their can
 })
 
 test('wrong render families and undeclared commands cannot serve as witnesses', () => {
-  for (const [state, replacement] of [['loading', 'InlineError'], ['error', 'NoticeLine']] as const) {
+  for (const [state, replacement] of [['loading', 'InlineError'], ['error', 'EmptyState']] as const) {
     const value = clone()
     const entry = value.states.find((entry) => entry.state === state && entry.render.component !== 'toast')!
     expect(entry).toBeDefined()
