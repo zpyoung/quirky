@@ -639,6 +639,45 @@ describe('interrupt', () => {
     expect(query.written.at(-1).message.content).toBeDefined()
   })
 
+  test('echoes of the interrupt after the turn closed journal nothing', async () => {
+    const query = await begin()
+    await emit(query, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Write', input: { file_path: '/a/bye.txt', content: 'x' } }] } })
+    await until(() => messages.length === 2)
+    await runner.interrupt('s_1')
+    const before = messages.length
+    await emit(
+      query,
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: 'The user doesn\'t want to proceed' }] } },
+      { type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } },
+      { type: 'result', subtype: 'error_during_execution', is_error: true }
+    )
+    expect(messages).toHaveLength(before)
+    expect(items().filter((item) => item.callId === 't1').map((item) => item.state)).toEqual(['running', 'stopped'])
+    expect(items().filter((item) => item.kind === 'turn-end')).toHaveLength(1)
+    expect(items().some((item) => item.kind === 'user' && item.text.startsWith('[Request interrupted'))).toBe(false)
+  })
+
+  test('a second final for an already closed call emits nothing', async () => {
+    const query = await begin()
+    await emit(
+      query,
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/a' } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'x' }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: 'late' }] } }
+    )
+    expect(items().filter((item) => item.callId === 't1').map((item) => item.state)).toEqual(['running', 'done'])
+  })
+
+  test('a live tool result still closes its call as failed', async () => {
+    const query = await begin()
+    await emit(
+      query,
+      { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: '/a' } }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', is_error: true, content: 'nope' }] } }
+    )
+    expect(items().filter((item) => item.callId === 't1').map((item) => item.state)).toEqual(['running', 'failed'])
+  })
+
   test('with no open turn it does nothing', async () => {
     const query = await begin()
     await emit(query, { type: 'result', subtype: 'success', result: 'ok', is_error: false })

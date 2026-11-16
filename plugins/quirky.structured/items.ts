@@ -76,6 +76,7 @@ const capped = (text: string): string => (text.length > DETAIL_LIMIT ? `${text.s
 export class CallTracker {
   private readonly open = new Map<string, CallItem>()
   private readonly tools = new Map<string, ToolEntry>()
+  private readonly closed = new Set<string>()
 
   get size(): number {
     return this.open.size
@@ -86,6 +87,11 @@ export class CallTracker {
     this.tools.set(callId, { name, input })
   }
 
+  /** Whether the call already has a final state, so a late result for it must be dropped. */
+  isClosed(callId: string): boolean {
+    return this.closed.has(callId)
+  }
+
   recall(callId: string): ToolEntry | undefined {
     return this.tools.get(callId)
   }
@@ -93,8 +99,11 @@ export class CallTracker {
   /** Records an item: a running call stays open, anything else closes it. */
   track(item: ChatItem): void {
     if (item.kind !== 'activity' && item.kind !== 'file-change' && item.kind !== 'tests') return
-    if (item.state === 'running') this.open.set(item.callId, item)
-    else {
+    if (item.state === 'running') {
+      this.closed.delete(item.callId)
+      this.open.set(item.callId, item)
+    } else {
+      this.closed.add(item.callId)
       this.open.delete(item.callId)
       this.tools.delete(item.callId)
     }
@@ -103,6 +112,7 @@ export class CallTracker {
   /** Closes every open call in `state` and returns the closing items. */
   settle(state: Exclude<CallState, 'running'>): CallItem[] {
     const closing = [...this.open.values()].map((item) => ({ ...item, state }) as CallItem)
+    for (const item of closing) this.closed.add(item.callId)
     this.open.clear()
     this.tools.clear()
     return closing
@@ -303,7 +313,7 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
       const content = msg.message?.content
       if (Array.isArray(content) && content.some((block: any) => block?.type === 'tool_result')) {
         return content
-          .filter((block: any) => block?.type === 'tool_result')
+          .filter((block: any) => block?.type === 'tool_result' && !calls.isClosed(String(block.tool_use_id ?? '')))
           .map((block: any): ItemEntry => {
             const callId = String(block.tool_use_id ?? '')
             const output = blockText(block.content)
@@ -319,6 +329,7 @@ function claudeEntriesUnchecked(msg: any, calls: CallTracker): ItemEntry[] {
           })
       }
       const text = blockText(content)
+      if (text.startsWith('[Request interrupted by user')) return []
       return [{ role: 'user', text, data: msg, item: userItem(text) }]
     }
     case 'system': {

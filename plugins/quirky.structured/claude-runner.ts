@@ -418,6 +418,7 @@ class ClaudeRunner implements StructuredRunner {
       // the result of the turn that was interrupted is already journaled as stopped
       if (msg.subtype !== 'success') return
     }
+    if (msg?.type === 'user' && run?.interrupted) return
     if (msg?.type === 'assistant') run?.stream.reset()
     const failed = msg?.type === 'result' && (msg.is_error === true || (typeof msg.subtype === 'string' && msg.subtype.startsWith('error')))
     if (msg?.type === 'result' && run) {
