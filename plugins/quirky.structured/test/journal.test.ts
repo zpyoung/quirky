@@ -46,3 +46,13 @@ test('a failed receipt cleanup rolls back message removal', () => {
   expect(() => journal.remove('retained-on-failure')).toThrow()
   expect(journal.list('retained-on-failure')).toEqual([message])
 })
+
+test('a chat item is stored beside the message and comes back from list', () => {
+  const item = { kind: 'activity' as const, callId: 'c1', tool: 'Read', summary: '/a', state: 'running' as const }
+  const stored = journal.append({ sessionId: 's', role: 'tool', text: 'Read: /a', data: { raw: 1 }, item, at: 1 })
+  journal.append({ sessionId: 's', role: 'system', text: 'legacy', at: 2 })
+  expect(stored.item).toEqual(item)
+  const [withItem, without] = journal.list('s')
+  expect(withItem).toEqual(stored)
+  expect(without).not.toHaveProperty('item')
+})
