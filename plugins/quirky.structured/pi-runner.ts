@@ -236,6 +236,7 @@ class PiRunner implements StructuredRunner {
         env: environmentWithPatch(this.deps.env ?? process.env, options.env)
       },
       { event: (frame) => this.onFrame(run, frame), exit: (exit) => this.onExit(run, exit) },
+      this.context.process,
       this.deps.transport ?? spawnPiTransport
     )
     return run
