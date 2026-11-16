@@ -816,7 +816,7 @@
       { "id": "quick-open", "title": "Go to File", "description": "Open Quick Open." },
       { "id": "search", "title": "Search Files", "description": "Search file contents." },
       { "id": "save", "title": "Save File", "description": "Save the focused editor draft; untitled Markdown opens the relative-path Save As dialog." },
-      { "id": "close", "title": "Close Editor Tab", "description": "Close the focused editor tab after its dirty-close decision." },
+      { "id": "close", "title": "Close Editor Tab", "description": "Close the focused editor tab after its dirty-close decision.", "args": { "type": "object", "properties": { "bufferId": { "type": "string" }, "tabId": { "type": "string" } }, "additionalProperties": false } },
       { "id": "close-all", "title": "Close All Editor Tabs", "description": "Close editor tabs with per-buffer dirty decisions." },
       { "id": "reopen", "title": "Reopen Closed Editor Tab", "description": "Reopen the last eligible closed editor tab." },
       { "id": "explorer", "title": "Show Explorer", "description": "Open the Explorer sidebar panel." },
