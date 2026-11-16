@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Button, EmptyState, IconButton, Menu, ScopeChip, SectionHeader } from '@quirky/ui'
+import { Button, EmptyState, IconButton, InlineError, Menu, NoticeLine, ScopeChip, SectionHeader } from '@quirky/ui'
 import type { GitChange, GitDiff, GitStatusEntry } from '@quirky/protocol'
 
 import { reuseGitDiff } from '../diffRefresh'
@@ -12,11 +12,12 @@ import { reviewOrder, nextToReview } from '../review/order'
 import { onSelectedPath, selectPath } from '../review/selection'
 import { setReviewMark, useReview } from '../review/useReview'
 import { useSourceEntries } from '../review/useSourceEntries'
-import { fetchDiff, messageOf, useRefreshTriggers } from './data'
+import { fetchDiff, isTextDiff, messageOf, useRefreshTriggers } from './data'
 import type { PaneHandle, PaneState } from './DiffPane'
 import { EAGER_SECTIONS } from './entries'
-import { ErrorNotice } from './Fallbacks'
 import { SectionLoader } from './loader'
+import { requestViewControl, useViewControl, viewControlGeneration, viewTarget, DIFF_SURFACE } from './view-control'
+import type { GitUiControl } from '../ui-control'
 import { ReviewCard, type CardData } from './ReviewCard'
 import {
   bodyAgainst,
@@ -56,6 +57,12 @@ const diskHashOf = (diff: GitDiff): string | null | undefined => (diff.modifiedD
 const diskMoved = (held: GitDiff, fresh: GitDiff): boolean => held.modifiedHash !== fresh.modifiedHash || held.modifiedDeleted !== fresh.modifiedDeleted
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
+function hasExactControlData(control: GitUiControl, keys: readonly string[]): boolean {
+  const data = control.data
+  if (keys.length === 0) return data === undefined || Object.keys(data).length === 0
+  return data !== undefined && Object.keys(data).length === keys.length && keys.every((key) => Object.hasOwn(data, key))
+}
+
 
 /**
  * The worktree's one Review tab: a card per base, staged, unstaged or commit change in the panel's
@@ -87,6 +94,8 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   }
   const mount = initial.current!
   const mountInput = mount.request
+  const controlTarget = viewTarget('review', { worktree, ...(input.tabId === undefined ? {} : { tabId: input.tabId }) })
+  const [controlGeneration, setControlGeneration] = useState(viewControlGeneration)
   const { model, error, refresh } = useReview(context, worktree)
   const [panelSettings] = useSettings(context)
   const viewMode = panelSettings.viewMode
@@ -96,7 +105,9 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const source = scope !== null && 'source' in scope ? scope.source : null
   const sourceData = useSourceEntries(context, worktree, source !== null)
   const [commitData, setCommitData] = useState<CommitFiles | null>(null)
+  const [commitReadRevision, setCommitReadRevision] = useState(0)
   const [commitError, setCommitError] = useState<string | null>(null)
+  const [previews, setPreviews] = useState<Record<string, boolean>>({})
   const [ui, setUi] = useState<Record<string, CardUi>>({})
   const [sections, setSections] = useState<Record<string, CardData>>({})
   const [paneStates, setPaneStates] = useState<Record<string, PaneState>>({})
@@ -111,6 +122,17 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const [marking, setMarking] = useState<ReadonlySet<string>>(new Set())
 
   const sectionsRef = useRef<Record<string, CardData>>({})
+  const controlReservations = useRef(new Set<string>())
+  function postControl(action: string, data?: Record<string, unknown>): void {
+    void requestViewControl(context, { target: controlTarget, generation: controlGeneration, action, ...(data === undefined ? {} : { data }) })
+  }
+  const reserveControl = (key: string): boolean => {
+    if (controlReservations.current.has(key)) return false
+    controlReservations.current.add(key)
+    return true
+  }
+  const releaseControl = (key: string) => controlReservations.current.delete(key)
+  const releaseControlAfterTurn = (key: string) => queueMicrotask(() => releaseControl(key))
   const paneStatesRef = useRef<Record<string, PaneState>>({})
   const uiRef = useRef(ui)
   uiRef.current = ui
@@ -148,7 +170,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     return () => {
       current = false
     }
-  }, [context, worktree, commit])
+  }, [context, worktree, commit, commitReadRevision])
 
   const files = model?.files
   const noteCounts = useMemo(() => {
@@ -330,10 +352,9 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   }
 
   useEffect(() => {
-    const kept: Record<string, CardData> = {}
-    for (const item of items) {
-      kept[item.key] = sectionsRef.current[item.key] ?? { status: 'idle', revision: 0, against: 'base', signature: item.signature }
-    }
+    const kept: Record<string, CardData> = Object.fromEntries(
+      items.map((item) => [item.key, sectionsRef.current[item.key] ?? { status: 'idle', revision: 0, against: 'base', signature: item.signature }])
+    )
     const same = Object.keys(kept).length === Object.keys(sectionsRef.current).length && Object.keys(kept).every((k) => sectionsRef.current[k] === kept[k])
     if (!same) commitSections(kept)
     for (const key of [...versions.current.keys()]) if (!kept[key]) versions.current.delete(key)
@@ -346,6 +367,11 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
       setPaneStates(remaining)
     }
     setUi((prev) => reconcileCards(prev, items))
+    const activeKeys = new Set(items.map((item) => item.key))
+    setPreviews((current) => {
+      const remaining = Object.fromEntries(Object.entries(current).filter(([key]) => activeKeys.has(key)))
+      return Object.keys(remaining).length === Object.keys(current).length ? current : remaining
+    })
   }, [items])
 
   useEffect(() => {
@@ -385,14 +411,16 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     worktree
   )
 
-  const loadNow = (key: string) => {
+  const loadNow = (key: string): Promise<void> => {
     const item = itemsRef.current.find((i) => i.key === key)
     if (item && sectionsRef.current[key]?.status === 'error') versionOf(item).wanted++
-    void loader.current!.request(key, true)
+    return loader.current!.request(key, true)
   }
   const loadNowRef = useRef(loadNow)
   loadNowRef.current = loadNow
-  const loadCard = useCallback((key: string) => loadNowRef.current(key), [])
+  const loadCard = useCallback((key: string) => {
+    void loadNowRef.current(key)
+  }, [])
   const onVisible = useCallback((key: string) => {
     const item = itemsRef.current.find((i) => i.key === key)
     if (item && loadModeOf(item) === 'auto' && !isCollapsed(cardFor(uiRef.current[key], item.mark))) void loader.current?.request(key)
@@ -423,27 +451,46 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const writeCard = useCallback((item: ReviewItem, patch: Partial<CardUi>) => {
     setUi((prev) => ({ ...prev, [item.key]: { ...cardFor(prev[item.key], item.mark), ...patch } }))
   }, [])
-  const toggle = useCallback(
-    (key: string) => {
-      const item = itemsRef.current.find((i) => i.key === key)
-      if (item) writeCard(item, { collapsed: !isCollapsed(viewOfRef(item)) })
-    },
-    [writeCard]
-  )
-  const showFullDiff = useCallback(
-    (key: string) => {
-      const item = itemsRef.current.find((i) => i.key === key)
-      if (item) writeCard(item, { full: true })
-    },
-    [writeCard]
-  )
+  function setCardCollapsed(item: ReviewItem, collapsed: boolean): void {
+    setUi((prev) => {
+      const current = cardFor(prev[item.key], item.mark)
+      if (isCollapsed(current) === collapsed) return prev
+      return { ...prev, [item.key]: { ...current, collapsed } }
+    })
+  }
+  function toggle(key: string): void {
+    const item = itemsRef.current.find((i) => i.key === key)
+    if (item) postControl('collapse', { path: item.path, collapsed: !isCollapsed(viewOfRef(item)) })
+  }
+  function showFullDiff(key: string): void {
+    const item = itemsRef.current.find((i) => i.key === key)
+    if (item) postControl('full-diff', { path: item.path })
+  }
+  function markByControl(item: ReviewItem): void {
+    postControl('mark', { path: item.path, reviewed: item.mark !== 'reviewed' })
+  }
+  function previewByControl(key: string, preview: boolean): void {
+    const item = itemsRef.current.find((i) => i.key === key)
+    if (item) postControl('preview', { path: item.path, preview })
+  }
+  function loadByControl(key: string): void {
+    const item = itemsRef.current.find((i) => i.key === key)
+    if (item) postControl('load', { path: item.path })
+  }
+  function reloadByControl(key: string): void {
+    const item = itemsRef.current.find((i) => i.key === key)
+    if (item) postControl('reload', { path: item.path })
+  }
 
   const allCollapsed = items.length > 0 && items.every((item) => isCollapsed(viewOf(item)))
-  const setAllCollapsed = (collapsed: boolean) => {
+  function setAllCollapsed(collapsed: boolean): void {
     setUi((prev) => {
-      const next = { ...prev }
-      for (const item of itemsRef.current) next[item.key] = { ...cardFor(prev[item.key], item.mark), collapsed }
-      return next
+      const currentItems = itemsRef.current
+      if (currentItems.every((item) => isCollapsed(cardFor(prev[item.key], item.mark)) === collapsed)) return prev
+      return Object.fromEntries([
+        ...Object.entries(prev),
+        ...currentItems.map((item) => [item.key, { ...cardFor(prev[item.key], item.mark), collapsed }] as const)
+      ])
     })
   }
 
@@ -523,6 +570,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
     setNoteTarget(nextReveal?.noteId === undefined ? null : { path: nextReveal.path, noteId: nextReveal.noteId })
     const applied = Promise.withResolvers<void>()
     pendingScope.current = { scope: nextScope, ...applied }
+    setControlGeneration(viewControlGeneration())
     setScopeState(nextScope)
     await applied.promise
     return 'applied'
@@ -590,7 +638,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
         }
       } catch (e) {
         refresh()
-        context.toast('Could not update the review mark', messageOf(e))
+        context.toast('Could not update the review mark', messageOf(e), { kind: 'error' })
       } finally {
         setMarking((prev) => {
           const next = new Set(prev)
@@ -738,8 +786,133 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
         : commit !== null
           ? 'No files in this commit'
           : `Nothing changed against ${model?.base.name ?? 'the base'}`
-  const retry = source !== null ? sourceData.refresh : refresh
-  const removeScope = () => void applyScopeRef.current(null, 'ask').catch(() => undefined)
+
+  const controlActions: string[] = ['layout']
+  if (items.length > 0) {
+    controlActions.push('collapse', 'collapse-all')
+  }
+  if (!scoped && items.some((item) => !marking.has(item.path))) controlActions.push('mark')
+  if (
+    items.some((item) => {
+      const diff = sections[item.key]?.status === 'loaded' ? sections[item.key]?.diff : undefined
+      return diff !== undefined && /\.(md|markdown)$/i.test(item.path) && isTextDiff(diff) && diff.modifiedDeleted !== true
+    })
+  ) {
+    controlActions.push('preview')
+  }
+  if (items.some((item) => !scoped && item.mark === 'changed' && !viewOf(item).full && paneStates[item.key]?.dirty !== true)) {
+    controlActions.push('full-diff')
+  }
+  if (
+    items.some((item) => {
+      const status = sections[item.key]?.status ?? 'idle'
+      return status === 'error' || (status === 'idle' && loadModeOf(item) !== 'auto')
+    })
+  ) {
+    controlActions.push('load')
+  }
+  if (items.some((item) => paneStates[item.key]?.stale === true)) controlActions.push('reload')
+  if (loadError !== null || staleError !== null) controlActions.push('retry')
+  if (scope !== null && !askingScope.current) controlActions.push('scope-clear')
+
+  const controlAddress = { target: controlTarget, generation: controlGeneration, actions: controlActions.sort() }
+  const itemForPath = (path: unknown) => (typeof path === 'string' ? itemsRef.current.find((item) => item.path === path) : undefined)
+  const handleViewControl = (control: GitUiControl): boolean => {
+    if (control.surface !== DIFF_SURFACE || control.target !== controlTarget || control.generation !== controlGeneration) return false
+    const data = control.data
+
+    if (control.action === 'collapse-all') {
+      if (!hasExactControlData(control, ['collapsed']) || data === undefined || typeof data.collapsed !== 'boolean' || itemsRef.current.length === 0) return false
+      const collapsed = data.collapsed
+      setAllCollapsed(collapsed)
+      return true
+    }
+    if (control.action === 'layout') {
+      if (!hasExactControlData(control, ['layout']) || data === undefined || (data.layout !== 'inline' && data.layout !== 'side-by-side')) return false
+      setOverride(data.layout)
+      return true
+    }
+    if (control.action === 'collapse') {
+      if (!hasExactControlData(control, ['path', 'collapsed']) || data === undefined || typeof data.path !== 'string' || typeof data.collapsed !== 'boolean') return false
+      const item = itemForPath(data.path)
+      if (!item) return false
+      setCardCollapsed(item, data.collapsed)
+      return true
+    }
+    if (control.action === 'mark') {
+      if (!hasExactControlData(control, ['path', 'reviewed']) || data === undefined || typeof data.path !== 'string' || typeof data.reviewed !== 'boolean' || scopeRef.current !== null) {
+        return false
+      }
+      const item = itemForPath(data.path)
+      if (!item || marking.has(item.path)) return false
+      const reservation = `mark:${item.key}`
+      if (!reserveControl(reservation)) return false
+      if ((item.mark === 'reviewed') === data.reviewed) {
+        releaseControlAfterTurn(reservation)
+        return true
+      }
+      void markItem(item).finally(() => releaseControl(reservation))
+      return true
+    }
+    if (control.action === 'full-diff') {
+      if (!hasExactControlData(control, ['path']) || data === undefined || typeof data.path !== 'string') return false
+      const item = itemForPath(data.path)
+      if (!item || item.mark !== 'changed' || viewOfRef(item).full || paneStatesRef.current[item.key]?.dirty === true) return false
+      writeCard(item, { full: true })
+      return true
+    }
+    if (control.action === 'load') {
+      if (!hasExactControlData(control, ['path']) || data === undefined || typeof data.path !== 'string') return false
+      const item = itemForPath(data.path)
+      const status = item ? (sectionsRef.current[item.key]?.status ?? 'idle') : null
+      if (!item || (status !== 'error' && !(status === 'idle' && loadModeOf(item) !== 'auto'))) return false
+      const reservation = `load:${item.key}`
+      if (!reserveControl(reservation)) return false
+      void loadNow(item.key).finally(() => releaseControl(reservation))
+      return true
+    }
+    if (control.action === 'preview') {
+      if (!hasExactControlData(control, ['path', 'preview']) || data === undefined || typeof data.path !== 'string' || typeof data.preview !== 'boolean') return false
+      const item = itemForPath(data.path)
+      const section = item && sectionsRef.current[item.key]
+      const diff = section?.status === 'loaded' ? section.diff : undefined
+      if (!item || diff === undefined || !/\.(md|markdown)$/i.test(item.path) || !isTextDiff(diff) || diff.modifiedDeleted === true) return false
+      setPreviews((current) => (current[item.key] === data.preview ? current : { ...current, [item.key]: data.preview as boolean }))
+      return true
+    }
+    if (control.action === 'reload') {
+      if (!hasExactControlData(control, ['path']) || data === undefined || typeof data.path !== 'string') return false
+      const item = itemForPath(data.path)
+      if (!item || paneStatesRef.current[item.key]?.stale !== true) return false
+      const reservation = `reload:${item.key}`
+      if (!reserveControl(reservation)) return false
+      void reloadCard(item.key)
+        .catch((reason: unknown) => context.toast('Reload failed', messageOf(reason), { kind: 'error' }))
+        .finally(() => releaseControl(reservation))
+      return true
+    }
+    if (control.action === 'retry') {
+      if (!hasExactControlData(control, []) || (loadError === null && staleError === null)) return false
+      const reservation = 'retry'
+      if (!reserveControl(reservation)) return false
+      if (commit !== null) setCommitReadRevision((revision) => revision + 1)
+      else if (source !== null) sourceData.refresh()
+      else refresh()
+      releaseControlAfterTurn(reservation)
+      return true
+    }
+    if (control.action === 'scope-clear') {
+      if (!hasExactControlData(control, []) || scopeRef.current === null || askingScope.current) return false
+      const reservation = 'scope-clear'
+      if (!reserveControl(reservation)) return false
+      void applyScopeRef.current(null, 'ask').catch(() => undefined).finally(() => releaseControl(reservation))
+      return true
+    }
+    return false
+  }
+  useViewControl(context, controlAddress, handleViewControl)
+  const retry = () => postControl('retry')
+  const removeScope = () => postControl('scope-clear')
 
   return (
     <div className="git-review" data-review-tab>
@@ -760,11 +933,11 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
         }
         actions={
           <div className="git-review__actions">
-            <Button onClick={() => setAllCollapsed(!allCollapsed)}>{allCollapsed ? 'Expand all' : 'Collapse all'}</Button>
+            <Button onClick={() => postControl('collapse-all', { collapsed: !allCollapsed })}>{allCollapsed ? 'Expand all' : 'Collapse all'}</Button>
             <IconButton
               label={layout === 'side-by-side' ? 'Switch to inline diff' : 'Switch to side-by-side diff'}
               title={layout === 'side-by-side' ? 'Switch to inline diff' : 'Switch to side-by-side diff'}
-              onClick={() => setOverride(layout === 'side-by-side' ? 'inline' : 'side-by-side')}
+              onClick={() => postControl('layout', { layout: layout === 'side-by-side' ? 'inline' : 'side-by-side' })}
             >
               {layout === 'side-by-side' ? '▤' : '▥'}
             </IconButton>
@@ -787,13 +960,17 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
         }
       />
       <div className="git-review__scroll" data-review-scroll ref={setScrollEl}>
-        {loadError !== null && items.length === 0 && <ErrorNotice message={loadError} subject="review" />}
+        {loadError !== null && items.length === 0 && (
+          <InlineError message={`Error loading review: ${loadError}`} action={{ label: 'Retry', onAction: retry }} />
+        )}
         {staleError !== null && (
-          <div role="alert" className="git-review__notice">
-            Review may be out of date: {staleError} <Button onClick={retry}>Retry</Button>
+          <InlineError message={`Review may be out of date: ${staleError}`} action={{ label: 'Retry', onAction: retry }} />
+        )}
+        {loading && (
+          <div role="status">
+            <NoticeLine>Loading diff...</NoticeLine>
           </div>
         )}
-        {loading && <p className="ui-text-muted git-review__notice">Loading diff...</p>}
         {notReady && <p className="ui-text-muted git-review__notice">{notReady}</p>}
         {source !== null && sourceData.status?.capped === true && (
           <p className="ui-text-muted git-review__notice">Git status stopped at its entry limit, so this list is incomplete.</p>
@@ -819,16 +996,19 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
               settings={paneSettings}
               notes={notes}
               revealNote={noteTarget?.path === item.path ? noteTarget.noteId : undefined}
+              preview={previews[item.key] === true}
               register={register}
               onToggle={toggle}
-              onMark={markItem}
+              onMark={markByControl}
               onFullDiff={showFullDiff}
-              onLoad={loadCard}
+              onPreview={previewByControl}
+              onLoad={loadByControl}
               onVisible={onVisible}
               onActivate={activate}
               onPaneState={onPaneState}
               onPaneHandle={onPaneHandle}
               onReload={reloadCard}
+              onStaleReload={reloadByControl}
               onSaved={onCardSaved}
             />
           )

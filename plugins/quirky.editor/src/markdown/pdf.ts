@@ -238,7 +238,9 @@ function findChrome(): string {
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
     join(homedir(), 'Applications/Chromium.app/Contents/MacOS/Chromium'),
     '/usr/bin/google-chrome',
-    '/usr/bin/chromium'
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser'
   ].filter((candidate): candidate is string => Boolean(candidate))
   for (const candidate of candidates) {
     try {

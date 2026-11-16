@@ -1,16 +1,7 @@
 import type { GitDiff } from '@quirky/protocol'
-import { Badge, EmptyState, ListRow, StatusDot } from '@quirky/ui'
+import { Badge, ListRow } from '@quirky/ui'
 
 import { LIMITS_TEXT, reasonText, type TooLarge } from './limits'
-
-/** The notice for a diff whose load failed; git's message is shown as-is. */
-export function ErrorNotice({ message, subject = 'diff' }: { message: string; subject?: string }) {
-  return (
-    <div role="alert">
-      <EmptyState message={`Error loading ${subject}: ${message}`} icon={<StatusDot status="failing" />} />
-    </div>
-  )
-}
 
 /** The fallback for a text diff past the display limits: the counts, the reason and the limits. */
 export function TooLargeNotice({ tooLarge }: { tooLarge: TooLarge }) {
@@ -68,3 +59,4 @@ export function ImagePanes({ diff }: { diff: GitDiff }) {
     </div>
   )
 }
+

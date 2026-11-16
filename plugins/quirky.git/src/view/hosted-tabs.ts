@@ -380,7 +380,7 @@ export function subscribeHostedLayouts(context: UiPluginContext): void {
     const worktree = payload.workspace
     if (typeof worktree !== 'string' || worktree === '') return
     void promotePinnedPreviews(context, worktree).catch((error: unknown) => {
-      context.toast('Could not make the diff tab permanent', messageOf(error))
+      context.toast('Could not make the diff tab permanent', messageOf(error), { kind: 'error' })
     })
     void refreshActiveHostedView(context)
   })

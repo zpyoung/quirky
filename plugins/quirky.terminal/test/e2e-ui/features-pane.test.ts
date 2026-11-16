@@ -230,7 +230,11 @@ test(
     const largeFile = `${f.h.home}/paste-large.bin`
     await readBytes(f, session, START.length + expected.length + END.length, largeFile, true)
     const fromLarge = f.calls.length
-    expect(await runCommand(f, 'paste', { text: large })).toEqual({ ok: true })
+    const largeResult = await f.h.call<{ result: unknown }>('ui.command.run', {
+      id: 'command:quirky.terminal/paste',
+      args: { text: large }
+    })
+    expect(largeResult.result).toEqual({ ok: true })
     await readDone(f, session, START.length + expected.length + END.length, 60_000)
     const chunks = writesSince(f, fromLarge)
     expect(chunks[0]).toBe(START)

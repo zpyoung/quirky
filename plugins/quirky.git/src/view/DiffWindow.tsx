@@ -12,9 +12,12 @@ import { registerView, reviewViewFor, type ViewHandle } from './registry'
 import { activateHostedDiff, claimReviewTab, closeHostedDiff, nameReviewTab, ownsReviewTab, releaseReviewTab, updateHostedDiffDirty } from './hosted-tabs'
 import { useDiffSettings } from './settings'
 import type { Controller, ViewReport } from './types'
+import { requestViewControl, useViewControl, viewControlGeneration, viewTarget } from './view-control'
 
 const MODES: ReadonlyArray<DiffViewInput['mode']> = ['file', 'combined', 'conflicts', 'conflict-file', 'review']
 type CloseChoice = 'save' | 'discard' | 'cancel'
+const noControlData = (data: Record<string, unknown> | undefined): boolean =>
+  data === undefined || Object.keys(data).length === 0
 
 /**
  * The mount input as a `DiffViewInput`, or null when it names no worktree. A missing mode means a
@@ -65,7 +68,7 @@ function useFoldsIntoReview(context: UiPluginContext, input: DiffViewInput): boo
       void (async () => {
         await activateHostedDiff(context, { worktree: input.worktree, mode: 'review' })
         await closeHostedDiff(context, input)
-      })().catch((error: unknown) => context.toast('Could not close the duplicate Review tab', messageOf(error)))
+      })().catch((error: unknown) => context.toast('Could not close the duplicate Review tab', messageOf(error), { kind: 'error' }))
       return
     }
     // the name is cosmetic; the tab works without it
@@ -91,6 +94,26 @@ function DiffTab({ context, input, report }: { context: UiPluginContext; input: 
   const closeChoiceResolver = useRef<((choice: CloseChoice) => void) | null>(null)
   const closeChoicePromise = useRef<Promise<CloseChoice> | null>(null)
   const closeTask = useRef<Promise<void> | null>(null)
+  const [closeDialogGeneration, setCloseDialogGeneration] = useState<string | null>(null)
+  const closeDialogGenerationRef = useRef<string | null>(null)
+  const closeBusyRef = useRef(false)
+  const mounted = useRef(true)
+  const closeDialogTarget = viewTarget('close-dialog', {
+    worktree: input.worktree,
+    ...(input.tabId === undefined ? {} : { tabId: input.tabId })
+  })
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      closeBusyRef.current = false
+      closeDialogGenerationRef.current = null
+      const resolve = closeChoiceResolver.current
+      closeChoiceResolver.current = null
+      closeChoicePromise.current = null
+      resolve?.('cancel')
+    }
+  }, [])
   const bind = useCallback((next: Controller) => {
     controller.current = next
   }, [])
@@ -108,17 +131,21 @@ function DiffTab({ context, input, report }: { context: UiPluginContext; input: 
     const pending = Promise.withResolvers<CloseChoice>()
     closeChoiceResolver.current = pending.resolve
     closeChoicePromise.current = pending.promise
+    const generation = viewControlGeneration()
+    closeDialogGenerationRef.current = generation
+    setCloseDialogGeneration(generation)
     setCloseDialogOpen(true)
     return pending.promise
   }, [])
-  const chooseClose = useCallback((choice: CloseChoice) => {
-    if (closeBusy) return
+  const chooseClose = useCallback((choice: CloseChoice): boolean => {
+    if (closeBusyRef.current) return false
     const resolve = closeChoiceResolver.current
-    if (!resolve) return
+    if (!resolve) return false
     closeChoiceResolver.current = null
     closeChoicePromise.current = null
     resolve(choice)
-  }, [closeBusy])
+    return true
+  }, [])
   const requestClose = useCallback(() => {
     if (closeTask.current !== null) return closeTask.current
     const task = (async () => {
@@ -126,24 +153,35 @@ function DiffTab({ context, input, report }: { context: UiPluginContext; input: 
         let restoreDirty = false
         if (controller.current.isDirty?.() ?? true) {
           const choice = await askCloseChoice()
-          if (choice === 'cancel') return
+          if (choice === 'cancel' || !mounted.current) return
           if (choice === 'save') {
+            closeBusyRef.current = true
             setCloseBusy(true)
             try {
               await controller.current.save?.()
             } finally {
-              setCloseBusy(false)
+              closeBusyRef.current = false
+              if (mounted.current) setCloseBusy(false)
             }
-            if (controller.current.isDirty?.() ?? true) return
+            if (!mounted.current || (controller.current.isDirty?.() ?? true)) return
           } else {
             restoreDirty = true
+            closeBusyRef.current = true
             setCloseBusy(true)
           }
         }
-        await closeAfterDecision(restoreDirty)
+        if (mounted.current) await closeAfterDecision(restoreDirty)
       } finally {
-        setCloseBusy(false)
-        setCloseDialogOpen(false)
+        if (mounted.current) {
+          closeBusyRef.current = false
+          setCloseBusy(false)
+          setCloseDialogOpen(false)
+          closeDialogGenerationRef.current = null
+          setCloseDialogGeneration(null)
+        } else {
+          closeBusyRef.current = false
+          closeDialogGenerationRef.current = null
+        }
       }
     })()
     closeTask.current = task
@@ -155,7 +193,7 @@ function DiffTab({ context, input, report }: { context: UiPluginContext; input: 
   }, [askCloseChoice, closeAfterDecision])
   const toastFailure = useCallback((title: string, error: unknown) => {
     try {
-      context.toast(title, error instanceof Error ? error.message : String(error))
+      context.toast(title, error instanceof Error ? error.message : String(error), { kind: 'error' })
     } catch {
       // these failures can land after the plugin is revoked, when toast itself throws
     }
@@ -163,6 +201,23 @@ function DiffTab({ context, input, report }: { context: UiPluginContext; input: 
   const close = useCallback(() => {
     void requestClose().catch((error: unknown) => toastFailure('Could not close diff', error))
   }, [requestClose, toastFailure])
+  const closeDialogActions = ['cancel', 'discard', 'save']
+  const postCloseChoice = (action: CloseChoice) => {
+    const generation = closeDialogGenerationRef.current
+    if (generation === null) return
+    void requestViewControl(context, { target: closeDialogTarget, generation, action })
+  }
+  useViewControl(
+    context,
+    closeDialogGeneration === null || closeBusy
+      ? null
+      : { target: closeDialogTarget, generation: closeDialogGeneration, actions: closeDialogActions },
+    ({ action, generation, data }) => {
+      if (!noControlData(data) || generation !== closeDialogGenerationRef.current || closeBusyRef.current) return false
+      if (action !== 'cancel' && action !== 'discard' && action !== 'save') return false
+      return chooseClose(action)
+    }
+  )
 
   const lastDirty = useRef<boolean | null>(null)
   const send = useCallback((state: ViewReport) => {
@@ -228,13 +283,13 @@ function DiffTab({ context, input, report }: { context: UiPluginContext; input: 
         <Dialog
           open
           title="Unsaved changes"
-          onClose={() => { if (!closeBusy) chooseClose('cancel') }}
+          onClose={() => { if (!closeBusyRef.current) postCloseChoice('cancel') }}
         >
           <p>Save changes to this diff before closing?</p>
           <div className="ui-dialog__actions">
-            <Button variant="secondary" disabled={closeBusy} onClick={() => chooseClose('cancel')}>Cancel</Button>
-            <Button variant="secondary" disabled={closeBusy} onClick={() => chooseClose('discard')}>Don't Save</Button>
-            <Button variant="primary" disabled={closeBusy} onClick={() => chooseClose('save')}>Save</Button>
+            <Button variant="secondary" disabled={closeBusy} onClick={() => postCloseChoice('cancel')}>Cancel</Button>
+            <Button variant="secondary" disabled={closeBusy} onClick={() => postCloseChoice('discard')}>Don't Save</Button>
+            <Button variant="primary" disabled={closeBusy} onClick={() => postCloseChoice('save')}>Save</Button>
           </div>
         </Dialog>
       )}

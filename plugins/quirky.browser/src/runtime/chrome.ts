@@ -53,6 +53,10 @@ function findDefaultChrome(): string {
   const candidates = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser'
   ]
   const found = candidates.find((path) => existsSync(path) && executable(path))
   if (!found) throw fault('browser_unavailable', 'no Chrome or Chromium executable was found; install Chrome or set QUIRKY_BROWSER_CHROME to its absolute executable path')
