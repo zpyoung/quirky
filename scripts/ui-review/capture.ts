@@ -549,6 +549,7 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
   const orchestrationSetupSurface = runtime.page.locator('aside[aria-label="Enable orchestration"]')
   const hadFloating = await floatingPanel.count() > 0 || await orchestrationSetupSurface.count() > 0
   const composer = runtime.page.locator('.tasks-composer')
+  const composerDialog = '[data-plugin-overlay="overlay:quirky.tasks/workspace-composer"] .ui-dialog-backdrop'
   const quickOpen = runtime.page.locator('.qe-quick-open')
   const quickOpenDialog = runtime.page.locator('[data-plugin-overlay="overlay:quirky.editor/quick-open"] .ui-dialog-backdrop')
   const hadQuickOpen = await quickOpen.count() > 0
@@ -587,11 +588,14 @@ async function closeCurrentSurface(runtime: CaptureRuntime): Promise<void> {
     await bounded(accountSwitchDialog.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Accounts switch dialog')
   }
   if (hadComposer) {
-    const state = record(await rpc(runtime.client, 'quirky.tasks/workspaceComposerState', {}, runtime.options.timeoutMs, runtime.options.signal))
-    if (typeof state.requestId === 'string' && state.requestId.length > 0) {
-      await rpc(runtime.client, 'quirky.tasks/workspaceComposerCancel', { requestId: state.requestId }, runtime.options.timeoutMs, runtime.options.signal)
-      await bounded(composer.waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }), runtime.options.timeoutMs, runtime.options.signal, 'close Tasks workspace composer')
-    }
+    // escape may already be unmounting the dialog; inspect and dismiss in one renderer turn.
+    await runtime.page.evaluate((selector) => {
+      const dialog = document.querySelector(selector)
+      const cancel = dialog?.querySelector<HTMLButtonElement>('.tasks-composer__actions button')
+      if (cancel && !cancel.disabled) cancel.click()
+    }, composerDialog)
+    await bounded(runtime.page.locator(composerDialog).waitFor({ state: 'detached', timeout: runtime.options.timeoutMs }),
+      runtime.options.timeoutMs, runtime.options.signal, 'close Tasks workspace composer')
   }
   if (hadFloating) {
     await rpc(runtime.client, 'quirky.terminal/setFloating', { open: false }, runtime.options.timeoutMs, runtime.options.signal)

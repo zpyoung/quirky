@@ -176,6 +176,8 @@ type FakeCaptureRuntimeOptions = {
   quickOpenVisible?: boolean
   escapeClosesQuickOpen?: boolean
   escapeSchedulesQuickOpenClose?: boolean
+  composerVisible?: boolean
+  escapeClosesComposer?: boolean
   rpcFailures?: Record<string, string>
 }
 
@@ -191,6 +193,9 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
   let dialogs = [...(settings.dialogs ?? [])]
   let quickOpenVisible = settings.quickOpenVisible ?? false
   let quickOpenDismissing = false
+  let composerVisible = settings.composerVisible ?? false
+  const composerTitle = 'Create workspace from issue'
+  if (composerVisible) dialogs.push(composerTitle)
   let reloadCount = 0
   let terminalCount = 0
 
@@ -204,8 +209,10 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
           (!settings.slotFailureTarget || selector.includes(settings.slotFailureTarget))) throw new Error(settings.slotFailure)
         if (settings.stripeVisible === false && selector.includes('.tool-shell__stripe')) throw new Error('renderer stripe missing')
         if (settings.overlayOpen === false && selector === '.never-visible') return await new Promise<void>(() => {})
+        if (selector.includes('overlay:quirky.tasks/workspace-composer') && composerVisible) throw new Error('Tasks composer remains open')
       },
       async count() {
+        if (selector.includes('.tasks-composer') || selector.includes('overlay:quirky.tasks/workspace-composer')) return composerVisible ? 1 : 0
         if (selector.includes('overlay:quirky.editor/quick-open')) return quickOpenVisible ? 1 : 0
         if (selector.includes('.qe-quick-open')) return quickOpenVisible ? 1 : 0
         if (selector.includes('.ui-dialog__title')) return dialogs.length
@@ -215,6 +222,7 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
         return 0
       },
       async isVisible() {
+        if (selector.includes('.tasks-composer') || selector.includes('overlay:quirky.tasks/workspace-composer')) return composerVisible
         if (selector.includes('overlay:quirky.editor/quick-open')) return quickOpenVisible
         if (selector.includes('.qe-quick-open')) return quickOpenVisible
         if (selector.includes('.ui-dialog-backdrop')) return dialogs.length > 0
@@ -277,13 +285,24 @@ function buildFakeCaptureRuntime(settings: FakeCaptureRuntimeOptions = {}) {
       async press(key: string) {
         if (key === 'Escape' && settings.escapeSchedulesQuickOpenClose) quickOpenDismissing = true
         else if (key === 'Escape' && settings.escapeClosesQuickOpen !== false) quickOpenVisible = false
+        if (key === 'Escape' && settings.escapeClosesComposer) {
+          composerVisible = false
+          dialogs = dialogs.filter((name) => name !== composerTitle)
+        }
       }
     },
     async waitForFunction() {
       if (settings.readinessPending) return await new Promise<boolean>(() => {})
       return true
     },
-    async evaluate() { return theme.value === 'light' ? '#eeeeee' : '#111111' },
+    async evaluate(_fn?: unknown, selector?: unknown) {
+      if (typeof selector === 'string' && selector.includes('overlay:quirky.tasks/workspace-composer')) {
+        composerVisible = false
+        dialogs = dialogs.filter((name) => name !== composerTitle)
+        return
+      }
+      return theme.value === 'light' ? '#eeeeee' : '#111111'
+    },
     async screenshot() { return new Uint8Array([1, 2, 3, 4]) },
     async reload() {
       reloadCount += 1
@@ -487,6 +506,20 @@ describe('cell isolation', () => {
       fake.cleanup()
     }
   })
+
+  for (const escapeClosesComposer of [false, true]) {
+    test(`Tasks composer leaves the next cell ready when Escape ${escapeClosesComposer ? 'closes it' : 'only clears its daemon request'}`, async () => {
+      const fake = buildFakeCaptureRuntime({ composerVisible: true, escapeClosesComposer })
+      try {
+        const result = await isolateCell(fake.runtime, target('overlay:quirky.tasks/workspace-composer', 'quirky.tasks', 'overlay'), 'dark', false)
+        expect(result).toEqual({ ready: true })
+        expect(fake.runtime.manifest.failures).toEqual([])
+        expect(await fake.page.locator('.overlay-layer .ui-dialog-backdrop').count()).toBe(0)
+      } finally {
+        fake.cleanup()
+      }
+    })
+  }
 
   test('fills every later capture cell with the renderer-blocked reason', () => {
     const cells = [
