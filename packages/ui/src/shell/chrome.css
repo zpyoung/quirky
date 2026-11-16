@@ -98,6 +98,11 @@
   color: var(--ui-muted);
 }
 
+[data-theme="light"] .window-bar__search {
+  background: var(--ui-selected);
+  height: calc(var(--ui-row-single) - var(--ui-space-4));
+}
+
 .window-bar__search:hover:not(:disabled) {
   color: var(--ui-text);
 }
@@ -452,12 +457,12 @@ button.ui-status-bar-item:focus-visible {
   background: var(--ui-transparent);
   border: 0;
   max-height: 60vh;
-  padding: 0;
+  padding: var(--ui-space-8);
 }
 
 .shell-palette .ui-list-row {
   border: 0;
-  padding-block: var(--ui-space-6);
+  padding-block: var(--ui-space-8);
 }
 
 .shell-palette .ui-list-row--selected {
