@@ -4,6 +4,10 @@ import { join } from 'node:path'
 import { bootHosting, type HostingTest } from '../helpers'
 import { bootGitLab, type GitLabWorld } from './world'
 import { mergeRequest } from './stand-in'
+import type { HostingEnv } from '../../src/env'
+import { createGitLabClient } from '../../src/gitlab/api'
+import { createGitLabReviewHandlers } from '../../src/gitlab/reviews'
+import type { GitLabScope } from '../../src/gitlab/types'
 
 let active: HostingTest | undefined
 async function boot(options: Parameters<typeof bootGitLab>[0] = {}): Promise<GitLabWorld> {
@@ -89,6 +93,52 @@ test('forBranch rejects before network when GitLab authentication is unavailable
   })
   expect(world.server.requests).toEqual([])
 })
+
+for (const method of ['forBranch', 'review'] as const) {
+  test(`${method} validates fresh before authentication or snapshot capture`, async () => {
+    const env = {
+      invalid: (reason: string, message: string) => Object.assign(new Error(message), { data: { reason } })
+    } as HostingEnv
+    const unexpected = async (): Promise<never> => { throw new Error('unexpected provider operation') }
+    const client = createGitLabClient(env, { fetch: unexpected, readToken: unexpected })
+    const handler = createGitLabReviewHandlers(env, client)[method]!
+    for (const fresh of [null, 'true', 1, {}, []]) {
+      await expect(handler(
+        {} as GitLabScope,
+        { branch: 'feature', number: 5, fresh },
+        { role: 'plugin', pluginId: 'quirky.hosting' },
+        unexpected
+      )).rejects.toMatchObject({
+        message: 'fresh must be a boolean.',
+        ...reason('validation_error')
+      })
+    }
+  })
+
+  test(`${method} records a cache-only auth-failure snapshot`, async () => {
+    const world = await boot({ token: null })
+    const head = localHead(world)
+    await expect(world.call(method, { number: 5 })).rejects.toMatchObject(reason('auth_required'))
+    expect(world.server.requests).toEqual([])
+    const authProbes = world.glabInvocations().length
+    for (let read = 0; read < 2; read++) {
+      const result = await world.client.callAny('quirky.hosting/cachedReviews', { worktrees: [world.worktree] })
+      expect(result).toMatchObject({
+        workspaces: [{
+          worktreeId: world.worktree,
+          branch: 'feature',
+          headOid: head,
+          review: null,
+          stale: false,
+          error: 'GitLab authentication is unavailable. Set GITLAB_TOKEN or run glab auth login.'
+        }]
+      })
+    }
+    expect(world.server.requests).toEqual([])
+    expect(world.glabInvocations()).toHaveLength(authProbes)
+    expect(world.invocations()).toEqual([])
+  })
+}
 
 test('forBranch normalizes the complete GitLab review shape and caches non-fresh reads', async () => {
   const world = await boot()
