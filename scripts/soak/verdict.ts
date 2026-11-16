@@ -6,17 +6,25 @@ import {
   WINDOW_SILENCE_SECONDS,
 } from './contracts'
 import type {
+  DayInputs,
   EventRecord,
+  GitProbeRecord,
+  PanelKey,
   PanelRefreshRecord,
+  PanelRequestRecord,
+  PhaseRecord,
   ProbeRecord,
   ProcessRow,
   Sample,
   SoakConfig,
   SoakLimits,
   SoakReport,
+  SwitchRecord,
   WindowBeat,
   WorkerBeat,
 } from './contracts'
+import { dayIdentity, daySchedule, panelOfRequest } from './day.ts'
+export { panelOfRequest }
 import { summarizeWorktreeRefreshes } from './worktree-refresh'
 
 
@@ -32,6 +40,13 @@ export type SoakEvidence = {
   workers: WorkerBeat[]
   daemonExited: boolean
   daemonLog?: string
+  windowRequestSeconds?: number[][]
+  panelRequests?: PanelRequestRecord[]
+  gitProbes?: GitProbeRecord[]
+  day?: DayInputs
+  switches?: SwitchRecord[]
+  phases?: PhaseRecord[]
+  dayDrainError?: string | null
 }
 
 /** Returns whether a renderer RPC attempt belongs to the panel-refresh budget. */
@@ -300,6 +315,18 @@ function panelRefreshPeak(records: PanelRefreshRecord[], index: number, worktree
   return best
 }
 
+
+function panelRequestPeak(records: PanelRequestRecord[]): number {
+  const chronological = [...records].sort((left, right) => left.at - right.at)
+  let first = 0
+  let peak = 0
+  for (let last = 0; last < chronological.length; last += 1) {
+    const lastAtMs = Math.round(chronological[last]!.at * 1000)
+    while (lastAtMs - Math.round(chronological[first]!.at * 1000) > 5000) first += 1
+    peak = Math.max(peak, last - first + 1)
+  }
+  return peak
+}
 function judgeRefreshes(evidence: SoakEvidence): SoakReport['checks']['refreshes'] {
   const chronologicalRecords = [...(evidence.panelRefreshes ?? [])].sort((left, right) =>
     left.at - right.at || left.index - right.index)
@@ -337,10 +364,32 @@ function judgeRefreshes(evidence: SoakEvidence): SoakReport['checks']['refreshes
       best = peak
     }
   }
+  const byPanel = new Map<number, Map<PanelKey, PanelRequestRecord[]>>()
+  for (const record of evidence.panelRequests ?? []) {
+    const panels = byPanel.get(record.index)
+    const records = panels?.get(record.panel)
+    if (records) {
+      records.push(record)
+    } else if (panels) {
+      panels.set(record.panel, [record])
+    } else {
+      byPanel.set(record.index, new Map([[record.panel, [record]]]))
+    }
+  }
+  const panelTotals = Array.from(byPanel, ([index, panels]) =>
+    Array.from(panels, ([panel, records]) => ({
+      index,
+      panel,
+      total: records.length,
+      peakPer5s: panelRequestPeak(records),
+    }))).flat()
+    .sort((left, right) => left.index - right.index || compareText(left.panel, right.panel))
   const total = (evidence.panelRefreshes ?? []).length
 
   return {
-    ok: best.count <= MAX_PANEL_REFRESHES_PER5S && missingWindows.length === 0,
+    ok: best.count <= MAX_PANEL_REFRESHES_PER5S
+      && missingWindows.length === 0
+      && panelTotals.every((panel) => panel.peakPer5s <= MAX_PANEL_REFRESHES_PER5S),
     total,
     limitPer5s: MAX_PANEL_REFRESHES_PER5S,
     peakPer5s: best.count,
@@ -349,12 +398,119 @@ function judgeRefreshes(evidence: SoakEvidence): SoakReport['checks']['refreshes
     peakWorktree: best.count === 0 ? null : best.worktree,
     missingWindows,
     byWindow,
+    byPanel: panelTotals,
   }
 }
 
+
+function judgeRequests(evidence: SoakEvidence, config: SoakConfig): SoakReport['checks']['requests'] {
+  const seconds = evidence.windowRequestSeconds ?? []
+  const byWindow = Array.from({ length: config.windows }, (_, index) => {
+    const counts = seconds[index] ?? []
+    const total = counts.reduce((sum, count) => sum + count, 0)
+    const width = Math.min(60, counts.length)
+    let peakPerMinute = 0
+    let peakAt: number | null = null
+    if (width > 0) {
+      let rolling = 0
+      for (let second = 0; second < width; second += 1) rolling += counts[second]!
+      peakPerMinute = rolling
+      peakAt = 0
+      for (let start = 1; start <= counts.length - width; start += 1) {
+        rolling += counts[start + width - 1]! - counts[start - 1]!
+        if (rolling > peakPerMinute) {
+          peakPerMinute = rolling
+          peakAt = start
+        }
+      }
+    }
+    if (peakPerMinute === 0) peakAt = null
+    return {
+      index,
+      worktree: evidence.day?.windows.find((window) => window.index === index)?.worktree
+        ?? evidence.windowBeats[index]?.worktree
+        ?? '',
+      total,
+      peakPerMinute,
+      peakAt,
+    }
+  })
+
+  let peakPerMinute = 0
+  let peakAt: number | null = null
+  let peakWindow: number | null = null
+  let peakWorktree: string | null = null
+  for (const window of byWindow) {
+    if (window.peakAt === null) continue
+    if (peakWindow === null || window.peakPerMinute > peakPerMinute
+      || (window.peakPerMinute === peakPerMinute
+        && (window.peakAt < peakAt! || (window.peakAt === peakAt && window.index < peakWindow)))) {
+      peakPerMinute = window.peakPerMinute
+      peakAt = window.peakAt
+      peakWindow = window.index
+      peakWorktree = window.worktree || null
+    }
+  }
+  const limitPerMinute = config.limits.maxWindowRequestsPerMinute
+  return {
+    ok: limitPerMinute === null || peakPerMinute <= limitPerMinute,
+    limitPerMinute,
+    peakPerMinute,
+    peakAt,
+    peakWindow,
+    peakWorktree,
+    byWindow,
+  }
+}
 function percentile(sortedValues: number[], fraction: number): number {
   if (sortedValues.length === 0) return 0
   return sortedValues[Math.ceil(sortedValues.length * fraction) - 1]
+}
+
+function judgeGitStalls(
+  records: GitProbeRecord[],
+  maxStallMs: number,
+): SoakReport['checks']['stalls']['git'] {
+  const chronological = [...records].sort((left, right) => left.at - right.at)
+  const latencies = chronological.map((probe) => probe.ms)
+  const sortedLatencies = [...latencies].sort((left, right) => left - right)
+  const byWorktree = new Map<string, { probes: number; maxMs: number }>()
+  let stalls = 0
+  let failed = 0
+  let hostBusy = 0
+
+  for (const probe of chronological) {
+    if (probe.failed) failed += 1
+    if (probe.timedOut) {
+      stalls += 1
+    } else if (probe.ms > maxStallMs) {
+      if (probe.ownLagMs > HOST_LAG_LIMIT_MS) hostBusy += 1
+      else stalls += 1
+    }
+    const stats = byWorktree.get(probe.worktree)
+    if (stats) {
+      stats.probes += 1
+      stats.maxMs = Math.max(stats.maxMs, probe.ms)
+    } else {
+      byWorktree.set(probe.worktree, { probes: 1, maxMs: probe.ms })
+    }
+  }
+
+  return {
+    probes: chronological.length,
+    stalls,
+    failed,
+    hostBusy,
+    p50Ms: median([...latencies]),
+    p95Ms: percentile(sortedLatencies, 0.95),
+    maxMs: sortedLatencies.length === 0 ? 0 : sortedLatencies[sortedLatencies.length - 1]!,
+    worst: [...chronological]
+      .sort((left, right) => right.ms - left.ms || left.at - right.at || compareText(left.worktree, right.worktree))
+      .slice(0, TOP_COUNT)
+      .map(({ at, ms, worktree }) => ({ at, ms, worktree })),
+    byWorktree: Array.from(byWorktree, ([worktree, stats]) => ({ worktree, ...stats }))
+      .sort((left, right) => compareText(left.worktree, right.worktree)),
+  }
 }
 
 function judgeStalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['checks']['stalls'] {
@@ -378,8 +534,9 @@ function judgeStalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['ch
     .slice(0, TOP_COUNT)
     .map(({ at, ms }) => ({ at, ms }))
 
+  const git = judgeGitStalls(evidence.gitProbes ?? [], config.limits.maxStallMs)
   return {
-    ok: stalls === 0 && !evidence.daemonExited,
+    ok: stalls === 0 && git.stalls === 0 && git.failed === 0 && !evidence.daemonExited,
     probes: chronologicalProbes.length,
     stalls,
     hostBusy,
@@ -388,6 +545,7 @@ function judgeStalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['ch
     maxMs: sortedLatencies.length === 0 ? 0 : sortedLatencies[sortedLatencies.length - 1],
     worst,
     daemonExited: evidence.daemonExited,
+    git,
   }
 }
 
@@ -418,7 +576,121 @@ function judgeWindows(windowBeats: WindowBeat[]): SoakReport['checks']['windows'
   return { ok: lost.length === 0, expected: windowBeats.length, alive, lost }
 }
 
-function disqualifications(evidence: SoakEvidence, config: SoakConfig, hostBusy: number, probes: number): string[] {
+
+function dayInputsMatchWindows(day: DayInputs | undefined, windowCount: number): boolean {
+  if (!day || day.windows.length !== windowCount || day.worktrees.length === 0) return false
+  const indexes = new Set<number>()
+  for (const window of day.windows) {
+    if (!Number.isInteger(window.index) || window.index < 0 || window.index >= windowCount
+      || indexes.has(window.index) || !day.worktrees.includes(window.worktree)) return false
+    indexes.add(window.index)
+  }
+  return indexes.size === windowCount
+}
+
+function judgeDay(evidence: SoakEvidence, config: SoakConfig): SoakReport['checks']['day'] {
+  if (config.fault !== undefined || config.windows === 0) {
+    return {
+      ok: true,
+      enabled: false,
+      expectedSwitches: 0,
+      expectedPhases: 0,
+      switches: 0,
+      phases: 0,
+      missing: [],
+      duplicates: [],
+      unscheduled: [],
+      wrongTarget: [],
+      failed: [],
+      slowestFollowMs: null,
+      counts: { missing: 0, duplicates: 0, unscheduled: 0, wrongTarget: 0, failed: 0 },
+    }
+  }
+
+  const day = evidence.day
+  const expectedActions = day ? daySchedule({
+    seconds: Math.min(config.minutes * 60, evidence.durationSeconds),
+    windows: day.windows,
+    worktrees: day.worktrees,
+  }) : []
+  const scheduledActions = day ? daySchedule({
+    seconds: config.minutes * 60,
+    windows: day.windows,
+    worktrees: day.worktrees,
+  }) : []
+  const expected = new Map(scheduledActions.map((action) => [dayIdentity(action), action]))
+  const switches = evidence.switches ?? []
+  const phases = evidence.phases ?? []
+  const actual: (SwitchRecord | PhaseRecord)[] = [...switches, ...phases]
+  const identityCounts = new Map<string, number>()
+  for (const record of actual) {
+    const identity = dayIdentity(record)
+    identityCounts.set(identity, (identityCounts.get(identity) ?? 0) + 1)
+  }
+
+  const missing = expectedActions
+    .filter((action) => !identityCounts.has(dayIdentity(action)))
+    .map((action) => dayIdentity(action))
+  const duplicates = Array.from(new Set(actual
+    .map((record) => dayIdentity(record))
+    .filter((identity) => (identityCounts.get(identity) ?? 0) > 1)))
+  const unscheduled = Array.from(new Set(actual
+    .filter((record) => !expected.has(dayIdentity(record)))
+    .map((record) => dayIdentity(record))))
+  const wrongTarget = Array.from(new Set(actual.flatMap((record) => {
+    const identity = dayIdentity(record)
+    const action = expected.get(identity)
+    if (!action) return []
+    const wrong = 'phase' in record
+      ? action.kind !== 'phase' || action.phase !== record.phase
+      : action.kind !== 'switch' || action.to !== record.requested
+    return wrong ? [identity] : []
+  })))
+  const failed = Array.from(new Set([
+    ...actual.filter((record) => !record.ok).map((record) => dayIdentity(record)),
+    ...(evidence.dayDrainError === undefined || evidence.dayDrainError === null ? [] : ['stop']),
+  ]))
+  const counts = {
+    missing: missing.length,
+    duplicates: duplicates.length,
+    unscheduled: unscheduled.length,
+    wrongTarget: wrongTarget.length,
+    failed: failed.length,
+  }
+  let slowestFollowMs: number | null = null
+  for (const record of switches) {
+    if (record.followMs !== null && (slowestFollowMs === null || record.followMs > slowestFollowMs)) {
+      slowestFollowMs = record.followMs
+    }
+  }
+  const inputsMatch = dayInputsMatchWindows(day, config.windows)
+  const enabled = day?.enabled === true
+
+  return {
+    ok: enabled && inputsMatch
+      && Object.values(counts).every((count) => count === 0),
+    enabled,
+    expectedSwitches: expectedActions.filter((action) => action.kind === 'switch').length,
+    expectedPhases: expectedActions.filter((action) => action.kind === 'phase').length,
+    switches: switches.length,
+    phases: phases.length,
+    missing: missing.slice(0, TOP_COUNT),
+    duplicates: duplicates.slice(0, TOP_COUNT),
+    unscheduled: unscheduled.slice(0, TOP_COUNT),
+    wrongTarget: wrongTarget.slice(0, TOP_COUNT),
+    failed: failed.slice(0, TOP_COUNT),
+    slowestFollowMs,
+    counts,
+  }
+}
+function disqualifications(
+  evidence: SoakEvidence,
+  config: SoakConfig,
+  hostBusy: number,
+  probes: number,
+  gitHostBusy: number,
+  gitProbes: number,
+): string[] {
   const reasons: string[] = []
   const runMinutes = Math.min(config.minutes, evidence.durationSeconds / 60)
   if (runMinutes < QUALIFYING_MINUTES) {
@@ -431,6 +703,9 @@ function disqualifications(evidence: SoakEvidence, config: SoakConfig, hostBusy:
   if (probes > 0 && hostBusy / probes > 0.05) {
     reasons.push(`host too busy to judge stalls: ${hostBusy} of ${probes} probes`)
   }
+  if (gitProbes > 0 && gitHostBusy / gitProbes > 0.05) {
+    reasons.push(`host too busy to judge git stalls: ${gitHostBusy} of ${gitProbes} probes`)
+  }
 
   const limitKeys: (keyof SoakLimits)[] = [
     'maxChildren',
@@ -439,10 +714,39 @@ function disqualifications(evidence: SoakEvidence, config: SoakConfig, hostBusy:
     'maxEventsPer5s',
     'maxStallMs',
     'maxUnanswered',
+    'maxWindowRequestsPerMinute',
   ]
   for (const key of limitKeys) {
-    if (config.limits[key] > DEFAULT_LIMITS[key]) {
-      reasons.push(`limit loosened: ${key} ${config.limits[key]} > ${DEFAULT_LIMITS[key]}`)
+    const defaultLimit = DEFAULT_LIMITS[key]
+    if (defaultLimit === null) continue
+    const configuredLimit = config.limits[key]
+    if (configuredLimit === null || configuredLimit > defaultLimit) {
+      reasons.push(`limit loosened: ${key} ${configuredLimit} > ${defaultLimit}`)
+    }
+  }
+
+  if (config.fault === undefined) {
+    if (!evidence.gitProbes || evidence.gitProbes.length === 0) {
+      reasons.push('missing instrumentation: gitProbes')
+    }
+    if (config.windows > 0 && evidence.windowBeats.length !== config.windows) {
+      reasons.push(`window records missing: ${evidence.windowBeats.length} of ${config.windows}`)
+    }
+    if (config.windows > 0
+      && (!evidence.windowRequestSeconds || evidence.windowRequestSeconds.length !== config.windows)) {
+      reasons.push('missing instrumentation: windowRequestSeconds')
+    }
+    if (config.windows > 0 && evidence.panelRequests === undefined) {
+      reasons.push('missing instrumentation: panelRequests')
+    }
+    if (config.windows > 0 && evidence.day === undefined) {
+      reasons.push('missing instrumentation: day')
+    }
+    if (config.windows > 0 && evidence.day?.enabled === false) {
+      reasons.push('day rotation did not run')
+    }
+    if (evidence.day !== undefined && !dayInputsMatchWindows(evidence.day, config.windows)) {
+      reasons.push('day schedule inputs do not match the windows')
     }
   }
   if (config.fault !== undefined) reasons.push(`fault injected: ${config.fault}`)
@@ -472,7 +776,9 @@ export function judge(
     zombies: judgeZombies(evidence, config),
     events: judgeEvents(evidence, config),
     refreshes: judgeRefreshes(evidence),
+    requests: judgeRequests(evidence, config),
     stalls: judgeStalls(evidence, config),
+    day: judgeDay(evidence, config),
     calls: judgeCalls(evidence, config),
     workers: judgeWorkers(evidence.workers),
     windows: judgeWindows(evidence.windowBeats),
@@ -482,6 +788,8 @@ export function judge(
     config,
     checks.stalls.hostBusy,
     checks.stalls.probes,
+    checks.stalls.git.hostBusy,
+    checks.stalls.git.probes,
   )
 
   return {
