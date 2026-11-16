@@ -30,7 +30,7 @@ const activatedHandlers = new Map<string, (args?: unknown) => unknown>()
 
 beforeAll(async () => {
   // React DOM and TipTap inspect window while initializing, so load them only after Happy DOM is registered.
-  GlobalRegistrator.register()
+  GlobalRegistrator.register({ settings: { navigation: { disableMainFrameNavigation: true, disableChildFrameNavigation: true } } })
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   ;({ createRoot } = await import('react-dom/client'))
   ;({ MarkdownSurface } = await import('../src/markdown/MarkdownSurface'))
@@ -58,20 +58,15 @@ beforeEach(() => {
   surfaces = []
   originalPlatform = Object.getOwnPropertyDescriptor(navigator, 'platform')
   Object.defineProperty(navigator, 'platform', { configurable: true, value: 'MacIntel' })
-  document.addEventListener('click', preventHappyDomAnchorNavigation, true)
 })
 afterEach(async () => {
   for (const surface of surfaces) await surface.unmount()
   surfaces = []
-  document.removeEventListener('click', preventHappyDomAnchorNavigation, true)
   document.body.innerHTML = ''
   if (originalPlatform) Object.defineProperty(navigator, 'platform', originalPlatform)
   else Reflect.deleteProperty(navigator, 'platform')
 })
 
-function preventHappyDomAnchorNavigation(event: MouseEvent): void {
-  if (event.target instanceof Element && event.target.closest('a[href]')) event.preventDefault()
-}
 
 function makeBuffer(mode: 'preview' | 'rich', content: string, readOnly = false): EditorSurfaceBuffer {
   return {
