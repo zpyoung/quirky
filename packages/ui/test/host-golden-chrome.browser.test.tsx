@@ -2,7 +2,7 @@ import { beforeAll, afterAll, expect, test } from 'bun:test'
 import { accessSync, constants } from 'node:fs'
 import { chromium, type Browser } from 'playwright'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { ControlIcon, ListRow, Tabs, TextField } from '../src/design-system'
+import { Button, ControlIcon, ListRow, SectionHeader, Tabs, TextField } from '../src/design-system'
 import * as capture from '../../../scripts/ui-review/capture'
 
 const candidates = [
@@ -22,8 +22,8 @@ if (!executable && process.env.CI === 'true') {
 let browser: Browser
 beforeAll(async () => {
   if (executable) browser = await chromium.launch({ headless: true, executablePath: executable })
-})
-afterAll(async () => { await browser?.close() })
+}, 30_000)
+afterAll(async () => { await browser?.close() }, 30_000)
 
 test.skipIf(!executable)('Settings opens from the Window bar when a plugin also has a More button', async () => {
   const page = await browser.newPage()
@@ -186,6 +186,37 @@ for (const theme of themes) {
         const description = node.querySelector('.ui-list-row__description')!
         return [style.backgroundColor, style.color, getComputedStyle(description).color, style.borderTopWidth]
       })).toEqual([theme.accent, theme.rail, theme.rail, '0px'])
+    } finally {
+      await page.close()
+    }
+  })
+
+  test.skipIf(!executable)(`Settings uses compact headings, borderless close and wrapping navigation (${theme.name})`, async () => {
+    const page = await styledPage(theme.name, renderToStaticMarkup(
+      <div className="ui-dialog">
+        <header className="ui-dialog__header"><h2 className="ui-dialog__title">Settings</h2><button className="ui-dialog__close">Close</button></header>
+        <form id="settings-form" className="ui-stack">
+          <section className="ui-stack" role="group" aria-label="Plugin settings">
+            <SectionHeader title="Plugin settings" className="ui-settings-group-heading" />
+            <div className="ui-stack"><Button>Automations</Button><Button>Browser Settings</Button></div>
+          </section>
+        </form>
+      </div>
+    ))
+    try {
+      expect(await page.locator('.ui-settings-group-heading .ui-section-header__title').evaluate((node) => {
+        const style = getComputedStyle(node)
+        return [style.fontSize, style.fontWeight]
+      })).toEqual(['12px', '600'])
+      expect(await page.locator('.ui-dialog__close').evaluate((node) => {
+        const style = getComputedStyle(node)
+        return [style.borderTopColor, style.backgroundColor]
+      })).toEqual(['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)'])
+      expect(await page.locator('[aria-label="Plugin settings"] > .ui-stack').evaluate((node) => {
+        const style = getComputedStyle(node)
+        return [style.flexDirection, style.flexWrap]
+      })).toEqual(['row', 'wrap'])
+      expect(await page.getByRole('button', { name: 'Automations' }).evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
     } finally {
       await page.close()
     }
