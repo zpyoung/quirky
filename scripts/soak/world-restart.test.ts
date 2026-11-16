@@ -7,6 +7,18 @@ import { startWorld, type StartWorldDependencies } from './world.ts'
 
 const homes: string[] = []
 
+function fakeRuntimeInfo(pid: number): RuntimeInfo {
+  return {
+    pid,
+    port: 30_000 + pid,
+    token: `rpc-token-${pid}`,
+    hookToken: `hook-token-${pid}`,
+    daemonVersion: 'test',
+    protocolVersion: 1,
+    startedAt: Date.now()
+  }
+}
+
 function makeWorld(options: {
   waitForShutdown?: StartWorldDependencies['waitForShutdown']
   failReplacement?: boolean
@@ -46,7 +58,7 @@ function makeWorld(options: {
     waitForDaemon: async (_home, daemon) => {
       readinessCalls++
       if (options.failReplacement && readinessCalls === 2) throw new Error('replacement readiness failed')
-      return { pid: daemon.pid, home } as RuntimeInfo
+      return fakeRuntimeInfo(daemon.pid)
     },
     connectDaemon: async ({ home: daemonHome }) => ({
       async callAny(method: string) {
