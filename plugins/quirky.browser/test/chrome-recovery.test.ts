@@ -407,6 +407,7 @@ test('escalates from TERM to KILL at five seconds and launches only after disapp
     mkdirSync(userDataDir, { recursive: true })
     writeFileSync(markerPath(profileRoot), '9111\n/devtools/browser/old\n')
     const matching = chromeIdentity(userDataDir)
+    timerControls.useFakeTimers()
     const startedAt = Date.now()
     const signalTimes: Array<[string, number]> = []
     const fake = fakeAccess([matching], (identity, signal) => {
@@ -414,7 +415,6 @@ test('escalates from TERM to KILL at five seconds and launches only after disapp
       if (signal === 'SIGKILL') fake.current.delete(identity.pid)
     })
     let launched = 0
-    timerControls.useFakeTimers()
     const operation = startChrome(profileRoot, dependencies(profileRoot, fake.access, (_command, launchedDir) => {
       launched += 1
       expect(existsSync(join(launchedDir, 'DevToolsActivePort'))).toBe(false)
@@ -499,12 +499,12 @@ test('refuses to launch when the verified root survives the final KILL wait', as
     writeFileSync(markerPath(profileRoot), '9111\n/devtools/browser/old\n')
     const matching = chromeIdentity(userDataDir)
     const signalTimes: Array<[string, number]> = []
+    timerControls.useFakeTimers()
     const startedAt = Date.now()
     const fake = fakeAccess([matching], (_identity, signal) => {
       signalTimes.push([signal, Date.now() - startedAt])
     })
     let launched = 0
-    timerControls.useFakeTimers()
     const outcome = startChrome(profileRoot, dependencies(profileRoot, fake.access, () => {
       launched += 1
       return pendingChild()

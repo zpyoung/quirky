@@ -128,9 +128,7 @@ function isChromeCandidate(
         name === known.slice(0, DARWIN_MAXCOMLEN))
     ) return true
   }
-  const limit = platform === 'darwin' ? DARWIN_MAXCOMLEN : 15
-  return configuredExecutableNames.some(configured => name === configured ||
-    name === Buffer.from(configured).subarray(0, limit).toString('utf8'))
+  return configuredExecutableNames.includes(name)
 }
 
 function isChromeRoot(identity: ChromeProcessIdentity): boolean {
@@ -250,9 +248,13 @@ export function createChromeProcessAccess(
   const platform = overrides.platform ?? process.platform
   const now = overrides.now ?? (() => performance.now())
 
-  const configuredExecutableNames = [overrides.executablePath, overrides.resolvedExecutablePath]
-    .filter((path): path is string => !!path)
-    .map(path => basename(path).toLowerCase())
+  const limit = platform === 'darwin' ? DARWIN_MAXCOMLEN : 15
+  const configuredExecutableNames: string[] = []
+  for (const path of [overrides.executablePath, overrides.resolvedExecutablePath]) {
+    if (!path) continue
+    const name = basename(path)
+    configuredExecutableNames.push(name.toLowerCase(), Buffer.from(name).subarray(0, limit).toString('utf8').toLowerCase())
+  }
 
   function ensureSupported(): void {
     if (platform !== 'darwin' && platform !== 'linux') throw inspectionError()

@@ -30,6 +30,7 @@ type AccessOverrides = {
   readLinuxProcessArgs?: (pid: number, maxBytes: number) => Uint8Array
   readLinuxExecutable?: (pid: number) => string
   executablePath?: string
+  resolvedExecutablePath?: string
 }
 
 type RunOptions = { timeoutMs?: number; killGraceMs?: number; maxOutputBytes?: number }
@@ -524,4 +525,14 @@ test('discovers the resolved executable behind a differently named configured sy
   } finally {
     rmSync(home, { recursive: true, force: true })
   }
+})
+
+test('truncates the original executable bytes before Unicode case normalization', async () => {
+  const executablePath = '/opt/custom/abcdefghijklmİZ'
+  const access = fakeAccess('linux', processRow(240, 1, 240, 501, 'abcdefghijklmİ'), {
+    executablePath,
+    readLinuxProcessArgs: () => linuxProcessArgs([executablePath]),
+    readLinuxExecutable: () => executablePath
+  })
+  expect((await access.snapshot())[0]?.executable).toBe(executablePath)
 })
