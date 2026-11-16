@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { bootGitLab, type GitLabWorld } from './world'
 import { mergeRequest } from './stand-in'
 import type { CheckRecord } from '../../src/check-details'
@@ -148,31 +148,114 @@ test('routed checks select the current MR pipeline and map its failed and succes
   expect(world.invocations()).toEqual([])
 })
 
-// A two-read detail integration path takes about 5.9s because it repeats local-Git fences.
-test('routed checkDetails verifies and reads only the selected current-head job trace', async () => {
-  const world = await boot()
-  const { head } = setupDefault(world)
-  const result = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90, jobName: 'build' })
+describe('selected current-head detail', () => {
+  let world!: GitLabWorld
+  let head = ''
+  let initialResult: unknown
 
-  expect(result).toMatchObject({
-    check: { id: 201, name: 'build', status: 'completed', conclusion: 'failure', headSha: head, detailsUrl: `${world.server.url}/group/sub/proj/-/jobs/201`, workflowRunId: 90 },
-    annotations: [],
-    jobs: [{ id: 201, name: 'build', status: 'completed', conclusion: 'failure', htmlUrl: `${world.server.url}/group/sub/proj/-/jobs/201`, checkRunUrl: null }],
-    logTails: [{ jobId: 201, jobName: 'build', tail: 'trace for job 201\n' }],
-    partialFailures: [],
-    truncated: false
+  beforeEach(async () => {
+    world = await boot()
+    head = setupDefault(world).head
+    initialResult = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90, jobName: 'build' })
   })
-  await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90, jobName: 'build' })
-  expect(world.server.requests.filter((request) => request.path === jobPath(world, 201))).toHaveLength(2)
-  expect(world.server.requests.filter((request) => request.path.endsWith('/trace')).map((request) => request.path)).toEqual([
-    tracePath(world, 201),
-    tracePath(world, 201)
-  ])
-  expect(world.server.requests.every((request) => request.method === 'GET')).toBe(true)
-  expect(world.server.requests.every((request) => request.authorization === 'Bearer dummy-gitlab-token')).toBe(true)
-  expect(world.glabInvocations()).toEqual([])
-  expect(world.invocations()).toEqual([])
-}, 20_000)
+
+  test('routed checkDetails verifies and reads only the selected current-head job trace', async () => {
+    const result = initialResult
+
+    expect(result).toMatchObject({
+      check: { id: 201, name: 'build', status: 'completed', conclusion: 'failure', headSha: head, detailsUrl: `${world.server.url}/group/sub/proj/-/jobs/201`, workflowRunId: 90 },
+      annotations: [],
+      jobs: [{ id: 201, name: 'build', status: 'completed', conclusion: 'failure', htmlUrl: `${world.server.url}/group/sub/proj/-/jobs/201`, checkRunUrl: null }],
+      logTails: [{ jobId: 201, jobName: 'build', tail: 'trace for job 201\n' }],
+      partialFailures: [],
+      truncated: false
+    })
+    await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90, jobName: 'build' })
+    expect(world.server.requests.filter((request) => request.path === jobPath(world, 201))).toHaveLength(2)
+    expect(world.server.requests.filter((request) => request.path.endsWith('/trace')).map((request) => request.path)).toEqual([
+      tracePath(world, 201),
+      tracePath(world, 201)
+    ])
+    expect(world.server.requests.every((request) => request.method === 'GET')).toBe(true)
+    expect(world.server.requests.every((request) => request.authorization === 'Bearer dummy-gitlab-token')).toBe(true)
+    expect(world.glabInvocations()).toEqual([])
+    expect(world.invocations()).toEqual([])
+  })
+})
+
+describe('streaming trace redaction', () => {
+  let world!: GitLabWorld
+
+  beforeEach(async () => {
+    world = await boot()
+    setupDefault(world)
+  })
+
+  test('trace streaming removes split terminal controls, active and GitLab tokens, bearer secrets, and URL userinfo', async () => {
+    world.server.traces.set('201', {
+      chunks: [
+        'before\u001b[3',
+        '1mred\u001b[0m\r\n\u001b]0;private title',
+        '\u0007Authorization: Bearer fixture-bearer-secret\r',
+        `token=${'dummy-gitlab-token'} glpat-Token_123-ABC gldt-Token_234-DEF glrt-Token_345-GHI`,
+        '\u0001https://alice:password@example.test/path\tcolumn\n',
+        'split=dummy-gitlab\u0001-token glpat-Token_123\u0001-ABC\n',
+        'Authorization: Bea\u0001rer\u0002 split-bearer-secret\n',
+        'https://alice\u0001:pass\u0002word@example.test',
+        '\nactive-adjacent=dummy-gitlab-\u0001tokenhttps://alice:password@example.test/active\n',
+        'prefixed-adjacent=glpat-Visible_\u0001123-GHI\u0001https://bob:distinctive-password@example.test/prefixed\n'
+      ]
+    })
+
+    const result = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as { logTails: Array<{ tail: string }> }
+    const tail = result.logTails[0]?.tail ?? ''
+    const whitespaceNormalizedTail = tail.replace(/\s/gu, '')
+    expect(tail).toContain('beforered\n')
+    expect(tail).toContain('Authorization:')
+    expect(tail).toContain('[REDACTED]')
+    expect(tail).toContain('https://example.test/path\tcolumn\n')
+    expect(tail).toContain('https://example.test/active')
+    expect(tail).toContain('https://example.test/prefixed')
+    expect(tail).not.toContain('\r')
+    expect(tail).not.toContain('\u001b')
+    expect(tail).not.toContain('\u0001')
+    expect(tail).not.toContain('\u0002')
+    for (const secret of [
+      'dummy-gitlab-token',
+      'dummy-gitlab-',
+      'tokenhttps://alice:password@example.test',
+      'dummy-gitlab-tokenhttps://alice:password@example.test',
+      'Visible_123-GHI',
+      'glpat-Visible_123-GHI' + 'https://bob:distinctive-password@example.test',
+      'bob:distinctive-password@',
+      'distinctive-password@example.test',
+      'fixture-bearer-secret',
+      'split-bearer-secret',
+      'glpat-Token_123-ABC',
+      'gldt-Token_234-DEF',
+      'glrt-Token_345-GHI',
+      'alice:password@',
+      'password@example.test'
+    ]) {
+      expect(tail).not.toContain(secret)
+    }
+    for (const credential of [
+      'dummy-gitlab-tokenhttps://alice:password@example.test',
+      'glpat-Visible_123-GHI' + 'https://bob:distinctive-password@example.test'
+    ]) {
+      expect(whitespaceNormalizedTail).not.toContain(credential)
+    }
+    for (const fragment of [
+      'dummy-gitlab-',
+      'tokenhttps://alice:password@example.test',
+      'Visible_123-GHI',
+      'glpat-Visible_123-GHI'
+    ]) {
+      expect(whitespaceNormalizedTail).not.toContain(fragment)
+    }
+    expect(result.logTails).toHaveLength(1)
+  })
+})
 test('checks, details, and retries accept the current merge-request pipeline ref', async () => {
   const world = await boot()
   const { current, jobs } = setupDefault(world)
@@ -712,38 +795,6 @@ test('detail revalidates target identity after the trace response await', async 
   expect(world.server.requests.some((request) => request.method === 'POST')).toBe(false)
 }, 20_000)
 
-test('trace streaming removes split terminal controls, active and GitLab tokens, bearer secrets, and URL userinfo', async () => {
-  const world = await boot()
-  setupDefault(world)
-  world.server.traces.set('201', {
-    chunks: [
-      'before\u001b[3',
-      '1mred\u001b[0m\r\n\u001b]0;private title',
-      '\u0007Authorization: Bearer fixture-bearer-secret\r',
-      `token=${'dummy-gitlab-token'} glpat-Token_123-ABC gldt-Token_234-DEF glrt-Token_345-GHI`,
-      '\u0001https://alice:password@example.test/path\tcolumn\n',
-      'split=dummy-gitlab\u0001-token glpat-Token_123\u0001-ABC\n',
-      'Authorization: Bea\u0001rer\u0002 split-bearer-secret\n',
-      'https://alice\u0001:pass\u0002word@example.test'
-    ]
-  })
-
-  const result = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as { logTails: Array<{ tail: string }> }
-  const tail = result.logTails[0]?.tail ?? ''
-  expect(tail).toContain('beforered\n')
-  expect(tail).toContain('Authorization:')
-  expect(tail).toContain('[REDACTED]')
-  expect(tail).toContain('https://example.test/path\tcolumn\n')
-  expect(tail).toContain('https://example.test')
-  expect(tail).not.toContain('\r')
-  expect(tail).not.toContain('\u001b')
-  expect(tail).not.toContain('\u0001')
-  expect(tail).not.toContain('\u0002')
-  for (const secret of ['dummy-gitlab-token', 'fixture-bearer-secret', 'split-bearer-secret', 'glpat-Token_123-ABC', 'gldt-Token_234-DEF', 'glrt-Token_345-GHI', 'alice:password@', 'password@example.test']) {
-    expect(tail).not.toContain(secret)
-  }
-  expect(result.logTails).toHaveLength(1)
-}, 20_000)
 test('large malformed trace text is sanitized without quadratic escape or userinfo searches', async () => {
   const world = await boot()
   setupDefault(world)
@@ -828,6 +879,16 @@ test('trace stream accepts exactly 4 MiB and reports an honest partial detail ab
   expect(exact.partialFailures).toEqual([])
   expect(exact.logTails[0]?.tail).toHaveLength(16 * 1024)
   expect(exact.truncated).toBe(true)
+
+  world.server.traces.set('201', { chunks: [new Uint8Array(limit + 1).fill(0x78)] })
+  const noLength = await world.call('checkDetails', { number: 5, checkRunId: 201, workflowRunId: 90 }) as {
+    partialFailures: string[]
+    truncated: boolean
+    logTails: Array<{ tail: string }>
+  }
+  expect(noLength.partialFailures).toEqual(['trace_output_limit'])
+  expect(noLength.truncated).toBe(true)
+  expect(noLength.logTails).toEqual([])
 
   world.server.traces.set('201', {
     chunks: [new Uint8Array(limit + 1).fill(0x78)],

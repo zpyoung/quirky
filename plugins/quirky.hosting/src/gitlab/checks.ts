@@ -919,14 +919,12 @@ function traceFailureMarker(reason: string | null): string {
 }
 
 function sanitizeTrace(value: string, token: string): { text: string; truncated: boolean } {
-  const stripped = stripTraceControlsAndTerminalSequences(value)
-  let clean = preserveTraceUrlSchemeSeparators(stripped.text, stripped.controlBoundaries)
-    .replace(/\r\n?/gu, '\n')
-  clean = redactTraceUserinfo(clean)
+  let clean = stripTraceControlsAndTerminalSequences(value)
   if (token.length > 0) clean = replaceTraceToken(clean, token)
-  clean = clean
-    .replace(/(?:glpat-|gldt-|glrt-)[A-Za-z0-9_-]+/gu, '[REDACTED]')
+  clean = clean.replace(/\r\n?/gu, '\n')
     .replace(/\bBearer\s+[^\s"'<>]+/giu, 'Bearer [REDACTED]')
+  clean = redactTraceUserinfo(clean)
+  clean = redactTraceGitLabCredentials(clean)
 
   const hadTrailingNewline = clean.endsWith('\n')
   let lines = clean.length === 0 ? [] : clean.split('\n')
@@ -944,12 +942,8 @@ function sanitizeTrace(value: string, token: string): { text: string; truncated:
   return { text, truncated }
 }
 
-function stripTraceControlsAndTerminalSequences(value: string): {
-  text: string
-  controlBoundaries: Uint8Array
-} {
+function stripTraceControlsAndTerminalSequences(value: string): string {
   const output = new Uint16Array(value.length)
-  const controlBoundaries = new Uint8Array(value.length + 1)
   let outputLength = 0
   for (let index = 0; index < value.length;) {
     const code = value.charCodeAt(index)
@@ -964,60 +958,16 @@ function stripTraceControlsAndTerminalSequences(value: string): {
       sequenceEnd = skipTraceOsc(value, index + 1)
     }
     if (sequenceEnd !== null) {
-      controlBoundaries[outputLength] = 1
       index = sequenceEnd
       continue
     }
     if (code <= 0x08 || code === 0x0b || code === 0x0c
       || (code >= 0x0e && code <= 0x1f) || (code >= 0x7f && code <= 0x9f)) {
-      controlBoundaries[outputLength] = 1
       index += 1
       continue
     }
     output[outputLength++] = code
     index += 1
-  }
-  return {
-    text: traceStringFromCodeUnits(output, outputLength),
-    controlBoundaries: controlBoundaries.subarray(0, outputLength + 1)
-  }
-}
-
-function traceUrlSchemeStarts(value: string): Uint8Array {
-  const starts = new Uint8Array(value.length)
-  let searchFrom = 0
-  while (true) {
-    const separator = value.indexOf('://', searchFrom)
-    if (separator < 0) return starts
-    let schemeStart = separator
-    while (schemeStart > 0) {
-      const code = value.charCodeAt(schemeStart - 1)
-      const letter = (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)
-      const digit = code >= 0x30 && code <= 0x39
-      if (!letter && !digit && code !== 0x2b && code !== 0x2e && code !== 0x2d) break
-      schemeStart -= 1
-    }
-    for (let index = schemeStart; index < separator; index += 1) {
-      const code = value.charCodeAt(index)
-      if ((code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)) starts[index] = 1
-    }
-    searchFrom = separator + 3
-  }
-}
-
-function preserveTraceUrlSchemeSeparators(value: string, controlBoundaries: Uint8Array): string {
-  const urlSchemeStarts = traceUrlSchemeStarts(value)
-  let separatorCount = 0
-  for (let index = 0; index < value.length; index += 1) {
-    if (controlBoundaries[index] === 1 && urlSchemeStarts[index] === 1) separatorCount += 1
-  }
-  if (separatorCount === 0) return value
-
-  const output = new Uint16Array(value.length + separatorCount)
-  let outputLength = 0
-  for (let index = 0; index < value.length; index += 1) {
-    if (controlBoundaries[index] === 1 && urlSchemeStarts[index] === 1) output[outputLength++] = 0x20
-    output[outputLength++] = value.charCodeAt(index)
   }
   return traceStringFromCodeUnits(output, outputLength)
 }
@@ -1057,31 +1007,6 @@ function redactTraceUserinfo(value: string): string {
   while (true) {
     const separator = value.indexOf('://', searchFrom)
     if (separator < 0) break
-
-    let schemeStart = separator
-    while (schemeStart > 0) {
-      const code = value.charCodeAt(schemeStart - 1)
-      const letter = (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)
-      const digit = code >= 0x30 && code <= 0x39
-      if (!letter && !digit && code !== 0x2b && code !== 0x2e && code !== 0x2d) break
-      schemeStart -= 1
-    }
-    let hasSchemeBoundary = false
-    for (let index = schemeStart; index < separator; index += 1) {
-      const code = value.charCodeAt(index)
-      const previous = value.charCodeAt(index - 1)
-      const letter = (code >= 0x41 && code <= 0x5a) || (code >= 0x61 && code <= 0x7a)
-      const previousWord = (previous >= 0x41 && previous <= 0x5a) || (previous >= 0x61 && previous <= 0x7a)
-        || (previous >= 0x30 && previous <= 0x39) || previous === 0x5f
-      if (letter && (index === 0 || !previousWord)) {
-        hasSchemeBoundary = true
-        break
-      }
-    }
-    if (!hasSchemeBoundary) {
-      searchFrom = separator + 3
-      continue
-    }
 
     const userinfoStart = separator + 3
     let userinfoEnd = userinfoStart
@@ -1124,6 +1049,16 @@ function replaceTraceToken(value: string, token: string): string {
   }
   parts.push(value.slice(copyFrom))
   return parts.join('')
+}
+function redactTraceGitLabCredentials(value: string): string {
+  return value.replace(/(?:glpat-|gldt-|glrt-)[A-Za-z0-9_-]+/gu, (credential: string, offset: number, whole: string) => {
+    const end = offset + credential.length
+    if (!whole.startsWith('://', end)) return '[REDACTED]'
+    const scheme = credential.slice(-5)
+    if (scheme.toLowerCase() === 'https') return `[REDACTED]${scheme}`
+    const shortScheme = credential.slice(-4)
+    return shortScheme.toLowerCase() === 'http' ? `[REDACTED]${shortScheme}` : '[REDACTED]'
+  })
 }
 
 function jobUrl(scope: GitLabScope, jobId: number): string {
