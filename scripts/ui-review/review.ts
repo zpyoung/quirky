@@ -20,6 +20,8 @@ import {
   type ReviewerIdentity,
   type VisualAssessment
 } from './contracts'
+import type { ContributionInventory } from './contracts'
+import { validateContributionInventory } from './contribution-inventory'
 import { goldenFor } from './goldens'
 
 const MAX_IMAGE_BYTES = 64 * 1024 * 1024
@@ -72,6 +74,15 @@ function isRecord(value: unknown): value is RecordValue {
   const prototype = Object.getPrototypeOf(value)
   return prototype === Object.prototype || prototype === null
 }
+function checkedActivatedVisibilitySettings(value: unknown): void {
+  if (!Array.isArray(value) || value.some((setting) => !safeText(setting, 256) || !setting.startsWith('setting:'))) {
+    fail('Capture manifest activated visibility settings are malformed.')
+  }
+  for (let index = 1; index < value.length; index++) {
+    if (value[index - 1]! >= value[index]!) fail('Capture manifest activated visibility settings must be unique and sorted.')
+  }
+}
+
 
 function hasExactKeys(value: RecordValue, required: string[], optional: string[] = []): boolean {
   const allowed = new Set([...required, ...optional])
@@ -174,7 +185,7 @@ async function loadImage(evidence: ImageEvidence, description: string, approvedB
 }
 
 async function prepareManifest(value: unknown): Promise<PreparedManifest> {
-  if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'createdAt', 'commit', 'surface', 'viewport', 'scope', 'selectors', 'targets', 'captures', 'failures'])) {
+  if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'createdAt', 'commit', 'surface', 'viewport', 'scope', 'selectors', 'targets', 'captures', 'failures'], ['contributionInventory', 'activatedVisibilitySettings'])) {
     fail('Capture manifest has an invalid runtime shape.')
   }
   if (value.schemaVersion !== CAPTURE_SCHEMA_VERSION) fail(`Unsupported capture schema version; expected ${CAPTURE_SCHEMA_VERSION}.`)
@@ -197,6 +208,14 @@ async function prepareManifest(value: unknown): Promise<PreparedManifest> {
     if (targetById.has(target.id)) fail(`Capture manifest contains duplicate target ID ${target.id}.`)
     targetById.set(target.id, target)
   }
+  if (Object.hasOwn(value, 'contributionInventory')) {
+    try {
+      validateContributionInventory(value.contributionInventory as ContributionInventory, targets)
+    } catch (error) {
+      fail(`Capture contribution inventory is invalid: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  if (Object.hasOwn(value, 'activatedVisibilitySettings')) checkedActivatedVisibilitySettings(value.activatedVisibilitySettings)
   if (!Array.isArray(value.failures)) fail('Capture manifest failures must be an array.')
   if (value.failures.length > 0) fail('Capture manifest records capture failures; incomplete runs cannot be reviewed as passing.')
   const stableEvidence = new Map<string, LoadedImage>()

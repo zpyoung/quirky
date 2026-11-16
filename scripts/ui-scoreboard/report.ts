@@ -1,4 +1,6 @@
 import type { Inventory, ScoreboardReport, VisualResult, CheckResult, VisualCell } from './contracts'
+import type { ContributionInventory } from '../ui-review/contracts'
+import { scopeCaptureInventory } from '../ui-review/contribution-inventory'
 import { CHECK_IDS } from './contracts'
 import { checkPlugin, checkHostTokens, sharedTokenEvidence } from './tokens'
 
@@ -29,6 +31,19 @@ export function buildReport(inventory: Inventory, visuals: VisualResult, mode: S
   const cells = [...visuals.cells]
     .filter((cell) => !pluginMode || cell.plugin === pluginId)
     .sort((a, b) => compareText(a.targetId, b.targetId) || compareText(a.theme, b.theme))
+  let contributionInventory: ContributionInventory | undefined
+  let contributionInventoryError: string | undefined
+  const sourceContributionInventory = inventory.contributionInventory
+  if (sourceContributionInventory !== undefined) {
+    try {
+      const selectedTargets = pluginMode
+        ? inventory.targets.filter((target) => target.plugin === pluginId)
+        : inventory.targets
+      contributionInventory = scopeCaptureInventory(sourceContributionInventory, selectedTargets)
+    } catch (error) {
+      contributionInventoryError = error instanceof Error ? error.message : String(error)
+    }
+  }
   const plugins = reportPlugins.map((plugin) => {
     const pluginCells = cells.filter((cell) => cell.plugin === plugin.id)
     return {
@@ -40,15 +55,20 @@ export function buildReport(inventory: Inventory, visuals: VisualResult, mode: S
   const host = pluginMode
     ? { checks: [], targets: [] }
     : { checks: [checkHostTokens(inventory), screenshotCheck(true, cells.filter((cell) => cell.plugin === null))], targets: visuals.targets.filter((target) => target.plugin === null).map((target) => target.id).sort() }
-  const failures = [...inventory.failures, ...visuals.failures].sort((a, b) => compareText(a.source?.file ?? '', b.source?.file ?? '') || (a.source?.line ?? 0) - (b.source?.line ?? 0) || (a.source?.column ?? 0) - (b.source?.column ?? 0) || compareText(a.code, b.code))
+  const failures = [...inventory.failures, ...visuals.failures]
+  if (contributionInventoryError !== undefined) {
+    failures.push({ code: 'contribution-inventory', message: `Source contribution inventory could not be scoped for the report: ${contributionInventoryError}` })
+  }
+  failures.sort((a, b) => compareText(a.source?.file ?? '', b.source?.file ?? '') || (a.source?.line ?? 0) - (b.source?.line ?? 0) || (a.source?.column ?? 0) - (b.source?.column ?? 0) || compareText(a.code, b.code))
   const checks = pluginMode ? plugins.flatMap((plugin) => plugin.checks) : [...plugins.flatMap((plugin) => plugin.checks), ...host.checks]
   const checksPassed = (!pluginMode || plugins.length === 1) && failures.length === 0 && !visuals.operationalError && checks.every((check) => check.status === 'pass')
   const goalPassed = mode === 'full' && checksPassed
-  const status = inventory.failures.length || visuals.operationalError ? 'error' : pluginMode ? checksPassed ? 'passed' : 'failed' : goalPassed ? 'passed' : 'failed'
+  const status = inventory.failures.length || visuals.operationalError || contributionInventoryError !== undefined ? 'error' : pluginMode ? checksPassed ? 'passed' : 'failed' : goalPassed ? 'passed' : 'failed'
   return {
     schemaVersion: 1, mode, ...(pluginMode && pluginId ? { plugin: pluginId } : {}),
     commit: inventory.commit, sourceDigest: inventory.sourceDigest, threshold: 85, status, goalPassed,
     plugins, host, cells, sharedTokenEvidence: sharedTokenEvidence(inventory), exclusions: inventory.exclusions, failures,
+    ...(contributionInventory === undefined ? {} : { contributionInventory })
   }
 }
 
@@ -74,6 +94,11 @@ export function formatMarkdown(report: ScoreboardReport): string {
   for (const failure of report.failures) lines.push(`- ${failure.code}: ${escape(failure.message)}`)
   lines.push('', '## Visual cells', '', '| Target | Theme | Status | Score | Evidence |', '| --- | --- | --- | --- | --- |')
   for (const cell of report.cells) lines.push(`| ${escape(cell.targetId)} | ${cell.theme} | ${cell.status} | ${cell.score ?? 'unmeasured'} | ${escape(`${cell.code}: ${cell.reasons.join('; ')}`)} |`)
+  const aliases = report.contributionInventory?.toolAliases ?? []
+  lines.push('', '## Declared but not mounted', '', '| Declaration | Owner | Tool ID | Rendered body | Reason |', '| --- | --- | --- | --- | --- |')
+  for (const alias of aliases) {
+    lines.push(`| ${escape(alias.declaration.id)} | ${escape(alias.declaration.plugin ?? 'host')} | ${escape(alias.toolId)} | ${escape(alias.renderedTarget.id)} | ${escape(alias.reason)} |`)
+  }
   lines.push('', '## Exclusions', '')
   for (const exclusion of report.exclusions) lines.push(`- ${exclusion.plugin}: ${exclusion.reason}; ${exclusion.branch}, PR ${exclusion.pr}, steer ${exclusion.steerDate}.`)
   lines.push('', 'Loading, empty, error and command checks are a syntactic source audit. See the UI scoreboard section of apps/desktop/README.md for its limits.', '')

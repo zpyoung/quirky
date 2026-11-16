@@ -22,6 +22,18 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 const quiet = { stdout: (_: string) => {}, stderr: (_: string) => {} }
 function report(output: string): ScoreboardReport { return JSON.parse(readFileSync(join(output, 'scoreboard.json'), 'utf8')) }
 
+type TestToolAlias = {
+  declaration: { id: string; plugin: string | null; title: string; kind: 'sidebar-section' }
+  toolId: string
+  renderedTarget: { id: string; plugin: string | null; title: string; kind: string }
+  reason: 'tool-navigation-alias'
+}
+
+type TestContributionInventory = {
+  declaredTargets: Array<{ id: string; plugin: string | null; title: string; kind: string }>
+  toolAliases: TestToolAlias[]
+}
+
 function fixtureFile(root: string, path: string, content: string): void {
   const fullPath = join(root, path)
   mkdirSync(dirname(fullPath), { recursive: true })
@@ -176,11 +188,21 @@ function pluginManifest(inventory: Inventory, pluginId: string): CaptureManifest
     reference: { path: `/goldens/${theme}.png`, sha256: (theme === 'dark' ? 'c' : 'd').repeat(64) },
     status: 'captured' as const,
   })))
-  return {
+  const manifest: CaptureManifest = {
     schemaVersion: 1, createdAt: '2026-11-13T00:00:00.000Z', commit: inventory.commit,
     surface: 'desktop-renderer', viewport: { width: 1280, height: 800 },
     scope: 'filtered', selectors: [pluginId], targets, captures, failures: [],
   }
+  const contributionInventory = (inventory as Inventory & { contributionInventory?: TestContributionInventory }).contributionInventory
+  if (contributionInventory) {
+    Object.assign(manifest, {
+      contributionInventory: {
+        declaredTargets: contributionInventory.declaredTargets.filter((target) => target.plugin === pluginId),
+        toolAliases: contributionInventory.toolAliases.filter((alias) => alias.declaration.plugin === pluginId)
+      }
+    })
+  }
+  return manifest
 }
 
 function passingPluginReview(manifest: CaptureManifest, reviewerAlias: string, authorFamily: ModelFamily): ReviewReport {
@@ -203,6 +225,26 @@ function passingPluginReview(manifest: CaptureManifest, reviewerAlias: string, a
 test('plugin mode captures and reports only the selected plugin without certifying the full goal', async () => {
   const { inventory: base, output } = fixture()
   const inventory = pluginModeInventory(base)
+  const aliases: TestToolAlias[] = [
+    {
+      declaration: { id: 'sidebar-section:acme.ui/navigation', plugin: 'acme.ui', title: 'Navigation', kind: 'sidebar-section' },
+      toolId: 'sidebar-section:acme.ui/navigation',
+      renderedTarget: { id: 'view:acme.ui/main', plugin: 'acme.ui', title: 'Main', kind: 'view' },
+      reason: 'tool-navigation-alias'
+    },
+    {
+      declaration: { id: 'sidebar-section:acme.other/navigation', plugin: 'acme.other', title: 'Other navigation', kind: 'sidebar-section' },
+      toolId: 'sidebar-section:acme.other/navigation',
+      renderedTarget: { id: 'view:acme.other/main', plugin: 'acme.other', title: 'Other', kind: 'view' },
+      reason: 'tool-navigation-alias'
+    }
+  ]
+  Object.assign(inventory, {
+    contributionInventory: {
+      declaredTargets: [...inventory.targets, ...aliases.map((alias) => alias.declaration)].sort((left, right) => left.id.localeCompare(right.id)),
+      toolAliases: aliases.sort((left, right) => left.declaration.id.localeCompare(right.declaration.id))
+    }
+  })
   let captureOnly: string[] | undefined
   const exit = await runUiScoreboard(['--plugin', 'acme.ui', '--author-family', 'openai', '--output', output], {
     ...quiet,
@@ -224,8 +266,14 @@ test('plugin mode captures and reports only the selected plugin without certifyi
     ['acme.ui', 'view:acme.ui/main', 'dark'],
     ['acme.ui', 'view:acme.ui/main', 'light'],
   ])
+  const metadata = (value as ScoreboardReport & { contributionInventory: TestContributionInventory }).contributionInventory
+  expect(metadata.declaredTargets.map((target) => target.id)).toContain('sidebar-section:acme.ui/navigation')
+  expect(metadata.declaredTargets.some((target) => target.id.includes('acme.other'))).toBe(false)
+  expect(metadata.toolAliases.map((alias) => alias.declaration.id)).toEqual(['sidebar-section:acme.ui/navigation'])
   const markdown = readFileSync(join(output, 'scoreboard.md'), 'utf8')
   expect(markdown).toContain('Mode: plugin (acme.ui).')
+  expect(markdown).toContain('## Declared but not mounted')
+  expect(markdown).toContain('| sidebar-section:acme.ui/navigation | acme.ui | sidebar-section:acme.ui/navigation | view:acme.ui/main | tool-navigation-alias |')
   expect(markdown).not.toContain('| host |')
   expect(markdown).not.toContain('acme.other')
 })
@@ -290,6 +338,41 @@ test('static-only writes complete honest reports and never starts runtime', asyn
   expect(readFileSync(join(output, 'scoreboard.md'), 'utf8')).toContain('--compat-px-40')
   expect(messages.join('\n')).toContain(join(output, 'scoreboard.json'))
   expect(messages.join('\n')).toContain(join(output, 'scoreboard.md'))
+})
+test('static-only reports disclose declarations without inventing alias visual cells', async () => {
+  const { inventory, output } = fixture()
+  const body = inventory.targets[0]!
+  body.id = 'view:acme.ui/main'
+  inventory.plugins[0]!.targets = [body.id]
+  const declaration = { id: 'sidebar-section:acme.ui/navigation', plugin: 'acme.ui', title: 'Navigation', kind: 'sidebar-section' as const }
+  const alias: TestToolAlias = {
+    declaration,
+    toolId: declaration.id,
+    renderedTarget: body,
+    reason: 'tool-navigation-alias'
+  }
+  Object.assign(inventory, {
+    contributionInventory: {
+      declaredTargets: [body, declaration].sort((left, right) => left.id.localeCompare(right.id)),
+      toolAliases: [alias]
+    }
+  })
+
+  expect(await runUiScoreboard(['--static-only', '--output', output], { ...quiet, collectInventory: () => inventory })).toBe(1)
+
+  const value = report(output)
+  const metadata = (value as ScoreboardReport & { contributionInventory: TestContributionInventory }).contributionInventory
+  expect(value).toMatchObject({ mode: 'static-only', goalPassed: false, status: 'failed' })
+  expect(value.cells).toHaveLength(2)
+  expect(value.cells.every((cell) => cell.targetId === body.id && cell.code === 'not-run' && cell.score === null)).toBe(true)
+  expect(metadata.declaredTargets.map((target) => target.id)).toEqual([declaration.id, body.id].sort())
+  expect(metadata.toolAliases).toHaveLength(1)
+  expect(Object.keys(metadata.toolAliases[0]!).sort()).toEqual(['declaration', 'reason', 'renderedTarget', 'toolId'])
+  expect(JSON.stringify(metadata.toolAliases)).not.toMatch(/"image"|"score"|"theme"|"passed"/)
+  const markdown = readFileSync(join(output, 'scoreboard.md'), 'utf8')
+  expect(markdown).toContain('## Declared but not mounted')
+  expect(markdown).toContain(`| ${declaration.id} | acme.ui | ${declaration.id} | ${body.id} | tool-navigation-alias |`)
+  expect(markdown).not.toContain(`| ${declaration.id} | dark |`)
 })
 test('Markdown caps failed source-audit evidence and JSON retains all evidence', async () => {
   const { output, inventory } = fixture()
