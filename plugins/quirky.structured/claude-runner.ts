@@ -1,9 +1,9 @@
-import type { CanUseTool, Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { CanUseTool, Options, PermissionMode, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { extname } from 'node:path'
 import type { AskEnvelope, Session } from '@quirky/protocol'
-import type { StructuredContext, StructuredSendOptions, StructuredStartOptions, StructuredRunner } from './runner'
+import type { StructuredContext, StructuredSendOptions, StructuredSettings, StructuredStartOptions, StructuredRunner } from './runner'
 import {
   CallTracker,
   ProseStream,
@@ -26,6 +26,9 @@ export type ClaudeQueryParams = { prompt: AsyncIterable<SDKUserMessage>; options
 export type ClaudeQuery = AsyncIterable<any> & {
   interrupt(): Promise<unknown>
   close(): void
+  setPermissionMode(mode: PermissionMode): Promise<void>
+  setModel(model?: string): Promise<void>
+  applyFlagSettings(settings: { effortLevel?: Options['effort'] | null }): Promise<void>
 }
 
 export type ClaudeRunnerDeps = {
@@ -90,6 +93,7 @@ type Running = {
   turnStartedAt: number | null
   /** Prompts sent whose result has not arrived yet; a result closes one turn, not all of them. */
   openTurns: number
+  settings: { model?: string; effort?: string; permissionMode: string; planMode: boolean }
 }
 
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
@@ -221,6 +225,12 @@ class ClaudeRunner implements StructuredRunner {
       stream: new ProseStream(),
       turnStartedAt: hasPrompt ? Date.now() : null,
       openTurns: hasPrompt ? 1 : 0,
+      settings: {
+        permissionMode: 'default',
+        planMode: false,
+        ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
+        ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort } : {})
+      },
       query: query({
         prompt: input.messages,
         options: {
@@ -257,6 +267,28 @@ class ClaudeRunner implements StructuredRunner {
     run.turnStartedAt ??= Date.now()
     this.context.setStatus(sessionId, 'working')
     run.input.push(message)
+  }
+
+  async configure(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings> {
+    const run = this.running.get(sessionId)
+    if (!run || run.stopped || run.ended) throw new Error('session is not running')
+    const current = run.settings
+    if (settings.model !== undefined) {
+      await run.query.setModel(settings.model)
+      current.model = settings.model
+    }
+    if (settings.effort !== undefined) {
+      await run.query.applyFlagSettings({ effortLevel: settings.effort as Options['effort'] })
+      current.effort = settings.effort
+    }
+    if (settings.permissionMode !== undefined || settings.planMode !== undefined) {
+      const permissionMode = settings.permissionMode ?? current.permissionMode
+      const planMode = settings.planMode ?? current.planMode
+      await run.query.setPermissionMode((planMode ? 'plan' : permissionMode) as PermissionMode)
+      current.permissionMode = permissionMode
+      current.planMode = planMode
+    }
+    return { ...current }
   }
 
   async interrupt(sessionId: string): Promise<void> {

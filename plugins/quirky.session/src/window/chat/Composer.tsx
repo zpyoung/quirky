@@ -8,6 +8,8 @@ import { QueuedList } from './QueuedList'
 type Attachment = { name: string; path: string }
 type Mention = { start: number; query: string }
 
+type ReportedSettings = { model?: string; effort?: string; permissionMode?: string; planMode?: boolean }
+
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 const MENTION_BEFORE_CARET = /(^|\s)@([^\s@]*)$/
@@ -89,6 +91,34 @@ export function Composer({
       context.toast('Could not send', messageOf(error))
       setText(value)
       setAttachments(images)
+    }
+  }
+
+  const pick = async (next: Picks) => {
+    const before = picks
+    setPicks(next)
+    onPick?.(next)
+    const changes = {
+      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),
+      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),
+      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),
+      ...(next.plan !== before.plan ? { planMode: next.plan } : {})
+    }
+    if (Object.keys(changes).length === 0) return
+    try {
+      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined
+      const settings = result?.settings
+      if (settings) {
+        setPicks((current) => ({
+          model: settings.model ?? current.model,
+          effort: settings.effort ?? current.effort,
+          mode: settings.permissionMode ?? current.mode,
+          plan: settings.planMode ?? current.plan
+        }))
+      }
+    } catch (error) {
+      setPicks(before)
+      context.toast('Could not change the setting', messageOf(error))
     }
   }
 
@@ -229,10 +259,7 @@ export function Composer({
           capabilities={capabilities}
           options={options}
           picks={picks}
-          onPicks={(next) => {
-            setPicks(next)
-            onPick?.(next)
-          }}
+          onPicks={(next) => void pick(next)}
         />
         {working && (
           <span style={running}>

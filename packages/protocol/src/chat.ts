@@ -39,6 +39,7 @@ export type Capability = { ok: true } | { ok: false; reason: string }
 export type AgentCapabilities = {
   agent: 'claude' | 'codex' | 'pi' | 'omp'
   steer: Capability
+  model: Capability
   planMode: Capability
   permissionModes: { ok: true; modes: string[] } | { ok: false; reason: string }
   images: Capability

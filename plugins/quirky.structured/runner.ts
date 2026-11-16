@@ -33,6 +33,8 @@ export type StructuredContext = {
    * Native questions use the kernel-issued live lease; ordinary tool approvals retain their existing card path.
    */
   createAsk(spec: AskSpec, sessionId: string, options?: { nativeQuestion?: boolean }): Promise<AskEnvelope>
+  /** Cancels a pending ask the runner no longer needs, so its card becomes a dismissed record. */
+  cancelAsk(askId: string): Promise<void>
   /** Stores a native provider session ID before the first turn is started. */
   setProviderSession(sessionId: string, providerSession: SessionProviderSession): Promise<void>
   /** The user's `claude` executable, found through their login shell. */
@@ -52,6 +54,9 @@ export type StructuredStartOptions = StructuredLaunchOptions & { providerSession
 /** Extras of one message: absolute image paths the agent should see, and the queue entry the message came from. */
 export type StructuredSendOptions = { images?: string[]; queuedId?: string }
 
+/** The composer picks a running session can take; plan mode wins over the permission mode while on. */
+export type StructuredSettings = { model?: string; effort?: string; permissionMode?: string; planMode?: boolean }
+
 /** Drives background (no PTY) agent sessions. One runner serves every structured session. */
 export interface StructuredRunner {
   start(session: Session, prompt?: string, options?: StructuredStartOptions): Promise<void>
@@ -61,6 +66,11 @@ export interface StructuredRunner {
    * Falls back to `stop` when the agent does not honour the interrupt, so the turn always ends.
    * A session with no open turn is left alone.
    */
+  /**
+   * Applies the picks to the running session, for the next turn or at once where the agent allows it,
+   * and returns the settings now in force. Absent on runners whose picks are fixed at start.
+   */
+  configure?(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings>
   interrupt(sessionId: string): Promise<void>
   stop(sessionId: string): Promise<void>
 }

@@ -111,7 +111,7 @@ export function Controls({ context, session, capabilities, options, picks, onPic
   const modes = capabilities?.permissionModes
   const mode = picks.mode ?? (modes?.ok ? modes.modes[0] : undefined) ?? ''
 
-  const modelReason = options === null ? 'Models unavailable' : options.supported ? undefined : 'This agent takes no model setting'
+  const modelReason = reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? undefined : 'This agent takes no model setting')
   const effortReason = reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined)
   const modeReason = reasonOf(modes)
   const planReason = reasonOf(capabilities?.planMode)

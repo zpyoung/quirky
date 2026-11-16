@@ -313,3 +313,66 @@ describe('the queue store', () => {
     }
   })
 })
+
+describe('turn baseline', () => {
+  test('the snapshot is awaited before the message reaches the agent, for send, flush and steer', async () => {
+    chat = await bootChat({ git: true })
+    const session = await working(chat)
+    chat.runner.finish(session.id)
+    await waitFor(() => chat!.world.statusLog.some((entry) => entry.status === 'done'))
+    const order: string[] = []
+    chat.git.snapshotTree = async () => {
+      order.push('snapshot-start')
+      await Bun.sleep(60)
+      order.push('snapshot-end')
+      return { tree: 'late' }
+    }
+    chat.runner.onSend = () => order.push('send')
+    await chat.call('quirky.structured/send', { session: session.id, text: 'direct' })
+    expect(order).toEqual(['snapshot-start', 'snapshot-end', 'send'])
+
+    const queuedMessage = await chat.call('quirky.structured/send', { session: session.id, text: 'later', when: 'idle' })
+    expect(queuedMessage.queuedId).toBeDefined()
+    order.length = 0
+    chat.runner.finish(session.id)
+    await waitFor(() => order.includes('send'))
+    expect(order.slice(-3)).toEqual(['snapshot-start', 'snapshot-end', 'send'])
+  })
+
+  test('a failing snapshot does not block the send', async () => {
+    chat = await bootChat({ git: true })
+    const session = await working(chat)
+    chat.runner.finish(session.id)
+    await waitFor(() => chat!.world.statusLog.some((entry) => entry.status === 'done'))
+    chat.git.snapshotTree = () => {
+      throw new Error('git is down')
+    }
+    expect(await chat.call('quirky.structured/send', { session: session.id, text: 'still goes' })).toEqual({ ok: true })
+    expect(chat.runner.sent.map((sent) => sent.text)).toEqual(['still goes'])
+  })
+})
+
+describe('configure', () => {
+  test('hands the picks to the runner and reports the settings in force', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    const result = await chat.call('quirky.structured/configure', { session: session.id, planMode: true, permissionMode: 'acceptEdits' })
+    expect(result).toEqual({ ok: true, settings: { planMode: true, permissionMode: 'acceptEdits' } })
+    expect(chat.runner.configured).toEqual([{ sessionId: session.id, settings: { planMode: true, permissionMode: 'acceptEdits' } }])
+  })
+
+  test('a pick the agent cannot take fails with the capability reason', async () => {
+    chat = await bootChat()
+    const session = await chat.call('quirky.structured/create', { worktree: 'main', agent: 'codex', prompt: 'go' })
+    const error = await chat.failure(chat.call('quirky.structured/configure', { session: session.id, planMode: true }))
+    expect(error.message).toContain('Codex runs with on-request approval in Quirky')
+    expect(chat.runner.configured).toEqual([])
+  })
+
+  test('rejects unknown keys and bad types', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, planMode: 'yes' }))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await chat.failure(chat.call('quirky.structured/configure', { session: session.id, bogus: 1 }))).code).toBe(RpcErrorCode.InvalidParams)
+  })
+})

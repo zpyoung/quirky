@@ -395,6 +395,15 @@ try {
     expect((await pending).status).toBe('answered')
   })
 
+  test('the context cancels one pending ask', async () => {
+    const session = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    const pending = runner.context.createAsk({ questions: [{ id: 'ok', type: 'confirm', question: 'Run rm?' }] }, session.id)
+    const ask = await waitForAsync(async () => ((await call('quirky.ask/list', { pendingOnly: true })) as any[])[0])
+    await runner.context.cancelAsk(ask.id)
+    expect((await pending).status).toBe('declined')
+  })
+
   test('closing a session declines its pending asks', async () => {
     const session = await create('go')
     await waitFor(() => runner.started.length === 1)

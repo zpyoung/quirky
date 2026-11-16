@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { QuirkyClient, QuirkyEvent, RpcError, Session, StructuredMessage } from '@quirky/protocol'
 import { startHarness, type Harness } from '../../../packages/daemon/test/helpers'
 import { makeTempDir, removeTempDirs } from '../../../packages/daemon/test/plugins/fixtures'
-import type { StructuredContext, StructuredRunner, StructuredSendOptions, StructuredStartOptions } from '../runner'
+import type { StructuredContext, StructuredRunner, StructuredSendOptions, StructuredSettings, StructuredStartOptions } from '../runner'
 import { FakeWorld } from './fakes/world'
 
 const PLUGIN_DIR = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -31,10 +31,18 @@ export class ChatRunner implements StructuredRunner {
   }
   async send(sessionId: string, text: string, options?: StructuredSendOptions) {
     if (this.sendError) throw this.sendError
+    this.onSend?.()
     this.sent.push({ sessionId, text, ...(options === undefined ? {} : { options }) })
     this.context.appendMessage({ sessionId, role: 'user', text, item: { kind: 'user', text, ...(options?.queuedId ? { queuedId: options.queuedId } : {}) } })
     this.context.setStatus(sessionId, 'working')
   }
+  configured: { sessionId: string; settings: StructuredSettings }[] = []
+  async configure(sessionId: string, settings: StructuredSettings) {
+    this.configured.push({ sessionId, settings })
+    return settings
+  }
+  /** Runs when a message reaches the agent, before it is recorded; lets a test observe ordering. */
+  onSend: (() => void) | null = null
   interrupted: string[] = []
   async interrupt(sessionId: string) {
     this.interrupted.push(sessionId)

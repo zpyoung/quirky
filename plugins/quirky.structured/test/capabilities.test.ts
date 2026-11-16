@@ -9,6 +9,7 @@ describe('capabilities values', () => {
     expect(claude).toMatchObject({
       agent: 'claude',
       steer: { ok: true },
+      model: { ok: true },
       planMode: { ok: true },
       images: { ok: true },
       effort: { ok: true },
@@ -23,7 +24,7 @@ describe('capabilities values', () => {
     const codex = capabilitiesFor('codex')!
     expect(codex.planMode).toEqual({ ok: false, reason: 'Codex runs with on-request approval in Quirky' })
     expect(codex.permissionModes).toEqual({ ok: false, reason: 'Codex runs with on-request approval in Quirky' })
-    expect([codex.steer, codex.images, codex.effort, codex.approveForSession, codex.resume].every((c) => c.ok)).toBe(true)
+    expect([codex.steer, codex.model, codex.images, codex.effort, codex.approveForSession, codex.resume].every((c) => c.ok)).toBe(true)
   })
 
   test('pi and omp lack plan mode, permission modes and session approval', () => {
@@ -34,7 +35,9 @@ describe('capabilities values', () => {
         expect(capability.ok).toBe(false)
         expect((capability as { reason: string }).reason).toContain(agent)
       }
-      expect([found.steer, found.images, found.effort, found.resume].every((c) => c.ok)).toBe(true)
+      expect([found.steer, found.images, found.resume].every((c) => c.ok)).toBe(true)
+      expect(found.model).toEqual({ ok: false, reason: 'Set when the chat starts' })
+      expect(found.effort).toEqual({ ok: false, reason: 'Set when the chat starts' })
     }
     expect((capabilitiesFor('pi')!.planMode as { reason: string }).reason).toBe('pi has no plan mode')
   })
