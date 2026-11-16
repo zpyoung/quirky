@@ -1,4 +1,4 @@
-import { afterEach, expect, jest, test } from 'bun:test'
+import { afterEach, expect, jest, spyOn, test } from 'bun:test'
 import { UI_TOOL_SLOTS, type QuirkyClient } from '@quirky/protocol'
 import { applyPhase, daySchedule, PANEL_PHASES, startDay, STOP_DRAIN_MS } from './day.ts'
 import type { SoakWindows } from './windows.ts'
@@ -239,4 +239,73 @@ test('layout writes and mount proof consume one shared deadline', async () => {
   await applying
   expect(f.waits).toHaveLength(3)
   for (const { options } of f.waits) expect(options.timeoutMs).toBe(10_000)
+})
+
+test('rejects a late final readback even when the timeout callback has not run', async () => {
+  jest.useFakeTimers()
+  const f = fixture(1)
+  let now = performance.now()
+  const initial = now
+  const clock = spyOn(performance, 'now').mockImplementation(() => now)
+  const call = f.control.callAny.bind(f.control)
+  f.control.callAny = async (...args: Parameters<typeof call>) => {
+    const result = await call(...args)
+    if (args[0] === 'ui.window.state') now = initial + 30_001
+    return result
+  }
+  try {
+    const result = await applyPhase({ ...f, phase: 1, previous: 0, signal: new AbortController().signal })
+    expect(result.error).toContain('30000ms')
+  } finally {
+    clock.mockRestore()
+  }
+})
+
+test('rejects a late drain even when its timeout callback has not run', async () => {
+  jest.useFakeTimers()
+  const f = fixture(1)
+  let now = performance.now()
+  const initial = now
+  const clock = spyOn(performance, 'now').mockImplementation(() => now)
+  const navigation = Promise.withResolvers<Omit<SwitchRecord, 'at' | 'seq'>>()
+  f.windows.navigate = () => navigation.promise
+  const driver = startDay({
+    ...f, startedAt: now, signal: new AbortController().signal,
+    schedule: [{ at: 0, kind: 'switch', seq: 0, index: 0, to: 'b' }]
+  })
+  try {
+    await flush()
+    const result = driver.stop()
+    now = initial + STOP_DRAIN_MS + 1
+    navigation.resolve({ index: 0, from: 'a', requested: 'b', settled: 'b', proof: null, ok: true, followMs: null, error: null })
+    expect((await result).drainError).toBe('active action did not drain within 10000ms')
+  } finally {
+    clock.mockRestore()
+  }
+})
+
+test('a failed phase readback does not skip the next remount proofs', async () => {
+  const f = fixture(1)
+  let first = true
+  const call = f.control.callAny.bind(f.control)
+  f.control.callAny = async (...args: Parameters<typeof call>) => {
+    if (args[0] === 'ui.window.state' && first) {
+      first = false
+      throw new Error('readback failed after layout applied')
+    }
+    return call(...args)
+  }
+  let proofWaits = 0
+  f.windows.waitForRequest = async () => { proofWaits++; return null }
+  const driver = startDay({
+    ...f, startedAt: performance.now(), signal: new AbortController().signal,
+    schedule: [{ at: 0, kind: 'phase', seq: 1, phase: 1 }, { at: 0, kind: 'phase', seq: 2, phase: 0 }]
+  })
+  await flush()
+  const result = await driver.stop()
+  expect(result.phases).toHaveLength(2)
+  expect(result.phases[0]!.ok).toBe(false)
+  expect(result.phases[1]!.ok).toBe(false)
+  expect(result.phases[1]!.missing).toEqual([{ index: 0, panel: 'checks' }, { index: 0, panel: 'explorer' }])
+  expect(proofWaits).toBe(2)
 })

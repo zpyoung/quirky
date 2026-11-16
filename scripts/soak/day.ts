@@ -114,11 +114,15 @@ function message(error: unknown): string {
 
 function bounded<T>(task: Promise<T>, milliseconds: number, signal: AbortSignal, label: string): Promise<T> {
   const pending = Promise.withResolvers<T>()
+  const deadline = performance.now() + milliseconds
   const abort = () => pending.reject(new Error('day action was interrupted'))
   const timer = setTimeout(() => pending.reject(new Error(label)), Math.max(0, milliseconds))
   signal.addEventListener('abort', abort, { once: true })
   if (signal.aborted) abort()
-  task.then(pending.resolve, pending.reject)
+  task.then((value) => {
+    if (performance.now() >= deadline) pending.reject(new Error(label))
+    else pending.resolve(value)
+  }, pending.reject)
   return pending.promise.finally(() => {
     clearTimeout(timer)
     signal.removeEventListener('abort', abort)
@@ -236,7 +240,7 @@ export function startDay(options: {
         const result = await applyPhase({ control, windows, phase: action.phase, previous, signal: aborter.signal })
         if (aborter.signal.aborted || sealed) return
         phases.push({ at, seq: action.seq, phase: action.phase, ok: result.error === null && result.missing.length === 0, ...result })
-        if (result.error === null) previous = action.phase
+        previous = action.phase
       } else {
         const from = windows.liveness?.().find(({ index }) => index === action.index)?.worktree ?? ''
         let result: Omit<SwitchRecord, 'at' | 'seq'>
