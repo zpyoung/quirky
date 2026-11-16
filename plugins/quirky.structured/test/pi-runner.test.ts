@@ -14,7 +14,7 @@ async function until(check: () => boolean) {
   expect(check()).toBe(true)
 }
 
-type AskWaiter = { spec: AskSpec; sessionId: string; options?: { nativeQuestion?: boolean }; resolve(envelope: AskEnvelope): void }
+type AskWaiter = { spec: AskSpec; sessionId: string; options?: { nativeQuestion?: boolean; onAsk?: (askId: string) => void }; resolve(envelope: AskEnvelope): void }
 
 const noSpawn: ProcessSpawner = {
   spawn() {
@@ -28,6 +28,7 @@ function makeSetup(variant: PiVariant) {
   const asks: AskWaiter[] = []
   const providerSessions: { sessionId: string; id: string; transcriptPath?: string | null }[] = []
   const resolved: PiVariant[] = []
+  const cancelledAsks: string[] = []
   const context: StructuredContext = {
     process: noSpawn,
     appendMessage(message: NewStructuredMessage) {
@@ -48,6 +49,9 @@ function makeSetup(variant: PiVariant) {
       const { promise, resolve } = Promise.withResolvers<AskEnvelope>()
       asks.push({ spec, sessionId, ...(options === undefined ? {} : { options }), resolve })
       return promise
+    },
+    async cancelAsk(askId) {
+      cancelledAsks.push(askId)
     },
     async setProviderSession(sessionId, providerSession) {
       providerSessions.push({ sessionId, id: providerSession.id, transcriptPath: providerSession.transcriptPath })
@@ -81,7 +85,7 @@ function makeSetup(variant: PiVariant) {
   const settle = (transport: FakePiTransport) =>
     variant === 'pi' ? transport.emit({ type: 'agent_settled' }) : transport.emit({ type: 'agent_end', messages: [], isTerminal: true, yielded: true })
   const answered = (askId: string, answers: AskEnvelope['answers']): AskEnvelope => ({ status: 'answered', askId, answers, skipped: [], summary: '' })
-  return { messages, statuses, asks, providerSessions, resolved, context, session, fake, runner, items, ofKind, settle, answered }
+  return { messages, statuses, asks, providerSessions, resolved, cancelledAsks, context, session, fake, runner, items, ofKind, settle, answered }
 }
 
 type Setup = ReturnType<typeof makeSetup>
@@ -213,7 +217,7 @@ for (const variant of ['pi', 'omp'] as const) {
       const transport = await begin()
       transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-1', method: 'confirm', title: 'Run rm -rf?', message: 'This deletes files' })
       await until(() => setup.asks.length === 1)
-      expect(setup.asks[0]!.options).toBeUndefined()
+      expect(setup.asks[0]!.options?.nativeQuestion).toBeUndefined()
       expect(setup.asks[0]!.spec.questions.map((q) => q.id)).toEqual(['decision', 'reason'])
       expect(setup.asks[0]!.spec.questions[0]!.question).toBe('Run rm -rf?: This deletes files')
       expect(setup.statuses.at(-1)).toBe('waiting')
@@ -238,7 +242,7 @@ for (const variant of ['pi', 'omp'] as const) {
       const transport = await begin()
       transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-3', method: 'select', title: 'Which branch?', options: ['main', 'dev'] })
       await until(() => setup.asks.length === 1)
-      expect(setup.asks[0]!.options).toEqual({ nativeQuestion: true })
+      expect(setup.asks[0]!.options?.nativeQuestion).toBe(true)
       setup.asks[0]!.resolve(setup.answered('ask_3', { answer: { value: 'o2', label: 'dev', source: 'option' } }))
       await until(() => transport.commands('extension_ui_response').length === 1)
       expect(transport.commands('extension_ui_response')[0]).toEqual({ type: 'extension_ui_response', id: 'ui-3', value: 'dev' })
@@ -369,6 +373,19 @@ for (const variant of ['pi', 'omp'] as const) {
       await until(() => setup.statuses.at(-1) === 'working')
       setup.asks[0]!.resolve(setup.answered('ask_c', { decision: { value: 'allow', source: 'option' } }))
       await Bun.sleep(10)
+      expect(transport.commands('extension_ui_response')).toEqual([])
+    })
+
+    test('a cancelled dialog cancels its own ask once', async () => {
+      const transport = await begin()
+      transport.emit({ type: 'agent_start' }, { type: 'extension_ui_request', id: 'ui-c', method: 'confirm', title: 'Go?' })
+      await until(() => setup.asks.length === 1)
+      setup.asks[0]!.options?.onAsk?.('ask_c')
+      transport.emit({ type: 'extension_ui_request', id: 'ui-x', method: 'cancel', targetId: 'ui-c' })
+      await until(() => setup.statuses.at(-1) === 'working')
+      transport.emit({ type: 'extension_ui_request', id: 'ui-y', method: 'cancel', targetId: 'ui-c' })
+      await Bun.sleep(10)
+      expect(setup.cancelledAsks).toEqual(['ask_c'])
       expect(transport.commands('extension_ui_response')).toEqual([])
     })
 
