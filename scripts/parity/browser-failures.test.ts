@@ -2,9 +2,15 @@ import { expect, spyOn, test } from 'bun:test'
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import * as fs from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve, sep } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { runBrowserParity, validateOutcomes, type BrowserCheck, type BrowserParityReport } from './browser-run'
 import { parseBrowserArgs, createBrowserEnvironment, createBuiltinPluginsDirectory, boundedDiagnostic, decodeCliReceipt, BrowserFailure, daemonStatus, readShimLogs, startBrowserWorld, waitForDaemon, restartBrowserDaemon, areChromeProcessesGone, type BrowserWorld, type CliReceipt } from './browser-world'
+import type { SpawnExit } from '@quirky/protocol'
+import { createProcessRunner } from '../../packages/process/src/api'
+import { startChrome } from '../../plugins/quirky.browser/src/runtime/chrome'
+import type { BrowserChild } from '../../plugins/quirky.browser/src/runtime/dependencies'
+import { browserDependencies } from '../../plugins/quirky.browser/src/runtime/defaults'
+import type { ChromeProcessAccess, ChromeProcessIdentity } from '../../plugins/quirky.browser/src/runtime/chrome-processes'
 import type { RuntimeInfo } from '@quirky/protocol/node'
 import { startBrowserFixture } from './browser-fixture'
 import type { BrowserRow } from './browser-table'
@@ -18,6 +24,7 @@ import { tabChecks } from './browser-checks-tabs'
 const PARITY_CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/opt/google/chrome/chrome',
   '/usr/bin/google-chrome',
   '/usr/bin/google-chrome-stable',
   '/usr/bin/chromium',
@@ -93,6 +100,126 @@ test('browser parity selects installed Linux Chrome over a poisoned inherited ov
   } finally {
     if (previous === undefined) delete process.env.QUIRKY_BROWSER_CHROME
     else process.env.QUIRKY_BROWSER_CHROME = previous
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('browser parity reclaims a wrapper-launched Linux Chrome using its native executable', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'parity-native-chrome-'))
+  const runner = createProcessRunner({ owner: 'quirky.browser.parity-native-chrome-test' })
+  const nativeSystemPath = '/opt/google/chrome/chrome'
+  const macSystemPaths = new Set(PARITY_CHROME_CANDIDATES.slice(0, 2))
+  const canonicalWrapperSystemPath = '/opt/google/chrome/google-chrome'
+  const wrapperSystemPaths = [
+    canonicalWrapperSystemPath,
+    ...LINUX_PARITY_CHROME_CANDIDATES.filter((path) => path !== nativeSystemPath)
+  ]
+  const fixturePaths = new Map<string, string>([
+    [nativeSystemPath, join(home, 'system', nativeSystemPath.slice(1))],
+    ...wrapperSystemPaths.map((path) => [path, join(home, 'system', path.slice(1))] as const)
+  ])
+  const nativeBinary = fixturePaths.get(nativeSystemPath)!
+  const canonicalWrapper = fixturePaths.get(canonicalWrapperSystemPath)!
+  const profileRoot = join(home, 'profile')
+  const userDataDir = join(profileRoot, 'chrome-profile')
+  try {
+    for (const [systemPath, fixturePath] of fixturePaths) {
+      mkdirSync(dirname(fixturePath), { recursive: true })
+      if (systemPath === nativeSystemPath) {
+        writeFileSync(fixturePath, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]), { mode: 0o700 })
+      } else {
+        writeFileSync(fixturePath, '#!/bin/sh\nCHROME_WRAPPER="$0"\nexec -a "$CHROME_WRAPPER" "$HERE/chrome" "$@"\n', { mode: 0o700 })
+      }
+    }
+    mkdirSync(userDataDir, { recursive: true })
+
+    const originalStatSync = fs.statSync
+    const originalAccessSync = fs.accessSync
+    const statSpy = spyOn(fs, 'statSync').mockImplementation(new Proxy(originalStatSync, {
+      apply(target, receiver, args) {
+        const candidate = String(args[0])
+        if (macSystemPaths.has(candidate)) return { isFile: () => false }
+        const fixturePath = fixturePaths.get(candidate)
+        return Reflect.apply(target, receiver, [fixturePath ?? args[0], ...args.slice(1)])
+      }
+    }))
+    const accessSpy = spyOn(fs, 'accessSync').mockImplementation((path, mode) => {
+      if (macSystemPaths.has(String(path))) throw Object.assign(new Error(`not installed: ${path}`), { code: 'ENOENT' })
+      return originalAccessSync(fixturePaths.get(String(path)) ?? path, mode)
+    })
+    try {
+      const env = createBrowserEnvironment(home, resolve(import.meta.dir, '../..'))
+      const selectedSystemPath = env.QUIRKY_BROWSER_CHROME!
+      const executablePath = fixturePaths.get(selectedSystemPath)
+      if (!executablePath) throw new Error(`unexpected selected Chrome candidate: ${selectedSystemPath}`)
+
+      const events: string[] = []
+      const orphan: ChromeProcessIdentity = {
+        pid: 711,
+        ppid: 1,
+        pgid: 711,
+        uid: process.getuid?.() ?? 0,
+        started: 'wrapper-launch-test',
+        executable: nativeBinary,
+        argv: [
+          canonicalWrapper,
+          '--headless=new',
+          `--user-data-dir=${userDataDir}`,
+          '--remote-debugging-address=127.0.0.1',
+          '--remote-debugging-port=0'
+        ]
+      }
+      let orphanAlive = true
+      const chromeProcesses: ChromeProcessAccess = {
+        async snapshot() { events.push('snapshot'); return [orphan] },
+        async inspect(pid) {
+          events.push('inspect')
+          expect(pid).toBe(orphan.pid)
+          return orphanAlive ? orphan : null
+        },
+        signal(pid, signal) {
+          events.push(`signal:${signal}`)
+          expect(pid).toBe(orphan.pid)
+          expect(signal).toBe('SIGTERM')
+          orphanAlive = false
+        }
+      }
+      const launchExit: SpawnExit = { exitCode: null, signal: 'SIGTERM', stopped: 'stop', durationMs: 1 }
+      const child: BrowserChild = {
+        pid: 712,
+        exited: new Promise<SpawnExit>(() => {}),
+        async stop() { return launchExit }
+      }
+      const dependencies = {
+        ...browserDependencies(home, runner),
+        chromePath: executablePath,
+        chromeProcesses,
+        spawn(command: string[]) {
+          events.push('spawn')
+          expect(orphanAlive).toBe(false)
+          expect(command[0]).toBe(nativeBinary)
+          const selectedProfile = command.find((argument) => argument.startsWith('--user-data-dir='))!.slice('--user-data-dir='.length)
+          writeFileSync(join(selectedProfile, 'DevToolsActivePort'), '9222\n/devtools/browser/native-binary-proof\n')
+          return child
+        }
+      }
+
+      const chrome = await startChrome(profileRoot, dependencies)
+      try {
+        expect(env.QUIRKY_BROWSER_CHROME).toBe(nativeSystemPath)
+        expect(chrome.cdpUrl).toBe('http://127.0.0.1:9222')
+        expect(chrome.browserWebSocketUrl).toBe('ws://127.0.0.1:9222/devtools/browser/native-binary-proof')
+        expect(events.filter(event => event.startsWith('signal:'))).toEqual(['signal:SIGTERM'])
+        expect(events.filter(event => event === 'spawn')).toHaveLength(1)
+      } finally {
+        await chrome.asyncClose()
+      }
+    } finally {
+      accessSpy.mockRestore()
+      statSpy.mockRestore()
+    }
+  } finally {
+    await runner.dispose()
     rmSync(home, { recursive: true, force: true })
   }
 })

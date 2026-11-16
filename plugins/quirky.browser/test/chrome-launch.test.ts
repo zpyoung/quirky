@@ -17,6 +17,7 @@ let nextRunnerId = 0
 const DEFAULT_CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  '/opt/google/chrome/chrome',
   '/usr/bin/google-chrome',
   '/usr/bin/google-chrome-stable',
   '/usr/bin/chromium',
@@ -174,7 +175,7 @@ test('startChrome discovers Linux candidates in order and skips missing or non-e
       const commands: string[][] = []
       const stops: StopOptions[] = []
       await withChromeProbes(LINUX_CHROME_CANDIDATES, LINUX_CHROME_CANDIDATES, () => launchChrome(profileRoot, runner, undefined, commands, stops))
-      expect(commands[0]?.[0]).toBe('/usr/bin/google-chrome')
+      expect(commands[0]?.[0]).toBe('/opt/google/chrome/chrome')
     })
 
     await withFixture(async (profileRoot, runner) => {
@@ -185,7 +186,7 @@ test('startChrome discovers Linux candidates in order and skips missing or non-e
         [LINUX_CHROME_CANDIDATES[1]!],
         () => launchChrome(profileRoot, runner, undefined, commands, stops)
       )
-      expect(commands[0]?.[0]).toBe('/usr/bin/google-chrome-stable')
+      expect(commands[0]?.[0]).toBe(LINUX_CHROME_CANDIDATES[1])
     })
   })
 })

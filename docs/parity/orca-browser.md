@@ -2,6 +2,8 @@
 
 This table owns the browser command inventory, including browser identity, interception, and the browser meaning of `open-url`. The [Orca CLI parity table](./orca-cli.md) and [Orca feature table](./orca-features.md) provide the broader routing context.
 
+Headless Chrome discovery prefers the native executable (`/opt/google/chrome/chrome` on Linux) before launcher wrappers such as `/usr/bin/google-chrome`. Linux wrappers can `exec` that binary while preserving a wrapper path in `argv[0]`; choosing the binary keeps owned-process recovery's `/proc/<pid>/exe` identity check exact without weakening its safety proof.
+
 The inventory is frozen from the read-only Orca agent-context schema: schema version 1 reported 322 commands, of which these 80 browser commands were selected on 2026-11-12. The [capture](../../scripts/parity/browser-orca.json) retains each command’s words, usage, flags, summary, and remaining schema fields. Discovery ran only `orca agent-context --json`; no Orca browser/page command ran. CI reads this capture and never invokes Orca.
 
 Each primary command has one row and a distinct check ID. The five `wait-*` subordinate rows split the wait conditions into independently executable checks and each has its own check ID. `covered` names executable behavioral coverage, not a historical pass; no run result is asserted here. Every row is covered or excluded. An excluded row gives the reason it is left out of the scripted run, and its Check cell is none. Chrome clipboard rows do not claim macOS pasteboard access.
