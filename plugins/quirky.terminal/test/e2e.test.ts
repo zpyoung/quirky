@@ -111,7 +111,7 @@ async function waitForHostLoss(h: E2eHarness, ids: string[]): Promise<void> {
 }
 
 scenario('SC-1: a new shell session is ready at its first prompt', async () => {
-  const h = await start()
+  const h = await start({ zshrc: "PROMPT='%1~ %# '\nRPROMPT=''\n" })
   const session = await h.newSession()
   expect(session).toMatchObject({ agent: 'shell', kind: 'terminal', status: 'running' })
 
@@ -128,7 +128,7 @@ scenario('SC-1: a new shell session is ready at its first prompt', async () => {
     const text = await h.ok(['terminal', 'snapshot', session.id])
     return text.includes(`${basename(h.repo)} %`) || text.includes(`${basename(h.repo)} #`) ? text : undefined
   })
-  expect(plain(prompt)).toContain(basename(h.repo))
+  expect(plain(prompt)).toMatch(new RegExp(`${basename(h.repo)} [%#]`))
   const snapshot = await h.json<{ cwd: string; shellState: string }>(['terminal', 'snapshot', session.id])
   expect(snapshot).toMatchObject({ cwd: h.repo, shellState: 'ready' })
 })
@@ -188,7 +188,11 @@ scenario('SC-3: the ready marker never shows', async () => {
   expect(shells).toContain('/bin/zsh')
 
   for (const shell of shells) {
-    const h = await start({ shell })
+    const h = await start({
+      shell,
+      zshrc: "PROMPT='%1~ %# '\nRPROMPT=''\n",
+      bashrc: "PS1='\\W \\$ '\n"
+    })
     const session = await h.newSession()
     await waitFor(`${shell} ready`, async () => (await h.hostRow(session.id))?.shellState === 'ready')
     const name = basename(h.repo)

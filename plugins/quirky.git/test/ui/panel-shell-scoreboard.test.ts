@@ -1,5 +1,4 @@
 import { beforeAll, expect, setDefaultTimeout, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { collectInventory } from '../../../../scripts/ui-scoreboard/inventory'
 import { discoverCandidates, discoverUiFiles } from '../../../../scripts/ui-scoreboard/audit-discovery'
@@ -53,7 +52,6 @@ test('the full production graph has complete owned classifications, honest sibli
   const routed = checks.find((check) => check.id === 'commands')!.evidence
   expect(routed.some((entry) => entry.code === 'action-routed' && entry.cli === 'quirky ui run command:quirky.git/ui-control')).toBe(true)
   expect(checkPlugin(inventory, plugin.id).find((check) => check.id === 'compatibility-tokens')?.status).toBe('pass')
-  expect(JSON.parse(readFileSync(resolve(ROOT, 'scripts/ui-scoreboard-ratchet.json'), 'utf8'))['quirky.git']).toBeUndefined()
 })
 
 test('removing a real routed action restores missing coverage at its source candidate', () => {

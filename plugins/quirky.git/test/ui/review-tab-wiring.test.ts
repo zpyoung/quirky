@@ -8,6 +8,7 @@ registerDom()
 const p = await import('./panel-support')
 const s = await import('./support')
 const { parseInput, mountDiffView } = await import('../../src/view/DiffWindow')
+const { GIT_UI_CONTROL_COMMAND, dispatchGitUiControl } = await import('../../src/ui-control')
 const { commandHandlers } = await import('../../src/view/commands')
 const { openHostedDiff } = await import('../../src/view/hosted-tabs')
 const { noteViewInput } = await import('../../src/notes/open-note')
@@ -40,6 +41,7 @@ type Mounted = { element: HTMLElement; reports: Array<Record<string, unknown>>; 
 
 /** Mounts the diff view as the host does for a hosted tab: the tab's input with its id merged in. */
 function mount(input: object): Mounted {
+  fake.provided.set(GIT_UI_CONTROL_COMMAND, (args: unknown) => dispatchGitUiControl(fake.context, args))
   const element = document.createElement('div')
   document.body.appendChild(element)
   const reports: Array<Record<string, unknown>> = []

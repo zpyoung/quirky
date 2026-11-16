@@ -299,9 +299,10 @@ test('Watch keyboard shortcuts select and copy/paste between owned inputs', asyn
         await call(h, 'paneFrameAck', { pane: pane.id, watchId: watch.watchId, sequence })
         acknowledgedSequence = sequence
       }
-      const pressMetaKey = async (key: string, code: string) => {
-        await call(h, 'paneInput', { pane: pane.id, kind: 'key', type: 'keyDown', key, code, modifiers: 4 })
-        await call(h, 'paneInput', { pane: pane.id, kind: 'key', type: 'keyUp', key, code, modifiers: 4 })
+      const pressShortcutKey = async (key: string, code: string) => {
+        const modifiers = process.platform === 'darwin' ? 4 : 2
+        await call(h, 'paneInput', { pane: pane.id, kind: 'key', type: 'keyDown', key, code, modifiers })
+        await call(h, 'paneInput', { pane: pane.id, kind: 'key', type: 'keyUp', key, code, modifiers })
       }
       await acknowledgeNextFrame()
 
@@ -310,17 +311,17 @@ test('Watch keyboard shortcuts select and copy/paste between owned inputs', asyn
       await call(h, 'paneInput', { pane: pane.id, kind: 'text', text: 'watch clipboard' })
       await acknowledgeNextFrame()
 
-      await pressMetaKey('a', 'KeyA')
+      await pressShortcutKey('a', 'KeyA')
       expect(await call(h, 'eval', {
         page: page.browserPageId,
         expression: "(() => { const input = document.querySelector('#source'); return input.value + ':' + input.selectionStart + ':' + input.selectionEnd })()"
       })).toEqual({ value: 'watch clipboard:0:15' })
       await acknowledgeNextFrame()
 
-      await pressMetaKey('c', 'KeyC')
+      await pressShortcutKey('c', 'KeyC')
       await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mousePressed', x: 220, y: 16, button: 'left' })
       await call(h, 'paneInput', { pane: pane.id, kind: 'mouse', type: 'mouseReleased', x: 220, y: 16, button: 'left' })
-      await pressMetaKey('v', 'KeyV')
+      await pressShortcutKey('v', 'KeyV')
       expect(await call(h, 'eval', {
         page: page.browserPageId,
         expression: "document.querySelector('#target').value"
