@@ -343,6 +343,18 @@ for (const variant of ['pi', 'omp'] as const) {
       expect(settings).toEqual({ model: 'openai/gpt-x', effort: 'high' })
     })
 
+    test('models lists the available models as provider/id', async () => {
+      const transport = await begin(null)
+      transport.replies.set('get_available_models', () => ({
+        success: true,
+        data: { models: [{ provider: 'openai', id: 'gpt-x', name: 'GPT X' }, { provider: 'a', id: 'bare' }, { id: 'orphan' }] }
+      }))
+      expect(await setup.runner.models!(setup.session.id)).toEqual([
+        { id: 'openai/gpt-x', label: 'GPT X (openai)' },
+        { id: 'a/bare', label: 'a/bare' }
+      ])
+    })
+
     test('configure resolves a bare model id through the available models and rejects an ambiguous one', async () => {
       const transport = await begin(null)
       transport.replies.set('get_available_models', () => ({

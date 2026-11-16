@@ -71,6 +71,8 @@ export interface StructuredRunner {
    * and returns the settings now in force. Absent on runners whose picks are fixed at start.
    */
   configure?(sessionId: string, settings: StructuredSettings): Promise<StructuredSettings>
+  /** The models the running agent offers, as ids `configure` accepts. Absent on runners with a fixed catalog. */
+  models?(sessionId: string): Promise<{ id: string; label: string }[]>
   interrupt(sessionId: string): Promise<void>
   stop(sessionId: string): Promise<void>
 }
