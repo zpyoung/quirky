@@ -1462,6 +1462,78 @@ test('resolving hosting identity does not cancel an in-flight defaults read', as
 })
 
 for (const provider of ['github', 'gitlab'] as const) {
+  test(`${provider} settings retry failed initial discovery through the mounted control`, async () => {
+    const initial = settingsSnapshot(null)
+    initial.settings.fetchedAt = 0
+    const harness = createHarness({
+      initialState: initial, view: SETTINGS_VIEW, connectionId: 42,
+      backendReplies: {
+        'quirky.hosting/repository': () => { throw new Error('repository temporarily unavailable') },
+        'quirky.hosting/diagnoseAuth': provider === 'github' ? GITHUB_DIAGNOSTICS : GITLAB_DIAGNOSTICS,
+        'quirky.hosting/accounts': { requiredHost: GITHUB_REPO.host, accounts: [] },
+        'quirky.hosting/configuration': { worktreeId: WORKTREE, issueSourcePreference: 'auto', account: null },
+        'quirky.hosting/rateLimit': {
+          core: { limit: 5000, remaining: 4999, resetAt: 1 },
+          search: { limit: 30, remaining: 29, resetAt: 1 },
+          graphql: { limit: 5000, remaining: 4999, resetAt: 1 },
+          fetchedAt: 1,
+        },
+      },
+    })
+    const mounted = mountSurface(harness, SETTINGS_VIEW)
+    await settle()
+    expect(mounted.element.textContent).toContain('repository temporarily unavailable')
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/hostingSettingsRefresh')).toEqual([
+      { method: 'quirky.reviews/hostingSettingsRefresh', params: { worktree: WORKTREE, forceBudget: true } },
+    ])
+    expect(harness.backend.env.view(WORKTREE).settings).toMatchObject({
+      provider: null, repository: null, diagnostics: null, loading: false,
+    })
+    const hosting = currentControl(harness, SETTINGS_VIEW, 'settings-hosting')
+    for (const action of ['account-select', 'account-save', 'budget-refresh']) {
+      expect(actionEnabled(hosting, action)).toBe(false)
+      expect(await invoke(harness, hosting, action)).toEqual({ delivered: false, reason: 'disabled' })
+    }
+    expect(harness.backend.calls.filter((call) => call.method.startsWith('quirky.hosting/'))).toEqual([
+      { method: 'quirky.hosting/repository', params: { worktree: WORKTREE } },
+    ])
+    expect(actionEnabled(hosting, 'provider-recheck')).toBe(true)
+    const retry = button(mounted.element, 'Retry hosting')
+    expect(retry.disabled).toBe(false)
+    const repo = provider === 'github' ? GITHUB_REPO : REPO
+    harness.setBackendReply('quirky.hosting/repository', { provider, repository: repo })
+    harness.clearCalls()
+    act(() => retry.click())
+    await settle()
+    expect(harness.calls.filter((call) => call.method === 'ui.window.self')).toHaveLength(1)
+    expect(harness.calls.filter((call) => call.method === 'ui.window.command.run')).toEqual([
+      { method: 'ui.window.command.run', params: {
+        connId: 42, id: CONTROL,
+        args: { target: hosting.target, generation: hosting.generation, action: 'provider-recheck' },
+      } },
+    ])
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/hostingSettingsRefresh')).toEqual([
+      { method: 'quirky.reviews/hostingSettingsRefresh', params: { worktree: WORKTREE, forceBudget: true } },
+    ])
+    expect(harness.backend.calls.filter((call) => call.method === 'quirky.hosting/repository')).toEqual([
+      { method: 'quirky.hosting/repository', params: { worktree: WORKTREE } },
+    ])
+    expect(harness.backend.calls.filter((call) => call.method === 'quirky.hosting/diagnoseAuth')).toEqual([
+      { method: 'quirky.hosting/diagnoseAuth', params: { worktree: WORKTREE } },
+    ])
+    expect(harness.backend.env.view(WORKTREE).settings).toMatchObject({
+      provider, repository: repo, diagnostics: provider === 'github' ? GITHUB_DIAGNOSTICS : GITLAB_DIAGNOSTICS,
+      loading: false, error: null,
+    })
+    expect(mounted.element.textContent).not.toContain('repository temporarily unavailable')
+    expect(mounted.element.textContent).not.toContain('Retry hosting')
+    expect(mounted.element.querySelector(`article[aria-label="${provider === 'github' ? 'GitHub' : 'GitLab'}"]`)?.textContent).toContain('Connected')
+    expect(button(mounted.element, provider === 'github' ? 'Re-check GitHub' : 'Re-check GitLab').disabled).toBe(false)
+    if (provider === 'gitlab') {
+      expect(harness.backend.calls.filter((call) => /\/(?:accounts|configuration|configure|rateLimit)$/.test(call.method))).toEqual([])
+    }
+  })
+
   test(`${provider} settings initialize once while unresolved identity becomes known`, async () => {
     const refresh = deferred<unknown>()
     const harness = createHarness({

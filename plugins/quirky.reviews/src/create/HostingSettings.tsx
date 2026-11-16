@@ -727,7 +727,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
     !repositoryDefaultsLoading && !defaultsReadBusy && !defaultsWriteBusy
   const defaultsReadFailed = (defaultsError !== null && !globalDefaultsReady) || repositoryDefaultsError !== null
   const canRetryDefaults = defaultsReadFailed && !globalDefaultsLoading && !repositoryDefaultsLoading && !defaultsReadBusy
-  const canRecheckProvider = worktree !== null && providerId !== null && !loadingProvider && !operationLocked('provider', worktree, 'hosting')
+  const canRecheckProvider = worktree !== null && !loadingProvider && !operationLocked('provider', worktree, 'hosting')
   const canRefreshBudget = isGitHub && worktree !== null && !loadingBudget && !operationLocked('budget', worktree, 'hosting')
   const currentFor = (target: string | null, isCurrent: () => boolean, session = worktreeSessionEpoch, hostSession?: number) =>
     () => mounted.current && isCurrent() && currentWorktree.current === target &&
@@ -961,7 +961,7 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       const selectionIsValid = accountSelectionRef.current === 'ambient' || requiredHostAccounts.some((account) =>
         accountKey(account) === accountSelectionRef.current && account.bindable)
       return [
-        { action: 'provider-recheck', enabled: providerId !== null && worktree !== null && !providerBusy && !operationLocked('provider', worktree, 'hosting') },
+        { action: 'provider-recheck', enabled: worktree !== null && !providerBusy && !operationLocked('provider', worktree, 'hosting') },
         { action: 'budget-refresh', enabled: isGitHub && worktree !== null && !budgetBusy && !operationLocked('budget', worktree, 'hosting') },
         { action: 'account-select', enabled: isGitHub && canSelect },
         { action: 'account-save', enabled: isGitHub && canSelect && selectionIsValid && !operationLocked('account', worktree, 'hosting') }
@@ -1032,7 +1032,10 @@ export function HostingSettings(props: ReviewsSurfaceProps) {
       <SectionHeader title="Review providers" />
       {!worktree && <EmptyState message="Select a registered Git worktree to inspect repository hosting." />}
       {providerId === null && worktree && loadingProvider && <NoticeLine>Checking repository hosting…</NoticeLine>}
-      {providerId === null && worktree && providerCardError && <InlineError message={providerCardError} />}
+      {providerId === null && worktree && providerCardError && <InlineError
+        message={providerCardError}
+        action={canRecheckProvider ? { label: 'Retry hosting', onAction: () => { void hostingControl.request('provider-recheck') } } : undefined}
+      />}
       <article className="ui-stack" aria-label="GitHub">
         <SectionHeader title="GitHub" />
         {isGitHub ? <>
