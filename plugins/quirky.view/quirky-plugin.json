@@ -6,6 +6,7 @@
   "description": "Views an agent draws in its chat with quirky view: checked against a fixed catalog, stored per session, and answered by actions.",
   "main": "main.ts",
   "cli": "cli.ts",
+  "ui": "dist/ui.js",
   "activation": "lazy",
   "contributes": {
     "method": [
@@ -533,6 +534,16 @@
         "methods": [
           "quirky.view/wait"
         ]
+      }
+    ],
+    "view": [
+      {
+        "id": "render",
+        "title": "View card"
+      },
+      {
+        "id": "pane",
+        "title": "Views pane"
       }
     ]
   }
