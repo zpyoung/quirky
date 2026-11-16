@@ -731,6 +731,13 @@ export async function openWindows(options: {
           error
         })
 
+        const failedFollow = async (): Promise<Omit<SwitchRecord, 'at' | 'seq'>> => {
+          const readable = await reconcile()
+          if (navigationOptions.signal.aborted) throw interrupted()
+          const message = `did not request status for ${worktreeId} within ${navigationOptions.followTimeoutMs}ms`
+          return failedRecord(`${message}${readable ? '' : '; window state unreadable'}`)
+        }
+
         let result: Record<string, unknown>
         try {
           const timeoutMs = Math.max(0, deadline - performance.now())
@@ -786,13 +793,9 @@ export async function openWindows(options: {
           await reconcile()
           throw interrupted()
         }
-        if (proof === null || proof.at > deadline) {
-          return failedRecord(`did not request status for ${worktreeId} within ${navigationOptions.followTimeoutMs}ms`)
-        }
+        if (proof === null || proof.at > deadline) return await failedFollow()
         const observedWorktree = worktreeFromParams(proof.params)
-        if (observedWorktree === null) {
-          return failedRecord(`did not request status for ${worktreeId} within ${navigationOptions.followTimeoutMs}ms`)
-        }
+        if (observedWorktree === null) return await failedFollow()
         return {
           index,
           from: previous,

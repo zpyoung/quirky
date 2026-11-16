@@ -96,6 +96,8 @@ const current = {
 }
 
 let fastReconcileTimeout = false
+let virtualTime = false
+let followNow = 0
 class Emitter {
   listeners = new Map()
   on(event, listener) {
@@ -242,13 +244,39 @@ const { openWindows } = await import(${JSON.stringify(moduleUrl)})
 const controller = new AbortController()
 current.controller = controller
 const nativeSetTimeout = globalThis.setTimeout
+const nativeClearTimeout = globalThis.clearTimeout
+const nativePerformanceNow = performance.now.bind(performance)
+const virtualTimeout = (callback, ms, args) => {
+  const timer = { virtualTimer: true, active: true }
+  queueMicrotask(() => queueMicrotask(() => {
+    if (!timer.active) return
+    timer.active = false
+    followNow += ms
+    callback(...args)
+  }))
+  return timer
+}
+const startVirtualClock = () => {
+  followNow = nativePerformanceNow()
+  Object.defineProperty(performance, 'now', { configurable: true, value: () => followNow })
+  virtualTime = true
+}
 globalThis.setTimeout = (callback, ms, ...args) => {
-  if (fastReconcileTimeout && ms === 5000) return nativeSetTimeout(callback, 0, ...args)
+  if ((virtualTime && [1, 5, 20].includes(ms)) || (fastReconcileTimeout && ms === 5000)) {
+    return virtualTimeout(callback, ms, args)
+  }
   if (ms === 100) {
     queueMicrotask(() => controller.abort())
     return 0
   }
   return nativeSetTimeout(callback, ms, ...args)
+}
+globalThis.clearTimeout = (timer) => {
+  if (timer?.virtualTimer === true) {
+    timer.active = false
+    return
+  }
+  return nativeClearTimeout(timer)
 }
 const world = {
   home: process.env.QUIRKY_HOME,
@@ -281,7 +309,10 @@ const world = {
           current.resolveState = deferred.resolve
           return deferred.promise
         }
-        if (scenario === 'switch-unreadable' && current.stateReads > 1) throw new Error('window state unavailable')
+        if (['switch-unreadable', 'switch-no-proof-unreadable'].includes(scenario) && current.stateReads > 1) {
+          throw new Error('window state unavailable')
+        }
+        if (scenario === 'switch-no-proof' && current.stateReads > 1) current.selected.set(params.connId, 'wt-c')
         const worktree = scenario === 'finish-mismatch' && current.stateReads > 1
           ? 'daemon-worktree'
           : current.selected.get(params.connId) ?? 'ready'
@@ -369,6 +400,7 @@ const capture = async () => {
       livenessRpcCalls = current.rpcCalls.slice(rpcCallsBeforeLiveness)
     }
     if (scenario === 'wait-ring-no-observer') {
+      startVirtualClock()
       for (let index = 0; index <= 2000; index++) windows.pages[0].sendRequest(\`ring.\${index}\`, {})
       dropped = await windows.waitForRequest(0, (method) => method === 'ring.0', {
         since: 0,
@@ -382,7 +414,8 @@ const capture = async () => {
       })
     }
     if (scenario === 'switch-proof' || scenario === 'switch-mismatch' || scenario === 'switch-unreadable'
-      || scenario === 'switch-wrong-proof' || scenario === 'switch-no-proof') {
+      || scenario === 'switch-wrong-proof' || scenario === 'switch-no-proof' || scenario === 'switch-no-proof-unreadable') {
+      startVirtualClock()
       switchRecord = await windows.navigate(0, 'wt-b', {
         signal: new AbortController().signal,
         followTimeoutMs: 20
@@ -400,6 +433,7 @@ const capture = async () => {
     }
     if (scenario === 'abort-reconcile-read') {
       fastReconcileTimeout = true
+      startVirtualClock()
       const signal = new AbortController()
       const pending = windows.navigate(0, 'wt-b', { signal: signal.signal, followTimeoutMs: 1000 })
       await current.reconciliationStarted.promise
@@ -410,6 +444,7 @@ const capture = async () => {
     }
     if (scenario === 'finish-mismatch') windows.pages[0].sendStatus('ready')
     if (scenario === 'wait-filter') {
+      startVirtualClock()
       windows.pages[0].sendStatus('wt-b')
       dropped = await windows.waitForRequest(0, (method, params) => method === 'quirky.git/status'
         && params?.worktree === 'wt-b', {
@@ -612,7 +647,7 @@ test('keeps the last 2,000 requests even without an observer and waits from ring
 test('navigates with a ring-backed proof and labels requests from the settled daemon worktree', async () => {
   const result = await runRecordingWindowScenario('switch-proof')
 
-  expect(result.resolved).toBe(true)
+  expect(result.resolved, result.error ?? 'window scenario failed').toBe(true)
   expect(result.switchRecord).toMatchObject({
     index: 0,
     from: 'ready',
@@ -627,20 +662,32 @@ test('navigates with a ring-backed proof and labels requests from the settled da
 
 test('keeps failed follow and navigation attribution aligned with daemon readback', async () => {
   const noFollow = await runRecordingWindowScenario('switch-no-proof')
-  expect(noFollow.resolved).toBe(true)
+  expect(noFollow.resolved, noFollow.error ?? 'window scenario failed').toBe(true)
   expect(noFollow.switchRecord).toMatchObject({
     requested: 'wt-b',
-    settled: 'wt-b',
+    settled: 'wt-c',
     proof: null,
     ok: false,
     error: 'did not request status for wt-b within 20ms'
   })
-  expect(noFollow.requests.at(-1)?.worktree).toBe('wt-b')
+  expect(noFollow.requests.at(-1)?.worktree).toBe('wt-c')
+  const unreadableFollow = await runRecordingWindowScenario('switch-no-proof-unreadable')
+  expect(unreadableFollow.resolved, unreadableFollow.error ?? 'window scenario failed').toBe(true)
+  expect(unreadableFollow.switchRecord).toMatchObject({
+    requested: 'wt-b',
+    settled: 'wt-b',
+    proof: null,
+    ok: false,
+    error: 'did not request status for wt-b within 20ms; window state unreadable'
+  })
+  expect(unreadableFollow.requests.at(-1)?.worktree).toBe('wt-b')
 
   const wrongProof = await runRecordingWindowScenario('switch-wrong-proof')
+  expect(wrongProof.resolved, wrongProof.error ?? 'window scenario failed').toBe(true)
   expect(wrongProof.switchRecord).toMatchObject({ settled: 'wt-b', proof: null, ok: false })
 
   const mismatch = await runRecordingWindowScenario('switch-mismatch')
+  expect(mismatch.resolved, mismatch.error ?? 'window scenario failed').toBe(true)
   expect(mismatch.switchRecord).toMatchObject({
     requested: 'wt-b',
     settled: 'wt-c',
@@ -651,6 +698,7 @@ test('keeps failed follow and navigation attribution aligned with daemon readbac
   expect(mismatch.requests.at(-1)?.worktree).toBe('wt-c')
 
   const unreadable = await runRecordingWindowScenario('switch-unreadable')
+  expect(unreadable.resolved, unreadable.error ?? 'window scenario failed').toBe(true)
   expect(unreadable.switchRecord).toMatchObject({
     settled: 'ready',
     error: 'navigation selected wt-c, expected wt-b; window state unreadable'
