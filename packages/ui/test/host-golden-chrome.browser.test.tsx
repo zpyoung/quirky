@@ -43,3 +43,46 @@ test.skipIf(!executable)('Settings opens from the Window bar when a plugin also 
     await page.close()
   }
 })
+test.skipIf(!executable)('rejects unavailable host Settings controls without clicking plugin More', async () => {
+  const cases = [
+    {
+      hostControls: '',
+      hostMenu: '',
+      expectedError: 'host Overflow control is unavailable'
+    },
+    {
+      hostControls: `
+        <button aria-label="More">Host one</button>
+        <button aria-label="More">Host two</button>
+      `,
+      hostMenu: '',
+      expectedError: 'host Overflow control is unavailable'
+    },
+    {
+      hostControls: `<button aria-label="More" onclick="document.querySelector('[role=menu]').hidden=false">Host</button>`,
+      hostMenu: `<div role="menu" hidden><button role="menuitem">Help</button></div>`,
+      expectedError: 'host Settings control is unavailable'
+    }
+  ]
+  for (const scenario of cases) {
+    const page = await browser.newPage()
+    try {
+      await page.setContent(`
+        <header class="window-bar" aria-label="Window bar">
+          ${scenario.hostControls}
+        </header>
+        <section data-plugin-slot="sidebar:worktrees">
+          <button aria-label="More" onclick="document.body.dataset.pluginClicked='true'">Plugin</button>
+        </section>
+        ${scenario.hostMenu}
+      `)
+      const error = await openSettings({ page, options: { timeoutMs: 1_000 } } as Parameters<typeof openSettings>[0])
+        .then(() => null, (reason: unknown) => reason)
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toBe(scenario.expectedError)
+      expect(await page.locator('body').getAttribute('data-plugin-clicked')).toBeNull()
+    } finally {
+      await page.close()
+    }
+  }
+})
