@@ -24,7 +24,7 @@ export type BrowserOrphanChrome = BrowserChromeIdentity & { ppid: number; profil
 export type BrowserRestartReceipt = DaemonRestart & {
   previousPid: number
   daemonPid: number
-  oldChromeTree: readonly BrowserChromeIdentity[]
+  oldChromeTree?: readonly BrowserChromeIdentity[]
   orphanChromeAfterKill?: readonly BrowserOrphanChrome[]
 }
 export type BrowserCleanup = { ok: boolean; error?: string; evidence?: Record<string, unknown> }
@@ -472,21 +472,26 @@ function hasExactUserDataDirectory(command: string, path: string): boolean {
 }
 
 function chromeProfileRoots(home: string, snapshot: Map<number, ProcessIdentity>): ChromeRootIdentity[] {
+  const profilesDirectory = join(home, 'plugin-data', 'quirky.browser', 'profiles')
   let profiles: Dirent[]
+  let canonicalProfilesDirectory: string
   try {
-    profiles = readdirSync(join(home, 'plugin-data', 'quirky.browser', 'profiles'), { withFileTypes: true })
+    profiles = readdirSync(profilesDirectory, { withFileTypes: true })
+    canonicalProfilesDirectory = realpathSync(profilesDirectory)
   } catch {
     return []
   }
   const roots: ChromeRootIdentity[] = []
   for (const entry of profiles) {
     if (!entry.isDirectory()) continue
-    const userDataDir = join(home, 'plugin-data', 'quirky.browser', 'profiles', entry.name, 'chrome-profile')
+    const rawUserDataDir = join(profilesDirectory, entry.name, 'chrome-profile')
+    const canonicalUserDataDir = join(canonicalProfilesDirectory, entry.name, 'chrome-profile')
     for (const identity of snapshot.values()) {
       const command = identity.command.toLowerCase()
       if (!command.includes('chrome') || !command.includes('--headless') ||
         /(?:^|\s)--type(?:=|\s)/.test(command) ||
-        !hasExactUserDataDirectory(identity.command, userDataDir)) continue
+        (!hasExactUserDataDirectory(identity.command, rawUserDataDir) &&
+          !hasExactUserDataDirectory(identity.command, canonicalUserDataDir))) continue
       roots.push({ profileId: entry.name, identity })
     }
   }

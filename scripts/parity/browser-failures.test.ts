@@ -995,12 +995,17 @@ test('replacement readiness preserves exit, abort, and bounded timeout failures'
 test('browser restart forwards SIGKILL and captures the old Chrome tree before orphan observation', async () => {
   const home = mkdtempSync(join(tmpdir(), 'browser-restart-receipt-'))
   try {
-    const roots = ['profile-a', 'profile-b'].map(profileId => {
-      const profilePath = join(home, 'plugin-data', 'quirky.browser', 'profiles', profileId)
-      mkdirSync(profilePath, { recursive: true })
+    const profilesRoot = join(home, 'plugin-data', 'quirky.browser', 'profiles')
+    mkdirSync(profilesRoot, { recursive: true })
+    const canonicalProfilesRoot = join(realpathSync(home), 'plugin-data', 'quirky.browser', 'profiles')
+    expect(canonicalProfilesRoot).not.toBe(profilesRoot)
+    const roots = ['profile-a', 'profile-b'].map((profileId, index) => {
+      const profilePath = join(profilesRoot, profileId)
+      mkdirSync(join(profilePath, 'chrome-profile'), { recursive: true })
+      const argvProfilesRoot = index === 0 ? canonicalProfilesRoot : profilesRoot
       return {
         profileId,
-        command: `Google Chrome --headless --user-data-dir=${join(profilePath, 'chrome-profile')}`
+        command: `Google Chrome --headless --user-data-dir=${join(argvProfilesRoot, profileId, 'chrome-profile')}`
       }
     })
     const before = new Map([
@@ -1053,8 +1058,8 @@ test('browser restart forwards SIGKILL and captures the old Chrome tree before o
         { pid: 301, started: 'root-b', ppid: 1, profileId: 'profile-b' }
       ]
     })
-    expect(areChromeProcessesGone(receipt.oldChromeTree, after)).toBe(false)
-    expect(areChromeProcessesGone(receipt.oldChromeTree, new Map([
+    expect(areChromeProcessesGone(receipt.oldChromeTree ?? [], after)).toBe(false)
+    expect(areChromeProcessesGone(receipt.oldChromeTree ?? [], new Map([
       [201, { ...after.get(201)!, started: 'reused' }]
     ]))).toBe(true)
   } finally {
