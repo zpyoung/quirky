@@ -91,10 +91,11 @@ test('folder workspace remains a non-alert availability state with Retry and cle
   expect(buttonText(element, 'Retry')).toBeDefined()
 })
 
-test('successful non-ready compare remains an advisory with its base and Retry choices', async () => {
+test('successful non-ready compare uses a shared error with its base and Retry choices', async () => {
   const { element } = await open((fake) => { fake.compare = compareOf({ status: 'invalid-base', message: 'Choose a base.', base: null }) })
-  expect(element.textContent).toContain('Choose a base.')
-  expect(q(element, '[role="alert"]')).toBeNull()
+  const messages = qa(element, '[role="status"] .ui-inline-error__message')
+  expect(messages).toHaveLength(1)
+  expect(messages[0]?.textContent).toBe('Choose a base.')
   expect(buttonText(element, 'Change base ref')).toBeDefined()
   expect(buttonText(element, 'Retry')).toBeDefined()
 })

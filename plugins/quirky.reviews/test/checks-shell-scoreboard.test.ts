@@ -231,3 +231,31 @@ test('authentication failure is covered as a shared Checks error', () => {
   expect(withoutPassEvidence(plugin)).toEqual([])
   expectRemovedStateToExposeCandidate(entry)
 })
+
+for (const anchor of [
+  "diagnosticProvider === 'GitHub' && diagnosticData.ghAvailable === false &&",
+  "active.conflicts?.status === 'unavailable' &&",
+]) {
+  test(`unavailable diagnostic has shared error evidence: ${anchor}`, () => {
+    const entry = coverage.states.find((state) => state.surface === PANEL_SURFACE
+      && state.site.file === PANEL && state.anchor === anchor)
+    expect(entry).toBeDefined()
+    if (!entry || entry.render.component !== 'InlineError') throw new Error('Expected a shared diagnostic error')
+    expect(entry.state).toBe('error')
+    expect(entry.render.import.file).toBe(PANEL)
+    expect(entry.render.import.quote).toContain('@quirky/ui')
+    expectRemovedStateToExposeCandidate(entry)
+    const element = entry.render.element
+    const raw = element.quote.replace(/<InlineError\b[\s\S]*\/>/, '<p>Diagnostic unavailable</p>')
+    expect(raw).not.toBe(element.quote)
+    const edited: PluginInventory = {
+      ...plugin,
+      sources: plugin.sources.map((source) => source.file === element.file
+        ? { ...source, content: source.content.replace(element.quote, raw) }
+        : source),
+    }
+    const check = auditPlugin(inventory, edited).find((result) => result.id === 'error')!
+    expect(check.status).toBe('fail')
+    expect(check.evidence.some((failure) => failure.code === 'evidence-missing' && failure.coverageFile === FRAGMENT)).toBe(true)
+  })
+}

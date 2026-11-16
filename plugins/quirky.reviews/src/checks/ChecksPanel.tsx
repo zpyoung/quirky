@@ -1911,7 +1911,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
                 </li>
               ))}
             </ul>}
-            {diagnosticProvider === 'GitHub' && diagnosticData.ghAvailable === false && <p>GitHub CLI (gh) is unavailable. Install it, then retry.</p>}
+            {diagnosticProvider === 'GitHub' && diagnosticData.ghAvailable === false && <InlineError message="GitHub CLI (gh) is unavailable. Install it, then retry." />}
             <Button onClick={() => { void requestChecksControl('copy-link', { source: 'auth-status' }) }}>Copy {diagnosticProvider === 'GitLab' ? 'glab' : 'gh'} auth status</Button>
           </section>}
           {reason === 'authentication_required' || reason === 'auth_required' || reason === 'not_authenticated' || reason === 'scope_missing' || reason === 'gh_unavailable'
@@ -2062,7 +2062,7 @@ export function ChecksPanel(props: ReviewsSurfaceProps) {
       {(hostConflict || localConflict) && <section className="ui-stack" aria-label="Merge conflicts">
         <SectionHeader title="Conflicts block this PR" />
         {active.conflicts?.status === 'loading' && <NoticeLine>Loading conflict paths…</NoticeLine>}
-        {active.conflicts?.status === 'unavailable' && <p>{typeof active.conflicts.message === 'string' ? active.conflicts.message : 'Conflict paths are unavailable from the read-only preview.'}</p>}
+        {active.conflicts?.status === 'unavailable' && <InlineError message={typeof active.conflicts.message === 'string' ? active.conflicts.message : 'Conflict paths are unavailable from the read-only preview.'} />}
         {active.conflicts?.available === true && active.conflicts.conflicting === false && <p>Git’s read-only preview found no conflicting paths; refresh the review metadata before merging.</p>}
         {Array.isArray(active.conflicts?.files) && active.conflicts.files.length > 0 && <ul className="ui-stack">{active.conflicts.files.map((file, index) => <li key={isRecord(file) && typeof file.path === 'string' ? file.path : index}>{isRecord(file) && typeof file.path === 'string' ? file.path : 'Conflicting file'}</li>)}</ul>}
         {Array.isArray(active.conflicts?.localFiles) && active.conflicts.localFiles.length > 0 && <div className="ui-stack"><strong>Active workspace conflicts</strong><ul className="ui-stack">{active.conflicts.localFiles.map((file, index) => <li key={isRecord(file) && typeof file.path === 'string' ? file.path : index}>{isRecord(file) && typeof file.path === 'string' ? file.path : 'Conflicting file'}</li>)}</ul></div>}
