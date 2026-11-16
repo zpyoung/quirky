@@ -98,6 +98,11 @@
   color: var(--ui-muted);
 }
 
+[data-theme="light"] .window-bar__search {
+  background: var(--ui-selected);
+  height: calc(var(--ui-row-single) - var(--ui-space-4));
+}
+
 .window-bar__search:hover:not(:disabled) {
   color: var(--ui-text);
 }
@@ -396,6 +401,84 @@ button.ui-status-bar-item:focus-visible {
   overflow: auto;
 }
 
+.shell-main-header > .ui-icon-button {
+  background: var(--ui-transparent);
+  border: 0;
+}
+
+.shell-palette {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-12);
+  min-width: 0;
+}
+
+.shell-palette__search {
+  align-items: center;
+  background: var(--ui-selected);
+  border-radius: var(--ui-radius-control);
+  display: flex;
+  gap: var(--ui-space-8);
+  padding: var(--ui-space-4) var(--ui-space-8);
+  padding-inline-end: calc(var(--ui-space-8) + var(--ui-icon-size) + var(--ui-space-8));
+}
+
+.shell-palette__search:focus-within {
+  outline: var(--ui-focus-width) solid var(--ui-accent);
+  outline-offset: var(--ui-focus-offset);
+}
+
+.shell-palette__search > .ui-text-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shell-palette .ui-text-field__label {
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  height: var(--ui-border-width);
+  margin: calc(-1 * var(--ui-border-width));
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: var(--ui-border-width);
+}
+
+.shell-palette .ui-text-field__input {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+}
+
+.shell-palette .ui-text-field__input:focus {
+  outline: none;
+}
+
+.shell-palette .ui-option-list {
+  background: var(--ui-transparent);
+  border: 0;
+  max-height: 60vh;
+  padding: var(--ui-space-8);
+}
+
+.shell-palette .ui-list-row {
+  border: 0;
+  padding-block: var(--ui-space-8);
+}
+
+.shell-palette .ui-list-row--selected {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+
+.shell-palette .ui-list-row--selected:hover:not([aria-disabled="true"]) {
+  background: var(--ui-accent);
+  color: var(--ui-rail);
+}
+
+.shell-palette .ui-list-row--selected .ui-list-row__description {
+  color: inherit;
+}
+
 .shell-palette-list {
   display: grid;
   gap: var(--ui-space-4);
@@ -418,4 +501,62 @@ button.ui-status-bar-item:focus-visible {
 
 .window-bar__new-agent svg {
   color: var(--ui-hue-coral);
+}
+
+.ui-dialog:has(#settings-form) {
+  box-shadow: 0 var(--ui-space-8) var(--ui-space-24) var(--ui-shadow);
+}
+
+.ui-dialog:has(#settings-form) .ui-dialog__close {
+  background: var(--ui-transparent);
+  border-color: var(--ui-transparent);
+  font-size: var(--ui-icon-size);
+  height: var(--ui-row-single);
+  padding: 0;
+  width: var(--ui-row-single);
+}
+
+#settings-form .ui-settings-group-heading > .ui-section-header__title {
+  font-size: var(--ui-font-body);
+  font-weight: 600;
+}
+
+#settings-form [aria-label="Plugin settings"] > .ui-stack,
+#settings-form [aria-label="Plugin settings commands"] > .ui-stack {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+#settings-form [aria-label="Plugin settings"] > .ui-stack > .ui-button,
+#settings-form [aria-label="Plugin settings commands"] > .ui-stack > .ui-button {
+  background: var(--ui-transparent);
+  border-color: var(--ui-border);
+  justify-content: flex-start;
+}
+
+#settings-form [aria-label="Plugin settings"] > .ui-stack > .ui-button:hover:not(:disabled),
+#settings-form [aria-label="Plugin settings commands"] > .ui-stack > .ui-button:hover:not(:disabled) {
+  background: var(--ui-selected);
+}
+
+#settings-form .ui-form-row:has(input[type="checkbox"]) {
+  align-items: center;
+  display: grid;
+  gap: var(--ui-space-4) var(--ui-space-8);
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+#settings-form .ui-form-row:has(input[type="checkbox"]) > .ui-form-row__label {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+#settings-form .ui-form-row:has(input[type="checkbox"]) > .ui-form-row__control {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+#settings-form .ui-form-row:has(input[type="checkbox"]) > .ui-help-text,
+#settings-form .ui-form-row:has(input[type="checkbox"]) > .ui-error-text {
+  grid-column: 1 / -1;
 }
