@@ -109,7 +109,8 @@ function controlClock() {
   jest.useFakeTimers()
 }
 async function advanceUi(milliseconds: number) {
-  await act(async () => { jest.advanceTimersByTime(milliseconds) })
+  const timers = jest as typeof jest & { advanceTimersByTime(milliseconds: number): void }
+  await act(async () => { timers.advanceTimersByTime(milliseconds) })
   await waitForUi()
 }
 const waitForUi = async () => {

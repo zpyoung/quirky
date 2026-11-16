@@ -678,7 +678,7 @@ describe('quirky.git shared automatic status resource', () => {
       const freshStatus = statusOf([entry('retry-fresh.ts')], { branch: 'fresh-after-rejection', head: 'b'.repeat(40) })
       await act(async () => freshRead.resolve(freshStatus))
       await settle()
-      expect(outcome).toBe('resolved')
+      expect<string>(outcome).toBe('resolved')
       expect(value).toEqual(freshStatus)
       expect(probe.current()?.status?.branch).toBe('fresh-after-rejection')
       expect(statusCalls(fake)).toHaveLength(3)
@@ -768,7 +768,7 @@ describe('quirky.git shared automatic status resource', () => {
       probe.render('B')
       await settle()
       expect(statusCalls(fake).filter(({ params }) => params.worktree === 'B')).toHaveLength(1)
-      expect(outcome).toBe('resolved')
+      expect<string>(outcome).toBe('resolved')
       expect(resolvedNull).toBe(true)
       expect(probe.current()?.status?.branch).toBe('branch-B')
 
