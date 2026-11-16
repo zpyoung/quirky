@@ -746,8 +746,8 @@
 }
 
 .ui-dialog-backdrop--top .ui-dialog__header {
-  inset-block-start: var(--ui-space-8);
-  inset-inline-end: var(--ui-space-8);
+  inset-block-start: calc(var(--ui-space-16) + var(--ui-space-8));
+  inset-inline-end: calc(var(--ui-space-16) + var(--ui-space-4));
   position: absolute;
 }
 

@@ -112,10 +112,11 @@ const themes = [
 async function styledPage(theme: string, markup: string) {
   const page = await browser.newPage({ viewport: { width: 1400, height: 880 } })
   const styles = await Promise.all([
+    '../src/shell/chrome.css',
     '../src/design-system/tokens.css',
     '../src/design-system/components.css',
-    '../src/shell/chrome.css'
-  ].map((path) => Bun.file(new URL(path, import.meta.url)).text()))
+    '../src/styles.css'
+  ].map(async (path) => (await Bun.file(new URL(path, import.meta.url)).text()).replace(/^@import[^;]+;/gm, '')))
   await page.setContent(`<html data-theme="${theme}"><head><style>${styles.join('\n')}</style></head><body>${markup}</body></html>`)
   return page
 }
@@ -180,7 +181,8 @@ for (const theme of themes) {
   })
 
   test.skipIf(!executable)(`top dialogs are search popups while centered dialogs retain their scrim (${theme.name})`, async () => {
-    const dialog = '<section class="ui-dialog"><header class="ui-dialog__header"><h2 class="ui-dialog__title">Command palette</h2><button class="ui-dialog__close" aria-label="Close dialog">×</button></header><div class="ui-dialog__body">Search</div></section>'
+    const search = renderToStaticMarkup(<div className="shell-palette"><div className="shell-palette__search"><ControlIcon name="magnifying-glass" /><TextField label="Search" value="" readOnly /></div></div>)
+    const dialog = `<section class="ui-dialog"><header class="ui-dialog__header"><h2 class="ui-dialog__title">Command palette</h2><button class="ui-dialog__close" aria-label="Close dialog">×</button></header><div class="ui-dialog__body">${search}</div></section>`
     const page = await styledPage(theme.name, `<div class="ui-dialog-backdrop ui-dialog-backdrop--top">${dialog}</div><div class="ui-dialog-backdrop" id="center">${dialog}</div>`)
     try {
       expect(await page.locator('.ui-dialog-backdrop--top').evaluate((node) => getComputedStyle(node, '::before').opacity)).toBe('0')
@@ -198,6 +200,15 @@ for (const theme of themes) {
         const style = getComputedStyle(node)
         return [style.borderTopColor, style.backgroundColor]
       })).toEqual(['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)'])
+      const geometry = await popup.evaluate((node) => ({
+        close: node.querySelector('.ui-dialog__close')!.getBoundingClientRect().toJSON(),
+        search: node.querySelector('.shell-palette__search')!.getBoundingClientRect().toJSON(),
+        input: node.querySelector('input')!.getBoundingClientRect().toJSON()
+      }))
+      expect(geometry.close.right).toBeLessThanOrEqual(geometry.search.right)
+      expect(geometry.close.top).toBeGreaterThanOrEqual(geometry.search.top)
+      expect(geometry.close.bottom).toBeLessThanOrEqual(geometry.search.bottom)
+      expect(geometry.close.left).toBeGreaterThan(geometry.input.right)
     } finally {
       await page.close()
     }
@@ -270,6 +281,7 @@ for (const theme of themes) {
         return [style.flexDirection, style.flexWrap]
       })).toEqual(['row', 'wrap'])
       expect(await page.getByRole('button', { name: 'Automations' }).evaluate((node) => getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+      expect(await page.locator('.ui-dialog').evaluate((node) => getComputedStyle(node).boxShadow)).not.toBe('none')
       expect(await page.locator('.ui-dialog__close').evaluate((node) => {
         const style = getComputedStyle(node)
         return [style.width, style.height, style.fontSize]
