@@ -1,3 +1,4 @@
+import { createSupervision, type SupervisionEngine, type TerminalWaitResult } from '@quirky/supervision'
 import type { PluginContext, Session } from '@quirky/protocol'
 import { randomUUID } from 'node:crypto'
 import type { JsonValue, TaskRow } from '../contracts'
@@ -31,7 +32,6 @@ type AgentOptions = {
 }
 type SetupResult = { ran: 'terminal' | 'daemon' | 'none' | 'skipped'; sessionId?: string; exitCode?: number | null; timedOut?: boolean }
 type RepoHooks = { setup?: { text?: string; source?: string } | null; agentStartup?: 'start-immediately' | 'wait-for-setup' | null }
-type SessionStatusWait = { status: 'matched' | 'pending'; state: 'working' | 'blocked' | 'idle' | 'unknown' | 'exited'; kind?: string }
 type PointerResult = { operationId: string; result: { status: string; reason?: string; attemptedPhase?: string; retryEnter?: false } }
 type StructuredMessage = { sessionId: string; seq: number; role: string; text: string; at: number; data?: unknown }
 type SetupState = WorkerSetup['state']
@@ -186,6 +186,49 @@ async function getIdentity(context: PluginContext, sessionId: string): Promise<S
     throw failure('invalid_runtime_response', `quirky.session/identity returned invalid evidence for ${sessionId}.`)
   }
   return identity
+}
+async function listSessionsActive(context: PluginContext, ensureActive: () => void): Promise<Session[]> {
+  try {
+    const sessions = await listSessions(context)
+    ensureActive()
+    return sessions
+  } catch (cause) {
+    ensureActive()
+    throw cause
+  }
+}
+
+async function getIdentityActive(context: PluginContext, sessionId: string, ensureActive: () => void): Promise<SessionIdentity> {
+  try {
+    const identity = await getIdentity(context, sessionId)
+    ensureActive()
+    return identity
+  } catch (cause) {
+    ensureActive()
+    throw cause
+  }
+}
+
+async function readMessagesActive(
+  engine: SupervisionEngine,
+  sessionId: string,
+  ensureActive: () => void,
+): Promise<StructuredMessage[]> {
+  try {
+    const messages = await engine.readMessages({ session: sessionId })
+    ensureActive()
+    return messages
+  } catch (cause) {
+    ensureActive()
+    if (codeOf(cause) === 'invalid-response') {
+      throw failure('invalid_runtime_response', 'The structured journal returned an invalid message page.')
+    }
+    throw cause
+  }
+}
+
+function unsupportedCapability(cause: unknown): boolean {
+  return codeOf(cause) === 'method_not_found' || codeOf(cause) === 'capability_unsupported'
 }
 
 async function showWorktree(context: PluginContext, selector: string): Promise<PublicWorktree> {
@@ -456,26 +499,35 @@ function sessionTitle(task: TaskRow): string {
 
 
 async function waitForReadyAgent(
-  context: PluginContext,
+  engine: SupervisionEngine,
   sessionId: string,
   deadline: number,
   reused: boolean,
   ensureActive: () => void,
+  signal: AbortSignal,
 ): Promise<void> {
-  while (Date.now() < deadline) {
+  const timeoutMs = Math.max(0, deadline - Date.now())
+  if (timeoutMs > 0) {
+    let result: TerminalWaitResult
+    try {
+      result = await engine.waitTerminal({
+        session: sessionId,
+        until: ['idle', 'blocked', 'exited'],
+        timeoutMs,
+        signal,
+      })
+    } catch (cause) {
+      ensureActive()
+      throw cause
+    }
     ensureActive()
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) break
-    const result = await call<SessionStatusWait>(context, 'quirky.agent-status/wait', {
-      session: sessionId,
-      until: ['idle', 'blocked', 'exited'],
-      timeoutMs: Math.min(WAIT_SLICE_MS, remaining),
-    })
-    if (result.state === 'blocked') {
+    if (result.status === 'matched' && result.state === 'blocked') {
       throw failure('agent_startup_blocked', `Agent startup blocked: ${result.kind ?? 'human input is required'}.`, { reason: result.kind ?? 'blocked' })
     }
-    if (result.state === 'exited') throw failure('terminal_not_found', `Agent session ${sessionId} exited before it became ready.`)
-    if (result.state === 'idle' && result.status === 'matched') return
+    if (result.status === 'matched' && result.state === 'exited') {
+      throw failure('terminal_not_found', `Agent session ${sessionId} exited before it became ready.`)
+    }
+    if (result.status === 'matched' && result.state === 'idle') return
   }
   const detail = reused ? 'The reused agent terminal did not reach a fresh idle prompt.' : 'The launched agent did not reach its composer-ready idle state.'
   throw failure('worker_readiness_timeout', `${detail} Session ${sessionId} remains unready.`)
@@ -483,6 +535,7 @@ async function waitForReadyAgent(
 
 async function waitForStructuredReady(
   context: PluginContext,
+  engine: SupervisionEngine,
   sessionId: string,
   expectedIdentity: SessionIdentity,
   deadline: number,
@@ -490,12 +543,11 @@ async function waitForStructuredReady(
 ): Promise<void> {
   while (Date.now() < deadline) {
     ensureActive()
-    const session = (await listSessions(context)).find(candidate => candidate.id === sessionId)
+    const session = (await listSessionsActive(context, ensureActive)).find(candidate => candidate.id === sessionId)
     if (!session) throw failure('terminal_not_found', `Structured worker session ${sessionId} is absent before startup completed.`)
     if (session.kind !== 'structured') throw failure('worker_identity_changed', `Session ${sessionId} is no longer structured.`)
     if (session.status === 'exited') {
-      const messages = await call<StructuredMessage[]>(context, 'quirky.structured/messages', { session: sessionId })
-      if (!Array.isArray(messages)) throw failure('invalid_runtime_response', 'quirky.structured/messages returned an invalid journal page.')
+      const messages = await readMessagesActive(engine, sessionId, ensureActive)
       let startupFailure: string | null = null
       for (const message of messages) {
         if (message.sessionId === sessionId && message.role === 'system' && message.text.startsWith('could not start: ')) {
@@ -505,7 +557,7 @@ async function waitForStructuredReady(
       if (startupFailure) throw failure('agent_not_ready', `Structured worker ${sessionId} could not start: ${startupFailure}`)
       throw failure('terminal_not_found', `Structured worker session ${sessionId} exited before it became ready.`)
     }
-    const identity = await getIdentity(context, sessionId)
+    const identity = await getIdentityActive(context, sessionId, ensureActive)
     if (!identity.live || identity.sessionId !== expectedIdentity.sessionId
       || identity.processIncarnation !== expectedIdentity.processIncarnation
       || identity.runtimeEpoch !== expectedIdentity.runtimeEpoch
@@ -522,6 +574,7 @@ async function waitForStructuredReady(
     const delay = Promise.withResolvers<void>()
     setTimeout(delay.resolve, Math.min(WAIT_SLICE_MS, remaining))
     await delay.promise
+    ensureActive()
   }
   throw failure('worker_readiness_timeout', `Structured worker session ${sessionId} did not finish provider startup before the worker start deadline.`)
 }
@@ -529,7 +582,7 @@ async function waitForStructuredReady(
 async function waitForSetupExit(context: PluginContext, sessionId: string, deadline: number, ensureActive: () => void): Promise<number | null> {
   while (Date.now() < deadline) {
     ensureActive()
-    const sessions = await listSessions(context)
+    const sessions = await listSessionsActive(context, ensureActive)
     const session = sessions.find(candidate => candidate.id === sessionId)
     if (!session) throw failure('operation_unknown', `Setup terminal ${sessionId} is absent from session inventory.`)
     if (session.status === 'exited') return session.exitCode
@@ -538,6 +591,7 @@ async function waitForSetupExit(context: PluginContext, sessionId: string, deadl
     const delay = Promise.withResolvers<void>()
     setTimeout(delay.resolve, Math.min(WAIT_SLICE_MS, remaining))
     await delay.promise
+    ensureActive()
   }
   throw failure('setup_timeout', `Setup terminal ${sessionId} did not finish within the worker start timeout.`)
 }
@@ -579,12 +633,13 @@ function residualForTerminal(
 export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
   const epoch = randomUUID()
   let disposed = false
+  const engine = createSupervision(context)
+  const runtimeAbort = new AbortController()
   const preflightPlans = new WeakMap<WorkerStartParams, RuntimeStartPreflight>()
 
   const ensureActive = (): void => {
-    if (disposed) throw failure('runtime_inactive', 'Worker runtime has been deactivated.')
+    if (disposed || runtimeAbort.signal.aborted) throw failure('runtime_inactive', 'Worker runtime has been deactivated.')
   }
-
   return {
     context,
     epoch,
@@ -592,7 +647,8 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
     async validate(params, caller) {
       ensureActive()
       const plan = await resolvePlan(context, params, caller)
-      const identity = params.terminal ? await getIdentity(context, params.terminal) : null
+      ensureActive()
+      const identity = params.terminal ? await getIdentityActive(context, params.terminal, ensureActive) : null
       if (identity && (!identity.live || identity.kind !== 'terminal')) {
         throw failure('worker_identity_changed', `Session ${params.terminal} has no matching live terminal identity.`)
       }
@@ -615,6 +671,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       const preflight = preflightPlans.get(params)
       preflightPlans.delete(params)
       const plan = await resolvePlan(context, params, caller)
+      ensureActive()
       if (preflight && (
         preflight.worktreeId !== plan.worktreeId
         || preflight.coordinatorWorktreeId !== plan.coordinatorWorktreeId
@@ -638,6 +695,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       try {
         if (plan.selectedSession) {
           session = await getSession(context, plan.selectedSession.id)
+          ensureActive()
           if (session.kind !== 'terminal' || session.agent === 'shell') throw failure('inject_rejected', 'The selected terminal no longer runs a recognized agent.')
           worktreeId = session.worktreeId
         } else {
@@ -666,10 +724,12 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
             const createdWorkspace = asWorktree(worktreeResult.worktree ?? createdWorktree)
             worktreeId = createdWorkspace.id
             effects.push(effect('worktree', 'created', 'agent', createdWorkspace.id))
+            ensureActive()
             const setupResult = (worktreeResult.setup ?? null) as SetupResult | null
             let hooks: RepoHooks
             try {
               hooks = await repoHooks(context, plan.repo.id, createdWorkspace.head)
+              ensureActive()
             } catch (cause) {
               throw attachPlacementData(cause, effects, residualForWorktree(createdWorkspace.id, setupResult))
             }
@@ -694,16 +754,18 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
           const title = sessionTitle(task)
           const options = sessionOptions(params)
           if (plan.decision.mode === 'structured') {
-            session = await call<Session>(context, 'quirky.structured/create', {
+            if (!worktreeId) throw failure('invalid_runtime_response', 'The worker session has no resolved workspace.')
+            session = await engine.create({
               worktree: worktreeId,
-              agent: plan.agent.id,
+              agent: plan.agent.id as 'claude' | 'codex',
               title,
               ...(params.model !== undefined ? { model: params.model } : {}),
               ...(options === undefined ? {} : { options }),
               deferStart: true,
-            })
+            }) as Session
             created = true
             effects.push(effect('terminal', 'created', 'agent', session.id))
+            ensureActive()
           } else {
             if (!worktreeId) throw failure('invalid_runtime_response', 'The worker session has no resolved workspace.')
             let createdTab: unknown
@@ -751,11 +813,14 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
                 residualForTerminal(worktreeId, 'outcome_unknown', sessionId ?? undefined, tabId ?? undefined),
               )
             }
+            ensureActive()
 
             let sessionValue: unknown
             try {
               sessionValue = await call<unknown>(context, 'quirky.session/get', { session: sessionId })
+              ensureActive()
             } catch (cause) {
+              ensureActive()
               throw attachPlacementData(
                 failure('operation_unknown', `The created session ${sessionId} could not be read: ${messageOf(cause)}`),
                 effects,
@@ -793,8 +858,10 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         if (!worktreeId) throw failure('invalid_runtime_response', 'The worker session has no resolved workspace.')
         let identity: SessionIdentity
         try {
-          identity = await getIdentity(context, session.id)
+          identity = await getIdentityActive(context, session.id, ensureActive)
+          ensureActive()
         } catch (cause) {
+          ensureActive()
           const identityResidual = terminalTabId === null
             ? [{ kind: 'session', id: session.id, state: 'identity_unverifiable' }]
             : residualForTerminal(worktreeId, 'identity_unverifiable', session.id, terminalTabId)
@@ -819,6 +886,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         if (terminalTabId !== null) {
           try {
             await call(context, 'quirky.terminal/renameTab', { tab: terminalTabId, title: session.title })
+            ensureActive()
           } catch (cause) {
             throw attachPlacementData(
               failure('operation_unknown', `Worker session ${session.id} was created but its tab title could not be set: ${messageOf(cause)}`),
@@ -829,6 +897,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         }
         return placement
       } catch (cause) {
+        ensureActive()
         if (cause instanceof Error && 'data' in cause && cause.data) throw cause
         const residual = worktreeId
           ? createdTerminalSessionId !== null || terminalTabId !== null
@@ -841,26 +910,32 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
 
     async waitReady(placement, deadline, reused) {
       ensureActive()
-      if (placement.session.kind === 'structured') {
-        if (placement.setup.startupPolicy === 'wait-for-setup' && placement.setup.state === 'running') {
-          throw failure('operation_unknown', 'A structured worker was created before its required setup gate completed.')
+      try {
+        if (placement.session.kind === 'structured') {
+          if (placement.setup.startupPolicy === 'wait-for-setup' && placement.setup.state === 'running') {
+            throw failure('operation_unknown', 'A structured worker was created before its required setup gate completed.')
+          }
+          await waitForStructuredReady(context, engine, placement.session.id, placement.identity, deadline, ensureActive)
+        } else {
+          await waitForReadyAgent(engine, placement.session.id, deadline, reused, ensureActive, runtimeAbort.signal)
         }
-        return waitForStructuredReady(context, placement.session.id, placement.identity, deadline, ensureActive)
+        ensureActive()
+      } catch (cause) {
+        ensureActive()
+        throw cause
       }
-      await waitForReadyAgent(context, placement.session.id, deadline, reused, ensureActive)
     },
 
     async submit(placement, text, operationId, deadline) {
       ensureActive()
-      const current = await getIdentity(context, placement.session.id)
+      const current = await getIdentityActive(context, placement.session.id, ensureActive)
       if (!current.live || current.processIncarnation !== placement.identity.processIncarnation || current.worktreeId !== placement.worktreeId || current.kind !== placement.session.kind) {
         throw failure('worker_identity_changed', `Worker session ${placement.session.id} changed before the initial turn was submitted.`)
       }
 
       let beforeSeq = 0
       if (placement.session.kind === 'structured') {
-        const messages = await call<StructuredMessage[]>(context, 'quirky.structured/messages', { session: placement.session.id })
-        if (!Array.isArray(messages)) throw failure('invalid_runtime_response', 'quirky.structured/messages returned an invalid journal page.')
+        const messages = await readMessagesActive(engine, placement.session.id, ensureActive)
         beforeSeq = messages.reduce((max, message) => Math.max(max, message.seq), 0)
       }
 
@@ -871,6 +946,7 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         purpose: 'worker_start',
         text,
       }
+      ensureActive()
       const submittedNotBefore = Date.now()
       let pointer: PointerResult
       try {
@@ -906,25 +982,37 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         throw failure('operation_unknown', `The session pointer returned an unverifiable result: ${pointer.result.status}.`)
       }
       if (pointer.result.status === 'text_only') return 'unobserved'
+      if (disposed) return 'unobserved'
 
       const observationDeadline = Math.min(deadline, Date.now() + OBSERVATION_TIMEOUT_MS)
       let observation: TurnStart
       try {
         if (placement.session.kind === 'structured') {
-          observation = await thisObserveStructured(context, placement.session.id, beforeSeq, text, placement.identity, observationDeadline, ensureActive)
+          observation = await observeStructured(
+            engine,
+            context,
+            runtimeAbort.signal,
+            { sessionId: placement.session.id, worktreeId: placement.worktreeId, agent: placement.session.agent },
+            beforeSeq,
+            text,
+            placement.identity,
+            observationDeadline,
+            ensureActive,
+          )
         } else {
-          observation = await thisObserveTerminal(context, placement.session.id, observationDeadline, submittedNotBefore, ensureActive)
+          observation = await observeTerminal(engine, context, runtimeAbort.signal, placement.session.id, observationDeadline, submittedNotBefore, ensureActive)
         }
       } catch (cause) {
-        if (codeOf(cause) === 'method_not_found' || codeOf(cause) === 'capability_unsupported') observation = 'unsupported'
+        if (unsupportedCapability(cause)) observation = 'unsupported'
         else {
           context.log(`Turn-start observation for ${placement.session.id} was inconclusive: ${messageOf(cause)}`)
           return 'unobserved'
         }
       }
+      if (disposed) return 'unobserved'
       if (observation === 'unobserved') return observation
       try {
-        const afterTurn = await getIdentity(context, placement.session.id)
+        const afterTurn = await getIdentityActive(context, placement.session.id, ensureActive)
         if (!afterTurn.live || afterTurn.sessionId !== placement.identity.sessionId
           || afterTurn.processIncarnation !== placement.identity.processIncarnation
           || afterTurn.runtimeEpoch !== placement.identity.runtimeEpoch
@@ -943,8 +1031,9 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       }
       let sessions: Session[]
       try {
-        sessions = await listSessions(context)
+        sessions = await listSessionsActive(context, ensureActive)
       } catch (cause) {
+        ensureActive()
         return { status: 'unverifiable', exactWorker: false, reason: messageOf(cause), identity: null, session: null }
       }
       let session = sessions.find(candidate => candidate.id === record.sessionId) ?? null
@@ -952,8 +1041,9 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       let identity: SessionIdentity | null = null
       let identityError: string | null = null
       try {
-        identity = await getIdentity(context, record.sessionId)
+        identity = await getIdentityActive(context, record.sessionId, ensureActive)
       } catch (cause) {
+        ensureActive()
         identityError = messageOf(cause)
       }
       if (dispatch.assigneeSessionId === null) {
@@ -984,16 +1074,18 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
         await delay.promise
         ensureActive()
         try {
-          sessions = await listSessions(context)
+          sessions = await listSessionsActive(context, ensureActive)
         } catch (cause) {
+          ensureActive()
           return { status: 'unverifiable', exactWorker: Boolean(identity), reason: messageOf(cause), identity, session }
         }
         session = sessions.find(candidate => candidate.id === record.sessionId) ?? null
         if (!session) return { status: 'missing', exactWorker: false, reason: 'The complete session inventory does not contain the recorded session.', identity, session: null }
         try {
-          identity = await getIdentity(context, record.sessionId)
+          identity = await getIdentityActive(context, record.sessionId, ensureActive)
           identityError = null
         } catch (cause) {
+          ensureActive()
           identity = null
           identityError = messageOf(cause)
           continue
@@ -1021,13 +1113,20 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       if (identity.live) {
         let agentWait: WorkerObservation['agentWait']
         try {
-          const status = await call<SessionStatusWait>(context, 'quirky.agent-status/wait', {
+          const status = await engine.waitTerminal({
             session: session.id,
             until: ['working', 'blocked', 'idle'],
             timeoutMs: 0,
+            signal: runtimeAbort.signal,
           })
-          agentWait = { waiting: status.state === 'blocked', source: 'quirky.agent-status/wait', reason: status.state === 'blocked' ? status.kind ?? 'agent requires human input' : null }
+          ensureActive()
+          agentWait = {
+            waiting: status.state === 'blocked',
+            source: 'quirky.agent-status/wait',
+            reason: status.state === 'blocked' ? status.kind ?? 'agent requires human input' : null,
+          }
         } catch (cause) {
+          ensureActive()
           agentWait = { waiting: false, source: 'unavailable', reason: messageOf(cause) }
         }
         return { status: 'live', exactWorker: true, reason: null, identity, session, agentWait }
@@ -1039,117 +1138,155 @@ export function createWorkerRuntime(context: PluginContext): WorkerRuntime {
       ensureActive()
       let identity: SessionIdentity
       try {
-        identity = await getIdentity(context, resource.sessionId)
+        identity = await getIdentityActive(context, resource.sessionId, ensureActive)
       } catch (cause) {
+        ensureActive()
         return { closed: false, reason: `Could not prove the recorded session identity: ${messageOf(cause)}` }
       }
       if (!identity.live || identity.processIncarnation !== resource.processIncarnation || identity.worktreeId !== resource.worktreeId) {
         return { closed: false, reason: 'The recorded session incarnation is not the current live identity.' }
       }
       try {
-        const result = identity.kind === 'structured'
-          ? await call<Record<string, unknown>>(context, 'quirky.structured/stop', { session: resource.sessionId, expectedIncarnation: resource.processIncarnation })
-          : await call<Record<string, unknown>>(context, 'quirky.session/close', { session: resource.sessionId, expectedIncarnation: resource.processIncarnation })
+        const result = asRecord(await engine.stop({
+          kind: identity.kind,
+          session: resource.sessionId,
+          expectedIncarnation: resource.processIncarnation,
+        }))
+        ensureActive()
         const positivelyClosed = result.ok === true && result.closed === true
           && result.sessionId === resource.sessionId && result.processIncarnation === resource.processIncarnation
         return positivelyClosed ? { closed: true } : { closed: false, reason: typeof result.reason === 'string' ? result.reason : 'The guarded close did not positively confirm the exact session was closed.' }
       } catch (cause) {
+        ensureActive()
         return { closed: false, reason: messageOf(cause) }
       }
     },
 
     dispose() {
+      if (disposed) return
       disposed = true
+      runtimeAbort.abort()
+      engine.dispose()
     },
   }
 }
 
 
-async function thisObserveTerminal(
+async function observeTerminal(
+  engine: SupervisionEngine,
   context: PluginContext,
+  runtimeSignal: AbortSignal,
   sessionId: string,
   deadline: number,
   submittedNotBefore: number,
   ensureActive: () => void,
 ): Promise<TurnStart> {
-  while (Date.now() < deadline) {
-    ensureActive()
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) break
-    try {
-      const result = await call<SessionStatusWait>(context, 'quirky.agent-status/wait', {
-        session: sessionId,
-        until: ['working', 'blocked', 'idle', 'exited'],
-        timeoutMs: Math.min(WAIT_SLICE_MS, remaining),
-      })
-      if (result.state === 'blocked') return 'permission'
-      if (result.state === 'working') return 'observed'
-      if (result.state === 'exited') throw failure('terminal_not_found', `Worker session ${sessionId} exited after the prompt was submitted.`)
-      if (result.state === 'idle') {
-        const session = (await listSessions(context)).find(candidate => candidate.id === sessionId)
-        if (session?.status === 'exited') throw failure('terminal_not_found', `Worker session ${sessionId} exited after the prompt was submitted.`)
-        const agentStatus = asRecord(session?.agentStatus)
-        const evidenceAt = agentStatus.evidenceAt
-        if (typeof evidenceAt === 'number' && evidenceAt > submittedNotBefore) return 'observed'
-        const delay = Promise.withResolvers<void>()
-        setTimeout(delay.resolve, Math.min(WAIT_SLICE_MS, Math.max(0, deadline - Date.now())))
-        await delay.promise
-      }
-    } catch (cause) {
-      if (codeOf(cause) === 'method_not_found' || codeOf(cause) === 'capability_unsupported') return 'unsupported'
-      throw cause
-    }
-  }
+  ensureActive()
+  const timeoutMs = Math.max(0, deadline - Date.now())
+  if (timeoutMs === 0) return 'unobserved'
+  const result = await engine.waitTerminal({
+    session: sessionId,
+    until: ['working', 'blocked', 'idle', 'exited'],
+    timeoutMs,
+    signal: runtimeSignal,
+    accept: async state => {
+      if (state.state !== 'idle') return true
+      const session = (await listSessionsActive(context, ensureActive)).find(candidate => candidate.id === sessionId)
+      if (session?.status === 'exited') throw failure('terminal_not_found', `Worker session ${sessionId} exited after the prompt was submitted.`)
+      const evidenceAt = asRecord(session?.agentStatus).evidenceAt
+      return typeof evidenceAt === 'number' && evidenceAt > submittedNotBefore
+    },
+  })
+  ensureActive()
+  if (result.status !== 'matched') return 'unobserved'
+  if (result.state === 'blocked') return 'permission'
+  if (result.state === 'working') return 'observed'
+  if (result.state === 'exited') throw failure('terminal_not_found', `Worker session ${sessionId} exited after the prompt was submitted.`)
+  if (result.state === 'idle') return 'observed'
   return 'unobserved'
 }
 
-async function thisObserveStructured(
+async function observeStructured(
+  engine: SupervisionEngine,
   context: PluginContext,
-  sessionId: string,
+  runtimeSignal: AbortSignal,
+  target: { sessionId: string; worktreeId: string; agent: string },
   afterSeq: number,
   expectedText: string,
   expectedIdentity: SessionIdentity,
   deadline: number,
   ensureActive: () => void,
 ): Promise<TurnStart> {
-  while (Date.now() < deadline) {
+  ensureActive()
+  const remaining = deadline - Date.now()
+  if (remaining <= 0) return 'unobserved'
+  const controller = new AbortController()
+  const deadlineTimer = setTimeout(() => controller.abort(), remaining)
+  const abortForRuntime = () => controller.abort()
+  runtimeSignal.addEventListener('abort', abortForRuntime, { once: true })
+  try {
+    if (runtimeSignal.aborted) controller.abort()
+    const result = await engine.watchStructured<TurnStart>({
+      target,
+      journal: () => ({ afterSeq }),
+      signal: controller.signal,
+      onSample: async (sample, signal) => {
+        if (signal.aborted) return { kind: 'continue' }
+        ensureActive()
+        if (!sample.session.ok) {
+          return unsupportedCapability(sample.session.error)
+            ? { kind: 'done', value: 'unsupported' }
+            : { kind: 'continue' }
+        }
+        if (!sample.journal.ok) {
+          return unsupportedCapability(sample.journal.error)
+            ? { kind: 'done', value: 'unsupported' }
+            : { kind: 'continue' }
+        }
+        for (const message of sample.journal.value.messages) {
+          if (message.sessionId !== target.sessionId || !Number.isSafeInteger(message.seq) || message.seq <= afterSeq) continue
+          if (message.role === 'assistant' || message.role === 'tool' || message.role === 'result') {
+            return { kind: 'done', value: 'observed' }
+          }
+          if (message.role !== 'user' || message.text !== expectedText) continue
+          const receipt = asRecord(message.data)
+          const method = receipt.method
+          const threadId = receipt.threadId
+          if ((method !== 'turn/start' && method !== 'turn/steer') || !nonEmptyString(threadId)) continue
+          if (method === 'turn/steer' && !nonEmptyString(receipt.expectedTurnId)) continue
+          let session: Session
+          let identity: SessionIdentity
+          try {
+            ;[session, identity] = await Promise.all([
+              call<Session>(context, 'quirky.session/get', { session: target.sessionId }),
+              getIdentityActive(context, target.sessionId, ensureActive),
+            ])
+          } catch (cause) {
+            ensureActive()
+            if (signal.aborted) return { kind: 'continue' }
+            throw cause
+          }
+          ensureActive()
+          if (signal.aborted) return { kind: 'continue' }
+          const providerThreadId = session.providerSession?.id
+          if (session.id !== target.sessionId || session.kind !== 'structured' || session.agent !== 'codex'
+            || target.agent !== 'codex' || expectedIdentity.providerId !== 'codex'
+            || session.worktreeId !== expectedIdentity.worktreeId
+            || !nonEmptyString(providerThreadId) || providerThreadId !== threadId) continue
+          if (!identity.live || identity.sessionId !== expectedIdentity.sessionId
+            || identity.processIncarnation !== expectedIdentity.processIncarnation
+            || identity.runtimeEpoch !== expectedIdentity.runtimeEpoch
+            || identity.worktreeId !== expectedIdentity.worktreeId
+            || identity.kind !== 'structured' || identity.providerId !== 'codex') continue
+          return { kind: 'done', value: 'observed' }
+        }
+        return { kind: 'continue' }
+      },
+    })
     ensureActive()
-    try {
-      const messages = await call<StructuredMessage[]>(context, 'quirky.structured/messages', { session: sessionId, afterSeq })
-      if (!Array.isArray(messages)) throw failure('invalid_runtime_response', 'quirky.structured/messages returned an invalid journal page.')
-      for (const message of messages) {
-        if (message.sessionId !== sessionId || !Number.isSafeInteger(message.seq) || message.seq <= afterSeq) continue
-        if (message.role === 'assistant' || message.role === 'tool' || message.role === 'result') return 'observed'
-        if (message.role !== 'user' || message.text !== expectedText) continue
-        const receipt = asRecord(message.data)
-        const method = receipt.method
-        const threadId = receipt.threadId
-        if ((method !== 'turn/start' && method !== 'turn/steer') || !nonEmptyString(threadId)) continue
-        if (method === 'turn/steer' && !nonEmptyString(receipt.expectedTurnId)) continue
-        const [session, identity] = await Promise.all([
-          call<Session>(context, 'quirky.session/get', { session: sessionId }),
-          getIdentity(context, sessionId),
-        ])
-        const providerThreadId = session.providerSession?.id
-        if (session.id !== sessionId || session.kind !== 'structured' || session.agent !== 'codex'
-          || expectedIdentity.providerId !== 'codex' || session.worktreeId !== expectedIdentity.worktreeId
-          || !nonEmptyString(providerThreadId) || providerThreadId !== threadId) continue
-        if (!identity.live || identity.sessionId !== expectedIdentity.sessionId
-          || identity.processIncarnation !== expectedIdentity.processIncarnation
-          || identity.runtimeEpoch !== expectedIdentity.runtimeEpoch
-          || identity.worktreeId !== expectedIdentity.worktreeId
-          || identity.kind !== 'structured' || identity.providerId !== 'codex') continue
-        return 'observed'
-      }
-      const remaining = deadline - Date.now()
-      if (remaining <= 0) break
-      const delay = Promise.withResolvers<void>()
-      setTimeout(delay.resolve, Math.min(WAIT_SLICE_MS, remaining))
-      await delay.promise
-    } catch (cause) {
-      if (codeOf(cause) === 'method_not_found' || codeOf(cause) === 'capability_unsupported') return 'unsupported'
-      throw cause
-    }
+    return result
+  } finally {
+    clearTimeout(deadlineTimer)
+    runtimeSignal.removeEventListener('abort', abortForRuntime)
   }
-  return 'unobserved'
 }
