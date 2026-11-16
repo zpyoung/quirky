@@ -22,6 +22,24 @@
       "error": {
         "applicable": true
       }
+    },
+    "overlay:quirky.session/chat-dialogs": {
+      "loading": {
+        "applicable": true
+      },
+      "empty": {
+        "applicable": false,
+        "reason": "The picker always lists the four chat agents, each ready or disabled with its reason, so the dialog has no empty read.",
+        "evidence": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+            "quote": "/** The four agents a chat can run, in the order the picker shows them. */"
+          }
+        ]
+      },
+      "error": {
+        "applicable": true
+      }
     }
   },
   "states": [
@@ -530,6 +548,46 @@
         "call": {
           "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
           "quote": "context.toast('Could not update the queue', messageOf(error))"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.session/chat-dialogs",
+      "state": "loading",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+        "quote": "cards === null &&"
+      },
+      "anchor": "cards === null &&",
+      "render": {
+        "component": "NoticeLine",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+          "quote": "<NoticeLine><span role=\"status\">Loading agents…</span></NoticeLine>"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
+          "quote": "import { Button, NoticeLine } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "overlay:quirky.session/chat-dialogs",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "dialog.error !== null &&"
+      },
+      "anchor": "dialog.error !== null &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+          "quote": "<InlineError\n          message={dialog.error}\n          action={created === null ? undefined : { label: 'Retry', onAction: () => void adoptNewChat(context, dialog, created) }}\n        />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+          "quote": "import { Dialog, InlineError } from '@quirky/ui'"
         }
       }
     }
@@ -1156,6 +1214,22 @@
       },
       "anchor": "modes?.ok &&",
       "reason": "Lists permission modes only when the agent supports them."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "if (dialog === null) return null"
+      },
+      "anchor": "if (dialog === null)",
+      "reason": "Renders nothing while no dialog is open; that is visibility, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "created === null &&"
+      },
+      "anchor": "created === null &&",
+      "reason": "Shows the agent picker until the chat exists; selects content, not a loading, empty or failed read."
     }
   ],
   "actions": [
@@ -1510,14 +1584,18 @@
       "anchor": "onClick",
       "route": {
         "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
-          "quote": "context.call('quirky.structured/create', {\n        agent,\n        worktree,\n        deferStart: true,\n        ...(picks.model === null ? {} : { model: picks.model }),\n        ...(Object.keys(options).length === 0 ? {} : { options })\n      })"
+          "file": "plugins/quirky.session/src/window/chat/createChat.ts",
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
         },
         "target": "quirky.structured/create",
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/AgentPicker.tsx",
-            "quote": "const start = async (agent: string) => {\n    const options = {\n      ...(picks.effort === null ? {} : { effort: picks.effort }),\n      ...(picks.mode === null ? {} : { mode: picks.mode }),\n      ...(picks.plan ? { plan: true } : {})\n    }\n    setStarting(agent)\n    try {\n      const created = (await context.call('quirky.structured/create', {\n        agent,\n        worktree,\n        deferStart: true,\n        ...(picks.model === null ? {} : { model: picks.model }),\n        ...(Object.keys(options).length === 0 ? {} : { options })\n      })) as Session\n      onCreated(created)\n    } catch (error) {\n      context.toast('Could not start chat', messageOf(error))\n    } finally {\n      setStarting(null)\n    }\n  }"
+            "quote": "const start = async (agent: string) => {\n    setStarting(agent)\n    try {\n      onCreated(await createChat(context, agent, worktree, picks))\n    } catch (error) {\n      if (onError) onError(messageOf(error))\n      else context.toast('Could not start chat', messageOf(error))\n    } finally {\n      setStarting(null)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/createChat.ts",
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const options = {\n    ...(picks.effort === null ? {} : { effort: picks.effort }),\n    ...(picks.mode === null ? {} : { mode: picks.mode }),\n    ...(picks.plan ? { plan: true } : {})\n  }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
           }
         ]
       }
@@ -1867,6 +1945,64 @@
       "anchor": "onClick",
       "notAction": "forwarded",
       "reason": "Forwards the click to the onAttachHint handler, which only shows the drop-images hint."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "onClose={() => closeNewChatDialog(dialog.id)}"
+      },
+      "anchor": "onClose",
+      "transient": "draft",
+      "reason": "Dismisses the New chat dialog before any chat exists; only local dialog state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "onAction: () => void adoptNewChat(context, dialog, created)"
+      },
+      "anchor": "onAction",
+      "route": {
+        "target": "quirky.terminal/adoptSession",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/newChat.ts",
+          "quote": "context.call('quirky.terminal/adoptSession', { group, session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/newChat.ts",
+            "quote": "export async function adoptNewChat(context: UiPluginContext, dialog: NewChatDialogState, session: Session): Promise<void> {\n  try {\n    let group = dialog.group\n    if (group === null) {\n      const result = await context.call('quirky.terminal/workspace', { workspace: dialog.workspace })\n      const active = isRecord(result) && isRecord(result.workspace) ? result.workspace.activeGroup : undefined\n      if (typeof active !== 'string' || active === '') throw new Error('the workspace has no active group')\n      group = active\n    }\n    await context.call('quirky.terminal/adoptSession', { group, session: session.id })\n    closeNewChatDialog(dialog.id)\n  } catch (error) {\n    failNewChat(dialog.id, `Chat ${session.id} was created, but its tab could not be opened: ${messageOf(error)}`)\n  }\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "onError={(message) => failNewChat(dialog.id, message)}"
+      },
+      "anchor": "onError",
+      "transient": "draft",
+      "reason": "Shows a failed create in the dialog; only local dialog state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
+        "quote": "onCreated={(session) => {"
+      },
+      "anchor": "onCreated",
+      "route": {
+        "target": "quirky.terminal/adoptSession",
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/newChat.ts",
+          "quote": "context.call('quirky.terminal/adoptSession', { group, session: session.id })"
+        },
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/newChat.ts",
+            "quote": "export async function adoptNewChat(context: UiPluginContext, dialog: NewChatDialogState, session: Session): Promise<void> {\n  try {\n    let group = dialog.group\n    if (group === null) {\n      const result = await context.call('quirky.terminal/workspace', { workspace: dialog.workspace })\n      const active = isRecord(result) && isRecord(result.workspace) ? result.workspace.activeGroup : undefined\n      if (typeof active !== 'string' || active === '') throw new Error('the workspace has no active group')\n      group = active\n    }\n    await context.call('quirky.terminal/adoptSession', { group, session: session.id })\n    closeNewChatDialog(dialog.id)\n  } catch (error) {\n    failNewChat(dialog.id, `Chat ${session.id} was created, but its tab could not be opened: ${messageOf(error)}`)\n  }\n}"
+          }
+        ]
+      }
     }
   ]
 }

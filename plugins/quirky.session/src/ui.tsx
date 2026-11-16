@@ -12,10 +12,13 @@ import {
   WorktreeSessions
 } from './window/model'
 import { ChatView } from './window/chat/ChatView'
+import { newChatCommand, resetNewChatDialog } from './window/chat/newChat'
+import { NewChatOverlay } from './window/chat/NewChatOverlay'
 import { WorktreeView } from './window/WorktreeView'
 
 const PLUGIN_ID = 'quirky.session'
 const STRUCTURED_VIEW_ID = `view:${PLUGIN_ID}/structured`
+const CHAT_OVERLAY_ID = `overlay:${PLUGIN_ID}/chat-dialogs`
 const TAB_SHORTCUTS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 /** The selected worktree, if any. */
@@ -153,6 +156,15 @@ export function activate(context: UiPluginContext): void {
     return () => queueMicrotask(() => root.unmount())
   }
 
+  const mountChatDialogs: MountFunction = (element) => {
+    const root = createRoot(element)
+    root.render(<NewChatOverlay context={context} />)
+    return () => {
+      resetNewChatDialog()
+      queueMicrotask(() => root.unmount())
+    }
+  }
+
   const selectTab = (index: number) => {
     const target = current?.tab(index)
     if (target) current?.open(target.id)
@@ -160,6 +172,8 @@ export function activate(context: UiPluginContext): void {
 
   context.provide(WORKTREE_VIEW_ID, mountView)
   context.provide(STRUCTURED_VIEW_ID, mountStructured)
+  context.provide(CHAT_OVERLAY_ID, mountChatDialogs)
+  context.provide(`command:${PLUGIN_ID}/new-chat`, (args?: unknown) => newChatCommand(context, args))
   context.provide(`command:${PLUGIN_ID}/new-shell`, async () => {
     const store = current
     const worktree = store?.report().worktree ?? layoutWorktree(context)

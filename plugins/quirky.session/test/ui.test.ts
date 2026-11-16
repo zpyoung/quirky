@@ -85,6 +85,7 @@ describe('the plugin module', () => {
     start()
     const declared = [
       ...manifest.contributes.view.map((entry) => `view:quirky.session/${entry.id}`),
+      ...manifest.contributes.overlay.map((entry) => `overlay:quirky.session/${entry.id}`),
       ...manifest.contributes.command.map((entry) => `command:quirky.session/${entry.id}`)
     ]
     expect([...fake.provided.keys()].sort()).toEqual(declared.sort())
