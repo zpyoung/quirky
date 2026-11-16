@@ -1,4 +1,4 @@
-import { beforeAll, expect, test } from 'bun:test'
+import { beforeAll, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { collectInventory } from '../../../scripts/ui-scoreboard/inventory'
@@ -6,6 +6,7 @@ import { discoverCandidates, discoverUiFiles } from '../../../scripts/ui-scorebo
 import { parseCoverage, resolveRef, selectCandidate } from '../../../scripts/ui-scoreboard/audit-evidence'
 import { auditPlugin } from '../../../scripts/ui-scoreboard/audit'
 import { checkPlugin } from '../../../scripts/ui-scoreboard/tokens'
+import * as tokens from '../../../scripts/ui-scoreboard/tokens'
 import { checkRatchet, parseRatchetConfig } from '../../../scripts/ui-scoreboard/ratchet'
 import type { CoverageFile, Inventory, PluginInventory, StaticCheckId } from '../../../scripts/ui-scoreboard/contracts'
 
@@ -55,6 +56,7 @@ function enrollment() {
 }
 
 test('Markdown completes every Editor static check across the full production graph', () => {
+  const started = performance.now()
   const graph = discoverUiFiles(plugin)
   expect(graph.failures).toEqual([])
   expect(graph.files).toContain(FILE)
@@ -72,7 +74,18 @@ test('Markdown completes every Editor static check across the full production gr
   for (const declaration of declarations) expect(declaration.file).toBe('plugins/quirky.editor/ui-scoreboard/explorer-and-overlays.json')
   expect(checkPlugin(inventory, plugin.id).map(({ id, status }) => ({ id, status }))).toEqual(expect.arrayContaining(STATIC.map((id) => ({ id, status: 'pass' }))))
   expect(auditPlugin(inventory, plugin).every(({ status }) => status === 'pass')).toBe(true)
-  expect(checkRatchet(inventory, enrollment())).toEqual({ exitCode: 0, failures: [] })
+  const config = enrollment()
+  const pluginSpy = spyOn(tokens, 'checkPlugin')
+  try {
+    const ratchetStarted = performance.now()
+    const result = checkRatchet(inventory, config)
+    console.info(`Markdown Editor static ratchet: ${(performance.now() - ratchetStarted).toFixed(0)} ms`)
+    expect(result).toEqual({ exitCode: 0, failures: [] })
+    expect(pluginSpy.mock.calls).toEqual([[inventory, 'quirky.editor']])
+  } finally {
+    pluginSpy.mockRestore()
+    console.info(`Markdown full static test body: ${(performance.now() - started).toFixed(0)} ms`)
+  }
 }, 30_000)
 
 for (const mode of ['SourceSurface', 'PreviewSurface', 'RichSurface']) {
