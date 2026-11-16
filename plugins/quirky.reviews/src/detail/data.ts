@@ -87,7 +87,7 @@ export function parseRepoIdentity(value: unknown, provider?: ReviewProvider): Re
   if (!hostPattern.test(value.host)) return null
   if (provider === 'gitlab') {
     try {
-      if (new URL(`https://${value.host}`).host.toLowerCase() !== value.host.toLowerCase()) return null
+      if (new URL(`https://${value.host}`).hostname.toLowerCase() !== value.host.replace(/:[0-9]+$/, '').toLowerCase()) return null
     } catch {
       return null
     }
@@ -518,6 +518,7 @@ export function reviewContext(state: ReviewsState, surface: 'detail' | 'checks')
     if (provider === 'gitlab' && !safeGitLabMergeMetadata(review)) return null
   }
   const explicit = source === undefined ? null : parseRepoIdentity(source, provider)
+    ?? (review === null ? parseRepoIdentity(source, 'gitlab') : null)
   if (source !== undefined && explicit === null) return null
   const urlRepo = review === null ? null : repoFromReviewUrl(review.url, number, provider)
   if (review !== null && urlRepo === null) return null
