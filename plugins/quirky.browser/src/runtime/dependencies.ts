@@ -1,3 +1,4 @@
+import type { ChromeProcessAccess } from './chrome-processes'
 import type { ProcessRunner, ProcessSpawner, SpawnedProcess } from '@quirky/protocol'
 
 import type { BrowserFamily, Cookie } from '../cookies/types'
@@ -27,6 +28,7 @@ export type BrowserDependencies = {
   runtimeRoot: string
   process: BrowserProcess
   spawn: BrowserSpawn
+  chromeProcesses?: ChromeProcessAccess
   log?: (message: string) => void
   chromeArguments?: string[]
   chromePath?: string | null

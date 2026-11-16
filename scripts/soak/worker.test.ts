@@ -3,12 +3,39 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { startChild } from '../../packages/process/src/child.ts'
-import { DEFAULT_BEAT_MS } from './worker.ts'
+import { agentCycleChunks, DEFAULT_BEAT_MS } from './worker.ts'
 
 const worker = resolve(import.meta.dir, 'worker.ts')
 
 test('retains the ten-second default beat', () => {
   expect(DEFAULT_BEAT_MS).toBe(10_000)
+})
+
+test('builds deterministic bounded agent-like terminal output', () => {
+  const chunks = agentCycleChunks(2, 7)
+  expect(agentCycleChunks(2, 7)).toEqual(chunks)
+  expect(chunks[0]).toBe('\x1b]0;soak agent 2 cycle 7\x07')
+  expect(chunks.slice(1, 4)).toEqual(['\x1b[?1049h', '\x1b[?25l', '\x1b[2J\x1b[H'])
+
+  const frameRows = chunks.slice(4, 28)
+  expect(frameRows).toHaveLength(24)
+  for (let row = 1; row <= 24; row++) {
+    expect(frameRows[row - 1]).toMatch(new RegExp(`^\\x1b\\[${row};1H.*\\x1b\\[K$`))
+  }
+
+  const spinner = chunks.slice(28, 68)
+  expect(spinner).toHaveLength(40)
+  expect(spinner.every((chunk) => chunk.startsWith('\x1b[24;1H\x1b[2K'))).toBe(true)
+
+  const coloredLines = chunks[68]!
+  expect(coloredLines.split('\n').filter(Boolean)).toHaveLength(200)
+  expect(coloredLines).toContain('\x1b[30m')
+  expect(coloredLines).toContain('\x1b[0m')
+  expect(chunks.slice(69, 71)).toEqual(['\x1b[?25h', '\x1b[?1049l'])
+  expect(chunks[71]!.split('\n').filter(Boolean)).toEqual(
+    Array.from({ length: 40 }, (_, line) => `soak worker 2 cycle 7 line ${line + 1}`)
+  )
+  expect(new TextEncoder().encode(chunks.join('')).byteLength).toBeLessThanOrEqual(32_768)
 })
 
 test('skips missed beats instead of replaying hooks after slow git', async () => {

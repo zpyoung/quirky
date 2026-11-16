@@ -5,7 +5,9 @@ export const CHECKS_PANEL = 'panel:quirky.reviews/checks'
 export const CREATE_VIEW = 'view:quirky.reviews/create'
 export const SETTINGS_VIEW = 'view:quirky.reviews/settings'
 export type ReviewTab = 'conversation' | 'checks' | 'files'
-export type ReviewTarget = { worktree: string; number: number; tab?: ReviewTab; prRepo?: { host: string; owner: string; repo: string } }
+export type ReviewProvider = 'github' | 'gitlab'
+export type RepoIdentity = { host: string; owner: string; repo: string }
+export type ReviewTarget = { worktree: string; number: number; tab?: ReviewTab; prRepo?: RepoIdentity }
 export type Audience = 'all' | 'humans' | 'bots'
 export type JsonRecord = Record<string, unknown>
 export type ReviewData = {
@@ -45,6 +47,7 @@ export type CreationState = {
 }
 export type HostingSettingsState = {
   worktree: string | null; generation: number; loading: boolean; error: string | null
+  provider?: ReviewProvider | null; repository?: RepoIdentity | null
   diagnostics: JsonRecord | null; accounts: JsonRecord | null; configuration: JsonRecord | null; budget: JsonRecord | null; fetchedAt: number
 }
 export type ReviewsState = {

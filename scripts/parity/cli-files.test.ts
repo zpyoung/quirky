@@ -41,26 +41,33 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
       while (bytes.length && !isUtf8(bytes)) bytes = bytes.subarray(0, bytes.length - 1)
       console.info(bytes.toString())
     }
-    expect(code, stderr + '\n' + stdout).toBe(0)
     const report = JSON.parse(stdout)
     console.info(JSON.stringify({
       elapsedMs: report.elapsedMs,
       buildElapsedMs: report.buildElapsedMs,
       startup: {
-        phase: report.startup.phase,
-        elapsedMs: report.startup.elapsedMs,
-        buildElapsedMs: report.startup.buildElapsedMs,
-        rendererElapsedMs: report.startup.rendererElapsedMs
+        phase: report.startup?.phase,
+        elapsedMs: report.startup?.elapsedMs,
+        buildElapsedMs: report.startup?.buildElapsedMs,
+        rendererElapsedMs: report.startup?.rendererElapsedMs,
+        renderer: report.startup?.renderer.slice(-64)
       },
       cleanup: {
         ok: report.cleanup.ok,
-        trackedIdentities: report.cleanup.evidence.trackedIdentities.length,
-        homeRemoved: report.cleanup.evidence.homeRemoved,
-        processIdentitiesGone: report.cleanup.evidence.processIdentitiesGone,
-        sentinelAlive: report.cleanup.evidence.sentinelAlive
+        trackedIdentities: report.cleanup.evidence?.trackedIdentities?.length,
+        homeRemoved: report.cleanup.evidence?.homeRemoved,
+        processIdentitiesGone: report.cleanup.evidence?.processIdentitiesGone,
+        sentinelAlive: report.cleanup.evidence?.sentinelAlive
       },
-      observationElapsedMs: Object.fromEntries(report.observations.map((entry: { id: string; evidence: { elapsedMs: number } }) => [entry.id, entry.evidence.elapsedMs]))
+      error: report.error,
+      observations: report.observations.map((entry: { id: string; status: string; evidence?: { elapsedMs: number } }) =>
+        ({ id: entry.id, status: entry.status, elapsedMs: entry.evidence?.elapsedMs })),
+      rows: report.rows.map((row: { id: string; status: string; executed: boolean }) =>
+        ({ id: row.id, status: row.status, executed: row.executed })),
+      receiptCount: report.receipts.length,
+      observationElapsedMs: Object.fromEntries(report.observations.map((entry: { id: string; evidence?: { elapsedMs: number } }) => [entry.id, entry.evidence?.elapsedMs]))
     }))
+    expect(code, stderr + '\n' + stdout).toBe(0)
     expect(report.parityComplete).toBe(true)
     expect(report).toMatchObject({ schemaVersion: 1, scope: 'goal-11-cli-files', ok: true, cleanup: { ok: true } })
     expect(report.startup.phase).toBe('ready')
@@ -71,6 +78,31 @@ test('the real two-window CLI rehearsal observes file placement and cleans its o
       [entry.index, entry.connId, entry.worktree])).toEqual(
       report.observations[0].before.map((entry: { connId: number; windowWorktree: string }, index: number) =>
         [index, entry.connId, entry.windowWorktree]))
+    expect(ready).toHaveLength(2)
+    expect(new Set(ready.map((entry: { connId: number }) => entry.connId)).size).toBe(2)
+    const renderer = report.startup.renderer as Array<{
+      stage: string; elapsedMs: number; index?: number; connId?: number; worktree?: string; browserPid?: number
+    }>
+    const shellReady = renderer.filter(entry => entry.stage === 'shell-ready')
+    expect(shellReady).toHaveLength(2)
+    expect(renderer.filter(entry => entry.stage === 'shell')).toHaveLength(2)
+    const setup = renderer.findIndex(entry => entry.stage === 'changes')
+    for (const identity of ready) {
+      const completion = shellReady.find(entry => entry.index === identity.index)!
+      expect(completion).toMatchObject({
+        index: identity.index, connId: identity.connId, worktree: identity.worktree, browserPid: identity.browserPid
+      })
+      const start = renderer.findIndex(entry => entry.stage === 'shell' && entry.index === identity.index)
+      const end = renderer.indexOf(completion)
+      expect(start).toBeGreaterThanOrEqual(0)
+      expect(end).toBeGreaterThan(start)
+      expect(end).toBeLessThan(setup)
+      expect(renderer.findIndex(entry => entry.stage === 'worktree')).toBeGreaterThan(end)
+      expect(Number.isFinite(completion.elapsedMs)).toBe(true)
+      expect(completion.elapsedMs).toBeGreaterThanOrEqual(renderer[start]!.elapsedMs)
+      expect(completion.elapsedMs).toBeLessThan(30_000)
+      expect(identity.elapsedMs).toBeLessThan(30_000)
+    }
     expect(report.cleanup.evidence.homeRemoved).toBe(true)
     expect(report.error).toBeUndefined()
     expect(report.timing.cliCalls).toBe(report.receipts.length)

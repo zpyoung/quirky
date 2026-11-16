@@ -125,9 +125,16 @@ function useCommentControl(options: {
 }) {
   const owner = options.owner
   const repo = owner?.repo
-  const target = JSON.stringify([options.surface, options.slot, owner?.worktree ?? null,
+  const target = JSON.stringify([
+    options.surface,
+    options.slot,
+    owner?.worktree ?? null,
     repo ? { host: repo.host, owner: repo.owner, repo: repo.repo } : null,
-    owner?.number ?? null, owner?.review?.headRefOid ?? null, null])
+    owner?.number ?? null,
+    owner?.review?.provider ?? null,
+    owner?.review?.headRefOid ?? null,
+    null,
+  ])
   const current = useRef(options)
   const registration = useRef<{ target: string; generation: number; changed(): void; dispose(): void } | null>(null)
   const [reported, setReported] = useState<{ target: string; generation: number } | null>(null)
@@ -171,14 +178,16 @@ function useCommentControl(options: {
 
 export function Comments(props: CommentsProps) {
   const owner = reviewContext(props.state, props.surface)
+  const isGitLab = owner?.review?.provider === 'gitlab'
+  const provider = isGitLab ? 'gitlab' : 'github'
   const data = surfaceData(props)
   const targetParams = owner === null ? null : {
     surface: props.surface, worktree: owner.worktree, number: owner.number,
     ...(owner.repo === null ? {} : { prRepo: owner.repo }),
   }
-  const identity = JSON.stringify([props.surface, owner?.worktree, owner?.repo, owner?.number, owner?.generation, owner?.review?.headRefOid])
+  const identity = JSON.stringify([props.surface, owner?.worktree, owner?.repo, owner?.number, owner?.generation, owner?.review?.provider ?? null, owner?.review?.headRefOid])
   const targetGuard = useTargetGuard(identity)
-  const parsed = data.value === null || owner === null ? null : parseCommentsResult(data.value, owner.number)
+  const parsed = data.value === null || owner === null ? null : parseCommentsResult(data.value, owner.number, provider)
   const comments = parsed?.comments ?? []
   const filtered = useMemo(() => comments.filter((comment) => data.audience === 'all'
     || isBotAuthor(comment, props.state.botOverrides) === (data.audience === 'bots')), [comments, data.audience, props.state.botOverrides])
@@ -237,7 +246,7 @@ export function Comments(props: CommentsProps) {
     const request = ++suggestionRequest.current
     const here = targetGuard()
     setMentionError(null)
-    if (mentionPrefix === null || owner === null) {
+    if (mentionPrefix === null || owner === null || isGitLab) {
       setMentionOptions([]); setMentionPending(false)
       return () => { suggestionRequest.current++ }
     }
@@ -268,7 +277,7 @@ export function Comments(props: CommentsProps) {
       })()
     }, 180)
     return () => { clearTimeout(timer); suggestionRequest.current++ }
-  }, [mentionPrefix, identity, props.context, localParticipants])
+  }, [mentionPrefix, identity, props.context, localParticipants, isGitLab])
 
   const setSharedDraft = (value: string) => { draftField.edit(value); setActionError(null) }
   const topLevel = (comment: ReviewComment) => comment.kind === 'issue_comment' && typeof comment.id === 'number'
@@ -329,6 +338,7 @@ export function Comments(props: CommentsProps) {
     actions: () => ['comments-retry', 'audience-set', 'grouping-set', 'reply-open', 'edit-open', 'comment-delete',
       'thread-set', 'queue-set', 'bot-set', 'comment-open', 'queue-send'].map((action) => ({
       action, enabled: action === 'queue-send' ? data.queued.length > 0 : owner !== null
+        && !(isGitLab && action === 'comment-delete')
         && !(pendingRef.current !== null && ['reply-open', 'edit-open', 'comment-delete'].includes(action)),
     })),
     run: (request, isCurrent, accept) => {
@@ -341,6 +351,7 @@ export function Comments(props: CommentsProps) {
         return accept(props.context.call('quirky.reviews/checksSetAgentDialog', { surface: props.surface,
           ...(props.surface === 'checks' ? { worktree: owner.worktree } : {}), action: 'comments' }))
       }
+      if (isGitLab && request.action === 'comment-delete') throw new Error('Comment deletion is unavailable for GitLab merge requests.')
       if (targetParams === null) return
       if (request.action === 'comments-retry') return accept(props.context.call('quirky.reviews/detailRefresh', targetParams))
       if (request.action === 'audience-set') {
@@ -353,7 +364,10 @@ export function Comments(props: CommentsProps) {
       }
       const comment = resolveComment(value.comment)
       if (request.action === 'reply-open') {
-        if (comment.kind !== 'review_comment' || typeof comment.id !== 'number') throw new Error('Choose a current review comment to reply to.')
+        if (typeof comment.id !== 'number'
+          || !(comment.kind === 'review_comment' || isGitLab && topLevel(comment))) {
+          throw new Error('Choose a current comment to reply to.')
+        }
         if (pendingRef.current) return
         setReplyTo(comment.id); setComposerSession((value) => value + 1); return
       }
@@ -397,10 +411,11 @@ export function Comments(props: CommentsProps) {
     actions: () => [
       { action: 'comment-send', enabled: pendingRef.current === null && data.review !== null && draft.trim() !== '' },
       { action: 'reply-cancel', enabled: pendingRef.current === null && replyTo !== null },
-      { action: 'mention-select', enabled: mentionPrefix !== null },
+      { action: 'mention-select', enabled: !isGitLab && mentionPrefix !== null },
       { action: 'image-open', enabled: true },
     ],
     run: (request, isCurrent, accept) => {
+      if (request.action === 'mention-select' && isGitLab) throw new Error('Mention suggestions are unavailable for GitLab merge requests.')
       const value = controlValue(request, request.action === 'mention-select' ? ['login'] : [])
       if (request.action === 'comment-send') return accept(submit(isCurrent))
       if (request.action === 'reply-cancel') { if (!pendingRef.current) { setReplyTo(null); setComposerSession((value) => value + 1) }; return }
@@ -480,13 +495,13 @@ export function Comments(props: CommentsProps) {
       </div> : <div><Markdown source={comment.body} /></div>}
       <div className="ui-cluster">
         {comment.threadId ? <Button onClick={() => void commentsControl.request('thread-set', { comment: key, resolved: comment.isResolved !== true })}>{comment.isResolved === true ? 'Unresolve' : 'Resolve'}</Button> : null}
-        {comment.kind === 'review_comment' && typeof comment.id === 'number' ? <Button disabled={pending} onClick={() => void commentsControl.request('reply-open', { comment: key })}>Reply</Button> : null}
+        {comment.kind === 'review_comment' && typeof comment.id === 'number' || isGitLab && topLevel(comment) ? <Button disabled={pending} onClick={() => void commentsControl.request('reply-open', { comment: key })}>Reply</Button> : null}
         {safeHttpUrl(comment.url) && owner ? <Button onClick={() => void commentsControl.request('comment-open', { comment: key })}>Go to comment</Button> : null}
         <Button aria-pressed={data.queued.includes(queueId)} onClick={() => void commentsControl.request('queue-set', { comment: key, queued: !data.queued.includes(queueId) })}>{data.queued.includes(queueId) ? 'Unqueue for agent' : 'Queue for agent'}</Button>
         {comment.author ? <Button onClick={() => void commentsControl.request('bot-set', { comment: key, bot: !authorIsManuallyMarked })}>{authorIsManuallyMarked ? 'Unmark author as bot' : 'Mark author as bot'}</Button> : null}
         {topLevel(comment) ? <>
           {editingId === comment.id ? null : <Button disabled={pending} onClick={() => void commentsControl.request('edit-open', { comment: key })}>Edit</Button>}
-          <Button variant="destructive" disabled={pending} onClick={() => void commentsControl.request('comment-delete', { comment: key })}>Delete</Button>
+          {!isGitLab ? <Button variant="destructive" disabled={pending} onClick={() => void commentsControl.request('comment-delete', { comment: key })}>Delete</Button> : null}
         </> : null}
       </div>
     </article>
@@ -521,7 +536,7 @@ export function Comments(props: CommentsProps) {
                 {allThreads.filter((thread) => thread.resolved === true).sort((left, right) => right.updatedAt - left.updatedAt).map(renderThread)}
               </section> : null}
             </div>
-  return <section className="ui-stack" aria-label="Pull request comments" data-review-control-target={commentsControl.target} data-review-control-generation={commentsControl.generation}>
+  return <section className="ui-stack" aria-label={isGitLab ? 'Merge request comments' : 'Pull request comments'} data-review-control-target={commentsControl.target} data-review-control-generation={commentsControl.generation}>
     <SectionHeader title={`Comments${parsed ? ` (${comments.length})` : ''}`} actions={<div className="ui-cluster">
       <Tabs label="Comment audience" items={[
         { id: 'all', label: `All (${countFor('all')})`, disabled: owner === null },
@@ -535,7 +550,7 @@ export function Comments(props: CommentsProps) {
     </div>} />
     {parsed !== null && data.error ? <InlineError message={`${data.error} Showing the last available comments where present.`} action={{ label: 'Retry', onAction: retry }} /> : null}
     {(actionError ?? draftField.error) ? <InlineError message={actionError ?? draftField.error!} /> : null}
-    {parsed?.partial === true ? <p role="status" className="ui-text-muted">Showing the first 100 comments per source{parsed.partialFailures.length > 0 ? `; ${parsed.partialFailures.join(' ')}` : '.'}</p> : null}
+    {parsed?.partial === true ? <p role="status" className="ui-text-muted">{isGitLab ? 'Showing a limited set of comments.' : 'Showing the first 100 comments per source'}{parsed.partialFailures.length > 0 ? `${isGitLab ? ' ' : '; '}${parsed.partialFailures.join(' ')}` : !isGitLab && '.'}</p> : null}
     {content}
     {owner !== null ? <form className="ui-stack" data-review-control-target={composerControl.target} data-review-control-generation={composerControl.generation}
       onSubmit={(event) => { event.preventDefault(); void composerControl.request('comment-send') }}>
@@ -543,7 +558,7 @@ export function Comments(props: CommentsProps) {
       <MarkdownComposer value={draft} onChange={setSharedDraft} label={replyTo === null ? 'Add a comment' : `Reply to comment #${replyTo}`}
         placeholder={replyTo === null ? 'Add a comment…' : 'Write a reply…'} minRows={4} disabled={pending || data.review === null}
         onSubmit={() => void composerControl.request('comment-send')} />
-      {mentionPrefix !== null ? <div className="ui-stack" role="listbox" aria-label="Mention suggestions">
+      {mentionPrefix !== null && !isGitLab ? <div className="ui-stack" role="listbox" aria-label="Mention suggestions">
         {mentionPending ? <NoticeLine>Finding mention suggestions…</NoticeLine> : null}
         {!mentionPending && !mentionError && mentionOptions.length === 0 ? <EmptyState message="No matching participants." /> : null}
         {mentionOptions.map((option) => <Button key={option.login} role="option" onClick={() => void composerControl.request('mention-select', { login: option.login })}>@{option.login}</Button>)}

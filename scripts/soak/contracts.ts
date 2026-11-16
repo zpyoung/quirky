@@ -5,6 +5,24 @@ export type SoakLimits = {
   maxEventsPer5s: number
   maxStallMs: number
   maxUnanswered: number
+  maxWindowRequestsPerMinute: number | null
+}
+export type PanelKey = 'changes' | 'checks' | 'explorer' | 'tasks' | 'session-info' | 'feedback'
+export type PanelRequestRecord = { at: number; index: number; panel: PanelKey }
+export type GitProbeRecord = { at: number; ms: number; ownLagMs: number; timedOut: boolean; failed: boolean; worktree: string }
+export type DayInputs = { enabled: boolean; windows: { index: number; worktree: string }[]; worktrees: string[] }
+export type SwitchRecord = {
+  at: number; seq: number; index: number; from: string; requested: string; settled: string
+  proof: { at: number; method: string; worktree: string } | null
+  ok: boolean; followMs: number | null; error: string | null
+}
+export type PhaseRecord = {
+  at: number; seq: number; phase: number; ok: boolean; applyMs: number
+  missing: { index: number; panel: PanelKey }[]; error: string | null
+}
+export type TaskInteractionRecord = {
+  kind: 'task'; at: number; seq: number; index: number; method: string
+  ok: boolean; proof: { at: number; method: string } | null; error: string | null
 }
 
 export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback'] as const
@@ -45,7 +63,15 @@ export type RefreshSummary = {
   examples: RefreshExample[]
 }
 
-export const DEFAULT_LIMITS: SoakLimits = { maxChildren: 60, maxGrowth: 5, maxZombies: 0, maxEventsPer5s: 30, maxStallMs: 1000, maxUnanswered: 0 }
+export const DEFAULT_LIMITS: SoakLimits = {
+  maxChildren: 60,
+  maxGrowth: 5,
+  maxZombies: 0,
+  maxEventsPer5s: 30,
+  maxStallMs: 1000,
+  maxUnanswered: 0,
+  maxWindowRequestsPerMinute: null,
+}
 export const QUALIFYING_MINUTES = 30
 export const QUALIFYING_WINDOWS = 2
 
@@ -113,8 +139,41 @@ export type SoakReport = {
       peakWorktree: string | null
       missingWindows: string[]
       byWindow: { index: number; worktree: string; total: number; peakPer5s: number }[]
+      byPanel: { index: number; panel: PanelKey; total: number; peakPer5s: number }[]
     }
-    stalls: { ok: boolean; probes: number; stalls: number; hostBusy: number; p50Ms: number; p95Ms: number; maxMs: number; worst: { at: number; ms: number }[]; daemonExited: boolean }
+    requests: {
+      ok: boolean
+      limitPerMinute: number | null
+      peakPerMinute: number
+      peakAt: number | null
+      peakWindow: number | null
+      peakWorktree: string | null
+      byWindow: { index: number; worktree: string; total: number; peakPerMinute: number; peakAt: number | null }[]
+    }
+    stalls: {
+      ok: boolean
+      probes: number
+      stalls: number
+      hostBusy: number
+      p50Ms: number
+      p95Ms: number
+      maxMs: number
+      worst: { at: number; ms: number }[]
+      daemonExited: boolean
+      git: {
+        probes: number; stalls: number; failed: number; hostBusy: number
+        p50Ms: number; p95Ms: number; maxMs: number
+        worst: { at: number; ms: number; worktree: string }[]
+        byWorktree: { worktree: string; probes: number; maxMs: number }[]
+      }
+    }
+    day: {
+      ok: boolean; enabled: boolean; expectedSwitches: number; expectedPhases: number
+      expectedTaskInteractions: number; switches: number; phases: number; taskInteractions: number
+      missing: string[]; duplicates: string[]; unscheduled: string[]
+      wrongTarget: string[]; failed: string[]; slowestFollowMs: number | null
+      counts: { missing: number; duplicates: number; unscheduled: number; wrongTarget: number; failed: number }
+    }
     calls: { ok: boolean; unanswered: number; byMethod: { method: string; count: number }[]; gitTimeouts: number; refreshes: RefreshSummary }
     workers: { ok: boolean; expected: number; alive: number; stale: string[] }
     windows: { ok: boolean; expected: number; alive: number; lost: string[] }
@@ -122,6 +181,13 @@ export type SoakReport = {
   panelRefreshes: PanelRefreshRecord[]
   windows: WindowRecord[]
   windowRequests: { method: string; total: number }[]
+  windowRequestSeconds: number[][]
+  panelRequests: PanelRequestRecord[]
+  gitProbes: GitProbeRecord[]
+  day: DayInputs | null
+  switches: SwitchRecord[]
+  taskInteractions: TaskInteractionRecord[]
+  phases: PhaseRecord[]
   fault: FaultRecord | null
   daemon: { pid: number; rssKbFirst: number | null; rssKbMax: number | null; rssKbLast: number | null }
   skippedSamples: number

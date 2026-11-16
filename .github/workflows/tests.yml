@@ -212,17 +212,53 @@ jobs:
           done
           exit "$smoke_status"
 
+      - name: Set Playwright browser path
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/quirky-playwright" >> "$GITHUB_ENV"
+
+      - name: Install Playwright Chromium
+        run: bun node_modules/playwright/cli.js install chromium
+
       - name: Run shard
         env:
           SHARD: ${{ matrix.shard }}
         run: bun scripts/test-baseline/cli.ts run-shard --plan plan --shard "$SHARD" --out "results/linux-$SHARD.json"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Linux shard results (attempt 1)
+        id: upload_results_1
+        if: ${{ !cancelled() && hashFiles('results/*.json') != '' }}
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-linux-${{ matrix.shard }}
           path: results/
           retention-days: 1
           if-no-files-found: error
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Upload Linux shard results (attempt 2)
+        id: upload_results_2
+        if: ${{ !cancelled() && steps.upload_results_1.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux-${{ matrix.shard }}
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Upload Linux shard results (attempt 3)
+        id: upload_results_3
+        if: ${{ !cancelled() && steps.upload_results_2.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux-${{ matrix.shard }}
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+        timeout-minutes: 5
 
   macos:
     name: macOS
@@ -253,12 +289,42 @@ jobs:
       - name: Run macOS files
         run: bun scripts/test-baseline/cli.ts run-shard --plan plan --macos --out results/macos.json
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload macOS results (attempt 1)
+        id: upload_results_1
+        if: ${{ !cancelled() && hashFiles('results/*.json') != '' }}
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-macos
           path: results/
           retention-days: 1
           if-no-files-found: error
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Upload macOS results (attempt 2)
+        id: upload_results_2
+        if: ${{ !cancelled() && steps.upload_results_1.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+        timeout-minutes: 5
+        continue-on-error: true
+
+      - name: Upload macOS results (attempt 3)
+        id: upload_results_3
+        if: ${{ !cancelled() && steps.upload_results_2.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: results/
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+        timeout-minutes: 5
 
   speed:
     name: Speed
