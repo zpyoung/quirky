@@ -98,7 +98,7 @@ for (const method of ['forBranch', 'review'] as const) {
   test(`${method} validates fresh before authentication or snapshot capture`, async () => {
     const env = {
       invalid: (reason: string, message: string) => Object.assign(new Error(message), { data: { reason } })
-    } as HostingEnv
+    } as unknown as HostingEnv
     const unexpected = async (): Promise<never> => { throw new Error('unexpected provider operation') }
     const client = createGitLabClient(env, { fetch: unexpected, readToken: unexpected })
     const handler = createGitLabReviewHandlers(env, client)[method]!
