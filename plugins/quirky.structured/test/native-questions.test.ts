@@ -46,3 +46,14 @@ test('an approval outcome reads the decision and reason, and fails closed', () =
 test('a stale always on an agent without session approval is an allow', () => {
   expect(approvalOutcome(answered({ decision: { value: 'always', source: 'option' } }), false)).toEqual({ decision: 'allow' })
 })
+
+test('a partial approval envelope with the decision answered is honored', () => {
+  const partial = (answers: AskEnvelope['answers'], status: 'partial' | 'declined' | 'timed_out' = 'partial'): AskEnvelope => ({ status, askId: 'a', answers, skipped: ['reason'], summary: '' })
+  expect(approvalOutcome(partial({ decision: { value: 'allow', label: 'Allow once', source: 'option' } }), true)).toEqual({ decision: 'allow' })
+  expect(approvalOutcome(partial({ decision: { value: 'always', source: 'option' } }), true)).toEqual({ decision: 'always' })
+  expect(approvalOutcome(partial({ decision: { value: 'always', source: 'option' } }), false)).toEqual({ decision: 'allow' })
+  expect(approvalOutcome(partial({ decision: { value: 'deny', source: 'option' }, reason: { value: ' nope ', source: 'input' } }), true)).toEqual({ decision: 'deny', reason: 'nope' })
+  expect(approvalOutcome(partial({}), true)).toEqual({ decision: 'deny' })
+  expect(approvalOutcome(partial({ decision: { value: 'allow', source: 'option' } }, 'declined'), true)).toEqual({ decision: 'deny' })
+  expect(approvalOutcome(partial({ decision: { value: 'allow', source: 'option' } }, 'timed_out'), true)).toEqual({ decision: 'deny' })
+})
