@@ -2,8 +2,6 @@ import type { AgentCapabilities } from '@quirky/protocol'
 
 const OK = { ok: true } as const
 
-const STARTUP_ONLY = { ok: false, reason: 'Set when the chat starts' } as const
-
 const CODEX_APPROVAL = 'Codex runs with on-request approval in Quirky'
 
 const CAPABILITIES: Record<AgentCapabilities['agent'], AgentCapabilities> = {
@@ -32,22 +30,22 @@ const CAPABILITIES: Record<AgentCapabilities['agent'], AgentCapabilities> = {
   pi: {
     agent: 'pi',
     steer: OK,
-    model: STARTUP_ONLY,
+    model: OK,
     planMode: { ok: false, reason: 'pi has no plan mode' },
     permissionModes: { ok: false, reason: 'pi has no permission modes' },
     images: OK,
-    effort: STARTUP_ONLY,
+    effort: OK,
     approveForSession: { ok: false, reason: 'pi has no session-wide approval' },
     resume: OK
   },
   omp: {
     agent: 'omp',
     steer: OK,
-    model: STARTUP_ONLY,
+    model: OK,
     planMode: { ok: false, reason: 'omp has no plan mode' },
     permissionModes: { ok: false, reason: 'omp has no permission modes' },
     images: OK,
-    effort: STARTUP_ONLY,
+    effort: OK,
     approveForSession: { ok: false, reason: 'omp has no session-wide approval' },
     resume: OK
   }

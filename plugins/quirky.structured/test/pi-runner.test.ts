@@ -316,6 +316,52 @@ for (const variant of ['pi', 'omp'] as const) {
       }
     })
 
+    test('images that fit one by one but not in one frame are refused clearly and nothing is written', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'pi-runner-'))
+      try {
+        const first = join(dir, 'a.png')
+        const second = join(dir, 'b.png')
+        writeFileSync(first, Buffer.alloc(13 * 1024 * 1024))
+        writeFileSync(second, Buffer.alloc(13 * 1024 * 1024))
+        const transport = await begin(null)
+        await expect(setup.runner.send(setup.session.id, 'look', { images: [first, second] })).rejects.toThrow('too large to send together')
+        expect(transport.commands('prompt')).toEqual([])
+        expect(setup.ofKind('user')).toEqual([])
+        expect(setup.ofKind('error')).toHaveLength(1)
+        await setup.runner.send(setup.session.id, 'one', { images: [first] })
+        expect(transport.commands('prompt')).toHaveLength(1)
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    })
+
+    test('configure switches the model by provider/id and sets the thinking level, returning what is in force', async () => {
+      const transport = await begin(null, { model: 'anthropic/old', effort: 'low' })
+      const settings = await setup.runner.configure!(setup.session.id, { model: 'openai/gpt-x', effort: 'high' })
+      expect(transport.commands('set_model')).toMatchObject([{ provider: 'openai', modelId: 'gpt-x' }])
+      expect(transport.commands('set_thinking_level')).toMatchObject([{ level: 'high' }])
+      expect(settings).toEqual({ model: 'openai/gpt-x', effort: 'high' })
+    })
+
+    test('configure resolves a bare model id through the available models and rejects an ambiguous one', async () => {
+      const transport = await begin(null)
+      transport.replies.set('get_available_models', () => ({
+        success: true,
+        data: { models: [{ provider: 'a', id: 'solo' }, { provider: 'a', id: 'twin' }, { provider: 'b', id: 'twin' }] }
+      }))
+      expect(await setup.runner.configure!(setup.session.id, { model: 'solo' })).toEqual({ model: 'solo' })
+      expect(transport.commands('set_model')).toMatchObject([{ provider: 'a', modelId: 'solo' }])
+      await expect(setup.runner.configure!(setup.session.id, { model: 'twin' })).rejects.toThrow('use provider/model')
+    })
+
+    test('configure surfaces an agent refusal and keeps the previous settings', async () => {
+      const transport = await begin(null, { model: 'anthropic/old' })
+      transport.replies.set('set_model', () => ({ success: false, error: 'Model not found: x/y' }))
+      await expect(setup.runner.configure!(setup.session.id, { model: 'x/y' })).rejects.toThrow('Model not found')
+      transport.replies.set('set_model', () => ({ success: true }))
+      expect(await setup.runner.configure!(setup.session.id, { effort: 'medium' })).toEqual({ model: 'anthropic/old', effort: 'medium' })
+    })
+
     test('an image path that is not a regular file is refused before anything is journaled or sent', async () => {
       const dir = mkdtempSync(join(tmpdir(), 'pi-runner-'))
       try {
