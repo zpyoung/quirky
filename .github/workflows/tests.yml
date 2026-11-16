@@ -135,6 +135,7 @@ jobs:
           root=
           smoke_pid=
           smoke_attempt=0
+          smoke_pending=0
           total_started=$SECONDS
           cleanup_attempt() {
             if [ -n "$smoke_pid" ]; then
@@ -143,7 +144,9 @@ jobs:
                 if ! kill -0 -- "-$smoke_pid" 2>/dev/null; then break; fi
                 sleep 0.1
               done
-              kill -KILL -- "-$smoke_pid" 2>/dev/null || true
+              if kill -0 -- "-$smoke_pid" 2>/dev/null; then
+                kill -KILL -- "-$smoke_pid" 2>/dev/null || true
+              fi
               wait "$smoke_pid" 2>/dev/null || true
               smoke_pid=
             fi
@@ -152,9 +155,26 @@ jobs:
               root=
             fi
           }
+          report_attempt() {
+            smoke_pending=0
+            echo "Chrome sandbox smoke attempt $smoke_attempt/3: $((SECONDS - smoke_started))s (exit $smoke_status, result $smoke_result)"
+            if [ "$smoke_status" -ne 0 ]; then
+              echo "Chrome sandbox smoke attempt $smoke_attempt/3 stderr:" >&2
+              cat "$root/chrome.log" >&2
+              if [ "$smoke_result" = missing-marker ]; then
+                echo "Chrome sandbox smoke attempt $smoke_attempt/3: expected quirky-linux-chrome marker missing" >&2
+              fi
+            fi
+          }
           cleanup() {
             status=$?
             trap - EXIT
+            trap '' INT TERM
+            if [ "$smoke_pending" -eq 1 ]; then
+              smoke_status=$status
+              smoke_result=chrome-exit
+              report_attempt
+            fi
             cleanup_attempt
             echo "Chrome sandbox smoke total: $((SECONDS - total_started))s ($smoke_attempt attempts, exit $status)"
             exit "$status"
@@ -173,6 +193,7 @@ jobs:
               'data:text/html,<html><body>quirky-linux-chrome</body></html>' \
               > "$root/dom.html" 2> "$root/chrome.log" &
             smoke_pid=$!
+            smoke_pending=1
             smoke_status=0
             wait "$smoke_pid" || smoke_status=$?
             smoke_result=ok
@@ -185,14 +206,7 @@ jobs:
               smoke_status=1
               smoke_result=missing-marker
             fi
-            echo "Chrome sandbox smoke attempt $smoke_attempt/3: $((SECONDS - smoke_started))s (exit $smoke_status, result $smoke_result)"
-            if [ "$smoke_status" -ne 0 ]; then
-              echo "Chrome sandbox smoke attempt $smoke_attempt/3 stderr:" >&2
-              cat "$root/chrome.log" >&2
-              if [ "$smoke_result" = missing-marker ]; then
-                echo "Chrome sandbox smoke attempt $smoke_attempt/3: expected quirky-linux-chrome marker missing" >&2
-              fi
-            fi
+            report_attempt
             cleanup_attempt
             if [ "$smoke_status" -eq 0 ]; then exit 0; fi
           done
