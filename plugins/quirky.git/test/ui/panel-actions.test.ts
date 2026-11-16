@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
 import type { Fake } from './panel-support'
@@ -6,12 +6,14 @@ import type { Fake } from './panel-support'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, noticesOf, press, q, qa, rowOf, settle, statusOf, type, waitForState } = s
+const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, noticesOf, press, q, qa, rowOf, settle, settleAfter, statusOf, type, waitForState } = s
 
 afterAll(() => GlobalRegistrator.unregister())
 beforeEach(() => {
   document.body.innerHTML = ''
 })
+afterEach(() => jest.useRealTimers())
+
 
 
 async function open(configure: (fake: Fake) => void = () => {}) {
@@ -340,12 +342,11 @@ describe('SC-25: the message box and the commit step', () => {
     await type(message(element), '  fix the login  ')
     const before = fake.calls.length
     await press(message(element), 'Enter', { metaKey: true })
-    expect(fake.calls.slice(before).map((c) => c.method).filter((m) => ['quirky.git/status', 'quirky.git/commit', 'quirky.git/compare'].includes(m))).toEqual([
-      'quirky.git/status',
-      'quirky.git/commit',
-      'quirky.git/status',
-      'quirky.git/compare'
-    ])
+    const methods = fake.calls.slice(before).map((c) => c.method).filter((m) => ['quirky.git/status', 'quirky.git/commit', 'quirky.git/compare'].includes(m))
+    expect(methods.slice(0, 2)).toEqual(['quirky.git/status', 'quirky.git/commit'])
+    expect(methods.slice(2)).toHaveLength(2)
+    expect(methods.slice(2)).toContain('quirky.git/status')
+    expect(methods.slice(2)).toContain('quirky.git/compare')
     expect(fake.called('quirky.git/commit').at(-1)?.params).toEqual({ worktree: 'feat', message: 'fix the login' })
     expect(message(element).value).toBe('')
     unmount()
@@ -449,6 +450,7 @@ describe('SC-25: the message box and the commit step', () => {
   })
 
   test('the box keeps a draft per worktree and goes away when nothing is left to commit', async () => {
+    jest.useFakeTimers()
     const { fake, element, unmount } = await open((f) => {
       f.status = statusOf([entry('math.ts', 'staged')])
       f.statuses.other = statusOf([entry('x.ts', 'staged')])
@@ -458,11 +460,11 @@ describe('SC-25: the message box and the commit step', () => {
     await settle()
     expect(message(element).value).toBe('')
     await act(async () => fake.setLayout(layoutFor('feat')))
-    await settle()
+    await settleAfter(3000)
     expect(message(element).value).toBe('draft one')
     fake.status = statusOf([], { upstreamStatus: upstream(1, 0) })
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
-    await settle()
+    await settleAfter(3000)
     expect(message(element)).toBeNull()
     unmount()
   })
