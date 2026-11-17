@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { Badge, Button, Dialog } from '@quirky/ui'
-import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
+import { Badge, Button, Dialog, EmptyState, InlineError, NoticeLine } from '@quirky/ui'
+import { RpcErrorCode, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
 import type { ViewPlacement, ViewRecord } from '../core/contract'
 import { RenderNode } from './RenderNode'
 import { RuntimeContext, type ViewRuntime } from './runtime'
@@ -147,16 +147,15 @@ export function ViewCard({ context, instance, record, agent, framed = true, inPa
   }
 
   if (record.closed) {
-    return <p data-view-record={viewId} role="status" style={RECORD}>{record.title} closed</p>
+    return <div data-view-record={viewId} role="status" style={RECORD}><NoticeLine>{record.title} closed</NoticeLine></div>
   }
 
   if (record.placement === 'pane' && !inPane) {
     return (
-      <div data-view-record={viewId} role="status" style={{ ...ROW, justifyContent: 'space-between', ...RECORD }}>
-        <span>{record.title} is in the Views pane</span>
-        <div style={ROW}>
-          <Button disabled={moving} onClick={() => void move()}>Move inline</Button>
-        </div>
+      <div data-view-record={viewId} role="status" style={RECORD}>
+        <NoticeLine actions={[{ label: 'Move inline', disabled: moving, onAction: () => void move() }]}>
+          {record.title} is in the Views pane
+        </NoticeLine>
       </div>
     )
   }
@@ -200,36 +199,56 @@ export function ViewCardView({ context, instance, viewId }: { context: UiPluginC
   const [record, setRecord] = useState<ViewRecord | null>(null)
   const recordRef = useRef<ViewRecord | null>(null)
   const alive = useRef(true)
+  const requestId = useRef(0)
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'failed' | 'missing'>('loading')
+  const [failure, setFailure] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    const request = ++requestId.current
     try {
-      const next = (await context.call('quirky.view/get', { viewId })) as ViewRecord | null
-      if (!alive.current) return
-      if (next) {
-        recordRef.current = next
-        setRecord(next)
-        instance.update({ phase: 'ready', activeViewId: next.viewId })
-      } else {
-        instance.update({ phase: 'missing', activeViewId: recordRef.current?.viewId ?? null })
-      }
+      const next = (await context.call('quirky.view/get', { viewId })) as ViewRecord | null | undefined
+      if (!alive.current || request !== requestId.current) return
+      recordRef.current = next ?? null
+      setRecord(next ?? null)
+      setFailure(null)
+      const nextPhase = next ? 'ready' : 'missing'
+      setPhase(nextPhase)
+      instance.update({ phase: nextPhase, activeViewId: next?.viewId ?? null })
     } catch (error) {
-      if (alive.current) instance.update({ phase: 'failed', activeViewId: recordRef.current?.viewId ?? null })
-      context.log(`could not load view ${viewId}: ${errorText(error)}`)
+      if (!alive.current || request !== requestId.current) return
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === RpcErrorCode.NotFound) {
+        recordRef.current = null
+        setRecord(null)
+        setFailure(null)
+        setPhase('missing')
+        instance.update({ phase: 'missing', activeViewId: null })
+        return
+      }
+      setPhase('failed')
+      setFailure(errorText(error))
+      instance.update({ phase: 'failed', activeViewId: recordRef.current?.viewId ?? null })
+      throw error
     }
   }, [context, instance, viewId])
 
   useEffect(() => {
     alive.current = true
+    recordRef.current = null
+    setRecord(null)
+    setPhase('loading')
+    setFailure(null)
+    instance.update({ phase: 'loading', activeViewId: null, tabs: [], pendingLink: null })
     instance.setHandlers({ refresh: load })
-    void load()
+    void load().catch(() => {})
     const unsubscribeEvents = context.subscribe((event: QuirkyEvent) => {
-      if (eventData(event, 'quirky.view/changed')?.viewId === viewId) void load()
+      if (eventData(event, 'quirky.view/changed')?.viewId === viewId) void load().catch(() => {})
     })
     const unsubscribeConnection = context.onConnection((status) => {
-      if (status === 'connected') void load()
+      if (status === 'connected') void load().catch(() => {})
     })
     return () => {
       alive.current = false
+      ++requestId.current
       instance.clearHandlers('refresh')
       unsubscribeEvents()
       unsubscribeConnection()
@@ -237,8 +256,17 @@ export function ViewCardView({ context, instance, viewId }: { context: UiPluginC
   }, [context, instance, viewId, load])
 
   const agent = useAgent(context, record?.sessionId)
-  if (!record) return null
-  return <ViewCard context={context} instance={instance} record={record} agent={agent} />
+  const retry = () => {
+    void runViewUiCommand(context, CONTROL_COMMAND_ID, { instance: instance.id, action: 'refresh' }).catch(() => {})
+  }
+  if (phase === 'loading') return <NoticeLine>Loading view…</NoticeLine>
+  if (phase === 'missing') return <EmptyState message="This view is no longer available." />
+  return (
+    <>
+      {failure !== null && <InlineError message={`Could not load view: ${failure}`} action={{ label: 'Retry', onAction: retry }} />}
+      {record && <ViewCard context={context} instance={instance} record={record} agent={agent} />}
+    </>
+  )
 }
 
 /** Reads the view input, which is untrusted until it has a `viewId`. */

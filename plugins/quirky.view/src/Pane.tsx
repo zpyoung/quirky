@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { IconButton, ControlIcon, Tabs, ToolPanelFrame } from '@quirky/ui'
+import { EmptyState, InlineError, NoticeLine, IconButton, ControlIcon, Tabs, ToolPanelFrame } from '@quirky/ui'
 import type { QuirkyEvent, UiPluginContext } from '@quirky/protocol'
 import type { ViewRecord } from './core/contract'
 import { CONTROL_COMMAND_ID, runViewUiCommand, type ViewUiInstance } from './control'
@@ -27,10 +27,13 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
   const [dismissed, setDismissed] = useState<Record<string, string>>({})
   const dismissedRef = useRef<Record<string, string>>({})
   const alive = useRef(true)
+  const requestId = useRef(0)
+  const [loaded, setLoaded] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   const phase = useRef<'loading' | 'ready' | 'failed'>('loading')
 
   const publish = useCallback(
-    (nextRecords: ViewRecord[], nextDismissed: Record<string, string>, selectedId: string | null, phase: 'ready' | 'failed') => {
+    (nextRecords: ViewRecord[], nextDismissed: Record<string, string>, selectedId: string | null, phase: 'loading' | 'ready' | 'failed') => {
       const open = openViews(nextRecords, nextDismissed)
       const active = open.find((record) => record.viewId === selectedId) ?? open[0]
       instance.update({
@@ -43,20 +46,24 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
   )
 
   const load = useCallback(async () => {
+    const request = ++requestId.current
     try {
       const next = (await context.call('quirky.view/list', { session })) as ViewRecord[]
-      if (alive.current) {
-        phase.current = 'ready'
-        recordsRef.current = next
-        setRecords(next)
-        publish(next, dismissedRef.current, activeIdRef.current, phase.current)
-      }
+      if (!alive.current || request !== requestId.current) return
+      phase.current = 'ready'
+      recordsRef.current = next
+      setRecords(next)
+      setLoaded(true)
+      setFailure(null)
+      publish(next, dismissedRef.current, activeIdRef.current, phase.current)
     } catch (error) {
-      if (alive.current) {
+      if (alive.current && request === requestId.current) {
         phase.current = 'failed'
+        setLoaded(true)
+        setFailure(errorText(error))
         instance.update({ phase: phase.current })
       }
-      context.log(`could not load the views of session ${session}: ${errorText(error)}`)
+      throw error
     }
   }, [context, instance, publish, session])
 
@@ -86,16 +93,27 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
 
   useEffect(() => {
     alive.current = true
+    recordsRef.current = []
+    activeIdRef.current = null
+    dismissedRef.current = {}
+    phase.current = 'loading'
+    setRecords([])
+    setActiveId(null)
+    setDismissed({})
+    setLoaded(false)
+    setFailure(null)
+    instance.update({ phase: 'loading', activeViewId: null, tabs: [], pendingLink: null })
     instance.setHandlers({ refresh: load, selectTab, dismissTab })
-    void load()
+    void load().catch(() => {})
     const unsubscribeEvents = context.subscribe((event: QuirkyEvent) => {
-      if (eventData(event, 'quirky.view/changed')?.sessionId === session) void load()
+      if (eventData(event, 'quirky.view/changed')?.sessionId === session) void load().catch(() => {})
     })
     const unsubscribeConnection = context.onConnection((status) => {
-      if (status === 'connected') void load()
+      if (status === 'connected') void load().catch(() => {})
     })
     return () => {
       alive.current = false
+      ++requestId.current
       instance.clearHandlers('refresh', 'selectTab', 'dismissTab')
       unsubscribeEvents()
       unsubscribeConnection()
@@ -105,7 +123,9 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
   const open = openViews(records, dismissed)
   const active = open.find((record) => record.viewId === activeId) ?? open[0]
   const agent = useAgent(context, active?.sessionId)
-  if (!active) return null
+  const retry = () => {
+    void runViewUiCommand(context, CONTROL_COMMAND_ID, { instance: instance.id, action: 'refresh' }).catch(() => {})
+  }
 
   const runControl = (action: 'select-tab' | 'dismiss-tab', viewId: string): void => {
     void runViewUiCommand(context, CONTROL_COMMAND_ID, { instance: instance.id, action, viewId }).catch((error: unknown) => {
@@ -116,14 +136,17 @@ export function ViewsPane({ context, session, instance }: { context: UiPluginCon
   return (
     <ToolPanelFrame
       title="Views"
-      tabs={<Tabs label="Views" items={open.map((record) => ({ id: record.viewId, label: record.title }))} value={active.viewId} onChange={(viewId) => runControl('select-tab', viewId)} />}
-      actions={
+      tabs={active && <Tabs label="Views" items={open.map((record) => ({ id: record.viewId, label: record.title }))} value={active.viewId} onChange={(viewId) => runControl('select-tab', viewId)} />}
+      actions={active && (
         <IconButton label={`Close ${active.title}`} onClick={() => runControl('dismiss-tab', active.viewId)}>
           <ControlIcon name="x" />
         </IconButton>
-      }
+      )}
     >
-      <ViewCard key={active.viewId} context={context} instance={instance} record={active} agent={agent} framed={false} inPane />
+      {!loaded && <NoticeLine>Loading views…</NoticeLine>}
+      {failure !== null && <InlineError message={`Could not load views: ${failure}`} action={{ label: 'Retry', onAction: retry }} />}
+      {loaded && failure === null && !active && <EmptyState message="No views in the pane." />}
+      {active && <ViewCard key={active.viewId} context={context} instance={instance} record={active} agent={agent} framed={false} inPane />}
     </ToolPanelFrame>
   )
 }

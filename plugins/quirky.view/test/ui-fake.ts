@@ -30,6 +30,7 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
   const reports: unknown[] = []
   const provided = new Map<string, ProvidedImplementation>()
   const listeners = new Set<(event: QuirkyEvent) => void>()
+  const connectionListeners = new Set<(status: 'connected' | 'reconnecting') => void>()
   const toasts: { title: string; body: string }[] = []
 
   const context = {
@@ -54,7 +55,10 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    onConnection: () => () => {},
+    onConnection(listener: (status: 'connected' | 'reconnecting') => void) {
+      connectionListeners.add(listener)
+      return () => connectionListeners.delete(listener)
+    },
     toast(title: string, body: string) {
       toasts.push({ title, body })
     }
@@ -78,7 +82,9 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
       })
       return result
     },
-    emit: (event: { type: string; data?: unknown }) => act(async () => void listeners.forEach((listener) => listener(event as unknown as QuirkyEvent)))
+    emit: (event: { type: string; data?: unknown }) => act(async () => void listeners.forEach((listener) => listener(event as unknown as QuirkyEvent))),
+    emitConnection: (status: 'connected' | 'reconnecting') =>
+      act(async () => void connectionListeners.forEach((listener) => listener(status)))
   }
 }
 

@@ -1,25 +1,56 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
-import { act } from 'react'
+import { act, createElement, type ReactNode } from 'react'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
-import type { UiPluginContext } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type UiPluginContext } from '@quirky/protocol'
 import bundleSize from './fixtures/bundle-size.json'
 import { CATALOG_TYPES, COMPONENTS, type ViewSpec } from '../src/core/catalog'
 import { fakeContext, mountView, record, settle, type FakeContext } from './ui-fake'
+import { createViewUiController } from '../src/control'
+import type { createRoot as CreateRoot } from 'react-dom/client'
+import type { ViewsPane as ViewsPaneComponent } from '../src/Pane'
+import type { ViewCardView as ViewCardViewComponent } from '../src/render/ViewCard'
 
 const RENDER = 'view:quirky.view/render'
 const PANE = 'view:quirky.view/pane'
 
 let activate: (context: UiPluginContext) => void
+let createRoot: typeof CreateRoot
+let ViewsPane: typeof ViewsPaneComponent
+let ViewCardView: typeof ViewCardViewComponent
 const MOVE = 'command:quirky.view/move'
 const ACTION = 'command:quirky.view/action'
 const CONTROL = 'command:quirky.view/control'
 
 const mounted: Awaited<ReturnType<typeof mountView>>[] = []
+async function mountDirect(node: ReactNode) {
+  const element = document.createElement('div')
+  document.body.appendChild(element)
+  const root = createRoot(element)
+  await act(async () => root.render(node))
+  await settle()
+  const view = {
+    element,
+    click: (target: Element) => act(async () => void target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))),
+    unmount: () => act(async () => void root.unmount())
+  }
+  mounted.push(view)
+  return {
+    ...view,
+    render: async (next: ReactNode) => {
+      await act(async () => root.render(next))
+      await settle()
+    }
+  }
+}
 
 beforeAll(async () => {
   GlobalRegistrator.register()
   ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+  // react-dom must detect the registered DOM before initializing its input events
   activate = ((await import('../src/ui')) as { activate: typeof activate }).activate
+  createRoot = (await import('react-dom/client')).createRoot
+  ViewsPane = (await import('../src/Pane')).ViewsPane
+  ViewCardView = (await import('../src/render/ViewCard')).ViewCardView
 })
 
 afterAll(async () => {
@@ -522,7 +553,8 @@ describe('the views pane', () => {
   test('renders nothing when the session has no pane views', async () => {
     const fake = start([record(markdownSpec('inline body'), { viewId: 'view_3', placement: 'inline' }), paneView('view_4', 'Gone', { closed: true })])
     const { element } = await mountPane(fake)
-    expect(element.innerHTML).toBe('')
+    expect(element.querySelectorAll('[data-ui-tool-panel-frame]')).toHaveLength(1)
+    expect(text(element.querySelector('.ui-empty-state__message')!)).toBe('No views in the pane.')
   })
 
   test('Move inline in the pane moves that view and the pane follows the change', async () => {
@@ -537,7 +569,8 @@ describe('the views pane', () => {
     records[0] = { ...records[0], placement: 'inline', movedByUser: true }
     await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
     await settle()
-    expect(element.innerHTML).toBe('')
+    expect(element.querySelectorAll('[data-ui-tool-panel-frame]')).toHaveLength(1)
+    expect(text(element.querySelector('.ui-empty-state__message')!)).toBe('No views in the pane.')
   })
 
   test('a new pane view appears when the agent opens one', async () => {
@@ -691,5 +724,425 @@ describe('scriptable view commands', () => {
       { title: 'Could not open link', body: 'open denied' }
     ])
     expect(fake.callsTo('quirky.terminal/openExternal').map((call) => call.params)).toEqual([{ target: 'https://example.test/docs' }])
+  })
+})
+describe('visible view read states', () => {
+  const paneRecord = (viewId: string, title: string, sessionId = 's1', over: Partial<ReturnType<typeof record>> = {}) =>
+    record(markdownSpec(`${title} body`), { viewId, title, sessionId, placement: 'pane', ...over })
+
+  const mountPane = async (fake: FakeContext, session = 's1') => {
+    const view = await mountView(fake, PANE, { session })
+    mounted.push(view)
+    return view
+  }
+
+  const expectPaneFrame = (element: Element) => {
+    const frames = element.querySelectorAll('[data-ui-tool-panel-frame]')
+    expect(frames).toHaveLength(1)
+    expect(frames[0]?.querySelector('h2')?.textContent).toBe('Views')
+  }
+
+  test('a valid render mount announces its pending get and replaces the notice with content', async () => {
+    const pending = Promise.withResolvers<ReturnType<typeof record> | null>()
+    const fake = start([], { 'quirky.view/get': () => pending.promise })
+    const { element } = await mountCard(fake)
+
+    expect(text(element.querySelector('.ui-notice-line')!)).toBe('Loading view…')
+    expect(element.querySelector('.ui-empty-state')).toBeNull()
+    expect(element.querySelector('.ui-inline-error')).toBeNull()
+
+    await act(async () => pending.resolve(record(markdownSpec('ready body'))))
+    await settle()
+
+    expect(element.querySelector('.ui-notice-line')).toBeNull()
+    expect(text(element)).toContain('ready body')
+  })
+
+  test('a pane keeps one Views frame through pending, empty, failed, and recovered list states', async () => {
+    const pending = Promise.withResolvers<ReturnType<typeof record>[]>()
+    let reads = 0
+    const fake = start([], {
+      'quirky.view/list': () => {
+        reads += 1
+        if (reads === 1) return pending.promise
+        if (reads === 2) throw new Error('offline')
+        return [paneRecord('view_1', 'Ready')]
+      }
+    })
+    const { element, click } = await mountPane(fake)
+
+    expectPaneFrame(element)
+    expect(text(element.querySelector('.ui-notice-line')!)).toBe('Loading views…')
+
+    await act(async () => pending.resolve([]))
+    await settle()
+    expectPaneFrame(element)
+    expect(text(element.querySelector('.ui-empty-state__message')!)).toBe('No views in the pane.')
+
+    await fake.emitConnection('connected')
+    await settle()
+    expectPaneFrame(element)
+    expect(element.querySelector('.ui-inline-error__message')?.textContent).toBe('Could not load views: offline')
+    expect(buttonLabelled(element, 'Retry')).toBeTruthy()
+
+    const instance = await instanceFor(fake, PANE)
+    await click(buttonLabelled(element, 'Retry'))
+    await settle()
+    expect(routedArgs(fake, CONTROL)).toContainEqual({ instance, action: 'refresh' })
+    expect(fake.callsTo('quirky.view/list')).toHaveLength(3)
+    expectPaneFrame(element)
+    expect(element.querySelector('.ui-inline-error')).toBeNull()
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Ready'])
+    expect(text(element)).toContain('Ready body')
+  })
+
+  test('a failed get shows its exact alert and Retry refreshes through the control command', async () => {
+    let reads = 0
+    const fake = start([], {
+      'quirky.view/get': () => {
+        reads += 1
+        if (reads === 1) throw new Error('offline')
+        return record(markdownSpec('recovered body'))
+      }
+    })
+    const { element, click } = await mountCard(fake)
+
+    expect(element.querySelector('.ui-inline-error__message')?.textContent).toBe('Could not load view: offline')
+    expect(buttonLabelled(element, 'Retry')).toBeTruthy()
+    const instance = await instanceFor(fake, RENDER)
+    await click(buttonLabelled(element, 'Retry'))
+    await settle()
+
+    expect(fake.callsTo('quirky.view/get')).toHaveLength(2)
+    expect(routedArgs(fake, CONTROL)).toContainEqual({ instance, action: 'refresh' })
+    expect(element.querySelector('.ui-inline-error')).toBeNull()
+    expect(text(element)).toContain('recovered body')
+  })
+
+  test('a failed refresh retains the last good card and an optional agent lookup failure only removes its badge', async () => {
+    let reads = 0
+    const lastGood = record(markdownSpec('last good content'), { title: 'Last good' })
+    const fake = start([], {
+      'quirky.view/get': () => {
+        reads += 1
+        if (reads === 1) return lastGood
+        throw new Error('offline')
+      },
+      'quirky.session/get': () => { throw new Error('agent lookup offline') }
+    })
+    const { element } = await mountCard(fake)
+
+    expect(text(element)).toContain('last good content')
+    expect(text(element)).not.toContain('by omp')
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+
+    expect(element.querySelector('[data-view-card="view_1"]')).not.toBeNull()
+    expect(text(element)).toContain('last good content')
+    expect(element.querySelector('.ui-inline-error__message')?.textContent).toBe('Could not load view: offline')
+  })
+
+  test('NotFound, null, and undefined get results replace stale content with the unavailable empty state', async () => {
+    for (const outcome of ['NotFound', 'null', 'undefined'] as const) {
+      let missing = false
+      const fake = start([], {
+        'quirky.view/get': () => {
+          if (!missing) return record(markdownSpec(`${outcome} old content`))
+          if (outcome === 'NotFound') throw new RpcError(RpcErrorCode.NotFound, 'view disappeared')
+          return outcome === 'null' ? null : undefined
+        }
+      })
+      const { element } = await mountCard(fake)
+      missing = true
+      await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+      await settle()
+
+      expect(text(element.querySelector('.ui-empty-state__message')!)).toBe('This view is no longer available.')
+      expect(element.querySelector('[data-view-card="view_1"]')).toBeNull()
+      expect(text(element)).not.toContain(`${outcome} old content`)
+    }
+  })
+
+  test('closing the final pane tab shows the pane empty state, makes no close RPC, and a later update restores it', async () => {
+    const records = [paneRecord('view_1', 'Notes')]
+    const fake = start(records)
+    const { element, click } = await mountPane(fake)
+
+    await click(element.querySelector('button[aria-label="Close Notes"]')!)
+    expectPaneFrame(element)
+    expect(text(element.querySelector('.ui-empty-state__message')!)).toBe('No views in the pane.')
+    expect([...element.querySelectorAll('[role="tab"]')]).toHaveLength(0)
+    expect(fake.callsTo('quirky.view/close')).toHaveLength(0)
+
+    records[0] = { ...records[0]!, updatedAt: '2026-11-16T11:00:00.000Z' }
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Notes'])
+  })
+
+  test('closed and pane-placed transcript records use shared NoticeLine markup on status wrappers', async () => {
+    const closedFake = start([record(markdownSpec('must not appear'), { closed: true })])
+    const closed = await mountCard(closedFake)
+    const closedWrapper = closed.element.querySelector('[data-view-record="view_1"][role="status"]')!
+    const closedNotice = closedWrapper.querySelector('.ui-notice-line')!
+    expect(closedWrapper).not.toBe(closedNotice)
+    expect(closedNotice.tagName).toBe('P')
+    expect(closedNotice.querySelector('p')).toBeNull()
+    expect(closedNotice.getAttribute('role')).toBeNull()
+    expect(closedNotice.getAttribute('data-view-record')).toBeNull()
+    expect(text(closedNotice.querySelector('.ui-notice-line__text')!)).toBe('Notes closed')
+    expect(closedNotice.querySelector('.ui-notice-line__text button')).toBeNull()
+    expect(closedWrapper.querySelector('[data-view-node]')).toBeNull()
+    expect(text(closed.element)).not.toContain('must not appear')
+
+    const paneFake = start([record(markdownSpec('pane only content'), { placement: 'pane' })])
+    const pane = await mountCard(paneFake)
+    const paneWrapper = pane.element.querySelector('[data-view-record="view_1"][role="status"]')!
+    const paneNotice = paneWrapper.querySelector('.ui-notice-line')!
+    expect(paneWrapper).not.toBe(paneNotice)
+    expect(paneWrapper.getAttribute('role')).toBe('status')
+    expect(text(paneNotice.querySelector('.ui-notice-line__text')!)).toBe('Notes is in the Views pane')
+    expect(paneNotice.querySelector('p')).toBeNull()
+    expect(paneNotice.querySelector('.ui-notice-line__text button')).toBeNull()
+    expect(buttonLabelled(paneWrapper, 'Move inline')).toBeTruthy()
+    expect(paneWrapper.querySelector('[data-view-node]')).toBeNull()
+    await pane.click(buttonLabelled(paneWrapper, 'Move inline'))
+    expect(paneFake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'inline' }])
+  })
+
+  test('invalid render and pane inputs mount nothing and initiate no read', async () => {
+    const fake = start([])
+    const render = await mountView(fake, RENDER, {})
+    const pane = await mountView(fake, PANE, {})
+    mounted.push(render, pane)
+
+    expect(render.element.innerHTML).toBe('')
+    expect(pane.element.innerHTML).toBe('')
+    expect(fake.callsTo('quirky.view/get')).toHaveLength(0)
+    expect(fake.callsTo('quirky.view/list')).toHaveLength(0)
+  })
+
+  test('a later get success wins over an earlier success for the same mounted target', async () => {
+    const first = Promise.withResolvers<ReturnType<typeof record> | null>()
+    const second = Promise.withResolvers<ReturnType<typeof record> | null>()
+    let reads = 0
+    const fake = start([], { 'quirky.view/get': () => [first.promise, second.promise][reads++]! })
+    const { element } = await mountCard(fake)
+
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    await act(async () => second.resolve(record(markdownSpec('new body'), { title: 'New' })))
+    await settle()
+    await act(async () => first.resolve(record(markdownSpec('old body'), { title: 'Old' })))
+    await settle()
+
+    expect(text(element)).toContain('new body')
+    expect(text(element)).not.toContain('old body')
+  })
+
+  test('an obsolete get rejection cannot replace newer content with an alert', async () => {
+    const first = Promise.withResolvers<ReturnType<typeof record> | null>()
+    const second = Promise.withResolvers<ReturnType<typeof record> | null>()
+    let reads = 0
+    const fake = start([], { 'quirky.view/get': () => [first.promise, second.promise][reads++]! })
+    const { element } = await mountCard(fake)
+
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    await act(async () => second.resolve(record(markdownSpec('new body'), { title: 'New' })))
+    await settle()
+    await act(async () => first.reject(new Error('obsolete offline')))
+    await settle()
+
+    expect(text(element)).toContain('new body')
+    expect(element.querySelector('.ui-inline-error')).toBeNull()
+  })
+
+  test('a later list success wins over an earlier success for the same pane target', async () => {
+    const first = Promise.withResolvers<ReturnType<typeof record>[]>()
+    const second = Promise.withResolvers<ReturnType<typeof record>[]>()
+    let reads = 0
+    const fake = start([], { 'quirky.view/list': () => [first.promise, second.promise][reads++]! })
+    const { element } = await mountPane(fake)
+
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_any' } })
+    await settle()
+    await act(async () => second.resolve([paneRecord('view_new', 'New')]))
+    await settle()
+    await act(async () => first.resolve([paneRecord('view_old', 'Old')]))
+    await settle()
+
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['New'])
+    expect(text(element)).toContain('New body')
+    expect(text(element)).not.toContain('Old body')
+  })
+
+  test('an obsolete list rejection cannot replace newer pane content with an alert', async () => {
+    const first = Promise.withResolvers<ReturnType<typeof record>[]>()
+    const second = Promise.withResolvers<ReturnType<typeof record>[]>()
+    let reads = 0
+    const fake = start([], { 'quirky.view/list': () => [first.promise, second.promise][reads++]! })
+    const { element } = await mountPane(fake)
+
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_any' } })
+    await settle()
+    await act(async () => second.resolve([paneRecord('view_new', 'New')]))
+    await settle()
+    await act(async () => first.reject(new Error('obsolete offline')))
+    await settle()
+
+    expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['New'])
+    expect(text(element)).toContain('New body')
+    expect(element.querySelector('.ui-inline-error')).toBeNull()
+  })
+
+  test('an unmounted render request and connection listener cannot revive after remount', async () => {
+    const obsolete = Promise.withResolvers<ReturnType<typeof record> | null>()
+    const current = Promise.withResolvers<ReturnType<typeof record> | null>()
+    let reads = 0
+    const fake = start([], {
+      'quirky.view/get': () => [obsolete.promise, current.promise][reads++]!
+    })
+    const oldMount = await mountCard(fake)
+    await oldMount.unmount()
+    mounted.splice(mounted.indexOf(oldMount), 1)
+
+    await fake.emitConnection('connected')
+    expect(fake.callsTo('quirky.view/get')).toHaveLength(1)
+    const newMount = await mountCard(fake)
+    await act(async () => current.resolve(record(markdownSpec('remounted content'))))
+    await settle()
+    await act(async () => obsolete.resolve(record(markdownSpec('obsolete content'))))
+    await settle()
+
+    expect(text(newMount.element)).toContain('remounted content')
+    expect(text(newMount.element)).not.toContain('obsolete content')
+  })
+
+  test('an unmounted pane list and connection listener cannot revive after remount', async () => {
+    const obsolete = Promise.withResolvers<ReturnType<typeof record>[]>()
+    const current = Promise.withResolvers<ReturnType<typeof record>[]>()
+    let reads = 0
+    const fake = start([], {
+      'quirky.view/list': () => [obsolete.promise, current.promise][reads++]!
+    })
+    const oldMount = await mountPane(fake)
+    await oldMount.unmount()
+    mounted.splice(mounted.indexOf(oldMount), 1)
+
+    await fake.emitConnection('connected')
+    expect(fake.callsTo('quirky.view/list')).toHaveLength(1)
+    const newMount = await mountPane(fake)
+    await act(async () => current.resolve([paneRecord('view_new', 'Remounted')]))
+    await settle()
+    await act(async () => obsolete.resolve([paneRecord('view_old', 'Obsolete')]))
+    await settle()
+
+    expect([...newMount.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Remounted'])
+    expect(text(newMount.element)).toContain('Remounted body')
+    expect(text(newMount.element)).not.toContain('Obsolete body')
+  })
+
+  test('changing the render target clears its pending card/link and invalidates the old target read', async () => {
+    const obsolete = Promise.withResolvers<ReturnType<typeof record> | null>()
+    const next = Promise.withResolvers<ReturnType<typeof record> | null>()
+    let firstTargetReads = 0
+    const fake = fakeContext({
+      'quirky.view/get': ({ viewId }) => {
+        if (viewId === 'view_1') {
+          firstTargetReads += 1
+          return firstTargetReads === 1
+            ? record(markdownSpec('[docs](https://example.test/docs)'), { title: 'Notes' })
+            : obsolete.promise
+        }
+        return next.promise
+      },
+      'quirky.session/get': () => ({ id: 's1', agent: 'omp' }),
+      'quirky.terminal/openExternal': () => ({ ok: true })
+    })
+    const controller = createViewUiController(fake.context)
+    const oldInstance = controller.mount({ surface: RENDER, viewId: 'view_1' })
+    const view = await mountDirect(createElement(ViewCardView, { context: fake.context, instance: oldInstance, viewId: 'view_1' }))
+
+    await view.click(view.element.querySelector('a')!)
+    await settle()
+    expect(view.element.querySelector('[role="dialog"]')).not.toBeNull()
+    expect((await fake.runCommand(CONTROL, { action: 'state' }) as { instances: { pendingLink: string | null }[] }).instances[0]?.pendingLink).toBe('https://example.test/docs')
+
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    const nextInstance = controller.mount({ surface: RENDER, viewId: 'view_2' })
+    await view.render(createElement(ViewCardView, { context: fake.context, instance: nextInstance, viewId: 'view_2' }))
+    oldInstance.dispose()
+
+    expect(view.element.querySelector('[data-view-card="view_1"]')).toBeNull()
+    expect(view.element.querySelector('.ui-notice-line')?.textContent).toBe('Loading view…')
+    expect(view.element.querySelector('[role="dialog"]')).toBeNull()
+    expect((await fake.runCommand(CONTROL, { action: 'state' }) as { instances: { pendingLink: string | null }[] }).instances[0]?.pendingLink).toBeNull()
+
+    await act(async () => next.resolve(record(markdownSpec('new target content'), { viewId: 'view_2', title: 'New target' })))
+    await settle()
+    await act(async () => obsolete.resolve(record(markdownSpec('obsolete old target content'), { viewId: 'view_1', title: 'Old target' })))
+    await settle()
+
+    expect(text(view.element)).toContain('new target content')
+    expect(text(view.element)).not.toContain('obsolete old target content')
+    const reads = fake.callsTo('quirky.view/get').length
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    expect(fake.callsTo('quirky.view/get')).toHaveLength(reads)
+  })
+
+  test('changing the pane target resets tabs, selection, and dismissals and invalidates its old list read', async () => {
+    const obsolete = Promise.withResolvers<ReturnType<typeof record>[]>()
+    const next = Promise.withResolvers<ReturnType<typeof record>[]>()
+    let firstSessionReads = 0
+    const oldRecords = [paneRecord('view_1', 'Notes', 's1'), paneRecord('view_2', 'Module map', 's1')]
+    const nextRecords = [paneRecord('view_1', 'Notes in s2', 's2'), paneRecord('view_2', 'Map in s2', 's2')]
+    const fake = fakeContext({
+      'quirky.view/list': ({ session }) => {
+        if (session === 's1') {
+          firstSessionReads += 1
+          return firstSessionReads === 1 ? oldRecords : obsolete.promise
+        }
+        return next.promise
+      },
+      'quirky.session/get': () => ({ id: 's1', agent: 'omp' })
+    })
+    const controller = createViewUiController(fake.context)
+    const oldInstance = controller.mount({ surface: PANE, session: 's1' })
+    const view = await mountDirect(createElement(ViewsPane, { context: fake.context, instance: oldInstance, session: 's1' }))
+
+    await view.click(view.element.querySelector('button[aria-label="Close Notes"]')!)
+    expect([...view.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Module map'])
+    await view.click(view.element.querySelector('[role="tab"]')!)
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_2' } })
+    await settle()
+
+    const nextInstance = controller.mount({ surface: PANE, session: 's2' })
+    await view.render(createElement(ViewsPane, { context: fake.context, instance: nextInstance, session: 's2' }))
+    oldInstance.dispose()
+
+    expectPaneFrame(view.element)
+    expect(view.element.querySelectorAll('[role="tab"]')).toHaveLength(0)
+    expect(text(view.element.querySelector('.ui-notice-line')!)).toBe('Loading views…')
+    expect(text(view.element)).not.toContain('Notes body')
+    expect(text(view.element)).not.toContain('Module map body')
+
+    await act(async () => next.resolve(nextRecords))
+    await settle()
+    expect([...view.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Notes in s2', 'Map in s2'])
+    expect(text(view.element)).toContain('Notes in s2 body')
+    expect(text(view.element)).not.toContain('Map in s2 body')
+
+    await act(async () => obsolete.resolve(oldRecords))
+    await settle()
+    expect([...view.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Notes in s2', 'Map in s2'])
+    expect(text(view.element)).toContain('Notes in s2 body')
+    expect(text(view.element)).not.toContain('Notes body')
+    const reads = fake.callsTo('quirky.view/list').length
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    expect(fake.callsTo('quirky.view/list')).toHaveLength(reads)
   })
 })
