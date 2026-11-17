@@ -741,15 +741,18 @@ describe('the agent picker', () => {
   })
 
   test('the composer picks reach the create call', async () => {
-    await mountPicker({}, { picks: { model: 'opus', effort: 'high', mode: null, plan: true } })
+    await mountPicker({}, { picks: { model: 'opus', effort: 'high', mode: 'yolo', plan: true } })
     await click(card('omp'))
     await settle()
+    // the permission and plan picks are structured create params, not catalog launch options
     expect(fake.callsTo('quirky.structured/create')[0]!.params).toEqual({
       agent: 'omp',
       worktree: 'wt-main',
       deferStart: true,
       model: 'opus',
-      options: { effort: 'high', plan: true }
+      options: { effort: 'high' },
+      permissionMode: 'yolo',
+      planMode: true
     })
   })
 

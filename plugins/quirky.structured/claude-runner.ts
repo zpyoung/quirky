@@ -1,4 +1,4 @@
-import type { CanUseTool, Options, PermissionMode, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { CanUseTool, ModelInfo, Options, PermissionMode, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { extname } from 'node:path'
@@ -29,6 +29,7 @@ export type ClaudeQuery = AsyncIterable<any> & {
   setPermissionMode(mode: PermissionMode): Promise<void>
   setModel(model?: string): Promise<void>
   applyFlagSettings(settings: { effortLevel?: Options['effort'] | null }): Promise<void>
+  supportedModels?(): Promise<ModelInfo[]>
 }
 
 export type ClaudeRunnerDeps = {
@@ -215,6 +216,8 @@ class ClaudeRunner implements StructuredRunner {
       input.push(first)
     }
     this.context.setStatus(session.id, hasPrompt ? 'working' : 'running')
+    const permissionMode = launchOptions.permissionMode ?? 'default'
+    const planMode = launchOptions.planMode === true
     const run: Running = {
       input,
       providerSessionId,
@@ -227,8 +230,8 @@ class ClaudeRunner implements StructuredRunner {
       turnStartedAt: hasPrompt ? Date.now() : null,
       openTurns: hasPrompt ? 1 : 0,
       settings: {
-        permissionMode: 'default',
-        planMode: false,
+        permissionMode,
+        planMode,
         ...(typeof launchOptions.model === 'string' ? { model: launchOptions.model } : {}),
         ...(typeof launchOptions.effort === 'string' ? { effort: launchOptions.effort } : {})
       },
@@ -238,7 +241,9 @@ class ClaudeRunner implements StructuredRunner {
           cwd: session.cwd,
           pathToClaudeCodeExecutable,
           ...(launchOptions.providerSession === undefined ? {} : { resume: launchOptions.providerSession.id }),
-          permissionMode: 'default',
+          permissionMode: (planMode ? 'plan' : permissionMode) as PermissionMode,
+          // lets the user switch into bypass permissions mid-session; the mode itself stays as picked
+          allowDangerouslySkipPermissions: true,
           includePartialMessages: true,
           canUseTool: this.canUseTool(session.id),
           ...(launchOptions.env !== undefined ? { env: environmentOf(launchOptions.env) } : {}),
@@ -299,11 +304,25 @@ class ClaudeRunner implements StructuredRunner {
     if (settings.permissionMode !== undefined || settings.planMode !== undefined) {
       const permissionMode = settings.permissionMode ?? current.permissionMode
       const planMode = settings.planMode ?? current.planMode
+      if (!planMode && permissionMode === 'auto' && current.permissionMode !== 'auto') await this.requireAutoModeModel(run)
       await run.query.setPermissionMode((planMode ? 'plan' : permissionMode) as PermissionMode)
       current.permissionMode = permissionMode
       current.planMode = planMode
     }
     return { ...current }
+  }
+
+  /** Refuses auto mode when Claude reports that the session's model cannot use it; an unknown answer lets Claude decide. */
+  private async requireAutoModeModel(run: Running): Promise<void> {
+    let models: ModelInfo[]
+    try {
+      models = (await run.query.supportedModels?.()) ?? []
+    } catch {
+      return
+    }
+    const model = run.settings.model ?? 'default'
+    const found = models.find((entry) => entry.value === model || entry.resolvedModel === model)
+    if (found?.supportsAutoMode === false) throw new Error(`${found.displayName || model} does not support auto mode`)
   }
 
   async interrupt(sessionId: string): Promise<void> {

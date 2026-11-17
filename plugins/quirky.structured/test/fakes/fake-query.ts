@@ -1,3 +1,4 @@
+import type { ModelInfo } from '@anthropic-ai/claude-agent-sdk'
 import type { ClaudeQuery, ClaudeQueryParams } from '../../claude-runner'
 
 /** A scripted stand-in for the Agent SDK's `Query`: tests push messages and read what the runner wrote. */
@@ -46,10 +47,20 @@ export class FakeQuery implements ClaudeQuery {
   }
 
   permissionModeDelayMs: (mode: string) => number = () => 0
+  /** A mode `setPermissionMode` rejects, like the CLI refusing one the account or settings disallow. */
+  refusedPermissionMode: { mode: string; message: string } | null = null
+  /** What `supportedModels` reports; null leaves the method off, like an older SDK. */
+  modelList: ModelInfo[] | null = null
 
   async setPermissionMode(mode: string) {
     await new Promise((resolve) => setTimeout(resolve, this.permissionModeDelayMs(mode)))
+    if (this.refusedPermissionMode?.mode === mode) throw new Error(this.refusedPermissionMode.message)
     this.permissionModes.push(mode)
+  }
+
+  get supportedModels(): (() => Promise<ModelInfo[]>) | undefined {
+    const list = this.modelList
+    return list === null ? undefined : async () => list
   }
 
   async setModel(model?: string) {

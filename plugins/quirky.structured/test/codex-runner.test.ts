@@ -275,11 +275,49 @@ describe('Codex app-server runner', () => {
     await setup.runner.start(setup.session, 'first', { model: 'gpt-5.5', effort: 'low' })
     await until(() => setup.statuses.includes('done'))
     const result = await setup.runner.configure!(setup.session.id, { model: 'gpt-5.6', effort: 'high' })
-    expect(result).toEqual({ model: 'gpt-5.6', effort: 'high' })
+    expect(result).toEqual({ model: 'gpt-5.6', effort: 'high', permissionMode: 'default' })
     await setup.runner.send(setup.session.id, 'second')
     await until(() => setup.fixture.requests().filter((request) => request.method === 'turn/start').length === 2)
     const second = setup.fixture.requests().filter((request) => request.method === 'turn/start')[1]!
     expect(second.params).toMatchObject({ model: 'gpt-5.6', effort: 'high' })
+  })
+
+  test('the opening permission mode sets the thread approval policy, sandbox and reviewer', async () => {
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'full-access' })
+    const threadStart = setup.fixture.requests().find((request) => request.method === 'thread/start')
+    expect(threadStart?.params).toMatchObject({ approvalPolicy: 'never', sandbox: 'danger-full-access' })
+    expect(threadStart?.params).not.toHaveProperty('approvalsReviewer')
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'full-access' })
+  })
+
+  test('a permission mode picked mid-session goes out once, with the next turn/start', async () => {
+    await setup.runner.start(setup.session, 'first')
+    await until(() => setup.statuses.includes('done'))
+    expect(await setup.runner.configure!(setup.session.id, { permissionMode: 'read-only' })).toEqual({ permissionMode: 'read-only' })
+    await setup.runner.send(setup.session.id, 'second')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: second'))
+    await setup.runner.configure!(setup.session.id, { permissionMode: 'auto-review' })
+    await setup.runner.send(setup.session.id, 'third')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: third'))
+    await setup.runner.send(setup.session.id, 'fourth')
+    await until(() => setup.messages.some((message) => message.role === 'assistant' && message.text === 'Codex: fourth'))
+    const turns = setup.fixture.requests().filter((request) => request.method === 'turn/start').map((request) => request.params as Record<string, unknown>)
+    expect(turns[0]).not.toHaveProperty('approvalPolicy')
+    expect(turns[1]).toMatchObject({ approvalPolicy: 'on-request', sandboxPolicy: { type: 'readOnly' }, approvalsReviewer: 'user' })
+    expect(turns[2]).toMatchObject({ approvalPolicy: 'on-request', sandboxPolicy: { type: 'workspaceWrite' }, approvalsReviewer: 'auto_review' })
+    // app-server keeps turn overrides for later turns, so an unchanged mode sends none
+    expect(turns[3]).not.toHaveProperty('approvalPolicy')
+  })
+
+  test('opening in auto-review asks app-server for the auto reviewer', async () => {
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'auto-review' })
+    const threadStart = setup.fixture.requests().find((request) => request.method === 'thread/start')
+    expect(threadStart?.params).toMatchObject({ approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'auto_review' })
+  })
+
+  test('a permission mode Codex does not offer is refused', async () => {
+    await setup.runner.start(setup.session, undefined)
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow('Codex has no permission mode yolo')
   })
 
   test('starts a native thread without an initial turn until the caller is attached', async () => {

@@ -6,16 +6,13 @@ import type { Picks } from './controls'
  * applying whichever of the composer `picks` are set. Shared by every surface that starts a chat.
  */
 export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {
-  const options = {
-    ...(picks.effort === null ? {} : { effort: picks.effort }),
-    ...(picks.mode === null ? {} : { mode: picks.mode }),
-    ...(picks.plan ? { plan: true } : {})
-  }
   return (await context.call('quirky.structured/create', {
     agent,
     worktree,
     deferStart: true,
     ...(picks.model === null ? {} : { model: picks.model }),
-    ...(Object.keys(options).length === 0 ? {} : { options })
+    ...(picks.effort === null ? {} : { options: { effort: picks.effort } }),
+    ...(picks.mode === null ? {} : { permissionMode: picks.mode }),
+    ...(picks.plan ? { planMode: true } : {})
   })) as Session
 }

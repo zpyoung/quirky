@@ -17,7 +17,7 @@ import type {
 } from '@quirky/protocol'
 import { QuirkyClient, RpcError, RpcErrorCode, type AskRegistration } from '@quirky/protocol'
 import { connectDaemon } from '@quirky/protocol/node'
-import { capabilitiesFor } from './capabilities'
+import { capabilitiesFor, startingPermissionMode } from './capabilities'
 import { resolveClaudeThroughLoginShell } from './claude-path'
 import { createClaudeRunner } from './claude-runner'
 import { resolveCodexThroughLoginShell } from './codex-path'
@@ -888,6 +888,24 @@ export function activate(context: PluginContext): void {
     await Promise.all(stops)
   }
 
+  /**
+   * The permission mode and plan mode a session opens in: the caller's pick, else the chat mode that
+   * matches the agent's terminal permission preset, so chats and terminals of one agent agree.
+   */
+  const openingModes = async (agent: StructuredAgent, picked: string | undefined, planMode: boolean): Promise<Pick<StructuredStartOptions, 'permissionMode' | 'planMode'>> => {
+    let terminal: string | null = null
+    if (picked === undefined) {
+      try {
+        const info = (await context.call('quirky.agents/get', { agent })) as { permissions?: { mode?: unknown } } | undefined
+        terminal = typeof info?.permissions?.mode === 'string' ? info.permissions.mode : null
+      } catch {
+        // without the agents plugin a chat opens in the agent's default mode
+      }
+    }
+    const permissionMode = startingPermissionMode(agent, picked, terminal)
+    return { ...(permissionMode === undefined ? {} : { permissionMode }), ...(planMode ? { planMode: true } : {}) }
+  }
+
   const create: MethodHandler = async (params, caller) => {
     const ownerPluginId = await ownerPluginFor(caller)
     if (!isStructuredAgent(params.agent)) {
@@ -913,10 +931,24 @@ export function activate(context: PluginContext): void {
           'title',
           'deferStart',
           'lifetime',
-          'lifetimeKey'
+          'lifetimeKey',
+          'permissionMode',
+          'planMode'
         ].includes(key)
     )
     if (unsupported !== undefined) throw context.error('invalid-params', `structured create does not support ${unsupported}`)
+    const support = capabilitiesFor(params.agent)!
+    if (params.permissionMode !== undefined) {
+      if (typeof params.permissionMode !== 'string') throw context.error('invalid-params', 'permissionMode must be a string')
+      if (!support.permissionModes.ok) throw context.error('conflict', support.permissionModes.reason)
+      if (!support.permissionModes.modes.includes(params.permissionMode)) {
+        throw context.error('invalid-params', `permissionMode must be one of ${support.permissionModes.modes.join(', ')}`)
+      }
+    }
+    if (params.planMode !== undefined) {
+      if (typeof params.planMode !== 'boolean') throw context.error('invalid-params', 'planMode must be a boolean')
+      if (params.planMode && !support.planMode.ok) throw context.error('conflict', support.planMode.reason)
+    }
     const deferStart = params.deferStart === true
     if (params.deferStart !== undefined && typeof params.deferStart !== 'boolean') throw context.error('invalid-params', 'deferStart must be a boolean')
     if (params.title !== undefined && (typeof params.title !== 'string' || params.title.trim() === '')) throw context.error('invalid-params', 'title must be a non-empty string')
@@ -930,6 +962,8 @@ export function activate(context: PluginContext): void {
     const worktree = await resolveWorktree(params.worktree, caller)
     ensureActive()
     const resolution = await resolveStructuredLaunch(params)
+    ensureActive()
+    const modes = await openingModes(agent, params.permissionMode as string | undefined, params.planMode === true)
     ensureActive()
     const title = typeof params.title === 'string' ? params.title : await nextTitle(worktree.id, agent)
     ensureActive()
@@ -1015,8 +1049,9 @@ export function activate(context: PluginContext): void {
         agent
       })
       entry.lease = lease
-      const launchOptions: StructuredLaunchOptions = {
+      const launchOptions: StructuredStartOptions = {
         ...(resolution?.structured ?? {}),
+        ...modes,
         env: environmentForLease(lease.env, environment)
       }
       startRunner(registered, agent, prompt, launchOptions, token)
@@ -1063,6 +1098,8 @@ export function activate(context: PluginContext): void {
     } catch (error) {
       throw context.error('conflict', `session ${old.id} cannot replay its structured launch options: ${error instanceof Error ? error.message : String(error)}`)
     }
+    const resumeModes = await openingModes(agent, undefined, false)
+    ensureActive()
     const key = `${agent}:${providerSession.id}`
     if (owners.has(key)) throw context.error('conflict', `the ${agent} conversation already has a connected owner`)
     const token: OwnerToken = { key, sessionId: null }
@@ -1186,7 +1223,7 @@ export function activate(context: PluginContext): void {
         registered,
         agent,
         params.prompt as string | undefined,
-        { ...launchOptions, providerSession: preparedProviderSession },
+        { ...launchOptions, ...resumeModes, providerSession: preparedProviderSession },
         token
       )
       if (typeof params.prompt !== 'string' || params.prompt === '') {
@@ -1467,6 +1504,24 @@ export function activate(context: PluginContext): void {
     }
     try {
       return { ok: true, settings: await runner.configure(session.id, picks) }
+    } catch (error) {
+      throw context.error('conflict', error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  /** The settings a running session is in, as `configure` reports them, so a composer opened later shows the real mode. */
+  const currentSettings: MethodHandler = async (params) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'session')
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured settings does not support ${unsupported}`)
+    if (typeof params.session !== 'string') throw context.error('invalid-params', 'session must be a string')
+    const session = await requireStructured(params.session)
+    await startTasks.get(session.id)
+    const entry = live.get(session.id)
+    const runner = runnerBySession.get(session.id)
+    if (!entry || entry.stopping || entry.status === 'exited' || !runner?.configure) return { settings: {} }
+    try {
+      // an empty pick changes nothing, so configure doubles as a read of the settings in force
+      return { settings: await runner.configure(session.id, {}) }
     } catch (error) {
       throw context.error('conflict', error instanceof Error ? error.message : String(error))
     }
@@ -1761,6 +1816,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/commands', commands)
   context.provide('method:quirky.structured/steer', steer)
   context.provide('method:quirky.structured/configure', configure)
+  context.provide('method:quirky.structured/settings', currentSettings)
   context.provide('method:quirky.structured/stop', stop)
   context.provide('method:quirky.structured/interrupt', interrupt)
   context.provide('method:quirky.structured/stopOwned', stopOwned)

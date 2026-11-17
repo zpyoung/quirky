@@ -172,7 +172,9 @@ function receive(message) {
     log(message)
     // Stable wire enum spellings from codex app-server generate-json-schema.
     if ((message.method === 'thread/start' || message.method === 'thread/resume') &&
-        (message.params.approvalPolicy !== 'on-request' || message.params.sandbox !== 'workspace-write')) {
+        (!['untrusted', 'on-request', 'never'].includes(message.params.approvalPolicy) ||
+          !['read-only', 'workspace-write', 'danger-full-access'].includes(message.params.sandbox) ||
+          (message.params.approvalsReviewer !== undefined && !['user', 'auto_review', 'guardian_subagent'].includes(message.params.approvalsReviewer)))) {
       send({ id: message.id, error: { code: -32602, message: 'invalid native approvalPolicy or sandbox enum' } })
       return
     }
