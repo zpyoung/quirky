@@ -22,6 +22,8 @@ declare global {
     __repairFixture: {
       changes: boolean[]
       mount(options: { disabled?: boolean; long?: boolean; mixed?: boolean }): void
+      calls: { method: string; params: Record<string, unknown> }[]
+      mountQuick(purpose: 'files' | 'markdown-open' | 'markdown-new', long?: boolean): void
     }
   }
 }
@@ -31,8 +33,33 @@ function browserEntry() {
     import { createElement as h, useState } from 'react'
     import { createRoot } from 'react-dom/client'
     import { Checkbox, FormRow } from '@quirky/ui'
+    import { QuickOpenOverlay } from '${ROOT}/plugins/quirky.editor/src/window/QuickOpenOverlay.tsx'
+    import { showQuickOpen, clearOverlayRequests } from '${ROOT}/plugins/quirky.editor/src/window/overlayState.ts'
+    import { EditorUiControlProvider, createEditorUiControlReportScope, runEditorUiControl } from '${ROOT}/plugins/quirky.editor/src/window/uiControl.tsx'
     const root = createRoot(document.getElementById('root'))
-    const fixture = { changes: [], mount(options = {}) {
+    const fixture = { changes: [], calls: [], mountQuick(purpose, long = false) {
+      clearOverlayRequests()
+      fixture.calls = []
+      const context = {
+        async call(method, params = {}) {
+          if (method === 'ui.window.self') return { connId: 22 }
+          if (method === 'ui.window.command.run') return { result: await runEditorUiControl(params.args) }
+          fixture.calls.push({ method, params })
+          if (method === 'quirky.editor/quickOpen') return {
+            results: [
+              { path: long ? 'a'.repeat(237) + '.md' : 'docs/alpha.md', name: long ? 'VeryLongFilename'.repeat(16) + '.md' : 'alpha.md', score: 1 },
+              { path: 'docs/beta.md', name: 'beta.md', score: 1, line: 12, column: 3 }
+            ], history: [], truncated: false
+          }
+          if (method === 'quirky.editor/markdown') return { templates: [{ relativePath: 'templates/note.md', title: 'Note' }] }
+          if (method === 'quirky.editor/open') return {}
+          throw new Error('Unexpected method ' + method)
+        }, toast() {}
+      }
+      const scope = createEditorUiControlReportScope(undefined, { surface: 'overlay:quirky.editor/quick-open' })
+      showQuickOpen(context, 'worktree-1', '', purpose, 'group-1')
+      root.render(h(EditorUiControlProvider, { scope }, h(QuickOpenOverlay, { context })))
+    }, mount(options = {}) {
       fixture.changes = []
       function Probe() {
         const [checked, setChecked] = useState(false)
@@ -152,6 +179,74 @@ for (const theme of ['dark', 'light']) for (const width of [1000, 320]) {
       await page.keyboard.press('Space')
       expect(await page.evaluate(() => window.__repairFixture.changes)).toEqual([])
       expect(await input.isChecked()).toBe(false)
+    } finally { await page.close() }
+  })
+}
+
+for (const theme of ['dark', 'light']) for (const width of [1000, 320]) {
+  for (const purpose of ['files', 'markdown-open'] as const) {
+    test(`Quick Open selection and navigation ${purpose} ${theme} ${width}`, async () => {
+      const page = await pageFor(theme, width)
+      try {
+        await page.evaluate((purpose) => window.__repairFixture.mountQuick(purpose, true), purpose)
+        const options = page.getByRole('option')
+        await options.nth(1).waitFor()
+        const input = page.getByRole('textbox')
+        expect(await input.evaluate((node) => node === document.activeElement)).toBe(true)
+        const colors = theme === 'dark'
+          ? { accent: 'rgb(124, 140, 255)', rail: 'rgb(12, 13, 15)', text: 'rgb(236, 238, 242)', muted: 'rgb(124, 130, 141)' }
+          : { accent: 'rgb(91, 108, 255)', rail: 'rgb(238, 240, 243)', text: 'rgb(27, 29, 34)', muted: 'rgb(128, 134, 143)' }
+        const appearance = async (index: number) => options.nth(index).evaluate((node) => {
+          const style = getComputedStyle(node)
+          return {
+            background: style.backgroundColor, name: getComputedStyle(node.querySelector('span')!).color,
+            path: getComputedStyle(node.querySelector('small')!).color,
+            padding: style.padding, border: style.borderWidth,
+          }
+        })
+        expect(await appearance(0)).toEqual({ background: colors.accent, name: colors.rail, path: colors.rail, padding: '8px', border: '0px' })
+        expect(await appearance(1)).toEqual({ background: 'rgba(0, 0, 0, 0)', name: colors.text, path: colors.muted, padding: '8px', border: '0px' })
+        await options.first().hover()
+        expect((await appearance(0)).background).toBe(colors.accent)
+        const geometry = await page.getByRole('listbox').evaluate((node) => ({
+          padding: getComputedStyle(node).padding,
+          margins: [...node.children].map((child) => getComputedStyle(child).marginBlock),
+          overflow: node.scrollWidth > node.clientWidth,
+          contained: [...node.querySelectorAll('button, span, small')].every((child) => child.getBoundingClientRect().right <= node.getBoundingClientRect().right),
+        }))
+        expect(geometry).toEqual({ padding: '8px', margins: ['0px', '0px'], overflow: false, contained: true })
+        await page.keyboard.press('ArrowDown')
+        expect(await options.nth(1).getAttribute('aria-selected')).toBe('true')
+        expect((await appearance(1)).path).toBe(colors.rail)
+        await page.keyboard.press('Enter')
+        await page.getByRole('dialog').waitFor({ state: 'detached' })
+        const calls = await page.evaluate(() => window.__repairFixture.calls)
+        expect(calls.filter((call) => call.method === 'quirky.editor/open')).toEqual([{
+          method: 'quirky.editor/open', params: { worktree: 'worktree-1', group: 'group-1', path: 'docs/beta.md', line: 12, column: 3, focus: true, preview: false },
+        }])
+        expect(calls.filter((call) => call.params.action === 'record')).toEqual([{
+          method: 'quirky.editor/quickOpen', params: { action: 'record', worktree: 'worktree-1', path: 'docs/beta.md' },
+        }])
+        await page.evaluate((purpose) => window.__repairFixture.mountQuick(purpose), purpose)
+        await page.getByRole('option').first().waitFor()
+        await page.keyboard.press('Escape')
+        await page.getByRole('dialog').waitFor({ state: 'detached' })
+        expect(await page.evaluate(() => window.__repairFixture.calls.some((call) => call.method === 'quirky.editor/open'))).toBe(false)
+      } finally { await page.close() }
+    })
+  }
+  test(`New Markdown template treatment and keyboard focus remain ${theme} ${width}`, async () => {
+    const page = await pageFor(theme, width)
+    try {
+      await page.evaluate(() => window.__repairFixture.mountQuick('markdown-new'))
+      const template = page.getByRole('button', { name: 'Note templates/note.md' })
+      await template.waitFor()
+      expect(await page.getByRole('listbox').count()).toBe(0)
+      expect(await template.evaluate((node) => getComputedStyle(node).borderWidth)).toBe('1px')
+      await template.focus()
+      await page.keyboard.press('Tab')
+      await page.keyboard.press('Shift+Tab')
+      expect(await template.evaluate((node) => getComputedStyle(node).outlineStyle)).not.toBe('none')
     } finally { await page.close() }
   })
 }
