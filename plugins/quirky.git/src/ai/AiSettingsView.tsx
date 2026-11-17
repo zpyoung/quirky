@@ -264,7 +264,7 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
 
   return (
     <section className="ui-stack" data-action={action}>
-      <h3>{title}</h3>
+      <SectionHeader title={title} />
       {overridden && <p className="ui-text-muted">This repository has its own recipe, which takes precedence here.</p>}
       <FormRow label="Agent" htmlFor={agentId}>
         <select
@@ -375,11 +375,12 @@ function AiSettingsBody({ context, worktree }: { context: UiPluginContext; workt
       {agents.error !== null && (
         <InlineError message={`Could not read the agents: ${agents.error}`} action={{ label: 'Retry', onAction: agents.retry }} />
       )}
-      <FormRow label="Show Source Control AI actions" htmlFor={switchId}>
+      <FormRow label="Show Source Control AI actions" htmlFor={switchId} layout="inline">
         <input
           id={switchId}
           type="checkbox"
           role="switch"
+          style={{ width: 'var(--ui-checkbox-size)', height: 'var(--ui-checkbox-size)' }}
           aria-label="Show Source Control AI actions"
           checked={enabled}
           onChange={(event) => {

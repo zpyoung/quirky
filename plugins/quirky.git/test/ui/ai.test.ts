@@ -820,7 +820,7 @@ describe('NA-40: the Source Control AI defaults view', () => {
     expect(element.textContent).toContain('Adds AI buttons that run the selected agent with the command template for that action.')
     expect(element.textContent).toContain('Command line Quirky runs when a recipe uses Custom command.')
     expect((byLabel(element, 'Show Source Control AI actions') as HTMLInputElement).checked).toBe(true)
-    expect(qa(element, '[data-action]').map((el) => [el.getAttribute('data-action'), q(el, 'h3')?.textContent])).toEqual([
+    expect(qa(element, '[data-action]').map((el) => [el.getAttribute('data-action'), q(el, '.ui-section-header__title')?.textContent])).toEqual([
       ['commitMessage', 'Commit message'],
       ['fixCommitFailure', 'Commit failure fixes'],
       ['fixPushFailure', 'Push failure fixes'],
