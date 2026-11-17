@@ -22,7 +22,7 @@ import {
   validatePluginSample, type PluginArtifact, type PluginAttempt, type PluginCampaignInput,
   type PluginCampaignReport, type PluginCampaignTiming, type PluginSampleSlot
 } from './plugin-campaign'
-import { reviewManifest } from './review'
+import { preflightReviewer, reviewManifest } from './review'
 
 type SignalName = 'SIGINT' | 'SIGTERM'
 type SignalListener = () => void
@@ -40,6 +40,7 @@ export type PluginGateIO = {
 
 export type PluginGateDependencies = {
   inventory?: (repoRoot: string) => Inventory | Promise<Inventory>
+  preflight?: typeof preflightReviewer
   capture?: (options: CaptureOptions) => Promise<CaptureManifest>
   review?: (manifest: CaptureManifest, options: ReviewOptions) => Promise<ReviewReport>
   repoRoot?: string
@@ -485,6 +486,13 @@ export async function runPluginGate(argv: readonly string[], dependencies: Plugi
     if (inventory.dirty || inventory.failures.length) throw new GateFailure('evidence-changed', 'Source inventory is dirty or contains discovery failures.')
     const implementationBytes = await readRegular(CONTEXT_IMPLEMENTATION)
     frozenFiles.set(CONTEXT_IMPLEMENTATION, sha256(implementationBytes))
+    if (controller.signal.aborted) throw new GateFailure('aborted', 'Campaign interrupted before capture.')
+    const preflight = await (dependencies.preflight ?? preflightReviewer)({
+      reviewerAlias: args.reviewer, authorFamily: args.authorFamily,
+      timeoutMs: REVIEW_TIMEOUT_MS, signal: controller.signal
+    })
+    if (!preflight.ok) throw new GateFailure(preflight.issue.code, preflight.issue.message)
+    bindIdentity(preflight.resolved, true)
     if (controller.signal.aborted) throw new GateFailure('aborted', 'Campaign interrupted before capture.')
     const captureDir = join(output, 'capture')
     await io.mkdir(captureDir, { mode: 0o700 })

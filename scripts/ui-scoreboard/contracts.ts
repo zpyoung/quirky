@@ -1,4 +1,5 @@
 import type { CaptureTarget, CaptureTheme, ContributionInventory, ImageEvidence, ReviewerIdentity, VisualAssessment, CaptureManifest, CaptureOptions, ReviewOptions, ReviewReport, ModelFamily } from '../ui-review/contracts'
+import type { preflightReviewer } from '../ui-review/review'
 
 export const CHECK_IDS = ['compatibility-tokens', 'loading', 'empty', 'error', 'commands', 'screenshots'] as const
 export type CheckId = typeof CHECK_IDS[number]
@@ -60,6 +61,7 @@ export type VisualCell = {
 }
 export type VisualOptions = { outputDir: string; authorFamily: ModelFamily; reviewerAlias: string; browserExecutable?: string; signal?: AbortSignal; plugin?: string }
 export type VisualDependencies = {
+  preflight: typeof preflightReviewer
   capture: (options: CaptureOptions) => Promise<CaptureManifest>
   review: (manifest: CaptureManifest, options: ReviewOptions) => Promise<ReviewReport>
 }

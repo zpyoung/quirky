@@ -9,7 +9,7 @@ import { hostContractContext, serializeContractContext } from './host-contracts'
 import { runPluginGate, type PluginGateDependencies } from './plugin-gate'
 import { goldenFor, SCREENSHOT_SIZE, VIEWPORT } from './goldens'
 import { SCORE_DIMENSIONS, THEMES, type CaptureManifest, type CaptureOptions, type CaptureTarget, type CaptureTheme, type ContributionInventory, type ReviewCellKey, type ReviewIssue, type ReviewOptions, type ReviewReport, type ReviewedCapture, type ReviewerIdentity, type VisualAssessment } from './contracts'
-import { reviewManifest } from './review'
+import { reviewManifest, type ReviewerPreflightOptions, type ReviewerPreflightResult } from './review'
 import type { Inventory, PluginInventory } from '../ui-scoreboard/contracts'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
@@ -21,6 +21,31 @@ const HOST_TARGETS: CaptureTarget[] = [
   { id: 'host:palette', plugin: null, title: 'Palette', kind: 'host' }
 ]
 const REVIEWER: ReviewerIdentity = { alias: 'gemini', provider: 'google', model: 'fixture-vision', family: 'google' }
+
+const FIXTURE_PREFLIGHT: ReviewerPreflightResult = {
+  ok: true,
+  resolved: { provider: 'google', model: 'fixture-vision', family: 'google' },
+  process: {
+    exitCode: 0,
+    stdout: { text: '', bytes: 0, truncated: false },
+    stderr: { text: '', bytes: 0, truncated: false },
+    timedOut: false,
+    aborted: false
+  }
+}
+
+function failedPreflight(code: ReviewIssue['code'], message: string): ReviewerPreflightResult {
+  return {
+    ok: false,
+    process: {
+      stdout: { text: '', bytes: 0, truncated: false },
+      stderr: { text: '', bytes: 0, truncated: false },
+      timedOut: false,
+      aborted: code === 'aborted'
+    },
+    issue: { code, message }
+  }
+}
 const tempRoots: string[] = []
 
 afterEach(() => {
@@ -198,6 +223,8 @@ type Scenario = {
   scores?: number | ((targetId: string, theme: CaptureTheme, slot: number) => number)
   issue?: (key: ReviewCellKey, slot: number, attempt: number) => ReviewIssue[] | undefined
   mutate?: (report: ReviewReport, context: { key: ReviewCellKey; slot: number }) => ReviewReport
+  preflight?: (options: ReviewerPreflightOptions) => Promise<ReviewerPreflightResult>
+  identity?: (key: ReviewCellKey, slot: number) => ReviewerIdentity
   captureError?: Error
 }
 
@@ -206,6 +233,10 @@ type ObservedReview = { key: ReviewCellKey; slot: number; manifest: CaptureManif
 function dependencies(value: Fixture, scenario: Scenario = {}) {
   let captureCalls = 0
   let reviewCalls = 0
+  let preflightCalls = 0
+  const preflightOptions: ReviewerPreflightOptions[] = []
+  const preflightEntered = eventLatch()
+  const events: string[] = []
   let clock = 0
   const captureOptions: CaptureOptions[] = []
   const observed: ObservedReview[] = []
@@ -216,9 +247,17 @@ function dependencies(value: Fixture, scenario: Scenario = {}) {
   const stderr: string[] = []
   const signalListeners = new Map<string, () => void>()
   const deps: PluginGateDependencies = {
+    preflight: async (options) => {
+      preflightCalls += 1
+      preflightOptions.push(options)
+      events.push('preflight')
+      preflightEntered.advance()
+      return scenario.preflight ? scenario.preflight(options) : FIXTURE_PREFLIGHT
+    },
     repoRoot: value.repoRoot,
     inventory: () => structuredClone(value.inventory),
     capture: async (options) => {
+      events.push('capture')
       captureCalls += 1
       captureOptions.push(options)
       value.captureDirectory = options.outputDir
@@ -229,6 +268,7 @@ function dependencies(value: Fixture, scenario: Scenario = {}) {
       return structuredClone(value.manifest)
     },
     review: async (manifest, options) => {
+      events.push('review')
       reviewCalls += 1
       const requested = options.onlyCells ?? manifest.captures.map(({ targetId, theme }) => ({ targetId, theme }))
       const runId = randomUUID()
@@ -265,7 +305,10 @@ function dependencies(value: Fixture, scenario: Scenario = {}) {
           })),
           conflicts: [] as Array<{ contractId: string; reason: string; affectsScore: boolean }>
         }
-        const reviewer = { ...REVIEWER, alias: options.reviewerAlias }
+        const injectedIdentity = scenario.identity?.(key, slot)
+        const reviewer = injectedIdentity
+          ? { ...injectedIdentity }
+          : { ...REVIEWER, alias: options.reviewerAlias }
         const reviewed: ReviewedCapture = {
           targetId: key.targetId,
           theme: key.theme,
@@ -293,7 +336,7 @@ function dependencies(value: Fixture, scenario: Scenario = {}) {
           targetId: key.targetId,
           theme: key.theme,
           identity: reviewer,
-          preflight: { provider: REVIEWER.provider, model: REVIEWER.model, family: REVIEWER.family },
+          preflight: { provider: reviewer.provider, model: reviewer.model, family: reviewer.family },
           contextPath,
           contextSha256: contextHash,
           audit
@@ -322,6 +365,8 @@ function dependencies(value: Fixture, scenario: Scenario = {}) {
         const contextPath = sample?.contractReview?.contextPath ?? join(reviewerDir, `${prefix}.context.json`)
         const contextHash = sample?.contractReview?.contextSha256 ?? digest(contextText)
         const audit = sample?.contractReview?.audit ?? null
+        const preflightIdentity = scenario.identity?.(key, primarySlot) ??
+          { ...REVIEWER, alias: options.reviewerAlias }
         writeFileSync(join(reviewerDir, `${prefix}.context.json`), contextText)
         writeFileSync(join(reviewerDir, `${prefix}.response.txt`), sample
           ? JSON.stringify({ assessment: sample.assessment, contractAudit: audit })
@@ -330,7 +375,11 @@ function dependencies(value: Fixture, scenario: Scenario = {}) {
           targetId: key.targetId,
           theme: key.theme,
           identity: sample?.reviewer ?? null,
-          preflight: { provider: REVIEWER.provider, model: REVIEWER.model, family: REVIEWER.family },
+          preflight: {
+            provider: preflightIdentity.provider,
+            model: preflightIdentity.model,
+            family: preflightIdentity.family
+          },
           contextPath,
           contextSha256: contextHash,
           audit
@@ -350,6 +399,10 @@ function dependencies(value: Fixture, scenario: Scenario = {}) {
   }
   return {
     deps,
+    preflightOptions,
+    preflightEntered,
+    preflightCalls: () => preflightCalls,
+    events,
     captureOptions,
     observed,
     captureCalls: () => captureCalls,
@@ -401,7 +454,15 @@ type GateReport = {
   failures: Array<{ code: string; message: string; targetId?: string; theme?: CaptureTheme }>
   manifest: { path: string; sha256: string } | null
   reviewer?: ReviewerIdentity | null
-  timing?: { initialReviewCalls: number; replacementReviewCalls: number; maxConcurrency: number }
+  timing?: {
+    captureMs: number
+    reviewMs: number
+    totalMs: number
+    initialReviewCalls: number
+    replacementReviewCalls: number
+    maxConcurrency: number
+  }
+  extraAttempts: unknown[]
   captureEvidence?: CaptureManifest['captures']
   activatedVisibilitySettings?: string[]
   targetManifests?: Array<{ targetId: string; path: string; sha256: string }>
@@ -415,6 +476,55 @@ function cellAt(report: GateReport, targetId: string, theme: CaptureTheme): Gate
   const cell = report.cells.find((entry) => entry.targetId === targetId && entry.theme === theme)
   if (!cell) throw new Error(`missing ${targetId} (${theme}) in plugin-gate.json`)
   return cell
+}
+
+type DependencyHarness = {
+  deps: PluginGateDependencies
+  captureCalls(): number
+  reviewCalls(): number
+  events: string[]
+}
+
+function expectEarlyPreflightFailure(
+  value: Fixture,
+  harness: DependencyHarness,
+  code: string,
+  diagnostic: string
+): void {
+  const jsonPath = join(value.output, 'plugin-gate.json')
+  const markdownPath = join(value.output, 'plugin-gate.md')
+  expect(existsSync(jsonPath)).toBe(true)
+  expect(existsSync(markdownPath)).toBe(true)
+  const report = reportAt(value)
+  const markdown = readFileSync(markdownPath, 'utf8')
+  expect(report.status).toBe('error')
+  expect(report.goalPassed).toBe(false)
+  expect(report.manifest).toBeNull()
+  const expectedCells = value.inventory.targets
+    .filter(({ plugin }) => plugin !== null)
+    .flatMap(({ id }) => THEMES.map((theme) => `${id}\0${theme}`))
+    .sort()
+  expect(report.cells.map(({ targetId, theme }) => `${targetId}\0${theme}`).sort()).toEqual(expectedCells)
+  expect(report.cells.every(({ status, median, range }) =>
+    status === 'invalid' && median === null && range === null
+  )).toBe(true)
+  expect(report.cells.flatMap(({ slots }) => slots.flatMap(({ attempts }) => attempts))).toHaveLength(0)
+  expect(report.extraAttempts).toHaveLength(0)
+  expect(report.failures).toContainEqual(expect.objectContaining({ code, message: diagnostic }))
+  expect(markdown).toContain('Status: **error**')
+  expect(markdown).toContain('Goal passed: **false**')
+  expect(markdown).toContain('Capture manifest: unavailable.')
+  expect(markdown).toContain(`- ${code}: ${diagnostic}`)
+  expect(markdown.split('\n').filter((line) => line.startsWith('| view:'))).toHaveLength(4)
+  expect(report.timing).toMatchObject({
+    captureMs: 0, reviewMs: 0, initialReviewCalls: 0, replacementReviewCalls: 0, maxConcurrency: 0
+  })
+  expect(report.timing!.totalMs).toBeGreaterThan(0)
+  expect(harness.captureCalls()).toBe(0)
+  expect(harness.reviewCalls()).toBe(0)
+  expect(harness.events).toEqual(['preflight'])
+  expect(value.captureDirectory).toBeNull()
+  expect(existsSync(join(value.output, 'capture'))).toBe(false)
 }
 
 function eventLatch() {
@@ -553,6 +663,108 @@ describe('plugin gate', () => {
         : outputFlag?.slice('--output='.length)
       if (outputPath) expect(existsSync(outputPath)).toBe(false)
     }
+  })
+
+  test('preflight failures persist error reports without capture or review', async () => {
+    const cases = [
+      { code: 'operational', message: 'preflight operational diagnostic' },
+      { code: 'identity-mismatch', message: 'preflight identity diagnostic' },
+      { code: 'aborted', message: 'Reviewer preflight was aborted.' },
+      { code: 'usage-limit', message: 'preflight quota diagnostic' }
+    ] as const
+    for (const failure of cases) {
+      const value = fixture({ alpha: 1, beta: 1 })
+      const harness = dependencies(value, {
+        preflight: async () => failedPreflight(failure.code, failure.message)
+      })
+      expect(await runPluginGate(args(value.output), harness.deps)).toBe(2)
+      expectEarlyPreflightFailure(value, harness, failure.code, failure.message)
+    }
+
+    const value = fixture({ alpha: 1, beta: 1 })
+    const rejection = 'preflight transport exploded'
+    const harness = dependencies(value, { preflight: async () => { throw new Error(rejection) } })
+    expect(await runPluginGate(args(value.output), harness.deps)).toBe(2)
+    expectEarlyPreflightFailure(value, harness, 'campaign-error', rejection)
+  })
+
+  test('runs one successful preflight before capture with the gate reviewer options', async () => {
+    const value = fixture()
+    const harness = dependencies(value)
+    expect(await runPluginGate(args(value.output, ['--reviewer', 'gemini']), harness.deps)).toBe(0)
+    expect(harness.preflightCalls()).toBe(1)
+    expect(harness.captureCalls()).toBe(1)
+    expect(harness.events.slice(0, 2)).toEqual(['preflight', 'capture'])
+    expect(harness.preflightOptions[0]).toMatchObject({
+      reviewerAlias: 'gemini', authorFamily: 'openai', timeoutMs: 120_000
+    })
+    expect(harness.preflightOptions[0]!.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  test('persists SIGINT/SIGTERM interruptions raised during preflight and removes listeners', async () => {
+    for (const [signal, exitCode] of [['SIGINT', 130], ['SIGTERM', 143]] as const) {
+      const value = fixture()
+      const harness = dependencies(value, {
+        preflight: async ({ signal: abortSignal }) => {
+          await waitForSignal(abortSignal!)
+          return failedPreflight('aborted', 'Reviewer preflight was aborted.')
+        }
+      })
+      const running = runPluginGate(args(value.output), harness.deps)
+      await harness.preflightEntered.waitFor(1)
+      harness.signalListeners.get(signal)!()
+      expect(await running).toBe(exitCode)
+      expect(existsSync(join(value.output, 'plugin-gate.json'))).toBe(true)
+      expect(existsSync(join(value.output, 'plugin-gate.md'))).toBe(true)
+      expect(reportAt(value).status).toBe('error')
+      expect(harness.captureCalls()).toBe(0)
+      expect(harness.reviewCalls()).toBe(0)
+      expect(harness.signalListeners.size).toBe(0)
+    }
+  })
+
+  test('rejects first logged identity drift from preflight, including a consistent sample', async () => {
+    const drifts: Array<{
+      identity: ReviewerIdentity
+      sample: boolean
+    }> = [
+      { identity: { ...REVIEWER, provider: 'google-antigravity' }, sample: false },
+      { identity: { ...REVIEWER, model: 'later-model' }, sample: true },
+      { identity: { ...REVIEWER, provider: 'anthropic', family: 'anthropic' }, sample: false }
+    ]
+    for (const drift of drifts) {
+      const value = fixture()
+      const harness = dependencies(value, {
+        identity: () => drift.identity,
+        ...(drift.sample ? {} : { mutate: (report) => { report.captures = []; return report } })
+      })
+      expect(await runPluginGate(args(value.output), harness.deps)).toBe(2)
+      const report = reportAt(value)
+      expect(report.failures.some(({ code }) => code === 'identity-mismatch')).toBe(true)
+      expect(report.cells.every(({ median, range, status }) =>
+        median === null && range === null && status === 'invalid'
+      )).toBe(true)
+      expect(report.timing!.replacementReviewCalls).toBe(0)
+      expect(report.extraAttempts).toHaveLength(0)
+      expect(report.cells.flatMap(({ slots }) => slots.flatMap(({ attempts }) => attempts))
+        .every(({ retryOf }) => retryOf === null)).toBe(true)
+    }
+
+    const value = fixture()
+    const harness = dependencies(value, {
+      mutate: (report) => {
+        report.captures[0]!.reviewer.alias = 'different-alias'
+        return report
+      }
+    })
+    expect(await runPluginGate(args(value.output), harness.deps)).toBe(2)
+    const report = reportAt(value)
+    expect(report.failures.some(({ code }) => code === 'identity-mismatch')).toBe(true)
+    expect(report.cells.every(({ median, range, status }) =>
+      median === null && range === null && status === 'invalid'
+    )).toBe(true)
+    expect(report.timing!.replacementReviewCalls).toBe(0)
+    expect(report.extraAttempts).toHaveLength(0)
   })
 
   test('captures every screenshot-bearing plugin once and freezes scoped two-theme manifests', async () => {
@@ -1216,6 +1428,7 @@ try {
   await runPluginGate(${JSON.stringify(args(value.output))}, {
     repoRoot: ${JSON.stringify(value.repoRoot)},
     inventory: () => structuredClone(inventory),
+    preflight: async () => (${JSON.stringify(FIXTURE_PREFLIGHT)}),
     capture: async () => manifest,
     review: async () => { reviewCalls += 1; throw new Error('unexpected review dispatch') },
     io: { readFile: async (path) => {
@@ -1478,11 +1691,12 @@ process.stdout.write(JSON.stringify({ assessment, contractAudit }) + '\\n')
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runPluginGate } from ${JSON.stringify(fileURLToPath(new URL('./plugin-gate.ts', import.meta.url)))}
-import { reviewManifest } from ${JSON.stringify(fileURLToPath(new URL('./review.ts', import.meta.url)))}
+import { preflightReviewer, reviewManifest } from ${JSON.stringify(fileURLToPath(new URL('./review.ts', import.meta.url)))}
 const { inventory, manifest } = JSON.parse(readFileSync(${JSON.stringify(inputPath)}, 'utf8'))
 let calls = 0
 process.exitCode = await runPluginGate(${JSON.stringify(args(value.output))}, {
   repoRoot: ${JSON.stringify(value.repoRoot)}, inventory: () => structuredClone(inventory),
+  preflight: (options) => preflightReviewer({ ...options, reviewerExecutable: ${JSON.stringify(executable)} }),
   capture: async (options) => {
     writeFileSync(join(options.outputDir, 'capture-progress.json'), JSON.stringify(manifest, null, 2) + '\\n', { mode: 0o600 })
     return manifest

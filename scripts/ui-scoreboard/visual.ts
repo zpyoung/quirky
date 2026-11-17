@@ -16,6 +16,7 @@ import {
   type VisualAssessment,
   type ContributionInventory
 } from '../ui-review/contracts'
+import type { ReviewerPreflightResult } from '../ui-review/review'
 import { scopeCaptureInventory, validateContributionInventory } from '../ui-review/contribution-inventory'
 import { CAPTURE_TIMEOUT_MS, DEFAULT_THRESHOLD, REVIEW_TIMEOUT_MS } from '../ui-review/arguments'
 import type { Evidence, Inventory, VisualCell, VisualDependencies, VisualOptions, VisualResult } from './contracts'
@@ -372,12 +373,18 @@ function mapReviewReport(
   target: CaptureTarget,
   options: VisualOptions,
   targetCaptures: CaptureEvidence[],
-  reportValue: unknown
+  reportValue: unknown,
+  reviewer: Extract<ReviewerPreflightResult, { ok: true }>['resolved']
 ): { operational: boolean; reason?: string } {
   if (!validReviewReport(reportValue)) return { operational: true, reason: 'Reviewer returned a malformed report.' }
   const report = reportValue
   if (report.authorFamily !== options.authorFamily || report.reviewerAlias !== options.reviewerAlias) {
     return { operational: true, reason: 'Reviewer report identity or author family does not match the request.' }
+  }
+  if (report.captures.some((sample) => sample.reviewer.alias !== options.reviewerAlias ||
+      sample.reviewer.provider !== reviewer.provider || sample.reviewer.model !== reviewer.model ||
+      sample.reviewer.family !== reviewer.family)) {
+    return { operational: true, reason: 'Reviewer sample identity does not match the successful preflight identity.' }
   }
 
   const capturesByKey = new Map<string, CaptureEvidence>()
@@ -472,6 +479,23 @@ export async function measureVisuals(inventory: Inventory, options: VisualOption
     setAllFailure(cells, result.targets, 'dirty-source', 'Production source is dirty; visual capture was not started.')
     result.failures.push(evidence('dirty-source', 'Production source is dirty; visual capture was not started.'))
     result.operationalError = true
+    result.cells = [...cells.values()]
+    return result
+  }
+
+  let preflight: ReviewerPreflightResult
+  try {
+    preflight = await dependencies.preflight({
+      reviewerAlias: options.reviewerAlias,
+      authorFamily: options.authorFamily,
+      timeoutMs: REVIEW_TIMEOUT_MS,
+      ...(options.signal === undefined ? {} : { signal: options.signal })
+    })
+    if (!preflight.ok) throw new Error(preflight.issue.message)
+  } catch (error) {
+    const detail = message(error)
+    setAllFailure(cells, result.targets, 'reviewer-preflight', detail)
+    recordReviewFailure(result, 'reviewer-preflight', detail)
     result.cells = [...cells.values()]
     return result
   }
@@ -643,7 +667,7 @@ export async function measureVisuals(inventory: Inventory, options: VisualOption
             continue
           }
 
-          const mapped = mapReviewReport(result, cells, item.target, options, item.captures, report)
+          const mapped = mapReviewReport(result, cells, item.target, options, item.captures, report, preflight.resolved)
           if (mapped.operational) {
             if (!result.failures.some((failure) => failure.targetId === item.target.id && failure.code === 'review-error') && mapped.reason) {
               result.failures.push(evidence('review-error', mapped.reason, item.target.id))

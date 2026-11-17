@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, watch, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { once } from 'node:events'
 import { CAPTURE_SCHEMA_VERSION, type CaptureManifest, type CaptureTheme, type ReviewOptions } from './contracts'
 import { goldenFor } from './goldens'
-import { reviewManifest } from './review'
+import * as reviewModule from './review'
+import type { ReviewerPreflightOptions, ReviewerPreflightResult } from './review'
+const { reviewManifest } = reviewModule
 type TestReviewCellKey = { targetId: string; theme: CaptureTheme }
 type ExtendedReviewOptions = ReviewOptions & { onlyCells?: readonly TestReviewCellKey[] }
 
@@ -16,6 +19,7 @@ const goldenPaths = {
 let scratch = ''
 let outputDir = ''
 let reviewerExecutable = ''
+let preflightCheckFile = ''
 let childPidFile = ''
 let reviewStartedFile = ''
 let promptLogFile = ''
@@ -38,11 +42,14 @@ beforeEach(() => {
   childPidFile = join(scratch, 'review-child.pid')
   reviewStartedFile = join(scratch, 'review-started')
   promptLogFile = join(scratch, 'reviewer-prompts.jsonl')
+  preflightCheckFile = join(scratch, 'preflight-check.json')
   setEnv('UI_REVIEW_FAKE_MODE', 'pass')
   setEnv('UI_REVIEW_FAKE_CHILD_PID', childPidFile)
   setEnv('UI_REVIEW_FAKE_REVIEW_STARTED', reviewStartedFile)
   setEnv('UI_REVIEW_FAKE_PROMPTS', promptLogFile)
   setEnv('UI_REVIEW_FAKE_ARTIFACT_DIR', join(outputDir, 'reviewer'))
+  setEnv('UI_REVIEW_FAKE_CHECK_LOG', preflightCheckFile)
+  setEnv('UI_REVIEW_FAKE_PARENT_VALUE', undefined)
   setEnv('UI_REVIEW_FAKE_SCORE', undefined)
   setEnv('UI_REVIEW_FAKE_CONFLICT_ID', undefined)
   setEnv('UI_REVIEW_FAKE_CONFLICT_REASON', undefined)
@@ -131,6 +138,41 @@ function options(overrides: Partial<ExtendedReviewOptions> = {}): ExtendedReview
     ...overrides
   }
 }
+function preflightOptions(overrides: Partial<ReviewerPreflightOptions> = {}): ReviewerPreflightOptions {
+  return {
+    reviewerAlias: 'gemini',
+    authorFamily: 'openai',
+    timeoutMs: 30_000,
+    reviewerExecutable,
+    ...overrides
+  }
+}
+
+const callPreflightReviewer = reviewModule.preflightReviewer
+
+function requirePreflightFailure(result: ReviewerPreflightResult): Extract<ReviewerPreflightResult, { ok: false }> {
+  expect(result.ok).toBe(false)
+  if (result.ok) throw new Error('Expected reviewer preflight to fail')
+  return result
+}
+
+async function waitForFile(path: string): Promise<void> {
+  const watcher = watch(dirname(path))
+  try {
+    while (!existsSync(path)) await once(watcher, 'change')
+  } finally {
+    watcher.close()
+  }
+}
+
+function expectChildProcessesStopped(): void {
+  const childPids = readFileSync(childPidFile, 'utf8').trim().split('\n').map(Number)
+  expect(childPids.length).toBeGreaterThan(0)
+  for (const childPid of childPids) {
+    const processState = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(childPid)])
+    expect(processState.exitCode === 1 || processState.stdout.toString().trim().startsWith('Z')).toBe(true)
+  }
+}
 
 function fakeReviewerSource(): string {
   return `#!/usr/bin/env node
@@ -139,13 +181,49 @@ const { createHash } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const args = process.argv.slice(2);
 const mode = process.env.UI_REVIEW_FAKE_MODE || 'pass';
-if (args[0] === '--check') {
-  if (mode === 'check-fail') { process.stderr.write('reviewer unavailable' + String.fromCharCode(10)); process.exit(7); }
-  const provider = mode === 'github-copilot' ? 'github-copilot' : mode === 'preflight-unknown' ? 'mystery' : 'google';
-  const model = mode === 'github-copilot' ? 'claude-3.7-sonnet' : 'gemini-3.1-pro-preview';
-  process.stderr.write('  ✓ gemini       ' + provider + '/' + model + ':high' + String.fromCharCode(10));
-  process.exit(0);
-}
+  if (args[0] === '--check') {
+    fs.appendFileSync(process.env.UI_REVIEW_FAKE_CHECK_LOG, JSON.stringify({
+      args,
+      cwd: process.cwd(),
+      parentValue: process.env.UI_REVIEW_FAKE_PARENT_VALUE
+    }) + String.fromCharCode(10));
+    const alias = args[1] || 'gemini';
+    const newline = String.fromCharCode(10);
+    if (mode === 'check-fail') {
+      process.stderr.write('reviewer unavailable OPENAI_API_KEY=sk-secret-value-123456789012345 HOME=/tmp/private-runtime-home' + newline);
+      process.exit(7);
+    }
+    if (mode === 'preflight-usage') {
+      process.stderr.write('Usage limit reached; reviewer quota unavailable' + newline);
+      process.exit(9);
+    }
+    if (mode === 'preflight-no-identity') process.exit(0);
+    if (mode === 'preflight-timeout' || mode === 'preflight-abort') {
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60000)'], { stdio: 'ignore' });
+      fs.appendFileSync(process.env.UI_REVIEW_FAKE_CHILD_PID, String(child.pid) + newline);
+      setInterval(() => {}, 60000);
+      return;
+  } else {
+    const provider = mode === 'preflight-unknown' ? 'mystery' : mode === 'github-copilot' ? 'github-copilot' : 'google';
+    const model = mode === 'preflight-unknown' || mode === 'preflight-fixture' ? 'fixture-vision' : mode === 'github-copilot' ? 'claude-3.7-sonnet' : 'gemini-3.1-pro-preview';
+    const header = '  ✓ ' + alias + '       ' + provider + '/' + model + ':high' + newline;
+    if (mode === 'preflight-ambiguous') {
+      process.stderr.write(header + '  ✓ ' + alias + '       anthropic/other-model:high' + newline);
+      process.exit(0);
+    }
+    if (mode === 'preflight-stdout-oversized') {
+      fs.writeSync(1, Buffer.alloc(1048577, 'x'));
+      process.stderr.write(header);
+      process.exit(0);
+    }
+    if (mode === 'preflight-stderr-oversized') {
+      fs.writeSync(2, header + 'x'.repeat(1048577));
+      process.exit(0);
+    }
+    process.stderr.write(header);
+    process.exit(0);
+  }
+  }
 fs.appendFileSync(process.env.UI_REVIEW_FAKE_REVIEW_STARTED, 'started');
 const provider = mode === 'unknown-family' ? 'mystery' : mode === 'github-copilot' ? 'github-copilot' : ['reviewer-same-family', 'identity-invalid-json', 'identity-process-fail'].includes(mode) ? 'openai' : 'google';
 const model = mode === 'github-copilot' ? 'claude-3.7-sonnet' : ['reviewer-same-family', 'identity-invalid-json', 'identity-process-fail'].includes(mode) ? 'gpt-4.1' : 'gemini-3.1-pro-preview';
@@ -329,6 +407,152 @@ if (mode === 'prose-suffix' || mode === 'fenced-prose-suffix') framedResponse +=
 process.stdout.write(framedResponse + newline);
 `
 }
+
+test('preflight resolves a padded header with only --check, inherited cwd and environment, and an executable path containing spaces', async () => {
+  const spacedExecutable = join(scratch, 'fake reviewer executable with spaces.cjs')
+  writeFileSync(spacedExecutable, fakeReviewerSource(), { mode: 0o700 })
+  chmodSync(spacedExecutable, 0o700)
+  setEnv('UI_REVIEW_FAKE_PARENT_VALUE', 'inherited-from-parent')
+
+  setEnv('UI_REVIEW_FAKE_MODE', 'preflight-fixture')
+  const result = await callPreflightReviewer(preflightOptions({ reviewerExecutable: spacedExecutable }))
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) throw new Error('Expected reviewer preflight to succeed')
+  expect(result.resolved).toEqual({ provider: 'google', model: 'fixture-vision', family: 'google' })
+  expect(result.process.stderr.text).toContain('  ✓ gemini       google/fixture-vision:high')
+  expect(readFileSync(preflightCheckFile, 'utf8').trim().split('\n').map((line) => JSON.parse(line))).toEqual([{
+    args: ['--check', 'gemini'],
+    cwd: process.cwd(),
+    parentValue: 'inherited-from-parent'
+  }])
+  expect(readdirSync(outputDir)).toEqual([])
+})
+
+test('preflight reports a missing reviewer executable as operational', async () => {
+  const result = requirePreflightFailure(await callPreflightReviewer(preflightOptions({
+    reviewerExecutable: join(scratch, 'missing reviewer executable')
+  })))
+
+  expect(result.issue.code).toBe('operational')
+  expect(result.issue.message.startsWith('Could not start pi-watch:')).toBe(true)
+})
+
+test('preflight timeout terminates the fake reviewer and its child', async () => {
+  setEnv('UI_REVIEW_FAKE_MODE', 'preflight-timeout')
+
+  const result = requirePreflightFailure(await callPreflightReviewer(preflightOptions({ timeoutMs: 2_000 })))
+
+  expect(result.issue.code).toBe('operational')
+  expect(result.issue.message).toBe('Reviewer preflight timed out.')
+  expect(result.process.timedOut).toBe(true)
+  expectChildProcessesStopped()
+})
+
+test('preflight exit diagnostics retain redacted stderr', async () => {
+  setEnv('UI_REVIEW_FAKE_MODE', 'check-fail')
+
+  const result = requirePreflightFailure(await callPreflightReviewer(preflightOptions()))
+
+  expect(result.issue.code).toBe('operational')
+  expect(result.issue.message.startsWith('Reviewer preflight exited unsuccessfully (7).')).toBe(true)
+  expect(result.issue.message).toContain('reviewer unavailable')
+  expect(result.issue.message).toContain('[REDACTED')
+  expect(result.issue.message).not.toContain('sk-secret-value-123456789012345')
+  expect(result.issue.message).not.toContain('/tmp/private-runtime-home')
+})
+
+test.each([
+  ['no identity', 'preflight-no-identity'],
+  ['ambiguous identities', 'preflight-ambiguous']
+] as const)('preflight rejects %s', async (_name, mode) => {
+  setEnv('UI_REVIEW_FAKE_MODE', mode)
+
+  const result = requirePreflightFailure(await callPreflightReviewer(preflightOptions()))
+
+  expect(result.issue.code).toBe('identity-mismatch')
+  expect(result.issue.message).toBe('Reviewer preflight did not report a resolved provider/model identity.')
+})
+
+test('preflight preserves an unresolved provider family in its failure result', async () => {
+  setEnv('UI_REVIEW_FAKE_MODE', 'preflight-unknown')
+
+  const result = requirePreflightFailure(await callPreflightReviewer(preflightOptions()))
+
+  expect(result.issue.code).toBe('identity-mismatch')
+  expect(result.issue.message).toBe('Reviewer preflight resolved unknown provider family mystery.')
+  expect(result.resolved).toMatchObject({ provider: 'mystery', model: 'fixture-vision' })
+  expect(result.resolved?.family).toBeFalsy()
+})
+
+test('preflight rejects a reviewer matching the author family', async () => {
+  const result = requirePreflightFailure(await callPreflightReviewer(preflightOptions({ authorFamily: 'google' })))
+
+  expect(result.issue.code).toBe('identity-mismatch')
+  expect(result.issue.message).toBe('Resolved reviewer family google matches author family google.')
+})
+
+test.each([
+  ['stdout', 'preflight-stdout-oversized'],
+  ['stderr', 'preflight-stderr-oversized']
+] as const)('preflight rejects more than 1 MiB of %s even with a valid identity header', async (_stream, mode) => {
+  setEnv('UI_REVIEW_FAKE_MODE', mode)
+
+  const result = requirePreflightFailure(await callPreflightReviewer(preflightOptions()))
+
+  expect(result.issue.code).toBe('operational')
+  expect(result.issue.message).toBe('Reviewer preflight output exceeded the bounded output limit.')
+})
+
+test('preflight abort returns the aborted classification and terminates its child', async () => {
+  setEnv('UI_REVIEW_FAKE_MODE', 'preflight-abort')
+  const controller = new AbortController()
+  const pending = callPreflightReviewer(preflightOptions({ signal: controller.signal }))
+  await waitForFile(childPidFile)
+  controller.abort()
+
+  const result = requirePreflightFailure(await pending)
+
+  expect(result.issue.code).toBe('aborted')
+  expect(result.issue.message).toBe('Reviewer preflight was aborted.')
+  expect(result.process.aborted).toBe(true)
+  expectChildProcessesStopped()
+})
+
+test('preflight keeps the usage-limit classification for usage diagnostics', async () => {
+  setEnv('UI_REVIEW_FAKE_MODE', 'preflight-usage')
+
+  const result = requirePreflightFailure(await callPreflightReviewer(preflightOptions()))
+
+  expect(result.issue.code).toBe('usage-limit')
+  const invocations = readFileSync(preflightCheckFile, 'utf8').trim().split('\n')
+  expect(invocations).toHaveLength(1)
+  expect(JSON.parse(invocations[0]!).args).toEqual(['--check', 'gemini'])
+})
+
+test.each([
+  ['129-character alias', { reviewerAlias: 'a'.repeat(129) }],
+  ['shell syntax in alias', { reviewerAlias: 'gemini; touch /tmp/should-not-run' }],
+  ['unknown author family', { authorFamily: 'mystery' as ReviewerPreflightOptions['authorFamily'] }],
+  ['zero timeout', { timeoutMs: 0 }],
+  ['timeout above maximum', { timeoutMs: 600_001 }],
+  ['fractional timeout', { timeoutMs: 1.5 }]
+] as const)('preflight rejects %s before spawning', async (_name, overrides) => {
+  await expect(
+    Promise.resolve().then(() => callPreflightReviewer(preflightOptions(overrides)))
+  ).rejects.toThrow()
+  expect(existsSync(preflightCheckFile)).toBe(false)
+})
+
+test('preflight accepts the 128-character alias boundary', async () => {
+  const alias = 'a'.repeat(128)
+
+  const result = await callPreflightReviewer(preflightOptions({ reviewerAlias: alias }))
+
+  expect(result.ok).toBe(true)
+  expect(JSON.parse(readFileSync(preflightCheckFile, 'utf8')).args).toEqual(['--check', alias])
+})
+
 test('the request supplements the exact base prompt with hashed trusted context and persists both artifacts', async () => {
   const input = manifest('host:palette')
   const capture = input.captures[0]!
