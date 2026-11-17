@@ -3,9 +3,9 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 
-import { parseArguments, UsageError } from './arguments.ts'
+import { parseArguments, USAGE, UsageError } from './arguments.ts'
 
-const faultKinds = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback'] as const
+const faultKinds = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback', 'flood'] as const
 
 const scratch: string[] = []
 const defaultLimits = {
@@ -15,7 +15,7 @@ const defaultLimits = {
   maxEventsPer5s: 30,
   maxStallMs: 1000,
   maxUnanswered: 0,
-  maxWindowRequestsPerMinute: null,
+  maxWindowRequestsPerMinute: 2500,
 }
 
 function makeTempDir(): string {
@@ -176,7 +176,7 @@ for (const argv of [
 
     expect(caught).toBeInstanceOf(UsageError)
     if (caught instanceof UsageError) {
-      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block, slow-git, feedback')
+      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block, slow-git, feedback, flood')
     }
   })
 }
@@ -208,8 +208,8 @@ for (const value of ['0', '-1', '1.5', 'abc']) {
   })
 }
 
-test('defaults the per-window request budget to report-only', () => {
-  expect(parseConfig(['--out', makeTempDir()]).limits.maxWindowRequestsPerMinute).toBeNull()
+test('defaults the per-window request budget to 2500', () => {
+  expect(parseConfig(['--out', makeTempDir()]).limits.maxWindowRequestsPerMinute).toBe(2500)
 })
 
 
@@ -308,4 +308,37 @@ test('accepts feedback with two or more windows', () => {
   const out = makeTempDir()
   const config = parseConfig(['--out', out, '--fault', 'feedback', '--windows', '2'])
   expect(config).toMatchObject({ fault: 'feedback', windows: 2 })
+})
+
+for (const windows of ['0', '1']) {
+  test(`rejects flood with ${windows} windows before reserving the default output`, () => {
+    expectUsageError(
+      ['--fault', 'flood', '--windows', windows],
+      '--fault flood needs --windows 2 or more'
+    )
+  })
+}
+
+for (let windows = 2; windows <= 7; windows += 1) {
+  test(`accepts flood with ${windows} windows`, () => {
+    const out = makeTempDir()
+    const config = parseConfig(['--out', out, '--fault', 'flood', '--windows', String(windows), '--minutes', '0.4'])
+    expect(config).toMatchObject({
+      fault: 'flood',
+      windows,
+      minutes: 0.4,
+      limits: { maxWindowRequestsPerMinute: 2500 }
+    })
+  })
+}
+
+test('lists flood last in the supported fault choices', () => {
+  expect(USAGE).toContain('--fault leak|zombies|storm|block|slow-git|feedback|flood')
+})
+
+test('does not add a report-only spelling for the request limit', () => {
+  expectUsageError(
+    ['--out', makeTempDir(), '--max-window-requests-per-minute=null'],
+    'whole positive number'
+  )
 })
