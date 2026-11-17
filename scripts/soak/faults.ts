@@ -18,6 +18,7 @@ export type FaultPlan =
   | { kind: 'block'; ms: number }
   | { kind: 'slow-git'; ms: number }
   | { kind: 'feedback'; refreshes: number }
+  | { kind: 'flood'; requests: 3000 }
 type PluginReport = { leaked: number[]; holders: number[]; refreshes: number; blockedMs: number | null }
 
 /** Returns bounded parameters that trip the chosen check on a run of this length. */
@@ -30,6 +31,7 @@ export function faultPlan(kind: FaultKind, runSeconds: number): FaultPlan {
     case 'block': return { kind, ms: 3000 }
     case 'slow-git': return { kind, ms: SLOW_GIT_FAULT_MS }
     case 'feedback': return { kind, refreshes: 17 }
+    case 'flood': return { kind, requests: 3000 }
   }
 }
 
@@ -125,16 +127,30 @@ export type RunningFault = {
 export function startFault(options: {
   kind: FaultKind; home: string; control: QuirkyClient; projects: string[]; out: string
   runSeconds: number; startedAt: number; signal: AbortSignal; feedbackWorktrees?: [string, string]
+  floodWindow?: { index: number; worktree: string }
 }): RunningFault {
   const isWorktreePair = (value: unknown): value is [string, string] =>
     Array.isArray(value) && value.length === 2 && value.every((worktree) => typeof worktree === 'string' && worktree.trim() !== '')
   const sameWorktrees = (value: unknown, expected: [string, string]) =>
     isWorktreePair(value) && value[0] === expected[0] && value[1] === expected[1]
+  const isFloodWindow = (value: unknown): value is { index: number; worktree: string } => {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+    const target = value as Record<string, unknown>
+    return typeof target.index === 'number' && Number.isSafeInteger(target.index) && target.index >= 0
+      && typeof target.worktree === 'string' && target.worktree.trim() !== ''
+  }
   const messageOf = (error: unknown) => error instanceof Error ? error.message : String(error)
   if (options.kind === 'feedback' && (!isWorktreePair(options.feedbackWorktrees) || options.feedbackWorktrees[0] === options.feedbackWorktrees[1])) {
     throw new Error('feedback fault requires two distinct nonempty worktrees')
   }
   const feedbackWorktrees = options.feedbackWorktrees ? [...options.feedbackWorktrees] as [string, string] : undefined
+  let floodWindow: { index: number; worktree: string } | undefined
+  if (options.kind === 'flood') {
+    if (!isFloodWindow(options.floodWindow)) {
+      throw new Error('flood fault requires a nonnegative window index and nonempty worktree')
+    }
+    floodWindow = { index: options.floodWindow.index, worktree: options.floodWindow.worktree }
+  }
   const plan = faultPlan(options.kind, options.runSeconds)
   let stopped = false
   let driversStopped = false
@@ -172,9 +188,9 @@ export function startFault(options: {
     task,
     cancellation.promise.then((): never => { throw new Error('soak fault was stopped before completion') })
   ])
-  const call = (client: QuirkyClient, method: string, params: Record<string, unknown>) => {
+  const call = (client: QuirkyClient, method: string, params: Record<string, unknown>, timeoutMs = 30_000) => {
     ensureRunning()
-    return client.callAny(`${FAULT_PLUGIN_ID}/${method}`, params, { timeoutMs: 30_000 })
+    return client.callAny(`${FAULT_PLUGIN_ID}/${method}`, params, { timeoutMs })
   }
   const pause = (ms: number) => {
     const { promise, resolve } = Promise.withResolvers<void>()
@@ -277,11 +293,72 @@ export function startFault(options: {
     }
   }
 
+  const injectFlood = async (window: { index: number; worktree: string }, requests: number) => {
+    const deadlineAt = performance.now() + 10_000
+    const deadline = Promise.withResolvers<never>()
+    const deadlineTimer = setTimeout(
+      () => deadline.reject(new Error('flood injection did not complete within 10 seconds')),
+      10_000
+    )
+    const withinDeadline = <T>(task: Promise<T>) => untilStopped(Promise.race([task, deadline.promise]))
+    const timeoutMs = () => {
+      const remaining = deadlineAt - performance.now()
+      if (remaining <= 0) throw new Error('flood injection did not complete within 10 seconds')
+      return Math.ceil(remaining)
+    }
+    const callFlood = async (method: string, params: Record<string, unknown>) => {
+      let raw: unknown
+      try {
+        raw = await withinDeadline(call(options.control, method, params, timeoutMs()))
+      } catch (error) {
+        ensureRunning()
+        throw new Error(`${method} RPC failed: ${messageOf(error)}`, { cause: error })
+      }
+      ensureRunning()
+      return raw
+    }
+    const hasExactKeys = (value: unknown, keys: readonly string[]): value is Record<string, unknown> =>
+      typeof value === 'object' && value !== null && !Array.isArray(value)
+      && Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
+
+    try {
+      at = (performance.now() - options.startedAt) / 1000
+      const started = await callFlood('floodStart', { worktree: window.worktree, requests })
+      if (!hasExactKeys(started, ['started']) || started.started !== true) {
+        throw new Error('floodStart RPC did not confirm that the fixture started')
+      }
+
+      while (true) {
+        const raw = await callFlood('floodReport', {})
+        if (!hasExactKeys(raw, ['worktree', 'expected', 'requests', 'active'])
+          || raw.worktree !== window.worktree
+          || raw.expected !== requests
+          || typeof raw.requests !== 'number'
+          || !Number.isSafeInteger(raw.requests)
+          || raw.requests < 0
+          || raw.requests > requests
+          || typeof raw.active !== 'boolean') {
+          throw new Error('floodReport did not match the armed target')
+        }
+        if (raw.requests === requests && raw.active === false) return
+        if (raw.requests === requests || raw.active === false) {
+          throw new Error('floodReport did not match the armed target')
+        }
+        await withinDeadline(pause(Math.min(100, Math.max(0, deadlineAt - performance.now()))))
+        ensureRunning()
+      }
+    } finally {
+      clearTimeout(deadlineTimer)
+    }
+  }
+
   const inject = async () => {
     const deadline = options.startedAt + FAULT_DELAY_SECONDS * 1000
     while (!stopped && performance.now() < deadline) await pause(deadline - performance.now())
     ensureRunning()
-    if (plan.kind === 'feedback') {
+    if (plan.kind === 'flood') {
+      await injectFlood(floodWindow!, plan.requests)
+    } else if (plan.kind === 'feedback') {
       await injectFeedback(feedbackWorktrees!)
     } else if (plan.kind === 'slow-git') {
       setGitDelay(options.home, plan.ms)
@@ -320,6 +397,19 @@ export function startFault(options: {
     await untilStopped(injected)
     ensureRunning()
     if (failed) throw failure
+    if (options.kind === 'flood') {
+      return {
+        kind: options.kind,
+        check: FAULT_CHECK[options.kind],
+        at: Number(at.toFixed(3)),
+        detail: {
+          pids: [],
+          refreshes: 0,
+          blockedMs: null,
+          flood: { ...floodWindow!, requests: 3000 }
+        }
+      }
+    }
     if (options.kind === 'feedback') {
       let raw: unknown
       try {

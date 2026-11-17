@@ -11,6 +11,9 @@ const { createRoot }: typeof ReactClient = await import(clientModule)
 
 const PANEL_ID = 'panel:soak.faults/feedback'
 const FEEDBACK_LIMIT = 17
+const FLOOD_PANEL_ID = 'panel:soak.faults/flood'
+const FLOOD_BATCH_SIZE = 50
+const FLOOD_REQUEST_LIMIT = 10_000
 
 type PanelReport = { ready: boolean; worktree: string | null; sequence: number; error: string | null }
 type WorktreePair = [string, string]
@@ -163,11 +166,149 @@ function FeedbackPanel({ context, report }: {
   )
 }
 
+type FloodPanelReport = { ready: boolean; worktree: string | null; sent: number; error: string | null }
+
+
+function FloodPanel({ context, report }: {
+  context: UiPluginContext
+  report?: (state: unknown) => void
+}) {
+  const [worktree, setWorktree] = useState(() => worktreeOf(context.getLayout()))
+  const [state, setState] = useState<FloodPanelReport>(() => ({
+    ready: false, worktree: worktreeOf(context.getLayout()), sent: 0, error: null
+  }))
+  const [expected, setExpected] = useState(0)
+  const [layoutRevision, setLayoutRevision] = useState(0)
+  const worktreeRef = useRef(worktree)
+  const reportRef = useRef(report)
+  const generation = useRef(0)
+  const started = useRef(false)
+  worktreeRef.current = worktree
+  reportRef.current = report
+
+  const publish = useCallback((next: FloodPanelReport) => {
+    setState(next)
+    reportRef.current?.(next)
+  }, [])
+
+  useEffect(() => context.onLayout((layout) => {
+    const next = worktreeOf(layout)
+    if (next === worktreeRef.current) return
+    generation.current += 1
+    setLayoutRevision((revision) => revision + 1)
+    worktreeRef.current = next
+    setExpected(0)
+    publish({ ready: false, worktree: next, sent: 0, error: null })
+    setWorktree(next)
+  }), [context, publish])
+
+  useEffect(() => {
+    const currentWorktree = worktree
+    const currentGeneration = ++generation.current
+    worktreeRef.current = currentWorktree
+    const isCurrent = () => generation.current === currentGeneration && worktreeRef.current === currentWorktree
+    const waitingReport = (): FloodPanelReport => ({
+      ready: false, worktree: currentWorktree, sent: 0, error: null
+    })
+
+    if (currentWorktree === null) {
+      publish(waitingReport())
+      return () => { if (generation.current === currentGeneration) generation.current += 1 }
+    }
+
+    const startFlood = async (requests: number) => {
+      let sent = 0
+      setExpected(requests)
+      publish({ ready: true, worktree: currentWorktree, sent, error: null })
+      try {
+        for (let first = 1; first <= requests; first += FLOOD_BATCH_SIZE) {
+          if (!isCurrent()) return
+          const count = Math.min(FLOOD_BATCH_SIZE, requests - first + 1)
+          const batch = Array.from({ length: count }, (_, offset) => {
+            const sequence = first + offset
+            return context.call('soak.faults/floodTick', {
+              owner: currentWorktree,
+              sequence
+            }).then((value) => {
+              if (!isCurrent()) return
+              if (!record(value) || value.owner !== currentWorktree || value.sequence !== sequence) {
+                throw new Error(`flood tick ${sequence} returned an unexpected result`)
+              }
+            })
+          })
+          await Promise.all(batch)
+          if (!isCurrent()) return
+          sent += count
+        }
+        if (isCurrent()) publish({ ready: true, worktree: currentWorktree, sent, error: null })
+      } catch (error) {
+        if (isCurrent()) {
+          publish({ ready: true, worktree: currentWorktree, sent, error: error instanceof Error ? error.message : 'The flood fixture request failed.' })
+        }
+      }
+    }
+
+    const onEvent = (event: QuirkyEvent) => {
+      if (!('data' in event) || event.type !== 'soak.faults/floodStarted') return
+      const data = event.data
+      if (!isCurrent() || !record(data) || started.current
+        || typeof data.worktree !== 'string' || data.worktree.trim() === ''
+        || data.worktree !== currentWorktree
+        || typeof data.requests !== 'number' || !Number.isSafeInteger(data.requests)
+        || data.requests < 1 || data.requests > FLOOD_REQUEST_LIMIT) return
+      started.current = true
+      void startFlood(data.requests)
+    }
+
+    let unsubscribe = () => {}
+    try {
+      unsubscribe = context.subscribe(onEvent, { worktreeId: currentWorktree })
+      publish({ ready: true, worktree: currentWorktree, sent: 0, error: null })
+    } catch (error) {
+      publish({ ...waitingReport(), error: error instanceof Error ? error.message : 'The flood fixture request failed.' })
+    }
+
+    return () => {
+      if (generation.current === currentGeneration) generation.current += 1
+      unsubscribe()
+    }
+  }, [context, layoutRevision, publish, worktree])
+
+  const progress = state.error
+    ? `Flood stopped after ${state.sent} of ${expected} requests.`
+    : expected > 0 && state.sent === expected
+      ? `Flood completed: ${state.sent} of ${expected} requests.`
+      : expected > 0
+        ? `Flood in progress: ${state.sent} of ${expected} requests.`
+        : 'Waiting for flood activation.'
+
+  return createElement(
+    'section',
+    { className: 'ui-stack', style: { padding: 'var(--ui-space-12)', gap: 'var(--ui-space-8)' } },
+    state.error
+      ? createElement(InlineError, { message: state.error })
+      : createElement(EmptyState, { message: state.ready ? 'Flood fixture is mounted and listening.' : 'Waiting for a worktree subscription…' }),
+    createElement(
+      'p',
+      { className: 'ui-text-muted', role: 'status' },
+      state.worktree === null ? 'No worktree selected.' : `Worktree: ${state.worktree}`,
+      ' · ',
+      progress
+    )
+  )
+}
+
 export function activate(context: UiPluginContext): void {
-  const mount: MountFunction = (element, props) => {
+  const feedbackMount: MountFunction = (element, props) => {
     const root = createRoot(element)
     root.render(createElement(FeedbackPanel, { context, report: props.report }))
     return () => root.unmount()
   }
-  context.provide(PANEL_ID, mount)
+  const floodMount: MountFunction = (element, props) => {
+    const root = createRoot(element)
+    root.render(createElement(FloodPanel, { context, report: props.report }))
+    return () => root.unmount()
+  }
+  context.provide(PANEL_ID, feedbackMount)
+  context.provide(FLOOD_PANEL_ID, floodMount)
 }

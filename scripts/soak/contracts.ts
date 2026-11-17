@@ -25,9 +25,9 @@ export type TaskInteractionRecord = {
   ok: boolean; proof: { at: number; method: string } | null; error: string | null
 }
 
-export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback'] as const
+export const FAULT_KINDS = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback', 'flood'] as const
 export type FaultKind = (typeof FAULT_KINDS)[number]
-export type FaultCheck = 'children' | 'zombies' | 'events' | 'stalls' | 'calls' | 'refreshes'
+export type FaultCheck = 'children' | 'zombies' | 'events' | 'stalls' | 'calls' | 'refreshes' | 'requests'
 export const FAULT_CHECK: Record<FaultKind, FaultCheck> = {
   leak: 'children',
   zombies: 'zombies',
@@ -35,6 +35,7 @@ export const FAULT_CHECK: Record<FaultKind, FaultCheck> = {
   block: 'stalls',
   'slow-git': 'calls',
   feedback: 'refreshes',
+  flood: 'requests',
 }
 export const FAULT_MIN_MINUTES = 0.25
 export const DEFAULT_WINDOWS = 3
@@ -42,7 +43,13 @@ export const MAX_WINDOWS = 7
 export const WINDOW_SILENCE_SECONDS = 30
 
 /** `pids` is leaked children, zombie holders, or slow-git process groups; empty otherwise. */
-export type FaultDetail = { pids: number[]; refreshes: number; blockedMs: number | null; worktrees?: [string, string] }
+export type FaultDetail = {
+  pids: number[]
+  refreshes: number
+  blockedMs: number | null
+  worktrees?: [string, string]
+  flood?: { index: number; worktree: string; requests: number }
+}
 export type FaultRecord = { kind: FaultKind; check: FaultCheck; at: number; detail: FaultDetail }
 
 export type RefreshExample = {
@@ -70,7 +77,7 @@ export const DEFAULT_LIMITS: SoakLimits = {
   maxEventsPer5s: 30,
   maxStallMs: 1000,
   maxUnanswered: 0,
-  maxWindowRequestsPerMinute: null,
+  maxWindowRequestsPerMinute: 2500,
 }
 export const QUALIFYING_MINUTES = 30
 export const QUALIFYING_WINDOWS = 2

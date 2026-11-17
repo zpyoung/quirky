@@ -7,6 +7,7 @@ import { validateValue } from '@quirky/protocol'
 import { startChild, type StartedChild } from '../../packages/process/src/child.ts'
 import { parseManifest } from '../../packages/daemon/src/plugins/manifest.ts'
 import { buildFaultUi, faultPlan, installFaultPlugin, installSlowGit, setGitDelay, startFault } from './faults.ts'
+import { FAULT_CHECK } from './contracts.ts'
 import { activate } from './faults/main.ts'
 const timerControls = vi as typeof vi & { advanceTimersByTime(milliseconds: number): void }
 
@@ -20,12 +21,14 @@ test('bounds the leak interval and lifetime on extreme run lengths', () => {
   expect(faultPlan('leak', 0.01)).toEqual({ kind: 'leak', count: 80, everyMs: 10, lifetimeSeconds: 31 })
 })
 
-test('plans zombie holders, bounded storms, a synchronous stall, slow git, and fixed feedback', () => {
+test('plans zombie holders, bounded storms, a synchronous stall, slow git, and fixed feedback and flood', () => {
   expect(faultPlan('zombies', 24)).toEqual({ kind: 'zombies', holders: 2, each: 5, lifetimeSeconds: 54 })
   expect(faultPlan('storm', 24)).toEqual({ kind: 'storm', seconds: 10 })
   expect(faultPlan('block', 24)).toEqual({ kind: 'block', ms: 3000 })
   expect(faultPlan('slow-git', 24)).toEqual({ kind: 'slow-git', ms: 35_000 })
   expect(faultPlan('feedback', 24)).toEqual({ kind: 'feedback', refreshes: 17 })
+  expect(faultPlan('flood', 24)).toEqual({ kind: 'flood', requests: 3000 })
+  expect(FAULT_CHECK.flood).toBe('requests')
 })
 
 test('feedback injection requires two distinct ready-window worktrees', () => {
@@ -40,6 +43,23 @@ test('feedback injection requires two distinct ready-window worktrees', () => {
     startedAt: performance.now(),
     signal: new AbortController().signal
   })).toThrow('feedback fault requires two distinct nonempty worktrees')
+})
+
+test('flood injection requires a valid copied window target', async () => {
+  const control = { callAny: async () => ({ started: true }) } as unknown as QuirkyClient
+  const base = {
+    kind: 'flood' as const,
+    home: '/unused',
+    control,
+    projects: [],
+    out: '/unused',
+    runSeconds: 24,
+    startedAt: performance.now() - 2100,
+    signal: new AbortController().signal
+  }
+  for (const floodWindow of [undefined, { index: -1, worktree: 'a' }, { index: 0.5, worktree: 'a' }, { index: 0, worktree: '' }, { index: 0, worktree: '  ' }]) {
+    expect(() => startFault({ ...base, floodWindow })).toThrow('flood fault requires a nonnegative window index and nonempty worktree')
+  }
 })
 
 type FixtureHandler = (params?: unknown) => unknown
@@ -63,7 +83,7 @@ function activateFixture() {
   return { handlers, events, dispose }
 }
 
-test('declares feedback schemas accepted by the daemon manifest validator', () => {
+test('declares feedback and flood schemas accepted by the daemon manifest validator', () => {
   const manifest = JSON.parse(readFileSync(join(import.meta.dir, 'faults', 'quirky-plugin.json'), 'utf8'))
   const methods = Object.fromEntries(manifest.contributes.method.map((entry: { id: string }) => [entry.id, entry]))
   const events = Object.fromEntries(manifest.contributes.event.map((entry: { id: string }) => [entry.id, entry]))
@@ -87,6 +107,47 @@ test('declares feedback schemas accepted by the daemon manifest validator', () =
     source: 'installed'
   })
   expect(parsed.ok).toBe(true)
+})
+
+test('validates bounded strict flood method and event schemas', () => {
+  const manifest = JSON.parse(readFileSync(join(import.meta.dir, 'faults', 'quirky-plugin.json'), 'utf8'))
+  const methods = Object.fromEntries(manifest.contributes.method.map((entry: { id: string }) => [entry.id, entry]))
+  const events = Object.fromEntries(manifest.contributes.event.map((entry: { id: string }) => [entry.id, entry]))
+  const start = methods.floodStart.params
+  const tick = methods.floodTick.params
+  const report = methods.floodReport.result
+
+  for (const method of [methods.floodStart, methods.floodTick, methods.floodReport]) {
+    expect(method.params.type).toBe('object')
+    expect(method.params.additionalProperties).toBe(false)
+    expect(method.result.type).toBe('object')
+    expect(method.result.additionalProperties).toBe(false)
+  }
+  for (const value of [1, 10_000]) {
+    expect(validateValue(start, { worktree: 'a', requests: value })).toBeNull()
+  }
+  expect(validateValue(start, { worktree: 'a' })).not.toBeNull()
+  for (const value of [0, -1, 1.5, '1', null, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1, 10_001]) {
+    expect(validateValue(start, { worktree: 'a', requests: value })).not.toBeNull()
+  }
+  expect(validateValue(start, { worktree: 'a', requests: 1, extra: true })).not.toBeNull()
+  expect(validateValue(methods.floodStart.result, { started: true })).toBeNull()
+  expect(validateValue(methods.floodStart.result, { started: true, extra: true })).not.toBeNull()
+  expect(validateValue(tick, { owner: 'a', sequence: 1 })).toBeNull()
+  expect(validateValue(tick, { owner: 'a', sequence: 0 })).not.toBeNull()
+  expect(validateValue(tick, { owner: 'a', sequence: 10_001 })).not.toBeNull()
+  expect(validateValue(methods.floodTick.result, { owner: 'a', sequence: 1 })).toBeNull()
+  expect(validateValue(methods.floodTick.result, { owner: 'a', sequence: 1, extra: true })).not.toBeNull()
+  expect(validateValue(methods.floodReport.params, {})).toBeNull()
+  expect(validateValue(methods.floodReport.params, { extra: true })).not.toBeNull()
+  expect(methods.floodReport.readOnly).toBe(true)
+  expect(validateValue(report, { worktree: null, expected: 0, requests: 0, active: false })).toBeNull()
+  expect(validateValue(report, { worktree: 'a', expected: 10_000, requests: 10_000, active: false })).toBeNull()
+  expect(validateValue(report, { worktree: 'a', expected: 10_001, requests: 0, active: true })).not.toBeNull()
+  expect(validateValue(events.floodStarted.data, { worktree: 'a', requests: 3000 })).toBeNull()
+  expect(validateValue(events.floodStarted.data, { worktree: 'a', requests: 3000, extra: true })).not.toBeNull()
+  expect(events.floodStarted.worktree).toBe('worktree')
+  expect(events.floodStarted.data.additionalProperties).toBe(false)
 })
 
 test('feedback fixture alternates exactly seventeen owners and rejects invalid or late requests', () => {
@@ -151,6 +212,107 @@ test('feedback fixture deactivation cancels its pending changed event', () => {
   } finally {
     fixture.dispose?.()
     vi.useRealTimers()
+  }
+})
+
+test('flood fixture starts once and accepts each requested sequence in arbitrary order', () => {
+  const fixture = activateFixture()
+  const start = fixture.handlers.get('method:soak.faults/floodStart')!
+  const tick = fixture.handlers.get('method:soak.faults/floodTick')!
+  const report = fixture.handlers.get('method:soak.faults/floodReport')!
+  try {
+    expect(report()).toEqual({ worktree: null, expected: 0, requests: 0, active: false })
+    expect(start({ worktree: 'a', requests: 3000 })).toEqual({ started: true })
+    expect(fixture.events).toEqual([{
+      type: 'floodStarted',
+      data: { worktree: 'a', requests: 3000 }
+    }])
+    for (let sequence = 3000; sequence >= 1; sequence -= 1) {
+      expect(tick({ owner: 'a', sequence })).toEqual({ owner: 'a', sequence })
+    }
+    expect(report()).toEqual({ worktree: 'a', expected: 3000, requests: 3000, active: false })
+    expect(fixture.events).toEqual([{
+      type: 'floodStarted',
+      data: { worktree: 'a', requests: 3000 }
+    }])
+    expect(fixture.handlers.get('method:soak.faults/report')!())
+      .toEqual({ leaked: [], holders: [], refreshes: 0, blockedMs: null })
+  } finally {
+    fixture.dispose?.()
+  }
+})
+
+test('flood fixture rejects empty or whitespace worktree IDs', () => {
+  const fixture = activateFixture()
+  const start = fixture.handlers.get('method:soak.faults/floodStart')!
+  try {
+    expect(() => start({ worktree: '', requests: 1 })).toThrow()
+    expect(() => start({ worktree: '  ', requests: 1 })).toThrow()
+    expect(fixture.handlers.get('method:soak.faults/floodReport')!())
+      .toEqual({ worktree: null, expected: 0, requests: 0, active: false })
+    expect(fixture.events).toEqual([])
+  } finally {
+    fixture.dispose?.()
+  }
+})
+
+test('flood fixture rejects every invalid request count without arming', () => {
+  const fixture = activateFixture()
+  const start = fixture.handlers.get('method:soak.faults/floodStart')!
+  const report = fixture.handlers.get('method:soak.faults/floodReport')!
+  try {
+    for (const requests of [0, -1, 1.5, '1', null, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1, 10_001]) {
+      expect(() => start({ worktree: 'a', requests })).toThrow()
+      expect(report()).toEqual({ worktree: null, expected: 0, requests: 0, active: false })
+      expect(fixture.events).toEqual([])
+    }
+    expect(start({ worktree: 'a', requests: 10_000 })).toEqual({ started: true })
+    expect(report()).toEqual({ worktree: 'a', expected: 10_000, requests: 0, active: true })
+  } finally {
+    fixture.dispose?.()
+  }
+})
+
+test('flood fixture rejects unarmed, foreign, duplicate, and out-of-range ticks without counting them', () => {
+  const fixture = activateFixture()
+  const start = fixture.handlers.get('method:soak.faults/floodStart')!
+  const tick = fixture.handlers.get('method:soak.faults/floodTick')!
+  const report = fixture.handlers.get('method:soak.faults/floodReport')!
+  try {
+    expect(() => tick({ owner: 'a', sequence: 1 })).toThrow()
+    expect(start({ worktree: 'a', requests: 2 })).toEqual({ started: true })
+    expect(() => tick({ owner: 'b', sequence: 1 })).toThrow()
+    expect(() => tick({ owner: 'a', sequence: 0 })).toThrow()
+    expect(() => tick({ owner: 'a', sequence: 3 })).toThrow()
+    expect(report()).toEqual({ worktree: 'a', expected: 2, requests: 0, active: true })
+    expect(tick({ owner: 'a', sequence: 2 })).toEqual({ owner: 'a', sequence: 2 })
+    expect(() => tick({ owner: 'a', sequence: 2 })).toThrow()
+    expect(report()).toEqual({ worktree: 'a', expected: 2, requests: 1, active: true })
+    expect(fixture.events).toHaveLength(1)
+  } finally {
+    fixture.dispose?.()
+  }
+})
+
+test('flood fixture rejects repeated starts and mutations after completion or deactivation', () => {
+  const fixture = activateFixture()
+  const start = fixture.handlers.get('method:soak.faults/floodStart')!
+  const tick = fixture.handlers.get('method:soak.faults/floodTick')!
+  const report = fixture.handlers.get('method:soak.faults/floodReport')!
+  try {
+    expect(start({ worktree: 'a', requests: 1 })).toEqual({ started: true })
+    expect(() => start({ worktree: 'a', requests: 1 })).toThrow()
+    expect(tick({ owner: 'a', sequence: 1 })).toEqual({ owner: 'a', sequence: 1 })
+    expect(() => tick({ owner: 'a', sequence: 1 })).toThrow()
+    expect(report()).toEqual({ worktree: 'a', expected: 1, requests: 1, active: false })
+    expect(() => start({ worktree: 'b', requests: 1 })).toThrow()
+    fixture.dispose?.()
+    expect(() => tick({ owner: 'a', sequence: 1 })).toThrow()
+    expect(() => start({ worktree: 'b', requests: 1 })).toThrow()
+    expect(report()).toEqual({ worktree: 'a', expected: 1, requests: 1, active: false })
+    expect(fixture.events).toHaveLength(1)
+  } finally {
+    fixture.dispose?.()
   }
 })
 
@@ -415,3 +577,319 @@ test('a failed final report is not retried on subsequent finalization', async ()
     fault.stop()
   }
 })
+
+test('flood controller polls until the copied target reports exact completion', async () => {
+  const selectedWindow = { index: 0, worktree: 'window-a' }
+  let reportCalls = 0
+  const methods: string[] = []
+  const control = { callAny: async (method: string, params: unknown) => {
+    methods.push(method)
+    if (method === 'soak.faults/floodStart') {
+      expect(params).toEqual({ worktree: 'window-a', requests: 3000 })
+      selectedWindow.worktree = 'changed-after-start'
+      return { started: true }
+    }
+    if (method === 'soak.faults/floodReport') {
+      reportCalls += 1
+      return reportCalls === 1
+        ? { worktree: 'window-a', expected: 3000, requests: 2999, active: true }
+        : { worktree: 'window-a', expected: 3000, requests: 3000, active: false }
+    }
+    throw new Error(`unexpected call: ${method}`)
+  } } as unknown as QuirkyClient
+  const fault = startFault({
+    kind: 'flood',
+    home: '/unused',
+    control,
+    projects: [],
+    out: '/unused',
+    runSeconds: 24,
+    startedAt: performance.now() - 2100,
+    signal: new AbortController().signal,
+    floodWindow: selectedWindow
+  })
+  try {
+    const record = await fault.finish()
+    expect(record).toEqual({
+      kind: 'flood',
+      check: 'requests',
+      at: expect.any(Number),
+      detail: {
+        pids: [],
+        refreshes: 0,
+        blockedMs: null,
+        flood: { index: 0, worktree: 'window-a', requests: 3000 }
+      }
+    })
+    expect(reportCalls).toBe(2)
+    expect(methods).toEqual([
+      'soak.faults/floodStart',
+      'soak.faults/floodReport',
+      'soak.faults/floodReport'
+    ])
+  } finally {
+    fault.stop()
+  }
+})
+
+for (const phase of ['start', 'report'] as const) {
+  test(`flood controller rejects malformed ${phase} acknowledgements`, async () => {
+    const control = { callAny: async (method: string) => {
+      if (method === 'soak.faults/floodStart') return phase === 'start' ? { started: false } : { started: true }
+      if (method === 'soak.faults/floodReport') {
+        return phase === 'report'
+          ? { worktree: 'foreign', expected: 3000, requests: 3000, active: false }
+          : { worktree: 'window-a', expected: 3000, requests: 3000, active: false }
+      }
+      throw new Error(`unexpected call: ${method}`)
+    } } as unknown as QuirkyClient
+    const fault = startFault({
+      kind: 'flood',
+      home: '/unused',
+      control,
+      projects: [],
+      out: '/unused',
+      runSeconds: 24,
+      startedAt: performance.now() - 2100,
+      signal: new AbortController().signal,
+      floodWindow: { index: 0, worktree: 'window-a' }
+    })
+    try {
+      await expect(fault.finish()).rejects.toThrow(
+        phase === 'start' ? 'floodStart RPC did not confirm' : 'floodReport did not match the armed target'
+      )
+    } finally {
+      fault.stop()
+    }
+  })
+}
+
+for (const [label, response] of [
+  ['null result', null],
+  ['missing started field', {}],
+  ['extra property', { started: true, extra: true }]
+] as const) {
+  test(`flood controller rejects floodStart ${label}`, async () => {
+    const control = { callAny: async () => response } as unknown as QuirkyClient
+    const fault = startFault({
+      kind: 'flood',
+      home: '/unused',
+      control,
+      projects: [],
+      out: '/unused',
+      runSeconds: 24,
+      startedAt: performance.now() - 2100,
+      signal: new AbortController().signal,
+      floodWindow: { index: 0, worktree: 'window-a' }
+    })
+    try {
+      await expect(fault.finish()).rejects.toThrow('floodStart RPC did not confirm')
+    } finally {
+      fault.stop()
+    }
+  })
+}
+
+for (const [label, report] of [
+  ['null report', null],
+  ['unarmed worktree', { worktree: null, expected: 0, requests: 0, active: false }],
+  ['foreign worktree', { worktree: 'other', expected: 3000, requests: 3000, active: false }],
+  ['wrong expected count', { worktree: 'window-a', expected: 2999, requests: 3000, active: false }],
+  ['negative request count', { worktree: 'window-a', expected: 3000, requests: -1, active: true }],
+  ['excess request count', { worktree: 'window-a', expected: 3000, requests: 3001, active: false }],
+  ['nonboolean active flag', { worktree: 'window-a', expected: 3000, requests: 0, active: 'yes' }],
+  ['complete but still active', { worktree: 'window-a', expected: 3000, requests: 3000, active: true }],
+  ['incomplete but inactive', { worktree: 'window-a', expected: 3000, requests: 2999, active: false }],
+  ['extra property', { worktree: 'window-a', expected: 3000, requests: 3000, active: false, extra: true }]
+] as const) {
+  test(`flood controller rejects a malformed floodReport with ${label}`, async () => {
+    const control = { callAny: async (method: string) => {
+      if (method === 'soak.faults/floodStart') return { started: true }
+      if (method === 'soak.faults/floodReport') return report
+      throw new Error(`unexpected call: ${method}`)
+    } } as unknown as QuirkyClient
+    const fault = startFault({
+      kind: 'flood',
+      home: '/unused',
+      control,
+      projects: [],
+      out: '/unused',
+      runSeconds: 24,
+      startedAt: performance.now() - 2100,
+      signal: new AbortController().signal,
+      floodWindow: { index: 0, worktree: 'window-a' }
+    })
+    try {
+      await expect(fault.finish()).rejects.toThrow('floodReport did not match the armed target')
+    } finally {
+      fault.stop()
+    }
+  })
+}
+
+for (const phase of ['start', 'report'] as const) {
+  test(`flood controller preserves a rejected ${phase} RPC`, async () => {
+    const control = { callAny: async (method: string) => {
+      if (method === 'soak.faults/floodStart') {
+        if (phase === 'start') throw new Error('start transport failed')
+        return { started: true }
+      }
+      if (method === 'soak.faults/floodReport') throw new Error('report transport failed')
+      throw new Error(`unexpected call: ${method}`)
+    } } as unknown as QuirkyClient
+    const fault = startFault({
+      kind: 'flood',
+      home: '/unused',
+      control,
+      projects: [],
+      out: '/unused',
+      runSeconds: 24,
+      startedAt: performance.now() - 2100,
+      signal: new AbortController().signal,
+      floodWindow: { index: 0, worktree: 'window-a' }
+    })
+    try {
+      await expect(fault.finish()).rejects.toThrow(
+        phase === 'start' ? 'floodStart RPC failed: start transport failed' : 'floodReport RPC failed: report transport failed'
+      )
+    } finally {
+      fault.stop()
+    }
+  })
+}
+
+for (const phase of ['start', 'report'] as const) {
+  test(`flood controller bounds a pending ${phase} RPC by the ten-second deadline`, async () => {
+    vi.useFakeTimers()
+    const pending = Promise.withResolvers<unknown>()
+    const entered = Promise.withResolvers<void>()
+    let calls = 0
+    let timeoutMs = 0
+    const control = { callAny: async (method: string, _params: unknown, options: { timeoutMs?: number }) => {
+      calls += 1
+      timeoutMs = options.timeoutMs ?? 0
+      if (method === 'soak.faults/floodStart') {
+        if (phase === 'start') {
+          entered.resolve()
+          return pending.promise
+        }
+        return { started: true }
+      }
+      if (method === 'soak.faults/floodReport' && phase === 'report') {
+        entered.resolve()
+        return pending.promise
+      }
+      throw new Error(`unexpected call: ${method}`)
+    } } as unknown as QuirkyClient
+    const fault = startFault({
+      kind: 'flood',
+      home: '/unused',
+      control,
+      projects: [],
+      out: '/unused',
+      runSeconds: 24,
+      startedAt: performance.now() - 2100,
+      signal: new AbortController().signal,
+      floodWindow: { index: 0, worktree: 'window-a' }
+    })
+    const finished = fault.finish().then(() => null, (error: unknown) => error)
+    try {
+      await entered.promise
+      expect(timeoutMs).toBeGreaterThan(0)
+      expect(timeoutMs).toBeLessThanOrEqual(10_000)
+      timerControls.advanceTimersByTime(10_000)
+      const result = await finished
+      expect(result).toBeInstanceOf(Error)
+      expect((result as Error).message).toContain('10 seconds')
+      expect(calls).toBe(phase === 'start' ? 1 : 2)
+    } finally {
+      fault.stop()
+      pending.resolve({ started: true })
+      vi.useRealTimers()
+    }
+  })
+}
+
+test('flood controller rejects an incomplete fixture at the deadline and caches finalization', async () => {
+  vi.useFakeTimers()
+  const entered = Promise.withResolvers<void>()
+  let reportCalls = 0
+  const control = { callAny: async (method: string) => {
+    if (method === 'soak.faults/floodStart') return { started: true }
+    if (method === 'soak.faults/floodReport') {
+      reportCalls += 1
+      entered.resolve()
+      return { worktree: 'window-a', expected: 3000, requests: 0, active: true }
+    }
+    throw new Error(`unexpected call: ${method}`)
+  } } as unknown as QuirkyClient
+  const fault = startFault({
+    kind: 'flood',
+    home: '/unused',
+    control,
+    projects: [],
+    out: '/unused',
+    runSeconds: 24,
+    startedAt: performance.now() - 2100,
+    signal: new AbortController().signal,
+    floodWindow: { index: 0, worktree: 'window-a' }
+  })
+  try {
+    const first = fault.finish()
+    expect(fault.finish()).toBe(first)
+    await entered.promise
+    timerControls.advanceTimersByTime(10_000)
+    await expect(first).rejects.toThrow('10 seconds')
+    expect(reportCalls).toBeGreaterThan(0)
+    expect(reportCalls).toBeLessThanOrEqual(101)
+  } finally {
+    fault.stop()
+    vi.useRealTimers()
+  }
+})
+
+for (const phase of ['start', 'report'] as const) {
+  test(`stopping during a pending flood ${phase} RPC releases finalization without another call`, async () => {
+    const pending = Promise.withResolvers<unknown>()
+    const entered = Promise.withResolvers<void>()
+    let calls = 0
+    const control = { callAny: async (method: string) => {
+      calls += 1
+      if (method === 'soak.faults/floodStart') {
+        if (phase === 'start') {
+          entered.resolve()
+          return pending.promise
+        }
+        return { started: true }
+      }
+      if (method === 'soak.faults/floodReport' && phase === 'report') {
+        entered.resolve()
+        return pending.promise
+      }
+      throw new Error(`unexpected call: ${method}`)
+    } } as unknown as QuirkyClient
+    const fault = startFault({
+      kind: 'flood',
+      home: '/unused',
+      control,
+      projects: [],
+      out: '/unused',
+      runSeconds: 24,
+      startedAt: performance.now() - 2100,
+      signal: new AbortController().signal,
+      floodWindow: { index: 0, worktree: 'window-a' }
+    })
+    const finished = fault.finish().then(() => null, (error: unknown) => error)
+    try {
+      await entered.promise
+      fault.stop()
+      const result = await finished
+      expect(result).toBeInstanceOf(Error)
+      expect((result as Error).message).toBe('soak fault was stopped before completion')
+      expect(calls).toBe(phase === 'start' ? 1 : 2)
+    } finally {
+      fault.stop()
+      pending.resolve({ started: true })
+    }
+  })
+}
