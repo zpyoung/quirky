@@ -44,7 +44,7 @@ export const DEFAULT_WINDOWS = 3
 export const MAX_WINDOWS = 7
 export const WINDOW_SILENCE_SECONDS = 30
 
-/** `pids` is leaked children, zombie holders, or slow-git process groups; empty otherwise. */
+/** `pids` holds leaked children, zombie holders, slow-git process groups, or the paused PTY host. */
 export type FaultDetail = {
   pids: number[]
   refreshes: number
