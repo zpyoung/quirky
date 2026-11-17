@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from '
 import { resolve, join } from 'node:path'
 import { readRuntime } from '@quirky/protocol/node'
 import { parseArguments, USAGE, UsageError } from './soak/arguments.ts'
-import type { DayInputs, PanelRequestRecord, PanelRefreshRecord, Sample, SoakReport, WorkerBeat } from './soak/contracts.ts'
+import type { DayInputs, PanelRequestRecord, PanelRefreshRecord, Sample, SoakReport, WindowRecord, WorkerBeat } from './soak/contracts.ts'
 import { applyPhase, daySchedule, startDay, type DayDriver } from './soak/day.ts'
 import { startFault, setGitDelay, type RunningFault } from './soak/faults.ts'
 import { ownedProcesses, readProcessTable } from './soak/processes.ts'
@@ -73,28 +73,32 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
-async function readyFeedbackWindows(world: SoakWorld, windows: SoakWindows, signal: AbortSignal): Promise<[string, string]> {
-  await world.control.callAny('ui.tool.open', { id: 'panel:soak.faults/feedback' }, { timeoutMs: 5_000 })
+async function readyFaultWindows(
+  world: SoakWorld, windows: SoakWindows, signal: AbortSignal, kind: 'feedback' | 'flood',
+): Promise<WindowRecord[]> {
+  const panel = `panel:soak.faults/${kind}`
+  await world.control.callAny('ui.tool.open', { id: panel }, { timeoutMs: 5_000 })
   const records = (await windows.finish()).records
   const deadline = performance.now() + 30_000
   const pending = new Map(records.map((record) => [record.index, record]))
   while (pending.size > 0 && performance.now() < deadline) {
-    if (signal.aborted) throw new Error('feedback panel readiness was interrupted')
+    if (signal.aborted) throw new Error(`${kind} panel readiness was interrupted`)
     for (const [index, record] of pending) {
-      const state = await world.control.callAny('ui.window.state', { connId: record.connId }, { timeoutMs: 1_000 }) as {
+      const state = await world.control.callAny('ui.window.state', { connId: record.connId }, {
+        timeoutMs: Math.max(1, Math.min(1_000, deadline - performance.now())),
+      }) as {
         slots?: { id: string; shown: boolean; report?: { ready?: boolean; worktree?: string; error?: string | null } }[]
       }
-      const slot = state.slots?.find(({ id }) => id === 'panel:soak.faults/feedback')
-      if (slot?.report?.error) throw new Error(`feedback panel readiness: ${slot.report.error}`)
+      const slot = state.slots?.find(({ id }) => id === panel)
+      if (slot?.report?.error) throw new Error(`${kind} panel readiness: ${slot.report.error}`)
       if (slot?.shown && slot.report?.ready === true && slot.report.worktree === record.worktree) pending.delete(index)
-      if (signal.aborted) throw new Error('feedback panel readiness was interrupted')
+      if (signal.aborted) throw new Error(`${kind} panel readiness was interrupted`)
+      if (performance.now() >= deadline) break
     }
     if (pending.size) await pause(Math.min(100, Math.max(0, deadline - performance.now())), signal)
   }
-  if (pending.size) throw new Error(`feedback panel readiness missing for ${[...pending.values()].map(({ worktree }) => worktree).join(', ')} within 30000ms`)
-  const pair = records.slice(0, 2).map(({ worktree }) => worktree)
-  if (pair.length !== 2 || !pair[0] || !pair[1] || pair[0] === pair[1]) throw new Error('feedback needs two distinct ready window worktrees')
-  return [pair[0], pair[1]]
+  if (pending.size) throw new Error(`${kind} panel readiness missing for ${[...pending.values()].map(({ worktree }) => worktree).join(', ')} within 30000ms`)
+  return records
 }
 
 /** Runs an isolated real-daemon soak and returns its verdict or harness exit code. */
@@ -140,6 +144,10 @@ export async function main(argv: string[]): Promise<number> {
   const panelRefreshes: PanelRefreshRecord[] = []
   let measurementStart: number | null = null
   let measurementEnd: number | null = null
+  let floodWindow: { index: number; worktree: string } | undefined
+  const floodSequences = new Set<number>()
+  let floodObserved = 0
+  let floodObservationError: string | null = null
   try {
     mkdirSync(config.out, { recursive: true })
     const repoRoot = resolve(import.meta.dir, '..')
@@ -157,6 +165,26 @@ export async function main(argv: string[]): Promise<number> {
       windows = await openWindows({
         world, count: config.windows, executable: executable!, out: config.out, signal: setupAbort.signal,
         onRequest: (request) => {
+          if (config.fault === 'flood' && request.method === 'soak.faults/floodTick') {
+            floodObserved += 1
+            const params = request.params as { owner?: unknown; sequence?: unknown } | null
+            const sequence = params?.sequence
+            let error: string | null = null
+            if (measurementStart === null || measurementEnd === null || !Number.isFinite(request.at)
+              || request.at < measurementStart || request.at >= measurementEnd) {
+              error = 'a tick outside the measurement interval'
+            } else if (!floodWindow || request.index !== floodWindow.index || request.worktree !== floodWindow.worktree
+              || params?.owner !== floodWindow.worktree) {
+              error = 'a tick from the wrong window or owner'
+            } else if (typeof sequence !== 'number' || !Number.isSafeInteger(sequence) || sequence < 1 || sequence > 3000) {
+              error = 'an invalid tick sequence'
+            } else if (floodSequences.has(sequence)) {
+              error = 'a duplicate tick sequence'
+            } else {
+              floodSequences.add(sequence)
+            }
+            floodObservationError ??= error
+          }
           if (measurementStart === null || measurementEnd === null || request.at < measurementStart || request.at >= measurementEnd) return
           const at = Number(((request.at - measurementStart) / 1000).toFixed(3))
           const buckets = windowRequestSeconds[request.index]!
@@ -176,9 +204,24 @@ export async function main(argv: string[]): Promise<number> {
         worktrees: world.fixtures.worktrees.map(({ id }) => id)
       }
     }
-    const feedbackWorktrees = config.fault === 'feedback'
-      ? await readyFeedbackWindows(world, windows!, setupAbort.signal)
-      : undefined
+    let feedbackWorktrees: [string, string] | undefined
+    if (config.fault === 'feedback' || config.fault === 'flood') {
+      const ready = await readyFaultWindows(world, windows!, setupAbort.signal, config.fault)
+      if (config.fault === 'feedback') {
+        const pair = ready.slice(0, 2).map(({ worktree }) => worktree)
+        if (pair.length !== 2 || !pair[0] || !pair[1] || pair[0] === pair[1]) {
+          throw new Error('feedback needs two distinct ready window worktrees')
+        }
+        feedbackWorktrees = [pair[0], pair[1]]
+      } else {
+        const target = ready.find(({ index }) => index === 0)
+        if (!target || !target.worktree.trim() || ready.length !== config.windows
+          || new Set(ready.map(({ worktree }) => worktree)).size !== ready.length) {
+          throw new Error('flood needs distinct ready window worktrees including index 0')
+        }
+        floodWindow = { index: target.index, worktree: target.worktree }
+      }
+    }
     if (interrupted) return interrupted
     if (config.slowGitMs !== undefined) setGitDelay(world.home, config.slowGitMs)
     const startedAt = performance.now()
@@ -217,6 +260,7 @@ export async function main(argv: string[]): Promise<number> {
         startedAt,
         signal: runAbort.signal,
         feedbackWorktrees,
+        floodWindow,
       })
     }
     const elapsed = () => (performance.now() - startedAt) / 1000
@@ -275,6 +319,19 @@ export async function main(argv: string[]): Promise<number> {
       if (events.length !== 17) throw new Error(`feedback observed ${events.length} changed events, expected 17`)
     }
     const windowEvidence = windows ? await windows.finish() : { records: [], requests: [] }
+    if (config.fault === 'flood') {
+      if (floodObservationError) throw new Error(`flood observed ${floodObservationError}`)
+      if (floodObserved !== 3000 || floodSequences.size !== 3000) {
+        throw new Error(`flood observed ${floodObserved} ticks (${floodSequences.size} unique), expected 3000`)
+      }
+      const completed = faultRecord?.detail.flood
+      if (!completed || completed.requests !== 3000 || completed.index !== floodWindow!.index
+        || completed.worktree !== floodWindow!.worktree) {
+        throw new Error('flood observed ticks do not match the completed fixture')
+      }
+      const events = probe.events.filter(({ type }) => type === 'soak.faults/floodStarted')
+      if (events.length !== 1) throw new Error(`flood observed ${events.length} started events, expected 1`)
+    }
     if (interrupted) return interrupted
     const now = Date.now()
     const daemonLog = readFileSync(join(config.out, 'daemon.log'), 'utf8')

@@ -75,24 +75,116 @@ for (const count of [2, 3]) {
   }, 240_000)
 }
 
-test.skipIf(executable === null)('bounds missing mounted-panel readiness and publishes no report', async () => {
+test.skipIf(executable === null)('rejects 3000 mounted flood ticks under the calibrated default with an untouched peer', async () => {
   const temporaryDirectory = tmpdir()
-  const root = mkdtempSync(join(temporaryDirectory, 'quirky-soak-feedback-unready-'))
+  const root = mkdtempSync(join(temporaryDirectory, 'quirky-soak-flood-'))
+  const out = join(root, 'out')
+  const before = sourceOutputs()
+  const preload = join(root, 'events.ts')
+  writeFileSync(preload, `
+import { mock } from 'bun:test'
+import { writeFileSync } from 'node:fs'
+import { startWorld as realStartWorld } from ${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}
+import { startProbe as realStartProbe } from ${JSON.stringify(join(repoRoot, 'scripts/soak/probe.ts'))}
+const startWorld = realStartWorld
+const startProbe = realStartProbe
+mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
+  startWorld: async (options) => {
+    const world = await startWorld(options)
+    writeFileSync(${JSON.stringify(join(root, 'home.txt'))}, world.home)
+    return world
+  }
+}))
+mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/probe.ts'))}, () => ({
+  startProbe: (options) => {
+    const probe = startProbe(options)
+    const stop = probe.stop.bind(probe)
+    probe.stop = () => {
+      stop()
+      writeFileSync(${JSON.stringify(join(root, 'events.json'))}, JSON.stringify(probe.events))
+    }
+    return probe
+  }
+}))
+`)
+  const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--fault', 'flood', '--windows', '2', '--minutes', '0.4', '--out', out], {
+    cwd: repoRoot,
+    env: {
+      ...createIsolatedRuntimeEnvironment(root, { repoRoot }),
+      PLAYWRIGHT_BROWSERS_PATH: browserCache,
+      TMPDIR: temporaryDirectory, TMP: temporaryDirectory, TEMP: temporaryDirectory,
+    },
+    stdout: 'pipe', stderr: 'pipe',
+  })
+  const output = new Response(child.stdout).text()
+  const errors = new Response(child.stderr).text()
+  // real daemon and browser children cannot share the test process's fake timers
+  const watchdog = setTimeout(() => child.kill('SIGTERM'), 180_000)
+  try {
+    const code = await child.exited
+    await output
+    expect(code, await errors).toBe(1)
+    const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
+    const target = report.windows.find(({ index }) => index === 0)!.worktree
+    expect(report.version).toBe(1)
+    expect(report.verdict).toBe('fail')
+    expect(report.fault).toMatchObject({
+      kind: 'flood', check: 'requests',
+      detail: { pids: [], refreshes: 0, blockedMs: null, flood: { index: 0, worktree: target, requests: 3000 } },
+    })
+    expect(report.fault!.at).toBeGreaterThanOrEqual(2)
+    expect(report.checks.requests).toMatchObject({
+      ok: false, limitPerMinute: 2500, peakWindow: 0, peakWorktree: target,
+    })
+    const [owner, peer] = report.checks.requests.byWindow
+    expect(owner!.peakPerMinute).toBeGreaterThanOrEqual(3000)
+    expect(peer!.peakPerMinute).toBeGreaterThan(0)
+    expect(peer!.peakPerMinute).toBeLessThan(2500)
+    expect(report.windowRequests.find(({ method }) => method === 'soak.faults/floodTick')?.total).toBe(3000)
+    const events = JSON.parse(readFileSync(join(root, 'events.json'), 'utf8')) as { type: string }[]
+    expect(events.filter(({ type }) => type === 'soak.faults/floodStarted')).toHaveLength(1)
+    expect(events.filter(({ type }) => type === 'soak.faults/changed' || type === 'soak.faults/feedbackChanged')).toEqual([])
+    expect(report.panelRequests.some(({ panel }) => panel === 'feedback')).toBe(false)
+    expect(report.panelRefreshes.some(({ method }) => method === 'soak.faults/floodTick')).toBe(false)
+    expect(report.qualifies).toBe(false)
+    expect(report.disqualified).toContain('fault injected: flood')
+    expect(report.windows).toHaveLength(2)
+    expect(new Set(report.windows.map(({ connId }) => connId)).size).toBe(2)
+    expect(new Set(report.windows.map(({ worktree }) => worktree)).size).toBe(2)
+    expect(report.windows.every(({ open, shown }) => open && shown)).toBe(true)
+    expect(existsSync(readFileSync(join(root, 'home.txt'), 'utf8'))).toBe(false)
+    for (const file of ['browser.pid', 'daemon.pid']) expect(isAlive(Number(readFileSync(join(out, file), 'utf8').trim()))).toBe(false)
+  } finally {
+    clearTimeout(watchdog)
+    if (child.exitCode === null) child.kill('SIGTERM')
+    await child.exited
+    await Promise.all([output, errors])
+    expect(sourceOutputs()).toEqual(before)
+    rmSync(root, { recursive: true, force: true })
+  }
+}, 240_000)
+
+for (const kind of ['feedback', 'flood']) {
+test.skipIf(executable === null)(`bounds missing mounted ${kind} panel readiness and publishes no report`, async () => {
+  const temporaryDirectory = tmpdir()
+  const root = mkdtempSync(join(temporaryDirectory, `quirky-soak-${kind}-unready-`))
   const out = join(root, 'out')
   const before = sourceOutputs()
   const preload = join(root, 'unready.ts')
   writeFileSync(preload, `
 import { mock } from 'bun:test'
+import { writeFileSync } from 'node:fs'
 import { startWorld as realStartWorld } from ${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}
 const startWorld = realStartWorld
 mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
   startWorld: async (options) => {
     const world = await startWorld(options)
+    writeFileSync(${JSON.stringify(join(root, 'home.txt'))}, world.home)
     const call = world.control.callAny.bind(world.control)
     world.control.callAny = async (method, params, ...rest) => {
       const result = await call(method, params, ...rest)
       if (method === 'ui.window.state') {
-        for (const slot of result.slots ?? []) if (slot.id === 'panel:soak.faults/feedback') delete slot.report
+        for (const slot of result.slots ?? []) if (slot.id === ${JSON.stringify(`panel:soak.faults/${kind}`)}) delete slot.report
       }
       return result
     }
@@ -100,7 +192,7 @@ mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
   }
 }))
 `)
-  const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--fault', 'feedback', '--windows', '2', '--minutes', '0.4', '--out', out], {
+  const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--fault', kind, '--windows', '2', '--minutes', '0.4', '--out', out], {
     cwd: repoRoot,
     env: {
       ...createIsolatedRuntimeEnvironment(root, { repoRoot }),
@@ -121,10 +213,11 @@ mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
     expect(await child.exited).toBe(2)
     const stderr = await errors
     await output
-    expect(stderr).toContain('feedback panel readiness')
+    expect(stderr).toContain(`${kind} panel readiness`)
     expect(stderr).toContain('30000ms')
     expect(performance.now() - began).toBeLessThan(180_000)
     expect(existsSync(join(out, 'soak-report.json'))).toBe(false)
+    expect(existsSync(readFileSync(join(root, 'home.txt'), 'utf8'))).toBe(false)
     for (const file of ['browser.pid', 'daemon.pid']) expect(isAlive(Number(readFileSync(join(out, file), 'utf8').trim()))).toBe(false)
   } finally {
     clearTimeout(watchdog)
@@ -135,6 +228,79 @@ mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
     rmSync(root, { recursive: true, force: true })
   }
 }, 240_000)
+}
+
+for (const contradiction of ['missing', 'duplicate', 'foreign-window', 'wrong-owner', 'outside-interval']) {
+  test.skipIf(executable === null)(`rejects ${contradiction} live flood observation despite a completed daemon fixture`, async () => {
+    const temporaryDirectory = tmpdir()
+    const root = mkdtempSync(join(temporaryDirectory, 'quirky-soak-flood-observation-'))
+    const out = join(root, 'out')
+    const before = sourceOutputs()
+    const preload = join(root, 'observation.ts')
+    writeFileSync(preload, `
+import { mock } from 'bun:test'
+import { writeFileSync } from 'node:fs'
+import { startWorld as realStartWorld } from ${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}
+const startWorld = realStartWorld
+mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/world.ts'))}, () => ({
+  startWorld: async (options) => {
+    const world = await startWorld(options)
+    writeFileSync(${JSON.stringify(join(root, 'home.txt'))}, world.home)
+    return world
+  }
+}))
+import { openWindows as realOpenWindows, chromiumPath } from ${JSON.stringify(join(repoRoot, 'scripts/soak/windows.ts'))}
+const openWindows = realOpenWindows
+mock.module(${JSON.stringify(join(repoRoot, 'scripts/soak/windows.ts'))}, () => ({
+  chromiumPath,
+  openWindows: async (options) => {
+    let changed = false
+    return openWindows({ ...options, onRequest: (request) => {
+      if (!changed && request.method === 'soak.faults/floodTick') {
+        changed = true
+        switch (${JSON.stringify(contradiction)}) {
+          case 'missing': return
+          case 'duplicate': options.onRequest(request); break
+          case 'foreign-window': request = { ...request, index: 1 }; break
+          case 'wrong-owner': request = { ...request, params: { ...request.params, owner: 'foreign' } }; break
+          case 'outside-interval': request = { ...request, at: 0 }; break
+        }
+      }
+      options.onRequest(request)
+    } })
+  }
+}))
+`)
+    const child = Bun.spawn([process.execPath, '--preload', preload, join(repoRoot, 'scripts/soak.ts'), '--fault', 'flood', '--windows', '2', '--minutes', '0.4', '--out', out], {
+      cwd: repoRoot,
+      env: {
+        ...createIsolatedRuntimeEnvironment(root, { repoRoot }),
+        PLAYWRIGHT_BROWSERS_PATH: browserCache,
+        TMPDIR: temporaryDirectory, TMP: temporaryDirectory, TEMP: temporaryDirectory,
+      },
+      stdout: 'pipe', stderr: 'pipe',
+    })
+    const output = new Response(child.stdout).text()
+    const errors = new Response(child.stderr).text()
+    // the watchdog bounds a real daemon/browser child that cannot share fake timers
+    const watchdog = setTimeout(() => child.kill('SIGTERM'), 180_000)
+    try {
+      expect(await child.exited).toBe(2)
+      expect(await errors).toContain('flood observed')
+      await output
+      expect(existsSync(join(out, 'soak-report.json'))).toBe(false)
+      expect(existsSync(readFileSync(join(root, 'home.txt'), 'utf8'))).toBe(false)
+      for (const file of ['browser.pid', 'daemon.pid']) expect(isAlive(Number(readFileSync(join(out, file), 'utf8').trim()))).toBe(false)
+    } finally {
+      clearTimeout(watchdog)
+      if (child.exitCode === null) child.kill('SIGTERM')
+      await child.exited
+      await Promise.all([output, errors])
+      expect(sourceOutputs()).toEqual(before)
+      rmSync(root, { recursive: true, force: true })
+    }
+  }, 240_000)
+}
 
 test.skipIf(executable === null)('records every scheduled phase, switch, panel and git probe in a three-minute rotated run', async () => {
   const out = mkdtempSync(join(tmpdir(), 'quirky-soak-rotated-'))
@@ -177,7 +343,8 @@ test.skipIf(executable === null)('records every scheduled phase, switch, panel a
     }
     expect(report.checks.requests.byWindow).toHaveLength(2)
     for (const row of report.checks.requests.byWindow) expect(row.peakPerMinute).toBeGreaterThan(0)
-    expect(report.config.limits.maxWindowRequestsPerMinute).toBeNull()
+    expect(report.config.limits.maxWindowRequestsPerMinute).toBe(2500)
+    expect(report.checks.requests.ok).toBe(true)
     console.log(`rotated soak: ${JSON.stringify({
       stalls: report.checks.stalls.ok, refreshes: report.checks.refreshes.ok, requests: report.checks.requests.ok,
       gitProbes: report.checks.stalls.git.probes, taskInteractions: report.checks.day.taskInteractions

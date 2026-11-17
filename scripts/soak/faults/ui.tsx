@@ -197,7 +197,6 @@ function FloodPanel({ context, report }: {
     generation.current += 1
     setLayoutRevision((revision) => revision + 1)
     worktreeRef.current = next
-    started.current = false
     setExpected(0)
     publish({ ready: false, worktree: next, sent: 0, error: null })
     setWorktree(next)
@@ -207,7 +206,6 @@ function FloodPanel({ context, report }: {
     const currentWorktree = worktree
     const currentGeneration = ++generation.current
     worktreeRef.current = currentWorktree
-    started.current = false
     const isCurrent = () => generation.current === currentGeneration && worktreeRef.current === currentWorktree
     const waitingReport = (): FloodPanelReport => ({
       ready: false, worktree: currentWorktree, sent: 0, error: null

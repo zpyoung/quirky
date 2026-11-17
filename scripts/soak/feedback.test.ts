@@ -433,6 +433,33 @@ test('a worktree change invalidates a pending flood batch and its late report', 
   expect(a.activeSubscriptions()).toBe(1)
 })
 
+test('a worktree round trip cannot restart the armed flood while its original batch is pending', async () => {
+  const pending: { params: Record<string, unknown>; resolve(value: unknown): void }[] = []
+  const shared: Shared = {
+    calls: [], sequence: 0,
+    floodReply: (params) => {
+      const { promise, resolve } = Promise.withResolvers<unknown>()
+      pending.push({ params, resolve })
+      return promise
+    },
+  }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  windows.push(a)
+  const start = { worktree: 'a', requests: 3000 }
+  await emitToAll('soak.faults/floodStarted', start)
+  expect(shared.calls).toHaveLength(50)
+  await a.bounceWorktree('b', 'a')
+  const reportsAfterChange = a.reports.length
+  await emitToAll('soak.faults/floodStarted', start)
+  expect(shared.calls).toHaveLength(50)
+  expect(shared.maxOutstanding).toBe(50)
+  for (const request of pending) request.resolve(request.params)
+  await flushMicrotasks()
+  expect(shared.calls).toHaveLength(50)
+  expect(a.reports).toHaveLength(reportsAfterChange)
+  expect(a.activeSubscriptions()).toBe(1)
+})
+
 test('unmounting invalidates a pending flood batch and suppresses late reports', async () => {
   const pending: { params: Record<string, unknown>; resolve(value: unknown): void }[] = []
   const shared: Shared = {
