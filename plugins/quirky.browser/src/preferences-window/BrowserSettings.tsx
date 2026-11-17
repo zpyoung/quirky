@@ -154,8 +154,8 @@ export function BrowserSettings(props: BrowserPreferencesProps & { embedded?: bo
   const activeIdentity = preferences?.identity.active ?? preferences?.identity.selected ?? identitySelection
   const restartRequired = preferences?.identity.restartRequired === true || activeIdentity !== identitySelection
 
-  return <div className="browser-settings" aria-label="Browser settings" style={SETTINGS_LAYOUT_STYLE}>
-    <h1 style={{ fontSize: 'var(--ui-font-title)', margin: 0 }}>Browser</h1>
+  return <div className={embedded ? 'browser-settings' : 'browser-settings ui-panel-content'} aria-label="Browser settings" style={SETTINGS_LAYOUT_STYLE}>
+    {!embedded && <h1 style={{ fontSize: 'var(--ui-font-title)', margin: 0 }}>Browser</h1>}
     {stateError && <InlineError message={stateError} action={{ label: 'Retry', onAction: () => { void refresh().catch(() => {}) } }} />}
     {actionError && <InlineError message={actionError} />}
     {successMessage && <p role="status" style={SETTINGS_MESSAGE_STYLE}>{successMessage}</p>}

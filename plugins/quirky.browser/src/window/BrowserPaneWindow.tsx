@@ -70,8 +70,8 @@ const paneStyles = {
   addressWrap: {
     position: 'relative',
     display: 'flex',
-    flex: '1 1 40%',
-    minWidth: 0
+    flex: '1 1 calc(var(--ui-row-single) * 6)',
+    minWidth: 'min(100%, calc(var(--ui-row-single) * 6))'
   },
   addressFieldWrap: { flex: '1 1 auto', minWidth: 0 },
   addressField: { width: '100%', minWidth: 0 },
@@ -1284,6 +1284,7 @@ export function BrowserPaneWindow({ context, input }: { context: UiPluginContext
               ref={addressRef}
               className="qbp-address"
               label="Address and search"
+              hideLabel
               aria-label="Address and search"
               aria-autocomplete="list"
               aria-expanded={suggestionsOpen && suggestions.length > 0}
