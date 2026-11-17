@@ -26,5 +26,6 @@
   "quirky.git": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.sidebar-extras": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.automations": ["commands", "compatibility-tokens", "empty", "error", "loading"],
+  "quirky.view": ["commands", "compatibility-tokens", "empty", "error", "loading"],
   "quirky.worktree": ["commands", "compatibility-tokens", "empty", "error", "loading"]
 }
