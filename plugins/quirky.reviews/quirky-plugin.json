@@ -1867,7 +1867,8 @@
             "state": {
               "type": "string",
               "enum": [
-                "open"
+                "open",
+                "draft"
               ]
             },
             "updated": {

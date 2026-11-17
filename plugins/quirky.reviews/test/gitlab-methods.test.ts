@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { validateValue, type Schema } from '@quirky/protocol'
 import {
   isRecord,
   type GitHubAuthAccount,
@@ -799,6 +800,48 @@ describe('GitLab Reviews daemon methods', () => {
         expect(callsFor(harness, 'quirky.hosting/updateReview')[0]?.params).toMatchObject({
           worktree: GITLAB_WORKTREE, number: 5, prRepo: GITLAB_REPOSITORY, action: item.action,
         })
+      })
+    }
+  })
+
+  test('GitLab reopen applies the confirmed draft state', async () => {
+    await withHarness({
+      replies: { 'quirky.hosting/updateReview': { number: 5, state: 'draft', updated: true } },
+    }, async (harness) => {
+      selectDetail(harness, selectedGitLabReview({ state: 'closed' }))
+      const result = await harness.invoke('detail', 'detailReopenReview', {
+        surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
+      })
+      expect(result).toEqual({ number: 5, state: 'draft', updated: true })
+      const declared = detailSpecs.find((spec) => spec.id === 'detailReopenReview')
+      expect(validateValue(declared!.result!, result, 'result')).toBeNull()
+      const manifest = await Bun.file(new URL('../quirky-plugin.json', import.meta.url)).json() as {
+        contributes: { method: Array<{ id: string; result: Schema }> }
+      }
+      const published = manifest.contributes.method.find((method) => method.id === 'detailReopenReview')
+      expect(validateValue(published!.result, result, 'result')).toBeNull()
+      expect(harness.env.read().detail.review?.state).toBe('draft')
+    })
+  })
+
+  test('state changes reject unconfirmed states and restore the prior review', async () => {
+    const cases = [
+      { provider: 'gitlab', method: 'detailReopenReview', initial: 'closed', returned: 'closed' },
+      { provider: 'github', method: 'detailReopenReview', initial: 'closed', returned: 'draft' },
+      { provider: 'gitlab', method: 'detailCloseReview', initial: 'open', returned: 'draft' },
+      { provider: 'gitlab', method: 'detailMarkReady', initial: 'draft', returned: 'draft' },
+    ] as const
+    for (const item of cases) {
+      await withHarness({
+        replies: { 'quirky.hosting/updateReview': { number: 5, state: item.returned, updated: true } },
+      }, async (harness) => {
+        selectDetail(harness, item.provider === 'gitlab'
+          ? selectedGitLabReview({ state: item.initial })
+          : selectedGitHubReview(undefined, { state: item.initial }))
+        await expect(harness.invoke('detail', item.method, {
+          surface: 'detail', worktree: GITLAB_WORKTREE, number: 5,
+        })).rejects.toMatchObject({ data: { reason: 'invalid_upstream' } })
+        expect(harness.env.read().detail.review?.state).toBe(item.initial)
       })
     }
   })
