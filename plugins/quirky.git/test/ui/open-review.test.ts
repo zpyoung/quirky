@@ -525,7 +525,7 @@ describe('useReview polling', () => {
     globalThis.clearInterval = (() => {}) as unknown as typeof clearInterval
     const seen: { model: ReviewModel | null } = { model: null }
     function Probe({ worktree: wt }: { worktree: string }) {
-      seen.model = useReview(context, wt).model
+      seen.model = useReview(context, wt, undefined).model
       return null
     }
     const root = createRoot(document.createElement('div'))

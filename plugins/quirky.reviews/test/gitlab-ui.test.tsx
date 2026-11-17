@@ -1371,7 +1371,54 @@ test('visibility reports retain ordinary rejected and malformed result errors', 
 })
 
 test('held GitLab queue and visibility completions are fenced by replacement provider and repository identity', async () => {
-  const timers = controlledWindowTimers()
+  const originalNow = Date.now
+  const originalGlobalSetTimeout = globalThis.setTimeout
+  const originalGlobalClearTimeout = globalThis.clearTimeout
+  const originalWindowSetTimeout = window.setTimeout
+  const originalWindowClearTimeout = window.clearTimeout
+  let now = originalNow()
+  let nextTimer = 0
+  const scheduled = new Map<number, { deadline: number; run(): void }>()
+  const schedule = (handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+    const id = --nextTimer
+    scheduled.set(id, {
+      deadline: now + Number(delay ?? 0),
+      run: () => { if (typeof handler === 'function') handler(...args) }
+    })
+    return id
+  }
+  const clearScheduled = (id: unknown) => {
+    if (typeof id !== 'number') return false
+    return scheduled.delete(id)
+  }
+  Date.now = () => now
+  globalThis.setTimeout = ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+    if (delay < 1_000) return Reflect.apply(originalGlobalSetTimeout, globalThis, [handler, delay, ...args])
+    return schedule(handler, delay, ...args)
+  }) as typeof globalThis.setTimeout
+  globalThis.clearTimeout = ((id: unknown) => {
+    if (!clearScheduled(id)) Reflect.apply(originalGlobalClearTimeout, globalThis, [id])
+  }) as typeof globalThis.clearTimeout
+  window.setTimeout = ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+    if (delay < 1_000) return Reflect.apply(originalWindowSetTimeout, window, [handler, delay, ...args])
+    return schedule(handler, delay, ...args)
+  }) as typeof window.setTimeout
+  window.clearTimeout = ((id: unknown) => {
+    if (!clearScheduled(id)) Reflect.apply(originalWindowClearTimeout, window, [id])
+  }) as typeof window.clearTimeout
+  const advanceAutomaticState = async () => {
+    now += 3_000
+    const due = [...scheduled.entries()].filter(([, timer]) => timer.deadline <= now)
+    if (due.length === 0) throw new Error('No automatic Reviews state refresh reached its deadline.')
+    await act(async () => {
+      for (const [id, timer] of due) {
+        scheduled.delete(id)
+        timer.run()
+      }
+      await Promise.resolve()
+    })
+    await settle()
+  }
   try {
     const firstState = stateFor()
     const initialReport = deferred<unknown>()
@@ -1389,7 +1436,7 @@ test('held GitLab queue and visibility completions are fenced by replacement pro
     const mounted = mountSurface(harness, CHECKS_PANEL)
     await settle()
     harness.setState(stateFor({ repo: OTHER_REPO, provider: 'github', review: reviewFor({ repo: OTHER_REPO, provider: 'github' }) }))
-    await settle()
+    await advanceAutomaticState()
     expect(harness.calls.filter((call) => call.method === 'quirky.hosting/visibleRefreshCandidates')).toHaveLength(2)
     await act(async () => { initialReport.resolve({ accepted: false, generation: 1, candidates: 1 }) })
     await settle()
@@ -1400,7 +1447,7 @@ test('held GitLab queue and visibility completions are fenced by replacement pro
     await invoke(harness, current, 'refresh')
     await settle()
     harness.setState(stateFor({ repo: REPO, provider: 'gitlab' }))
-    await settle()
+    await advanceAutomaticState()
     const replacement = currentControl(harness, CHECKS_PANEL, 'checks')
     const freshQueue = harness.holdNext('quirky.hosting/refresh')
     await invoke(harness, replacement, 'refresh')
@@ -1414,7 +1461,13 @@ test('held GitLab queue and visibility completions are fenced by replacement pro
     await act(async () => { freshQueue.resolve({ kind: 'found', review: reviewFor(), fetchedAt: 1_000_000 }) })
     await settle()
     expect(harness.calls.filter((call) => call.method === 'quirky.reviews/checksRefresh')).toHaveLength(1)
-  } finally { timers.restore() }
+  } finally {
+    Date.now = originalNow
+    globalThis.setTimeout = originalGlobalSetTimeout
+    globalThis.clearTimeout = originalGlobalClearTimeout
+    window.setTimeout = originalWindowSetTimeout
+    window.clearTimeout = originalWindowClearTimeout
+  }
 })
 
 function settingsSnapshot(provider: 'github' | 'gitlab' | null): ReviewsState {

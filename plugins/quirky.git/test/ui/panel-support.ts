@@ -1,3 +1,4 @@
+import { jest } from 'bun:test'
 import {
   RpcErrorCode,
   type GitChangeStatus,
@@ -527,6 +528,14 @@ export function mountPanel(fake: Fake): { element: HTMLElement; unmount: () => v
 /** Lets pending promises and effects run. */
 export async function settle(): Promise<void> {
   for (let i = 0; i < 6; i++) await act(async () => {})
+}
+
+/** Advances only the explicitly requested fake-clock interval, then flushes pending work. */
+export async function settleAfter(ms: number, rounds = 6): Promise<void> {
+  await act(async () => {
+    ;(jest as unknown as { advanceTimersByTime(ms: number): void }).advanceTimersByTime(ms)
+  })
+  for (let i = 0; i < rounds; i++) await act(async () => {})
 }
 
 /** Wait for a rendered state change without coupling tests to async lookup timing. */

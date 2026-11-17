@@ -1,4 +1,4 @@
-import { afterAll, afterEach, expect, test } from 'bun:test'
+import { afterAll, afterEach, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
 import type { Fake } from './panel-support'
@@ -6,9 +6,12 @@ import type { Fake } from './panel-support'
 registerDom()
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 // React DOM and the activated plugin must load after the test window is installed.
-const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, rowOf, settle, statusOf, type } = await import('./panel-support')
+const { act, byLabel, buttonText, click, compareOf, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, rowOf, settle, settleAfter, statusOf, type } = await import('./panel-support')
 const mounted: Array<() => void> = []
-afterEach(() => { for (const unmount of mounted.splice(0)) unmount() })
+afterEach(() => {
+  for (const unmount of mounted.splice(0)) unmount()
+  jest.useRealTimers()
+})
 afterAll(() => GlobalRegistrator.unregister())
 async function open(configure: (fake: Fake) => void = () => {}) {
   const fake = fakeContext(layoutFor('feat'))
@@ -48,6 +51,7 @@ for (const method of ['status', 'review', 'compare']) {
 
 for (const method of ['status', 'review', 'compare']) {
   test(`${method} refresh failure keeps the last successful rows and shows its error`, async () => {
+    if (method === 'status') jest.useFakeTimers()
     const { element, fake } = await open()
     fake.on(`quirky.git/${method}`, () => { throw failure('fixture read failed') })
     await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }))
@@ -56,6 +60,7 @@ for (const method of ['status', 'review', 'compare']) {
       await click(buttonText(document.body, 'Refresh'))
     }
     await settle()
+    if (method === 'status') await settleAfter(3_000)
     expect(rowOf(element, 'a.ts')).not.toBeNull()
     expect(qa(element, '.ui-inline-error').some((node) => node.textContent?.includes('fixture read failed'))).toBe(true)
   })
@@ -118,6 +123,7 @@ for (const invalid of [false, true]) {
 }
 
 test('valid unavailable push destination is advisory, while a fork shows its exact identity', async () => {
+  jest.useFakeTimers()
   const { element, fake } = await open((f) => { linked(f); f.on('quirky.git/pushTarget', () => ({ ready: false, reason: 'no-push-remote', message: 'No push remote is configured.' })) })
   expect(q(element, '[data-git-push-target]')?.textContent).toBe('No push remote is configured.')
   expect(q(element, '[data-git-push-target][role="alert"]')).toBeNull()
@@ -125,6 +131,7 @@ test('valid unavailable push destination is advisory, while a fork shows its exa
   fake.on('quirky.git/pushTarget', () => ({ ready: true, remote: 'fork', branch: 'zoe/feat', localBranch: 'zoe/feat', localHead: 'a'.repeat(40), fork: true, repository: { host: 'github.com', owner: 'zoe', repo: 'repo' } }))
   await act(async () => { fake.status = { ...fake.status, head: 'd'.repeat(40) }; fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'feat' } }) })
   await settle()
+  await settleAfter(3_000)
   expect(q(element, '[data-git-push-target]')?.textContent).toContain('fork/zoe/feat')
   expect(q(element, '[data-git-push-target]')?.textContent).toContain('github.com/zoe/repo')
 })
