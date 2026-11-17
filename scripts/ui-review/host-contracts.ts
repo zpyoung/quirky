@@ -33,7 +33,7 @@ const THEME_VALUES: Record<CaptureTheme, ThemeValues> = {
 
 const RULE_SOURCES = {
   'host-frame-ownership': 'scripts/ui-review/capture.ts (full-window capture composition); g3-67 spec Section 2, scenario 1',
-  'host-underline-tabs': 'g3-62 scenarios 1 and 8',
+  'host-underline-tabs': 'g3-62 scenarios 1 and 8; packages/ui/src/design-system/components.css (tool-panel header tabs); docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md (saved-view tabs)',
   'palette-retained-spacing': 'g3-62 scenario 12',
   'palette-selected-colors': 'g3-62 scenario 7',
   'worktrees-approved-redesign': 'docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md, Design direction and SC-2 through SC-4'
@@ -55,7 +55,7 @@ export function hostContractContext(target: CaptureTarget, theme: CaptureTheme):
     {
       id: 'host-underline-tabs',
       source: RULE_SOURCES['host-underline-tabs'],
-      text: 'The tablist is ui-tabs ui-tabs--underline, with a 1px solid var(--ui-border) bottom rule. Selected tabs have no top border, zero radius, var(--ui-surface) background, var(--ui-text) foreground, and an inset 2px bottom accent underline. Unselected tabs are transparent, have no top border or shadow, and use var(--ui-muted). This governs Open views and palette Search scope; other Tabs keep their existing boxed default. An underline is not a defect merely because it differs from the older golden.'
+      text: "Four tab treatments are approved; judge each tablist against its own. Open views and palette Search scope: the tablist is ui-tabs ui-tabs--underline, with a 1px solid var(--ui-border) bottom rule. Selected tabs have no top border, zero radius, var(--ui-surface) background, var(--ui-text) foreground, and an inset 2px bottom accent underline. Unselected tabs are transparent, have no top border or shadow, and use var(--ui-muted). An underline is not a defect merely because it differs from the older golden. ToolPanelFrame header tabs, beside a tool panel's title such as Tasks (Issues, PRs, Projects) and Agent Session History (Workspace, Project, All): the tablist has no bottom rule and wraps whole tabs onto another row when narrow; tabs are compact, with 2px by 4px padding, a 7px radius, a transparent background and a transparent 1px border, and use var(--ui-muted); the selected tab keeps a transparent background with a 1px var(--ui-accent) border and var(--ui-text). They are neither boxed nor underline tabs, and this compact look is not a defect. Worktrees saved-view tabs (All, Needs you and starred views): a single scrolling row with no tablist bottom rule; tabs are transparent and borderless in var(--ui-muted), and the selected tab uses var(--ui-text) with a 2px var(--ui-accent) bottom border. They are neither boxed nor the Open views underline tablist. Other standalone Tabs, such as those in dialogs and settings, keep their existing boxed default: a 1px var(--ui-border) border, rounded top corners, and var(--ui-selected) behind the selected tab. A tablist that matches its own treatment is not a defect for lacking another treatment's border, underline or box. Clipped or partial labels, unreadable text, a missing selected state and overlap remain defects."
     },
     {
       id: 'palette-retained-spacing',

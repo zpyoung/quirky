@@ -246,8 +246,9 @@ Reviewer output may contain one outer plain or `json` Markdown code fence. Asses
 remain strictly validated; surrounding prose, nested fences and other non-JSON replies fail.
 
 Every model request includes checked-in, theme-specific host contracts and their SHA-256
-alongside the unchanged assessment prompt. These cover underline tabs, palette selection
-colors/spacing, the approved Worktrees redesign and ownership of the surrounding host frame.
+alongside the unchanged assessment prompt. These cover tab treatments (underline, tool-panel
+header, Worktrees saved views and boxed), palette selection colors/spacing, the approved
+Worktrees redesign and ownership of the surrounding host frame.
 They apply only to the named elements. Actual clipping, unreadability and broken controls
 remain defects. Responses wrap the assessment in a strict `contractAudit` that acknowledges
 every rule and audits every scored reason. Unpenalized conflicts retain their raw scores;
