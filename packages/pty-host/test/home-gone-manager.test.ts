@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { existsSync, linkSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { HOME_LOST, SessionManager, type CreateParams, type SessionManagerOptions } from '../src/session'
 import { claimHome } from '../src/ownership'
+import { HistoryLog } from '../src/history/log'
 import { groupGone, heldRunner, onCleanup, runCleanups, scopeForHome, tempHome, trackSessionProcesses, waitFor } from './helpers'
 
 afterEach(runCleanups)
@@ -168,5 +169,32 @@ describe('session manager home guard', () => {
     await waitForGroupGone(pid, 'old session process group to stop')
     expect(managerB.isAlive('s1')).toBe(true)
     expect(readFileSync(join(dirOf(home, 's1'), 'meta.json'))).toEqual(replacementMeta)
+  }, 20000)
+
+  test('losing ownership after reopening an ended history closes the new log', async () => {
+    const home = tempHome()
+    let ownsHome = true
+    const manager = managerFor(home, { ownsHome: () => ownsHome })
+    const ended = Promise.withResolvers<void>()
+    const unsubscribe = manager.onExit(event => {
+      if (event.sessionId === 's1') ended.resolve()
+    })
+    onCleanup(unsubscribe)
+    await manager.create(params('s1', 'exit 0'))
+    await ended.promise
+    let reopened: HistoryLog | undefined
+    const openForAppend = HistoryLog.openForAppend
+    const opening = spyOn(HistoryLog, 'openForAppend').mockImplementation((dir, options) => {
+      const log = openForAppend(dir, options)
+      onCleanup(() => log.close())
+      reopened = log
+      ownsHome = false
+      return log
+    })
+    onCleanup(() => opening.mockRestore())
+
+    await expect(manager.clear('s1')).rejects.toThrow(HOME_LOST)
+    expect(reopened).toBeDefined()
+    expect(reopened!.isOpen).toBe(false)
   }, 20000)
 })

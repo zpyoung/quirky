@@ -639,9 +639,9 @@ export class SessionManager {
       maxSegmentBytes: this.maxSegmentBytes,
       canWrite: () => this.canWriteHome()
     })
-    this.assertCanWrite()
-    session.log = log
     try {
+      this.assertCanWrite()
+      session.log = log
       write(log)
     } finally {
       log.close()
