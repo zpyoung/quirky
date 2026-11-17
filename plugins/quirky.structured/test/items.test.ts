@@ -114,6 +114,66 @@ describe('claudeEntries', () => {
     expect(entry!.item).toEqual({ kind: 'user', text: 'hello' })
   })
 
+  describe('skill bodies', () => {
+    // shapes captured from a real claude-agent-sdk 0.3.284 stream: the Skill tool_result is followed by
+    // an isSynthetic user message carrying SKILL.md, with no tool_use_id linking the two
+    const skillUse = (id: string, skill: string, parent: string | null = null) => ({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Skill', input: { skill } }] },
+      parent_tool_use_id: parent
+    })
+    const skillResult = (id: string, skill: string, parent: string | null = null) => ({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: `Launching skill: ${skill}` }] },
+      parent_tool_use_id: parent,
+      tool_use_result: { success: true, commandName: skill }
+    })
+    const skillBody = (body: string, parent: string | null = null) => ({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: body }] },
+      parent_tool_use_id: parent,
+      isSynthetic: true
+    })
+    const body = 'Base directory for this skill: /p/.claude/skills/probe\n\n# Probe skill body\nReply with PROBED.\n'
+
+    test('folds the injected SKILL.md into the Skill activity instead of a user item', () => {
+      const calls = new CallTracker()
+      const items = [skillUse('s1', 'probe'), skillResult('s1', 'probe'), skillBody(body)].flatMap((msg) =>
+        claudeEntries(msg, calls).map((entry) => entry.item)
+      )
+      expect(items.some((item) => item.kind === 'user')).toBe(false)
+      expect(items.at(-1)).toEqual({ kind: 'activity', callId: 's1', tool: 'Skill', summary: '{"skill":"probe"}', state: 'done', detail: body })
+    })
+
+    test('pairs each body with the Skill call from the same agent when a subagent interleaves', () => {
+      const calls = new CallTracker()
+      claudeEntries(skillUse('s1', 'outer'), calls)
+      claudeEntries(skillResult('s1', 'outer'), calls)
+      claudeEntries(skillUse('s2', 'inner', 'task1'), calls)
+      claudeEntries(skillResult('s2', 'inner', 'task1'), calls)
+      expect(claudeEntries(skillBody('inner body', 'task1'), calls)[0]!.item).toMatchObject({ callId: 's2', detail: 'inner body' })
+      expect(claudeEntries(skillBody('outer body'), calls)[0]!.item).toMatchObject({ callId: 's1', detail: 'outer body' })
+    })
+
+    test('a synthetic message with no Skill call to fold into is a status item', () => {
+      const [entry] = claudeEntries(skillBody(body), new CallTracker())
+      expect(entry!.item.kind).toBe('status')
+      const calls = new CallTracker()
+      claudeEntries(skillUse('s1', 'probe'), calls)
+      claudeEntries(skillResult('s1', 'probe'), calls)
+      claudeEntries(assistant({ type: 'text', text: 'moving on' }), calls)
+      expect(claudeEntries(skillBody('later context'), calls)[0]!.item.kind).toBe('status')
+    })
+
+    test('a typed message that looks like a skill body is still a user item', () => {
+      const calls = new CallTracker()
+      claudeEntries(skillUse('s1', 'probe'), calls)
+      claudeEntries(skillResult('s1', 'probe'), calls)
+      const [entry] = claudeEntries({ type: 'user', message: { role: 'user', content: body }, parent_tool_use_id: null }, calls)
+      expect(entry!.item).toEqual({ kind: 'user', text: body })
+    })
+  })
+
   test('partial-message events carry their text delta and journal nothing themselves', () => {
     const event = { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ab' } } }
     expect(claudeTextDelta(event)).toBe('ab')

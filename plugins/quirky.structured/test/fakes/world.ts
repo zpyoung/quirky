@@ -54,6 +54,8 @@ export class FakeWorld {
   agentPlanEnv: Record<string, string | null> = {}
   accountPreparationResult: FakeAccountPreparation = { env: {}, shellInit: null, account: null }
   accountPreparationFailure: string | null = null
+  /** The terminal permission preset the fake `quirky.agents/get` reports per agent; absent agents report none. */
+  terminalPermissions: Record<string, string | null> = {}
   /** Replaces the fake `quirky.agents/resolveLaunch` answer; it may throw to refuse the pick. */
   resolveLaunchOverride: ((params: Record<string, unknown>, context: PluginCtx) => unknown) | null = null
   readonly asks = new Map<string, Ask>()
@@ -147,6 +149,10 @@ export class FakeWorld {
       }
       return { added: [], args: '', structured, shadowed: [], launchSettings: null }
     },
+    get: (params: Record<string, unknown>) => ({
+      id: params.agent,
+      permissions: { mode: this.terminalPermissions[String(params.agent)] ?? null, hasAuto: false }
+    }),
     plan: (params: Record<string, unknown>) => {
       this.planCalls.push(params)
       const env = { ...this.agentPlanEnv }

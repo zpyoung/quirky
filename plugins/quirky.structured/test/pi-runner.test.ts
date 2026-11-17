@@ -566,7 +566,87 @@ for (const variant of ['pi', 'omp'] as const) {
   })
 }
 
+describe('omp approval modes', () => {
+  let setup: Setup
+  afterEach(async () => {
+    await setup?.runner.stop(setup.session.id)
+  })
+
+  test('the opening approval mode reaches the command line and the reported settings', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'write' })
+    expect(setup.fake.last().spec.args).toEqual(['--mode', 'rpc', '--approval-mode', 'write'])
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'write' })
+  })
+
+  test('switching mode relaunches omp on the same conversation and keeps the chat running', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask', model: 'a/m', env: { TOKEN: 't' } })
+    const first = setup.fake.last()
+    expect(await setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).toEqual({ model: 'a/m', permissionMode: 'yolo' })
+    const second = setup.fake.last()
+    expect(second).not.toBe(first)
+    // the fake's session file does not exist on disk, so the relaunch resumes by id
+    expect(second.spec.args).toEqual(['--mode', 'rpc', '--resume', 'pi-sess-1', '--model', 'a/m', '--approval-mode', 'yolo'])
+    expect(second.spec.env).toMatchObject({ TOKEN: 't' })
+    expect(second.commands('set_ask_dialog')).toHaveLength(1)
+    expect(first.closed).toBe(true)
+    expect(setup.statuses).not.toContain('exited')
+    await setup.runner.send(setup.session.id, 'next')
+    expect(second.commands('prompt')).toMatchObject([{ message: 'next' }])
+    expect(first.commands('prompt')).toEqual([])
+  })
+
+  test('the relaunch resumes from the session file when it exists', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'omp-mode-'))
+    try {
+      const file = join(dir, 'session.jsonl')
+      writeFileSync(file, '')
+      setup = makeSetup('omp')
+      setup.fake.prepare = (transport) => transport.replies.set('get_state', () => ({ success: true, data: { sessionId: 'pi-sess-1', sessionFile: file } }))
+      await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask' })
+      await setup.runner.configure!(setup.session.id, { permissionMode: 'write' })
+      expect(setup.fake.last().spec.args).toEqual(['--mode', 'rpc', '--resume', file, '--approval-mode', 'write'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('a turn in progress refuses the switch and leaves the process alone', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, 'busy', { permissionMode: 'always-ask' })
+    setup.fake.last().emit({ type: 'agent_start' })
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow("wait for the turn to end before changing omp's approval mode")
+    expect(setup.fake.started).toHaveLength(1)
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'always-ask' })
+  })
+
+  test('a relaunch that fails keeps the old process serving the chat', async () => {
+    setup = makeSetup('omp')
+    await setup.runner.start(setup.session, undefined, { permissionMode: 'always-ask' })
+    const first = setup.fake.last()
+    setup.fake.prepare = (transport) => transport.replies.set('get_state', () => ({ success: true, data: { sessionId: 'another' } }))
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow('expected pi-sess-1')
+    expect(setup.fake.last().closed).toBe(true)
+    expect(first.closed).toBe(false)
+    expect(await setup.runner.configure!(setup.session.id, {})).toEqual({ permissionMode: 'always-ask' })
+    await setup.runner.send(setup.session.id, 'still here')
+    expect(first.commands('prompt')).toMatchObject([{ message: 'still here' }])
+  })
+
+  test('pi refuses a permission mode', async () => {
+    setup = makeSetup('pi')
+    await setup.runner.start(setup.session, undefined, {})
+    await expect(setup.runner.configure!(setup.session.id, { permissionMode: 'yolo' })).rejects.toThrow('pi has no permission modes')
+  })
+})
+
 describe('pi launch arguments', () => {
+  test('only omp takes an approval mode', () => {
+    expect(piLaunchArgs('omp', { approvalMode: 'yolo' })).toEqual(['--mode', 'rpc', '--approval-mode', 'yolo'])
+    expect(piLaunchArgs('pi', { approvalMode: 'yolo' })).toEqual(['--mode', 'rpc'])
+  })
+
   test('pi resumes with --session and omp with --resume', () => {
     expect(piLaunchArgs('pi', { resume: 'abc' })).toEqual(['--mode', 'rpc', '--session', 'abc'])
     expect(piLaunchArgs('omp', { resume: 'abc', model: 'm', effort: 'low' })).toEqual(['--mode', 'rpc', '--resume', 'abc', '--model', 'm', '--thinking', 'low'])

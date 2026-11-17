@@ -29,6 +29,12 @@ const CLAUDE: AgentCapabilities = {
   approveForSession: OK,
   resume: OK
 }
+const CLAUDE_ALL_MODES: AgentCapabilities['permissionModes'] = {
+  ok: true,
+  modes: ['default', 'acceptEdits', 'auto', 'bypassPermissions'],
+  labels: { acceptEdits: 'Accept edits', bypassPermissions: 'Bypass permissions' },
+  dangerous: ['bypassPermissions']
+}
 const PI: AgentCapabilities = {
   agent: 'pi',
   steer: { ok: false, reason: 'pi steers only between tool calls' },
@@ -218,7 +224,7 @@ describe('screens: idle', () => {
     await typeText('go')
     await press({ key: 'Enter' })
     await settle()
-    expect(byLabel('Attachments')!.textContent).toContain('a.png')
+    expect(byLabel('Attachments')!.querySelector('img')!.alt).toBe('a.png')
     expect(byLabel('Attachments')!.textContent).toContain('Pasted text')
   })
 })
@@ -649,6 +655,49 @@ describe('screens: settings (SC-15, SC-16)', () => {
     expect(fake.callsTo('quirky.structured/configure').map((call) => call.params).at(-1)).toEqual({ session: 's1', permissionMode: 'default' })
   })
 
+  test('the permission list uses the agent labels and marks modes that skip approvals', async () => {
+    await mount({}, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    await click(settingsChip())
+    const rows = [...popover()!.querySelectorAll<HTMLElement>('[data-section="mode"] .ui-list-row')]
+    expect(rows.map((entry) => entry.querySelector('.ui-list-row__main')!.textContent?.trim())).toEqual(['Default', 'Accept edits', 'Auto', 'Bypass permissions'])
+    expect(rows.map((entry) => entry.querySelector('.ui-list-row__trailing')?.textContent ?? null)).toEqual([null, null, null, 'No approvals'])
+  })
+
+  test('picking bypass permissions shows a failing-tone badge that says the agent acts without asking', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true, settings: { permissionMode: 'bypassPermissions' } }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    await click(settingsChip())
+    await click(row('Bypass permissions'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').at(-1)!.params).toEqual({ session: 's1', permissionMode: 'bypassPermissions' })
+    const badge = buttonNamed('Return permissions to Default')!
+    expect(badge.textContent).toContain('Bypass permissions')
+    expect(badge.dataset.dangerous).toBe('true')
+    expect(badge.title).toContain('acts without asking for approval')
+    expect(badge.querySelector('.ui-badge--failing')).not.toBeNull()
+  })
+
+  test('a non-dangerous mode badge keeps the needs-you tone', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    await click(settingsChip())
+    await click(row('Auto'))
+    await settle()
+    const badge = buttonNamed('Return permissions to Default')!
+    expect(badge.dataset.dangerous).toBeUndefined()
+    expect(badge.querySelector('.ui-badge--needs-you')).not.toBeNull()
+  })
+
+  test('a session that opened in another mode shows that mode, read from the runner', async () => {
+    await mount({ 'quirky.structured/settings': () => ({ settings: { permissionMode: 'bypassPermissions' } }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    expect(fake.callsTo('quirky.structured/settings')[0]!.params).toEqual({ session: 's1' })
+    expect(buttonNamed('Return permissions to Default')!.textContent).toContain('Bypass permissions')
+    expect(fake.callsTo('quirky.structured/configure')).toEqual([])
+  })
+
+  test('a reported mode the agent does not list is ignored', async () => {
+    await mount({ 'quirky.structured/settings': () => ({ settings: { permissionMode: 'mystery' } }) })
+    expect(buttonNamed('Return permissions to Default')).toBeUndefined()
+  })
+
   test('unsupported controls stay visible, disabled, with the reason on hover; the chip shows the model alone without effort', async () => {
     await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, agent: 'pi', models: [{ id: 'm', label: 'Pi model', description: null, options: [] }] }) }, { capabilities: { ...PI, model: OK }, agent: 'pi', launched: { model: 'm' } })
     expect(settingsChip().textContent).toBe('Pi model')
@@ -721,14 +770,52 @@ describe('attachments (SC-7, SC-8, SC-9)', () => {
     await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
     await transfer('paste', [image('clip.png')])
     expect(fake.callsTo('quirky.session/pasteImage')[0]!.params).toEqual({ session: 's1', mime: 'image/png', data: btoa('x') })
-    expect(byLabel('Attachments')!.textContent).toContain('clip.png')
+    expect(byLabel('Attachments')!.querySelector('img')!.alt).toBe('clip.png')
   })
 
   test('a dropped image with a path attaches, and the same image dropped twice appears once', async () => {
     await mount()
     await transfer('drop', [image('shot.png', '/tmp/shot.png')])
     await transfer('drop', [image('shot.png', '/tmp/shot.png')])
-    expect(byLabel('Attachments')!.querySelectorAll('.ui-scope-chip')).toHaveLength(1)
+    expect(byLabel('Attachments')!.querySelectorAll('img')).toHaveLength(1)
+  })
+
+  test('a pasted image shows as a thumbnail named by its file, and its remove button drops it', async () => {
+    await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
+    await transfer('paste', [image('clip.png')])
+    const thumbnail = byLabel('Attachments')!.querySelector('img')!
+    expect(thumbnail.alt).toBe('clip.png')
+    expect(thumbnail.getAttribute('src')).toStartWith('blob:')
+    expect(byLabel('Attachments')!.querySelector('.ui-scope-chip')).toBeNull()
+    await click(buttonNamed('Remove clip.png'))
+    expect(byLabel('Attachments')).toBeNull()
+  })
+
+  test('an image alone enables Send and goes out with empty text', async () => {
+    await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
+    expect(buttonNamed('Send')!.disabled).toBe(true)
+    await transfer('paste', [image('clip.png')])
+    expect(buttonNamed('Send')!.disabled).toBe(false)
+    await click(buttonNamed('Send'))
+    await settle()
+    expect(sent()[0]).toMatchObject({ session: 's1', text: '', images: ['/data/pasted/s1/x.png'] })
+    expect(byLabel('Attachments')).toBeNull()
+  })
+
+  test('Enter sends an image with no text too', async () => {
+    await mount()
+    await transfer('drop', [image('shot.png', '/tmp/shot.png')])
+    await press({ key: 'Enter' })
+    await settle()
+    expect(sent()[0]).toMatchObject({ text: '', images: ['/tmp/shot.png'] })
+  })
+
+  test('a picker-added image keeps the name chip, with no thumbnail', async () => {
+    await mount({ 'desktop.file.pick': () => ({ cancelled: false, paths: ['/tmp/a.png'] }) })
+    await click(buttonNamed('Attach images'))
+    await settle()
+    expect(byLabel('Attachments')!.querySelector('.ui-scope-chip__label')!.textContent).toBe('a.png')
+    expect(byLabel('Attachments')!.querySelector('img')).toBeNull()
   })
 
   test('an image is refused inline with the reason when the agent takes none', async () => {

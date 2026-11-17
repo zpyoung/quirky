@@ -10,16 +10,13 @@ import { loadStartingPicks } from './startingPicks'
  */
 export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {
   const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks
-  const options = {
-    ...(effort === null ? {} : { effort }),
-    ...(picks.mode === null ? {} : { mode: picks.mode }),
-    ...(picks.plan ? { plan: true } : {})
-  }
   return (await context.call('quirky.structured/create', {
     agent,
     worktree,
     deferStart: true,
     ...(model === null ? {} : { model }),
-    ...(Object.keys(options).length === 0 ? {} : { options })
+    ...(effort === null ? {} : { options: { effort } }),
+    ...(picks.mode === null ? {} : { permissionMode: picks.mode }),
+    ...(picks.plan ? { planMode: true } : {})
   })) as Session
 }
