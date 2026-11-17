@@ -37,14 +37,14 @@ function listenOn(path: string): TrackedListener {
 
 function bind(path: string, ops?: BindOps): OwnedSocket<TrackedListener> {
   const owned = bindOwnedSocket(path, listenOn, ops)
-  onCleanup(() => owned.close())
+  onCleanup(() => { owned.close() })
   return owned
 }
 
 async function connect(path: string): Promise<boolean> {
   try {
     const socket = await Bun.connect({ unix: path, socket: { data() {} } })
-    onCleanup(() => socket.end())
+    onCleanup(() => { socket.terminate() })
     return true
   } catch {
     return false
@@ -65,10 +65,10 @@ function injectedOps(
   let failed = false
   return {
     ...fs,
-    mkdtempSync(prefix) {
+    mkdtempSync: ((prefix: string) => {
       capture.privateDir = fs.mkdtempSync(prefix)
       return capture.privateDir
-    },
+    }) as BindOps['mkdtempSync'],
     chmodSync(path, mode) {
       if (point === 'chmod' && !failed && String(path) === join(capture.privateDir!, 's')) {
         failed = true
@@ -345,11 +345,11 @@ describe('ownership', () => {
     onCleanup(() => log.mockRestore())
     const ops: BindOps = {
       ...fs,
-      mkdtempSync(prefix) {
+      mkdtempSync: ((prefix: string) => {
         capture.privateDir = fs.mkdtempSync(prefix)
         privatePath = join(capture.privateDir, 's')
         return capture.privateDir
-      },
+      }) as BindOps['mkdtempSync'],
       lstatSync: ((candidate: unknown, options?: unknown) => {
         if (failInspection && String(candidate) === privatePath) throw inspectionError
         return fs.lstatSync(candidate as fs.PathLike, options as never)
