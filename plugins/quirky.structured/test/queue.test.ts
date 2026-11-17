@@ -340,6 +340,163 @@ describe('the queue store', () => {
   })
 })
 
+describe('queue store reorder and move', () => {
+  const withQueue = (run: (queue: MessageQueue) => void) => {
+    const home = mkdtempSync(join(tmpdir(), 'qs-queue-'))
+    const opened = openPluginStore({ home, pluginId: 'quirky.structured', migrations: journalMigrations(home), isActive: () => true })
+    try {
+      run(new MessageQueue(opened.store))
+    } finally {
+      opened.close()
+      rmSync(home, { recursive: true, force: true })
+    }
+  }
+
+  test('reorder keeps ids, text and images and rejects anything but a permutation', () => {
+    withQueue((queue) => {
+      const a = queue.add('s1', { text: 'a' }, 1000)
+      const b = queue.add('s1', { text: 'b', images: ['/x.png'] }, 2000)
+      const c = queue.add('s1', { text: 'c' }, 3000)
+      const before = queue.list('s1')
+      expect(queue.reorder('s1', [c.id, a.id, b.id])).toBe(true)
+      expect(queue.list('s1')).toEqual([before[2]!, before[0]!, before[1]!])
+      expect(queue.reorder('s1', [a.id, b.id])).toBe(false)
+      expect(queue.reorder('s1', [a.id, a.id, b.id])).toBe(false)
+      expect(queue.reorder('s1', [a.id, b.id, 'nope'])).toBe(false)
+      expect(queue.list('s1').map((m) => m.id)).toEqual([c.id, a.id, b.id])
+    })
+  })
+
+  test('a message taken before a reorder still restores into the queue', () => {
+    withQueue((queue) => {
+      const a = queue.add('s1', { text: 'a' }, 1000)
+      const b = queue.add('s1', { text: 'b' }, 2000)
+      const c = queue.add('s1', { text: 'c' }, 3000)
+      const taken = queue.take('s1', a.id)!
+      queue.reorder('s1', [c.id, b.id])
+      queue.restore('s1', taken)
+      expect(queue.list('s1').map((m) => m.text)).toEqual(['a', 'c', 'b'])
+    })
+  })
+
+  test('moveSession moves the messages in order and leaves other sessions alone', () => {
+    withQueue((queue) => {
+      queue.add('old', { text: 'a' }, 1000)
+      queue.add('other', { text: 'x' }, 1500)
+      queue.add('old', { text: 'b' }, 2000)
+      queue.moveSession('old', 'new')
+      expect(queue.list('new').map((m) => m.text)).toEqual(['a', 'b'])
+      expect(queue.list('old')).toEqual([])
+      expect(queue.list('other')).toHaveLength(1)
+    })
+  })
+})
+
+describe('reorderQueued', () => {
+  test('sets the order, keeps the messages and emits queueChanged', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    const one = await chat.call('quirky.structured/send', { session: session.id, text: 'one', when: 'idle' })
+    const two = await chat.call('quirky.structured/send', { session: session.id, text: 'two', when: 'idle' })
+    const before = (await chat.call('quirky.structured/queue', { session: session.id })) as QueuedMessage[]
+    expect(await chat.call('quirky.structured/reorderQueued', { session: session.id, ids: [two.queuedId, one.queuedId] })).toEqual({ ok: true })
+    expect(await chat.call('quirky.structured/queue', { session: session.id })).toEqual([before[1]!, before[0]!])
+    expect(queueEvents(chat).at(-1)!.map((m) => m.text)).toEqual(['two', 'one'])
+  })
+
+  test('an unknown id is not-found and a non-permutation is invalid-params', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    const one = await chat.call('quirky.structured/send', { session: session.id, text: 'one', when: 'idle' })
+    await chat.call('quirky.structured/send', { session: session.id, text: 'two', when: 'idle' })
+    expect((await chat.failure(chat.call('quirky.structured/reorderQueued', { session: session.id, ids: [one.queuedId, 'nope'] }))).code).toBe(RpcErrorCode.NotFound)
+    expect((await chat.failure(chat.call('quirky.structured/reorderQueued', { session: session.id, ids: [one.queuedId] }))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await chat.failure(chat.call('quirky.structured/reorderQueued', { session: session.id, ids: [one.queuedId, one.queuedId] }))).code).toBe(RpcErrorCode.InvalidParams)
+    expect((await chat.failure(chat.call('quirky.structured/reorderQueued', { session: 'missing', ids: [] }))).code).toBe(RpcErrorCode.NotFound)
+  })
+})
+
+describe('sendQueued', () => {
+  const held = async (boot: ChatBoot, texts: string[]) => {
+    const session = await working(boot)
+    const ids: string[] = []
+    for (const text of texts) ids.push((await boot.call('quirky.structured/send', { session: session.id, text, when: 'idle' })).queuedId)
+    await boot.call('quirky.structured/interrupt', { session: session.id })
+    await waitFor(() => boot.world.statusLog.some((entry) => entry.status === 'done'))
+    return { session, ids }
+  }
+
+  test('sends the chosen message now while idle and leaves the rest queued', async () => {
+    chat = await bootChat()
+    const { session, ids } = await held(chat, ['first', 'second'])
+    expect(await chat.call('quirky.structured/sendQueued', { session: session.id, id: ids[1] })).toEqual({ ok: true })
+    expect(chat.runner.sent).toEqual([{ sessionId: session.id, text: 'second', options: { queuedId: ids[1] } }])
+    expect(((await chat.call('quirky.structured/queue', { session: session.id })) as QueuedMessage[]).map((m) => m.text)).toEqual(['first'])
+    expect(queueEvents(chat).at(-1)!.map((m) => m.text)).toEqual(['first'])
+  })
+
+  test('an id that is not queued is not-found', async () => {
+    chat = await bootChat()
+    const { session } = await held(chat, ['first'])
+    expect((await chat.failure(chat.call('quirky.structured/sendQueued', { session: session.id, id: 'nope' }))).code).toBe(RpcErrorCode.NotFound)
+  })
+
+  test('a working session is a busy conflict and keeps the message', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    const { queuedId } = await chat.call('quirky.structured/send', { session: session.id, text: 'x', when: 'idle' })
+    const error = await chat.failure(chat.call('quirky.structured/sendQueued', { session: session.id, id: queuedId }))
+    expect(error.code).toBe(RpcErrorCode.Conflict)
+    expect(error.data).toEqual({ reason: 'busy' })
+    expect(await chat.call('quirky.structured/queue', { session: session.id })).toHaveLength(1)
+  })
+
+  test('an ended session is an exited conflict', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    const { queuedId } = await chat.call('quirky.structured/send', { session: session.id, text: 'x', when: 'idle' })
+    await chat.call('quirky.structured/stop', { session: session.id })
+    const error = await chat.failure(chat.call('quirky.structured/sendQueued', { session: session.id, id: queuedId }))
+    expect(error.code).toBe(RpcErrorCode.Conflict)
+    expect(error.data).toEqual({ reason: 'exited' })
+  })
+
+  test('a failed send restores the message to its place', async () => {
+    chat = await bootChat()
+    const { session, ids } = await held(chat, ['first', 'second'])
+    chat.runner.sendError = new Error('nope')
+    const error = await chat.failure(chat.call('quirky.structured/sendQueued', { session: session.id, id: ids[0] }))
+    expect(error.message).toContain('nope')
+    expect(((await chat.call('quirky.structured/queue', { session: session.id })) as QueuedMessage[]).map((m) => m.text)).toEqual(['first', 'second'])
+  })
+})
+
+describe('commands', () => {
+  test('is empty until a runner reports, then returns the list without duplicates and emits commandsChanged', async () => {
+    chat = await bootChat()
+    const session = await working(chat)
+    expect(await chat.call('quirky.structured/commands', { session: session.id })).toEqual({ commands: [] })
+    chat.runner.context.reportCommands!(session.id, [
+      { name: 'compact', kind: 'command' },
+      { name: 'compact', kind: 'command' },
+      { name: 'compact', kind: 'skill' }
+    ])
+    const expected = [
+      { name: 'compact', kind: 'command' },
+      { name: 'compact', kind: 'skill' }
+    ]
+    expect(await chat.call('quirky.structured/commands', { session: session.id })).toEqual({ commands: expected })
+    await waitFor(() => chat!.events.some((event) => event.type === 'quirky.structured/commandsChanged'))
+    const event = chat.events.find((e) => e.type === 'quirky.structured/commandsChanged') as { data: unknown }
+    expect(event.data).toEqual({ sessionId: session.id, commands: expected })
+  })
+
+  test('an unknown session is not-found', async () => {
+    chat = await bootChat()
+    expect((await chat.failure(chat.call('quirky.structured/commands', { session: 'missing' }))).code).toBe(RpcErrorCode.NotFound)
+  })
+})
+
 describe('turn baseline', () => {
   test('the snapshot is awaited before the message reaches the agent, for send, flush and steer', async () => {
     chat = await bootChat({ git: true })

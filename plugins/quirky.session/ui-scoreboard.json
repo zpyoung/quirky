@@ -371,102 +371,6 @@
       "surface": "view:quirky.session/structured",
       "state": "error",
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "context.toast('Could not send', messageOf(error))"
-      },
-      "anchor": "context.toast(",
-      "render": {
-        "component": "toast",
-        "call": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.toast('Could not send', messageOf(error))"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "error",
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "context.toast('Could not stop', messageOf(error))"
-      },
-      "anchor": "context.toast(",
-      "render": {
-        "component": "toast",
-        "call": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.toast('Could not stop', messageOf(error))"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "error",
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "context.toast('Could not change the setting', messageOf(error))"
-      },
-      "anchor": "context.toast(",
-      "render": {
-        "component": "toast",
-        "call": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.toast('Could not change the setting', messageOf(error))"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "error",
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "context.toast('Could not attach', unsupported)"
-      },
-      "anchor": "context.toast(",
-      "render": {
-        "component": "toast",
-        "call": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.toast('Could not attach', unsupported)"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "error",
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "context.toast('Could not attach', `${file.name} is not an image`)"
-      },
-      "anchor": "context.toast(",
-      "render": {
-        "component": "toast",
-        "call": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.toast('Could not attach', `${file.name} is not an image`)"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "error",
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "context.toast('Could not attach', `${file.name} has no file path`)"
-      },
-      "anchor": "context.toast(",
-      "render": {
-        "component": "toast",
-        "call": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.toast('Could not attach', `${file.name} has no file path`)"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "error",
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
         "quote": "context.toast('Could not restart', messageOf(error))"
       },
@@ -499,46 +403,6 @@
       "surface": "view:quirky.session/structured",
       "state": "error",
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-        "quote": "if (search.unavailable) return <div style={note}><InlineError message=\"File search unavailable\" /></div>"
-      },
-      "anchor": "if (search.unavailable)",
-      "render": {
-        "component": "InlineError",
-        "element": {
-          "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-          "quote": "<InlineError message=\"File search unavailable\" />"
-        },
-        "import": {
-          "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "empty",
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-        "quote": "if (search.items.length === 0) return <div style={note} role=\"status\"><EmptyState message=\"No matching files\" /></div>"
-      },
-      "anchor": "if (search.items.length === 0)",
-      "render": {
-        "component": "EmptyState",
-        "element": {
-          "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-          "quote": "<EmptyState message=\"No matching files\" />"
-        },
-        "import": {
-          "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-          "quote": "import { EmptyState, InlineError } from '@quirky/ui'"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "error",
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
         "quote": "context.toast('Could not open link', error instanceof Error ? error.message : String(error))"
       },
@@ -548,22 +412,6 @@
         "call": {
           "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
           "quote": "context.toast('Could not open link', error instanceof Error ? error.message : String(error))"
-        }
-      }
-    },
-    {
-      "surface": "view:quirky.session/structured",
-      "state": "error",
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "context.toast('Could not update the queue', messageOf(error))"
-      },
-      "anchor": "context.toast(",
-      "render": {
-        "component": "toast",
-        "call": {
-          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-          "quote": "context.toast('Could not update the queue', messageOf(error))"
         }
       }
     },
@@ -604,6 +452,66 @@
         "import": {
           "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
           "quote": "import { Dialog, InlineError } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "const problem = failure && ("
+      },
+      "anchor": "failure &&",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "<InlineError message={failure.message} action={onRetry ? { label: 'Retry', onAction: onRetry } : undefined} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "import { Button, ControlIcon, IconButton, InlineError, ScopeChip, StatusDot } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "error",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "if (unavailable) return <div style={list}><InlineError message={unavailable} /></div>"
+      },
+      "anchor": "if (unavailable)",
+      "render": {
+        "component": "InlineError",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+          "quote": "<InlineError message={unavailable} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+          "quote": "import { EmptyState, FileIcon, InlineError, ListRow, SectionHeader } from '@quirky/ui'"
+        }
+      }
+    },
+    {
+      "surface": "view:quirky.session/structured",
+      "state": "empty",
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "if (items.length === 0) return <div style={list} role=\"status\"><EmptyState message={empty} /></div>"
+      },
+      "anchor": "if (items.length === 0)",
+      "render": {
+        "component": "EmptyState",
+        "element": {
+          "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+          "quote": "<EmptyState message={empty} />"
+        },
+        "import": {
+          "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+          "quote": "import { EmptyState, FileIcon, InlineError, ListRow, SectionHeader } from '@quirky/ui'"
         }
       }
     }
@@ -801,54 +709,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "if (session.status === 'exited') {"
-      },
-      "anchor": "if (session.status === 'exited')",
-      "reason": "An ended session has no composer; the notice reports the session lifecycle, not a loading, empty or failed read."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "<div style={ended} role=\"status\">session ended</div>"
-      },
-      "anchor": "role=\"status\"",
-      "reason": "Announces the ended-session notice classified at the branch above."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "{mention && <Mentions search={search} active={active} onPick={pickMention} />}"
-      },
-      "anchor": "mention &&",
-      "reason": "Shows the @file list only while a mention is being typed."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "{attachments.length > 0 && ("
-      },
-      "anchor": "attachments.length > 0 &&",
-      "reason": "Shows the attachment chips only when the unsent message has images."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "{working ? 'Queue' : 'Send'}"
-      },
-      "anchor": "working ?",
-      "reason": "Labels the send button Queue while the agent works and Send otherwise."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "{working && ("
-      },
-      "anchor": "working &&",
-      "reason": "Shows elapsed time and Stop only while the agent works."
-    },
-    {
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/Embedded.tsx",
         "quote": "if (missing) return <div role=\"note\" style={quiet}>{fallback}</div>"
       },
@@ -897,16 +757,16 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-        "quote": "if (search.items.length === 0) return <div style={note} role=\"status\"><EmptyState message=\"No matching files\" /></div>"
+        "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
+        "quote": "if (parts.length === 0) return text"
       },
-      "anchor": "role=\"status\"",
-      "reason": "The status wrapper announces the No matching files EmptyState; it is not a separate content state."
+      "anchor": "if (parts.length === 0)",
+      "reason": "Maps mention-split text to markup, returning the plain text when no mention is found; not a read state."
     },
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Prose.tsx",
-        "quote": "if (node.type === 'text') return node.value ?? ''"
+        "quote": "if (node.type === 'text') return mentions && !inPre ? withMentions(node.value ?? '') : (node.value ?? '')"
       },
       "anchor": "if (node.type === 'text')",
       "reason": "Maps one markdown node to its element; the node type selects markup, not a read state."
@@ -942,22 +802,6 @@
       },
       "anchor": "streaming &&",
       "reason": "Shows the typing caret only while the agent's text is still streaming."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "if (queue.length === 0) return null"
-      },
-      "anchor": "if (queue.length === 0)",
-      "reason": "With nothing queued the strip renders nothing, so there is no empty-state message to show."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "{editing?.id === entry.id ? ("
-      },
-      "anchor": "editing?.id === entry.id ?",
-      "reason": "Swaps a queued message for its inline editor while it is being edited."
     },
     {
       "site": {
@@ -1217,30 +1061,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
-        "quote": "const onAttachHint = () => context.toast('Attach images', DROP_HINT)"
-      },
-      "anchor": "context.toast(",
-      "reason": "The Attach images toast tells the user to drop images; it reports no loading, empty or failed state."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
-        "quote": "{unlisted && <option value={model}>{model}</option>}"
-      },
-      "anchor": "unlisted &&",
-      "reason": "Adds the session's launch model to the list when the catalog lacks it."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
-        "quote": "{modes?.ok && modes.modes.map((name) => ("
-      },
-      "anchor": "modes?.ok &&",
-      "reason": "Lists permission modes only when the agent supports them."
-    },
-    {
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/NewChatOverlay.tsx",
         "quote": "if (dialog === null) return null"
       },
@@ -1254,6 +1074,198 @@
       },
       "anchor": "created === null &&",
       "reason": "Shows the agent picker until the chat exists; selects content, not a loading, empty or failed read."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "if (ended) {"
+      },
+      "anchor": "if (ended)",
+      "reason": "An ended session swaps the editor for the ended card; it reports the session lifecycle, not a loading, empty or failed read."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<div style={{ ...endedCard, borderRadius: queue.length > 0 ? '0 0 var(--ui-radius-window) var(--ui-radius-window)' : 'var(--ui-radius-window)' }} role=\"status\">"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "Announces the ended card classified at the branch above."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{capabilities?.resume.ok === true && <Button variant=\"primary\" onClick={() => void resume()}>Resume</Button>}"
+      },
+      "anchor": "capabilities?.resume.ok === true &&",
+      "reason": "Shows Resume only when the agent can resume a conversation."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{listOpen ? ("
+      },
+      "anchor": "listOpen ?",
+      "reason": "Swaps the queued rows for the suggestion list while an @ or / token is being typed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{(images.length > 0 || pastes.length > 0) && ("
+      },
+      "anchor": "(images.length > 0 || pastes.length > 0) &&",
+      "reason": "Shows the attachment chips only when the unsent message has images or pasted text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{working && (\n              <span style={running} role=\"timer\" aria-label=\"Elapsed time\">"
+      },
+      "anchor": "working &&",
+      "reason": "Shows the pulsing dot and elapsed time only while the agent works."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{working && (\n              <IconButton label=\"Stop\" variant=\"destructive\" style={round} title=\"Stop (Esc)\" onClick={() => void stop()}>"
+      },
+      "anchor": "working &&",
+      "reason": "Shows Stop only while the agent works."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{(!working || canSend) && ("
+      },
+      "anchor": "(!working || canSend) &&",
+      "reason": "Shows the Send arrow when idle, and beside Stop once text is typed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "if (queue.length === 0 && steered.length === 0) return null"
+      },
+      "anchor": "if (queue.length === 0 && steered.length === 0)",
+      "reason": "With nothing queued or steered the rows render nothing, so there is no empty-state message to show."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "{!readOnly && ("
+      },
+      "anchor": "!readOnly &&",
+      "reason": "Shows the reorder handle only on rows that can still be moved."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "{readOnly ? ("
+      },
+      "anchor": "readOnly ?",
+      "reason": "An ended session shows its leftover rows with a note and Delete only."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "{working ? ("
+      },
+      "anchor": "working ?",
+      "reason": "Offers Steer now while the agent works and Send next once it is idle."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{searchable && <TextField label=\"Search models\" value={search} onChange={(event) => setSearch(event.target.value)} />}"
+      },
+      "anchor": "searchable &&",
+      "reason": "Shows the model search field once the list passes 8 entries."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{settings.unlisted && settings.model !== null && <ListRow compact selected title={settings.model} />}"
+      },
+      "anchor": "settings.unlisted && settings.model !== null &&",
+      "reason": "Adds the session's current model to the list when the catalog lacks it."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{settings.choices.length === 0 && ("
+      },
+      "anchor": "settings.choices.length === 0 &&",
+      "reason": "Keeps a disabled Effort control visible, with its reason, when the model lists no effort levels."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{settings.modes.length === 0 && <ListRow compact disabled mainTitle={settings.modeReason} title=\"Permission mode\" />}"
+      },
+      "anchor": "settings.modes.length === 0 &&",
+      "reason": "Keeps a disabled permission row visible, with its reason, when the agent has no permission modes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<span>{picks.plan ? 'On' : 'Off'}</span>"
+      },
+      "anchor": "picks.plan ?",
+      "reason": "Words the visible on or off state of the Plan switch."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{picks.plan && ("
+      },
+      "anchor": "picks.plan &&",
+      "reason": "Shows the Plan badge only while plan mode is on."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{defaultMode !== null && mode !== '' && mode !== defaultMode && ("
+      },
+      "anchor": "defaultMode !== null && mode !== '' && mode !== defaultMode &&",
+      "reason": "Shows the permission badge only while the mode is not the default."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "if (items.length === 0) return <div style={list} role=\"status\"><EmptyState message={empty} /></div>"
+      },
+      "anchor": "role=\"status\"",
+      "reason": "The status wrapper announces the empty-list message classified above; it is not a separate content state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "{item.source === 'file' && <FileIcon path={item.path} />} {item.label}"
+      },
+      "anchor": "item.source === 'file' &&",
+      "reason": "Shows a file icon only on file suggestions."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
+      },
+      "anchor": "item.tag ?",
+      "reason": "Shows the acts-now or sent mark when the row has one."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "trailing={item.tag ? <span style={tagStyle}>{item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}"
+      },
+      "anchor": "item.detail ?",
+      "reason": "Prefixes the mark with the command's description when it has one."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/editor/pills.ts",
+        "quote": "if (this.pill.kind === 'file') {"
+      },
+      "anchor": "if (this.pill.kind === 'file')",
+      "reason": "Chooses the pill glyph by whether it names a file or a command."
     }
   ],
   "actions": [
@@ -1670,144 +1682,6 @@
     },
     {
       "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "onDragOver={(event) => {"
-      },
-      "anchor": "onDragOver",
-      "transient": "hover",
-      "reason": "Marks the composer as a drop target while files are dragged over it; no data changes."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "}}\n      onDrop"
-      },
-      "anchor": "onDrop",
-      "notAction": "forwarded",
-      "reason": "Forwards the drop to the composer onDrop handler, which only adds image files to the unsent message; sending is routed separately."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "onDrop={onDrop}\n      onPaste"
-      },
-      "anchor": "onPaste",
-      "notAction": "forwarded",
-      "reason": "Forwards the paste to the composer onPaste handler, which only adds image files to the unsent message; sending is routed separately."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "{mention && <Mentions search={search} active={active} onPick={pickMention} />}"
-      },
-      "anchor": "onPick",
-      "transient": "draft",
-      "reason": "Inserts the chosen file path into the unsent message."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "onRemove={() => setAttachments((current) => current.filter((existing) => existing !== image))}"
-      },
-      "anchor": "onRemove",
-      "transient": "draft",
-      "reason": "Removes an image from the unsent message."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "onChange={(event) => {"
-      },
-      "anchor": "onChange",
-      "transient": "draft",
-      "reason": "Edits only the unsent message draft and the @file mention being typed."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "}}\n          onKeyDown"
-      },
-      "anchor": "onKeyDown",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.call('quirky.structured/send', {\n        session: session.id,\n        text: value,\n        ...(images.length > 0 ? { images: images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })"
-        },
-        "target": "quirky.structured/send",
-        "via": [
-          {
-            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {\n    if (event.nativeEvent.isComposing) return\n    if (mention && search.items.length > 0) {\n      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {\n        event.preventDefault()\n        const step = event.key === 'ArrowDown' ? 1 : -1\n        setActive((current) => (current + step + search.items.length) % search.items.length)\n        return\n      }\n      if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {\n        event.preventDefault()\n        pickMention(search.items[Math.min(active, search.items.length - 1)]!)\n        return\n      }\n    }\n    if (mention && event.key === 'Escape') {\n      event.preventDefault()\n      setMention(null)\n      return\n    }\n    if (event.key === 'Enter' && !event.shiftKey) {\n      event.preventDefault()\n      void send()\n    }\n  }"
-          },
-          {
-            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const send = async () => {\n    const value = text.trim()\n    if (!value) return\n    const images = attachments\n    setText('')\n    setAttachments([])\n    setMention(null)\n    try {\n      await context.call('quirky.structured/send', {\n        session: session.id,\n        text: value,\n        ...(images.length > 0 ? { images: images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })\n    } catch (error) {\n      context.toast('Could not send', messageOf(error))\n      setText(value)\n      setAttachments(images)\n    }\n  }"
-          }
-        ]
-      }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "<Button variant=\"primary\" disabled={!text.trim()} onClick={() => void send()}>"
-      },
-      "anchor": "onClick",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.call('quirky.structured/send', {\n        session: session.id,\n        text: value,\n        ...(images.length > 0 ? { images: images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })"
-        },
-        "target": "quirky.structured/send",
-        "via": [
-          {
-            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const send = async () => {\n    const value = text.trim()\n    if (!value) return\n    const images = attachments\n    setText('')\n    setAttachments([])\n    setMention(null)\n    try {\n      await context.call('quirky.structured/send', {\n        session: session.id,\n        text: value,\n        ...(images.length > 0 ? { images: images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })\n    } catch (error) {\n      context.toast('Could not send', messageOf(error))\n      setText(value)\n      setAttachments(images)\n    }\n  }"
-          }
-        ]
-      }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "onPicks={(next) => void pick(next)}"
-      },
-      "anchor": "onPicks",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.call('quirky.structured/configure', { session: session.id, ...changes })"
-        },
-        "target": "quirky.structured/configure",
-        "via": [
-          {
-            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "  const pick = async (next: Picks) => {\n    const before = picks\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),\n      ...(next.plan !== before.plan ? { planMode: next.plan } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const settings = result?.settings\n      if (settings) {\n        setPicks((current) => ({\n          model: settings.model ?? current.model,\n          effort: settings.effort ?? current.effort,\n          mode: settings.permissionMode ?? current.mode,\n          plan: settings.planMode ?? current.plan\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      context.toast('Could not change the setting', messageOf(error))\n    }\n  }"
-          }
-        ]
-      }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "<Button variant=\"destructive\" onClick={() => void stop()}>Stop</Button>"
-      },
-      "anchor": "onClick",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
-        },
-        "target": "quirky.structured/interrupt",
-        "via": [
-          {
-            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      context.toast('Could not stop', messageOf(error))\n    }\n  }"
-          }
-        ]
-      }
-    },
-    {
-      "site": {
         "file": "plugins/quirky.session/src/window/chat/ErrorRow.tsx",
         "quote": "<Button variant=\"primary\" disabled={!item.resumable || busy} title={reason} onClick={() => void restart()}>"
       },
@@ -1845,141 +1719,6 @@
           }
         ]
       }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-        "quote": "onMouseDown={(event) => event.preventDefault()}"
-      },
-      "anchor": "onMouseDown",
-      "transient": "caret",
-      "reason": "Keeps the composer's caret and focus while a file option is clicked."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/Mentions.tsx",
-        "quote": "onClick={() => onPick(path)}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the chosen path to the onPick handler of its owner."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "onChange={(event) => setEditing({ id: entry.id, text: event.target.value })}"
-      },
-      "anchor": "onChange",
-      "transient": "draft",
-      "reason": "Edits only the unsent text of a queued message."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "onClick={() => {"
-      },
-      "anchor": "onClick",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-          "quote": "context.call('quirky.structured/editQueued', { session: session.id, id: entry.id, text })"
-        },
-        "target": "quirky.structured/editQueued",
-        "via": []
-      }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "<Button onClick={onCancelEdit}>Cancel</Button>"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the click to the onCancelEdit handler, which only discards the unsent edit."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "<Button aria-label=\"Edit queued message\" onClick={() => onEdit(entry)}>Edit</Button>"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the click to the onEdit handler, which only opens the inline editor for the queued message."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "<Button aria-label=\"Delete queued message\" onClick={() => void act(() => context.call('quirky.structured/dequeue', { session: session.id, id: entry.id }))}>Delete</Button>"
-      },
-      "anchor": "onClick",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-          "quote": "context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })"
-        },
-        "target": "quirky.structured/dequeue",
-        "via": []
-      }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-        "quote": "onClick={() => void act(() => context.call('quirky.structured/steer', { session: session.id, id: entry.id }))}"
-      },
-      "anchor": "onClick",
-      "route": {
-        "invoke": {
-          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
-          "quote": "context.call('quirky.structured/steer', { session: session.id, id: entry.id })"
-        },
-        "target": "quirky.structured/steer",
-        "via": []
-      }
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
-        "quote": "onChange={(event) => onPicks({ ...picks, model: event.target.value, effort: null })}"
-      },
-      "anchor": "onChange",
-      "transient": "draft",
-      "reason": "Records the unsent model pick for the next turn."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
-        "quote": "onChange={(event) => onPicks({ ...picks, effort: event.target.value })}"
-      },
-      "anchor": "onChange",
-      "transient": "draft",
-      "reason": "Records the unsent effort pick for the next turn."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
-        "quote": "onChange={(event) => onPicks({ ...picks, mode: event.target.value })}"
-      },
-      "anchor": "onChange",
-      "transient": "draft",
-      "reason": "Records the unsent permission-mode pick for the next turn."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
-        "quote": "onClick={() => onPicks({ ...picks, plan: !picks.plan })}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the toggle to the onPicks handler of its owner, which only records the unsent plan pick."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/controls.tsx",
-        "quote": "onClick={onAttachHint}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the click to the onAttachHint handler, which only shows the drop-images hint."
     },
     {
       "site": {
@@ -2038,6 +1777,676 @@
           }
         ]
       }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onEdit={(entry) => void pullBack(entry)}"
+      },
+      "anchor": "onEdit",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/dequeue",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pullBack = async (entry: QueuedMessage) => {\n    try {\n      await context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })\n    } catch (error) {\n      fail(`Could not update the queue: ${messageOf(error)}`)\n      return\n    }\n    setText((current) => (current.trim() === '' ? entry.text : `${entry.text}\\n\\n${current}`))\n    addImages((entry.images ?? []).map((path) => ({ name: basename(path), path })))\n    editor.current?.focus()\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onSteered={(entry) => setSteered((current) => [...current, { id: entry.id, text: entry.text }])}"
+      },
+      "anchor": "onSteered",
+      "transient": "draft",
+      "reason": "Records that a steered row is waiting for the agent; no data changes until it arrives."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onError={fail}"
+      },
+      "anchor": "onError",
+      "transient": "draft",
+      "reason": "Only shows the inline error under the card."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<InlineError message={failure.message} action={onRetry ? { label: 'Retry', onAction: onRetry } : undefined} />"
+      },
+      "anchor": "onAction",
+      "notAction": "forwarded",
+      "reason": "Forwards the Retry click to the retry handler held with the error, which sends the restored message again; the send itself is routed separately."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "{capabilities?.resume.ok === true && <Button variant=\"primary\" onClick={() => void resume()}>Resume</Button>}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/resume', { session: session.id })"
+        },
+        "target": "quirky.structured/resume",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const resume = async () => {\n    try {\n      const resumed = (await context.call('quirky.structured/resume', { session: session.id })) as Session\n      draft.carryTo(resumed.id, { text, images: images.map((image) => image.path), pastes, picks })\n      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: resumed.id })\n    } catch (error) {\n      fail(`Could not resume: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<Button onClick={() => void newChat()}>New chat</Button>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/createChat.ts",
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
+        },
+        "target": "quirky.structured/create",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const newChat = async () => {\n    try {\n      const created = await createChat(context, session.agent, session.worktreeId, picks)\n      context.openView(WORKTREE_VIEW_ID, { worktree: session.worktreeId, session: created.id })\n    } catch (error) {\n      fail(`Could not start a chat: ${messageOf(error)}`)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/createChat.ts",
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const options = {\n    ...(picks.effort === null ? {} : { effort: picks.effort }),\n    ...(picks.mode === null ? {} : { mode: picks.mode }),\n    ...(picks.plan ? { plan: true } : {})\n  }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onDragOver={(event) => {"
+      },
+      "anchor": "onDragOver",
+      "transient": "hover",
+      "reason": "Marks the composer as a drop target while files are dragged over it; no data changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onDrop={(event) => {"
+      },
+      "anchor": "onDrop",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })"
+        },
+        "target": "quirky.session/pasteImage",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onPick={choose}"
+      },
+      "anchor": "onPick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
+        },
+        "target": "quirky.structured/interrupt",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const choose = (item: Suggestion) => {\n    if (item.source === 'file') editor.current?.insertPill({ kind: 'file', path: item.path })\n    else if (item.source === 'agent') editor.current?.insertPill({ kind: 'command', name: item.name })\n    else {\n      if (trigger) setText(text.slice(0, trigger.from) + text.slice(trigger.to))\n      setTrigger(null)\n      runCommand(item.command)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const runCommand = (name: QuirkyCommandName) => {\n    if (name === 'model' || name === 'effort' || name === 'mode') openSettings(name)\n    else if (name === 'plan') {\n      if (settings.planReason !== undefined) fail(settings.planReason)\n      else void pick({ ...picks, plan: !picks.plan })\n    } else if (name === 'new') void newChat()\n    else if (name === 'stop') void stop()\n    else if (ended) void resume()\n    else fail('The session has not ended')\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      fail(`Could not stop: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<div style={card(attached, working || focused)} onFocusCapture={() => setFocused(true)} onBlurCapture={() => setFocused(false)}>"
+      },
+      "anchor": "onFocusCapture",
+      "transient": "hover",
+      "reason": "Marks the card as focused so its border shows the accent."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<div style={card(attached, working || focused)} onFocusCapture={() => setFocused(true)} onBlurCapture={() => setFocused(false)}>"
+      },
+      "anchor": "onBlurCapture",
+      "transient": "hover",
+      "reason": "Clears the focused mark on the card border."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onRemove={() => setImages((current) => current.filter((existing) => existing !== image))}"
+      },
+      "anchor": "onRemove",
+      "transient": "draft",
+      "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onRemove={() => setPastes((current) => current.filter((existing) => existing !== paste))}"
+      },
+      "anchor": "onRemove",
+      "transient": "draft",
+      "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onChange={(value) => {"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Edits only the unsent message text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onSubmit={(kind) => void submit(kind)}"
+      },
+      "anchor": "onSubmit",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })"
+        },
+        "target": "quirky.structured/send",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '') return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onTrigger={trackTrigger}"
+      },
+      "anchor": "onTrigger",
+      "transient": "caret",
+      "reason": "Tracks the @ or / token under the caret to open the suggestion list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onKeyNav={navigate}"
+      },
+      "anchor": "onKeyNav",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
+        },
+        "target": "quirky.structured/interrupt",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const navigate = (key: NavKey): boolean => {\n    if (!listOpen) return false\n    if (key === 'escape') {\n      setDismissed(listKey)\n      return true\n    }\n    if (items.length === 0) return false\n    if (key === 'up' || key === 'down') {\n      setActive((current) => (current + (key === 'down' ? 1 : -1) + items.length) % items.length)\n      return true\n    }\n    choose(items[Math.min(active, items.length - 1)]!)\n    return true\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const choose = (item: Suggestion) => {\n    if (item.source === 'file') editor.current?.insertPill({ kind: 'file', path: item.path })\n    else if (item.source === 'agent') editor.current?.insertPill({ kind: 'command', name: item.name })\n    else {\n      if (trigger) setText(text.slice(0, trigger.from) + text.slice(trigger.to))\n      setTrigger(null)\n      runCommand(item.command)\n    }\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const runCommand = (name: QuirkyCommandName) => {\n    if (name === 'model' || name === 'effort' || name === 'mode') openSettings(name)\n    else if (name === 'plan') {\n      if (settings.planReason !== undefined) fail(settings.planReason)\n      else void pick({ ...picks, plan: !picks.plan })\n    } else if (name === 'new') void newChat()\n    else if (name === 'stop') void stop()\n    else if (ended) void resume()\n    else fail('The session has not ended')\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      fail(`Could not stop: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onEscape={() => {"
+      },
+      "anchor": "onEscape",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
+        },
+        "target": "quirky.structured/interrupt",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      fail(`Could not stop: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onUpInEmpty={() => {"
+      },
+      "anchor": "onUpInEmpty",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/dequeue",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pullBack = async (entry: QueuedMessage) => {\n    try {\n      await context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })\n    } catch (error) {\n      fail(`Could not update the queue: ${messageOf(error)}`)\n      return\n    }\n    setText((current) => (current.trim() === '' ? entry.text : `${entry.text}\\n\\n${current}`))\n    addImages((entry.images ?? []).map((path) => ({ name: basename(path), path })))\n    editor.current?.focus()\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onPasteFiles={(files) => void takeFiles(files)}"
+      },
+      "anchor": "onPasteFiles",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })"
+        },
+        "target": "quirky.session/pasteImage",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onDropFiles={(files) => void takeFiles(files)}"
+      },
+      "anchor": "onDropFiles",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })"
+        },
+        "target": "quirky.session/pasteImage",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "onLongPaste={(pasted) => setPastes((current) => [...current, { id: `paste-${Date.now().toString(36)}-${pasteSeq++}`, text: pasted }])}"
+      },
+      "anchor": "onLongPaste",
+      "transient": "draft",
+      "reason": "Turns a long paste into an unsent chip."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<SettingsChip settings={settings} picks={picks} onPicks={(next) => void pick(next)} open={settingsOpen} section={section} onOpenChange={setSettingsOpen} />"
+      },
+      "anchor": "onPicks",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/configure', { session: session.id, ...changes })"
+        },
+        "target": "quirky.structured/configure",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),\n      ...(next.plan !== before.plan ? { planMode: next.plan } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const reported = result?.settings\n      if (reported) {\n        setPicks((current) => ({\n          model: reported.model ?? current.model,\n          effort: reported.effort ?? current.effort,\n          mode: reported.permissionMode ?? current.mode,\n          plan: reported.planMode ?? current.plan\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<SettingsChip settings={settings} picks={picks} onPicks={(next) => void pick(next)} open={settingsOpen} section={section} onOpenChange={setSettingsOpen} />"
+      },
+      "anchor": "onOpenChange",
+      "transient": "draft",
+      "reason": "Opens or closes the settings popover; no data changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<ModeBadges settings={settings} picks={picks} onPicks={(next) => void pick(next)} />"
+      },
+      "anchor": "onPicks",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/configure', { session: session.id, ...changes })"
+        },
+        "target": "quirky.structured/configure",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const pick = async (next: Picks, before: Picks = picks) => {\n    setPicks(next)\n    onPick?.(next)\n    const changes = {\n      ...(next.model !== before.model && next.model !== null ? { model: next.model } : {}),\n      ...(next.effort !== before.effort && next.effort !== null ? { effort: next.effort } : {}),\n      ...(next.mode !== before.mode && next.mode !== null ? { permissionMode: next.mode } : {}),\n      ...(next.plan !== before.plan ? { planMode: next.plan } : {})\n    }\n    if (Object.keys(changes).length === 0) return\n    try {\n      const result = (await context.call('quirky.structured/configure', { session: session.id, ...changes })) as { settings?: ReportedSettings } | undefined\n      const reported = result?.settings\n      if (reported) {\n        setPicks((current) => ({\n          model: reported.model ?? current.model,\n          effort: reported.effort ?? current.effort,\n          mode: reported.permissionMode ?? current.mode,\n          plan: reported.planMode ?? current.plan\n        }))\n      }\n    } catch (error) {\n      setPicks(before)\n      fail(`Could not change the setting: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<IconButton label=\"Attach images\" style={round} disabled={attachReason !== undefined} title={attachReason ?? 'Attach images'} onClick={onAttach}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onAttach, which opens the native image picker and only adds the chosen paths to the unsent message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<IconButton label=\"Stop\" variant=\"destructive\" style={round} title=\"Stop (Esc)\" onClick={() => void stop()}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/interrupt', { session: session.id })"
+        },
+        "target": "quirky.structured/interrupt",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const stop = async () => {\n    try {\n      await context.call('quirky.structured/interrupt', { session: session.id })\n    } catch (error) {\n      fail(`Could not stop: ${messageOf(error)}`)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<IconButton label=\"Send\" variant=\"primary\" style={round} disabled={!canSend} title={working ? 'Queue (Enter)' : 'Send (Enter)'} onClick={() => void submit('send')}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+          "quote": "context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })"
+        },
+        "target": "quirky.structured/send",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '') return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onDragStart={(event) => {"
+      },
+      "anchor": "onDragStart",
+      "transient": "hover",
+      "reason": "Starts dragging a queued row; nothing changes until it is dropped."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onDragOver={(event) => {"
+      },
+      "anchor": "onDragOver",
+      "transient": "hover",
+      "reason": "Allows a dragged row to be dropped here; no data changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onDrop={(event) => {"
+      },
+      "anchor": "onDrop",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/reorderQueued', { session: session.id, ids })"
+        },
+        "target": "quirky.structured/reorderQueued",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+            "quote": "const reorder = (id: string, target: number) => {\n    const ids = queue.map((entry) => entry.id)\n    const from = ids.indexOf(id)\n    if (from < 0 || target < 0 || target >= ids.length || from === target) return\n    ids.splice(from, 1)\n    ids.splice(target, 0, id)\n    void act(() => context.call('quirky.structured/reorderQueued', { session: session.id, ids }))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onDragEnd={() => setDragging(null)}"
+      },
+      "anchor": "onDragEnd",
+      "transient": "hover",
+      "reason": "Clears the dragged-row mark."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "<button type=\"button\" style={handle} aria-label=\"Reorder queued message (drag, or Up and Down arrows)\" title=\"Drag to reorder\" onKeyDown={(event) => onHandleKey(event, entry.id, index)}>"
+      },
+      "anchor": "onKeyDown",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/reorderQueued', { session: session.id, ids })"
+        },
+        "target": "quirky.structured/reorderQueued",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+            "quote": "const onHandleKey = (event: KeyboardEvent, id: string, index: number) => {\n    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return\n    event.preventDefault()\n    reorder(id, index + (event.key === 'ArrowUp' ? -1 : 1))\n  }"
+          },
+          {
+            "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+            "quote": "const reorder = (id: string, target: number) => {\n    const ids = queue.map((entry) => entry.id)\n    const from = ids.indexOf(id)\n    if (from < 0 || target < 0 || target >= ids.length || from === target) return\n    ids.splice(from, 1)\n    ids.splice(target, 0, id)\n    void act(() => context.call('quirky.structured/reorderQueued', { session: session.id, ids }))\n  }"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "onClick={() => void act(() => context.call('quirky.structured/steer', { session: session.id, id: entry.id }).then(() => onSteered?.(entry)))}"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/steer', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/steer",
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "<Button onClick={() => void act(() => context.call('quirky.structured/sendQueued', { session: session.id, id: entry.id }))}>Send next</Button>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/sendQueued', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/sendQueued",
+        "via": []
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "<Button aria-label=\"Edit queued message\" onClick={() => onEdit?.(entry)}>Edit</Button>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onEdit, which moves the queued message back into the editor; the dequeue is routed from the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+        "quote": "<IconButton label=\"Delete queued message\" onClick={() => void remove(entry)}>"
+      },
+      "anchor": "onClick",
+      "route": {
+        "invoke": {
+          "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+          "quote": "context.call('quirky.structured/dequeue', { session: session.id, id: entry.id })"
+        },
+        "target": "quirky.structured/dequeue",
+        "via": [
+          {
+            "file": "plugins/quirky.session/src/window/chat/QueuedList.tsx",
+            "quote": "const remove = (entry: QueuedMessage) => act(() => context.call('quirky.structured/dequeue', { session: session.id, id: entry.id }))"
+          }
+        ]
+      }
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<Button style={chipButton} aria-haspopup=\"dialog\" aria-expanded={open} onClick={() => onOpenChange(!open)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpenChange, which only shows or hides the popover."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<Popover open={open} label=\"Turn settings\" anchor={anchor} onClose={() => onOpenChange(false)}>"
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "Forwards the close to onOpenChange, which only hides the popover."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{searchable && <TextField label=\"Search models\" value={search} onChange={(event) => setSearch(event.target.value)} />}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Filters the model list by the typed search text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClick={() => onPicks({ ...picks, model: entry.value, effort: null })}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClick={() => onPicks({ ...picks, effort: choice.value })}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClick={() => onPicks({ ...picks, mode: name })}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClick={() => onPicks({ ...picks, plan: !picks.plan })}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<button type=\"button\" style={badgeButton} aria-label=\"Turn off Plan mode\" title=\"Click to turn off plan mode\" onClick={() => onPicks({ ...picks, plan: false })}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClick={() => onPicks({ ...picks, mode: defaultMode })}"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "<div key={item.id} role=\"option\" aria-selected={index === active} style={option} onMouseDown={(event) => event.preventDefault()} onClick={() => onPick(item)}>"
+      },
+      "anchor": "onMouseDown",
+      "transient": "caret",
+      "reason": "Keeps the editor's caret and focus while an option is clicked."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SuggestionList.tsx",
+        "quote": "<div key={item.id} role=\"option\" aria-selected={index === active} style={option} onMouseDown={(event) => event.preventDefault()} onClick={() => onPick(item)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onPick, which the composer routes."
     }
   ]
 }

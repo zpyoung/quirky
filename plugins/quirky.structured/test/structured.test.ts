@@ -487,6 +487,47 @@ try {
     expect(h.pty.requests.some((request) => request.type === 'create')).toBe(false)
   })
 
+  test('resume without a prompt sends the moved queue in order', async () => {
+    const home = shortHome()
+    await boot({ home })
+    world.worktree.path = home
+    const original = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    world.sessions.get(original.id)!.providerSession = { id: 'provider-1', transcriptPath: null }
+    await call('quirky.structured/send', { session: original.id, text: 'one', when: 'idle' })
+    await call('quirky.structured/send', { session: original.id, text: 'two', when: 'idle' })
+    await call('quirky.structured/stop', { session: original.id })
+
+    const resumed = (await call('quirky.structured/resume', { session: original.id })) as Session
+    await waitFor(() => runner.sent.length === 1)
+    runner.context.setStatus(resumed.id, 'working')
+    runner.context.setStatus(resumed.id, 'done')
+    await waitFor(() => runner.sent.length === 2)
+    expect(runner.sent).toEqual([
+      { sessionId: resumed.id, text: 'one' },
+      { sessionId: resumed.id, text: 'two' }
+    ])
+    expect(await call('quirky.structured/queue', { session: resumed.id })).toEqual([])
+  })
+
+  test('a failed account preparation on resume leaves the queue on the old session in order', async () => {
+    const home = shortHome()
+    const failing = new FakeWorld()
+    failing.worktree.path = home
+    await boot({ home, world: failing, accountPreparation: true })
+    const original = await create('go')
+    await waitFor(() => runner.started.length === 1)
+    world.sessions.get(original.id)!.providerSession = { id: 'provider-1', transcriptPath: null }
+    const one = (await call('quirky.structured/send', { session: original.id, text: 'one', when: 'idle' })) as { queuedId: string }
+    const two = (await call('quirky.structured/send', { session: original.id, text: 'two', when: 'idle' })) as { queuedId: string }
+    await call('quirky.structured/stop', { session: original.id })
+    world.accountPreparationFailure = 'selected Claude home is unavailable'
+
+    const error = await failure(call('quirky.structured/resume', { session: original.id }))
+    expect(error.message).toContain('selected Claude home is unavailable')
+    expect(((await call('quirky.structured/queue', { session: original.id })) as { id: string }[]).map((m) => m.id)).toEqual([one.queuedId, two.queuedId])
+  })
+
   test('send failures from the runner surface as internal errors', async () => {
     const session = await create('go')
     await waitFor(() => runner.started.length === 1)
@@ -581,6 +622,63 @@ describe('the Claude runner inside the plugin', () => {
     expect(messages[2]!.item).toMatchObject({ kind: 'ask', variant: 'approval' })
     await waitFor(() => structuredEvents().length === messages.length)
     expect(structuredEvents().map((e) => e.data.message.seq)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  test('reports the Claude init commands and skills, and resume moves the queue in order', async () => {
+    const home = shortHome()
+    const queries: FakeQuery[] = []
+    await boot({
+      home,
+      factory: (context: StructuredContext) =>
+        createClaudeRunner(
+          { ...context, resolveClaudePath: async () => '/usr/local/bin/claude' },
+          {
+            query: (params: ClaudeQueryParams) => {
+              const query = new FakeQuery(params)
+              queries.push(query)
+              return query
+            }
+          }
+        )
+    })
+    world.worktree.path = home
+    const original = (await call('quirky.structured/create', { worktree: 'main', agent: 'claude', deferStart: true })) as Session
+    await waitFor(() => queries.length === 1 && world.statusLog.some((entry) => entry.sessionId === original.id && entry.status === 'running'))
+    expect(await call('quirky.structured/commands', { session: original.id })).toEqual({ commands: [] })
+
+    await call('quirky.structured/send', { session: original.id, text: 'first turn' })
+    await waitFor(() => queries[0].written.length === 1)
+    queries[0].emit({
+      type: 'system',
+      subtype: 'init',
+      session_id: 'sdk-commands-session',
+      model: 'm',
+      slash_commands: ['compact', 'review'],
+      skills: ['pdf', 'review']
+    })
+    const expected = [
+      { name: 'compact', kind: 'command' },
+      { name: 'review', kind: 'command' },
+      { name: 'pdf', kind: 'skill' },
+      { name: 'review', kind: 'skill' }
+    ]
+    await waitFor(() => events.some((e) => e.type === 'quirky.structured/commandsChanged'))
+    expect(events.find((e) => e.type === 'quirky.structured/commandsChanged')).toMatchObject({ data: { sessionId: original.id, commands: expected } })
+    expect(await call('quirky.structured/commands', { session: original.id })).toEqual({ commands: expected })
+
+    const one = (await call('quirky.structured/send', { session: original.id, text: 'one', when: 'idle' })) as { queuedId: string }
+    const two = (await call('quirky.structured/send', { session: original.id, text: 'two', when: 'idle' })) as { queuedId: string }
+    await call('quirky.structured/stop', { session: original.id })
+    expect(await call('quirky.structured/commands', { session: original.id })).toEqual({ commands: expected })
+
+    const resumed = (await call('quirky.structured/resume', { session: original.id, prompt: 'continue' })) as Session
+    expect(((await call('quirky.structured/queue', { session: resumed.id })) as { id: string }[]).map((m) => m.id)).toEqual([one.queuedId, two.queuedId])
+    expect(await call('quirky.structured/queue', { session: original.id })).toEqual([])
+    const changed = events.filter((e) => e.type === 'quirky.structured/queueChanged').map((e) => (e as { data: { sessionId: string } }).data.sessionId)
+    expect(changed).toContain(resumed.id)
+    expect(changed.at(-2)).toBe(original.id)
+    await waitFor(() => queries.length === 2)
+    await call('quirky.structured/stop', { session: resumed.id })
   })
 
   test('persists Claude identity after native init and resumes that session idle', async () => {

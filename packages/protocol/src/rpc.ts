@@ -17,6 +17,8 @@ import type {
   DesktopWindowRunOwnerCommandResult,
   DesktopWindowSummary,
   DesktopWindowUpdateRequest,
+  FilePickerRequest,
+  FilePickerResult,
   FolderPickerRequest,
   FolderPickerResult,
   NativeDesktopCapabilities
@@ -241,6 +243,8 @@ export type Methods = {
   'desktop.capabilities': { params: Record<string, never>; result: NativeDesktopCapabilities }
   /** Opens the host directory chooser and returns its actual result; cancellation has no paths. */
   'desktop.folder.pick': { params: FolderPickerRequest; result: FolderPickerResult }
+  /** Opens the host file chooser and returns its actual result; cancellation has no paths. */
+  'desktop.file.pick': { params: FilePickerRequest; result: FilePickerResult }
   /** Opens an effective UI view in a separately owned native window. */
   'desktop.window.open': { params: DesktopWindowRequest; result: DesktopWindowResult }
   /** Closes one auxiliary window owned by the calling native shell. */

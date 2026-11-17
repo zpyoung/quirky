@@ -300,3 +300,42 @@ test('notification capabilities are false until a window reports what its SDK su
   expect((await shell.call('desktop.capabilities', {})).notifications)
     .toEqual({ permission: true, click: true, dismiss: true })
 })
+
+test('file picker forwards imagesOnly to the selected native shell and returns its result', async () => {
+  harness = await startHarness({ home: makeTempHome('quirky-desktop-file-pick-'), builtinPluginsDir: builtinsDir() })
+  const requester = await harness.connect('cli')
+  const owner = await harness.connect('ui')
+  await owner.call('desktop.shell.capabilities', {
+    directoryPicker: false, filePicker: true, auxiliaryWindows: false, revealItem: false,
+    notifications: { permission: false, click: false, dismiss: false }
+  })
+  await owner.call('ui.window.focused', { focused: true })
+  expect(await requester.call('desktop.capabilities', {})).toMatchObject({ filePicker: true })
+
+  const requestEvent = waitForShellRequest(owner)
+  const resultPending = requester.call('desktop.file.pick', { title: 'Attach', multiple: true, imagesOnly: true })
+  const request = await requestEvent
+  expect(request.action).toEqual({ kind: 'file-picker', request: { title: 'Attach', multiple: true, imagesOnly: true } })
+  await owner.call('desktop.shell.reply', { requestId: request.requestId, result: { cancelled: false, paths: ['/a.png', '/b.jpg'] } })
+  await expect(resultPending).resolves.toEqual({ cancelled: false, paths: ['/a.png', '/b.jpg'] })
+
+  const cancelEvent = waitForShellRequest(owner)
+  const cancelPending = requester.call('desktop.file.pick', {})
+  await owner.call('desktop.shell.reply', { requestId: (await cancelEvent).requestId, result: { cancelled: true, paths: [] } })
+  await expect(cancelPending).resolves.toEqual({ cancelled: true, paths: [] })
+})
+
+test('file picker rejects wrongly typed params and shells that do not report filePicker', async () => {
+  harness = await startHarness({ home: makeTempHome('quirky-desktop-file-unavailable-'), builtinPluginsDir: builtinsDir() })
+  const requester = await harness.connect('cli')
+  const shell = await harness.connect('ui')
+  await shell.call('desktop.shell.capabilities', {
+    directoryPicker: true, auxiliaryWindows: true, revealItem: true,
+    notifications: { permission: false, click: false, dismiss: false }
+  })
+  await shell.call('ui.window.focused', { focused: true })
+
+  expect(await requester.call('desktop.capabilities', {})).toMatchObject({ directoryPicker: true, filePicker: false })
+  await expect(requester.call('desktop.file.pick', {})).rejects.toThrow(/no capable native desktop window supports file selection/)
+  await expect(requester.call('desktop.file.pick', { imagesOnly: 'yes' } as never)).rejects.toThrow(/imagesOnly must be a boolean/)
+})

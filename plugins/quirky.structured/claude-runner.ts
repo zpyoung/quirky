@@ -459,6 +459,13 @@ class ClaudeRunner implements StructuredRunner {
         }
       }
     }
+    if (msg?.type === 'system' && msg.subtype === 'init') {
+      const names = (value: unknown): string[] => (Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : [])
+      this.context.reportCommands?.(sessionId, [
+        ...names(msg.slash_commands).map((name) => ({ name, kind: 'command' as const })),
+        ...names(msg.skills).map((name) => ({ name, kind: 'skill' as const }))
+      ])
+    }
     if (msg?.type === 'result' && run?.interrupted) {
       run.interrupted = false
       // the result of the turn that was interrupted is already journaled as stopped

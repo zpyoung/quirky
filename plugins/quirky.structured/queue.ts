@@ -91,6 +91,42 @@ export class MessageQueue {
     )
   }
 
+  /**
+   * Puts the session's queue in the order of `ids`, which must be exactly its queued ids.
+   * Returns false when `ids` is not a permutation; ids, text and images are untouched.
+   */
+  reorder(sessionId: string, ids: string[]): boolean {
+    return this.store.transaction(() => {
+      const rows = this.store.all<Row>(
+        'SELECT slot, id, session_id, text, images, at FROM structured_queue WHERE session_id = ? ORDER BY slot',
+        sessionId
+      )
+      const byId = new Map(rows.map((row) => [row.id, row]))
+      if (ids.length !== rows.length || new Set(ids).size !== ids.length || ids.some((id) => !byId.has(id))) return false
+      // the slots are reused as a set so a message taken for sending still restores into its gap
+      const slots = rows.map((row) => row.slot)
+      this.store.run('DELETE FROM structured_queue WHERE session_id = ?', sessionId)
+      ids.forEach((id, index) => {
+        const row = byId.get(id)!
+        this.store.run(
+          'INSERT INTO structured_queue (slot, id, session_id, text, images, at) VALUES (?, ?, ?, ?, ?, ?)',
+          slots[index],
+          row.id,
+          sessionId,
+          row.text,
+          row.images,
+          row.at
+        )
+      })
+      return true
+    })
+  }
+
+  /** Moves every queued message of one session to another, keeping their order. */
+  moveSession(from: string, to: string): void {
+    this.store.run('UPDATE structured_queue SET session_id = ? WHERE session_id = ?', to, from)
+  }
+
   clear(sessionId: string): void {
     this.store.run('DELETE FROM structured_queue WHERE session_id = ?', sessionId)
   }

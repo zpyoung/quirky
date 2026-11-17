@@ -48,5 +48,8 @@ export type AgentCapabilities = {
   resume: Capability
 }
 
+/** A slash command or skill a session's agent offers; `name` has no leading slash. */
+export type AgentCommand = { name: string; kind: 'command' | 'skill'; description?: string }
+
 /** A message waiting in a session's queue; `images` are absolute paths and `at` is an ISO timestamp. */
 export type QueuedMessage = { id: string; text: string; images?: string[]; at: string }

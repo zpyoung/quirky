@@ -1,6 +1,8 @@
 /** Public shell operations carry caller/window identity through the normal daemon routing seam. */
 export type FolderPickerRequest = { title?: string; startingFolder?: string; multiple?: boolean }
 export type FolderPickerResult = { cancelled: boolean; paths: string[] }
+export type FilePickerRequest = { title?: string; multiple?: boolean; imagesOnly?: boolean }
+export type FilePickerResult = { cancelled: boolean; paths: string[] }
 export type DesktopWindowRequest = { view: string; input?: unknown; title?: string }
 export type DesktopWindowResult = { windowId: string }
 
@@ -33,6 +35,8 @@ export type DesktopRevealResult = { requested: true }
 
 export type NativeDesktopCapabilities = {
   directoryPicker: boolean
+  /** Absent means false, as reported by shells built before the file picker existed. */
+  filePicker?: boolean
   auxiliaryWindows: boolean
   revealItem: boolean
   notifications: NativeNotificationCapabilities
@@ -40,6 +44,7 @@ export type NativeDesktopCapabilities = {
 
 export type DesktopShellAction =
   | { kind: 'folder-picker'; request: FolderPickerRequest }
+  | { kind: 'file-picker'; request: FilePickerRequest }
   | { kind: 'window-open'; request: DesktopWindowRequest }
   | { kind: 'window-close'; request: { windowId: string } }
   | { kind: 'window-activate-owner'; request: { windowId: string } }
@@ -47,6 +52,7 @@ export type DesktopShellAction =
 
 export type DesktopShellResult =
   | FolderPickerResult
+  | FilePickerResult
   | DesktopWindowResult
   | DesktopWindowCloseResult
   | { activated: boolean }
@@ -64,6 +70,8 @@ export type DesktopShellBridge = {
   /** Reads text from the native pasteboard without WKWebView's async clipboard permission gate. */
   readClipboardText(): Promise<string>
   pickFolder(request: FolderPickerRequest): Promise<FolderPickerResult>
+  /** Absent on bridges built before the file picker existed; `capabilities.filePicker` gates its use. */
+  pickFiles?(request: FilePickerRequest): Promise<FilePickerResult>
   openWindow(request: DesktopWindowRequest, ownerShell: DesktopWindowOwner): Promise<DesktopWindowResult>
   closeWindow(windowId: string): Promise<DesktopWindowCloseResult>
   revealItem(request: DesktopRevealRequest): Promise<DesktopRevealResult>

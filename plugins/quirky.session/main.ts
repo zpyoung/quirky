@@ -1,4 +1,5 @@
 import type { PluginCaller, PluginContext, Session } from '@quirky/protocol'
+import { ComposerDrafts } from './src/drafts'
 import { SessionRecords, sessionMigrations } from './src/records'
 import { SessionService } from './src/sessions'
 
@@ -14,7 +15,9 @@ function sessionForCaller(result: Session | Promise<Session>, caller: PluginCall
 }
 
 export async function activate(context: PluginContext): Promise<void> {
-  const records = new SessionRecords(context.openStore(sessionMigrations(context.home)))
+  const store = context.openStore(sessionMigrations(context.home))
+  const records = new SessionRecords(store)
+  const drafts = new ComposerDrafts(store, context.dataDir, (id) => records.get(id) !== null, (kind, message) => context.error(kind, message))
   const sessions = new SessionService(context, records)
 
   const methods = {
@@ -38,9 +41,15 @@ export async function activate(context: PluginContext): Promise<void> {
     setStatus: sessions.setStatus,
     setUnread: sessions.setUnread,
     setBadge: sessions.setBadge,
-    restore: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.restore(params, caller), caller)
+    restore: (params: Record<string, unknown>, caller: PluginCaller) => sessionForCaller(sessions.restore(params, caller), caller),
+    pasteImage: drafts.pasteImage,
+    draft: drafts.draft,
+    saveDraft: drafts.saveDraft,
+    clearDraft: drafts.clearDraft
   }
   for (const [name, handler] of Object.entries(methods)) context.provide(`method:${context.pluginId}/${name}`, handler)
+
+  context.subscribe((event) => drafts.onEvent(event, context.pluginId))
 
   context.pty.onExit(
     (sessionId, exitCode, { exitSignal, exitCause }) =>

@@ -1699,6 +1699,178 @@
             "required": ["worktreeId", "state", "updatedAt", "sessions"]
           }
         }
+      },
+      {
+        "id": "pasteImage",
+        "description": "Saves a pasted image under the plugin data directory and returns its absolute path.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "mime": {
+              "type": "string",
+              "enum": [
+                "image/png",
+                "image/jpeg",
+                "image/gif",
+                "image/webp"
+              ]
+            },
+            "data": {
+              "type": "string",
+              "description": "The image bytes, base64-encoded; at most 20 MB decoded."
+            }
+          },
+          "required": [
+            "session",
+            "mime",
+            "data"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      },
+      {
+        "id": "draft",
+        "description": "The session's saved composer draft, or null when there is none.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "description": "The draft ({text, images, pastes, picks}), or null when none is saved."
+        }
+      },
+      {
+        "id": "saveDraft",
+        "description": "Replaces the session's composer draft; at most 64 KiB of JSON.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            },
+            "draft": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "images": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "pastes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "text"
+                    ]
+                  }
+                },
+                "picks": {
+                  "type": "object",
+                  "properties": {
+                    "model": {},
+                    "effort": {},
+                    "mode": {},
+                    "plan": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "effort",
+                    "mode",
+                    "plan"
+                  ]
+                }
+              },
+              "required": [
+                "text",
+                "images",
+                "pastes",
+                "picks"
+              ]
+            }
+          },
+          "required": [
+            "session",
+            "draft"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
+      },
+      {
+        "id": "clearDraft",
+        "description": "Deletes the session's composer draft.",
+        "params": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string",
+              "description": "The session ID."
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ok"
+          ]
+        }
       }
     ],
     "event": [
@@ -1833,6 +2005,15 @@
             "sessionId"
           ]
         }
+      }
+    ],
+    "setting": [
+      {
+        "id": "send-with-cmd-enter",
+        "type": "boolean",
+        "title": "Send with Cmd+Enter",
+        "description": "Enter inserts a new line and Cmd+Enter sends.",
+        "default": false
       }
     ],
     "view": [

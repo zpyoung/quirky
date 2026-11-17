@@ -188,6 +188,8 @@ export class BrowserHostController {
     switch (action.kind) {
       case 'folder-picker':
         return this.openFolderPicker(event.requestId, action.request, event.ownerShell, call)
+      case 'file-picker':
+        throw conflict('native file selection is unavailable in a browser tab')
       case 'window-open':
         return this.openAuxiliaryWindow(event.requestId, action.request, event.ownerShell, call)
       case 'window-close':

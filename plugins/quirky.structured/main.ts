@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 import type {
+  AgentCommand,
   AskEnvelope,
   AskSpec,
   MethodHandler,
@@ -313,6 +314,9 @@ export function activate(context: PluginContext): void {
     return message
   }
 
+  /** The latest slash commands and skills each session's runner reported; not persisted. */
+  const commandsBySession = new Map<string, AgentCommand[]>()
+
   const emitQueue = (sessionId: string): void => {
     context.emit('queueChanged', { sessionId, queue: queue.list(sessionId) })
   }
@@ -377,7 +381,8 @@ export function activate(context: PluginContext): void {
   const flushQueue = (sessionId: string): Promise<void> =>
     enqueueSend(sessionId, async () => {
       const entry = live.get(sessionId)
-      if (!active || !entry || entry.stopping || entry.status !== 'done' || flushPaused.has(sessionId)) return
+      const idle = entry?.status === 'done' || (entry?.status === 'running' && !entry.hasSent)
+      if (!active || !entry || entry.stopping || !idle || flushPaused.has(sessionId)) return
       const next = queue.list(sessionId)[0]
       if (!next) return
       const taken = queue.take(sessionId, next.id)
@@ -674,6 +679,17 @@ export function activate(context: PluginContext): void {
     setStatus,
     createAsk,
     cancelAsk,
+    reportCommands(sessionId, commands) {
+      const seen = new Set<string>()
+      const unique = commands.filter((command) => {
+        const key = `${command.kind}:${command.name}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      commandsBySession.set(sessionId, unique)
+      context.emit('commandsChanged', { sessionId, commands: unique })
+    },
     async setProviderSession(sessionId, providerSession) {
       await persistProviderSession(sessionId, providerSession)
     },
@@ -1148,6 +1164,7 @@ export function activate(context: PluginContext): void {
         ? providerSession
         : { ...providerSession, transcriptPath: prepared.resumeTranscriptPath }
 
+    let queueMoved = false
     try {
       await reconcilePluginLifetimes()
       if (!active || !entry || live.get(registered.id) !== entry || entry.stopping) return registered
@@ -1161,6 +1178,10 @@ export function activate(context: PluginContext): void {
         ...options,
         env: environmentForLease(lease.env, environment)
       }
+      queue.moveSession(old.id, registered.id)
+      queueMoved = true
+      emitQueue(old.id)
+      emitQueue(registered.id)
       startRunner(
         registered,
         agent,
@@ -1168,7 +1189,16 @@ export function activate(context: PluginContext): void {
         { ...launchOptions, providerSession: preparedProviderSession },
         token
       )
+      if (typeof params.prompt !== 'string' || params.prompt === '') {
+        // a promptless resume never settles a turn, so nothing else would send the moved queue
+        void startTasks.get(registered.id)?.then(() => flushQueue(registered.id))
+      }
     } catch (error) {
+      if (queueMoved) {
+        queue.moveSession(registered.id, old.id)
+        emitQueue(registered.id)
+        emitQueue(old.id)
+      }
       startupFailed(registered.id, token, error)
     }
     if (ownerPluginId !== null) await reconcileOwnedSessions()
@@ -1479,6 +1509,66 @@ export function activate(context: PluginContext): void {
     return { ok: true }
   }
 
+  const reorderQueued: MethodHandler = async (params) => {
+    const request = queuedRequest(params, ['ids'])
+    const ids = params.ids
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) throw context.error('invalid-params', 'ids must be an array of strings')
+    const session = await requireStructured(request.session)
+    const queuedIds = new Set(queue.list(session.id).map((message) => message.id))
+    const unknown = (ids as string[]).find((id) => !queuedIds.has(id))
+    if (unknown !== undefined) throw context.error('not-found', `no queued message ${unknown}`)
+    if (!queue.reorder(session.id, ids as string[])) throw context.error('invalid-params', 'ids must list every queued message exactly once')
+    emitQueue(session.id)
+    return { ok: true }
+  }
+
+  const sendQueued: MethodHandler = async (params) => {
+    const request = queuedRequest(params, ['id'])
+    const session = await requireStructured(request.session)
+    await startTasks.get(session.id)
+    return enqueueSend(session.id, async () => {
+      ensureActive()
+      const entry = live.get(session.id)
+      if (!entry || entry.stopping || entry.status === 'exited') {
+        throw Object.assign(context.error('conflict', 'structured session is not active'), { data: { reason: 'exited' } })
+      }
+      if (entry.status !== 'done') {
+        throw Object.assign(context.error('conflict', 'structured session is busy'), { data: { reason: 'busy' } })
+      }
+      const taken = queue.take(session.id, request.id!)
+      if (taken === null) throw context.error('not-found', `no queued message ${request.id}`)
+      flushPaused.delete(session.id)
+      emitQueue(session.id)
+      try {
+        const runner = runnerBySession.get(session.id) ?? runnerFor(entry.agent)
+        entry.hasSent = true
+        const images = revalidatedImages(session.id, taken.message.images)
+        const undo = await openTurnBaseline(session.id)
+        try {
+          if (sessionGone(session.id, entry)) throw context.error('conflict', 'structured session is stopping')
+          await runner.send(session.id, taken.message.text, {
+            ...(images === undefined ? {} : { images }),
+            queuedId: taken.message.id
+          })
+        } catch (error) {
+          undo()
+          throw error
+        }
+      } catch (error) {
+        queue.restore(session.id, taken)
+        emitQueue(session.id)
+        throw error
+      }
+      return { ok: true }
+    })
+  }
+
+  const commands: MethodHandler = async (params) => {
+    const request = queuedRequest(params)
+    const session = await requireStructured(request.session)
+    return { commands: commandsBySession.get(session.id) ?? [] }
+  }
+
   const steer: MethodHandler = async (params) => {
     const request = queuedRequest(params, ['id'])
     const session = await requireStructured(request.session)
@@ -1666,6 +1756,9 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/queue', queued)
   context.provide('method:quirky.structured/dequeue', dequeue)
   context.provide('method:quirky.structured/editQueued', editQueued)
+  context.provide('method:quirky.structured/reorderQueued', reorderQueued)
+  context.provide('method:quirky.structured/sendQueued', sendQueued)
+  context.provide('method:quirky.structured/commands', commands)
   context.provide('method:quirky.structured/steer', steer)
   context.provide('method:quirky.structured/configure', configure)
   context.provide('method:quirky.structured/stop', stop)

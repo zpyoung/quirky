@@ -189,6 +189,7 @@ describe('stopped derivation', () => {
 let createRoot: typeof import('react-dom/client').createRoot
 let ChatView: typeof import('../src/window/chat/ChatView').ChatView
 let AgentPicker: typeof import('../src/window/chat/AgentPicker').AgentPicker
+let CMView: typeof import('@codemirror/view').EditorView
 let fake: FakeContext
 let root: Root | null = null
 let host: HTMLElement | null = null
@@ -199,6 +200,7 @@ beforeAll(async () => {
   ;({ createRoot } = await import('react-dom/client'))
   ;({ ChatView } = await import('../src/window/chat/ChatView'))
   ;({ AgentPicker } = await import('../src/window/chat/AgentPicker'))
+  ;({ EditorView: CMView } = await import('@codemirror/view'))
 })
 afterAll(async () => {
   await GlobalRegistrator.unregister()
@@ -218,6 +220,8 @@ async function mountChat({ messages = [], capabilities = CLAUDE, session: over =
     'quirky.structured/capabilities': () => capabilities,
     'quirky.structured/queue': () => [],
     'quirky.view/list': () => [],
+    'quirky.session/draft': () => null,
+    'quirky.structured/commands': () => ({ commands: [] }),
     ...handlers
   })
   const chat = session({ id: 'chat', kind: 'structured', agent: capabilities.agent, status: 'done', title: 'Add backoff', ...over })
@@ -295,24 +299,26 @@ describe('the chat view', () => {
 
   test('the composer sits below the transcript and sends through the daemon', async () => {
     await mountChat({ messages: [user(1, 'go')], handlers: { 'quirky.structured/send': () => ({ ok: true }) } })
-    const box = host!.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]')!
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'next')
-      box.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await click(buttonNamed('Send'))
+    expect(host!.querySelector('[role="textbox"][aria-label="Message"]')).not.toBeNull()
+    const editor = CMView.findFromDOM(host!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, insert: 'next' } }))
+    await click(host!.querySelector('button[aria-label="Send"]'))
     expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'chat', text: 'next', when: 'now' })
   })
 
   test('a working session passes working to the composer, so Enter would queue', async () => {
-    await mountChat({ messages: [user(1, 'go')], session: { status: 'working' } })
-    expect(buttonNamed('Stop')).toBeDefined()
-    expect(buttonNamed('Queue')).toBeDefined()
+    await mountChat({ messages: [user(1, 'go')], session: { status: 'working' }, handlers: { 'quirky.structured/send': () => ({ ok: true }) } })
+    expect(host!.querySelector('button[aria-label="Stop"]')).not.toBeNull()
+    expect(host!.querySelector('.cm-placeholder')!.textContent).toContain('Queue a follow-up')
+    const editor = CMView.findFromDOM(host!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, insert: 'next' } }))
+    await click(host!.querySelector('button[aria-label="Send"]'))
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toMatchObject({ text: 'next', when: 'idle' })
   })
 
   test('Stop interrupts the turn instead of stopping the session', async () => {
     await mountChat({ messages: [user(1, 'go')], session: { status: 'working' }, handlers: { 'quirky.structured/interrupt': () => ({ ok: true }) } })
-    await click(buttonNamed('Stop'))
+    await click(host!.querySelector('button[aria-label="Stop"]'))
     expect(fake.callsTo('quirky.structured/interrupt')[0]!.params).toEqual({ session: 'chat' })
     expect(fake.callsTo('quirky.structured/stop')).toEqual([])
   })
@@ -460,7 +466,7 @@ describe('markdown prose', () => {
     expect(host!.querySelector('strong')!.textContent).toBe('bold')
     expect(host!.querySelector('code')!.textContent).toBe('code')
     expect(host!.querySelector('script')).toBeNull()
-    expect(host!.querySelector('img')).toBeNull()
+    expect(host!.querySelector('[role="log"] img')).toBeNull()
     expect(text()).not.toContain('alert(1)</script>')
     const links = [...host!.querySelectorAll('a')]
     expect(links.map((link) => link.getAttribute('href'))).toEqual(['https://example.com'])

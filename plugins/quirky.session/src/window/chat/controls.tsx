@@ -1,8 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { AgentCapabilities, Capability, Session, UiPluginContext } from '@quirky/protocol'
-import { AgentIcon, Badge, Button, ControlIcon, IconButton, SelectField } from '@quirky/ui'
+import { AgentIcon, Badge } from '@quirky/ui'
 
-type Choice = { value: string; label: string }
+export type Choice = { value: string; label: string }
 type ModelOption = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null }
 export type AgentModel = { id: string; label: string; options: ModelOption[] }
 
@@ -86,9 +86,7 @@ export function launchPicks(session: Session): Pick<Picks, 'model' | 'effort'> {
   return { model: typeof model === 'string' ? model : null, effort: typeof effort === 'string' ? effort : null }
 }
 
-const bar = { display: 'flex', alignItems: 'flex-end', flexWrap: 'wrap', gap: 'var(--ui-space-8)', minWidth: 0 } satisfies CSSProperties
 const chip = { display: 'inline-flex', alignItems: 'center', gap: 'var(--ui-space-4)' } satisfies CSSProperties
-const DROP_HINT = 'Drop images onto the composer'
 
 /** The agent a session runs; fixed because an agent cannot change once its session exists. */
 export function AgentChip({ session }: { session: Session }) {
@@ -119,20 +117,32 @@ export async function absolutePathsOf(context: UiPluginContext, files: File[]): 
   return files.map((_, index) => direct[index] ?? dropped?.[index] ?? null)
 }
 
-export type ControlsProps = {
-  context: UiPluginContext
-  session: Session
-  capabilities: AgentCapabilities | null
-  options: AgentOptions | null
-  picks: Picks
-  onPicks: (picks: Picks) => void
+/** What the settings chip shows and offers: the lists, the current values and why a control is off. */
+export type TurnSettings = {
+  modelList: Choice[]
+  model: string | null
+  /** True when the current model is not in the list, so it needs an entry of its own. */
+  unlisted: boolean
+  choices: Choice[]
+  effort: string
+  modes: string[]
+  mode: string
+  defaultMode: string | null
+  modelReason: string | undefined
+  effortReason: string | undefined
+  modeReason: string | undefined
+  planReason: string | undefined
+  imagesReason: string | undefined
 }
 
-/**
- * The composer's agent chip, model and effort pickers, permission mode, plan toggle and attach button.
- * The desktop shell has no native file picker, so the attach button only tells the user to drop images.
- */
-export function Controls({ context, session, capabilities, options, picks, onPicks }: ControlsProps) {
+/** Resolves the model, effort and mode in effect from the picks, the launch settings and the agent's lists. */
+export function useTurnSettings(
+  context: UiPluginContext,
+  session: Session,
+  capabilities: AgentCapabilities | null,
+  options: AgentOptions | null,
+  picks: Picks
+): TurnSettings {
   const launched = launchPicks(session)
   const live = useLiveModels(context, session, capabilities, options)
   const liveList = live !== null && live !== 'failed' ? live.models : []
@@ -141,78 +151,35 @@ export function Controls({ context, session, capabilities, options, picks, onPic
   const model = picks.model ?? launched.model ?? liveCurrent ?? modelList[0]?.value ?? null
   const choices = options ? effortChoices(options, model) : []
   const effort = picks.effort ?? launched.effort ?? choices[0]?.value ?? ''
-  const modes = capabilities?.permissionModes
-  const mode = picks.mode ?? (modes?.ok ? modes.modes[0] : undefined) ?? ''
+  const permissionModes = capabilities?.permissionModes
+  const modes = permissionModes?.ok ? permissionModes.modes : []
+  const defaultMode = modes[0] ?? null
+  const mode = picks.mode ?? defaultMode ?? ''
 
   const noModels =
     live === null ? (options !== null && modelList.length === 0 && capabilities?.model.ok ? 'Loading models' : undefined)
     : live === 'failed' ? 'Models unavailable'
     : modelList.length === 0 ? 'No models listed for this agent'
     : undefined
-  const modelReason =
-    reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? noModels : 'This agent takes no model setting')
-  const effortReason = reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined)
-  const modeReason = reasonOf(modes)
-  const planReason = reasonOf(capabilities?.planMode)
-  const imagesReason = reasonOf(capabilities?.images)
+  return {
+    modelList,
+    model,
+    unlisted: model !== null && !modelList.some((entry) => entry.value === model),
+    choices,
+    effort,
+    modes,
+    mode,
+    defaultMode,
+    modelReason: reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? noModels : 'This agent takes no model setting'),
+    effortReason: reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined),
+    modeReason: reasonOf(permissionModes),
+    planReason: reasonOf(capabilities?.planMode),
+    imagesReason: reasonOf(capabilities?.images)
+  }
+}
 
-  const onAttachHint = () => context.toast('Attach images', DROP_HINT)
-
-  const unlisted = model !== null && !modelList.some((entry) => entry.value === model)
-
-  return (
-    <div style={bar}>
-      <AgentChip session={session} />
-      <SelectField
-        label="Model"
-        value={model ?? ''}
-        disabled={modelReason !== undefined}
-        title={modelReason}
-        onChange={(event) => onPicks({ ...picks, model: event.target.value, effort: null })}
-      >
-        {unlisted && <option value={model}>{model}</option>}
-        {modelList.map((entry) => (
-          <option key={entry.value} value={entry.value}>{entry.label}</option>
-        ))}
-      </SelectField>
-      <SelectField
-        label="Effort"
-        value={effort}
-        disabled={effortReason !== undefined}
-        title={effortReason}
-        onChange={(event) => onPicks({ ...picks, effort: event.target.value })}
-      >
-        {choices.map((choice) => (
-          <option key={choice.value} value={choice.value}>{choice.label}</option>
-        ))}
-      </SelectField>
-      <SelectField
-        label="Permission mode"
-        value={mode}
-        disabled={modeReason !== undefined}
-        title={modeReason}
-        onChange={(event) => onPicks({ ...picks, mode: event.target.value })}
-      >
-        {modes?.ok && modes.modes.map((name) => (
-          <option key={name} value={name}>{name}</option>
-        ))}
-      </SelectField>
-      <Button
-        aria-pressed={picks.plan}
-        disabled={planReason !== undefined}
-        title={planReason}
-        onClick={() => onPicks({ ...picks, plan: !picks.plan })}
-      >
-        Plan mode
-      </Button>
-      <IconButton
-        label="Attach images"
-        disabled={imagesReason !== undefined}
-        title={imagesReason ?? DROP_HINT}
-        onClick={onAttachHint}
-      >
-        <ControlIcon name="plus" />
-      </IconButton>
-    </div>
-  )
+/** A permission mode id as a sentence-case label, "acceptEdits" as "Accept edits". */
+export function modeLabel(mode: string): string {
+  const words = mode.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').toLowerCase()
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }
