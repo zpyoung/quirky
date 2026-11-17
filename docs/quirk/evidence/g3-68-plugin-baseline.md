@@ -41,7 +41,7 @@ These ownership boundaries remain unchanged even when their surfaces score low. 
 
 ## Generated plugin evidence
 
-The following compact projection is generated from the original JSON, including every cell, all 435 attempts, aliases, no-target plugins and rejected attempts. All displayed statuses/counts are original machine admission; the appended semantic audit invalidates eight additional samples across seven cells and rules out a post-audit acceptance claim. It is a single-arm baseline: after: not measured (no product repair in this PR). The paired 23-point noise rule is not an absolute-85 allowance.
+The following compact projection is generated from the original JSON, including every cell, all 435 attempts, aliases, no-target plugins and rejected attempts. All displayed statuses/counts are original machine admission; the appended semantic audit invalidates nine additional samples across eight cells and rules out a post-audit acceptance claim. It is a single-arm baseline: after: not measured (no product repair in this PR). The paired 23-point noise rule is not an absolute-85 allowance.
 
 Status: **error**; goalPassed: false. Threshold: 85; sample count: 3.
 
@@ -889,7 +889,19 @@ All 435 persisted preflight identities and all 404 returned sample identities ex
 
 The text/source audit covered all 435 response/log pairs (870 readable, hash-matching files), all 404 returned assessments with 1,499 reasons, and 101 final reasons in rejected responses. Empty timed-out responses were also examined. It produced no new visual ratings or score corrections.
 
-**Eight machine-admitted samples are invalidated by this appended semantic audit, affecting seven cells. The generated table below this document's earlier data heading is the unchanged original instrument record, not post-audit numerical acceptance.** The exact quotations and approved-rule/source scope proofs follow. Original scores, medians, statuses and counts were not rewritten; no fourth valid score, replacement of a completed low score, or second campaign was requested. Disclosed unpenalized conflicts remain numerically unchanged. No plugin implementation defect is demonstrated with both source-file:line and observable reproduction; all other own-target visual allegations remain unconfirmed.
+**Nine machine-admitted samples are invalidated by this appended semantic audit, affecting eight cells. The generated table below this document's earlier data heading is the unchanged original instrument record, not post-audit numerical acceptance.** The exact quotations and approved-rule/source scope proofs follow. Original scores, medians, statuses and counts were not rewritten; no fourth valid score, replacement of a completed low score, or second campaign was requested. Disclosed unpenalized conflicts remain numerically unchanged. No plugin implementation defect is demonstrated with both source-file:line and observable reproduction; all other own-target visual allegations remain unconfirmed.
+
+### Limits for repair planning
+
+| Observed audit quantity | Total / original cells |
+| --- | --- |
+| Raw passing cells with an audit-invalidated sample | 3: Ledger settings/light (median 86), Tasks view/dark (85), Floating terminal/dark (90) |
+| Raw passing cells not touched by the identified audit invalidations | At most 61 of 64; this is not an audited pass count |
+| Admitted samples below 100 with no reason flagged affectsScore:true | 69 of 404 |
+| Those 69 samples with a declared conflict | 12 |
+
+The unpenalized flag is the model’s word, not independent proof of how it chose a number. These totals do not correct any score, recompute a median, or turn the remaining raw passes into numerical acceptance.
+
 
 ### Semantic audit A — one immutable g3-68 campaign
 Source: `/tmp/g3-68-campaign.T0LovS/baseline/plugin-gate.json` and its linked response/log artifacts; actual capture `dd2e692c9263f31f9419a72f7f25764eed854ad3`. This is a text-only semantic audit, not a screenshot review. No images, reviewer/model executables, captures, tests, native apps, other worktrees or owner state were used. One descriptive source-search helper attempted its remote judgment backend and returned HTTP 402 / zero tokens without judged results; only its literal filename hits were used, and subsequent source searches were literal grep. No campaign reviewer, reviewManifest, pi-watch, image scoring or model-produced search judgment ran. Original report/artifacts were not changed. No numeric ratings or corrected medians were produced.
@@ -923,7 +935,7 @@ All 13 assigned plugins, 32 targets / 64 cells: original 30 pass, 33 below-85, 1
 
 #### Confirmed missed contradictions and disclosed unpenalized observations
 
-Only the four missed-audit samples in subsection A are newly invalidated. Subsection B records 42 disclosed, unpenalized reasons across 31 other samples. No numeric deduction is inferred from those recommendations, and those 31 samples are not additionally invalidated: the contract preserves unpenalized conflicts. All raw numbers remain unchanged.
+Only the five missed-audit samples in subsection A are newly invalidated. Subsection B records 42 disclosed, unpenalized reasons across 31 other samples. No numeric deduction is inferred from those recommendations, and those 31 samples are not additionally invalidated: the contract preserves unpenalized conflicts. All raw numbers remain unchanged.
 
 ##### A. Contradictions missed by the response audit
 | Plugin / target | Theme / slot / attempt | Original raw score | Exact reason (zero-based index) | Rule | Original reasonCheck |
@@ -932,6 +944,9 @@ Only the four missed-audit samples in subsection A are newly invalidated. Subsec
 | `quirky.ledger` / `panel:quirky.ledger/ledger` | light / 1 / `bed50e8eb1fe9a2fc4dc-light-slot-1-initial` | 71 | R2: “The main workspace area lacks standard file tabs and editor chrome, showing only a plain 'Quirky' header and centered empty-state text.” | B | conflict=false, affectsScore=true |
 | `quirky.ledger` / `panel:quirky.ledger/ledger` | light / 2 / `bed50e8eb1fe9a2fc4dc-light-slot-2-initial` | 88 | R0: “The Ledger panel header includes an unauthorized minus (collapse) control on the far right, which is absent in the golden, violating the contract against inventing product controls.” | BH | conflict=false, affectsScore=true |
 | `quirky.ledger` / `view:quirky.ledger/settings` | light / 3 / `68de769606d2beda2f1f-light-slot-3-initial` | 86 | R0: “The top application window bar lacks a white surface background and separating gap, causing its controls to float directly on the gray rail background.” | H | conflict=false, affectsScore=true |
+| `quirky.git` / `panel:quirky.git/source-control` | dark / 3 / `2f637d3069aa1cacea89-dark-slot-3-initial` | 88 | R1: “In the bottom status bar, the resource pill redundantly displays the text 'Usage Used' instead of a numeric percentage, pointing to a broken component state.” | B | conflict=false, affectsScore=true |
+
+The additional Source Control reason is the same content/scope contradiction as B3/B4 below: `plugins/quirky.accounts/src/window/Usage.tsx:682` intentionally renders Used as a direction label, while `scripts/ui-review/review.ts:559` excludes legitimate text/data differences as defects by themselves. Its original reasonCheck is conflict=false / affectsScore=true. The immutable response SHA-256 is `dafca5915751980fa155cd4dfe529d6eeb767409df0b70a33ff1d272c3d09830`; its exact response path is retained in that attempt’s artifact directory/file map above.
 
 ##### B. Disclosed unpenalized conflicts, not additional invalidations
 | Plugin / target | Theme / slot / attempt | Original raw score | Exact reason (zero-based index) | Rule | Original reasonCheck |
@@ -1003,35 +1018,603 @@ These requests remain rejected; no overall raw aggregate was persisted for them,
 - Worktrees saved-view **presence** is approved. Requests about their actual component styling are not automatically contradictions: the boxed-default clause does not license boxed Open views, but neither does it establish that every non-Open-views tab must be underlined. Neutral observations comparing tabs/selection with a golden, and positive compliant reasons incorrectly marked as conflicts, were not promoted to violations.
 - Editor close-button blue outlines, destructive button palette/foreground, account emphasis, badge colors, missing icons, title casing, plain captions, focus borders, and other visual complaints remain unconfirmed without source-plus-observable reproduction. A checked-in token list is not proof that all other semantic/state colors are forbidden. No confirmed plugin defect is claimed.
 
-#### Named original failing/invalid targets, unchanged result grouping
-**HC** = host/surrounding-context complaint, not a demonstrated defect in the named plugin. **PV** = unconfirmed plugin visual claim. **X** = contradictory demand or observation above, not a repair instruction; only the four missed-audit samples receive new invalid markers. The complete attempt table above retains every original admitted reason and audit verbatim; raw rejected outputs remain linked. None is rewritten into a demonstrated defect. Original medians here are copied, not recomputed.
-| Plugin | Named target | Original failing/invalid themes | HC / PV grouping |
-|---|---|---|---|
-| `quirky.accounts` | `view:quirky.accounts/session-accessory` | light: fail, median 77 | HC: touching panels/gaps, Worktrees anatomy, tabs. PV: nested card/double borders, action emphasis, muted title hierarchy. |
-| `quirky.accounts` | `status-bar:quirky.accounts/usage` | dark: fail, median 75; light: fail, median 78 | HC: Worktrees anatomy, shell gaps, offline Checks. PV: Usage badge background/padding, label/value emphasis and muted typography. |
-| `quirky.accounts` | `overlay:quirky.accounts/switch-dialog` | light: fail, median 80 | HC: host gaps/rails, Worktrees, adjacent status icons and Dashboard palette. PV: checkbox/label separation. X: forbidden shell/selection reversions. |
-| `quirky.agent-status` | `sidebar-section:quirky.agent-status/activity` | dark: fail, median 78; light: fail, median 81 | HC: Worktrees anatomy/tabs, Mobile clipping and gaps. PV: header check/cross alignment, card borders/dots, Mark read grouping/spacing, checkbox/section spacing. |
-| `quirky.agent-status` | `sidebar-section:quirky.agent-status/dashboard` | dark: fail, median 80; light: fail, median 82 | HC: host gaps, Worktrees anatomy/tabs, Mobile clipping. PV: dot/header/type sizing, badge color/placement, edge-to-edge selected-row insets. |
-| `quirky.agents` | `view:quirky.agents/settings` | dark: fail, median 83 | HC: host gaps, Worktrees anatomy/tabs. No independently supported plugin-specific defect in failing dark cell; X: forbidden Worktrees reversal. |
-| `quirky.ask` | `panel:quirky.ask/questions` | dark: fail, median 77; light: fail, median 80 | HC: gaps/borders, Worktrees, Mobile clipping, Usage content. PV: header padding/divider and surface color. X: bright-blue Worktrees demand and non-styling title mismatch. |
-| `quirky.automations` | `view:quirky.automations/automations` | dark: fail, median 76; light: fail, median 83 | HC: gaps, Worktrees wrapping/indentation/saved-view tab styling. No demonstrated Automations defect. X: approved header actions removal and blue selection. |
-| `quirky.automations` | `view:quirky.automations/settings` | light: fail, median 80 | HC: gaps, selected main-tab accent/Worktrees. PV: orphaned checkboxes, label/helper spacing. |
-| `quirky.browser` | `view:quirky.browser/browser-settings` | light: fail, median 82 | HC: gaps/rail, Worktrees anatomy/tab styling, detached close icon. PV: Save touching input, page heading top padding. |
-| `quirky.browser` | `view:quirky.browser/page` | dark: fail, median 74; light: fail, median 81 | HC: gaps/rail, Worktrees anatomy, view-tab close placement. PV: History wrapping, URL label/address-bar styling, action spacing/contrast, toolbar background. No native-page-content defect. |
-| `quirky.browser` | `settings-section:quirky.browser/browser-preferences` | light: fail, median 79 | HC: gaps and Worktrees anatomy/tabs. PV: redundant heading hierarchy, Zoom control alignment/casing, Active badge spacing, Add Profile padding. |
-| `quirky.editor` | `overlay:quirky.editor/close` | light: fail, median 82 | HC: panel gaps and tabs/Worktrees. PV: prominent blue close button/border. No source-proven defect or token prohibition. |
-| `quirky.editor` | `overlay:quirky.editor/quick-open` | dark: fail, median 69; light: fail, median 73 | HC: Worktrees selection/name weight. PV: claimed actual palette selected fill/foreground/border/description/padding and detached result rows; these request compliance, not contradictory palette redesign. X: forbidden white rail / blue Worktrees demands. |
-| `quirky.feedback` | none | none | Nominal passes also fully audited. |
-| `quirky.git` | `view:quirky.git/ai-settings` | light: fail, median 75 | HC: gaps/rails, Worktrees/tab styling. PV: form/button gaps, inherited-choice legibility, section-heading hierarchy. |
-| `quirky.git` | `view:quirky.git/diff` | dark: fail, median 80; light: fail, median 83 | HC: gaps/rails, Worktrees, missing/incorrect Open-view tab underline, Dashboard background/status icons. PV: code/line-number/highlight alignment. X: blue Worktrees demand. |
-| `quirky.git` | `panel:quirky.git/source-control` | dark: fail, median 84 | HC: host gaps, Worktrees/tabs, Mobile clipping, Usage content. PV: Changes heading/subheading padding. |
-| `quirky.git` | `status-bar:quirky.git/ahead-behind` | dark: fail, median 83 | HC: window/status border/padding, Worktrees/Tasks gaps, unrelated popup/tab/Checks/palette assertions. No failing-dark reason demonstrates an ahead/behind indicator defect. X: blue selection, Ledger underline conversion, restore Checks. Palette assertions unconfirmed. |
-| `quirky.handoff` | `view:quirky.handoff/settings` | light: fail, median 81 | HC: gaps/corners and Worktrees/tab styling. PV: faint Reset to defaults text. |
-| `quirky.handoff` | `overlay:quirky.handoff/dialog` | light: invalid, median null | HC: Worktrees/tab styling. PV: claimed dialog vertical clipping, destination path padding, close-button outline. Invalid slot 3: reviewer failed to read images, not proven missing capture. |
-| `quirky.heimdall` | `view:quirky.heimdall/fleet` | light: fail, median 69 | HC: host gaps, Open-view tab styling, Worktrees wrapping/density. PV: bottom text clipping. Rejected raw response also complains about approved Worktrees density/selection. |
-| `quirky.ledger` | `view:quirky.ledger/ledger` | light: fail, median 80 | HC: shell gaps/rails, Worktrees, Heimdall clipping, Input blocked popup. PV: refresh-icon/text alignment. No confirmed plugin defect. |
-| `quirky.ledger` | `panel:quirky.ledger/ledger` | dark: fail, median 82; light: fail, median 75 | HC: gaps/rail, Worktrees, Mobile padding; tab default styling. PV: vertical icon layout, dividers, alignment. X: demanding editor content in an empty workspace and treating existing minimize chrome as unauthorized. |
-| `quirky.loops` | `overlay:quirky.loops/dialogs` | dark: fail, median 80; light: fail, median 74 | HC: gaps and Worktrees anatomy/tabs. PV: backdrop/shadow/elevation, textarea focus border/radius, action alignment and spacing. X: blue selection demand. |
+#### Named original failing/invalid targets, unchanged raw reasons
+
+The following admitted assessment reasons are copied unchanged from the original JSON, grouped by plugin, named target and theme. Host/context attribution is separate from unconfirmed plugin visual allegations; contract observations do not imply score adjustment. Only the five missed-audit samples listed above are newly invalidated in partition A. Rejected-attempt dimensions and raw response/log links follow in their own table.
+
+##### quirky.accounts
+
+###### `view:quirky.accounts/session-accessory` / light
+
+Original status fail; original median 77.
+
+- Host/surrounding context / `4719864fd944e008f233-light-slot-1-initial` / slot 1 / raw 70 / R0: “The application shell panels (Worktrees, center, right panel) touch directly without the required --ui-rail background gaps, presenting a genuinely all-white frame defect.”
+- Host/surrounding context / `4719864fd944e008f233-light-slot-1-initial` / slot 1 / raw 70 / R1: “The Worktrees panel selection ('main') is a neutral gray with bold text rather than the blue background style seen in the golden reference.”
+- Plugin visual allegation (unconfirmed) / `4719864fd944e008f233-light-slot-1-initial` / slot 1 / raw 70 / R2: “The center panel tabs ('Worktree' and 'Account switch') use an inset bottom underline instead of the boxed tab styling from the older golden.”
+- Plugin visual allegation (unconfirmed) / `4719864fd944e008f233-light-slot-1-initial` / slot 1 / raw 70 / R3: “The target component's action buttons ('Keep old account' and 'Restart') appear as flat gray boxes with minimal contrast, lacking standard primary button emphasis.”
+- Host/surrounding context / `4719864fd944e008f233-light-slot-2-initial` / slot 2 / raw 81 / R0: “The main shell panels (left, center, right) are touching without the required grey host gaps separating them, losing the rounded corner floating appearance.”
+- Plugin visual allegation (unconfirmed) / `4719864fd944e008f233-light-slot-2-initial` / slot 2 / raw 81 / R1: “The 'Account switch' content is wrapped in a nested bordered card, adding unnecessary visual noise instead of using the flat panel surface.”
+- Disclosed contract observation / `4719864fd944e008f233-light-slot-2-initial` / slot 2 / raw 81 / R2: “The center view tabs should use the pill-shaped design seen in the golden instead of a flat bottom border and blue underline.”
+- Disclosed contract observation / `4719864fd944e008f233-light-slot-2-initial` / slot 2 / raw 81 / R3: “The selected worktree 'main' should be highlighted in blue and use a multi-line layout like the golden, rather than being single-line and neutral grey.”
+- Plugin visual allegation (unconfirmed) / `4719864fd944e008f233-light-slot-3-initial` / slot 3 / raw 77 / R0: “The session accessory content is wrapped in an unnecessary secondary bordered card inside the main view container, creating awkward double borders.”
+- Disclosed contract observation / `4719864fd944e008f233-light-slot-3-initial` / slot 3 / raw 77 / R1: “The selected worktree row 'main' must use a blue background with white text to match the golden reference, rather than neutral gray with dark text.”
+- Disclosed contract observation / `4719864fd944e008f233-light-slot-3-initial` / slot 3 / raw 77 / R2: “The main view tabs should have a boxed appearance with side and top borders to match the golden, rather than just an inset underline.”
+- Plugin visual allegation (unconfirmed) / `4719864fd944e008f233-light-slot-3-initial` / slot 3 / raw 77 / R3: “The title 'CODEX ACCOUNT SWITCHED' uses a muted gray color and small uppercase letters, lacking visual hierarchy and distinction from the body paragraph.”
+
+###### `status-bar:quirky.accounts/usage` / dark
+
+Original status fail; original median 75.
+
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-dark-slot-1-initial` / slot 1 / raw 48 / R0: “The Usage label incorrectly features a prominent light background badge with dark text in the capture, whereas the golden presents it seamlessly as muted text with no background.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-dark-slot-1-initial` / slot 1 / raw 48 / R1: “The badge background adds unnecessary horizontal and vertical padding around the 'Usage' text, breaking the uniform inline spacing of the status bar.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-dark-slot-1-initial` / slot 1 / raw 48 / R2: “Due to the stark, high-contrast badge background, the Usage widget's visual hierarchy is improperly elevated, making it visually dominate the status bar compared to the golden's balanced text.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-dark-slot-2-initial` / slot 2 / raw 82 / R0: “The usage item's text is styled with a bright foreground color, failing to match the muted text typography established by the golden status bar.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-dark-slot-2-initial` / slot 2 / raw 82 / R1: “The usage item incorrectly features a solid background block or pill styling, whereas the golden reference displays it with a transparent background that blends with the status bar.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-dark-slot-3-initial` / slot 3 / raw 75 / R0: “The 'Usage' status bar component improperly inverts the expected text colors; the 'Usage' label uses the primary foreground while the 'Used' value is muted, whereas the golden correctly mutes the label and highlights the value.”
+- Host/surrounding context / `74318cce3925326c6ca8-dark-slot-3-initial` / slot 3 / raw 75 / R1: “The Worktrees panel incorrectly renders multi-line entries (e.g., the 'Coordinator' task) and lacks the required 4px vertical gaps between rows, violating the strict single-line 26px specification.”
+- Host/surrounding context / `74318cce3925326c6ca8-dark-slot-3-initial` / slot 3 / raw 75 / R2: “The selected row in the Worktrees panel uses a neutral dark gray background instead of the bright blue background shown in the older shell golden.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-dark-slot-3-initial` / slot 3 / raw 75 / R3: “The status bar is missing the 'Checks' metric that appears in the golden reference image.”
+
+###### `status-bar:quirky.accounts/usage` / light
+
+Original status fail; original median 78.
+
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-light-slot-1-initial` / slot 1 / raw 78 / R0: “The Usage item in the status bar has an incorrect white background fill, whereas the golden uses a transparent background for status bar items.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-light-slot-1-initial` / slot 1 / raw 78 / R1: “The 'Usage' label text is styled with a bold weight and dark color, failing to match the regular weight muted text used in the golden status bar.”
+- Host/surrounding context / `74318cce3925326c6ca8-light-slot-2-initial` / slot 2 / raw 69 / R0: “The full-window host shell incorrectly uses an all-white background instead of the required `--ui-rail` color, resulting in touching panels without visible gaps.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-light-slot-2-initial` / slot 2 / raw 69 / R1: “The 'Usage' status bar item incorrectly features a solid gray pill background, whereas the golden reference places the text directly on the transparent rail.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-light-slot-2-initial` / slot 2 / raw 69 / R2: “The typography within the 'Usage' item is inconsistent; the capture uses a dark, bold font for the label and a lighter font for the value, unlike the uniform muted text styling in the golden reference.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-light-slot-3-initial` / slot 3 / raw 87 / R0: “The 'Usage' label typography has changed to a bold weight and uses a dark text color, whereas it was normal weight and muted in the golden design.”
+- Plugin visual allegation (unconfirmed) / `74318cce3925326c6ca8-light-slot-3-initial` / slot 3 / raw 87 / R1: “The visual hierarchy is inverted because the label now draws primary emphasis, while the dynamic value is deemphasized with a muted color.”
+
+###### `overlay:quirky.accounts/switch-dialog` / light
+
+Original status fail; original median 80.
+
+- Host/surrounding context / `2333702c569053049379-light-slot-1-initial` / slot 1 / raw 78 / R0: “The primary shell panels (Worktrees, workspace, Agent Dashboard) are rendered as touching white regions without the required structural gray rail gaps, resulting in a flat frame.”
+- Host/surrounding context / `2333702c569053049379-light-slot-1-initial` / slot 1 / raw 78 / R1: “The Worktrees sidebar selected row uses a single-line layout with a neutral highlight instead of the two-line blue block design seen in the golden image.”
+- Plugin visual allegation (unconfirmed) / `2333702c569053049379-light-slot-1-initial` / slot 1 / raw 78 / R2: “The workspace tabs feature a bottom border and active underline styling rather than the standalone, borderless background pill design present in the golden.”
+- Host/surrounding context / `2333702c569053049379-light-slot-2-initial` / slot 2 / raw 80 / R0: “The main application panels (left sidebar, center workspace, right sidebar) lack the standard gray host gaps and rounded corners, appearing as touching white surfaces instead of distinct bounded areas.”
+- Host/surrounding context / `2333702c569053049379-light-slot-2-initial` / slot 2 / raw 80 / R1: “In the bottom right status bar, the icons next to the usage text lack proper horizontal spacing and are squashed tightly together.”
+- Host/surrounding context / `2333702c569053049379-light-slot-2-initial` / slot 2 / raw 80 / R2: “In the Worktrees panel, several items (e.g., 'Worker assignment unverified') incorrectly span two lines, violating the required single-line 26px row anatomy.”
+- Host/surrounding context / `2333702c569053049379-light-slot-3-initial` / slot 3 / raw 82 / R0: “In the Worktrees panel, the nested metadata text below the 'main' row has severe line-height issues, causing the text lines to cramp unreadably and violating standard line spacing.”
+- Plugin visual allegation (unconfirmed) / `2333702c569053049379-light-slot-3-initial` / slot 3 / raw 82 / R1: “In the overlay dialog, the checkbox input is pushed to the far right edge of the container, creating an awkward visual disconnect from its left-aligned label.”
+- Host/surrounding context / `2333702c569053049379-light-slot-3-initial` / slot 3 / raw 82 / R2: “The selected row in the right 'Agent Dashboard' pane uses a dark, muddy background color that clashes with the light theme palette and reduces text contrast.”
+- Host/surrounding context / `2333702c569053049379-light-slot-3-initial` / slot 3 / raw 82 / R3: “The selected Worktrees row uses a neutral gray background instead of the bright blue background shown in the golden reference.”
+- Host/surrounding context / `2333702c569053049379-light-slot-3-initial` / slot 3 / raw 82 / R4: “The selected center pane tab uses a bottom accent underline instead of the blue top border shown in the golden reference.”
+
+##### quirky.agent-status
+
+###### `sidebar-section:quirky.agent-status/activity` / dark
+
+Original status fail; original median 78.
+
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-dark-slot-1-initial` / slot 1 / raw 82 / R0: “The header action icons (checkmark and cross) wrap to a new line below the 'Activity' title instead of being horizontally aligned, breaking the header layout.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-dark-slot-1-initial` / slot 1 / raw 82 / R1: “The activity cards exhibit inconsistent left border styling; the WAITING and FAILED cards feature yellow and red left borders respectively, but the WORKING card uses a default grey left border instead of green.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-dark-slot-1-initial` / slot 1 / raw 82 / R2: “The 'Mark read' buttons have noticeably unbalanced vertical spacing, placed almost touching the cards above them while having a disproportionately large gap below before the next section.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-dark-slot-2-initial` / slot 2 / raw 78 / R0: “The check and cross icons are placed on a new line below the 'Activity' title instead of being right-aligned in the section header, breaking standard header layout.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-dark-slot-2-initial` / slot 2 / raw 78 / R1: “The 'Mark read' buttons are placed loosely outside the activity cards they correspond to, which breaks visual grouping and hierarchy.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-dark-slot-2-initial` / slot 2 / raw 78 / R2: “The filter form elements have inconsistent vertical spacing, causing the 'Unread only' checkbox to appear cramped between the search input and dropdown.”
+- Host/surrounding context / `b37d4d0a00bd2f44efcc-dark-slot-3-initial` / slot 3 / raw 76 / R0: “In the Worktrees left sidebar, several items like 'Coordinator · UI review coordinator' span multiple lines instead of being restricted to single-line 26px rows, breaking the approved density.”
+- Host/surrounding context / `b37d4d0a00bd2f44efcc-dark-slot-3-initial` / slot 3 / raw 76 / R1: “The 'Get started' button in the Mobile section at the bottom of the left sidebar is clipped by the container's bottom edge, resulting in vertical overflow.”
+- Disclosed contract observation / `b37d4d0a00bd2f44efcc-dark-slot-3-initial` / slot 3 / raw 76 / R2: “The Worktrees sidebar should revert to its less dense spacing and remove the saved-view tabs like 'All' and 'Needs you 3' to match the older shell golden.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-dark-slot-3-initial` / slot 3 / raw 76 / R3: “In the Activity right sidebar, the standalone check and cross icons lack proper layout wrapping or background, making them appear awkwardly floated above the 'Search Activity' label.”
+- Host/surrounding context / `b37d4d0a00bd2f44efcc-dark-slot-3-initial` / slot 3 / raw 76 / R4: “The 'All' and 'Needs you 3' tabs in the Worktrees sidebar appear as plain unboxed text, violating the requirement that tabs outside Open views and Search keep their existing boxed default.”
+
+###### `sidebar-section:quirky.agent-status/activity` / light
+
+Original status fail; original median 81.
+
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-light-slot-1-initial` / slot 1 / raw 81 / R0: “The check and cross actions below the Activity title are rendered as raw, unstyled text characters on a separate line rather than being styled as standard icon buttons aligned in the header row.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-light-slot-1-initial` / slot 1 / raw 81 / R1: “The text lines within the agent status cards (such as the branch and task details) have overly tight line-heights, resulting in a vertically cramped appearance.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-light-slot-2-initial` / slot 2 / raw 82 / R0: “Standalone checkmark and cross icons are floating above the search input without a container or button background, breaking component consistency.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-light-slot-2-initial` / slot 2 / raw 82 / R1: “The WORKING card lacks the strong colored left-border stripe that is present on the WAITING FOR INPUT and FAILED cards, causing visual inconsistency in the card design.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-light-slot-2-initial` / slot 2 / raw 82 / R2: “The 'Mark read' buttons are placed with extremely tight spacing against the bottom of their respective cards, making the layout feel cramped.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-light-slot-2-initial` / slot 2 / raw 82 / R3: “Inside the status cards, the colored status indicator dots are outdented to the left, breaking vertical alignment with the bold agent name above them.”
+- `b37d4d0a00bd2f44efcc-light-slot-3-initial` / slot 3: no admitted assessment; response-shape: Contract conflict IDs must be unique.
+- Host/surrounding context / `b37d4d0a00bd2f44efcc-light-slot-3-replacement` / slot 3 / raw 66 / R0: “The center panel and the right 'Activity' panel touch the top header and bottom status bar respectively without the required shell background gaps or rounded corners, violating frame ownership.”
+- Host/surrounding context / `b37d4d0a00bd2f44efcc-light-slot-3-replacement` / slot 3 / raw 66 / R1: “In the Worktrees panel, several rows are vertically expanded into multi-line text blocks (e.g., under 'ui-review-fixture'), which violates the approved single-line 26px row anatomy.”
+- Host/surrounding context / `b37d4d0a00bd2f44efcc-light-slot-3-replacement` / slot 3 / raw 66 / R2: “The 'All' tab in the Worktrees panel uses a dark grey underline instead of the required accent color, and the tablist lacks the required 1px solid bottom border.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-light-slot-3-replacement` / slot 3 / raw 66 / R3: “In the Activity panel, the check and cross icon buttons are placed awkwardly on the left below the title, rather than being properly aligned.”
+- Plugin visual allegation (unconfirmed) / `b37d4d0a00bd2f44efcc-light-slot-3-replacement` / slot 3 / raw 66 / R4: “Within the Activity section, the 'Unread only' checkbox is vertically misaligned with its text label, and section headers like 'WAITING FOR INPUT' lack sufficient top margin.”
+
+###### `sidebar-section:quirky.agent-status/dashboard` / dark
+
+Original status fail; original median 80.
+
+- Host/surrounding context / `b90d8fc25356e65f8390-dark-slot-1-initial` / slot 1 / raw 80 / R0: “The main shell panels lack the rounded corners and thick rail-colored gaps present in the golden, instead touching directly with 1px borders.”
+- Host/surrounding context / `b90d8fc25356e65f8390-dark-slot-1-initial` / slot 1 / raw 80 / R1: “Worktrees rows incorrectly display multi-line text (e.g., 'Coordinator...') instead of adhering to the single-line 26px density.”
+- Host/surrounding context / `b90d8fc25356e65f8390-dark-slot-1-initial` / slot 1 / raw 80 / R2: “The 'All' and 'Needs you 3' tabs in the Worktrees panel lack the expected boxed default styling, rendering as unboxed plain text.”
+- Disclosed contract observation / `b90d8fc25356e65f8390-dark-slot-1-initial` / slot 1 / raw 80 / R3: “The Worktrees row selection should use the blue accent color shown in the golden instead of the neutral dark gray background, and the extra saved-view tabs should be removed to match the reference.”
+- Host/surrounding context / `b90d8fc25356e65f8390-dark-slot-2-initial` / slot 2 / raw 88 / R0: “The Worktrees tablist container is missing the required 1px solid bottom border rule.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-dark-slot-2-initial` / slot 2 / raw 88 / R1: “The selected tab 'All' uses a neutral underline instead of the required accent color bottom underline.”
+- Host/surrounding context / `b90d8fc25356e65f8390-dark-slot-2-initial` / slot 2 / raw 88 / R2: “The Worktrees list includes a multi-line block starting with 'Coordinator', which violates the single-line 26px density rule for Worktree rows.”
+- Host/surrounding context / `b90d8fc25356e65f8390-dark-slot-2-initial` / slot 2 / raw 88 / R3: “The selected worktree row 'ui-review-fixture' uses a neutral background instead of the blue background seen in the golden image.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-dark-slot-3-initial` / slot 3 / raw 77 / R0: “The yellow status dot is shifted too far left and fails to vertically align with the 'Agent Dashboard' section header text, breaking the standard visual alignment.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-dark-slot-3-initial` / slot 3 / raw 77 / R1: “The font size of the item text is noticeably smaller than standard sidebar list items, violating typographic consistency.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-dark-slot-3-initial` / slot 3 / raw 77 / R2: “The '2' count badge uses a prominent yellow background with black text, inconsistent with the plain-text or muted numerical badges found in other sidebar sections.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-dark-slot-3-initial` / slot 3 / raw 77 / R3: “The spacing between the yellow status dot and the item text is too tight, lacking the standard gap seen between icons and text in golden sidebar lists.”
+
+###### `sidebar-section:quirky.agent-status/dashboard` / light
+
+Original status fail; original median 82.
+
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-1-initial` / slot 1 / raw 82 / R0: “The center content panel and the right 'Agent Dashboard' sidebar touch directly with a 1px border and sharp upper corners, missing the required var(--ui-rail) host gap and distinct rounded corners.”
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-1-initial` / slot 1 / raw 82 / R1: “The 'Coordinator' item in the Worktrees panel incorrectly spans multiple lines, violating the redesign requirement for single-line 26px rows.”
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-1-initial` / slot 1 / raw 82 / R2: “The selected worktree row ('ui-review-fixture') uses regular font weight, whereas the approved redesign explicitly requires a bold name for the selection.”
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-1-initial` / slot 1 / raw 82 / R3: “The saved-view tabs in the Worktrees panel ('All', 'Needs you 3') use the underline tab style, but the contract restricts this style to Open views and palette Search scope, requiring boxed tabs elsewhere.”
+- `b90d8fc25356e65f8390-light-slot-2-initial` / slot 2: no admitted assessment; response-shape: Reviewer response must contain only one strict contract-aware JSON object.
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-2-replacement` / slot 2 / raw 100 / R0: “The Agent Dashboard target is correctly mounted in the right sidebar pane with a valid white surface and distinct host frame gaps.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-light-slot-2-replacement` / slot 2 / raw 100 / R1: “The section header typography and padding properly mirror the golden reference without introducing invalid borders.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-light-slot-2-replacement` / slot 2 / raw 100 / R2: “The selected dashboard item uses a neutral background token with appropriate insets and readable contrast.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-light-slot-2-replacement` / slot 2 / raw 100 / R3: “Attention badges and status indicators are cleanly aligned horizontally, maintaining a proper visual hierarchy.”
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-3-initial` / slot 3 / raw 80 / R0: “The host frame has all panels touching with simple 1px borders, missing the required rail gaps and rail background, resulting in an all-white frame.”
+- Plugin visual allegation (unconfirmed) / `b90d8fc25356e65f8390-light-slot-3-initial` / slot 3 / raw 80 / R1: “List selection backgrounds stretch full-width to the panel edges without the inset margins and border-radius seen in the golden.”
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-3-initial` / slot 3 / raw 80 / R2: “Worktrees list items are incorrectly rendered as multi-line rows with descriptions, violating the approved redesign rule that requires single-line 26px rows.”
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-3-initial` / slot 3 / raw 80 / R3: “The Worktrees underline tablist is missing the required 1px solid var(--ui-border) bottom rule across its width.”
+- Host/surrounding context / `b90d8fc25356e65f8390-light-slot-3-initial` / slot 3 / raw 80 / R4: “The bottom of the left sidebar 'Mobile' panel is clipped, cutting off the 'Get started' button.”
+
+##### quirky.agents
+
+###### `view:quirky.agents/settings` / dark
+
+Original status fail; original median 83.
+
+- Host/surrounding context / `b68b07db2eefa2cb835f-dark-slot-1-initial` / slot 1 / raw 83 / R0: “The application panels are flush against each other, missing the required --ui-rail background gaps and rounded panel corners that establish the host frame.”
+- Host/surrounding context / `b68b07db2eefa2cb835f-dark-slot-1-initial` / slot 1 / raw 83 / R1: “The Worktrees panel displays multiline row items under the selected branch, violating the approved redesign rule that requires all rows to be single-line 26px.”
+- Host/surrounding context / `b68b07db2eefa2cb835f-dark-slot-2-initial` / slot 2 / raw 100 / R0: “The Worktrees sidebar replaces the golden's multiline rows and blue selection styling with a single-line layout, 12px indentation, and a neutral selection background.”
+- Plugin visual allegation (unconfirmed) / `b68b07db2eefa2cb835f-dark-slot-2-initial` / slot 2 / raw 100 / R1: “The main document tabs and sidebar tabs use an inset bottom accent underline rather than the fully boxed tab design present in the older golden.”
+- Plugin visual allegation (unconfirmed) / `b68b07db2eefa2cb835f-dark-slot-2-initial` / slot 2 / raw 100 / R2: “The view displays the Agents configuration UI with list rows for installed and available agents instead of the terminal view shown in the golden.”
+- `b68b07db2eefa2cb835f-dark-slot-3-initial` / slot 3: no admitted assessment; response-shape: Contract conflict IDs must be unique.
+- Host/surrounding context / `b68b07db2eefa2cb835f-dark-slot-3-replacement` / slot 3 / raw 82 / R0: “The Worktrees panel directly touches the leftmost icon rail without any gap, missing the standard host frame spacing.”
+- Host/surrounding context / `b68b07db2eefa2cb835f-dark-slot-3-replacement` / slot 3 / raw 82 / R1: “The selected 'All' tab in the Worktrees panel uses a white bottom underline instead of the required accent-colored underline.”
+- Plugin visual allegation (unconfirmed) / `b68b07db2eefa2cb835f-dark-slot-3-replacement` / slot 3 / raw 82 / R2: “The 'Agents' tab in the central pane is missing the required inset 2px bottom accent underline for selected tabs.”
+- Host/surrounding context / `b68b07db2eefa2cb835f-dark-slot-3-replacement` / slot 3 / raw 82 / R3: “The 'Worker assignment unverified' row in the Worktrees list incorrectly wraps text to a second line instead of being constrained to a single line.”
+- Disclosed contract observation / `b68b07db2eefa2cb835f-dark-slot-3-replacement` / slot 3 / raw 82 / R4: “The Worktrees panel includes saved-view tabs and a neutral gray selection background, which incorrectly deviate from the tabless design and blue selection in the golden image.”
+
+##### quirky.ask
+
+###### `panel:quirky.ask/questions` / dark
+
+Original status fail; original median 77.
+
+- Plugin visual allegation (unconfirmed) / `a406e8f1c4dc0072c525-dark-slot-1-initial` / slot 1 / raw 77 / R0: “The 'Ask' and 'Quirky' panels have zero top and left internal padding for their headers, causing the text to touch the corners.”
+- Plugin visual allegation (unconfirmed) / `a406e8f1c4dc0072c525-dark-slot-1-initial` / slot 1 / raw 77 / R1: “All captured panels lack the required 1px solid --ui-border, leaving them as flat surfaces without defined edges.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-dark-slot-1-initial` / slot 1 / raw 77 / R2: “The Worktrees list displays a four-line item starting with 'Coordinator', directly violating the approved single-line row density.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-dark-slot-1-initial` / slot 1 / raw 77 / R3: “The 'Get started' button in the Mobile panel is vertically clipped by the bottom edge of the container.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-dark-slot-1-initial` / slot 1 / raw 77 / R4: “The Worktrees header tabs ('All', 'Needs you 3') appear as unstyled text, missing the standard boxed default for non-navigational tabs.”
+- Plugin visual allegation (unconfirmed) / `a406e8f1c4dc0072c525-dark-slot-2-initial` / slot 2 / raw 93 / R0: “The Ask panel header is missing the standard 1px bottom border, breaking shared-component consistency with other panels.”
+- Plugin visual allegation (unconfirmed) / `a406e8f1c4dc0072c525-dark-slot-2-initial` / slot 2 / raw 93 / R1: “The absence of a separating border under the header weakens the visual hierarchy between the panel title and its content area.”
+- Disclosed contract observation / `a406e8f1c4dc0072c525-dark-slot-3-initial` / slot 3 / raw 56 / R0: “The Worktrees selected row 'main' uses a neutral dark grey background with bold text and is indented, but it should use a bright blue background spanning the full width as seen in the older golden.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-dark-slot-3-initial` / slot 3 / raw 56 / R1: “The 'All' and 'Needs you 3' tabs in the Worktrees panel use an underline style with a bottom accent rule, whereas the golden reference uses a completely different boxed tab design.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-dark-slot-3-initial` / slot 3 / raw 56 / R2: “The Ask panel uses the darker shell rail background color rather than the lighter --ui-surface color, failing to distinguish the content surface from the window chrome.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-dark-slot-3-initial` / slot 3 / raw 56 / R3: “The shell panels, including Ask and Worktrees, are missing their structural gaps, borders, and rounded corners, causing them to sit completely flush against the window edges and each other.”
+
+###### `panel:quirky.ask/questions` / light
+
+Original status fail; original median 80.
+
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-1-initial` / slot 1 / raw 74 / R0: “The left and right panels (Worktrees, Ask) are missing host gaps; their white surfaces touch the top toolbar, left/right rails, and bottom status bar directly, losing visual separation.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-1-initial` / slot 1 / raw 74 / R1: “The Worktrees panel contains multi-line rows (e.g., 'Coordinator', 'Worker assignment unverified'), violating the requirement for single-line 26px row density.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-1-initial` / slot 1 / raw 74 / R2: “The tabs in the Worktrees panel ('All', 'Needs you 3') improperly use the underline style instead of the standard boxed default required for non-Open/Search tabs.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-1-initial` / slot 1 / raw 74 / R3: “The 'Get started' button at the bottom of the Mobile panel is vertically clipped and overlapping the bottom edge of the panel container.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-1-initial` / slot 1 / raw 74 / R4: “The selected item 'ui-review-fixture' in the Worktrees panel uses a neutral gray background rather than the blue accent background shown in the golden.”
+- Plugin visual allegation (unconfirmed) / `a406e8f1c4dc0072c525-light-slot-2-initial` / slot 2 / raw 80 / R0: “The 'Ask' panel header text lacks padding and sits flush against the top-left edge of the panel.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-2-initial` / slot 2 / raw 80 / R1: “The Worktrees tabs ('All' and 'Needs you 3') use an underline style instead of the required boxed default for non-open views.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-2-initial` / slot 2 / raw 80 / R2: “The Worktrees list contains a multi-line row for 'Coordinator', violating the requirement for single-line 26px rows.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-2-initial` / slot 2 / raw 80 / R3: “The 'Get started' button in the Mobile panel is vertically clipped by the bottom edge of the panel.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-3-initial` / slot 3 / raw 87 / R0: “Worktrees rows contain multi-line text blocks (e.g., 'claude • terminal • done'), violating the single-line 26px height constraint.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-3-initial` / slot 3 / raw 87 / R1: “The 'Get started' button in the Mobile panel is vertically clipped at the bottom of the sidebar, indicating a layout overflow defect.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-3-initial` / slot 3 / raw 87 / R2: “The bottom status bar displays broken formatting with the text 'Usage Used' instead of a numeric percentage.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-3-initial` / slot 3 / raw 87 / R3: “The 'All' and 'Needs you 3' tabs in the Worktrees panel do not use the underline tab styling shown in the golden image, missing the 1px bottom border and 2px accent underline.”
+- Host/surrounding context / `a406e8f1c4dc0072c525-light-slot-3-initial` / slot 3 / raw 87 / R4: “The red attention badge '3' on the Worktrees icon in the left rail is unexpected and not present in the golden image.”
+- Audit-invalid content/scope reason / `a406e8f1c4dc0072c525-light-slot-3-initial` / slot 3 / raw 87 / R5: “The right panel displays the header title 'Ask' instead of the expected metadata title 'Questions'.”
+
+##### quirky.automations
+
+###### `view:quirky.automations/automations` / dark
+
+Original status fail; original median 76.
+
+- Plugin visual allegation (unconfirmed) / `a7293868fae2b6979946-dark-slot-1-initial` / slot 1 / raw 87 / R0: “The expanded 'ui-review-fixture' worktree contains multi-line rows (such as the 'Coordinator' item), which violates the redesign contract mandating single-line 26px rows.”
+- Host/surrounding context / `a7293868fae2b6979946-dark-slot-1-initial` / slot 1 / raw 87 / R1: “The Worktrees panel tabs ('All' and 'Needs you 3') use an underline styling without a full-width bottom border, instead of keeping their required boxed default.”
+- Disclosed contract observation / `a7293868fae2b6979946-dark-slot-1-initial` / slot 1 / raw 87 / R2: “The selected 'ui-review-notes' row should use the bright blue background pill seen in the golden image, rather than the neutral grey selection.”
+- Host/surrounding context / `a7293868fae2b6979946-dark-slot-2-initial` / slot 2 / raw 76 / R0: “The main application panels are touching directly without the thick rail-colored host gaps present in the golden image.”
+- Host/surrounding context / `a7293868fae2b6979946-dark-slot-2-initial` / slot 2 / raw 76 / R1: “The 'Coordinator' row in the Worktrees panel spans multiple lines, violating the approved redesign specification that requires single-line 26px rows.”
+- Host/surrounding context / `a7293868fae2b6979946-dark-slot-2-initial` / slot 2 / raw 76 / R2: “The Worktrees panel tabs use the underline style, which violates the requirement that tabs outside of Open views and palette Search scope must keep their existing boxed default.”
+- Host/surrounding context / `a7293868fae2b6979946-dark-slot-3-initial` / slot 3 / raw 74 / R0: “The sidebar panels (Worktrees, Automations) lack outer host gaps and sit flush against the left app rail and window edges, instead of floating as detached panels like the golden.”
+- Host/surrounding context / `a7293868fae2b6979946-dark-slot-3-initial` / slot 3 / raw 74 / R1: “The Worktrees list rows are multi-line and lack the specified 12px indentation, failing to implement the approved single-line 26px redesign.”
+- Host/surrounding context / `a7293868fae2b6979946-dark-slot-3-initial` / slot 3 / raw 74 / R2: “The Worktrees tabs ('All', 'Needs you 3') use an underline style instead of the boxed style, which should only apply to Open views and palette Search scope.”
+- Disclosed contract observation / `a7293868fae2b6979946-dark-slot-3-initial` / slot 3 / raw 74 / R3: “The Worktrees header contains a filter icon and extra header actions, which should be removed because they deviate from the older golden design.”
+
+###### `view:quirky.automations/automations` / light
+
+Original status fail; original median 83.
+
+- `a7293868fae2b6979946-light-slot-1-initial` / slot 1: no admitted assessment; response-shape: Contract conflict IDs must be unique.
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-1-replacement` / slot 1 / raw 83 / R0: “The Worktrees panel contains multi-line list items (e.g., 'Coordinator · UI review coordinator'), violating the approved redesign rule that rows must be single-line 26px.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-1-replacement` / slot 1 / raw 83 / R1: “The 'All' and 'Needs you 3' tabs in the Worktrees panel use an underline style rather than the required existing boxed default for tabs outside Open views and palette.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-1-replacement` / slot 1 / raw 83 / R2: “Multi-line elements within the Worktrees list lack appropriate tree indentation or guiding lines, making them visually detached from their parent items.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-2-initial` / slot 2 / raw 79 / R0: “The Open views tablist is missing the 1px solid bottom border, and the selected 'Quirky' tab lacks the required 2px inset bottom accent underline.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-2-initial` / slot 2 / raw 79 / R1: “Worktrees list items like 'Coordinator' and 'Worker assignment unverified' span multiple lines, violating the required single-line 26px row height.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-2-initial` / slot 2 / raw 79 / R2: “The saved-view tabs 'All' and 'Needs you 3' in the Worktrees panel are missing the standard boxed tab styling, rendering as borderless plain text.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-2-initial` / slot 2 / raw 79 / R3: “The Worktrees panel diverges from the golden reference by not using a blue accent background for selected rows.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-3-initial` / slot 3 / raw 87 / R0: “The Worktrees panel rows for 'Coordinator' and 'Worker assignment unverified' incorrectly span multiple lines, violating the approved redesign rule that requires single-line 26px rows.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-3-initial` / slot 3 / raw 87 / R1: “The Automations panel is successfully mounted in the bottom left, featuring standard typography and spacing that align with the shell's visual hierarchy.”
+- Host/surrounding context / `a7293868fae2b6979946-light-slot-3-initial` / slot 3 / raw 87 / R2: “The selected Worktree row correctly uses a neutral background instead of the golden image's blue selection background, complying with the redesign specifications.”
+
+###### `view:quirky.automations/settings` / light
+
+Original status fail; original median 80.
+
+- Plugin visual allegation (unconfirmed) / `f72e9a258db9aa03594c-light-slot-1-initial` / slot 1 / raw 85 / R0: “The application frame lacks the gray rail gaps and rounded corners between the main panels, merging the sidebars and center content into a continuous white surface.”
+- Plugin visual allegation (unconfirmed) / `f72e9a258db9aa03594c-light-slot-1-initial` / slot 1 / raw 85 / R1: “The active tab in the central view uses a bottom underline style and lacks borders, whereas the golden reference shows fully enclosed boxed tabs.”
+- Host/surrounding context / `f72e9a258db9aa03594c-light-slot-1-initial` / slot 1 / raw 85 / R2: “The Worktrees list employs a single-line row design with a neutral gray selection background instead of the blue selection color and multi-line layout present in the golden image.”
+- Plugin visual allegation (unconfirmed) / `f72e9a258db9aa03594c-light-slot-2-initial` / slot 2 / raw 80 / R0: “In the Automation settings view, the checkboxes are incorrectly rendered on separate lines from their corresponding labels, breaking standard inline form control layout.”
+- Plugin visual allegation (unconfirmed) / `f72e9a258db9aa03594c-light-slot-2-initial` / slot 2 / raw 80 / R1: “Vertical spacing between the form labels, checkboxes, and their muted helper text in the settings view is severely collapsed, causing the elements to visually crowd each other.”
+- Host/surrounding context / `f72e9a258db9aa03594c-light-slot-3-initial` / slot 3 / raw 79 / R0: “The main application panels (left sidebar, center view, right sidebar) are directly touching without the required gray host rail gaps or rounded corners.”
+- Plugin visual allegation (unconfirmed) / `f72e9a258db9aa03594c-light-slot-3-initial` / slot 3 / raw 79 / R1: “The selected 'Automations' tab in the center view uses a dark text-colored bottom underline instead of the required 2px accent color underline.”
+- Disclosed contract observation / `f72e9a258db9aa03594c-light-slot-3-initial` / slot 3 / raw 79 / R2: “The Worktrees selected row should use a blue background to match the golden image, rather than a neutral gray background.”
+- Plugin visual allegation (unconfirmed) / `f72e9a258db9aa03594c-light-slot-3-initial` / slot 3 / raw 79 / R3: “In the Automation settings view, the checkboxes are placed on their own lines below their primary labels rather than being horizontally aligned with them.”
+
+##### quirky.browser
+
+###### `view:quirky.browser/browser-settings` / light
+
+Original status fail; original median 82.
+
+- Plugin visual allegation (unconfirmed) / `78d5bf18c8084c85806b-light-slot-1-initial` / slot 1 / raw 89 / R0: “The 'Save' button in the Browser Defaults section lacks top margin and is physically touching the input field above it, creating a spacing defect.”
+- Plugin visual allegation (unconfirmed) / `78d5bf18c8084c85806b-light-slot-1-initial` / slot 1 / raw 89 / R1: “The close button ('x') for the 'Browser Settings' tab is improperly detached and rendered at the far right edge of the tab container instead of inside the tab.”
+- Host/surrounding context / `78d5bf18c8084c85806b-light-slot-1-initial` / slot 1 / raw 89 / R2: “Worktree list items, such as 'Coordinator', are rendering with multi-line text descriptions, which violates the strict single-line 26px layout requirement of the redesign.”
+- Plugin visual allegation (unconfirmed) / `78d5bf18c8084c85806b-light-slot-1-initial` / slot 1 / raw 89 / R3: “The active 'Browser Settings' tab uses a bottom blue underline to indicate selection instead of the fully boxed background style seen in the golden.”
+- Host/surrounding context / `78d5bf18c8084c85806b-light-slot-1-initial` / slot 1 / raw 89 / R4: “The selected worktree item 'main' uses a neutral gray background rather than a blue accent color to denote its active state.”
+- Host/surrounding context / `78d5bf18c8084c85806b-light-slot-2-initial` / slot 2 / raw 82 / R0: “The top header touches the Worktrees and center panels directly without the required structural gray gaps, violating host frame ownership.”
+- Host/surrounding context / `78d5bf18c8084c85806b-light-slot-2-initial` / slot 2 / raw 82 / R1: “The Worktrees 'All' tab incorrectly uses an underline style with a black underline instead of retaining the required boxed default for non-view tabs.”
+- Plugin visual allegation (unconfirmed) / `78d5bf18c8084c85806b-light-slot-2-initial` / slot 2 / raw 82 / R2: “The 'Browser' page title in the center pane lacks top padding and touches the tab list border.”
+- Host/surrounding context / `78d5bf18c8084c85806b-light-slot-2-initial` / slot 2 / raw 82 / R3: “The selected Worktrees row 'main' uses a neutral background instead of the blue accent background shown in the golden.”
+- Plugin visual allegation (unconfirmed) / `78d5bf18c8084c85806b-light-slot-2-initial` / slot 2 / raw 82 / R4: “The 'Browser Settings' active tab uses a bottom accent underline instead of the older boxed tab style seen in the golden.”
+- Host/surrounding context / `78d5bf18c8084c85806b-light-slot-3-initial` / slot 3 / raw 81 / R0: “The host shell frame is completely white and missing the distinct rail background and panel gaps, causing the sidebars and main view panels to touch without spatial separation or rounded corners.”
+- Host/surrounding context / `78d5bf18c8084c85806b-light-slot-3-initial` / slot 3 / raw 81 / R1: “The main view tabs use a transparent background with an inset blue bottom underline, which differs from the boxed tabs with rounded top borders seen in the golden reference.”
+- Host/surrounding context / `78d5bf18c8084c85806b-light-slot-3-initial` / slot 3 / raw 81 / R2: “The selected item in the Worktrees panel has a neutral gray background rather than the solid blue background shown in the golden.”
+
+###### `view:quirky.browser/page` / dark
+
+Original status fail; original median 74.
+
+- Host/surrounding context / `4918e7052dfaa9cae43f-dark-slot-1-initial` / slot 1 / raw 76 / R0: “The host panels (Worktrees, Automations, and Browser) lack the standard --ui-rail gaps between them and the top toolbar, causing them to abut directly without the expected rounded corners.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-dark-slot-1-initial` / slot 1 / raw 76 / R1: “The Browser view's header chrome has a broken layout where the 'History' button wraps to a second row and an unstyled 'Address and search' label is visibly exposed above the input field.”
+- Host/surrounding context / `4918e7052dfaa9cae43f-dark-slot-2-initial` / slot 2 / raw 74 / R0: “The main panels (Worktrees, Browser, Automations) touch each other directly without the required host rail background gaps and rounded corners, violating expected host frame layout.”
+- Host/surrounding context / `4918e7052dfaa9cae43f-dark-slot-2-initial` / slot 2 / raw 74 / R1: “The Worktrees panel successfully implements the approved redesign with single-line rows, 12px indentation, and neutral selection, correctly replacing the older golden's multi-line cards.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-dark-slot-2-initial` / slot 2 / raw 74 / R2: “The view tabs correctly use the approved underline style with a bottom accent rule and no top border, superseding the boxed style from the golden image.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-dark-slot-2-initial` / slot 2 / raw 74 / R3: “The Browser view's header action buttons ('Find', 'Native', etc.) are densely packed with varying paddings and text sizes, creating an inconsistent component visual hierarchy.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-dark-slot-3-initial` / slot 3 / raw 68 / R0: “The History button is improperly wrapped to a second line below the primary navigation controls, breaking the intended single-line toolbar layout.”
+- Host/surrounding context / `4918e7052dfaa9cae43f-dark-slot-3-initial` / slot 3 / raw 68 / R1: “The address bar uses a heavily rounded border with an overlapping floating label ('Address and search'), which clashes with the flat, dense input styling typical of the application shell.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-dark-slot-3-initial` / slot 3 / raw 68 / R2: “The toolbar action buttons (Find, Native, Grab, etc.) lack adequate horizontal margins, resulting in a cramped, dense appearance on the right side.”
+
+###### `view:quirky.browser/page` / light
+
+Original status fail; original median 81.
+
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-light-slot-1-initial` / slot 1 / raw 77 / R0: “The close 'x' icon is misaligned to the far right edge of the tab bar instead of residing inside the active 'Browser' tab, breaking component consistency.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-light-slot-1-initial` / slot 1 / raw 77 / R1: “An explicit 'Address and search' label above the URL input field consumes unnecessary vertical space, reducing the density of the toolbar.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-light-slot-1-initial` / slot 1 / raw 77 / R2: “The toolbar area uses a grey background sandwiched between the white tab bar and the white web content area, disrupting the visual hierarchy.”
+- Host/surrounding context / `4918e7052dfaa9cae43f-light-slot-2-initial` / slot 2 / raw 92 / R0: “The center Browser panel and the right Agent Dashboard panel touch directly without a rail-colored host gap, violating frame separation.”
+- Host/surrounding context / `4918e7052dfaa9cae43f-light-slot-2-initial` / slot 2 / raw 92 / R1: “The Open views tabs use an inset blue bottom underline rather than the boxed style with a top blue border from the golden.”
+- Host/surrounding context / `4918e7052dfaa9cae43f-light-slot-2-initial` / slot 2 / raw 92 / R2: “The selected item in the Worktrees panel uses a neutral gray background rather than the blue accent background seen in the golden.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-light-slot-3-initial` / slot 3 / raw 81 / R0: “The browser chrome action buttons ('Native', 'Grab', 'Annotate', 'Draw') use very light text on a light background, resulting in poor contrast and illegibility.”
+- Host/surrounding context / `4918e7052dfaa9cae43f-light-slot-3-initial` / slot 3 / raw 81 / R1: “Worktrees rows such as 'Coordinator' and 'Worker assignment unverified' wrap to multiple lines instead of strictly maintaining the required single-line density.”
+- Plugin visual allegation (unconfirmed) / `4918e7052dfaa9cae43f-light-slot-3-initial` / slot 3 / raw 81 / R2: “The 'Browser' tab features an inset bottom accent underline instead of the boxed tab appearance shown in the golden.”
+- Host/surrounding context / `4918e7052dfaa9cae43f-light-slot-3-initial` / slot 3 / raw 81 / R3: “The selected worktree 'main' has a neutral gray background rather than the accent blue background seen in the reference golden.”
+
+###### `settings-section:quirky.browser/browser-preferences` / light
+
+Original status fail; original median 79.
+
+- Plugin visual allegation (unconfirmed) / `7da20a47a6e05c57b214-light-slot-1-initial` / slot 1 / raw 79 / R0: “The Settings popup exhibits redundant typography, placing 'Browser: Session &amp; Cookies' as plain text immediately above a larger, bold 'Browser' heading.”
+- Plugin visual allegation (unconfirmed) / `7da20a47a6e05c57b214-light-slot-1-initial` / slot 1 / raw 79 / R1: “In the Zoom settings, the keyboard shortcut input fields are vertically misaligned with the 'active' status text and the row of action buttons.”
+- Host/surrounding context / `7da20a47a6e05c57b214-light-slot-1-initial` / slot 1 / raw 79 / R2: “Worktree rows under 'main' are rendered as tall, multi-line blocks with secondary descriptions, violating the requirement for single-line 26px rows.”
+- Host/surrounding context / `7da20a47a6e05c57b214-light-slot-1-initial` / slot 1 / raw 79 / R3: “The Worktrees panel tabs ('All', 'Needs you') incorrectly use an underline style instead of the boxed default required for tabs outside of Open views and palette Search scope.”
+- Host/surrounding context / `7da20a47a6e05c57b214-light-slot-1-initial` / slot 1 / raw 79 / R4: “The shell frame is missing the required gaps between the far-left icon strip and the Worktrees panel, resulting in improperly touching white panels.”
+- Host/surrounding context / `7da20a47a6e05c57b214-light-slot-1-initial` / slot 1 / raw 79 / R5: “The selected 'ui-review-fixture' row in the Worktrees panel uses a neutral gray background instead of the blue highlight shown in the older golden image.”
+- Host/surrounding context / `7da20a47a6e05c57b214-light-slot-2-initial` / slot 2 / raw 79 / R0: “The selected worktree in the left sidebar uses a neutral grey background instead of the blue accent color shown in the golden reference.”
+- Plugin visual allegation (unconfirmed) / `7da20a47a6e05c57b214-light-slot-2-initial` / slot 2 / raw 79 / R1: “The typography hierarchy is confusing: the large 'Browser' heading is placed immediately beneath the smaller bold 'Browser: Session &amp; Cookies' section title with inadequate vertical separation.”
+- Plugin visual allegation (unconfirmed) / `7da20a47a6e05c57b214-light-slot-2-initial` / slot 2 / raw 79 / R2: “In the Session &amp; Cookies profile list, the green 'Active' badge lacks sufficient left margin next to the 'Default' label, causing the text and badge to visually collide.”
+- Plugin visual allegation (unconfirmed) / `7da20a47a6e05c57b214-light-slot-2-initial` / slot 2 / raw 79 / R3: “The 'Add Profile' button is vertically cramped within the grey header of the 'SESSION &amp; COOKIES' card, lacking balanced padding compared to standard component margins.”
+- Host/surrounding context / `7da20a47a6e05c57b214-light-slot-3-initial` / slot 3 / raw 88 / R0: “The selected Worktree row uses a neutral grey background instead of the blue accent color shown in the golden design.”
+- Host/surrounding context / `7da20a47a6e05c57b214-light-slot-3-initial` / slot 3 / raw 88 / R1: “The Worktrees tablist ('All', 'Needs you 3') is missing the required 1px solid bottom border, leaving the active tab's underline floating.”
+- Plugin visual allegation (unconfirmed) / `7da20a47a6e05c57b214-light-slot-3-initial` / slot 3 / raw 88 / R2: “In the Settings dialog, the zoom control labels have inconsistent title casing ('Zoom in' vs 'Zoom Out').”
+- Plugin visual allegation (unconfirmed) / `7da20a47a6e05c57b214-light-slot-3-initial` / slot 3 / raw 88 / R3: “The 'Browser: Session &amp; Cookies' text is styled as plain body text directly above the 'Browser' heading, creating an unclear visual hierarchy.”
+- Host/surrounding context / `7da20a47a6e05c57b214-light-slot-3-initial` / slot 3 / raw 88 / R4: “Several Worktrees panel entries wrap into multiple lines of text without the required 12px indentation, violating the single-line 26px layout rule.”
+
+##### quirky.editor
+
+###### `overlay:quirky.editor/close` / light
+
+Original status fail; original median 82.
+
+- Host/surrounding context / `3f55ecae4f720eddd14f-light-slot-1-initial` / slot 1 / raw 77 / R0: “The host frame panels (sidebar, editor, right pane) touch directly without the expected structural rail gaps or rounded corners, creating an improper all-white flat layout.”
+- Plugin visual allegation (unconfirmed) / `3f55ecae4f720eddd14f-light-slot-1-initial` / slot 1 / raw 77 / R1: “The close 'X' button on the top right of the Unsaved Changes overlay incorrectly applies primary blue button styling (blue background and border) instead of standard plain icon styling.”
+- Disclosed contract observation / `3f55ecae4f720eddd14f-light-slot-1-initial` / slot 1 / raw 77 / R2: “The 'Editor Document' tab incorrectly uses a bottom accent underline instead of the boxed tab styling with top borders and rounded corners shown in the golden image.”
+- Disclosed contract observation / `3f55ecae4f720eddd14f-light-slot-1-initial` / slot 1 / raw 77 / R3: “The selected 'main' worktree row incorrectly uses a neutral gray background rather than the solid blue background for selection seen in the golden reference.”
+- Plugin visual allegation (unconfirmed) / `3f55ecae4f720eddd14f-light-slot-2-initial` / slot 2 / raw 84 / R0: “The Unsaved Changes overlay incorrectly styles its top-right close 'x' icon with a solid blue primary background, breaking shared-component conventions and drawing undue visual weight.”
+- Host/surrounding context / `3f55ecae4f720eddd14f-light-slot-2-initial` / slot 2 / raw 84 / R1: “The main application columns lack the necessary top background gap (rail) and top rounded corners, sitting improperly flush against the top header area.”
+- Host/surrounding context / `3f55ecae4f720eddd14f-light-slot-3-initial` / slot 3 / raw 82 / R0: “The host frame is missing standard rail gaps and rounded corners between the panels; the left, middle, and right panels are flush and form a continuous white surface.”
+- Plugin visual allegation (unconfirmed) / `3f55ecae4f720eddd14f-light-slot-3-initial` / slot 3 / raw 82 / R1: “The overlay's top-right close button has an incorrect prominent blue border instead of being a muted, borderless icon, disrupting visual hierarchy.”
+- Host/surrounding context / `3f55ecae4f720eddd14f-light-slot-3-initial` / slot 3 / raw 82 / R2: “The Worktrees selected row uses a neutral gray background rather than the blue accent background seen in the older golden.”
+- Plugin visual allegation (unconfirmed) / `3f55ecae4f720eddd14f-light-slot-3-initial` / slot 3 / raw 82 / R3: “The tabs such as 'All' and 'Editor Document' feature a bottom underline instead of being boxed as they appear in the golden.”
+
+###### `overlay:quirky.editor/quick-open` / dark
+
+Original status fail; original median 69.
+
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-1-initial` / slot 1 / raw 79 / R0: “In the 'Go to File' overlay, the palette rows incorrectly display visible borders, violating the rule that row block padding has no border.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-1-initial` / slot 1 / raw 79 / R1: “The selected palette row in the overlay lacks the required solid accent background and rail-colored text, displaying a transparent background with white text instead.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-1-initial` / slot 1 / raw 79 / R2: “The padding around the palette list inside the overlay is visibly larger than the strict 8px required on every side.”
+- Host/surrounding context / `113b4edf975adb9798c6-dark-slot-1-initial` / slot 1 / raw 79 / R3: “In the Worktrees panel, the selected row 'main' incorrectly uses a normal font weight for its name instead of the required bold typography.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-2-initial` / slot 2 / raw 69 / R0: “The selected palette row incorrectly uses a hollow blue border with a dark background and light text, failing to apply the required solid accent background, rail-colored text, and borderless design.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-2-initial` / slot 2 / raw 69 / R1: “The secondary description text in the selected palette result remains gray, failing to inherit the rail-colored text of the selected row.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-2-initial` / slot 2 / raw 69 / R2: “Applying the identical hollow blue border to both the active search input and the selected palette row creates visual confusion and weakens the hierarchy between input and selection.”
+- Host/surrounding context / `113b4edf975adb9798c6-dark-slot-2-initial` / slot 2 / raw 69 / R3: “The selected row in the Worktrees sidebar uses a neutral gray background instead of the solid blue accent color seen on selected items in the golden reference.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-3-initial` / slot 3 / raw 67 / R0: “The selected palette row is rendered as a standalone box with an accent border, whereas it must have an accent background and no border.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-3-initial` / slot 3 / raw 67 / R1: “The text in the selected palette row remains light instead of using the dark rail color as required for contrast.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-dark-slot-3-initial` / slot 3 / raw 67 / R2: “The palette results are separated by vertical gaps, breaking the contiguous list layout into detached boxes.”
+
+###### `overlay:quirky.editor/quick-open` / light
+
+Original status fail; original median 73.
+
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-light-slot-1-initial` / slot 1 / raw 73 / R0: “The palette's selected row has a light background, dark text, and a prominent blue border, which directly violates the contract specifying an accent background with rail-colored text and no border.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-light-slot-1-initial` / slot 1 / raw 73 / R1: “The secondary description 'src/app.ts' in the selected palette row remains a muted color rather than inheriting the exact text color of the selected row as required.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-light-slot-1-initial` / slot 1 / raw 73 / R2: “The search input and the selected row share identical heavy blue borders and styling, blurring the visual hierarchy between the text entry field and the list of results.”
+- Disclosed contract observation / `113b4edf975adb9798c6-light-slot-1-initial` / slot 1 / raw 73 / R3: “The selected worktree 'main' should use the solid blue background with white text shown in the golden image instead of a neutral gray background.”
+- `113b4edf975adb9798c6-light-slot-2-initial` / slot 2: no admitted assessment; response-shape: Reviewer response must contain only one strict contract-aware JSON object.
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-light-slot-2-replacement` / slot 2 / raw 64 / R0: “The selected quick-open row has a light background with black and gray text, violating the requirement for an accent background with rail-colored text for both name and description.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-light-slot-2-replacement` / slot 2 / raw 64 / R1: “The selected row in the palette incorrectly displays a visible border, failing the requirement that selected row blocks have no border.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-light-slot-2-replacement` / slot 2 / raw 64 / R2: “The editor tablist uses an underline style with a bottom accent rule instead of the boxed tab design shown in the golden reference.”
+- Host/surrounding context / `113b4edf975adb9798c6-light-slot-2-replacement` / slot 2 / raw 64 / R3: “The selected item in the Worktrees sidebar uses a neutral background with a bold name, rather than the blue accent background seen in the golden.”
+- Disclosed contract observation / `113b4edf975adb9798c6-light-slot-2-replacement` / slot 2 / raw 64 / R4: “The application rail and header backgrounds should be white to match the golden reference, rather than the distinct light gray used in the capture.”
+- Plugin visual allegation (unconfirmed) / `113b4edf975adb9798c6-light-slot-3-initial` / slot 3 / raw 83 / R0: “The selected palette row in the Go to File modal incorrectly uses a light background with a blue border and dark text, violating the requirement for an accent background, no border, and rail-colored text.”
+- Host/surrounding context / `113b4edf975adb9798c6-light-slot-3-initial` / slot 3 / raw 83 / R1: “The Worktrees panel selected row uses a neutral grey background and black text, rather than the blue accent background with white text shown in the older reference image.”
+
+##### quirky.feedback
+
+No originally failing or invalid cells; its nominally passing samples were also audited.
+
+##### quirky.git
+
+###### `view:quirky.git/ai-settings` / light
+
+Original status fail; original median 75.
+
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-1-initial` / slot 1 / raw 88 / R0: “The Open views tab 'Source Control AI defaults' lacks the required inset 2px bottom accent underline for selected tabs, showing only a standard bottom border.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-1-initial` / slot 1 / raw 88 / R1: “The 'All' and 'Needs you' tabs in the Worktrees panel incorrectly use an underline style instead of retaining their required boxed default style.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-1-initial` / slot 1 / raw 88 / R2: “Several child items under the 'main' worktree (e.g., 'Worker assignment unverified') span multiple lines, violating the strict single-line 26px layout requirement for Worktrees rows.”
+- Plugin visual allegation (unconfirmed) / `c37a55ad1e48bd80a593-light-slot-1-initial` / slot 1 / raw 88 / R3: “Vertical spacing is entirely missing between the 'Refresh models' and 'Use inherited launch choices' buttons and their preceding text inputs in the central form.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-1-initial` / slot 1 / raw 88 / R4: “The selected worktree row 'main' has a neutral gray background instead of the blue accent background shown in the golden reference.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-2-initial` / slot 2 / raw 75 / R0: “The middle and right panels are missing the required host rail gaps and rounded corners, causing the white surfaces to bleed into each other.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-2-initial` / slot 2 / raw 75 / R1: “The Worktrees selected row 'main' uses a neutral background rather than the blue accent color shown in the golden image.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-2-initial` / slot 2 / raw 75 / R2: “The Worktrees 'All' and 'Needs you 3' tabs use an underline style instead of the boxed tab style seen in the older golden.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-2-initial` / slot 2 / raw 75 / R3: “The Worktrees list contains a large multi-line block under the 'main' item, violating the redesign rule that requires single-line 26px rows.”
+- Plugin visual allegation (unconfirmed) / `c37a55ad1e48bd80a593-light-slot-2-initial` / slot 2 / raw 75 / R4: “The 'Use inherited launch choices' button uses light gray text on a light gray background, causing illegibility.”
+- Plugin visual allegation (unconfirmed) / `c37a55ad1e48bd80a593-light-slot-2-initial` / slot 2 / raw 75 / R5: “The 'Commit message' and 'Commit failure fixes' section headers in the main view use disproportionately large and bold typography, disrupting the visual hierarchy.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-3-initial` / slot 3 / raw 74 / R0: “The application shell's background is solid white, missing the required `--ui-rail` (#eef0f3) color for the side rails and gaps between panels. This eliminates the visual boundaries between the frame and content panels.”
+- Host/surrounding context / `c37a55ad1e48bd80a593-light-slot-3-initial` / slot 3 / raw 74 / R1: “Tab styles are incorrectly inverted: the main open view tab ('Source Control AI defaults') incorrectly uses a boxed tab style, while the Worktrees panel incorrectly uses the underline style. The contract requires open views to use the underline style and other tabs to remain boxed.”
+
+###### `view:quirky.git/diff` / dark
+
+Original status fail; original median 80.
+
+- Plugin visual allegation (unconfirmed) / `1ffe979c912f27358285-dark-slot-1-initial` / slot 1 / raw 78 / R0: “The application panels are rectangular and touching without the thick dark rail gaps and rounded corners seen in the golden reference.”
+- Host/surrounding context / `1ffe979c912f27358285-dark-slot-1-initial` / slot 1 / raw 78 / R1: “The 'main' worktree entry contains multi-line text blocks, whereas the worktree rows should maintain a single-line height.”
+- Plugin visual allegation (unconfirmed) / `1ffe979c912f27358285-dark-slot-1-initial` / slot 1 / raw 78 / R2: “The selected 'Diff' tab lacks the required 2px inset accent underline and bottom border to distinguish it as an active tab.”
+- Host/surrounding context / `1ffe979c912f27358285-dark-slot-1-initial` / slot 1 / raw 78 / R3: “The selected worktree row 'main' uses a neutral dark background, deviating from the bright blue background used for selected worktrees in the golden.”
+- Plugin visual allegation (unconfirmed) / `1ffe979c912f27358285-dark-slot-1-initial` / slot 1 / raw 78 / R4: “The 'Diff' tab is missing the blue top border that highlights active tabs in the golden reference.”
+- Host/surrounding context / `1ffe979c912f27358285-dark-slot-2-initial` / slot 2 / raw 80 / R0: “The Worktrees panel differs from the golden by using single-line rows, a neutral background for the selected item, and introducing saved-view tabs.”
+- Host/surrounding context / `1ffe979c912f27358285-dark-slot-2-initial` / slot 2 / raw 80 / R1: “The main application panels are touching each other and the window edges, missing the thick host gaps that should reveal the rail background.”
+- Host/surrounding context / `1ffe979c912f27358285-dark-slot-2-initial` / slot 2 / raw 80 / R2: “The tabs in the Worktrees panel use an underline style, violating the requirement that tabs outside of Open views and palette Search scope must retain their boxed default.”
+- Disclosed contract observation / `1ffe979c912f27358285-dark-slot-3-initial` / slot 3 / raw 85 / R0: “The selected Worktree row 'main' should use a blue accent background to match the golden reference, rather than the neutral gray background.”
+- Host/surrounding context / `1ffe979c912f27358285-dark-slot-3-initial` / slot 3 / raw 85 / R1: “The child rows in the Worktrees list (e.g., 'Worker assignment unverified') span multiple lines, violating the requirement that Worktrees rows must be single-line 26px.”
+- Host/surrounding context / `1ffe979c912f27358285-dark-slot-3-initial` / slot 3 / raw 85 / R2: “The saved-view tabs 'All' and 'Needs you 3' in the Worktrees sidebar use an underline style instead of the required boxed default.”
+- Host/surrounding context / `1ffe979c912f27358285-dark-slot-3-initial` / slot 3 / raw 85 / R3: “The Open views tablist component is entirely missing from the top of the main editor area.”
+- Plugin visual allegation (unconfirmed) / `1ffe979c912f27358285-dark-slot-3-initial` / slot 3 / raw 85 / R4: “Inside the diff view, the code text and highlight backgrounds are severely misaligned from the line numbers, leaving large gaps and a misplaced line wrap indicator (↰).”
+
+###### `view:quirky.git/diff` / light
+
+Original status fail; original median 83.
+
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-1-initial` / slot 1 / raw 65 / R0: “The host frame is completely white with touching panels, lacking the gray rail background, gaps, and rounded corners between sidebars and the central area.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-1-initial` / slot 1 / raw 65 / R1: “The Worktrees sidebar tabs ('All', 'Needs you') are styled with underlines instead of the required existing boxed default style.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-1-initial` / slot 1 / raw 65 / R2: “The selected Worktrees row 'main' uses a neutral gray background and single-line layout rather than the blue background and multi-line density seen in the older golden reference.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-2-initial` / slot 2 / raw 83 / R0: “The gap between the central Diff panel and the right Agent Dashboard panel is missing, causing the two white surfaces to touch directly, and the adjacent top corners of these panels are improperly sharp instead of rounded.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-2-initial` / slot 2 / raw 83 / R1: “The 'Diff' tab at the top of the central panel is missing the required 2px bottom accent underline for a selected open view.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-2-initial` / slot 2 / raw 83 / R2: “In the bottom right corner of the status bar, several icons and elements (next to 'Usage Used') are severely squished and overlapping each other.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-2-initial` / slot 2 / raw 83 / R3: “The Worktrees plugin's selected row uses a neutral grey background with bold text instead of the blue background seen in the golden, and has single-line density with 12px indentation.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-3-initial` / slot 3 / raw 83 / R0: “The Open views tab 'Diff' uses an underline instead of the boxed tab styling from the golden.”
+- Plugin visual allegation (unconfirmed) / `1ffe979c912f27358285-light-slot-3-initial` / slot 3 / raw 83 / R1: “The selected 'main' worktree has a neutral background instead of the blue selection color seen in the golden.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-3-initial` / slot 3 / raw 83 / R2: “Worktree list items like 'Coordinator' and 'Worker assignment' are multi-line and wrap improperly, violating the single-line constraint.”
+- Host/surrounding context / `1ffe979c912f27358285-light-slot-3-initial` / slot 3 / raw 83 / R3: “The 'Agent Dashboard' right panel incorrectly uses the gray rail background color instead of the white surface color.”
+
+###### `panel:quirky.git/source-control` / dark
+
+Original status fail; original median 84.
+
+- Host/surrounding context / `2f637d3069aa1cacea89-dark-slot-1-initial` / slot 1 / raw 84 / R0: “Host panels are completely flush and touching without the required gaps or rounded corners, violating the host frame styling seen in the golden image.”
+- Host/surrounding context / `2f637d3069aa1cacea89-dark-slot-1-initial` / slot 1 / raw 84 / R1: “The 'Get started' button in the Mobile section at the bottom of the left panel is vertically clipped by the panel's bottom edge.”
+- Plugin visual allegation (unconfirmed) / `2f637d3069aa1cacea89-dark-slot-1-initial` / slot 1 / raw 84 / R2: “The 'Changes' header in the Source Control panel lacks top padding, appearing cramped against the top edge of the container.”
+- Host/surrounding context / `2f637d3069aa1cacea89-dark-slot-1-initial` / slot 1 / raw 84 / R3: “The selected 'main' row in the Worktrees panel lacks the blue accent background shown in the older golden image, using a neutral background instead.”
+- Plugin visual allegation (unconfirmed) / `2f637d3069aa1cacea89-dark-slot-1-initial` / slot 1 / raw 84 / R4: “The 'All' tab in the left panel incorrectly uses an underline instead of the boxed, rounded tab style seen in the golden reference.”
+- `2f637d3069aa1cacea89-dark-slot-2-initial` / slot 2: no admitted assessment; response-shape: Contract conflict IDs must be unique.
+- Plugin visual allegation (unconfirmed) / `2f637d3069aa1cacea89-dark-slot-2-replacement` / slot 2 / raw 79 / R0: “In the right Changes panel, the 'main -&gt; origin/main' subheader text has zero left margin, causing it to incorrectly touch the panel's left border.”
+- Host/surrounding context / `2f637d3069aa1cacea89-dark-slot-2-replacement` / slot 2 / raw 79 / R1: “The 'Get started' button in the bottom-left Mobile panel is vertically clipped by the bottom edge of its container, partially hiding the button.”
+- Host/surrounding context / `2f637d3069aa1cacea89-dark-slot-2-replacement` / slot 2 / raw 79 / R2: “The right-hand Changes panel lacks outer host gaps and rounded corners on its right edge, improperly sitting completely flush against the right icon rail.”
+- Disclosed contract observation / `2f637d3069aa1cacea89-dark-slot-2-replacement` / slot 2 / raw 79 / R3: “The selected 'main' row in the Worktrees list incorrectly uses a neutral gray background instead of the blue accent color seen in the reference golden, and it is styled as a single line rather than two lines.”
+- Host/surrounding context / `2f637d3069aa1cacea89-dark-slot-3-initial` / slot 3 / raw 88 / R0: “In the left panel's Mobile section, the blue 'Get started' button is severely clipped horizontally by the bottom status bar, indicating a missing bottom margin or container layout defect.”
+- Audit-invalid content/scope reason / `2f637d3069aa1cacea89-dark-slot-3-initial` / slot 3 / raw 88 / R1: “In the bottom status bar, the resource pill redundantly displays the text 'Usage Used' instead of a numeric percentage, pointing to a broken component state.”
+- Host/surrounding context / `2f637d3069aa1cacea89-dark-slot-3-initial` / slot 3 / raw 88 / R2: “The selected worktree row 'main' features a neutral gray background instead of the distinct blue selection background established in the golden reference image.”
+
+###### `status-bar:quirky.git/ahead-behind` / dark
+
+Original status fail; original median 83.
+
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R0: “The window is missing its bottom rounded corners and the status bar is missing its 1px solid top border, violating host frame separation.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R1: “The right side of the status bar lacks internal padding, causing the rightmost icon to clip directly against the screen edge.”
+- Disclosed contract observation / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R2: “The selected item in the Worktrees panel incorrectly uses a neutral background instead of the blue selection color seen in the golden reference.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R3: “The selected row in the open palette uses a neutral background instead of the required accent color with rail-colored text.”
+- Disclosed contract observation / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R4: “The Ledger panel tabs use a boxed style and should be updated to the new standard with a 2px bottom accent underline.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R5: “The palette list is missing its required 8px padding on every side, causing the rows to touch the container edges.”
+- Disclosed contract observation / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R6: “The Checks widget is missing from the status bar and must be added back to match the golden reference.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R7: “The description text for the selected palette row should use a lighter shade of gray to improve contrast, rather than inheriting the rail text color.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-1-initial` / slot 1 / raw 73 / R8: “The palette list padding should be increased to 12px on every side to provide better visual breathing room and match modern density standards.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-2-initial` / slot 2 / raw 92 / R0: “The ahead and behind status bar widget correctly displays the directional arrows and numeric counts with consistent typography and color.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-2-initial` / slot 2 / raw 92 / R1: “The Worktrees and Tasks panels are touching vertically without the required host gap.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-2-initial` / slot 2 / raw 92 / R2: “The red notification badge on the top-left floats outside the panel bounds into the window rail region.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-2-initial` / slot 2 / raw 92 / R3: “The selected Worktree row uses a neutral dark background rather than the golden's bright blue.”
+- Plugin visual allegation (unconfirmed) / `b9baeffedaa6d9f1a636-dark-slot-2-initial` / slot 2 / raw 92 / R4: “The editor tab uses an underline selection indicator instead of the boxed tab style seen in the golden.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-3-initial` / slot 3 / raw 83 / R0: “The Worktrees list incorrectly displays multi-line row content (such as the descriptions under 'main'), violating the strict single-line 26px density requirement.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-3-initial` / slot 3 / raw 83 / R1: “Tabs in the Worktrees panel ('All', 'Needs you 3') improperly use the underline style instead of retaining the required boxed default for non-Open views.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-3-initial` / slot 3 / raw 83 / R2: “The target ahead-behind status indicator ('↑1 ↓1') properly implements the expected spacing, typography, and muted palette.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-3-initial` / slot 3 / raw 83 / R3: “The status bar is missing the 'Checks 12/14' data indicator present in the golden image.”
+- Host/surrounding context / `b9baeffedaa6d9f1a636-dark-slot-3-initial` / slot 3 / raw 83 / R4: “The Open views tab 'UI Review Fixture Shell' uses an underline style instead of the boxed style seen in older references.”
+
+##### quirky.handoff
+
+###### `view:quirky.handoff/settings` / light
+
+Original status fail; original median 81.
+
+- Plugin visual allegation (unconfirmed) / `fdecbb37e093ccf83ebd-light-slot-1-initial` / slot 1 / raw 81 / R0: “The left panel column and center workspace panel are touching without the required grey structural gap between them.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-1-initial` / slot 1 / raw 81 / R1: “The main content panels lack the rounded corners present in the golden design, displaying sharp square corners instead.”
+- Plugin visual allegation (unconfirmed) / `fdecbb37e093ccf83ebd-light-slot-1-initial` / slot 1 / raw 81 / R2: “The 'Reset to defaults' button text in the center panel is extremely faint and unreadable against the white background.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-2-initial` / slot 2 / raw 76 / R0: “The selected Worktrees row incorrectly uses a blue background instead of neutral var(--ui-selected) and expands to multiple lines, violating the single-line redesign rule.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-2-initial` / slot 2 / raw 76 / R1: “The main layout panels (Worktrees, Open views, Agent Dashboard) incorrectly lack top gray gaps and rounded corners, touching the top header directly.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-2-initial` / slot 2 / raw 76 / R2: “The Worktrees panel tabs ('All' and 'Needs you 3') incorrectly use the underline tab style instead of keeping their required boxed default.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-3-initial` / slot 3 / raw 84 / R0: “The central 'Session handoff' panel and the right 'Agent Dashboard' panel are touching directly, missing the required gray host rail gap between them.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-3-initial` / slot 3 / raw 84 / R1: “The 'All' and 'Needs you 3' tabs in the Worktrees panel incorrectly use the underline style instead of retaining their required boxed default.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-3-initial` / slot 3 / raw 84 / R2: “The Worktrees panel contains multi-line nested items, violating the redesign requirement that all Worktrees rows be single-line 26px.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-3-initial` / slot 3 / raw 84 / R3: “The selected Worktrees row 'main' has a neutral gray background instead of the blue accent color shown in the golden.”
+- Host/surrounding context / `fdecbb37e093ccf83ebd-light-slot-3-initial` / slot 3 / raw 84 / R4: “The 'Session handoff' main view tab has a bottom underline and no top border, instead of the boxed tab design seen in the older golden.”
+
+###### `overlay:quirky.handoff/dialog` / light
+
+Original status invalid; original median null.
+
+- Plugin visual allegation (unconfirmed) / `f4da6fea2c538df058e9-light-slot-1-initial` / slot 1 / raw 80 / R0: “The 'Continue in New Session' dialog exceeds the viewport height and is vertically clipped at the bottom, cutting off its lower padding and corners.”
+- Host/surrounding context / `f4da6fea2c538df058e9-light-slot-1-initial` / slot 1 / raw 80 / R1: “Several Worktree rows in the left rail (e.g., 'Coordinator...') are multi-line, which violates the approved single-line row layout constraint.”
+- Plugin visual allegation (unconfirmed) / `f4da6fea2c538df058e9-light-slot-1-initial` / slot 1 / raw 80 / R2: “The long path string in the Destination section input lacks proper internal horizontal padding, causing the text to sit flush against the input border.”
+- Disclosed contract observation / `f4da6fea2c538df058e9-light-slot-1-initial` / slot 1 / raw 80 / R3: “The selected 'main' worktree row incorrectly uses a neutral gray background instead of the bright blue selection color shown in the golden.”
+- Disclosed contract observation / `f4da6fea2c538df058e9-light-slot-1-initial` / slot 1 / raw 80 / R4: “The left rail incorrectly uses a gray background instead of matching the white background of the main content surface.”
+- Host/surrounding context / `f4da6fea2c538df058e9-light-slot-2-initial` / slot 2 / raw 82 / R0: “The Worktrees tablist container is missing the required continuous 1px solid bottom border across its width.”
+- Host/surrounding context / `f4da6fea2c538df058e9-light-slot-2-initial` / slot 2 / raw 82 / R1: “The Worktrees list incorrectly contains multi-line item content (e.g., 'Coordinator · UI review coordinator'), which violates the single-line 26px constraint.”
+- Plugin visual allegation (unconfirmed) / `f4da6fea2c538df058e9-light-slot-2-initial` / slot 2 / raw 82 / R2: “The 'Continue in New Session' dialog's close button uses a heavy blue outline that overpowers the primary dialog actions and breaks standard muted icon button conventions.”
+- Disclosed contract observation / `f4da6fea2c538df058e9-light-slot-2-initial` / slot 2 / raw 82 / R3: “The selected worktree row should use a solid blue background and white text to match the visual styling of the older golden reference.”
+- `f4da6fea2c538df058e9-light-slot-3-initial` / slot 3: no admitted assessment; invalid-sample: Reviewer did not confirm reading both image files.
+
+##### quirky.heimdall
+
+###### `view:quirky.heimdall/fleet` / light
+
+Original status fail; original median 69.
+
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-1-initial` / slot 1 / raw 83 / R0: “Worktree row items such as 'Coordinator' and 'Worker assignment unverified' wrap to multiple lines, violating the required single-line 26px layout.”
+- Plugin visual allegation (unconfirmed) / `99aef78e6dfc80d9e015-light-slot-1-initial` / slot 1 / raw 83 / R1: “The placeholder text 'No persisted watcher action attempts yet' in the Heimdall panel is vertically clipped at the bottom boundary, exposing a padding or overflow issue.”
+- Plugin visual allegation (unconfirmed) / `99aef78e6dfc80d9e015-light-slot-1-initial` / slot 1 / raw 83 / R2: “The inner panels, including the main workspace and Heimdall sidebar, lack bottom gaps and rounded corners where they meet the bottom window edge.”
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-1-initial` / slot 1 / raw 83 / R3: “The Worktrees selected item 'main' has a neutral background rather than the blue accent color shown in the golden image.”
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-1-initial` / slot 1 / raw 83 / R4: “The tabs in the Worktrees panel use a bottom underline style rather than the boxed style present in the golden image.”
+- `99aef78e6dfc80d9e015-light-slot-2-initial` / slot 2: no admitted assessment; response-shape: Contract conflict IDs must be unique.
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-2-replacement` / slot 2 / raw 69 / R0: “The shell layout lacks the required gray (--ui-rail) structural gaps and rounded corners for its panels; the sidebars and main view merge into a flat surface.”
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-2-replacement` / slot 2 / raw 69 / R1: “The 'Quirky' tab in the main open views area is missing the required inset 2px bottom accent underline and 1px solid bottom border for the tablist.”
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-2-replacement` / slot 2 / raw 69 / R2: “Nested items within the Worktrees list (e.g., 'Coordinator', 'Worker assignment unverified') incorrectly span multiple lines, violating the rule that rows must be single-line 26px.”
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-3-initial` / slot 3 / raw 56 / R0: “The host shell layout lacks the required gray rail gaps and rounded corners between main panels, creating a monolithic all-white frame with touching panes.”
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-3-initial` / slot 3 / raw 56 / R1: “The active 'All' tab in the Worktrees panel uses a black bottom underline instead of the specified accent color.”
+- Host/surrounding context / `99aef78e6dfc80d9e015-light-slot-3-initial` / slot 3 / raw 56 / R2: “Worktrees list items such as the 'Coordinator' entry incorrectly span multiple lines, violating the approved single-line density constraint.”
+
+##### quirky.ledger
+
+###### `view:quirky.ledger/ledger` / light
+
+Original status fail; original median 80.
+
+- Plugin visual allegation (unconfirmed) / `80a8e18d0e00e2e3c0c0-light-slot-1-initial` / slot 1 / raw 89 / R0: “In the Project Ledger view, the refresh icon is vertically misaligned and disconnected from the 'Attached and detached ledgers for this runtime' text.”
+- Host/surrounding context / `80a8e18d0e00e2e3c0c0-light-slot-1-initial` / slot 1 / raw 89 / R1: “In the left sidebar, the text 'No persisted watcher action attempts yet' inside the Heimdall panel is vertically clipped at the bottom of its scrollable area.”
+- Host/surrounding context / `80a8e18d0e00e2e3c0c0-light-slot-1-initial` / slot 1 / raw 89 / R2: “In the Worktrees panel, child items such as 'Coordinator · UI review coordinator' are incorrectly rendered as tall multiline blocks, violating the single-line 26px density rule.”
+- Plugin visual allegation (unconfirmed) / `80a8e18d0e00e2e3c0c0-light-slot-1-initial` / slot 1 / raw 89 / R3: “An unexpected 'Input blocked' popup appears in the bottom right of the main panel, obscuring the view as a capture artifact.”
+- Host/surrounding context / `80a8e18d0e00e2e3c0c0-light-slot-2-initial` / slot 2 / raw 78 / R0: “The host frame's rail and gaps between panels are rendered in white instead of the required light theme rail token color, removing the intended visual separation.”
+- Host/surrounding context / `80a8e18d0e00e2e3c0c0-light-slot-2-initial` / slot 2 / raw 78 / R1: “In the Worktrees panel, several rows are incorrectly rendering with multiple lines of text, violating the single-line 26px density requirement.”
+- Plugin visual allegation (unconfirmed) / `80a8e18d0e00e2e3c0c0-light-slot-2-initial` / slot 2 / raw 78 / R2: “The refresh icon in the Project Ledger view is awkwardly positioned on its own line above the text rather than being properly aligned with the content.”
+- Plugin visual allegation (unconfirmed) / `80a8e18d0e00e2e3c0c0-light-slot-3-initial` / slot 3 / raw 80 / R0: “The Project Ledger tab uses a bottom accent underline instead of the boxed tab style seen in the golden image.”
+- Host/surrounding context / `80a8e18d0e00e2e3c0c0-light-slot-3-initial` / slot 3 / raw 80 / R1: “The Worktrees active selection has a neutral gray background rather than the blue accent background shown in the older golden image.”
+- Host/surrounding context / `80a8e18d0e00e2e3c0c0-light-slot-3-initial` / slot 3 / raw 80 / R2: “The application shell frame and gaps are rendered entirely in white instead of the expected --ui-rail token color, eliminating visual separation between panels.”
+- Host/surrounding context / `80a8e18d0e00e2e3c0c0-light-slot-3-initial` / slot 3 / raw 80 / R3: “The Worktrees list displays a multi-line entry, which violates the redesign requirement for single-line 26px rows.”
+- Plugin visual allegation (unconfirmed) / `80a8e18d0e00e2e3c0c0-light-slot-3-initial` / slot 3 / raw 80 / R4: “The tablist in the main view is missing the required 1px solid bottom rule spanning its full width.”
+
+###### `panel:quirky.ledger/ledger` / dark
+
+Original status fail; original median 82.
+
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-dark-slot-1-initial` / slot 1 / raw 81 / R0: “Worktrees rows ('Coordinator', 'Worker assignment unverified') render on multiple lines with subtitles below titles, violating the approved redesign constraint that requires single-line 26px rows.”
+- Plugin visual allegation (unconfirmed) / `bed50e8eb1fe9a2fc4dc-dark-slot-1-initial` / slot 1 / raw 81 / R1: “In the Ledger panel, the empty state text ('Open a workspace...') is horizontally centered, but left-aligned list icons (check, filter, plus) erroneously render without text, breaking the layout.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-dark-slot-1-initial` / slot 1 / raw 81 / R2: “The 'Mobile' panel lacks bottom padding, causing the text 'Pair Quirky Mobile directly with this desktop to' to touch the bottom border and risk clipping.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-dark-slot-2-initial` / slot 2 / raw 82 / R0: “The application panels (Worktrees, central workspace, Ledger) are flush against each other and separated only by 1px borders, failing to implement the structural dark host gaps and rounded corners defined in the golden reference.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-dark-slot-2-initial` / slot 2 / raw 82 / R1: “The Worktrees panel's selected row uses a neutral selection background and a bold font weight, contrasting with the blue accent selection style shown in the older golden image.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-dark-slot-3-initial` / slot 3 / raw 85 / R0: “The left sidebar panels (Worktrees and Mobile) are touching directly without the required host rail gaps or rounded corners.”
+- Plugin visual allegation (unconfirmed) / `bed50e8eb1fe9a2fc4dc-dark-slot-3-initial` / slot 3 / raw 85 / R1: “The Ledger panel tabs ('Worktree', 'Project') use a fully rounded pill shape with a bright, high-contrast border rather than the expected subtle boxed default styling.”
+
+###### `panel:quirky.ledger/ledger` / light
+
+Original status fail; original median 75.
+
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-light-slot-1-initial` / slot 1 / raw 71 / R0: “The shell frame fails to separate panels; the left sidebar, main content area, and Ledger bottom panel touch directly without the standard var(--ui-rail) background gaps and rounded corners.”
+- Plugin visual allegation (unconfirmed) / `bed50e8eb1fe9a2fc4dc-light-slot-1-initial` / slot 1 / raw 71 / R1: “Inside the Ledger panel, a left-aligned vertical column of tight, unspaced icons (refresh, check, filter, plus) disrupts the expected horizontal row layout.”
+- Audit-invalid content/scope reason / `bed50e8eb1fe9a2fc4dc-light-slot-1-initial` / slot 1 / raw 71 / R2: “The main workspace area lacks standard file tabs and editor chrome, showing only a plain 'Quirky' header and centered empty-state text.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-light-slot-1-initial` / slot 1 / raw 71 / R3: “The Worktrees panel uses a neutral gray background for its active row selection instead of the bright blue highlight shown in the golden reference.”
+- Audit-invalid content/scope reason / `bed50e8eb1fe9a2fc4dc-light-slot-2-initial` / slot 2 / raw 88 / R0: “The Ledger panel header includes an unauthorized minus (collapse) control on the far right, which is absent in the golden, violating the contract against inventing product controls.”
+- Plugin visual allegation (unconfirmed) / `bed50e8eb1fe9a2fc4dc-light-slot-2-initial` / slot 2 / raw 88 / R1: “The Ledger panel incorrectly adds a horizontal divider line below the header and a vertical divider next to the left icon column, whereas the golden uses whitespace for separation.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-light-slot-2-initial` / slot 2 / raw 88 / R2: “The Worktrees sidebar tabs ('All', 'Needs you 3') incorrectly use the underline tab style instead of the boxed default required for sidebars.”
+- Plugin visual allegation (unconfirmed) / `bed50e8eb1fe9a2fc4dc-light-slot-2-initial` / slot 2 / raw 88 / R3: “The selected boxed tab in the Ledger panel ('Worktree') has black text, missing the accent (blue) text color shown for active boxed tabs in the golden.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-light-slot-2-initial` / slot 2 / raw 88 / R4: “The Worktrees sidebar rows use a single-line layout and a neutral selection color instead of the multi-line layout and blue selection seen in the golden.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-light-slot-3-initial` / slot 3 / raw 75 / R0: “The host frame lacks the required gaps between panels and uses a white background for the rail instead of the specified grey (--ui-rail), causing panels to touch directly without rounded corners.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-light-slot-3-initial` / slot 3 / raw 75 / R1: “The Worktrees panel contains multi-line rows (e.g., 'Coordinator'), violating the requirement that Worktrees rows must be single-line 26px.”
+- Plugin visual allegation (unconfirmed) / `bed50e8eb1fe9a2fc4dc-light-slot-3-initial` / slot 3 / raw 75 / R2: “The selected boxed tab ('Worktree') in the Ledger panel uses a grey border and text color, failing to match the accent color styling seen in the golden.”
+- Host/surrounding context / `bed50e8eb1fe9a2fc4dc-light-slot-3-initial` / slot 3 / raw 75 / R3: “The selected 'Quirky' tab in the center Open view lacks the required inset 2px bottom accent underline and uses muted text instead of the primary foreground color.”
+
+##### quirky.loops
+
+###### `overlay:quirky.loops/dialogs` / dark
+
+Original status fail; original median 80.
+
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-dark-slot-1-initial` / slot 1 / raw 80 / R0: “The New loop dialog lacks a backdrop or distinct drop shadow, causing its surface to visually blend into the main editor area with only a 1px border for separation.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-1-initial` / slot 1 / raw 80 / R1: “In the Worktrees panel, the saved-view tabs ('All') incorrectly use the underline tab style instead of keeping the required boxed default for non-open-view tabs.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-1-initial` / slot 1 / raw 80 / R2: “The selected Worktrees row ('main') uses a normal font weight, which violates the contract requirement for a bold name upon selection.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-1-initial` / slot 1 / raw 80 / R3: “Worktrees rows are single-line and use a neutral selection color rather than being multiline with a blue selection background as seen in the older golden.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-1-initial` / slot 1 / raw 80 / R4: “The main shell panels are separated only by 1px borders, lacking the thick host gaps that reveal the rail background as seen in the golden reference.”
+- `0edf5d495c56fd382c70-dark-slot-2-initial` / slot 2: no admitted assessment; response-shape: Contract conflict IDs must be unique.
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-2-replacement` / slot 2 / raw 81 / R0: “The Worktrees panel contains rows with multi-line text layouts (e.g., Coordinator and Worker assignment entries) rather than the required single-line 26px rows with 4px gaps.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-2-replacement` / slot 2 / raw 81 / R1: “The older golden reference depicts a selected Worktrees row with a blue accent background, which conflicts with the approved redesign mandating a neutral var(--ui-selected) selection.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-2-replacement` / slot 2 / raw 81 / R2: “The 'All' and 'Needs you 3' saved-view tabs in the Worktrees panel appear as floating text lacking any boxed tab container or underline, failing to provide a clear active tab indicator.”
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-dark-slot-2-replacement` / slot 2 / raw 81 / R3: “The focused 'Prompt' textarea in the 'New loop' dialog uses a stark thick blue outline that visually clashes with the other subdued input borders in the dialog.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-3-initial` / slot 3 / raw 79 / R0: “The host shell layout incorrectly omits required gaps and rounded corners between panels, leaving the rail, sidebars, and workspace touching directly.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-3-initial` / slot 3 / raw 79 / R1: “Worktrees rows incorrectly display multi-line content (e.g., 'Coordinator...') instead of adhering to the required single-line 26px density.”
+- Host/surrounding context / `0edf5d495c56fd382c70-dark-slot-3-initial` / slot 3 / raw 79 / R2: “The Worktrees header incorrectly uses the underline tab style for 'All' and 'Needs you 3', which violates the rule reserving this style for Open views and Search.”
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-dark-slot-3-initial` / slot 3 / raw 79 / R3: “The new loop dialog correctly applies the surface and accent theme tokens, presenting a clear visual hierarchy for its inputs and actions.”
+
+###### `overlay:quirky.loops/dialogs` / light
+
+Original status fail; original median 74.
+
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-light-slot-1-initial` / slot 1 / raw 74 / R0: “The 'New loop' overlay lacks a drop shadow or darkened backdrop scrim, causing its white surface to blend directly into the white workspace background and breaking visual elevation.”
+- Host/surrounding context / `0edf5d495c56fd382c70-light-slot-1-initial` / slot 1 / raw 74 / R1: “The Worktrees list incorrectly renders multi-line items (e.g., 'Worker assignment unverified'), violating the approved redesign that requires strictly single-line 26px rows.”
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-light-slot-1-initial` / slot 1 / raw 74 / R2: “The 'Prompt' textarea uses a noticeably larger, more rounded border radius than the other input fields in the dialog, breaking shared component consistency.”
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-light-slot-1-initial` / slot 1 / raw 74 / R3: “The dialog's primary action buttons ('Cancel' and 'Start loop') are incorrectly left-aligned rather than right-aligned or expanded to full width, disrupting standard layout conventions.”
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-light-slot-1-initial` / slot 1 / raw 74 / R4: “Vertical spacing within the dialog is uneven, leaving the descriptive text 'Run an agent...' cramped awkwardly against the action buttons with insufficient padding.”
+- Host/surrounding context / `0edf5d495c56fd382c70-light-slot-2-initial` / slot 2 / raw 88 / R0: “Worktrees list items incorrectly display multi-line text content (e.g., Coordinator details), violating the required single-line 26px layout.”
+- Disclosed contract observation / `0edf5d495c56fd382c70-light-slot-2-initial` / slot 2 / raw 88 / R1: “The Worktrees panel fails to use the vibrant blue background for active selection seen in the golden reference, making the active state appear too neutral.”
+- Host/surrounding context / `0edf5d495c56fd382c70-light-slot-2-initial` / slot 2 / raw 88 / R2: “Worktrees tabs ('All', 'Needs you') incorrectly use an underline style instead of the boxed default required for tabs outside of Open views.”
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-light-slot-2-initial` / slot 2 / raw 88 / R3: “The 'New loop' dialog overlay demonstrates proper component layout, using appropriate spacing, typography, and accent colors for its primary actions.”
+- Plugin visual allegation (unconfirmed) / `0edf5d495c56fd382c70-light-slot-3-initial` / slot 3 / raw 66 / R0: “The application frame is missing the gray rail gaps between the left sidebar, center workspace, and right sidebar, resulting in continuous white panels that touch directly.”
+- Host/surrounding context / `0edf5d495c56fd382c70-light-slot-3-initial` / slot 3 / raw 66 / R1: “The Worktrees sidebar contains entries rendering across multiple lines (e.g., 'Coordinator', 'Worker assignment unverified'), violating the single-line row specification.”
+- Host/surrounding context / `0edf5d495c56fd382c70-light-slot-3-initial` / slot 3 / raw 66 / R2: “The selected worktree row ('main') uses a regular font weight instead of the required bold typography.”
+
 
 #### All 12 rejected raw responses/logs examined
 | Plugin / target / theme / slot | Attempt ID | Original issue | Raw submitted dimensions (palette, typography, spacing, components, hierarchy) | Links |
@@ -1202,7 +1785,7 @@ No failing/invalid cells. Both CLI theme triples and all six audits/raw response
 - U — unconfirmed own-target visual claims (unchanged):
   - s2/replacement:r2: “The empty state text 'No pull request selected...' in the main view lacks adequate top padding, sitting uncomfortably close to the tab bar.”
 
-**`view:quirky.reviews/settings` — light: original invalid, median None.**
+**`view:quirky.reviews/settings` — light: original invalid, median null.**
 - H/context example (s1:r0): “The selected worktree in the left pane has a gray background with bold text, but should be blue with white text and taller padding to match the reference image.”
 - All H/context/approved-rule-discussion refs: s1:r0, s1:r1, s1:r2.
 - U — unconfirmed own-target visual claims (unchanged):
@@ -1246,7 +1829,7 @@ No failing/invalid cells. Both CLI theme triples and all six audits/raw response
 - U: no own-target visual defect claim in validated sample reasons.
 - Positive observations, not defect claims: s1:r3.
 
-**`panel:quirky.session-info/info` — light: original invalid, median None.**
+**`panel:quirky.session-info/info` — light: original invalid, median null.**
 - H/context example (s2:r0): “The center main panel and the right 'Session info' panel are directly touching without the required gray host frame gap between them.”
 - All H/context/approved-rule-discussion refs: s1:r1, s1:r2, s1:r3, s2:r0, s2:r1, s2:r2, s2:r3.
 - U — unconfirmed own-target visual claims (unchanged):
