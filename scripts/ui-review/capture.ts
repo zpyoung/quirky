@@ -1310,10 +1310,36 @@ export async function inspectSurface(runtime: CaptureRuntime, target: CaptureTar
       if (targetId === 'view:quirky.git/diff') {
         const reviewed = element.querySelector('section[data-path="src/app.ts"]')
         const expanded = [...element.querySelectorAll<HTMLElement>('[data-review-body]')].filter((body) => !body.hidden)
+        const textRange = document.createRange()
+        const renderedText = (line: HTMLElement) => {
+          const parts: string[] = []
+          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT)
+          for (let text = walker.nextNode(); text !== null; text = walker.nextNode()) {
+            const parent = text.parentElement
+            if (!visible(parent) || !parent.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue
+            textRange.selectNodeContents(text)
+            const rect = textRange.getBoundingClientRect()
+            if (rect.width > 0 && rect.height > 0) parts.push(text.textContent ?? '')
+          }
+          return parts.join('')
+        }
+        const diffs = expanded.map((body) => ({
+          body,
+          path: body.closest('section[data-path]')?.getAttribute('data-path'),
+          code: [...body.querySelectorAll<HTMLElement>('.cm-editor .cm-content')]
+            .filter((content) => visible(content.closest('.cm-editor')) && visible(content) &&
+              content.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+            .flatMap((content) => [...content.querySelectorAll<HTMLElement>('.cm-line')])
+            .filter((line) => visible(line) && line.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }))
+            .map(renderedText).join('\n').trim()
+        }))
+        const local = diffs.find((diff) => diff.path === 'src/local-review-fixture.ts')
+        const since = diffs.find((diff) => diff.path === 'src/review-note.ts')?.body.querySelector<HTMLElement>('.git-review__since')
         return visible(reviewed?.querySelector('header') ?? null) &&
-          reviewed?.querySelector<HTMLElement>('[data-review-body]')?.hidden === true && expanded.length === 2 &&
-          expanded.every((body) => visible(body) && [...body.querySelectorAll('.cm-editor')].some(visible)) &&
-          text.includes('export const localReviewFixture = true') && text.includes('Showing changes since you reviewed')
+          reviewed?.querySelector<HTMLElement>('[data-review-body]')?.hidden === true && diffs.length === 2 &&
+          diffs.every((diff) => visible(diff.body) && diff.code.length > 0) &&
+          local?.code.includes('export const localReviewFixture = true') === true &&
+          visible(since ?? null) && since?.innerText.includes('Showing changes since you reviewed') === true
       }
       if (targetId === 'view:quirky.session/worktree') {
         if (!terminal) return false
@@ -1336,11 +1362,12 @@ export async function inspectSurface(runtime: CaptureRuntime, target: CaptureTar
         text: (element.textContent ?? '').trim(),
         busy: node.querySelector('[aria-busy="true"], [role="progressbar"]') !== null,
         nodes: [...element.querySelectorAll('*')].filter((child) =>
-          child.matches('[aria-busy="true"], [role="progressbar"], [role="alert"], [data-terminal-connection-state], [data-review-body], [data-approval-card], [role="option"]') ||
+          child.matches('[aria-busy="true"], [role="progressbar"], [role="alert"], [data-terminal-connection-state], [data-review-body], [data-approval-card], [role="option"], .cm-content') ||
           (child.children.length === 0 && /^(loading|searching|connecting)\b/i.test(child.textContent?.trim() ?? ''))
         ).slice(0, 8).map((child) => ({
           tag: child.tagName, class: child.className, text: child.textContent?.trim().slice(0, 120),
           rect: child.getBoundingClientRect().toJSON(),
+          display: getComputedStyle(child).display, visibility: getComputedStyle(child).visibility,
           ancestors: [child.parentElement, child.parentElement?.parentElement].filter((parent) => parent !== null && parent !== undefined)
             .map((parent) => ({ tag: parent.tagName, hidden: parent.hidden, display: getComputedStyle(parent).display, rect: parent.getBoundingClientRect().toJSON() }))
         }))
@@ -1348,7 +1375,7 @@ export async function inspectSurface(runtime: CaptureRuntime, target: CaptureTar
     })
     const requirement = target.id === 'view:quirky.ask/card' ? 'Ask card approval card (owned ID, command, enabled approval controls)' :
       target.id === 'view:quirky.session/worktree' ? 'requested attached terminal surface' :
-      target.id === 'view:quirky.git/diff' ? 'reviewed header and two expanded diff editors' :
+      target.id === 'view:quirky.git/diff' ? 'reviewed header and visible code in both expanded fixture diffs' :
       target.id === 'overlay:quirky.editor/quick-open' ? 'current src/app.ts quick-open result' :
       target.id === 'overlay:quirky.session/chat-dialogs' ? 'New chat Agents group with four choices' : ''
     throw new Error(`${timeoutMessage} (busy: ${details.busy}, text: ${JSON.stringify(details.text.slice(0, 120))})${requirement ? `; ${requirement}; phase=content; elapsed=${Date.now() - contentStarted}ms; nodes=${JSON.stringify(details.nodes)}` : ''}`)

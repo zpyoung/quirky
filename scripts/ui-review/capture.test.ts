@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { chromium, type Locator } from 'playwright'
-import { captureCells, captureTargetCell, discoverCaptureTargets, ensureHandoffTerminalContext, fillBlockedCells, fixtureViewInput, hostingToolFor, isolateCell, openSurfaceTool, selectCaptureTargets, targetSlotSelector, waitForOverlay, waitForStateShown, type CaptureRuntime } from './capture'
+import { captureCells, captureTargetCell, discoverCaptureTargets, ensureHandoffTerminalContext, fillBlockedCells, fixtureViewInput, hostingToolFor, inspectSurface, isolateCell, openSurfaceTool, selectCaptureTargets, targetSlotSelector, waitForOverlay, waitForStateShown, type CaptureRuntime } from './capture'
 import { CAPTURE_BROWSER_CANDIDATES, captureBrowserExecutable } from './browser'
 import { goldenFor, SCREENSHOT_SIZE } from './goldens'
 import { PALETTE_SEARCH_LABEL } from '../../packages/ui/src/plugins/palette'
@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import type { UiModel, UiSlotEntry, UiToolEntry } from '@quirky/protocol'
 import type { CaptureEvidence, CaptureTarget, CaptureTheme } from './contracts'
+import { createIsolatedRuntimeEnvironment } from './fixtures'
 
 const slot = (id: string, plugin: string, title = id): UiSlotEntry => ({
   id, plugin, title, kind: id.slice(0, id.indexOf(':')) as UiSlotEntry['kind'],
@@ -1094,6 +1095,72 @@ test('reports the slot state when content readiness times out', async () => {
     fake.cleanup()
   }
 })
+
+test('Git admission requires rendered code in every expanded diff', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'capture-git-admission-'))
+  try {
+    const browser = await chromium.launch({
+      executablePath: captureBrowserExecutable(),
+      headless: true,
+      env: createIsolatedRuntimeEnvironment(home)
+    })
+    try {
+      const page = await browser.newPage({ viewport: { width: 1400, height: 880 }, deviceScaleFactor: 2 })
+      const git = target('view:quirky.git/diff', 'quirky.git', 'view')
+      const cases = [
+        { name: 'folded loading remains admissible' },
+        { name: 'transparent code leaves', transparentLeaves: true },
+        { name: 'empty expanded editor', empty: true },
+        { name: 'hidden expanded content', hidden: true },
+        { name: 'hidden code leaves', hiddenLeaves: true },
+        { name: 'marker outside the expanded code', misplaced: true },
+        { name: 'visible loading', loading: true },
+        { name: 'visible progress', busy: true },
+        { name: 'visible error', error: true }
+      ]
+      for (const fault of cases) {
+        const fake = buildFakeCaptureRuntime()
+        fake.runtime.page = page
+        fake.runtime.options.timeoutMs = 5_000
+        try {
+          await page.setContent(`<style>
+            :root { --bg: #111111 }
+            [data-review-body] { margin: 8px; }
+            .cm-editor { width: 500px; height: 80px; border: 1px solid; }
+            .cm-content, .cm-line { min-height: 20px; }
+            ${fault.hidden ? '.cm-content { visibility: hidden }' : ''}
+            ${fault.hiddenLeaves ? '.cm-line span { visibility: hidden }' : ''}
+            ${fault.transparentLeaves ? '.cm-line span { opacity: 0 }' : ''}
+          </style>
+          <div data-plugin-slot="${git.id}" class="plugin-slot"><div class="plugin-slot-body">
+            <section data-path="src/app.ts"><header>src/app.ts Reviewed</header>
+              <div data-review-body hidden>Loading diff...</div></section>
+            <section data-path="src/local-review-fixture.ts"><header>${fault.misplaced ? 'export const localReviewFixture = true' : 'local-review-fixture.ts'}</header>
+              <div data-review-body><div class="cm-editor"><div class="cm-content"><div class="cm-line"><span>${fault.misplaced ? 'export const unrelated = true' : 'export const localReviewFixture = true'}</span></div></div></div></div></section>
+            <section data-path="src/review-note.ts"><header>review-note.ts</header><div data-review-body>
+              <p class="git-review__since">Showing changes since you reviewed</p>
+              ${fault.loading ? '<p>Loading diff...</p>' : ''}
+              ${fault.busy ? '<p role="progressbar">Loading</p>' : ''}
+              ${fault.error ? '<p role="alert">Error loading diff: fixture failure</p>' : ''}
+              <div class="cm-editor"><div class="cm-content"><div class="cm-line"><span>${fault.empty ? '' : 'export const reviewedAt = "before the last edit"'}</span></div></div></div>
+            </div></section>
+          </div></div>`)
+          if (fault.name === 'folded loading remains admissible') {
+            fake.runtime.options.timeoutMs = 10_000
+            const result = await captureTargetCell(fake.runtime, git, 'dark')
+            expect(result.capture.status, result.capture.error).toBe('captured')
+            expect(result.isolation).toEqual({ ready: true })
+            const image = result.capture.image!
+            expect(createHash('sha256').update(readFileSync(image.path)).digest('hex')).toBe(image.sha256)
+          } else {
+            await fake.runtime.client.callAny('ui.view.open', { id: git.id })
+            await expect(inspectSurface(fake.runtime, git), fault.name).rejects.toThrow(/content exceeded|reported an error/)
+          }
+        } finally { fake.cleanup() }
+      }
+    } finally { await browser.close() }
+  } finally { rmSync(home, { recursive: true, force: true }) }
+}, 120_000)
 
 describe('opening the tool that hosts a target', () => {
   test('a sidebar section is hosted by the tool that lists it as its body or an alias', () => {
