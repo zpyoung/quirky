@@ -1,4 +1,4 @@
-import type { ViewNode } from '../core/catalog'
+import type { ViewNode } from '../core/contract'
 import { Callout, Code, DataTable, FileDiff, KeyValue, Stat, StatusList, Steps } from './data'
 import { BarChart, LineChart } from './charts'
 import { Field, ViewButton } from './controls'

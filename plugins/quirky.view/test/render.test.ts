@@ -10,7 +10,11 @@ const RENDER = 'view:quirky.view/render'
 const PANE = 'view:quirky.view/pane'
 
 let activate: (context: UiPluginContext) => void
-let mounted: Awaited<ReturnType<typeof mountView>> | undefined
+const MOVE = 'command:quirky.view/move'
+const ACTION = 'command:quirky.view/action'
+const CONTROL = 'command:quirky.view/control'
+
+const mounted: Awaited<ReturnType<typeof mountView>>[] = []
 
 beforeAll(async () => {
   GlobalRegistrator.register()
@@ -23,14 +27,13 @@ afterAll(async () => {
 })
 
 afterEach(async () => {
-  await mounted?.unmount()
-  mounted = undefined
+  for (const view of mounted.splice(0)) await view.unmount()
   document.body.innerHTML = ''
 })
 
 const markdownSpec = (text: string): ViewSpec => ({ title: 'Notes', root: { type: 'markdown', props: { text } } })
 
-function start(records: ReturnType<typeof record>[], extra: Record<string, (params: Record<string, any>) => unknown> = {}): FakeContext {
+function start(records: ReturnType<typeof record>[], extra: Record<string, (params: Record<string, unknown>) => unknown> = {}): FakeContext {
   const fake = fakeContext({
     'quirky.view/get': (params) => records.find((candidate) => candidate.viewId === params.viewId),
     'quirky.view/list': (params) => records.filter((candidate) => candidate.sessionId === params.session),
@@ -44,14 +47,29 @@ function start(records: ReturnType<typeof record>[], extra: Record<string, (para
   return fake
 }
 
-async function mountCard(fake: FakeContext, viewId = 'view_1') {
-  mounted = await mountView(fake, RENDER, { viewId })
-  return mounted
+async function mountCard(fake: FakeContext, viewId = 'view_1', report?: (state: unknown) => void) {
+  const view = await mountView(fake, RENDER, { viewId }, report)
+  mounted.push(view)
+  return view
+}
+
+type InstanceState = { instance: string; surface: string; viewId?: string; session?: string; activeViewId: string | null; phase: string; tabs: { viewId: string; title: string }[]; pendingLink: string | null }
+
+async function instances(fake: FakeContext): Promise<InstanceState[]> {
+  const result = await fake.runCommand(CONTROL, { action: 'state' }) as { instances: InstanceState[] }
+  return result.instances
+}
+
+async function instanceFor(fake: FakeContext, surface: string, match: (state: InstanceState) => boolean = () => true): Promise<string> {
+  const state = (await instances(fake)).find((candidate) => candidate.surface === surface && match(candidate))
+  if (!state) throw new Error(`no mounted instance for ${surface}`)
+  return state.instance
 }
 
 const text = (root: Element) => root.textContent ?? ''
 const buttonLabelled = (root: Element, label: string) =>
   [...root.querySelectorAll('button')].find((button) => button.textContent?.trim() === label) as HTMLButtonElement
+const routedArgs = (fake: FakeContext, id: string) => fake.routedTo(id).map((call) => call.args)
 
 describe('the view card', () => {
   test('renders the bundle-size fixture: stats, chart, table and buttons', async () => {
@@ -126,6 +144,7 @@ describe('the view card', () => {
     expect(fake.callsTo('quirky.view/action').map((call) => call.params)).toEqual([
       { viewId: 'view_1', name: 'lazy-load-zxcvbn', source: 'button' }
     ])
+    expect(routedArgs(fake, ACTION)).toEqual([{ viewId: 'view_1', name: 'lazy-load-zxcvbn', source: 'button' }])
   })
 
   test('a failed action tells the person instead of failing silently', async () => {
@@ -147,11 +166,32 @@ describe('the view card', () => {
     const { element, click } = await mountCard(fake)
 
     await click(buttonLabelled(element, 'Lazy-load'))
+    expect(routedArgs(fake, ACTION)).toEqual([])
     await click(buttonLabelled(element, 'Send'))
 
     expect(fake.callsTo('quirky.view/action').map((call) => call.params)).toEqual([
       { viewId: 'view_1', name: 'next-step', source: 'field', data: { value: 'lazy' } }
     ])
+    expect(routedArgs(fake, ACTION)).toEqual([{ viewId: 'view_1', name: 'next-step', source: 'field', data: { value: 'lazy' } }])
+  })
+
+  test('field form submission uses the same action command with its typed answer', async () => {
+    const fake = start([record({ title: 'Ask', root: { type: 'field', props: { question: { id: 'answer', type: 'text', question: 'Answer?' } } } as never })])
+    const { element } = await mountCard(fake)
+    const input = element.querySelector<HTMLInputElement>('input')!
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'ready')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    expect(routedArgs(fake, ACTION)).toEqual([])
+    await act(async () => void element.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })))
+    await settle()
+
+    expect(fake.callsTo('quirky.view/action').map((call) => call.params)).toEqual([
+      { viewId: 'view_1', name: 'answer', source: 'field', data: { value: 'ready' } }
+    ])
+    expect(routedArgs(fake, ACTION)).toEqual([{ viewId: 'view_1', name: 'answer', source: 'field', data: { value: 'ready' } }])
   })
 
   test('text, number and confirm fields send a string, a number and a boolean', async () => {
@@ -176,10 +216,16 @@ describe('the view card', () => {
     await type(input('Any note?'), 'ship it')
     await type(input('How many?'), '3')
     await click(buttonLabelled(element, 'Yes'))
+    expect(routedArgs(fake, ACTION)).toEqual([])
     const sends = [...element.querySelectorAll('button')].filter((button) => button.textContent === 'Send')
     for (const send of sends) await click(send)
 
     expect(fake.callsTo('quirky.view/action').map((call) => call.params)).toEqual([
+      { viewId: 'view_1', name: 'note', source: 'field', data: { value: 'ship it' } },
+      { viewId: 'view_1', name: 'count', source: 'field', data: { value: 3 } },
+      { viewId: 'view_1', name: 'go', source: 'field', data: { value: true } }
+    ])
+    expect(routedArgs(fake, ACTION)).toEqual([
       { viewId: 'view_1', name: 'note', source: 'field', data: { value: 'ship it' } },
       { viewId: 'view_1', name: 'count', source: 'field', data: { value: 3 } },
       { viewId: 'view_1', name: 'go', source: 'field', data: { value: true } }
@@ -272,8 +318,9 @@ describe('the view card', () => {
 
   test('renders nothing for an input without a view ID', async () => {
     const fake = start([])
-    mounted = await mountView(fake, RENDER, {})
-    expect(mounted.element.innerHTML).toBe('')
+    const view = await mountView(fake, RENDER, {})
+    mounted.push(view)
+    expect(view.element.innerHTML).toBe('')
   })
 })
 
@@ -312,8 +359,9 @@ describe('markdown', () => {
     for (const label of ['script', 'mail', 'relative', 'scheme-relative', 'data']) expect(text(element)).toContain(label)
   })
 
-  test('a link click asks first and opens it only on confirm', async () => {
+  test('a link click asks first and opens it only on confirm through control commands', async () => {
     const { element, click, fake } = await rendered('[docs](https://example.com/docs)')
+    const instance = await instanceFor(fake, RENDER)
     const link = element.querySelector('a')!
     const event = new MouseEvent('click', { bubbles: true, cancelable: true })
     await act(async () => void link.dispatchEvent(event))
@@ -323,18 +371,73 @@ describe('markdown', () => {
     expect(dialog).not.toBeNull()
     expect(dialog.textContent).toContain('https://example.com/docs')
     expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
+    expect(routedArgs(fake, CONTROL)).toEqual([{ instance, action: 'link-preview', viewId: 'view_1', href: 'https://example.com/docs' }])
 
+    await expect(fake.runCommand(CONTROL, { instance, action: 'link-confirm', viewId: 'other-view' })).rejects.toThrow()
+    expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
     await click(buttonLabelled(dialog, 'Open link'))
     expect(fake.callsTo('quirky.terminal/openExternal').map((call) => call.params)).toEqual([{ target: 'https://example.com/docs' }])
+    expect(routedArgs(fake, CONTROL)).toEqual([
+      { instance, action: 'link-preview', viewId: 'view_1', href: 'https://example.com/docs' },
+      { instance, action: 'link-confirm', viewId: 'view_1' }
+    ])
     expect(document.querySelector('[role="dialog"]')).toBeNull()
   })
 
-  test('cancelling the link dialog opens nothing', async () => {
+  test('cancelling the link dialog routes cancellation and opens nothing', async () => {
     const { element, click, fake } = await rendered('[docs](https://example.com/docs)')
+    const instance = await instanceFor(fake, RENDER)
     await click(element.querySelector('a')!)
     await click(buttonLabelled(document.querySelector('[role="dialog"]')!, 'Cancel'))
 
     expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
+    expect(routedArgs(fake, CONTROL)).toEqual([
+      { instance, action: 'link-preview', viewId: 'view_1', href: 'https://example.com/docs' },
+      { instance, action: 'link-cancel', viewId: 'view_1' }
+    ])
+  })
+
+  test('Escape and backdrop dismiss the link through the cancel control without opening it', async () => {
+    const { element, click, fake } = await rendered('[docs](https://example.com/docs)')
+    const instance = await instanceFor(fake, RENDER)
+
+    await click(element.querySelector('a')!)
+    await act(async () => void document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+
+    await click(element.querySelector('a')!)
+    await click(document.querySelector('.ui-dialog-backdrop')!)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
+    expect(routedArgs(fake, CONTROL)).toEqual([
+      { instance, action: 'link-preview', viewId: 'view_1', href: 'https://example.com/docs' },
+      { instance, action: 'link-cancel', viewId: 'view_1' },
+      { instance, action: 'link-preview', viewId: 'view_1', href: 'https://example.com/docs' },
+      { instance, action: 'link-cancel', viewId: 'view_1' }
+    ])
+  })
+
+  test('clears a pending link when its spec changes or its mount unmounts', async () => {
+    const records = [record(markdownSpec('[docs](https://example.test/docs)'))]
+    const fake = start(records)
+    const view = await mountCard(fake)
+    const instance = await instanceFor(fake, RENDER)
+    await view.click(view.element.querySelector('a')!)
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+
+    records[0] = record(markdownSpec('updated spec'), { updatedAt: '2026-11-16T11:00:00.000Z' })
+    await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
+    await settle()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect((await instances(fake))[0]!.pendingLink).toBeNull()
+
+    await fake.runCommand(CONTROL, { instance, action: 'link-preview', viewId: 'view_1', href: 'https://example.test/docs' })
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull()
+    await view.unmount()
+    mounted.splice(mounted.indexOf(view), 1)
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    await expect(fake.runCommand(CONTROL, { instance, action: 'link-confirm', viewId: 'view_1' })).rejects.toThrow('View UI instance is no longer mounted.')
     expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
   })
 })
@@ -343,9 +446,10 @@ describe('the views pane', () => {
   const paneView = (viewId: string, title: string, over: Partial<ReturnType<typeof record>> = {}) =>
     record(markdownSpec(`${title} body`), { viewId, title, placement: 'pane', ...over })
 
-  const mountPane = async (fake: FakeContext) => {
-    mounted = await mountView(fake, PANE, { session: 's1' })
-    return mounted
+  const mountPane = async (fake: FakeContext, report?: (state: unknown) => void) => {
+    const view = await mountView(fake, PANE, { session: 's1' }, report)
+    mounted.push(view)
+    return view
   }
 
   test('shows a tab for each pane view and the first view open', async () => {
@@ -367,6 +471,52 @@ describe('the views pane', () => {
 
     expect(text(element)).toContain('Module map body')
     expect(text(element)).not.toContain('Bundle size body')
+    const instance = await instanceFor(fake, PANE)
+    expect(routedArgs(fake, CONTROL)).toEqual([{ instance, action: 'select-tab', viewId: 'view_2' }])
+  })
+  test('control state discovers embedded mounts and isolates duplicate pane instances through cleanup', async () => {
+    const fake = start([paneView('view_1', 'Bundle size'), paneView('view_2', 'Module map')])
+    await mountCard(fake, 'view_1')
+    const reports: unknown[] = []
+    const first = await mountPane(fake, (state) => reports.push(state))
+    const second = await mountPane(fake)
+
+    const callCount = fake.calls.length
+    const state = await instances(fake)
+    expect(fake.calls).toHaveLength(callCount)
+    expect(state).toHaveLength(3)
+    expect(new Set(state.map((view) => view.instance)).size).toBe(3)
+
+    const cardState = state.find((view) => view.surface === RENDER)!
+    expect(cardState).toMatchObject({ viewId: 'view_1', activeViewId: 'view_1', phase: 'ready', tabs: [], pendingLink: null })
+    const paneStates = state.filter((view) => view.surface === PANE)
+    expect(paneStates).toHaveLength(2)
+    for (const view of paneStates) {
+      expect(view.tabs).toEqual([{ viewId: 'view_1', title: 'Bundle size' }, { viewId: 'view_2', title: 'Module map' }])
+    }
+    expect(fake.reports).toEqual(reports)
+    const reportedInstance = fake.reports
+      .map((report) => report !== null && typeof report === 'object' && 'instance' in report ? report.instance : undefined)
+      .find((instance): instance is string => typeof instance === 'string')!
+    expect(reportedInstance).toBeTruthy()
+    expect(fake.reports).toContainEqual(expect.objectContaining({ instance: reportedInstance, surface: PANE }))
+    const firstState = paneStates.find((view) => view.instance === reportedInstance)!
+    const secondState = paneStates.find((view) => view.instance !== firstState.instance)!
+    const firstPane = first
+    const secondPane = second
+    await fake.runCommand(CONTROL, { instance: firstState.instance, action: 'select-tab', viewId: 'view_2' })
+    expect(text(firstPane.element)).toContain('Module map body')
+    expect(text(secondPane.element)).toContain('Bundle size body')
+
+    await fake.runCommand(CONTROL, { instance: firstState.instance, action: 'dismiss-tab', viewId: 'view_2' })
+    expect([...firstPane.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size'])
+    expect([...secondPane.element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Bundle size', 'Module map'])
+    expect(fake.callsTo('quirky.view/close')).toHaveLength(0)
+
+    await firstPane.unmount()
+    mounted.splice(mounted.indexOf(firstPane), 1)
+    expect((await instances(fake)).map((view) => view.instance)).not.toContain(firstState.instance)
+    expect((await instances(fake)).map((view) => view.instance)).toContain(secondState.instance)
   })
 
   test('renders nothing when the session has no pane views', async () => {
@@ -382,6 +532,7 @@ describe('the views pane', () => {
 
     await click(buttonLabelled(element, 'Move inline'))
     expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'inline' }])
+    expect(routedArgs(fake, MOVE)).toEqual([{ viewId: 'view_1', placement: 'inline' }])
 
     records[0] = { ...records[0], placement: 'inline', movedByUser: true }
     await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
@@ -408,6 +559,8 @@ describe('the views pane', () => {
 
     await click(element.querySelector('button[aria-label="Close Bundle size"]')!)
     expect([...element.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(['Module map'])
+    const instance = await instanceFor(fake, PANE)
+    expect(routedArgs(fake, CONTROL)).toEqual([{ instance, action: 'dismiss-tab', viewId: 'view_1' }])
 
     records[0] = { ...records[0], updates: 1, updatedAt: '2026-11-16T11:00:00.000Z' }
     await fake.emit({ type: 'quirky.view/changed', data: { sessionId: 's1', viewId: 'view_1' } })
@@ -424,6 +577,7 @@ describe('moving a view', () => {
     await click(buttonLabelled(element, 'Move to pane'))
 
     expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'pane' }])
+    expect(routedArgs(fake, MOVE)).toEqual([{ viewId: 'view_1', placement: 'pane' }])
   })
 
   test('a card whose view is in the pane offers Move inline', async () => {
@@ -434,5 +588,108 @@ describe('moving a view', () => {
     await click(buttonLabelled(element, 'Move inline'))
 
     expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'inline' }])
+    expect(routedArgs(fake, MOVE)).toEqual([{ viewId: 'view_1', placement: 'inline' }])
+  })
+})
+
+describe('scriptable view commands', () => {
+  test('registers and dispatches move, action, and control commands', async () => {
+    const fake = start([record(markdownSpec('command target'))])
+    await mountCard(fake)
+    for (const id of [MOVE, ACTION, CONTROL]) expect(typeof fake.provided.get(id)).toBe('function')
+
+    await fake.runCommand(MOVE, { viewId: 'view_1', placement: 'pane' })
+    await fake.runCommand(ACTION, { viewId: 'view_1', name: 'go', source: 'button' })
+    const instance = await instanceFor(fake, RENDER)
+    const gets = fake.callsTo('quirky.view/get').length
+    await fake.runCommand(CONTROL, { instance, action: 'refresh' })
+
+    expect(fake.callsTo('quirky.view/move').map((call) => call.params)).toEqual([{ viewId: 'view_1', placement: 'pane' }])
+    expect(fake.callsTo('quirky.view/action').map((call) => call.params)).toEqual([{ viewId: 'view_1', name: 'go', source: 'button' }])
+    expect(fake.callsTo('quirky.view/get')).toHaveLength(gets + 1)
+  })
+
+  test('rejects malformed, stale, non-tab, and unsafe link controls before effects', async () => {
+    const fake = start([
+      record(markdownSpec('inline'), { viewId: 'view_1' }),
+      record(markdownSpec('pane'), { viewId: 'view_2', placement: 'pane' })
+    ])
+    await mountCard(fake, 'view_1')
+    const pane = await mountView(fake, PANE, { session: 's1' })
+    mounted.push(pane)
+    const renderInstance = await instanceFor(fake, RENDER)
+    const paneInstance = await instanceFor(fake, PANE)
+
+    await expect(fake.runCommand(MOVE, [])).rejects.toThrow()
+    await expect(fake.runCommand(MOVE, { placement: 'pane' })).rejects.toThrow()
+    await expect(fake.runCommand(ACTION, [])).rejects.toThrow()
+    await expect(fake.runCommand(ACTION, { viewId: ' ', name: 'go', source: 'button' })).rejects.toThrow()
+    await expect(fake.runCommand(ACTION, { viewId: 'view_1', name: 'go', source: ' ', extra: true })).rejects.toThrow()
+    await expect(fake.runCommand(MOVE, { viewId: 'view_1', placement: 'other' })).rejects.toThrow()
+    await expect(fake.runCommand(MOVE, { viewId: 'view_1', placement: 'pane', extra: true })).rejects.toThrow()
+    await expect(fake.runCommand(ACTION, { viewId: 'view_1', name: ' ', source: 'button' })).rejects.toThrow()
+    await expect(fake.runCommand(ACTION, { viewId: 'view_1', name: 'go' })).rejects.toThrow()
+    await expect(fake.runCommand(ACTION, { viewId: 'view_1', name: 'go', source: 'button', data: [] })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { action: 'state', instance: renderInstance })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { action: 'unknown' })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { instance: renderInstance, action: 'refresh', extra: true })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { instance: '', action: 'refresh' })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { instance: paneInstance, action: 'select-tab' })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { instance: renderInstance, action: 'link-preview', viewId: 'other-view', href: 'https://example.test/docs' })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { instance: renderInstance, action: 'link-confirm', viewId: 'view_1', href: 'https://example.test/docs' })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, [])).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { instance: 'stale-instance', action: 'refresh' })).rejects.toThrow('View UI instance is no longer mounted.')
+    await expect(fake.runCommand(CONTROL, { instance: paneInstance, action: 'select-tab', viewId: 'view_1' })).rejects.toThrow('View is not an open pane tab.')
+    await expect(fake.runCommand(CONTROL, { instance: paneInstance, action: 'dismiss-tab', viewId: 'view_1' })).rejects.toThrow('View is not an open pane tab.')
+    await expect(fake.runCommand(CONTROL, { instance: renderInstance, action: 'link-preview', viewId: 'view_1', href: 'javascript:alert(1)' })).rejects.toThrow()
+    await expect(fake.runCommand(CONTROL, { instance: renderInstance, action: 'link-confirm', viewId: 'view_1' })).rejects.toThrow('No link is awaiting confirmation.')
+
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(fake.callsTo('quirky.view/action')).toHaveLength(0)
+    expect(fake.callsTo('quirky.view/move')).toHaveLength(0)
+    expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
+  })
+
+  test('programmatic command errors reject while UI handlers preserve their failure toasts', async () => {
+    const spec = {
+      title: 'Actions',
+      root: {
+        type: 'stack',
+        children: [
+          { type: 'button', props: { label: 'Run', action: 'go' } },
+          { type: 'markdown', props: { text: '[docs](https://example.test/docs)' } }
+        ]
+      }
+    } as ViewSpec
+    const fake = start([record(spec)], {
+      'quirky.view/action': () => {
+        throw new Error('agent-busy')
+      },
+      'quirky.view/move': () => {
+        throw new Error('move denied')
+      },
+      'quirky.terminal/openExternal': () => {
+        throw new Error('open denied')
+      }
+    })
+    const { element, click } = await mountCard(fake)
+
+    await expect(fake.runCommand(ACTION, { viewId: 'view_1', name: 'go', source: 'button' })).rejects.toThrow('agent-busy')
+    await expect(fake.runCommand(MOVE, { viewId: 'view_1', placement: 'pane' })).rejects.toThrow('move denied')
+    expect(fake.toasts).toEqual([])
+
+    await click(buttonLabelled(element, 'Run'))
+    expect(fake.toasts).toEqual([{ title: 'Could not send the action', body: 'agent-busy' }])
+    await click(buttonLabelled(element, 'Move to pane'))
+    expect(fake.toasts[1]).toEqual({ title: 'Could not move the view', body: 'move denied' })
+    await click(element.querySelector('a')!)
+    await click(buttonLabelled(document.querySelector('[role="dialog"]')!, 'Open link'))
+
+    expect(fake.toasts).toEqual([
+      { title: 'Could not send the action', body: 'agent-busy' },
+      { title: 'Could not move the view', body: 'move denied' },
+      { title: 'Could not open link', body: 'open denied' }
+    ])
+    expect(fake.callsTo('quirky.terminal/openExternal').map((call) => call.params)).toEqual([{ target: 'https://example.test/docs' }])
   })
 })

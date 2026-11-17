@@ -536,6 +536,57 @@
         ]
       }
     ],
+    "command": [
+      {
+        "id": "move",
+        "title": "Move view",
+        "description": "Move a view between the transcript and Views pane.",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "viewId": { "type": "string" },
+            "placement": { "type": "string", "enum": ["inline", "pane"] }
+          },
+          "required": ["viewId", "placement"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "action",
+        "title": "Send view action",
+        "description": "Send a button or field action from a view to its agent.",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "viewId": { "type": "string" },
+            "name": { "type": "string" },
+            "source": { "type": "string" },
+            "data": { "type": "object", "additionalProperties": true }
+          },
+          "required": ["viewId", "name", "source"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "id": "control",
+        "title": "Control view UI",
+        "description": "Discover mounted view surfaces and control pane tabs, refreshes, and link confirmations.",
+        "palette": false,
+        "args": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["state", "refresh", "select-tab", "dismiss-tab", "link-preview", "link-cancel", "link-confirm"] },
+            "instance": { "type": "string" },
+            "viewId": { "type": "string" },
+            "href": { "type": "string" }
+          },
+          "required": ["action"],
+          "additionalProperties": false
+        }
+      }
+    ],
     "view": [
       {
         "id": "render",

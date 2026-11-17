@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Button, TextArea, TextField } from '@quirky/ui'
-import { textAnswerError } from '../core/catalog'
+import { textAnswerError } from '../core/contract'
 import { asItems, asNumber, asString, isRecord, oneOf, type Props } from './props'
 import { useRuntime } from './runtime'
 import { COLUMN, MUTED, ROW } from './styles'

@@ -1,8 +1,9 @@
 import { act } from 'react'
-import { RpcError, RpcErrorCode, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
+import { RpcError, RpcErrorCode, type CommandHandler, type MountFunction, type QuirkyEvent, type UiPluginContext } from '@quirky/protocol'
 import type { ViewPlacement, ViewRecord, ViewSpec } from '../src/core/catalog'
 
-type Handler = (params: Record<string, any>) => unknown
+type Handler = (params: Record<string, unknown>) => unknown
+type ProvidedImplementation = CommandHandler | MountFunction
 
 export type FakeContext = ReturnType<typeof fakeContext>
 
@@ -24,8 +25,10 @@ export function record(spec: ViewSpec, over: Partial<ViewRecord> = {}): ViewReco
 
 /** A `UiPluginContext` whose daemon calls are served by `handlers`; every other method rejects as unknown. */
 export function fakeContext(handlers: Record<string, Handler> = {}) {
-  const calls: { method: string; params: Record<string, any> }[] = []
-  const provided = new Map<string, (...args: any[]) => any>()
+  const calls: { method: string; params: Record<string, unknown> }[] = []
+  const commandCalls: { id: string; args?: unknown }[] = []
+  const reports: unknown[] = []
+  const provided = new Map<string, ProvidedImplementation>()
   const listeners = new Set<(event: QuirkyEvent) => void>()
   const toasts: { title: string; body: string }[] = []
 
@@ -33,13 +36,19 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
     pluginId: 'quirky.view',
     log() {},
     provide(id: string, implementation: unknown) {
-      provided.set(id, implementation as (...args: any[]) => any)
+      provided.set(id, implementation as ProvidedImplementation)
     },
     async call(method: string, params: Record<string, unknown> = {}) {
       calls.push({ method, params })
       const handler = handlers[method]
       if (!handler) throw new RpcError(RpcErrorCode.MethodNotFound, `unknown method: ${method}`)
       return handler(params)
+    },
+    executeCommand: async (id: string, args?: unknown) => {
+      commandCalls.push({ id, args })
+      const command = provided.get(id)
+      if (typeof command !== 'function') throw new Error(`No command: ${id}`)
+      await (command as CommandHandler)(args)
     },
     subscribe(listener: (event: QuirkyEvent) => void) {
       listeners.add(listener)
@@ -56,7 +65,19 @@ export function fakeContext(handlers: Record<string, Handler> = {}) {
     calls,
     provided,
     toasts,
+    commandCalls,
+    reports,
     callsTo: (method: string) => calls.filter((call) => call.method === method),
+    routedTo: (id: string) => commandCalls.filter((call) => call.id === id),
+    runCommand: async (id: string, args?: unknown) => {
+      const command = provided.get(id)
+      if (typeof command !== 'function') throw new Error(`No command: ${id}`)
+      let result: unknown
+      await act(async () => {
+        result = await (command as CommandHandler)(args)
+      })
+      return result
+    },
     emit: (event: { type: string; data?: unknown }) => act(async () => void listeners.forEach((listener) => listener(event as unknown as QuirkyEvent)))
   }
 }
@@ -67,13 +88,25 @@ export async function settle(): Promise<void> {
   })
 }
 
-/** Mounts a provided view on a fresh element of the document with `input`. */
-export async function mountView(fake: FakeContext, id: string, input: unknown) {
+/** Mounts a provided view on a fresh element, optionally capturing its host report. */
+export async function mountView(fake: FakeContext, id: string, input: unknown, onReport?: (state: unknown) => void) {
   const element = document.createElement('div')
   document.body.appendChild(element)
   let unmount: (() => void) | void = undefined
+  const implementation = fake.provided.get(id)
+  if (typeof implementation !== 'function') throw new Error(`No view: ${id}`)
   await act(async () => {
-    unmount = fake.provided.get(id)!(element, { input })
+    unmount = (implementation as MountFunction)(element, {
+      input,
+      ...(onReport === undefined
+        ? {}
+        : {
+            report: (state: unknown) => {
+              fake.reports.push(state)
+              onReport(state)
+            }
+          })
+    })
   })
   await settle()
   return {
