@@ -691,7 +691,7 @@
 }
 
 .qe-quick-open-results[role='listbox'] .ui-button {
-  background: transparent;
+  background: var(--ui-transparent);
   border: 0;
   color: var(--ui-text);
   min-width: 0;

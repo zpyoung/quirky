@@ -236,6 +236,67 @@ function expectInlineError(container: ParentNode, message: string): HTMLElement 
   expect(errors).toHaveLength(1)
   return errors[0]!
 }
+function inlineCheckbox(container: ParentNode, id: string, label: string, help: string) {
+  const input = container.querySelector<HTMLInputElement>(`#${id}`)
+  expect(input?.type).toBe('checkbox')
+  expect(input?.classList.contains('ui-checkbox__input')).toBe(true)
+  expect(input?.getAttribute('aria-label')).toBe(label)
+  expect(input?.getAttribute('aria-describedby')).toBe(`${id}-help`)
+  const row = input?.closest('.ui-form-row')
+  expect(row?.classList.contains('ui-form-row--inline')).toBe(true)
+  expect(row?.querySelector(`#${id}-help`)?.textContent).toBe(help)
+  const visibleLabel = row?.querySelector<HTMLLabelElement>(`.ui-form-row__label[for="${id}"]`)
+  expect(visibleLabel?.textContent).toBe(label)
+  return { input: input!, label: visibleLabel! }
+}
+
+test('settings use inline native checkboxes and save exact boolean setting routes', async () => {
+  const context = makeContext(async () => ({}))
+  const settings = await mountSurface(context, 'view:quirky.automations/settings')
+  const sidebar = inlineCheckbox(
+    settings,
+    'auto-setting-sidebar',
+    'Show Automations Button',
+    'Show the Automations shortcut in the sidebar.',
+  )
+  const deletion = inlineCheckbox(
+    settings,
+    'auto-setting-delete',
+    'Ask Before Deleting Automations',
+    'Show a confirmation before deleting automations and their run history.',
+  )
+
+  await clickAndSettle(sidebar.label)
+  expect(sidebar.input.checked).toBe(false)
+  await clickAndSettle(deletion.label)
+  expect(deletion.input.checked).toBe(false)
+  expect(context.calls.filter((call) => call.method === 'setting.set').map((call) => call.params)).toEqual([
+    { id: 'setting:quirky.automations/show-automations-button', value: false },
+    { id: 'setting:quirky.automations/ask-before-delete', value: false },
+  ])
+})
+
+test('rejected settings checkbox saves keep the native value and show one accessible InlineError', async () => {
+  const context = makeContext(async (method) => {
+    if (method === 'setting.set') throw new Error('Setting store is read-only.')
+    return defaultUiCall(method)
+  })
+  const settings = await mountSurface(context, 'view:quirky.automations/settings')
+  const sidebar = inlineCheckbox(
+    settings,
+    'auto-setting-sidebar',
+    'Show Automations Button',
+    'Show the Automations shortcut in the sidebar.',
+  )
+  await clickAndSettle(sidebar.label)
+
+  expect(context.calls.filter((call) => call.method === 'setting.set').map((call) => call.params)).toEqual([
+    { id: 'setting:quirky.automations/show-automations-button', value: false },
+  ])
+  expect(sidebar.input.checked).toBe(true)
+  expectInlineError(settings, 'Setting store is read-only.')
+  expect(settings.querySelectorAll('p.auto-error')).toHaveLength(0)
+})
 
 function deferred<T>() {
   const { promise, resolve, reject } = Promise.withResolvers<T>()

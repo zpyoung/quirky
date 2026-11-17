@@ -4,7 +4,7 @@ import type { MountFunction, UiPluginContext } from '@quirky/protocol'
 import { API, AUTOMATIONS_VIEW, AUTOMATIONS_SETTINGS_VIEW, type AutomationUiState } from './ui-contracts'
 import { AutomationEditor } from './editor/AutomationEditor'
 import { AutomationsPage } from './list/AutomationsPage'
-import { Button, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, InlineError, ToolPanelFrame } from '@quirky/ui'
+import { Button, Checkbox, ContextMenuList, ControlIcon, EmptyState, FormRow, IconButton, InlineError, ToolPanelFrame } from '@quirky/ui'
 
 function message(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause) }
 function useAutomationState(context: UiPluginContext) {
@@ -89,11 +89,11 @@ function AutomationSettings({ context, report }: SurfaceProps) {
       <div className="auto-settings__content">
         <p>Schedule agent work and choose whether Automations appears in the sidebar.</p>
         <ol><li>Describe the work</li><li>Quirky starts each run</li><li>Review the results</li></ol>
-        <FormRow label="Show Automations Button" htmlFor="auto-setting-sidebar" help="Show the Automations shortcut in the sidebar.">
-          <input id="auto-setting-sidebar" type="checkbox" checked={visible} onChange={event => void save('show-automations-button', event.target.checked)} />
+        <FormRow label="Show Automations Button" htmlFor="auto-setting-sidebar" help="Show the Automations shortcut in the sidebar." layout="inline">
+          <Checkbox checked={visible} label="Show Automations Button" onChange={checked => void save('show-automations-button', checked)} hideLabel />
         </FormRow>
-        <FormRow label="Ask Before Deleting Automations" htmlFor="auto-setting-delete" help="Show a confirmation before deleting automations and their run history.">
-          <input id="auto-setting-delete" type="checkbox" checked={ask} onChange={event => void save('ask-before-delete', event.target.checked)} />
+        <FormRow label="Ask Before Deleting Automations" htmlFor="auto-setting-delete" help="Show a confirmation before deleting automations and their run history." layout="inline">
+          <Checkbox checked={ask} label="Ask Before Deleting Automations" onChange={checked => void save('ask-before-delete', checked)} hideLabel />
         </FormRow>
         {error && <InlineError message={error} />}
       </div>

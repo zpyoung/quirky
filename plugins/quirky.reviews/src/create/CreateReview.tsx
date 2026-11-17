@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { Button, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
+import { Button, Checkbox, EmptyState, FormRow, InlineError, NoticeLine, SectionHeader, TextField } from '@quirky/ui'
 import { isRecord, safeHttpUrl } from './guards'
 import { CREATE_VIEW, type ReviewsSurfaceProps } from '../contracts'
 import {
@@ -860,27 +860,27 @@ export function CreateReview(props: ReviewsSurfaceProps) {
 
       <fieldset className="ui-stack" disabled={creation.submitting || saving || stackSaving || generationRunning || submitLock.current?.isCurrent()}>
         <legend>Creation options</legend>
-        <FormRow label="Create as draft" htmlFor="review-create-draft" error={draftField.error ?? undefined}>
-          <input id="review-create-draft" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={draft} onChange={(event) => {
-            draftField.edit(event.target.checked)
+        <FormRow layout="inline" label="Create as draft" htmlFor="review-create-draft" error={draftField.error ?? undefined}>
+          <Checkbox id="review-create-draft" label="Create as draft" hideLabel checked={draft} onChange={(checked) => {
+            draftField.edit(checked)
             setLocalError(null)
           }} />
         </FormRow>
         {provider === 'gitlab'
-          ? <FormRow label="Use repository merge-request template when the description is empty" htmlFor="review-use-template" error={templateField.error ?? undefined}>
-            <input id="review-use-template" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={useTemplate} onChange={(event) => {
-              templateField.edit(event.target.checked)
+          ? <FormRow layout="inline" label="Use repository merge-request template when the description is empty" htmlFor="review-use-template" error={templateField.error ?? undefined}>
+            <Checkbox id="review-use-template" label="Use repository merge-request template when the description is empty" hideLabel checked={useTemplate} onChange={(checked) => {
+              templateField.edit(checked)
               setLocalError(null)
             }} />
           </FormRow>
-          : <FormRow label="Use repository pull-request template when the description is empty" htmlFor="review-use-template" error={templateField.error ?? undefined}>
-            <input id="review-use-template" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={useTemplate} onChange={(event) => {
-              templateField.edit(event.target.checked)
+          : <FormRow layout="inline" label="Use repository pull-request template when the description is empty" htmlFor="review-use-template" error={templateField.error ?? undefined}>
+            <Checkbox id="review-use-template" label="Use repository pull-request template when the description is empty" hideLabel checked={useTemplate} onChange={(checked) => {
+              templateField.edit(checked)
               setLocalError(null)
             }} />
           </FormRow>}
-        {stackSupported && stackParentNumber !== null && <FormRow label={`Create pull request in stack with #${stackParentNumber}`} htmlFor="review-create-stack">
-          <input id="review-create-stack" type="checkbox" style={{ accentColor: 'var(--ui-accent)' }} checked={stackEnabled} disabled={!isControlEnabled('stack-set')} onChange={(event) => requestCreationControl('stack-set', { enabled: event.target.checked })} />
+        {stackSupported && stackParentNumber !== null && <FormRow layout="inline" label={`Create pull request in stack with #${stackParentNumber}`} htmlFor="review-create-stack">
+          <Checkbox id="review-create-stack" label={`Create pull request in stack with #${stackParentNumber}`} hideLabel checked={stackEnabled} disabled={!isControlEnabled('stack-set')} onChange={(checked) => requestCreationControl('stack-set', { enabled: checked })} />
         </FormRow>}
         {!stackSupported && <small>{copy.stackUnavailable}</small>}
       </fieldset>

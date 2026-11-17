@@ -264,6 +264,18 @@ async function click(element: HTMLElement) {
   await act(async () => { element.click() })
   await settle()
 }
+function inlineCheckbox(container: ParentNode, id: string, label: string) {
+  const input = container.querySelector<HTMLInputElement>(`#${id}`)
+  expect(input?.type).toBe('checkbox')
+  expect(input?.classList.contains('ui-checkbox__input')).toBe(true)
+  expect(input?.getAttribute('aria-label')).toBe(label)
+  const row = input?.closest('.ui-form-row')
+  expect(row?.classList.contains('ui-form-row--inline')).toBe(true)
+  const visibleLabel = row?.querySelector<HTMLLabelElement>(`.ui-form-row__label[for="${id}"]`)
+  expect(visibleLabel?.textContent).toBe(label)
+  return { input: input!, label: visibleLabel! }
+}
+
 function reactProps(node: HTMLElement): Record<string, (...args: never[]) => void> {
   const key = Object.getOwnPropertyNames(node).find((candidate) => candidate.startsWith('__reactProps$'))
   if (!key) throw new Error('Could not find React event handlers on the rendered control.')
@@ -277,10 +289,8 @@ function changeValue(node: HTMLInputElement | HTMLTextAreaElement, value: string
   act(() => onChange({ target: node, currentTarget: node } as never))
 }
 function changeChecked(node: HTMLInputElement, checked: boolean) {
-  node.checked = checked
-  const onChange = reactProps(node).onChange
-  if (!onChange) throw new Error('The rendered checkbox does not have an onChange handler.')
-  act(() => onChange({ target: node, currentTarget: node } as never))
+  if (node.checked === checked) return
+  act(() => node.click())
 }
 
 function pressCtrlEnter(node: HTMLTextAreaElement) {
@@ -784,6 +794,124 @@ for (const entry of ['button', 'keyboard'] as const) {
   })
 }
 
+for (const scenario of [
+  {
+    provider: 'github',
+    templateLabel: 'Use repository pull-request template when the description is empty'
+  },
+  {
+    provider: 'gitlab',
+    templateLabel: 'Use repository merge-request template when the description is empty'
+  }
+] as const) {
+  test(`creation ${scenario.provider} options use inline native checkboxes and save exact booleans`, async () => {
+    const state = stateFor({ creation: {
+      eligibility: { provider: scenario.provider, eligible: true, confirmedAt: Date.now(), stackSupported: false }
+    } })
+    const { harness, mounted } = mountActivatedSurface(CREATE_VIEW, state, WORKTREE_A, (controls) => {
+      controls.setMethod('quirky.reviews/createDraft', (params) => {
+        if (typeof params.draft === 'boolean') state.creation.draft = params.draft
+        if (typeof params.useTemplate === 'boolean') state.creation.useTemplate = params.useTemplate
+        return { updated: true }
+      })
+    })
+    await settle()
+    const draft = inlineCheckbox(mounted.element, 'review-create-draft', 'Create as draft')
+    const template = inlineCheckbox(mounted.element, 'review-use-template', scenario.templateLabel)
+
+    await click(draft.label)
+    expect(draft.input.checked).toBe(true)
+    await click(template.label)
+    expect(template.input.checked).toBe(true)
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/createDraft').map((call) => call.params)).toEqual([
+      { worktree: WORKTREE_A, draft: true, generation: 1 },
+      { worktree: WORKTREE_A, useTemplate: true, generation: 1 }
+    ])
+  })
+}
+
+test('rejected creation checkbox writes preserve the field error association and requested boolean route', async () => {
+  const { harness, mounted } = mountActivatedSurface(CREATE_VIEW, stateFor(), WORKTREE_A, (controls) => {
+    controls.setMethod('quirky.reviews/createDraft', () => Promise.reject(new Error('draft write failed')))
+  })
+  await settle()
+  const draft = inlineCheckbox(mounted.element, 'review-create-draft', 'Create as draft')
+  const heldWrite = harness.holdNext('quirky.reviews/createDraft')
+  await click(draft.label)
+  expect(harness.calls.filter((call) => call.method === 'quirky.reviews/createDraft').map((call) => call.params)).toEqual([
+    { worktree: WORKTREE_A, draft: true, generation: 1 }
+  ])
+
+  await act(async () => { heldWrite.reject(new Error('draft write failed')); await heldWrite.promise.catch(() => {}) })
+  await settle()
+  expect(draft.input.getAttribute('aria-invalid')).toBe('true')
+  expect(draft.input.getAttribute('aria-describedby')?.split(' ')).toContain('review-create-draft-error')
+  expect(mounted.element.querySelector('#review-create-draft-error')?.textContent).toBe('draft write failed')
+})
+
+for (const scenario of [
+  ['submission lock', { submitting: true }],
+  ['generation lock', { generating: true }]
+] as const) {
+  test(`creation fieldset and submit route are disabled by the ${scenario[0]}`, async () => {
+    const { harness, mounted } = mountActivatedSurface(CREATE_VIEW, stateFor({ creation: scenario[1] }))
+    await settle()
+    inlineCheckbox(mounted.element, 'review-create-draft', 'Create as draft')
+    expect(mounted.element.querySelector('fieldset')?.disabled).toBe(true)
+    const descriptor = latestControl(mounted.reports, CREATE_VIEW, 'creation')
+    expect(descriptor.actions.find((item) => item.action === 'submit')?.enabled).toBe(false)
+    expect(await requestControl(harness, descriptor, 'submit')).toEqual({ delivered: false, reason: 'disabled' })
+    expect(harness.calls.filter((call) => call.method === 'quirky.reviews/createDraft')).toHaveLength(0)
+  })
+}
+
+test('supported stack checkbox routes its exact boolean and locks while saving', async () => {
+  const state = stateFor({ creation: {
+    eligibility: {
+      provider: 'github', eligible: true, confirmedAt: Date.now(),
+      stackSupported: true, stackParentNumber: 7, stackEnabled: false
+    }
+  } })
+  const { harness, mounted } = mountActivatedSurface(CREATE_VIEW, state)
+  await settle()
+  const stack = inlineCheckbox(mounted.element, 'review-create-stack', 'Create pull request in stack with #7')
+  expect(stack.input.checked).toBe(false)
+  const descriptor = latestControl(mounted.reports, CREATE_VIEW, 'creation')
+  const stateReadsBeforeSave = harness.calls.filter((call) => call.method === 'quirky.reviews/state').length
+  const heldSave = harness.holdNext('quirky.reviews/createBase')
+
+  await click(stack.label)
+  expect(harness.calls.filter((call) => call.method === 'ui.window.command.run').map((call) => call.params)).toEqual([{
+    connId: 42,
+    id: CONTROL_COMMAND,
+    args: {
+      target: descriptor.target,
+      generation: descriptor.generation,
+      action: 'stack-set',
+      value: { enabled: true }
+    }
+  }])
+  expect(harness.calls.filter((call) => call.method === 'quirky.reviews/createBase').map((call) => call.params)).toEqual([
+    { worktree: WORKTREE_A, base: 'main', stack: true, generation: 1 }
+  ])
+  expect(stack.input.disabled).toBe(true)
+  const savingDescriptor = latestControl(mounted.reports, CREATE_VIEW, 'creation')
+  expect(savingDescriptor.actions.find((item) => item.action === 'stack-set')?.enabled).toBe(false)
+  expect(await requestControl(harness, savingDescriptor, 'stack-set', { enabled: false })).toEqual({ delivered: false, reason: 'disabled' })
+  expect(harness.calls.filter((call) => call.method === 'quirky.reviews/createBase')).toHaveLength(1)
+  expect(harness.calls.filter((call) => call.method === 'ui.window.command.run')).toHaveLength(2)
+  await act(async () => { heldSave.resolve({ updated: true }); await heldSave.promise })
+  await settle()
+  expect(harness.calls.filter((call) => call.method === 'quirky.reviews/state')).toHaveLength(stateReadsBeforeSave + 1)
+})
+
+test('unsupported stack capability keeps the notice and omits its checkbox', async () => {
+  const { mounted } = mountActivatedSurface(CREATE_VIEW)
+  await settle()
+  expect(mounted.element.querySelector('#review-create-stack')).toBeNull()
+  expect(mounted.element.textContent).toContain('Stacked pull requests are available only for supported GitHub.com repositories.')
+})
+
 test('creation submit waits for the latest drafts, writes base and full payload before one createSubmit', async () => {
   const { harness, mounted } = mountActivatedSurface(CREATE_VIEW)
   await settle()
@@ -806,7 +934,11 @@ test('creation submit waits for the latest drafts, writes base and full payload 
   expect(delivered).toEqual({ delivered: true })
   expect(harness.calls.filter((call) => call.method === 'quirky.reviews/createSubmit')).toHaveLength(0)
   expect(button(mounted.element, 'Creating…').disabled).toBe(true)
-  expect(await requestControl(harness, descriptor, 'submit')).toEqual({ delivered: false, reason: 'disabled' })
+  await settle()
+  expect(mounted.element.querySelector('fieldset')?.disabled).toBe(true)
+  const pendingControl = latestControl(mounted.reports, CREATE_VIEW, 'creation')
+  expect(pendingControl.actions.find((item) => item.action === 'submit')?.enabled).toBe(false)
+  expect(await requestControl(harness, pendingControl, 'submit')).toEqual({ delivered: false, reason: 'disabled' })
   expect(harness.calls.filter((call) => call.method === 'quirky.reviews/createSubmit')).toHaveLength(0)
 
   await act(async () => { heldTitleWrite.resolve({ updated: true }); await heldTitleWrite.promise })
