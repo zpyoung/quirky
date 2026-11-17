@@ -16,6 +16,7 @@ import {
   type ContractReviewEvidence,
   type ContractAwareResponse,
   type HostContractContext,
+  type ImageEvidence,
   type ModelFamily,
   type ReviewCellKey,
   type ReviewIssue,
