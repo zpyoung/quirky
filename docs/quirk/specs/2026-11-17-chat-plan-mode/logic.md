@@ -253,6 +253,6 @@ Open questions from the mock's gaps (elements with no existing component):
 
 ## Status & amendments
 
-**Status:** Draft
+**Status:** Approved
 
 **Amendments:** none
