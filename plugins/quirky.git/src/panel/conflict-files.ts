@@ -72,19 +72,19 @@ export function withStatusConflicts(files: readonly ReviewFile[], entries: reado
     paths.add(file.path)
     const facts = byPath.get(file.path)
     const liveConflict = facts?.conflict
-    if (file.conflict === undefined && liveConflict === undefined) continue
-    if (capped && liveConflict === undefined) continue
+    let updated = file
+    if ((file.conflict !== undefined || liveConflict !== undefined) && (!capped || liveConflict !== undefined)) {
+      const uncommitted = facts !== undefined
+      const staged = facts?.staged ?? false
+      if (!sameConflict(file.conflict, liveConflict) || file.uncommitted !== uncommitted || file.staged !== staged) {
+        updated = { ...file, uncommitted, staged }
+        if (liveConflict === undefined) delete updated.conflict
+        else updated.conflict = sameConflict(file.conflict, liveConflict) ? file.conflict : liveConflict
+      }
+    }
 
-    const conflict = sameConflict(file.conflict, liveConflict) ? file.conflict : liveConflict
-    const uncommitted = facts !== undefined
-    const staged = facts?.staged ?? false
-    if (sameConflict(file.conflict, liveConflict) && file.uncommitted === uncommitted && file.staged === staged) continue
-
-    projected ??= files.slice()
-    const updated: ReviewFile = { ...file, uncommitted, staged }
-    if (conflict === undefined) delete updated.conflict
-    else updated.conflict = conflict
-    projected[i] = updated
+    if (updated !== file) projected ??= files.slice(0, i)
+    projected?.push(updated)
   }
 
   for (const facts of byPath.values()) {

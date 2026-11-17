@@ -37,3 +37,16 @@ test('a capped status cannot clear a known conflict by omitting it', () => {
     })
   }
 })
+
+test('updating one conflict keeps the other displayed files', () => {
+  const files: ReviewFile[] = ['before.ts', 'known.ts', 'after.ts'].map(path => ({
+    path, status: 'M', added: 1, removed: 0, binary: false,
+    uncommitted: true, staged: false, mark: 'none', notes: 0
+  }))
+  const projected = withStatusConflicts(files, [{
+    path: 'known.ts', area: 'conflicts', status: 'modified',
+    conflict: { kind: 'both_modified', state: 'unresolved' }
+  }])
+  expect(projected.map(file => file.path).sort()).toEqual(['after.ts', 'before.ts', 'known.ts'])
+  expect(projected.find(file => file.path === 'known.ts')?.conflict).toEqual({ kind: 'both_modified', state: 'unresolved' })
+})
