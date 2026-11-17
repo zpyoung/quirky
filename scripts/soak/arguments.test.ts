@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path'
 
 import { parseArguments, USAGE, UsageError } from './arguments.ts'
 
-const faultKinds = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback', 'flood'] as const
+const faultKinds = ['leak', 'zombies', 'storm', 'block', 'slow-git', 'feedback', 'flood', 'pty-pause'] as const
 
 const scratch: string[] = []
 const defaultLimits = {
@@ -176,7 +176,7 @@ for (const argv of [
 
     expect(caught).toBeInstanceOf(UsageError)
     if (caught instanceof UsageError) {
-      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block, slow-git, feedback, flood')
+      expect(caught.message).toBe('--fault must be one of leak, zombies, storm, block, slow-git, feedback, flood, pty-pause')
     }
   })
 }
@@ -332,8 +332,8 @@ for (let windows = 2; windows <= 7; windows += 1) {
   })
 }
 
-test('lists flood last in the supported fault choices', () => {
-  expect(USAGE).toContain('--fault leak|zombies|storm|block|slow-git|feedback|flood')
+test('lists flood and pty-pause last in the supported fault choices', () => {
+  expect(USAGE).toContain('--fault leak|zombies|storm|block|slow-git|feedback|flood|pty-pause')
 })
 
 test('does not add a report-only spelling for the request limit', () => {
