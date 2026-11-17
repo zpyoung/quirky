@@ -1212,7 +1212,7 @@ export async function runHostGate(argv: readonly string[], dependencies: HostGat
       }
       const envelope = reportEnvelopeFailure(report, requested, manifest, args)
       const baseIssues = [...(report.issues ?? []), ...artifactFailure]
-      const preliminary = outcomeMapFor(report, requested, manifest, contexts, bundle, args, gateReport.reviewerIdentity)
+      const preliminary = outcomeMapFor({ ...report, issues: baseIssues }, requested, manifest, contexts, bundle, args, gateReport.reviewerIdentity)
       if (envelope && preliminary.fatal === null) preliminary.fatal = envelope
       const attemptIssues = [...baseIssues]
       if (preliminary.fatal) attemptIssues.push(makeIssue('invalid-sample', preliminary.fatal))

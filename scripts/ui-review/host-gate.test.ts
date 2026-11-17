@@ -609,6 +609,38 @@ describe('host gate', () => {
     expect(report.cells.every((cell) => cell.median === null)).toBe(true)
   })
 
+  test('a detected context artifact association mismatch blocks samples without retrying', async () => {
+    const value = fixture()
+    const missingContext = join(value.root, 'missing-context.json')
+    const result = await run(value, {
+      mutate: (report) => {
+        report.captures[0]!.contractReview!.contextPath = missingContext
+        return report
+      }
+    })
+    assertGateExit(value, result.exitCode, 2)
+    const report = reportAt(value)
+    const affected = report.cells.find((cell) => cell.targetId === 'host:shell' && cell.theme === 'dark')!
+    expect(result.reviewCalls()).toBe(1)
+    expect(report.status).toBe('error')
+    expect(affected.status).toBe('invalid')
+    expect(affected.median).toBeNull()
+    expect(affected.slots[0]).toMatchObject({ status: 'invalid', score: null })
+    expect(affected.slots[0]!.issues).toContainEqual(expect.objectContaining({ code: 'persistence' }))
+    const attempt = report.attempts[0]!
+    expect(attempt.issues).toContainEqual(expect.objectContaining({
+      code: 'persistence',
+      message: expect.stringContaining('context path does not match its run-ID artifact')
+    }))
+    expect(attempt.artifactPaths.every((path) => existsSync(join(value.output, path)))).toBe(true)
+    expect(attempt.artifactPaths.filter((path) => path.endsWith('.context.json'))).toHaveLength(10)
+    const raw = JSON.parse(readFileSync(join(value.output, attempt.reportPath!), 'utf8')) as ReviewReport
+    expect(raw.captures[0]!.contractReview!.contextPath).toBe(missingContext)
+    expect(raw.status).toBe('passed')
+    expect(raw.issues).toEqual([])
+    expect(existsSync(missingContext)).toBe(false)
+  })
+
   test('uses canonical artifact paths with a real reviewer behind a symlinked output parent', async () => {
     const value = fixture()
     const repoRoot = resolve(fileURLToPath(new URL('../..', import.meta.url)))
