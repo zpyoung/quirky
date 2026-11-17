@@ -1215,20 +1215,18 @@ describe('structured sessions', () => {
   test('sends a follow-up with Enter', async () => {
     start([bg], { 'quirky.structured/messages': () => [], 'quirky.structured/send': () => ({ ok: true }) })
     const view = await open({ worktree: WORKTREE.id })
-    const textarea = view.element.querySelector('textarea')!
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, ' next ')
-      textarea.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await act(async () => void textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
-    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: 'next', when: 'now' })
+    const { EditorView } = await import('@codemirror/view')
+    const editor = EditorView.findFromDOM(view.element.querySelector<HTMLElement>('.cm-editor')!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: ' next ' }, selection: { anchor: 6 } }))
+    await act(async () => void editor.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: ' next ', when: 'now' })
   })
 
   test('says so when quirky.structured is off', async () => {
     start([bg])
     const view = await open({ worktree: WORKTREE.id })
     expect(view.element.textContent).toContain('Structured sessions are off')
-    expect(view.element.querySelector('textarea')).toBeNull()
+    expect(view.element.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
   })
 
   describe('when quirky.structured changes while the transcript is open', () => {
@@ -1247,12 +1245,12 @@ describe('structured sessions', () => {
     test('disabling it shows the off state and removes the input', async () => {
       start2(true)
       const view = await open({ worktree: WORKTREE.id })
-      expect(view.element.querySelector('textarea')).not.toBeNull()
+      expect(view.element.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
       on = false
       await fake.emit({ type: 'plugin.changed' })
       await settle()
       expect(view.element.textContent).toContain('Structured sessions are off')
-      expect(view.element.querySelector('textarea')).toBeNull()
+      expect(view.element.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
     })
 
     test('enabling it reloads the transcript and enables the input', async () => {
@@ -1264,7 +1262,7 @@ describe('structured sessions', () => {
       await settle()
       expect(fake.callsTo('quirky.structured/messages')).toHaveLength(2)
       expect([...view.element.querySelectorAll('article[aria-label$="message"]')].map((row) => row.textContent)).toEqual(['userhi'])
-      expect(view.element.querySelector('textarea')).not.toBeNull()
+      expect(view.element.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
       expect(view.element.textContent).not.toContain('Structured sessions are off')
     })
 

@@ -76,7 +76,7 @@ describe('the structured session view', () => {
     const view = await mount({ session: 'bg' })
 
     expect(view.textContent).toContain('Loading session…')
-    expect(view.querySelector('textarea')).toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
   })
 
   test('shows a Retry error when the session read fails, then loads on retry', async () => {
@@ -96,7 +96,7 @@ describe('the structured session view', () => {
     await settle()
 
     expect(rows(view)).toEqual(['userhi', 'assistanthello'])
-    expect(view.querySelector('textarea')).not.toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
     expect(fake.callsTo('quirky.session/get')).toHaveLength(2)
   })
 
@@ -114,7 +114,7 @@ describe('the structured session view', () => {
     await fake.emit({ type: 'quirky.session/changed', data: { session: bg } })
     await settle()
 
-    expect(view.querySelector('textarea')).not.toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
     expect(view.querySelector('[role="alert"]')).toBeNull()
   })
 
@@ -278,7 +278,7 @@ describe('the structured session view', () => {
     expect(fake.callsTo('quirky.session/get')[0]!.params).toEqual({ session: 'bg' })
     expect(fake.callsTo('quirky.structured/messages')[0]!.params).toEqual({ session: 'bg' })
     expect(rows(view)).toEqual(['userhi', 'assistanthello'])
-    expect(view.querySelector('textarea')).not.toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
     expect(fake.callsTo('quirky.terminal/attach')).toEqual([])
 
     await act(async () => void (unmount as () => void)())
@@ -292,21 +292,19 @@ describe('the structured session view', () => {
   test('takes a follow-up through the same input the session view has', async () => {
     start({ session: bg }, { 'quirky.structured/send': () => ({ ok: true }) })
     const view = await mount({ session: 'bg' })
-    const textarea = view.querySelector('textarea')!
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea, ' next ')
-      textarea.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await act(async () => void textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
-    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: 'next', when: 'now' })
+    const { EditorView } = await import('@codemirror/view')
+    const editor = EditorView.findFromDOM(view.querySelector<HTMLElement>('.cm-editor')!)!
+    await act(async () => editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: ' next ' }, selection: { anchor: 6 } }))
+    await act(async () => void editor.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })))
+    expect(fake.callsTo('quirky.structured/send')[0]!.params).toEqual({ session: 'bg', text: ' next ', when: 'now' })
   })
 
   test('re-reads the session when it changes, and ignores other sessions', async () => {
     const current = { session: bg as Session | null }
     start(current)
     const view = await mount({ session: 'bg' })
-    expect(view.querySelector('textarea')).not.toBeNull()
-    expect(view.textContent).not.toContain('session ended')
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
+    expect(view.textContent).not.toContain('Session ended')
 
     await fake.emit({ type: 'quirky.session/changed', data: { session: session({ id: 'other', kind: 'structured' }) } })
     expect(fake.callsTo('quirky.session/get')).toHaveLength(1)
@@ -315,8 +313,8 @@ describe('the structured session view', () => {
     await fake.emit({ type: 'quirky.session/changed', data: { session: current.session } })
     await settle()
     expect(fake.callsTo('quirky.session/get')).toHaveLength(2)
-    expect(view.textContent).toContain('session ended')
-    expect(view.querySelector('textarea')).toBeNull()
+    expect(view.textContent).toContain('Session ended')
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
   })
 
   test('an unknown session says so, and a session that is closed while shown turns into the same message', async () => {
@@ -330,12 +328,12 @@ describe('the structured session view', () => {
     current.session = bg
     start(current)
     const view = await mount({ session: 'bg' })
-    expect(view.querySelector('textarea')).not.toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).not.toBeNull()
     current.session = null
     await fake.emit({ type: 'quirky.session/removed', data: { sessionId: 'bg' } })
     await settle()
     expect(view.querySelector('p')?.textContent).toBe('Session not found')
-    expect(view.querySelector('textarea')).toBeNull()
+    expect(view.querySelector('[aria-label="Message"][aria-multiline]')).toBeNull()
   })
 
   test('an input without a session names none and reads nothing', async () => {

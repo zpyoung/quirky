@@ -20,6 +20,7 @@ type NativeBrowserPreloadBridge = {
 
 type DesktopRequestBridge = {
   pickFolder(params: NativeBrowserHostRPC['bun']['requests']['pickFolder']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['pickFolder']['response']>
+  pickFiles(params: NativeBrowserHostRPC['bun']['requests']['pickFiles']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['pickFiles']['response']>
   openWindow(params: NativeBrowserHostRPC['bun']['requests']['openWindow']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['openWindow']['response']>
   closeWindow(params: NativeBrowserHostRPC['bun']['requests']['closeWindow']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['closeWindow']['response']>
   revealItem(params: NativeBrowserHostRPC['bun']['requests']['revealItem']['params']): Promise<NativeBrowserHostRPC['bun']['requests']['revealItem']['response']>
@@ -41,6 +42,7 @@ declare global {
 
 const DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
   directoryPicker: true,
+  filePicker: true,
   auxiliaryWindows: true,
   revealItem: true,
   notifications: preloadNotificationCapabilities(window.__quirkyNotificationCapabilities)
@@ -90,6 +92,7 @@ const desktopBridge: DesktopShellBridge = {
   capabilities: DESKTOP_CAPABILITIES,
   readClipboardText: () => requests.readClipboardText({}),
   pickFolder: (params) => requests.pickFolder(params),
+  pickFiles: (params) => requests.pickFiles(params),
   openWindow: (request, ownerShell) => requests.openWindow({ request, ownerShell }),
   closeWindow: (windowId) => requests.closeWindow({ windowId }),
   revealItem: (params) => requests.revealItem(params),

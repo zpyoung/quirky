@@ -1,7 +1,8 @@
-import { createElement, useMemo, type CSSProperties, type ReactNode } from 'react'
+import { cloneElement, createElement, isValidElement, useMemo, type CSSProperties, type ReactNode } from 'react'
 import type { UiPluginContext } from '@quirky/protocol'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
+import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import remarkRehype from 'remark-rehype'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
@@ -21,7 +22,7 @@ const SCHEMA = {
   clobber: []
 } satisfies typeof defaultSchema
 
-const PROCESSOR = unified().use(remarkParse).use(remarkGfm).use(remarkRehype).use(rehypeSanitize, SCHEMA)
+const PROCESSOR = unified().use(remarkParse).use(remarkGfm).use(remarkBreaks).use(remarkRehype).use(rehypeSanitize, SCHEMA)
 
 type HastNode = { type: string; tagName?: string; value?: string; properties?: Record<string, unknown>; children?: HastNode[] }
 
@@ -46,11 +47,31 @@ const inlineCode = { ...mono, padding: '0 var(--ui-space-4)', background: 'var(-
 const root = { minWidth: 0, overflowWrap: 'anywhere' } satisfies CSSProperties
 const caret = { color: 'var(--ui-accent)' } satisfies CSSProperties
 
-function toReact(node: HastNode, key: number, inPre: boolean, openLink: (href: string) => void): ReactNode {
-  if (node.type === 'text') return node.value ?? ''
+const mention = { ...mono, padding: '0 var(--ui-space-4)', background: 'var(--ui-selected)', borderRadius: 'var(--ui-radius-mark)' } satisfies CSSProperties
+const MENTION = /(^|\s)@(\S+)/g
+const basename = (path: string) => path.slice(path.lastIndexOf('/') + 1) || path
+
+function withMentions(text: string): ReactNode {
+  const parts: ReactNode[] = []
+  let last = 0
+  for (const match of text.matchAll(MENTION)) {
+    const path = match[2]!.replace(/[.,;:!?)]+$/, '')
+    if (!path) continue
+    const start = match.index! + match[1]!.length
+    if (start > last) parts.push(text.slice(last, start))
+    parts.push(<span key={start} style={mention} title={path}>{basename(path)}</span>)
+    last = start + 1 + path.length
+  }
+  if (parts.length === 0) return text
+  if (last < text.length) parts.push(text.slice(last))
+  return parts
+}
+
+function toReact(node: HastNode, key: number, inPre: boolean, openLink: (href: string) => void, mentions = false): ReactNode {
+  if (node.type === 'text') return mentions && !inPre ? withMentions(node.value ?? '') : (node.value ?? '')
   if (node.type !== 'element' || !node.tagName || !TAGS.includes(node.tagName)) return null
   const tag = node.tagName
-  const children = VOID.has(tag) ? undefined : (node.children ?? []).map((child, index) => toReact(child, index, inPre || tag === 'pre', openLink))
+  const children = VOID.has(tag) ? undefined : (node.children ?? []).map((child, index) => toReact(child, index, inPre || tag === 'pre' || tag === 'code', openLink, mentions))
   const props: Record<string, unknown> = { key }
   if (styles[tag]) props.style = styles[tag]
   if (tag === 'code') {
@@ -77,6 +98,19 @@ function toReact(node: HastNode, key: number, inPre: boolean, openLink: (href: s
 export function renderMarkdown(markdown: string, openLink: (href: string) => void): ReactNode[] {
   const tree = PROCESSOR.runSync(PROCESSOR.parse(markdown)) as HastNode
   return (tree.children ?? []).map((child, index) => toReact(child, index, false, openLink))
+}
+
+/**
+ * The sanitized tree for a message the user sent: the same GFM subset as agent prose, with `@path`
+ * tokens shown as file-name spans. Links are inert because nothing here opens them.
+ */
+export function renderUserMarkdown(text: string): ReactNode {
+  const tree = PROCESSOR.runSync(PROCESSOR.parse(text)) as HastNode
+  const noop = () => {}
+  const blocks = (tree.children ?? []).map((child, index) => toReact(child, index, false, noop, true))
+  const last = blocks.length - 1
+  // the bubble's own padding closes the message, so the last block keeps no bottom margin
+  return blocks.map((block, index) => index === last && isValidElement<{ style?: CSSProperties }>(block) ? cloneElement(block, { style: { ...block.props.style, margin: 0 } }) : block)
 }
 
 /**

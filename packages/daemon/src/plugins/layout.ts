@@ -17,6 +17,8 @@ import {
   type DesktopWindowRunOwnerCommandRequest,
   type DesktopWindowRunOwnerCommandResult,
   type DesktopWindowResult,
+  type FilePickerRequest,
+  type FilePickerResult,
   type FolderPickerRequest,
   type FolderPickerResult,
   type BrowserHostPrompt,
@@ -114,6 +116,7 @@ type AuxiliaryWindowRoute = {
 
 const DEFAULT_DESKTOP_CAPABILITIES: NativeDesktopCapabilities = {
   directoryPicker: false,
+  filePicker: false,
   auxiliaryWindows: false,
   revealItem: false,
   notifications: { permission: false, click: false, dismiss: false }
@@ -126,6 +129,7 @@ function nativeResultMatches(action: DesktopShellAction, value: unknown): value 
   if (!isRecord(value)) return false
   switch (action.kind) {
     case 'folder-picker':
+    case 'file-picker':
       return typeof value.cancelled === 'boolean' && Array.isArray(value.paths) &&
         value.paths.every((path) => typeof path === 'string') && value.cancelled === (value.paths.length === 0)
     case 'window-open':
@@ -1027,6 +1031,7 @@ export class LayoutService {
     this.requireWindow(conn)
     this.desktopCapabilitiesByWindow.set(conn.id, {
       directoryPicker: capabilities.directoryPicker,
+      filePicker: capabilities.filePicker,
       auxiliaryWindows: capabilities.auxiliaryWindows,
       revealItem: capabilities.revealItem,
       notifications: { ...capabilities.notifications }
@@ -1043,6 +1048,10 @@ export class LayoutService {
 
   pickFolder(conn: ClientConn, request: FolderPickerRequest): Promise<FolderPickerResult> {
     return this.requestDesktopShell(conn, { kind: 'folder-picker', request }) as Promise<FolderPickerResult>
+  }
+
+  pickFiles(conn: ClientConn, request: FilePickerRequest): Promise<FilePickerResult> {
+    return this.requestDesktopShell(conn, { kind: 'file-picker', request }) as Promise<FilePickerResult>
   }
 
   openDesktopWindow(conn: ClientConn, request: DesktopWindowRequest): Promise<DesktopWindowResult> {
@@ -1334,6 +1343,7 @@ export class LayoutService {
     if (!capabilities) return false
     switch (kind) {
       case 'folder-picker': return capabilities.directoryPicker
+      case 'file-picker': return capabilities.filePicker === true
       case 'window-open':
       case 'window-close':
       case 'window-activate-owner': return capabilities.auxiliaryWindows
@@ -1344,6 +1354,7 @@ export class LayoutService {
   private desktopActionLabel(kind: DesktopShellAction['kind']): string {
     switch (kind) {
       case 'folder-picker': return 'directory selection'
+      case 'file-picker': return 'file selection'
       case 'window-open':
       case 'window-close':
       case 'window-activate-owner': return 'auxiliary windows'

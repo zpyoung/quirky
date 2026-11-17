@@ -1,0 +1,1269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mock review</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #efefec;
+  --border: #d6d6d0;
+  --text: #1c1c1a;
+  --muted: #62625c;
+  --accent: #2f5fd0;
+  --accent-text: #ffffff;
+  --accent-soft: #e4ebfb;
+  --warn: #8a5a00;
+  --warn-soft: #fbf0d6;
+  --danger: #b3261e;
+  --ok: #1f7a3d;
+  --change: #c2410c;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615;
+    --surface: #1f1f1d;
+    --surface-2: #2a2a27;
+    --border: #3d3d38;
+    --text: #ececE8;
+    --muted: #a5a59d;
+    --accent: #7ba0ff;
+    --accent-text: #0d1424;
+    --accent-soft: #232c45;
+    --warn: #f0c36a;
+    --warn-soft: #3a2f14;
+    --danger: #ff8a80;
+    --ok: #6fd08c;
+    --change: #fb923c;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+button, select, textarea { font: inherit; color: inherit; }
+button {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--surface-2); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+select { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 6px; }
+[hidden] { display: none !important; }
+
+.app { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.banner {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+  font-weight: 600;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.chip {
+  display: inline-block;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.seg { display: inline-flex; }
+.seg button { border-radius: 0; margin-left: -1px; }
+.seg button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg button:last-child { border-radius: 0 6px 6px 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); position: relative; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.status { color: var(--muted); font-size: 13px; margin-left: auto; min-height: 1.4em; }
+.status.error { color: var(--danger); }
+
+.body { flex: 1; min-height: 0; display: grid; grid-template-columns: 272px minmax(0, 1fr); }
+.rail {
+  overflow: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 10px 10px 16px;
+}
+.rail h2 { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin: 14px 4px 6px; }
+.rail h2:first-child { margin-top: 2px; }
+.rail ul { list-style: none; margin: 0; padding: 0; }
+.screen-item { display: flex; align-items: center; gap: 4px; border-radius: 6px; }
+.screen-item.current { background: var(--accent-soft); }
+.screen-item > button.go {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 8px;
+}
+.screen-item .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 9px; height: 9px; flex: none; border-radius: 50%; border: 2px solid var(--muted); align-self: center; }
+.dot.visited { background: var(--ok); border-color: var(--ok); }
+.count { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
+.mark { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; color: var(--muted); padding-right: 6px; cursor: pointer; }
+.note { color: var(--muted); font-size: 12px; margin: 2px 8px 4px; }
+.skipped li { margin: 2px 8px; font-size: 12px; color: var(--muted); }
+.pin-row { border: 1px solid var(--border); border-radius: 8px; margin: 0 2px 6px; background: var(--surface); }
+.pin-row.selected { border-color: var(--accent); }
+.pin-row > button.head { width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 8px; display: block; }
+.pin-row .meta { color: var(--muted); font-size: 12px; }
+.badge { font-size: 11px; border-radius: 999px; padding: 0 7px; background: var(--surface-2); border: 1px solid var(--border); margin-left: 4px; white-space: nowrap; }
+.badge.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.badge.ok { color: var(--ok); }
+.thread { padding: 0 8px 8px; }
+.msg { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.agent { background: var(--accent-soft); }
+.msg .who { display: block; font-size: 11px; color: var(--muted); }
+.msg.last-reply { outline: 2px solid var(--ok); }
+
+.stage { position: relative; min-width: 0; min-height: 0; overflow: auto; display: flex; justify-content: center; padding: 12px; background: var(--surface-2); }
+.frame-box { position: relative; width: 100%; max-width: 100%; height: 100%; min-height: 360px; background: #fff; border-radius: 6px; box-shadow: 0 0 0 1px var(--border), 0 1px 4px rgba(0,0,0,0.12); }
+.frame-box.mobile { width: 390px; }
+.frame-box iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; border-radius: 6px; }
+.overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 6px; }
+.box { position: absolute; pointer-events: none; border-radius: 2px; }
+.box.hover { outline: 2px solid var(--accent); outline-offset: 0; background: rgba(47, 95, 208, 0.08); }
+.box.changed { outline: 2px dashed var(--change); outline-offset: 1px; }
+.box .tag { position: absolute; left: 0; top: -20px; background: var(--accent); color: var(--accent-text); font-size: 11px; line-height: 16px; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.box.changed .tag { background: var(--change); color: #fff; }
+.pin {
+  position: absolute;
+  pointer-events: auto;
+  width: 26px; height: 26px; padding: 0;
+  transform: translate(-50%, -50%);
+  border-radius: 50% 50% 50% 4px;
+  background: var(--accent); color: var(--accent-text); border: 2px solid #fff;
+  font-weight: 700; font-size: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.pin:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+.pin.resolved { background: var(--ok); color: #fff; }
+.pin.selected { outline: 3px solid var(--text); }
+.pop {
+  position: absolute;
+  pointer-events: auto;
+  width: min(300px, calc(100% - 16px));
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+  padding: 10px;
+  z-index: 5;
+}
+.pop h3 { margin: 0 0 6px; font-size: 13px; }
+.pop textarea { width: 100%; min-height: 76px; resize: vertical; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.pop .row { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; align-items: center; }
+.pop .err { color: var(--danger); font-size: 12px; margin-right: auto; }
+
+.verdict { background: var(--surface); border-top: 1px solid var(--border); padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.verdict .spacer { flex: 1; }
+.verdict .panel { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+.verdict .panel textarea { width: 100%; min-height: 64px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px; }
+.verdict .panel .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.verdict .err { color: var(--danger); }
+.verdict .info { color: var(--muted); }
+
+@media (max-width: 760px) {
+  .body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .rail { max-height: 34vh; border-right: 0; border-bottom: 1px solid var(--border); }
+  .stage { padding: 6px; }
+  .frame-box.mobile { width: 390px; max-width: 100%; }
+  .status { margin-left: 0; flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="banner" id="banner" hidden></div>
+  <header class="bar" id="toolbar">
+    <span class="chip" id="version-chip"></span>
+    <label id="version-wrap" hidden>Version <select id="version-picker" aria-label="Mock version"></select></label>
+    <div class="seg" role="group" aria-label="Mode">
+      <button type="button" id="mode-interact" aria-pressed="true">Interact</button>
+      <button type="button" id="mode-comment" aria-pressed="false">Comment</button>
+    </div>
+    <div class="seg" role="group" aria-label="Viewport">
+      <button type="button" id="vp-desktop" aria-pressed="true">Desktop</button>
+      <button type="button" id="vp-mobile" aria-pressed="false">Mobile 390px</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="show-changes"> Show changes</label>
+    <div class="seg" role="group" aria-label="State" id="state-switch" hidden></div>
+    <span class="status" id="status" role="status" aria-live="polite"></span>
+  </header>
+  <div class="body">
+    <nav class="rail" id="rail" aria-label="Screens"></nav>
+    <main class="stage">
+      <div class="frame-box" id="frame-box">
+        <iframe id="mock-frame" title="Mock under review"></iframe>
+        <div class="overlay" id="overlay">
+          <div id="layer-changes"></div>
+          <div id="layer-hover"></div>
+          <div id="layer-pins"></div>
+          <div id="layer-pop"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <footer class="verdict" id="verdict" hidden></footer>
+</div>
+<script id="quirk-mock-boot" type="application/json">{"mode":"offline","version":1,"latest":1,"versions":[1],"revision":"591073487b4a8641","screens":{"ui_layer":true,"screens":[{"id":"composer","title":"Composer, idle","purpose":"Write and send a message to the agent: text with live markdown, @ pills, attachments, and the settings chip.","states":["empty","draft","failed"],"skipped_states":[{"state":"loading","reason":"the composer renders with the session; agent options load into the chip without blocking typing"}],"elements":[{"pin":"card","label":"Composer card","component":null},{"pin":"editor","label":"Message editor (markdown styling, pills)","component":null},{"pin":"agent-chip","label":"Agent chip","component":"AgentIcon"},{"pin":"settings-chip","label":"Settings chip (model · effort)","component":"Button"},{"pin":"attach","label":"Attach (+) file picker","component":"IconButton"},{"pin":"send","label":"Send button","component":"IconButton"},{"pin":"mention-pill","label":"@ mention pill","component":"TagChip"},{"pin":"image-chip","label":"Image attachment chip","component":"ScopeChip"},{"pin":"paste-chip","label":"Long-paste file chip","component":"ScopeChip"},{"pin":"send-error","label":"Inline send error with Retry","component":"InlineError"}]},{"id":"working","title":"Composer, agent working","purpose":"See that the agent is working, stop it, and queue or steer follow-ups.","states":["running","queued"],"elements":[{"pin":"elapsed","label":"Working indicator and elapsed time","component":"StatusDot"},{"pin":"stop","label":"Stop button","component":"IconButton"},{"pin":"send","label":"Send (queue) button","component":"IconButton"},{"pin":"queue-row","label":"Queued message row","component":"ListRow"},{"pin":"steer-pending","label":"Steered row waiting for next tool call","component":"ListRow"},{"pin":"drag-handle","label":"Drag handle to reorder","component":null}]},{"id":"suggestions","title":"Suggestion list","purpose":"Pick a file with @ or a command or skill with /.","states":["mention","slash","no-match"],"elements":[{"pin":"suggest-list","label":"Suggestion list above the card","component":"Menu"},{"pin":"suggest-group","label":"Group header (Quirky, Claude, Skills)","component":"SectionHeader"},{"pin":"suggest-row","label":"Suggestion row","component":"ListRow"}]},{"id":"settings","title":"Settings chip","purpose":"Change model, effort, permission mode and plan for the next turn, and see non-default modes at a glance.","states":["popover","badges"],"elements":[{"pin":"popover","label":"Settings popover","component":"Popover"},{"pin":"model-list","label":"Model list","component":"ListRow"},{"pin":"effort-seg","label":"Effort segmented control","component":null},{"pin":"mode-list","label":"Permission mode list","component":"ListRow"},{"pin":"plan-switch","label":"Plan mode switch","component":null},{"pin":"disabled-row","label":"Unsupported row (reason on hover)","component":"ListRow"},{"pin":"mode-badge","label":"Non-default mode badge","component":"Badge"}]},{"id":"ended","title":"Session ended","purpose":"Resume the session or start a new chat; see what was still queued.","states":["default"],"elements":[{"pin":"ended-card","label":"Ended card","component":"EmptyState"},{"pin":"resume","label":"Resume button","component":"Button"},{"pin":"new-chat","label":"New chat button","component":"Button"},{"pin":"readonly-row","label":"Read-only queued row","component":"ListRow"}]}]},"changed":[],"mock_html":"\u003c!doctype html>\n\u003chtml lang=\"en\">\n\u003chead>\n\u003cmeta charset=\"utf-8\">\n\u003cmeta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\u003ctitle>Composer mock\u003c/title>\n\u003cstyle>\n  :root { --bg:#f4f4f5; --pane:#fff; --card:#fff; --line:#d4d4d8; --soft:#ececef; --text:#18181b; --muted:#71717a; --faint:#a1a1aa; --accent:#4f46e5; --accent-soft:#e0e7ff; --warn-soft:#fef3c7; --warn:#92400e; --danger:#dc2626; }\n  @media (prefers-color-scheme: dark) { :root { --bg:#111113; --pane:#18181b; --card:#1f1f23; --line:#3f3f46; --soft:#27272a; --text:#f4f4f5; --muted:#a1a1aa; --faint:#71717a; --accent:#818cf8; --accent-soft:#312e81; --warn-soft:#422006; --warn:#fcd34d; --danger:#f87171; } }\n  * { box-sizing: border-box; }\n  body { margin:0; font:14px/1.45 system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--text); }\n  nav.screens { display:flex; gap:4px; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--pane); }\n  nav.screens a { color:var(--muted); text-decoration:none; padding:4px 10px; border-radius:6px; font-size:13px; }\n  nav.screens a.on { background:var(--soft); color:var(--text); }\n  [data-screen] { display:none; }\n  [data-screen].shown { display:block; }\n  .pane { max-width:860px; margin:0 auto; padding:16px; }\n  .transcript { color:var(--muted); font-size:13px; padding:12px 4px 18px; border-bottom:1px dashed var(--line); margin-bottom:14px; }\n  .transcript .you { margin-left:auto; width:fit-content; max-width:80%; background:var(--soft); color:var(--text); padding:6px 10px; border-radius:10px; margin-bottom:8px; }\n  .transcript pre { background:var(--soft); padding:6px 8px; border-radius:6px; margin:4px 0 0; font-size:12px; }\n  .stack { display:flex; flex-direction:column; }\n  .attached { border:1px solid var(--line); border-bottom:none; background:var(--soft); }\n  .attached:first-child { border-radius:12px 12px 0 0; }\n  .attached + .attached { border-top:1px solid var(--line); }\n  .attached-wrap + .card { border-top-left-radius:0; border-top-right-radius:0; }\n  .row { display:flex; align-items:center; gap:10px; padding:6px 12px; font-size:13px; }\n  .row .acts { margin-left:auto; display:flex; gap:12px; color:var(--muted); font-size:12px; }\n  .row .acts a { color:var(--muted); text-decoration:none; }\n  .handle { color:var(--faint); cursor:grab; letter-spacing:-2px; }\n  .card { border:1px solid var(--line); background:var(--card); border-radius:12px; padding:10px 10px 8px; }\n  .card.focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }\n  .card.busy { border-color:var(--accent); }\n  .editor { min-height:44px; padding:2px 4px 8px; font-size:14px; outline:none; white-space:pre-wrap; }\n  .editor .ph { color:var(--faint); }\n  .md-mark { color:var(--faint); }\n  .md-code { font-family:ui-monospace, Menlo, monospace; background:var(--soft); padding:0 3px; border-radius:4px; font-size:13px; }\n  .md-block { display:block; font-family:ui-monospace, Menlo, monospace; background:var(--soft); border-radius:6px; padding:6px 8px; margin:4px 0; font-size:12.5px; }\n  .pill { display:inline-flex; align-items:center; gap:4px; padding:0 7px; border-radius:6px; background:var(--accent-soft); color:var(--accent); font-size:13px; }\n  .chips { display:flex; gap:6px; flex-wrap:wrap; padding:0 4px 8px; }\n  .chip { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:8px; padding:3px 8px; font-size:12px; background:var(--soft); }\n  .chip .x { color:var(--muted); cursor:pointer; }\n  .thumb { width:22px; height:16px; border-radius:3px; background:linear-gradient(135deg,#a5b4fc,#f0abfc); }\n  .toolbar { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }\n  .tchip { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--line); border-radius:999px; padding:2px 10px; font-size:12.5px; color:var(--text); background:transparent; text-decoration:none; cursor:pointer; }\n  .tchip.agent { border-color:transparent; background:var(--soft); color:var(--muted); cursor:default; }\n  .tchip.badge-plan { border-color:transparent; background:var(--accent-soft); color:var(--accent); }\n  .tchip.badge-edits { border-color:transparent; background:var(--warn-soft); color:var(--warn); }\n  .icon { width:28px; height:28px; border-radius:50%; display:inline-grid; place-items:center; border:1px solid var(--line); color:var(--muted); text-decoration:none; font-size:15px; background:transparent; cursor:pointer; }\n  .spacer { margin-left:auto; }\n  .send { background:var(--accent); border-color:var(--accent); color:#fff; }\n  .send.disabled { opacity:.35; cursor:default; }\n  .stop { background:var(--danger); border-color:var(--danger); }\n  .stop span { width:9px; height:9px; background:#fff; border-radius:2px; }\n  .elapsed { color:var(--muted); font-size:12.5px; display:inline-flex; align-items:center; gap:6px; }\n  .dot { width:7px; height:7px; border-radius:50%; background:var(--accent); animation:pulse 1.2s ease-in-out infinite; }\n  @keyframes pulse { 50% { opacity:.3; } }\n  .err { display:flex; align-items:center; gap:10px; color:var(--danger); font-size:12.5px; padding:6px 4px 0; }\n  .err a { color:var(--accent); text-decoration:none; }\n  .hint { color:var(--faint); font-size:12px; padding:6px 4px 0; display:flex; gap:14px; flex-wrap:wrap; }\n  .suggest { border:1px solid var(--accent); border-bottom:none; border-radius:12px 12px 0 0; background:var(--card); padding:6px; max-height:260px; overflow:auto; }\n  .suggest + .card { border-color:var(--accent); border-top-left-radius:0; border-top-right-radius:0; }\n  .sg { font-size:11px; letter-spacing:.04em; color:var(--faint); padding:6px 8px 2px; text-transform:uppercase; }\n  .sr { display:flex; gap:10px; align-items:baseline; padding:5px 8px; border-radius:6px; font-size:13px; cursor:pointer; }\n  .sr.on { background:var(--accent-soft); }\n  .sr .d { color:var(--muted); font-size:12px; }\n  .sr .src { margin-left:auto; color:var(--faint); font-size:11px; }\n  .pop-wrap { position:relative; }\n  .popover { position:absolute; bottom:44px; left:44px; width:290px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.18); padding:10px; z-index:2; }\n  .ph-h { font-size:11px; color:var(--faint); text-transform:uppercase; letter-spacing:.04em; margin:6px 2px 4px; }\n  .opt { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:6px; font-size:13px; cursor:pointer; }\n  .opt.on { background:var(--accent-soft); color:var(--accent); }\n  .opt .d { margin-left:auto; color:var(--muted); font-size:11.5px; }\n  .opt.dis { color:var(--faint); cursor:not-allowed; }\n  .seg { display:flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; }\n  .seg span { flex:1; text-align:center; padding:4px 0; font-size:12.5px; cursor:pointer; }\n  .seg span.on { background:var(--accent-soft); color:var(--accent); }\n  .switch { display:flex; align-items:center; justify-content:space-between; padding:8px 8px 2px; font-size:13px; }\n  .sw { width:32px; height:18px; border-radius:9px; background:var(--line); position:relative; cursor:pointer; }\n  .sw::after { content:\"\"; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:left .15s; }\n  .sw.on { background:var(--accent); }\n  .sw.on::after { left:16px; }\n  .ended { border:1px dashed var(--line); border-radius:12px; padding:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; color:var(--muted); }\n  .btn { border:1px solid var(--line); background:transparent; color:var(--text); border-radius:8px; padding:5px 12px; font-size:13px; cursor:pointer; text-decoration:none; }\n  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }\n  .ro { opacity:.75; }\n  .note { margin-top:12px; font-size:12.5px; color:var(--muted); background:var(--soft); border-radius:8px; padding:8px 10px; display:none; }\n  .note.show { display:block; }\n  .caption { font-size:12px; color:var(--faint); margin:10px 2px 0; }\n  @media (max-width: 480px) { .popover { left:0; width:100%; } .hint { display:none; } }\n\u003c/style>\n\u003c/head>\n\u003cbody>\n\u003cnav class=\"screens\" aria-label=\"Screens\">\n  \u003ca href=\"#/composer\">Idle\u003c/a>\n  \u003ca href=\"#/working\">Working\u003c/a>\n  \u003ca href=\"#/suggestions\">@ and /\u003c/a>\n  \u003ca href=\"#/settings\">Settings chip\u003c/a>\n  \u003ca href=\"#/ended\">Ended\u003c/a>\n\u003c/nav>\n\n\u003c!-- ============ composer ============ -->\n\u003csection data-screen=\"composer\">\u003cdiv class=\"pane\">\n  \u003cdiv class=\"transcript\">\n    \u003cdiv class=\"you\">Add a Usage section to README.md with one example command.\u003c/div>\n    I added a Usage section to README.md with one example command, \u003cspan class=\"md-code\">cat hello.txt\u003c/span>.\n  \u003c/div>\n\n  \u003cdiv data-state=\"empty\">\n    \u003cdiv class=\"card\" data-pin=\"card\">\n      \u003cdiv class=\"editor\" data-pin=\"editor\">\u003cspan class=\"ph\">Message Claude…  (/ for commands, @ for files)\u003c/span>\u003c/div>\n      \u003cdiv class=\"toolbar\">\n        \u003cspan class=\"tchip agent\" data-pin=\"agent-chip\">✳ claude\u003c/span>\n        \u003ca class=\"tchip\" href=\"#/settings\" data-pin=\"settings-chip\">Fable · Low ▾\u003c/a>\n        \u003cbutton class=\"icon\" data-pin=\"attach\" data-note=\"picker\" title=\"Attach images\">＋\u003c/button>\n        \u003cspan class=\"spacer\">\u003c/span>\n        \u003cspan class=\"icon send disabled\" data-pin=\"send\" aria-disabled=\"true\">↑\u003c/span>\n      \u003c/div>\n    \u003c/div>\n    \u003cdiv class=\"hint\">\u003cspan>Enter to send · Shift+Enter new line\u003c/span>\u003cspan>Cmd+B / Cmd+I / Cmd+E format\u003c/span>\u003c/div>\n    \u003cdiv class=\"note\" data-note-for=\"picker\">Not in this mock: + opens the system file picker for images. Drag and paste (including a clipboard screenshot) also attach.\u003c/div>\n  \u003c/div>\n\n  \u003cdiv data-state=\"draft\">\n    \u003cdiv class=\"card focus\" data-pin=\"card\">\n      \u003cdiv class=\"chips\">\n        \u003cspan class=\"chip\" data-pin=\"image-chip\">\u003cspan class=\"thumb\">\u003c/span>error-dialog.png \u003cspan class=\"x\" title=\"Remove error-dialog.png\">✕\u003c/span>\u003c/span>\n        \u003cspan class=\"chip\" data-pin=\"paste-chip\">📄 Pasted text · 412 lines \u003cspan class=\"x\" title=\"Remove pasted text\">✕\u003c/span>\u003c/span>\n      \u003c/div>\n      \u003cdiv class=\"editor\" data-pin=\"editor\">Look at \u003cspan class=\"pill\" data-pin=\"mention-pill\">📄 README.md\u003c/span> and rename \u003cspan class=\"md-mark\">`\u003c/span>\u003cspan class=\"md-code\">useElapsed\u003c/span>\u003cspan class=\"md-mark\">`\u003c/span> so it stays \u003cspan class=\"md-mark\">**\u003c/span>\u003cb>pure\u003c/b>\u003cspan class=\"md-mark\">**\u003c/span>:\n\u003cspan class=\"md-block\">\u003cspan class=\"md-mark\">```ts\u003c/span>\nconst elapsed = useElapsed(working)\n\u003cspan class=\"md-mark\">```\u003c/span>\u003c/span>The pasted log shows the crash.\u003c/div>\n      \u003cdiv class=\"toolbar\">\n        \u003cspan class=\"tchip agent\" data-pin=\"agent-chip\">✳ claude\u003c/span>\n        \u003ca class=\"tchip\" href=\"#/settings\" data-pin=\"settings-chip\">Fable · Low ▾\u003c/a>\n        \u003cbutton class=\"icon\" data-pin=\"attach\" data-note=\"picker2\" title=\"Attach images\">＋\u003c/button>\n        \u003cspan class=\"spacer\">\u003c/span>\n        \u003ca class=\"icon send\" href=\"#/working\" data-pin=\"send\" title=\"Send (Enter)\">↑\u003c/a>\n      \u003c/div>\n    \u003c/div>\n    \u003cp class=\"caption\">Draft is kept for this session, through tab switches and restart.\u003c/p>\n    \u003cdiv class=\"note\" data-note-for=\"picker2\">Not in this mock: + opens the system file picker for images.\u003c/div>\n  \u003c/div>\n\n  \u003cdiv data-state=\"failed\">\n    \u003cdiv class=\"card focus\" data-pin=\"card\">\n      \u003cdiv class=\"editor\" data-pin=\"editor\">Also add a License section to README.md.\u003c/div>\n      \u003cdiv class=\"toolbar\">\n        \u003cspan class=\"tchip agent\" data-pin=\"agent-chip\">✳ claude\u003c/span>\n        \u003ca class=\"tchip\" href=\"#/settings\" data-pin=\"settings-chip\">Fable · Low ▾\u003c/a>\n        \u003cbutton class=\"icon\" data-pin=\"attach\" title=\"Attach images\">＋\u003c/button>\n        \u003cspan class=\"spacer\">\u003c/span>\n        \u003ca class=\"icon send\" href=\"#/working\" data-pin=\"send\">↑\u003c/a>\n      \u003c/div>\n    \u003c/div>\n    \u003cdiv class=\"err\" data-pin=\"send-error\">Couldn't send: the agent process isn't responding. Your message is back in the box. \u003ca href=\"#/working\">Retry\u003c/a>\u003c/div>\n  \u003c/div>\n\u003c/div>\u003c/section>\n\n\u003c!-- ============ working ============ -->\n\u003csection data-screen=\"working\">\u003cdiv class=\"pane\">\n  \u003cdiv class=\"transcript\">\n    \u003cdiv class=\"you\">Write a 2000-word short story about a mapmaker.\u003c/div>\n    Ines had been surveying the Sorrel Valley for three weeks when the old man first came down the track…\n  \u003c/div>\n\n  \u003cdiv data-state=\"running\">\n    \u003cdiv class=\"card busy\" data-pin=\"card\">\n      \u003cdiv class=\"editor\" data-pin=\"editor\">\u003cspan class=\"ph\">Queue a follow-up…  (Enter queues · Cmd+Enter steers)\u003c/span>\u003c/div>\n      \u003cdiv class=\"toolbar\">\n        \u003cspan class=\"tchip agent\">✳ claude\u003c/span>\n        \u003ca class=\"tchip\" href=\"#/settings\">Fable · Low ▾\u003c/a>\n        \u003cbutton class=\"icon\" title=\"Attach images\">＋\u003c/button>\n        \u003cspan class=\"spacer\">\u003c/span>\n        \u003cspan class=\"elapsed\" data-pin=\"elapsed\">\u003cspan class=\"dot\">\u003c/span>Working 14s\u003c/span>\n        \u003ca class=\"icon stop\" href=\"#/composer\" data-pin=\"stop\" title=\"Stop (Esc)\">\u003cspan>\u003c/span>\u003c/a>\n      \u003c/div>\n    \u003c/div>\n  \u003c/div>\n\n  \u003cdiv data-state=\"queued\">\n    \u003cdiv class=\"stack\">\n      \u003cdiv class=\"attached-wrap\">\n        \u003cdiv class=\"attached row\" data-pin=\"steer-pending\">\u003cspan class=\"handle\" data-pin=\"drag-handle\">⋮⋮\u003c/span>\u003cspan>Keep it under 1000 words.\u003c/span>\u003cspan class=\"acts\">\u003cspan style=\"color:var(--accent)\">Steering · waiting for next tool call\u003c/span>\u003ca href=\"#\">Cancel\u003c/a>\u003c/span>\u003c/div>\n        \u003cdiv class=\"attached row\" data-pin=\"queue-row\">\u003cspan class=\"handle\">⋮⋮\u003c/span>\u003cspan>Then give it a title.\u003c/span>\u003cspan class=\"acts\">\u003ca href=\"#\">Steer now\u003c/a>\u003ca href=\"#\">Edit\u003c/a>\u003ca href=\"#\">✕\u003c/a>\u003c/span>\u003c/div>\n      \u003c/div>\n      \u003cdiv class=\"card busy\" data-pin=\"card\">\n        \u003cdiv class=\"editor\" data-pin=\"editor\">And list three alternative titles\u003c/div>\n        \u003cdiv class=\"toolbar\">\n          \u003cspan class=\"tchip agent\">✳ claude\u003c/span>\n          \u003ca class=\"tchip\" href=\"#/settings\">Fable · Low ▾\u003c/a>\n          \u003cbutton class=\"icon\" title=\"Attach images\">＋\u003c/button>\n          \u003cspan class=\"spacer\">\u003c/span>\n          \u003cspan class=\"elapsed\" data-pin=\"elapsed\">\u003cspan class=\"dot\">\u003c/span>Working 31s\u003c/span>\n          \u003ca class=\"icon stop\" href=\"#/composer\" data-pin=\"stop\" title=\"Stop (Esc)\">\u003cspan>\u003c/span>\u003c/a>\n          \u003ca class=\"icon send\" href=\"#\" data-pin=\"send\" title=\"Queue (Enter)\">↑\u003c/a>\n        \u003c/div>\n      \u003c/div>\n    \u003c/div>\n    \u003cp class=\"caption\">Up arrow in an empty box pulls the last queued message back to edit. After Stop, queued messages stay held.\u003c/p>\n  \u003c/div>\n\u003c/div>\u003c/section>\n\n\u003c!-- ============ suggestions ============ -->\n\u003csection data-screen=\"suggestions\">\u003cdiv class=\"pane\">\n  \u003cdiv class=\"transcript\">\u003cdiv class=\"you\">Add a Usage section to README.md.\u003c/div>Done. README.md now has a Usage section.\u003c/div>\n\n  \u003cdiv data-state=\"mention\">\n    \u003cdiv class=\"stack\">\n      \u003cdiv class=\"suggest\" data-pin=\"suggest-list\">\n        \u003cdiv class=\"sg\" data-pin=\"suggest-group\">Files in demo-repo\u003c/div>\n        \u003cdiv class=\"sr on\" data-pin=\"suggest-row\">📄 README.md \u003cspan class=\"d\">README.md\u003c/span>\u003c/div>\n        \u003cdiv class=\"sr\">📄 hello.txt \u003cspan class=\"d\">hello.txt\u003c/span>\u003c/div>\n        \u003cdiv class=\"sr\">📁 docs/ \u003cspan class=\"d\">docs\u003c/span>\u003c/div>\n      \u003c/div>\n      \u003cdiv class=\"card\">\n        \u003cdiv class=\"editor\">Look at @REA\u003c/div>\n        \u003cdiv class=\"toolbar\">\u003cspan class=\"tchip agent\">✳ claude\u003c/span>\u003cspan class=\"tchip\">Fable · Low ▾\u003c/span>\u003cspan class=\"spacer\">\u003c/span>\u003cspan class=\"icon send\">↑\u003c/span>\u003c/div>\n      \u003c/div>\n    \u003c/div>\n    \u003cp class=\"caption\">↑↓ move · Enter or Tab picks · Esc closes. The list covers queued rows while open.\u003c/p>\n  \u003c/div>\n\n  \u003cdiv data-state=\"slash\">\n    \u003cdiv class=\"stack\">\n      \u003cdiv class=\"suggest\" data-pin=\"suggest-list\">\n        \u003cdiv class=\"sg\" data-pin=\"suggest-group\">Quirky\u003c/div>\n        \u003cdiv class=\"sr on\" data-pin=\"suggest-row\">/model \u003cspan class=\"d\">Switch model\u003c/span>\u003cspan class=\"src\">acts now\u003c/span>\u003c/div>\n        \u003cdiv class=\"sr\">/plan \u003cspan class=\"d\">Toggle plan mode\u003c/span>\u003cspan class=\"src\">acts now\u003c/span>\u003c/div>\n        \u003cdiv class=\"sr\">/new \u003cspan class=\"d\">New chat, same agent and settings\u003c/span>\u003cspan class=\"src\">acts now\u003c/span>\u003c/div>\n        \u003cdiv class=\"sg\">Claude commands\u003c/div>\n        \u003cdiv class=\"sr\">/review \u003cspan class=\"d\">Review the current diff\u003c/span>\u003cspan class=\"src\">sent\u003c/span>\u003c/div>\n        \u003cdiv class=\"sr\">/compact \u003cspan class=\"d\">Summarize the conversation\u003c/span>\u003cspan class=\"src\">sent\u003c/span>\u003c/div>\n        \u003cdiv class=\"sg\">Claude skills\u003c/div>\n        \u003cdiv class=\"sr\">/brainstorming \u003cspan class=\"d\">Turn an idea into a design\u003c/span>\u003cspan class=\"src\">sent\u003c/span>\u003c/div>\n        \u003cdiv class=\"sr\">/simplify \u003cspan class=\"d\">Clean up changed code\u003c/span>\u003cspan class=\"src\">sent\u003c/span>\u003c/div>\n      \u003c/div>\n      \u003cdiv class=\"card\">\n        \u003cdiv class=\"editor\">/\u003c/div>\n        \u003cdiv class=\"toolbar\">\u003cspan class=\"tchip agent\">✳ claude\u003c/span>\u003cspan class=\"tchip\">Fable · Low ▾\u003c/span>\u003cspan class=\"spacer\">\u003c/span>\u003cspan class=\"icon send\">↑\u003c/span>\u003c/div>\n      \u003c/div>\n    \u003c/div>\n    \u003cp class=\"caption\">Quirky commands act at once. Agent commands and skills insert as a pill (\u003cspan class=\"pill\">/review\u003c/span>) and send with your message.\u003c/p>\n  \u003c/div>\n\n  \u003cdiv data-state=\"no-match\">\n    \u003cdiv class=\"stack\">\n      \u003cdiv class=\"suggest\" data-pin=\"suggest-list\">\u003cdiv class=\"sr\" style=\"color:var(--muted)\">No commands match \"/deplo\". Enter sends it as text.\u003c/div>\u003c/div>\n      \u003cdiv class=\"card\">\u003cdiv class=\"editor\">/deplo\u003c/div>\u003cdiv class=\"toolbar\">\u003cspan class=\"tchip agent\">✳ claude\u003c/span>\u003cspan class=\"tchip\">Fable · Low ▾\u003c/span>\u003cspan class=\"spacer\">\u003c/span>\u003cspan class=\"icon send\">↑\u003c/span>\u003c/div>\u003c/div>\n    \u003c/div>\n  \u003c/div>\n\u003c/div>\u003c/section>\n\n\u003c!-- ============ settings ============ -->\n\u003csection data-screen=\"settings\">\u003cdiv class=\"pane\">\n  \u003cdiv class=\"transcript\">\u003cdiv class=\"you\">Plan the License section before writing it.\u003c/div>…\u003c/div>\n\n  \u003cdiv data-state=\"popover\">\n    \u003cdiv class=\"pop-wrap\">\n      \u003cdiv class=\"popover\" data-pin=\"popover\" role=\"dialog\" aria-label=\"Turn settings\">\n        \u003cdiv class=\"ph-h\">Model\u003c/div>\n        \u003cdiv data-pin=\"model-list\">\n          \u003cdiv class=\"opt on\" data-group=\"model\">✓ Fable \u003cspan class=\"d\">default\u003c/span>\u003c/div>\n          \u003cdiv class=\"opt\" data-group=\"model\">Opus\u003c/div>\n          \u003cdiv class=\"opt\" data-group=\"model\">Sonnet\u003c/div>\n          \u003cdiv class=\"opt\" data-group=\"model\">Haiku\u003c/div>\n        \u003c/div>\n        \u003cdiv class=\"ph-h\">Effort\u003c/div>\n        \u003cdiv class=\"seg\" data-pin=\"effort-seg\">\u003cspan class=\"on\">Low\u003c/span>\u003cspan>Medium\u003c/span>\u003cspan>High\u003c/span>\u003cspan>Max\u003c/span>\u003c/div>\n        \u003cdiv class=\"ph-h\">Permissions\u003c/div>\n        \u003cdiv data-pin=\"mode-list\">\n          \u003cdiv class=\"opt on\" data-group=\"mode\">✓ Ask each time\u003c/div>\n          \u003cdiv class=\"opt\" data-group=\"mode\">Accept edits\u003c/div>\n          \u003cdiv class=\"opt\" data-group=\"mode\">Bypass permissions\u003c/div>\n        \u003c/div>\n        \u003cdiv class=\"switch\" data-pin=\"plan-switch\">\u003cspan>Plan mode\u003c/span>\u003cspan class=\"sw\" role=\"switch\" aria-checked=\"false\" tabindex=\"0\">\u003c/span>\u003c/div>\n        \u003cdiv class=\"opt dis\" data-pin=\"disabled-row\" title=\"Claude can't approve tools for the whole session from here\">Approve for session\u003c/div>\n      \u003c/div>\n      \u003cdiv class=\"card focus\">\n        \u003cdiv class=\"editor\">\u003cspan class=\"ph\">Message Claude…\u003c/span>\u003c/div>\n        \u003cdiv class=\"toolbar\">\n          \u003cspan class=\"tchip agent\">✳ claude\u003c/span>\n          \u003ca class=\"tchip\" href=\"#/composer\" data-pin=\"settings-chip\">Fable · Low ▴\u003c/a>\n          \u003cspan class=\"icon\">＋\u003c/span>\u003cspan class=\"spacer\">\u003c/span>\u003cspan class=\"icon send disabled\">↑\u003c/span>\n        \u003c/div>\n      \u003c/div>\n    \u003c/div>\n    \u003cp class=\"caption\">Click options to try them. Changes apply to the next turn. Esc or a click outside closes.\u003c/p>\n  \u003c/div>\n\n  \u003cdiv data-state=\"badges\">\n    \u003cdiv class=\"card\">\n      \u003cdiv class=\"editor\">\u003cspan class=\"ph\">Message Claude…\u003c/span>\u003c/div>\n      \u003cdiv class=\"toolbar\">\n        \u003cspan class=\"tchip agent\">✳ claude\u003c/span>\n        \u003ca class=\"tchip\" href=\"#/settings\">Opus · Medium ▾\u003c/a>\n        \u003cspan class=\"tchip badge-plan\" data-pin=\"mode-badge\" title=\"Click to turn off plan mode\">Plan ✕\u003c/span>\n        \u003cspan class=\"tchip badge-edits\" title=\"Click to go back to asking each time\">Accept edits ✕\u003c/span>\n        \u003cbutton class=\"icon\">＋\u003c/button>\u003cspan class=\"spacer\">\u003c/span>\u003cspan class=\"icon send disabled\">↑\u003c/span>\n      \u003c/div>\n    \u003c/div>\n    \u003cp class=\"caption\">Badges appear only for non-default modes; clicking one turns it off.\u003c/p>\n  \u003c/div>\n\u003c/div>\u003c/section>\n\n\u003c!-- ============ ended ============ -->\n\u003csection data-screen=\"ended\">\u003cdiv class=\"pane\">\n  \u003cdiv class=\"transcript\">\u003cdiv class=\"you\">Create a file named bye.txt containing: bye.\u003c/div>Stopped after 1m 24s\u003c/div>\n  \u003cdiv data-state=\"default\">\n    \u003cdiv class=\"stack\">\n      \u003cdiv class=\"attached-wrap\">\u003cdiv class=\"attached row ro\" data-pin=\"readonly-row\">\u003cspan>Then say bye.\u003c/span>\u003cspan class=\"acts\">\u003cspan>Queued · runs on Resume\u003c/span>\u003ca href=\"#\">✕\u003c/a>\u003c/span>\u003c/div>\u003c/div>\n      \u003cdiv class=\"ended\" data-pin=\"ended-card\" style=\"border-top-left-radius:0;border-top-right-radius:0\">\n        \u003cspan>Session ended\u003c/span>\u003cspan class=\"spacer\">\u003c/span>\n        \u003ca class=\"btn primary\" href=\"#/composer\" data-pin=\"resume\">Resume\u003c/a>\n        \u003ca class=\"btn\" href=\"#/composer\" data-pin=\"new-chat\">New chat\u003c/a>\n      \u003c/div>\n    \u003c/div>\n    \u003cp class=\"caption\">Resume shows only when the agent can resume; New chat keeps the agent and settings.\u003c/p>\n  \u003c/div>\n\u003c/div>\u003c/section>\n\n\u003cscript>\n  function route() {\n    var id = (location.hash.replace(/^#\\//, '') || 'composer').split('/')[0];\n    var found = document.querySelector('[data-screen=\"' + id + '\"]');\n    if (!found) { id = 'composer'; }\n    document.querySelectorAll('[data-screen]').forEach(function (s) { s.classList.toggle('shown', s.dataset.screen === id); });\n    document.querySelectorAll('nav.screens a').forEach(function (a) { a.classList.toggle('on', a.getAttribute('href') === '#/' + id); });\n  }\n  window.addEventListener('hashchange', route); route();\n  document.addEventListener('click', function (e) {\n    var n = e.target.closest('[data-note]');\n    if (n) { var t = document.querySelector('[data-note-for=\"' + n.dataset.note + '\"]'); if (t) t.classList.toggle('show'); }\n    var o = e.target.closest('.opt:not(.dis)');\n    if (o) { var g = o.dataset.group; o.parentElement.querySelectorAll('.opt[data-group=\"' + g + '\"]').forEach(function (x) { x.classList.remove('on'); x.textContent = x.textContent.replace(/^✓ /, ''); }); o.classList.add('on'); o.textContent = '✓ ' + o.textContent; }\n    var s = e.target.closest('.seg span');\n    if (s) { s.parentElement.querySelectorAll('span').forEach(function (x) { x.classList.remove('on'); }); s.classList.add('on'); }\n    var w = e.target.closest('.sw');\n    if (w) { w.classList.toggle('on'); w.setAttribute('aria-checked', w.classList.contains('on')); }\n    if (e.target.closest('a[href=\"#\"]')) e.preventDefault();\n  });\n\u003c/script>\n\u003c/body>\n\u003c/html>\n"}</script>
+<script>/**
+ * Pure logic for the mock review harness. Loaded two ways: inlined as a classic script in
+ * mock-harness.html (exposes `QuirkMockCore`) and `require`d by app/scripts/check-harness.ts.
+ * No DOM access, no network, so every rule here is testable from Node.
+ */
+(function (root) {
+  'use strict'
+
+  var PIN_ID = /^mock:v([1-9][0-9]{0,3})\/([a-z0-9-]{1,40})\/([a-z0-9-]{1,40})\/([a-z0-9][a-z0-9._-]{0,79})\/x([0-9]{1,3})-y([0-9]{1,3})$/
+
+  function clampPct(n) {
+    var v = Math.round(Number(n))
+    if (!isFinite(v)) return 0
+    return Math.max(0, Math.min(100, v))
+  }
+
+  /** Parses a pin block id into its parts, or returns null for anything that is not exactly a pin id. */
+  function parsePinId(id) {
+    if (typeof id !== 'string') return null
+    var m = PIN_ID.exec(id)
+    if (!m) return null
+    var x = Number(m[5])
+    var y = Number(m[6])
+    if (x > 100 || y > 100) return null
+    return { version: Number(m[1]), screen: m[2], state: m[3], pin: m[4], x: x, y: y }
+  }
+
+  /** Builds a pin block id; offsets are rounded and clamped to 0-100, anything else invalid throws. */
+  function formatPinId(p) {
+    var id = 'mock:v' + p.version + '/' + p.screen + '/' + p.state + '/' + p.pin + '/x' + clampPct(p.x) + '-y' + clampPct(p.y)
+    if (!parsePinId(id)) throw new Error('invalid pin id parts: ' + id)
+    return id
+  }
+
+  /**
+   * Decides how a pin is shown while `viewed` is on screen.
+   *   draw        its own version: drawn at the element plus offset
+   *   reanchored  older version and the element key still exists: drawn there with a "from vN" badge
+   *   orphaned    older version and the key is gone: listed, never drawn on another element
+   *   hidden      newer than the version viewed (or than the latest)
+   * `keys` is the set (or array) of data-pin keys present in the pin's screen and state in the viewed version.
+   */
+  function placePin(pin, viewed, latest, keys) {
+    if (pin.version > viewed || pin.version > latest) return 'hidden'
+    if (pin.version === viewed) return 'draw'
+    var present = keys instanceof Set ? keys.has(pin.pin) : Array.isArray(keys) && keys.indexOf(pin.pin) !== -1
+    return present ? 'reanchored' : 'orphaned'
+  }
+
+  /**
+   * Placement of a pin from the viewed version's own screen inventory. A pin of an older version whose
+   * screen or state the viewed version no longer lists is orphaned. When the screen and state exist,
+   * `keysFor(screen, state)` returns the data-pin keys rendered there (array or Set), or null when that
+   * screen is not rendered right now, which leaves the pin `unknown`: neither orphaned nor drawn.
+   */
+  function classifyPin(pin, viewed, latest, doc, keysFor) {
+    if (pin.version > viewed || pin.version > latest) return 'hidden'
+    if (pin.version === viewed) return 'draw'
+    var screen = screenList(doc).filter(function (s) { return s.id === pin.screen })[0]
+    if (!screen || !Array.isArray(screen.states) || screen.states.indexOf(pin.state) === -1) return 'orphaned'
+    var keys = keysFor(pin.screen, pin.state)
+    if (keys === null || keys === undefined) return 'unknown'
+    return placePin(pin, viewed, latest, keys)
+  }
+
+  /**
+   * The data-pin keys a pin's screen and state offers for classification, as a Set, or null for "cannot
+   * tell yet". `keys` is the array of keys found in the viewed document, or null when no element for the
+   * screen exists there. A missing screen element is only evidence of absence once the viewed document
+   * has loaded and the pin's screen is the one on show; before that, or for another screen, it is unknown.
+   */
+  function viewedKeys(loaded, currentScreen, screenId, keys) {
+    if (keys !== null && keys !== undefined) return new Set(keys)
+    return loaded && currentScreen === screenId ? new Set() : null
+  }
+
+  /**
+   * The elements of a screen that carry data-pin for `state`: the screen element itself (when it has a
+   * data-pin) followed by its descendants. `descendants` is every `[data-pin]` node inside `scr`.
+   */
+  function pinNodes(scr, state, descendants) {
+    var all = [scr].concat(Array.prototype.slice.call(descendants))
+    return all.filter(function (p) {
+      if (p.getAttribute('data-pin') === null) return false
+      var st = p.closest('[data-state]')
+      if (!st || st === scr || !scr.contains(st)) return true
+      return !state || st.getAttribute('data-state') === state
+    })
+  }
+
+  function screenList(doc) {
+    if (Array.isArray(doc)) return doc
+    return doc && Array.isArray(doc.screens) ? doc.screens : []
+  }
+
+  function isKnownScreen(doc, id) {
+    return screenList(doc).some(function (s) { return s.id === id })
+  }
+
+  /** Inventory screen ids not yet visited, in inventory order. */
+  function unvisitedScreens(doc, visited) {
+    var seen = visited instanceof Set ? visited : new Set(visited || [])
+    return screenList(doc)
+      .map(function (s) { return s.id })
+      .filter(function (id) { return !seen.has(id) })
+  }
+
+  /** Elements with no repo component while the repo has a UI layer. */
+  function deriveGaps(doc) {
+    if (!doc || doc.ui_layer !== true) return []
+    var gaps = []
+    screenList(doc).forEach(function (s) {
+      ;(s.elements || []).forEach(function (e) {
+        if (e.component === null) gaps.push({ screen: s.id, pin: e.pin, label: e.label })
+      })
+    })
+    return gaps
+  }
+
+  /** Screen id named by `#/<id>`; an empty hash is the first screen, an unknown id is returned as is. */
+  function currentScreenId(hash, doc) {
+    var h = String(hash || '').replace(/^#/, '').replace(/^\//, '')
+    var id = h.split(/[/?]/)[0]
+    try {
+      id = decodeURIComponent(id)
+    } catch (e) {
+      // keep the raw text
+    }
+    if (id) return id
+    var screens = screenList(doc)
+    return screens.length ? screens[0].id : null
+  }
+
+  var RAW_TEXT = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1, noscript: 1 }
+
+  /**
+   * Inserts <base href="about:srcdoc"> as the first child of the mock's real <head>. Comments, raw-text
+   * elements (script, style, ...) and quoted attribute values are skipped, so `<head>` text inside them is
+   * never mistaken for the head. With no head before the body, one is created right after <html>, else
+   * after the doctype, else at the start.
+   */
+  function withBase(html) {
+    var base = '<base href="about:srcdoc">'
+    var len = html.length
+    var i = 0
+    var doctypeEnd = 0
+    var htmlEnd = -1
+    var sawTag = false
+    while (i < len) {
+      var lt = html.indexOf('<', i)
+      if (lt === -1) break
+      var next = html.charAt(lt + 1)
+      if (html.substr(lt, 4) === '<!--') {
+        var close = html.indexOf('-->', lt + 2)
+        i = close === -1 ? len : close + 3
+        continue
+      }
+      if (next === '!' || next === '?' || next === '/') {
+        var gt = html.indexOf('>', lt + 2)
+        if (next === '!' && !sawTag && gt !== -1 && /^<!doctype/i.test(html.substr(lt, 9))) doctypeEnd = gt + 1
+        i = gt === -1 ? len : gt + 1
+        continue
+      }
+      if (!/[a-zA-Z]/.test(next)) {
+        i = lt + 1
+        continue
+      }
+      var j = lt + 1
+      while (j < len && !/[\s/>]/.test(html.charAt(j))) j += 1
+      var name = html.slice(lt + 1, j).toLowerCase()
+      while (j < len && html.charAt(j) !== '>') {
+        if (html.charAt(j) === '=') {
+          j += 1
+          while (j < len && /\s/.test(html.charAt(j))) j += 1
+          var q = html.charAt(j)
+          if (q === '"' || q === "'") {
+            var endQuote = html.indexOf(q, j + 1)
+            j = endQuote === -1 ? len : endQuote + 1
+          }
+          continue
+        }
+        j += 1
+      }
+      var tagEnd = j < len ? j + 1 : len
+      sawTag = true
+      if (name === 'head') return html.slice(0, tagEnd) + base + html.slice(tagEnd)
+      if (name === 'body' || name === 'frameset') break
+      if (name === 'html' && htmlEnd === -1) htmlEnd = tagEnd
+      i = tagEnd
+      if (RAW_TEXT[name] === 1) {
+        var closer = new RegExp('</' + name + '(?=[\\s/>])', 'ig')
+        closer.lastIndex = tagEnd
+        var found = closer.exec(html)
+        i = found ? found.index : len
+      }
+    }
+    var pos = htmlEnd !== -1 ? htmlEnd : doctypeEnd
+    return html.slice(0, pos) + '<head>' + base + '</head>' + html.slice(pos)
+  }
+
+  /**
+   * Whether the version registered under `boot.version` was replaced after this page was served. Only
+   * app mode compares, and only when both sides carry a revision.
+   */
+  function isStale(boot, snap) {
+    if (!boot || boot.mode !== 'app' || !snap || !snap.mocks || !snap.mocks.revisions) return false
+    var current = snap.mocks.revisions[String(boot.version)]
+    return typeof boot.revision === 'string' && typeof current === 'string' && current !== boot.revision
+  }
+
+  /** Whether comment mode and the verdict bar are allowed for this boot and snapshot. */
+  function canReview(boot, snap) {
+    if (!boot || boot.mode !== 'app' || !snap || !snap.step) return false
+    if (isStale(boot, snap)) return false
+    if (snap.step_state !== 'open') return false
+    if (snap.step.kind !== 'mock-review' || snap.step.version !== boot.version) return false
+    return !!snap.mocks && snap.mocks.latest === boot.version
+  }
+
+  /** Integer percentage offset of a point inside a box, clamped to 0-100. */
+  function offsetPct(rect, clientX, clientY) {
+    if (!rect.width || !rect.height) return { x: 0, y: 0 }
+    return {
+      x: clampPct(((clientX - rect.left) / rect.width) * 100),
+      y: clampPct(((clientY - rect.top) / rect.height) * 100),
+    }
+  }
+
+  function lastAgentMessage(thread) {
+    var msgs = (thread && thread.messages) || []
+    for (var i = msgs.length - 1; i >= 0; i -= 1) if (msgs[i].from === 'agent') return msgs[i]
+    return null
+  }
+
+  var api = {
+    parsePinId: parsePinId,
+    formatPinId: formatPinId,
+    placePin: placePin,
+    classifyPin: classifyPin,
+    viewedKeys: viewedKeys,
+    pinNodes: pinNodes,
+    isStale: isStale,
+    isKnownScreen: isKnownScreen,
+    unvisitedScreens: unvisitedScreens,
+    deriveGaps: deriveGaps,
+    currentScreenId: currentScreenId,
+    withBase: withBase,
+    canReview: canReview,
+    offsetPct: offsetPct,
+    lastAgentMessage: lastAgentMessage,
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api
+  else root.QuirkMockCore = api
+})(typeof globalThis !== 'undefined' ? globalThis : this)
+</script>
+<script>
+(function () {
+  'use strict'
+  var Core = window.QuirkMockCore
+  var bootNode = document.querySelector('script[type="application/json"]')
+  var boot = null
+  try { boot = JSON.parse(bootNode.textContent) } catch (e) { boot = null }
+  var $ = function (id) { return document.getElementById(id) }
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag)
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k]
+      if (v === null || v === undefined || v === false) return
+      if (k === 'class') n.className = v
+      else if (k === 'text') n.textContent = v
+      else if (k.slice(0, 2) === 'on') n.addEventListener(k.slice(2), v)
+      else n.setAttribute(k, v === true ? '' : v)
+    })
+    ;(kids || []).forEach(function (c) {
+      if (c === null || c === undefined || c === false) return
+      n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c)
+    })
+    return n
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild) }
+
+  if (!boot || !boot.screens) {
+    document.body.insertBefore(el('p', { text: 'This page needs a mock to review. It was opened without one.', style: 'padding:16px' }), document.body.firstChild)
+    return
+  }
+
+  var appMode = boot.mode === 'app' && !!boot.token
+  var screens = boot.screens.screens || []
+  var uiLayer = boot.screens.ui_layer === true
+  var changed = new Set(boot.changed || [])
+  var gaps = Core.deriveGaps(boot.screens)
+  var frame = $('mock-frame')
+  var frameBox = $('frame-box')
+
+  var S = {
+    mode: 'interact',
+    viewport: 'desktop',
+    showChanges: false,
+    screenId: Core.currentScreenId('', boot.screens),
+    states: {},
+    visited: new Set(),
+    marks: new Set(),
+    snap: null,
+    paused: false,
+    openThread: null,
+    note: null,
+    panel: null,
+    changesText: '',
+    submitting: false,
+    verdictError: '',
+    notice: '',
+    noticeError: false,
+  }
+  var inner = null
+  var hoverEl = null
+  var dotPos = {}
+  var noticeTimer = null
+  var frameTick = 0
+
+  var visitedKey = 'quirk-mock-visited-v' + boot.version
+  try {
+    var saved = JSON.parse(sessionStorage.getItem(visitedKey) || '[]')
+    if (Array.isArray(saved)) saved.forEach(function (id) { S.visited.add(id) })
+  } catch (e) { /* storage can be unavailable; visited then lives for this page only */ }
+  function saveVisited() {
+    try { sessionStorage.setItem(visitedKey, JSON.stringify(Array.from(S.visited))) } catch (e) { /* see above */ }
+  }
+
+  // ---- derived values -------------------------------------------------------
+  function screenById(id) {
+    for (var i = 0; i < screens.length; i += 1) if (screens[i].id === id) return screens[i]
+    return null
+  }
+  function currentState() {
+    var s = screenById(S.screenId)
+    if (!s || !s.states || !s.states.length) return null
+    return S.states[s.id] || s.states[0]
+  }
+  function latestVersion() {
+    return S.snap && S.snap.mocks && S.snap.mocks.latest ? S.snap.mocks.latest : boot.latest
+  }
+  function versionList() {
+    var v = S.snap && S.snap.mocks && S.snap.mocks.versions ? S.snap.mocks.versions : boot.versions
+    return v && v.length ? v : [boot.version]
+  }
+  function canReview() { return Core.canReview(boot, S.snap) }
+  function staleVersion() { return Core.isStale(boot, S.snap) }
+  function readOnlyVersion() { return appMode && S.snap !== null && boot.version !== latestVersion() }
+
+  // ---- inner document lookups (attribute compares avoid selector escaping) ----
+  function findAttr(nodes, attr, value) {
+    for (var i = 0; i < nodes.length; i += 1) if (nodes[i].getAttribute(attr) === value) return nodes[i]
+    return null
+  }
+  function screenEl(id) {
+    return inner ? findAttr(inner.doc.querySelectorAll('[data-screen]'), 'data-screen', id) : null
+  }
+  function stateEls(scr) {
+    return Array.prototype.filter.call(scr.querySelectorAll('[data-state]'), function (e) { return e.closest('[data-screen]') === scr })
+  }
+  /** Elements keyed with data-pin in a screen and state, or null when the screen is not in the DOM. */
+  function pinEls(screenId, state) {
+    var scr = screenEl(screenId)
+    if (!scr) return null
+    var states = stateEls(scr)
+    if (states.length && state && !findAttr(states, 'data-state', state)) return []
+    return Core.pinNodes(scr, state, scr.querySelectorAll('[data-pin]'))
+  }
+  function visibleBox(node) {
+    var r = node.getBoundingClientRect()
+    return r.width > 0 || r.height > 0 ? r : null
+  }
+  function inventoryLabel(key) {
+    var s = screenById(S.screenId)
+    var elements = (s && s.elements) || []
+    for (var i = 0; i < elements.length; i += 1) {
+      if (elements[i].pin !== key) continue
+      if (uiLayer) return elements[i].component === null ? 'gap' : elements[i].component
+      return elements[i].label
+    }
+    return ''
+  }
+
+  // ---- pins -----------------------------------------------------------------
+  /** Every thread that is a pin, with its placement relative to the version on screen. */
+  function pinThreads() {
+    var out = []
+    var threads = (S.snap && S.snap.threads) || []
+    var n = 0
+    threads.forEach(function (t) {
+      var pin = Core.parsePinId(t.block_id)
+      if (!pin) return
+      n += 1
+      var placement = Core.classifyPin(pin, boot.version, latestVersion(), boot.screens, function (screenId, state) {
+        var els = pinEls(screenId, state)
+        return Core.viewedKeys(!!inner, S.screenId, screenId, els === null ? null : els.map(function (e) { return e.getAttribute('data-pin') }))
+      })
+      out.push({ n: n, thread: t, pin: pin, placement: placement })
+    })
+    return out.filter(function (p) { return p.placement !== 'hidden' })
+  }
+
+  function renderOverlay() {
+    var changesLayer = $('layer-changes')
+    var pinsLayer = $('layer-pins')
+    clear(changesLayer)
+    clear(pinsLayer)
+    dotPos = {}
+    if (!inner) return
+    if (S.showChanges) {
+      Array.prototype.forEach.call(inner.doc.querySelectorAll('[data-pin]'), function (node) {
+        if (!changed.has(node.getAttribute('data-pin'))) return
+        var r = visibleBox(node)
+        if (!r) return
+        changesLayer.appendChild(el('div', { class: 'box changed', style: 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px' }, [el('span', { class: 'tag', text: 'changed' })]))
+      })
+    }
+    if (appMode) {
+      var state = currentState()
+      pinThreads().forEach(function (p) {
+        if (p.placement !== 'draw' && p.placement !== 'reanchored') return
+        if (p.pin.screen !== S.screenId || (state && p.pin.state !== state)) return
+        var els = pinEls(p.pin.screen, p.pin.state) || []
+        var target = null
+        for (var i = 0; i < els.length; i += 1) {
+          if (els[i].getAttribute('data-pin') === p.pin.pin && visibleBox(els[i])) { target = els[i]; break }
+        }
+        if (!target) return
+        var r = target.getBoundingClientRect()
+        var left = r.left + (p.pin.x / 100) * r.width
+        var top = r.top + (p.pin.y / 100) * r.height
+        dotPos[p.thread.id] = { left: left, top: top }
+        var cls = 'pin' + (p.thread.resolution ? ' resolved' : '') + (S.openThread === p.thread.id ? ' selected' : '')
+        pinsLayer.appendChild(el('button', {
+          type: 'button',
+          class: cls,
+          style: 'left:' + left + 'px;top:' + top + 'px',
+          'aria-label': 'Pin ' + p.n + (p.thread.resolution ? ' (resolved)' : ''),
+          onclick: function (ev) { ev.stopPropagation(); selectThread(p.thread.id, false) },
+          text: String(p.n),
+        }))
+      })
+    }
+    renderThreadPop()
+  }
+
+  function messageNode(m, isLastReply) {
+    return el('div', { class: 'msg ' + (m.from === 'agent' ? 'agent' : 'user') + (isLastReply ? ' last-reply' : '') }, [
+      el('span', { class: 'who', text: m.from === 'agent' ? 'Agent' : 'You' }),
+      el('span', { text: String(m.text) }),
+    ])
+  }
+  function threadBody(p) {
+    var reply = Core.lastAgentMessage(p.thread)
+    var wrap = el('div', { class: 'thread' })
+    if (p.thread.resolution) {
+      wrap.appendChild(el('div', { class: 'meta', text: 'Resolved' + (typeof p.thread.resolution === 'string' ? ': ' + p.thread.resolution : '') }))
+      if (reply) wrap.appendChild(messageNode(reply, true))
+      var rest = p.thread.messages.filter(function (m) { return m !== reply })
+      rest.forEach(function (m) { wrap.appendChild(messageNode(m, false)) })
+    } else {
+      p.thread.messages.forEach(function (m) { wrap.appendChild(messageNode(m, false)) })
+    }
+    return wrap
+  }
+
+  function renderThreadPop() {
+    var layer = $('layer-pop')
+    layer.querySelectorAll('.pop.thread-pop').forEach(function (n) { n.parentNode.removeChild(n) })
+    if (!S.openThread || !dotPos[S.openThread]) return
+    var p = pinThreads().filter(function (x) { return x.thread.id === S.openThread })[0]
+    if (!p) return
+    var at = dotPos[S.openThread]
+    var boxW = frameBox.clientWidth
+    var left = Math.max(8, Math.min(at.left, boxW - 308))
+    var pop = el('div', { class: 'pop thread-pop', style: 'left:' + left + 'px;top:' + (at.top + 16) + 'px' }, [
+      el('h3', { text: 'Pin ' + p.n + ' on ' + p.pin.pin }),
+      el('div', { class: 'meta', text: p.placement === 'reanchored' ? 'Placed in v' + p.pin.version + ', shown on the same element here' : 'v' + p.pin.version }),
+      threadBody(p),
+      el('div', { class: 'row' }, [el('button', { type: 'button', text: 'Close', onclick: function () { S.openThread = null; renderOverlay(); renderRail() } })]),
+    ])
+    layer.appendChild(pop)
+  }
+
+  var noteShown = null
+  var noteUi = null
+  var NOTE_CLOSED_REASON = 'This review is no longer open for comments. Your text is kept so you can copy it.'
+
+  function syncNoteGate() {
+    if (!noteUi) return
+    var open = canReview()
+    noteUi.send.disabled = !open || noteUi.busy
+    if (!open) noteUi.err.textContent = NOTE_CLOSED_REASON
+    else if (noteUi.err.textContent === NOTE_CLOSED_REASON) noteUi.err.textContent = ''
+  }
+
+  function renderNote() {
+    var layer = $('layer-pop')
+    if (S.note && S.note === noteShown && layer.querySelector('.pop.note-pop')) { syncNoteGate(); return }
+    noteUi = null
+    layer.querySelectorAll('.pop.note-pop').forEach(function (n) { n.parentNode.removeChild(n) })
+    noteShown = S.note
+    if (!S.note) return
+    var note = S.note
+    var boxW = frameBox.clientWidth
+    var left = Math.max(8, Math.min(note.x, boxW - 308))
+    var area = el('textarea', { 'aria-label': 'Comment', placeholder: 'What should change here?' })
+    var err = el('span', { class: 'err' })
+    var send = el('button', { type: 'button', class: 'primary', text: 'Send' })
+    var cancel = el('button', { type: 'button', text: 'Cancel', onclick: function () { S.note = null; renderNote() } })
+    var ui = { send: send, err: err, busy: false }
+    send.addEventListener('click', function () {
+      if (!canReview()) { syncNoteGate(); return }
+      var text = area.value.trim()
+      if (!text) { err.textContent = 'Write a comment first.'; return }
+      ui.busy = true
+      send.disabled = true
+      cancel.disabled = true
+      err.textContent = ''
+      postEvent('comment', { block_id: note.blockId, text: text }, {}).then(function (result) {
+        ui.busy = false
+        if (result === 'ok') {
+          S.note = null
+          renderNote()
+          setNotice('Comment sent.', false)
+          pollNow()
+        } else {
+          cancel.disabled = false
+          err.textContent = 'Could not send. Try again.'
+          syncNoteGate()
+        }
+      })
+    })
+    var pop = el('div', { class: 'pop note-pop', style: 'left:' + left + 'px;top:' + (note.y + 10) + 'px', role: 'dialog', 'aria-label': 'New comment' }, [
+      el('h3', { text: 'Comment on ' + note.label }),
+      area,
+      el('div', { class: 'row' }, [err, cancel, send]),
+    ])
+    layer.appendChild(pop)
+    noteUi = ui
+    syncNoteGate()
+    area.focus()
+  }
+
+  function selectThread(id, navigate) {
+    S.openThread = S.openThread === id && !navigate ? null : id
+    var p = pinThreads().filter(function (x) { return x.thread.id === id })[0]
+    if (navigate && p && inner && p.placement !== 'orphaned') {
+      var s = screenById(p.pin.screen)
+      if (s && s.states.indexOf(p.pin.state) !== -1) S.states[s.id] = p.pin.state
+      if (p.pin.screen !== S.screenId) {
+        goToScreen(p.pin.screen)
+        S.openThread = id
+      }
+    }
+    renderAll()
+  }
+
+  // ---- hover and click in the mock -----------------------------------------
+  function commentAllowed() { return S.mode === 'comment' && canReview() }
+
+  function onInnerMove(ev) {
+    if (!commentAllowed()) return clearHover()
+    var node = ev.target && ev.target.closest ? ev.target.closest('[data-pin]') : null
+    if (node === hoverEl) return
+    hoverEl = node
+    paintHover()
+  }
+  function clearHover() {
+    if (!hoverEl) return
+    hoverEl = null
+    paintHover()
+  }
+  function paintHover() {
+    var layer = $('layer-hover')
+    clear(layer)
+    if (!hoverEl || !hoverEl.isConnected) return
+    var r = visibleBox(hoverEl)
+    if (!r) return
+    var label = inventoryLabel(hoverEl.getAttribute('data-pin'))
+    layer.appendChild(el('div', { class: 'box hover', style: 'left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px' }, [label ? el('span', { class: 'tag', text: label }) : null]))
+  }
+  function onInnerClick(ev) {
+    if (!commentAllowed()) return
+    ev.preventDefault()
+    ev.stopPropagation()
+    var node = ev.target && ev.target.closest ? ev.target.closest('[data-pin]') : null
+    if (!node) {
+      setNotice('This element has no pin key, so it cannot take a comment. Hover to see which elements can.', true)
+      return
+    }
+    var state = currentState()
+    if (!screenById(S.screenId) || !state) {
+      setNotice('Open a screen from the rail first. Comments need a screen and state from the inventory.', true)
+      return
+    }
+    var r = node.getBoundingClientRect()
+    var off = Core.offsetPct(r, ev.clientX, ev.clientY)
+    var blockId
+    try {
+      blockId = Core.formatPinId({ version: boot.version, screen: S.screenId, state: state, pin: node.getAttribute('data-pin'), x: off.x, y: off.y })
+    } catch (e) {
+      setNotice('This element\'s pin key is not valid, so it cannot take a comment.', true)
+      return
+    }
+    S.openThread = null
+    S.note = { blockId: blockId, x: ev.clientX, y: ev.clientY, label: inventoryLabel(node.getAttribute('data-pin')) || node.getAttribute('data-pin') }
+    renderOverlay()
+    renderNote()
+  }
+
+  // ---- inner frame wiring ---------------------------------------------------
+  function applyStates() {
+    var scr = screenEl(S.screenId)
+    if (!scr) return
+    var cur = currentState()
+    stateEls(scr).forEach(function (node) {
+      var hide = node.getAttribute('data-state') !== cur
+      if (node.hidden !== hide) node.hidden = hide
+    })
+  }
+  function refreshFrame() {
+    frameTick = 0
+    if (!inner) return
+    applyStates()
+    renderOverlay()
+    paintHover()
+    renderRail()
+  }
+  function scheduleRefresh() {
+    if (frameTick) return
+    frameTick = requestAnimationFrame(refreshFrame)
+  }
+  function onInnerHash() {
+    if (!inner) return
+    var nextId = Core.currentScreenId(inner.win.location.hash, boot.screens)
+    var moved = nextId !== S.screenId
+    S.screenId = nextId
+    if (Core.isKnownScreen(boot.screens, S.screenId) && !S.visited.has(S.screenId)) {
+      S.visited.add(S.screenId)
+      saveVisited()
+    }
+    if (moved) {
+      S.note = null
+      S.openThread = null
+    }
+    hoverEl = null
+    renderAll()
+  }
+  function goToScreen(id) {
+    if (!inner) return
+    inner.win.location.hash = '#/' + id
+    onInnerHash()
+  }
+  function attach() {
+    var win = frame.contentWindow
+    var doc = null
+    try { doc = frame.contentDocument } catch (e) { doc = null }
+    if (!doc || !doc.documentElement) {
+      inner = null
+      setNotice('The mock document could not be read, so review tools are unavailable.', true)
+      return
+    }
+    inner = { win: win, doc: doc }
+    var style = doc.createElement('style')
+    style.textContent = '[hidden]{display:none !important}'
+    ;(doc.head || doc.documentElement).appendChild(style)
+    win.addEventListener('hashchange', onInnerHash)
+    win.addEventListener('resize', scheduleRefresh)
+    doc.addEventListener('scroll', scheduleRefresh, true)
+    doc.addEventListener('click', onInnerClick, true)
+    doc.addEventListener('mousemove', onInnerMove, true)
+    doc.documentElement.addEventListener('mouseleave', clearHover)
+    if (win.MutationObserver && doc.body) new win.MutationObserver(scheduleRefresh).observe(doc.body, { childList: true, subtree: true })
+    onInnerHash()
+  }
+
+  // ---- rail -----------------------------------------------------------------
+  function pinCountFor(list, id) {
+    return list.filter(function (p) { return p.pin.screen === id }).length
+  }
+  function renderRail() {
+    var rail = $('rail')
+    var list = appMode ? pinThreads() : []
+    var reviewing = canReview()
+    clear(rail)
+    rail.appendChild(el('h2', { text: 'Screens' }))
+    var ul = el('ul')
+    screens.forEach(function (s) {
+      var seen = S.visited.has(s.id)
+      var count = pinCountFor(list, s.id)
+      var item = el('li', { class: 'screen-item' + (s.id === S.screenId ? ' current' : '') }, [
+        el('button', { type: 'button', class: 'go', 'aria-current': s.id === S.screenId ? 'page' : null, onclick: function () { goToScreen(s.id) } }, [
+          el('span', { class: 'dot' + (seen ? ' visited' : ''), title: seen ? 'Visited' : 'Not visited' }),
+          el('span', { class: 'title', text: s.title }),
+          el('span', { class: 'count', text: (seen ? 'visited' : 'not visited') + (appMode ? ', ' + count + (count === 1 ? ' pin' : ' pins') : '') }),
+        ]),
+      ])
+      if (reviewing) {
+        var box = el('input', { type: 'checkbox', 'aria-label': 'Mark ' + s.title + ' as reviewed' })
+        box.checked = S.marks.has(s.id)
+        box.addEventListener('change', function () { if (box.checked) S.marks.add(s.id); else S.marks.delete(s.id) })
+        item.appendChild(el('label', { class: 'mark', title: 'Mark this screen as reviewed' }, [box, 'ok']))
+      }
+      ul.appendChild(item)
+    })
+    rail.appendChild(ul)
+
+    var cur = screenById(S.screenId)
+    if (!cur && S.screenId) {
+      rail.appendChild(el('p', { class: 'note' }, [el('span', { class: 'chip warn', text: 'Screen "' + S.screenId + '" is not in the inventory' })]))
+    }
+    if (cur && cur.skipped_states && cur.skipped_states.length) {
+      rail.appendChild(el('h2', { text: 'Skipped states here' }))
+      rail.appendChild(el('ul', { class: 'skipped' }, cur.skipped_states.map(function (k) { return el('li', { text: k.state + ': ' + k.reason }) })))
+    }
+    var gapsHere = gaps.filter(function (g) { return g.screen === S.screenId })
+    if (gapsHere.length) {
+      rail.appendChild(el('h2', { text: 'Gaps on this screen' }))
+      rail.appendChild(el('ul', { class: 'skipped' }, gapsHere.map(function (g) { return el('li', { text: g.label + ': no matching component' }) })))
+    }
+
+    if (appMode && list.length) {
+      var orphaned = list.filter(function (p) { return p.placement === 'orphaned' })
+      var placed = list.filter(function (p) { return p.placement !== 'orphaned' })
+      if (placed.length) {
+        rail.appendChild(el('h2', { text: 'Pins' }))
+        placed.forEach(function (p) { rail.appendChild(pinRow(p)) })
+      }
+      if (orphaned.length) {
+        rail.appendChild(el('h2', { text: 'Orphaned pins' }))
+        orphaned.forEach(function (p) { rail.appendChild(pinRow(p)) })
+      }
+    }
+  }
+  function pinRow(p) {
+    var open = S.openThread === p.thread.id
+    var first = p.thread.messages[0]
+    var badges = []
+    if (p.thread.resolution) badges.push(el('span', { class: 'badge ok', text: 'resolved' }))
+    if (p.placement === 'reanchored') badges.push(el('span', { class: 'badge', text: 'from v' + p.pin.version }))
+    if (p.placement === 'orphaned') badges.push(el('span', { class: 'badge warn', text: 'element removed in v' + boot.version }))
+    var screen = screenById(p.pin.screen)
+    var head = el('button', { type: 'button', class: 'head', 'aria-expanded': open ? 'true' : 'false', onclick: function () { selectThread(p.thread.id, true) } }, [
+      el('strong', { text: 'Pin ' + p.n }),
+      ' ',
+      el('span', { class: 'meta', text: (screen ? screen.title : p.pin.screen) + ' / ' + p.pin.state + ' / ' + p.pin.pin }),
+      ...badges,
+      el('div', { text: first ? String(first.text).slice(0, 90) : '' }),
+    ])
+    var row = el('div', { class: 'pin-row' + (open ? ' selected' : '') }, [head])
+    var reply = p.thread.resolution ? Core.lastAgentMessage(p.thread) : null
+    if (open) row.appendChild(threadBody(p))
+    else if (reply) row.appendChild(el('div', { class: 'thread' }, [messageNode(reply, true)]))
+    return row
+  }
+
+  // ---- toolbar, banner, verdict bar ----------------------------------------
+  function setNotice(text, isError) {
+    S.notice = text
+    S.noticeError = !!isError
+    clearTimeout(noticeTimer)
+    renderStatus()
+    if (text) noticeTimer = setTimeout(function () { S.notice = ''; renderStatus() }, 6000)
+  }
+  function renderStatus() {
+    var node = $('status')
+    var text = S.paused ? 'Lost contact with the companion, retrying' : S.notice
+    node.textContent = text
+    node.className = 'status' + (S.paused || S.noticeError ? ' error' : '')
+  }
+  function pressed(id, on) { $(id).setAttribute('aria-pressed', on ? 'true' : 'false') }
+
+  function renderToolbar() {
+    $('version-chip').textContent = 'Mock v' + boot.version + (!appMode || boot.version === latestVersion() ? '' : ' (not latest)')
+    var wrap = $('version-wrap')
+    var picker = $('version-picker')
+    if (appMode) {
+      wrap.hidden = false
+      clear(picker)
+      var latest = latestVersion()
+      versionList().forEach(function (v) {
+        var o = el('option', { value: String(v), text: 'v' + v + (v === latest ? ' (latest)' : '') })
+        if (v === boot.version) o.selected = true
+        picker.appendChild(o)
+      })
+    }
+    var reviewing = canReview()
+    if (!reviewing && S.mode === 'comment') { S.mode = 'interact'; clearHover() }
+    pressed('mode-interact', S.mode === 'interact')
+    pressed('mode-comment', S.mode === 'comment')
+    var cm = $('mode-comment')
+    cm.hidden = !appMode
+    cm.disabled = !reviewing
+    cm.title = reviewing ? 'Click an element to pin a comment' : (readOnlyVersion() ? 'Only the latest version takes comments' : 'Comments are open while a review is waiting on you')
+    pressed('vp-desktop', S.viewport === 'desktop')
+    pressed('vp-mobile', S.viewport === 'mobile')
+    frameBox.className = 'frame-box' + (S.viewport === 'mobile' ? ' mobile' : '')
+    var sw = $('state-switch')
+    clear(sw)
+    var s = screenById(S.screenId)
+    if (s && s.states && s.states.length > 1) {
+      sw.hidden = false
+      s.states.forEach(function (st) {
+        sw.appendChild(el('button', { type: 'button', 'aria-pressed': currentState() === st ? 'true' : 'false', onclick: function () { S.states[s.id] = st; S.note = null; renderAll() }, text: st }))
+      })
+    } else sw.hidden = true
+    renderStatus()
+  }
+
+  function renderBanner() {
+    var b = $('banner')
+    clear(b)
+    if (!appMode) {
+      b.hidden = false
+      b.appendChild(el('span', { text: 'Mock v' + boot.version + ' · not the product' }))
+    } else if (staleVersion()) {
+      b.hidden = false
+      b.appendChild(el('span', { role: 'alert', text: 'This version was updated \u2014 reload to review it' }))
+      b.appendChild(el('button', { type: 'button', text: 'Reload', onclick: function () { window.location.reload() } }))
+    } else if (readOnlyVersion()) {
+      b.hidden = false
+      var latest = latestVersion()
+      b.appendChild(el('span', { text: 'v' + boot.version + ' is read-only. New comments go on v' + latest + '.' }))
+      b.appendChild(el('button', { type: 'button', text: 'Go to v' + latest, onclick: function () { goToVersion(latest) } }))
+    } else b.hidden = true
+  }
+  function goToVersion(v) {
+    window.location.href = '/_quirk/mock/' + encodeURIComponent(String(v)) + '?t=' + encodeURIComponent(boot.token)
+  }
+
+  var verdictSig = ''
+  function renderVerdict() {
+    var bar = $('verdict')
+    if (!appMode) { bar.hidden = true; return }
+    var reviewing = canReview()
+    var unvisited = Core.unvisitedScreens(boot.screens, S.visited)
+    var sig = JSON.stringify([reviewing, S.panel, S.submitting, S.verdictError, unvisited])
+    if (sig === verdictSig) return
+    verdictSig = sig
+    var typing = document.activeElement && bar.contains(document.activeElement) && document.activeElement.tagName === 'TEXTAREA'
+      ? { start: document.activeElement.selectionStart, end: document.activeElement.selectionEnd }
+      : null
+    clear(bar)
+    if (!reviewing) {
+      bar.hidden = true
+      return
+    }
+    bar.hidden = false
+    bar.appendChild(el('strong', { text: 'Your verdict' }))
+    var busy = S.submitting
+    bar.appendChild(el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Looks right', onclick: onLooksRight }))
+    bar.appendChild(el('button', { type: 'button', disabled: busy, text: 'Needs changes', onclick: function () { S.panel = 'changes'; S.verdictError = ''; renderVerdict() } }))
+    bar.appendChild(el('span', { class: 'spacer' }))
+    bar.appendChild(el('button', { type: 'button', disabled: busy, text: 'Skip review', onclick: function () { submitVerdict('skip', null) } }))
+    if (S.verdictError) bar.appendChild(el('span', { class: 'err', role: 'alert', text: S.verdictError }))
+    if (S.panel === 'confirm') {
+      var names = unvisited.map(function (id) { var s = screenById(id); return s ? s.title : id })
+      bar.appendChild(el('div', { class: 'panel' }, [
+        el('div', { text: 'You have not opened ' + names.join(', ') + '. Sign off anyway?' }),
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Confirm: looks right', onclick: function () { submitVerdict('looks-right', null) } }),
+          el('button', { type: 'button', disabled: busy, text: 'Keep reviewing', onclick: function () { S.panel = null; renderVerdict() } }),
+        ]),
+      ]))
+    }
+    if (S.panel === 'changes') {
+      var area = el('textarea', { 'aria-label': 'Overall comment (optional)', placeholder: 'Overall comment (optional)' })
+      area.value = S.changesText
+      area.addEventListener('input', function () { S.changesText = area.value })
+      if (typing) {
+        queueMicrotask(function () {
+          area.focus()
+          area.setSelectionRange(typing.start, typing.end)
+        })
+      }
+      bar.appendChild(el('div', { class: 'panel' }, [
+        area,
+        el('div', { class: 'row' }, [
+          el('button', { type: 'button', class: 'primary', disabled: busy, text: 'Send: needs changes', onclick: function () { submitVerdict('needs-changes', S.changesText.trim()) } }),
+          el('button', { type: 'button', disabled: busy, text: 'Cancel', onclick: function () { S.panel = null; renderVerdict() } }),
+        ]),
+      ]))
+    }
+  }
+  function onLooksRight() {
+    S.verdictError = ''
+    if (Core.unvisitedScreens(boot.screens, S.visited).length) { S.panel = 'confirm'; renderVerdict() } else submitVerdict('looks-right', null)
+  }
+  function submitVerdict(verdict, comment) {
+    if (S.submitting || !canReview()) return
+    var ids = screens.map(function (s) { return s.id })
+    var payload = {
+      verdict: verdict,
+      visited: ids.filter(function (id) { return S.visited.has(id) }),
+      marks: ids.filter(function (id) { return S.marks.has(id) }),
+    }
+    if (comment) payload.comment = comment
+    S.submitting = true
+    S.verdictError = ''
+    renderVerdict()
+    var step = S.snap.step
+    postEvent('submit', payload, { nonce: step.nonce, step: step.id }).then(function (result) {
+      S.submitting = false
+      if (result === 'ok') {
+        S.panel = null
+        setNotice('Verdict sent.', false)
+      } else if (result === 'superseded') {
+        S.panel = null
+        S.verdictError = 'That review was replaced by a newer one. Refreshing.'
+      } else S.verdictError = 'Could not send the verdict. Try again.'
+      renderVerdict()
+      pollNow()
+    })
+  }
+
+  function renderAll() {
+    renderToolbar()
+    renderBanner()
+    applyStates()
+    renderRail()
+    renderOverlay()
+    renderNote()
+    paintHover()
+    renderVerdict()
+  }
+
+  // ---- companion transport (same-origin app endpoints only) ------------------
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID()
+    return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2)
+  }
+  /** Posts one event, retrying network errors with the same client_id so the server can dedupe. */
+  function postEvent(type, payload, scope) {
+    var body = { client_id: uuid(), type: type, payload: payload }
+    if (scope.nonce) body.nonce = scope.nonce
+    if (scope.step) body.step = scope.step
+    var text = JSON.stringify(body)
+    function attempt(n) {
+      return fetch('/_quirk/app/event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Quirk-Token': boot.token },
+        body: text,
+      }).then(function (r) {
+        if (r.status === 409) return 'superseded'
+        return r.ok ? 'ok' : 'error'
+      }, function () {
+        if (n >= 3) return 'error'
+        return new Promise(function (resolve) { setTimeout(resolve, 200 * (n + 1)) }).then(function () { return attempt(n + 1) })
+      })
+    }
+    return attempt(0)
+  }
+
+  var rev = ''
+  var failures = 0
+  var inflight = false
+  var pollTimer = null
+  function pollDelay() {
+    return failures < 3 ? 1000 : Math.min(5000, 1000 * Math.pow(2, failures - 2))
+  }
+  function poll() {
+    if (inflight) return
+    inflight = true
+    fetch('/_quirk/app/snapshot?rev=' + encodeURIComponent(rev), { cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 200) {
+          return r.json().then(function (snap) {
+            rev = String(snap.rev)
+            S.snap = snap
+            renderAll()
+          })
+        }
+        if (r.status !== 204) throw new Error('snapshot ' + r.status)
+        return null
+      })
+      .then(function () {
+        var recovered = failures > 0
+        failures = 0
+        if (S.paused || recovered) { S.paused = false; renderStatus() }
+      })
+      .catch(function () {
+        failures += 1
+        if (failures >= 3 && !S.paused) { S.paused = true; renderStatus() }
+      })
+      .then(function () {
+        inflight = false
+        clearTimeout(pollTimer)
+        pollTimer = setTimeout(poll, pollDelay())
+      })
+  }
+  function pollNow() {
+    if (!appMode) return
+    clearTimeout(pollTimer)
+    poll()
+  }
+
+  // ---- controls ------------------------------------------------------------
+  $('mode-interact').addEventListener('click', function () { S.mode = 'interact'; clearHover(); renderToolbar() })
+  $('mode-comment').addEventListener('click', function () { if (canReview()) { S.mode = 'comment'; renderToolbar() } })
+  $('vp-desktop').addEventListener('click', function () { S.viewport = 'desktop'; renderToolbar(); scheduleRefresh() })
+  $('vp-mobile').addEventListener('click', function () { S.viewport = 'mobile'; renderToolbar(); scheduleRefresh() })
+  $('show-changes').addEventListener('change', function (ev) {
+    S.showChanges = ev.target.checked
+    if (S.showChanges && !changed.size) setNotice('Nothing was recorded as changed in this version.', false)
+    renderOverlay()
+  })
+  $('version-picker').addEventListener('change', function (ev) {
+    var v = Number(ev.target.value)
+    if (v !== boot.version) goToVersion(v)
+  })
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && (S.note || S.openThread)) { S.note = null; S.openThread = null; renderNote(); renderOverlay(); renderRail() }
+  })
+  window.addEventListener('resize', scheduleRefresh)
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') pollNow() })
+
+  frame.addEventListener('load', attach)
+  frame.srcdoc = Core.withBase(String(boot.mock_html || ''))
+  renderAll()
+  if (appMode) poll()
+})()
+</script>
+</body>
+</html>

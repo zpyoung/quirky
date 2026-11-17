@@ -287,6 +287,53 @@
         "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
       },
       {
+        "id": "reorderQueued",
+        "description": "Sets the order of a session's queue to the given ids, which must list every queued id exactly once; an unknown id fails with not-found and a non-permutation with invalid-params.",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "ids": { "type": "array", "items": { "type": "string" } } },
+          "required": ["session", "ids"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "sendQueued",
+        "description": "Sends a queued message now as a new turn while the session is idle; an id that is not queued fails with not-found, and a working or ended session fails with conflict (data.reason busy or exited).",
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" }, "id": { "type": "string" } },
+          "required": ["session", "id"]
+        },
+        "result": { "type": "object", "properties": { "ok": { "type": "boolean" } }, "required": ["ok"] }
+      },
+      {
+        "id": "commands",
+        "description": "The slash commands and skills the session's agent last reported, or an empty list when it reported none. Works for live and ended sessions.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "session": { "type": "string" } },
+          "required": ["session"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "commands": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": { "name": { "type": "string" }, "kind": { "type": "string", "enum": ["command", "skill"] }, "description": { "type": "string" } },
+                "required": ["name", "kind"]
+              }
+            }
+          },
+          "required": ["commands"]
+        }
+      },
+      {
         "id": "models",
         "description": "The models a running session's agent offers, as ids `configure` accepts, with the model the session launched with. Runners without a live list return an empty list; a session that is not running fails with conflict.",
         "readOnly": true,
@@ -390,6 +437,18 @@
             "queue": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "text": { "type": "string" }, "images": { "type": "array", "items": { "type": "string" } }, "at": { "type": "string" } }, "required": ["id", "text", "at"] } }
           },
           "required": ["sessionId", "queue"]
+        }
+      },
+      {
+        "id": "commandsChanged",
+        "description": "A structured session's agent reported a new list of slash commands and skills.",
+        "data": {
+          "type": "object",
+          "properties": {
+            "sessionId": { "type": "string" },
+            "commands": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string", "enum": ["command", "skill"] }, "description": { "type": "string" } }, "required": ["name", "kind"] } }
+          },
+          "required": ["sessionId", "commands"]
         }
       },
       {

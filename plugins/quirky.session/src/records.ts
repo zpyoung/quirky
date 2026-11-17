@@ -268,6 +268,15 @@ export function sessionMigrations(home: string): StoreMigration[] {
     },
     (store) => {
       store.exec('ALTER TABLE workspace_sleep ADD COLUMN instance_id TEXT')
+    },
+    (store) => {
+      store.exec(`
+        CREATE TABLE composer_drafts (
+          session_id TEXT PRIMARY KEY,
+          draft TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `)
     }
   ]
 }

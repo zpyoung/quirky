@@ -1,0 +1,8 @@
+[
+  {"id": "g1", "title": "Write a two-line message and send it", "tag": "real-app"},
+  {"id": "g2", "title": "Queue a follow-up while the agent works, then stop the turn", "tag": "real-app"},
+  {"id": "g3", "title": "Mention a file with @ and pick it from the list", "tag": "real-app"},
+  {"id": "g4", "title": "Attach an image, then remove it before sending", "tag": "real-app"},
+  {"id": "g5", "title": "Switch model and effort, change permission mode, turn on plan mode", "tag": "real-app"},
+  {"id": "g6", "title": "See what the composer shows once the session has ended", "tag": "real-app"}
+]

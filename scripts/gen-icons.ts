@@ -23,7 +23,7 @@ export const TOOL_ICON_NAMES = [
 
 export const CONTROL_ICON_NAMES = [
   'plus', 'magnifying-glass', 'dots-three', 'dots-three-vertical', 'minus', 'caret-down', 'caret-left',
-  'caret-right', 'arrows-clockwise', 'funnel', 'export', 'x', 'arrows-out', 'arrows-in', 'check', 'gear', 'globe', 'squares-four', 'play'
+  'caret-right', 'arrows-clockwise', 'funnel', 'export', 'x', 'arrows-out', 'arrows-in', 'check', 'gear', 'globe', 'squares-four', 'play', 'stop', 'arrow-up'
 ] as const
 
 export const FILE_ICON_NAMES = [

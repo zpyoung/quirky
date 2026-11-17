@@ -60,7 +60,7 @@ const folderListing = object(
 const browserHostPrompt = object(
   {
     requestId: string(),
-    kind: { type: 'string', enum: ['folder-picker', 'window-open'] },
+    kind: { type: 'string', enum: ['folder-picker', 'file-picker', 'window-open'] },
     title: string(),
     expiresAt: integer(0),
     busy: boolean(),
@@ -364,6 +364,7 @@ const nativeNotificationCapabilities = object(
 const nativeDesktopCapabilities = object(
   {
     directoryPicker: boolean(),
+    filePicker: boolean(),
     auxiliaryWindows: boolean(),
     revealItem: boolean(),
     notifications: nativeNotificationCapabilities
@@ -871,6 +872,13 @@ export const KERNEL_METHOD_SCHEMAS = {
     ),
     result: object({ cancelled: boolean(), paths: strings }, ['cancelled', 'paths'])
   },
+  'desktop.file.pick': {
+    description: 'Opens the selected native shell file chooser and returns its absolute selected paths; an empty selection is cancellation.',
+    params: object(
+      { title: string(), multiple: boolean(), imagesOnly: boolean() }
+    ),
+    result: object({ cancelled: boolean(), paths: strings }, ['cancelled', 'paths'])
+  },
   'desktop.window.open': {
     description: 'Opens effective view `view` with its exact `input` in a separately owned native window.',
     params: object({ view: string(), input: { description: 'Passed to the view as its input.' }, title: string() }, ['view']),
@@ -1033,7 +1041,7 @@ export const KERNEL_EVENT_SCHEMAS = {
         requestId: string(),
         action: object(
           {
-            kind: { type: 'string', enum: ['folder-picker', 'window-open', 'window-close', 'window-activate-owner', 'reveal-item'] },
+            kind: { type: 'string', enum: ['folder-picker', 'file-picker', 'window-open', 'window-close', 'window-activate-owner', 'reveal-item'] },
             request: { type: 'object', additionalProperties: true, description: 'The request matching `kind`.' }
           },
           ['kind', 'request']

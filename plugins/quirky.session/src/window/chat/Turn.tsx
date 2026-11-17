@@ -8,7 +8,7 @@ import { TestResults } from './cards/TestResults'
 import { ViewError } from './cards/ViewError'
 import { Embedded } from './Embedded'
 import { ErrorRow } from './ErrorRow'
-import { Prose } from './Prose'
+import { Prose, renderUserMarkdown } from './Prose'
 import { formatDuration, type Block, type Turn as TurnData } from './turns'
 
 export const ASK_VIEW = 'view:quirky.ask/card'
@@ -32,7 +32,6 @@ const you = {
   alignSelf: 'flex-end',
   maxWidth: '80%',
   padding: 'var(--ui-space-8) var(--ui-space-12)',
-  whiteSpace: 'pre-wrap',
   overflowWrap: 'anywhere',
   background: 'var(--ui-selected)',
   border: 'var(--ui-border-width) solid var(--ui-border)',
@@ -129,7 +128,7 @@ export function TurnView({
       </div>
       {data.user && (
         <div style={you} aria-label="Your message">
-          {data.user.text}
+          {renderUserMarkdown(data.user.text)}
           {data.user.images.length > 0 && (
             <div style={images} aria-label="Attached images">
               {data.user.images.map((path) => (

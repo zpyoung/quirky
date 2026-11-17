@@ -224,6 +224,7 @@ function focusTarget(params: Params): 'sidebar' | 'view' | 'panel' {
 
 function nativeDesktopCapabilities(params: Params): NativeDesktopCapabilities {
   const directoryPicker = optBool(params, 'directoryPicker')
+  const filePicker = optBool(params, 'filePicker') ?? false
   const auxiliaryWindows = optBool(params, 'auxiliaryWindows')
   const revealItem = optBool(params, 'revealItem')
   const rawNotifications = params.notifications
@@ -240,6 +241,7 @@ function nativeDesktopCapabilities(params: Params): NativeDesktopCapabilities {
   }
   return {
     directoryPicker,
+    filePicker,
     auxiliaryWindows,
     revealItem,
     notifications: { permission, click, dismiss }
@@ -552,6 +554,16 @@ export function createHandlers(
         ...(title === undefined ? {} : { title }),
         ...(startingFolder === undefined ? {} : { startingFolder }),
         ...(multiple === undefined ? {} : { multiple })
+      })
+    },
+    'desktop.file.pick': (params, conn) => {
+      const title = optStr(params, 'title')
+      const multiple = optBool(params, 'multiple')
+      const imagesOnly = optBool(params, 'imagesOnly')
+      return layout.pickFiles(conn, {
+        ...(title === undefined ? {} : { title }),
+        ...(multiple === undefined ? {} : { multiple }),
+        ...(imagesOnly === undefined ? {} : { imagesOnly })
       })
     },
     'desktop.window.open': (params, conn) => {

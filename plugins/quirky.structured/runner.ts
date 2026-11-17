@@ -1,4 +1,5 @@
 import type {
+  AgentCommand,
   ProcessSpawner,
   AskEnvelope,
   AskSpec,
@@ -37,6 +38,8 @@ export type StructuredContext = {
   cancelAsk(askId: string): Promise<void>
   /** Stores a native provider session ID before the first turn is started. */
   setProviderSession(sessionId: string, providerSession: SessionProviderSession): Promise<void>
+  /** Reports the slash commands and skills the agent offers; each call replaces the session's list. */
+  reportCommands?(sessionId: string, commands: AgentCommand[]): void
   /** The user's `claude` executable, found through their login shell. */
   resolveClaudePath(): Promise<string>
   /** The user's `codex` executable, found through their login shell. */

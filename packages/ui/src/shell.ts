@@ -28,6 +28,10 @@ export async function answerDesktopShellRequest(
           if (!bridge.capabilities.directoryPicker) throw new Error('native directory selection is unavailable')
           nativeResult = await bridge.pickFolder(action.request)
           break
+        case 'file-picker':
+          if (!bridge.capabilities.filePicker || !bridge.pickFiles) throw new Error('native file selection is unavailable')
+          nativeResult = await bridge.pickFiles(action.request)
+          break
         case 'window-open':
           if (!bridge.capabilities.auxiliaryWindows) throw new Error('auxiliary native windows are unavailable')
           nativeResult = await bridge.openWindow(action.request, event.ownerShell)
