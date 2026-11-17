@@ -875,12 +875,18 @@ describe('plugin gate', () => {
 
   test('rejects malformed approved-reference dimensions before dispatch', async () => {
     const value = fixture()
-    const malformed = pngBytes(SCREENSHOT_SIZE.width - 1, SCREENSHOT_SIZE.height, 41)
-    const references = new Set(value.manifest.captures.map(({ reference }) => reference.path))
-    for (const capture of value.manifest.captures) capture.reference.sha256 = digest(malformed)
+    const malformedReferences = new Map<string, Buffer>()
+    for (const capture of value.manifest.captures) {
+      const original = readFileSync(capture.reference.path)
+      const malformed = Buffer.from(original)
+      malformed.writeUInt32BE(SCREENSHOT_SIZE.width - 1, 16)
+      capture.reference.sha256 = digest(malformed)
+      expect(malformed.length).toBe(original.length)
+      malformedReferences.set(capture.reference.path, malformed)
+    }
     const harness = dependencies(value)
     harness.deps.io = {
-      readFile: async (path) => references.has(path) ? malformed : readFileSync(path)
+      readFile: async (path) => malformedReferences.get(path) ?? readFileSync(path)
     }
 
     const exitCode = await runPluginGate(args(value.output), harness.deps)
@@ -888,7 +894,89 @@ describe('plugin gate', () => {
     expect(exitCode).toBe(2)
     expect(harness.reviewCalls()).toBe(0)
     expect(report.status).toBe('error')
-    expect(report.failures.length).toBeGreaterThan(0)
+    expect(report.failures.some(({ code, message }) =>
+      code === 'evidence-changed' && /reference|golden/i.test(message) && /dimension|2799|2800/i.test(message)
+    )).toBe(true)
+  })
+
+  test('late slot-three evidence drift invalidates an already completed sibling median', async () => {
+    const value = fixture({ alpha: 1, beta: 1, gamma: 1 })
+    const harness = dependencies(value)
+    const originalReview = harness.deps.review!
+    const slotByCell = new Map<string, number>()
+    const heldInitialReviews = eventLatch()
+    const fifthReviewEntered = eventLatch()
+    const releaseLateReviews = deferredVoid()
+    harness.deps.review = async (manifest, options) => {
+      const requested = options.onlyCells![0]!
+      const id = cellKey(requested.targetId, requested.theme)
+      const slot = (slotByCell.get(id) ?? 0) + 1
+      slotByCell.set(id, slot)
+      const report = await originalReview(manifest, options)
+      if (slot === 3 && (
+        requested.targetId === 'view:alpha/target-1' && requested.theme === 'light' ||
+        requested.targetId === 'view:beta/target-1'
+      )) {
+        heldInitialReviews.advance()
+        await releaseLateReviews.promise
+      }
+      if (slot === 3 && requested.targetId === 'view:gamma/target-1' && requested.theme === 'dark') {
+        fifthReviewEntered.advance()
+        await releaseLateReviews.promise
+      }
+      return report
+    }
+    const runPromise = runPluginGate(args(value.output), harness.deps)
+    try {
+      await Promise.all([heldInitialReviews.waitFor(3), fifthReviewEntered.waitFor(1)])
+      const imagePath = value.manifest.captures.find(({ targetId, theme }) =>
+        targetId === 'view:alpha/target-1' && theme === 'dark'
+      )!.image!.path
+      const changedImage = Buffer.from(readFileSync(imagePath))
+      changedImage[changedImage.length - 1] ^= 1
+      writeFileSync(imagePath, changedImage)
+      releaseLateReviews.resolve()
+
+      expect(await runPromise).toBe(2)
+      const report = reportAt(value)
+      expect(report.failures).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'evidence-changed' })
+      ]))
+      const completedSibling = cellAt(report, 'view:alpha/target-1', 'dark')
+      expect(completedSibling.slots.map(({ score }) => score)).toEqual([90, 90, 90])
+      expect(completedSibling).toMatchObject({ median: null, status: 'invalid' })
+    } finally {
+      releaseLateReviews.resolve()
+      await runPromise.catch(() => undefined)
+    }
+  })
+
+  test('mixed typed issues without a returned sample are never retried', async () => {
+    const key = { targetId: 'view:alpha/target-1', theme: 'dark' as const }
+    for (const codes of [
+      ['response-shape', 'contract-conflict'],
+      ['response-shape', 'invalid-sample']
+    ] as const) {
+      const value = fixture()
+      const result = await run(value, {
+        issue: (requested, slot) => requested.targetId === key.targetId && requested.theme === key.theme && slot === 1
+          ? codes.map((code) => ({ ...key, code, message: `${code} without a returned sample` }))
+          : undefined
+      })
+      const report = reportAt(value)
+      const failed = cellAt(report, key.targetId, key.theme)
+
+      expect(result.exitCode).toBe(2)
+      expect(result.reviewCalls()).toBe(4)
+      expect(report.timing!.replacementReviewCalls).toBe(0)
+      expect(failed).toMatchObject({ median: null, status: 'invalid' })
+      expect(failed.slots[0]!.attempts).toHaveLength(1)
+      expect(failed.slots[0]!.attempts[0]!.sample).toBeNull()
+      expect(failed.slots[0]!.attempts[0]!.issues.map(({ code }) => code)).toEqual([...codes])
+      expect(failed.slots.slice(1).every(({ score, attempts }) => score === null && attempts.length === 0)).toBe(true)
+      expect(cellAt(report, key.targetId, 'light').slots.map(({ score }) => score)).toEqual([90, 90, 90])
+      expect(cellAt(report, key.targetId, 'light').median).toBe(90)
+    }
   })
 
   test('stops on a source change discovered before the first review dispatch', async () => {
@@ -1100,6 +1188,69 @@ describe('plugin gate', () => {
     }
   }, 30_000)
 
+  test('detaches signal listeners when both reducer summaries throw', async () => {
+    const value = fixture()
+    const inputPath = join(value.root, 'fallback-input.json')
+    writePrivate(inputPath, JSON.stringify({ inventory: value.inventory, manifest: value.manifest }))
+    const childSource = `
+import { mock } from 'bun:test'
+import { readFileSync } from 'node:fs'
+import * as campaignModule from ${JSON.stringify(fileURLToPath(new URL('./plugin-campaign.ts', import.meta.url)))}
+const campaignPath = ${JSON.stringify(fileURLToPath(new URL('./plugin-campaign.ts', import.meta.url)))}
+const originalCampaign = { ...campaignModule }
+let summaryFailures = 0
+mock.module(campaignPath, () => ({
+  ...originalCampaign,
+  summarizePluginCampaign: () => {
+    summaryFailures += 1
+    throw new Error('forced reducer summary failure')
+  }
+}))
+// the fault must be installed before the gate imports its reducer
+const { runPluginGate } = await import(${JSON.stringify(fileURLToPath(new URL('./plugin-gate.ts', import.meta.url)))})
+const { inventory, manifest } = JSON.parse(readFileSync(${JSON.stringify(inputPath)}, 'utf8'))
+const listeners = new Map()
+let error = null
+let reviewCalls = 0
+try {
+  await runPluginGate(${JSON.stringify(args(value.output))}, {
+    repoRoot: ${JSON.stringify(value.repoRoot)},
+    inventory: () => structuredClone(inventory),
+    capture: async () => manifest,
+    review: async () => { reviewCalls += 1; throw new Error('unexpected review dispatch') },
+    io: { readFile: async (path) => {
+      if (path.endsWith('golden-shell-dark.png')) throw new Error('stop before review dispatch')
+      return readFileSync(path)
+    } },
+    stdout: () => {}, stderr: () => {},
+    signals: {
+      on: (signal, listener) => listeners.set(signal, listener),
+      off: (signal) => listeners.delete(signal)
+    }
+  })
+} catch (cause) { error = cause.message }
+console.log(JSON.stringify({ error, summaryFailures, reviewCalls, attached: [...listeners.keys()] }))
+`
+    const child = Bun.spawn([process.execPath, '-e', childSource], {
+      env: { ...process.env, QUIRKY_HOME: join(value.root, 'isolated-fallback-home') },
+      stdout: 'pipe', stderr: 'pipe', timeout: 20_000
+    })
+    try {
+      const [exitCode, stdout, stderr] = await Promise.all([
+        child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()
+      ])
+      expect(exitCode, stderr).toBe(0)
+      const result = JSON.parse(stdout.trim())
+      expect(result.error).toBe('forced reducer summary failure')
+      expect(result.summaryFailures).toBe(2)
+      expect(result.reviewCalls).toBe(0)
+      expect(result.attached).toEqual([])
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM')
+      await child.exited
+    }
+  }, 30_000)
+
   test('unknown issues, malformed identities and thrown exceptions retain raw evidence without retry', async () => {
     for (const kind of ['unknown', 'identity', 'envelope', 'throw'] as const) {
       const value = fixture()
@@ -1214,18 +1365,40 @@ describe('plugin gate', () => {
     }
   })
 
-  test('summary persistence failures never leave a durable passing verdict', async () => {
+  test('summary persistence failures retain capture-derived and skipped-slot diagnostics', async () => {
+    const failedCell = { targetId: 'view:alpha/target-1', theme: 'dark' as const }
     for (const filename of ['plugin-gate.json', 'plugin-gate.md']) {
-      const value = fixture()
+      const value = fixture({ alpha: 1 }, { failedCells: [failedCell] })
       const harness = dependencies(value)
       harness.deps.io = { writeFile: async (path, contents, options) => {
         if (path.endsWith(filename)) throw new Error('injected summary persistence failure')
         writeFileSync(path, contents, options)
       } }
       expect(await runPluginGate(args(value.output), harness.deps)).toBe(2)
+      expect(harness.reviewCalls()).toBe(0)
       const survivor = join(value.output, filename.endsWith('.json') ? 'plugin-gate.md' : 'plugin-gate.json')
-      expect(readFileSync(survivor, 'utf8')).toContain('error')
-      expect(readFileSync(survivor, 'utf8')).toContain('persistence')
+      const survivorText = readFileSync(survivor, 'utf8')
+      expect(survivorText).toContain('error')
+      expect(survivorText).toContain('persistence')
+
+      if (filename === 'plugin-gate.md') {
+        const report = JSON.parse(survivorText) as GateReport
+        expect(report.failures.map(({ code }) => code)).toEqual(expect.arrayContaining([
+          'capture-failure', 'target-capture-incomplete', 'persistence'
+        ]))
+        for (const theme of THEMES) {
+          expect(cellAt(report, failedCell.targetId, theme).slots.map(({ status }) => status))
+            .toEqual(['skipped', 'skipped', 'skipped'])
+        }
+      } else {
+        expect(survivorText).toContain(`- capture-failure ${failedCell.targetId}/dark:`)
+        expect(survivorText).toContain(`- target-capture-incomplete ${failedCell.targetId}/light:`)
+        for (const theme of THEMES) {
+          expect(survivorText).toContain(
+            `| ${failedCell.targetId} | ${theme} | skipped (—) | skipped (—) | skipped (—) | null | null | invalid |`
+          )
+        }
+      }
     }
   })
 

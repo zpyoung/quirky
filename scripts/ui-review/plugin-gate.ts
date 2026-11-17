@@ -527,6 +527,10 @@ export async function runPluginGate(argv: readonly string[], dependencies: Plugi
         if (await io.realpath(capture.reference.path) !== approved) throw new GateFailure('evidence-changed', 'Reference is not the approved same-theme PNG.')
         const referenceBytes = await readRegular(approved)
         if (sha256(referenceBytes) !== capture.reference.sha256) throw new GateFailure('evidence-changed', 'Approved reference hash differs from capture evidence.')
+        const referenceDimensions = pngDimensions(referenceBytes)
+        if (!referenceDimensions || referenceDimensions.width !== SCREENSHOT_SIZE.width || referenceDimensions.height !== SCREENSHOT_SIZE.height) {
+          throw new GateFailure('evidence-changed', `Approved reference PNG dimensions must be ${SCREENSHOT_SIZE.width}×${SCREENSHOT_SIZE.height}.`)
+        }
         frozenFiles.set(approved, capture.reference.sha256)
         try {
           if (!capture.image) throw new Error('Capture image is missing.')
@@ -591,46 +595,49 @@ export async function runPluginGate(argv: readonly string[], dependencies: Plugi
   } catch (error) {
     stop(error instanceof GateFailure ? error.code : 'campaign-error', message(error))
   } finally {
-    try { await verify() } catch (error) {
-      stop(error instanceof GateFailure ? error.code : 'evidence-changed', message(error))
-    }
-    if (reviewStartedAt !== null) timing.reviewMs = now() - reviewStartedAt
-    timing.totalMs = now() - startedAt
     try {
-      report = summarize()
-    } catch (error) {
-      failures.push({ code: 'inventory-mismatch', message: redact(message(error)) })
-      const source = inventory
-      if (source && captureValidated) {
-        captureValidated = false
-        report = summarize()
-      } else {
-        inventory = null
-        report = summarize()
-        if (source) report.source = { commit: source.commit, sourceDigest: source.sourceDigest }
+      try { await verify() } catch (error) {
+        stop(error instanceof GateFailure ? error.code : 'evidence-changed', message(error))
       }
-    }
-    try { await io.writeFile(join(output, 'plugin-gate.md'), renderPluginCampaign(report), { flag: 'wx', mode: 0o600 }) } catch (error) {
-      stop('persistence', `Could not persist plugin-gate.md: ${message(error)}`)
-      report.status = 'error'
-      report.failures = [...failures]
-    }
-    try { await io.writeFile(join(output, 'plugin-gate.json'), json(report), { flag: 'wx', mode: 0o600 }) } catch (error) {
-      stop('persistence', `Could not persist plugin-gate.json: ${message(error)}`)
-      report.status = 'error'
-      report.failures = [...failures]
-      const amendment = join(output, 'plugin-gate-error.md')
+      if (reviewStartedAt !== null) timing.reviewMs = now() - reviewStartedAt
+      timing.totalMs = now() - startedAt
       try {
-        await io.writeFile(amendment, renderPluginCampaign(report), { flag: 'wx', mode: 0o600 })
-        await io.rename(amendment, join(output, 'plugin-gate.md'))
-      } catch (amendError) {
-        stderr(`Could not preserve an accurate Markdown summary: ${redact(message(amendError))}`)
-        await io.unlink(join(output, 'plugin-gate.md')).catch(() => undefined)
+        report = summarize()
+      } catch (error) {
+        failures.push({ code: 'inventory-mismatch', message: redact(message(error)) })
+        const source = inventory
+        if (source && captureValidated) {
+          captureValidated = false
+          report = summarize()
+        } else {
+          inventory = null
+          report = summarize()
+          if (source) report.source = { commit: source.commit, sourceDigest: source.sourceDigest }
+        }
       }
-      stderr(redact(message(error)))
+      try { await io.writeFile(join(output, 'plugin-gate.md'), renderPluginCampaign(report), { flag: 'wx', mode: 0o600 }) } catch (error) {
+        stop('persistence', `Could not persist plugin-gate.md: ${message(error)}`)
+        report.status = 'error'
+        report.failures.push(failures[failures.length - 1]!)
+      }
+      try { await io.writeFile(join(output, 'plugin-gate.json'), json(report), { flag: 'wx', mode: 0o600 }) } catch (error) {
+        stop('persistence', `Could not persist plugin-gate.json: ${message(error)}`)
+        report.status = 'error'
+        report.failures.push(failures[failures.length - 1]!)
+        const amendment = join(output, 'plugin-gate-error.md')
+        try {
+          await io.writeFile(amendment, renderPluginCampaign(report), { flag: 'wx', mode: 0o600 })
+          await io.rename(amendment, join(output, 'plugin-gate.md'))
+        } catch (amendError) {
+          stderr(`Could not preserve an accurate Markdown summary: ${redact(message(amendError))}`)
+          await io.unlink(join(output, 'plugin-gate.md')).catch(() => undefined)
+        }
+        stderr(redact(message(error)))
+      }
+    } finally {
+      signals.off('SIGINT', onSigint)
+      signals.off('SIGTERM', onSigterm)
     }
-    signals.off('SIGINT', onSigint)
-    signals.off('SIGTERM', onSigterm)
   }
   if (signalName) return signalName === 'SIGINT' ? 130 : 143
   const exitCode = report!.status === 'passed' && !fatal ? 0 : report!.status === 'failed' && !fatal ? 1 : 2
