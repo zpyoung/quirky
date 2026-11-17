@@ -138,6 +138,7 @@ function evidence(overrides: Partial<SoakEvidence> = {}): EvidenceFixture {
       failed: false,
       worktree: dayWorktrees[0]!,
     }],
+    terminalProbes: [{ at: 0, ms: 10, ownLagMs: 0, timedOut: false, failed: false }],
     day,
     ...overrides,
     switches: overrides.switches ?? switches,
@@ -1757,4 +1758,51 @@ test('g2-96: flood ticks are not panel requests or panel refreshes', () => {
   const params = { owner: 'a', sequence: 1 }
   expect(panelOfRequest('soak.faults/floodTick', params)).toBeNull()
   expect(isPanelRefreshRequest('soak.faults/floodTick', params)).toBe(false)
+})
+
+test('terminal stalls preserve status-only counters and report terminal latency percentiles', () => {
+  const terminalProbes = Array.from({ length: 20 }, (_, index) => ({
+    at: index, ms: (index + 1) * 10, ownLagMs: 0, timedOut: false, failed: false,
+  }))
+  const result = judge(evidence({ terminalProbes }), config())
+  expect(result.checks.stalls).toMatchObject({
+    ok: true, probes: 0, stalls: 0, hostBusy: 0, p50Ms: 0, p95Ms: 0, maxMs: 0, worst: [],
+  })
+  expect(result.checks.stalls.terminal).toEqual({
+    probes: 20, stalls: 0, failed: 0, hostBusy: 0, p50Ms: 105, p95Ms: 190, maxMs: 200,
+    worst: terminalProbes.slice(-10).reverse().map(({ at, ms }) => ({ at, ms })),
+  })
+  expect(result.checks.stalls.git).toMatchObject({ probes: 1, maxMs: 10 })
+})
+
+test('terminal stalls and failures enforce the same latency and host-lag boundaries as git', () => {
+  const check = (ms: number, ownLagMs = 0, failed = false, timedOut = false) => judge(
+    evidence({ terminalProbes: [{ at: 1, ms, ownLagMs, failed, timedOut }] }), config(),
+  ).checks.stalls
+  expect(check(1000)).toMatchObject({ ok: true, terminal: { stalls: 0, failed: 0 } })
+  expect(check(1001, 500)).toMatchObject({ ok: false, terminal: { stalls: 1, hostBusy: 0 } })
+  expect(check(1500, 600)).toMatchObject({ ok: true, terminal: { stalls: 0, hostBusy: 1 } })
+  expect(check(5, 0, true)).toMatchObject({ ok: false, terminal: { stalls: 0, failed: 1 } })
+  expect(check(30_000, 600, false, true)).toMatchObject({ ok: false, terminal: { stalls: 1, hostBusy: 0 } })
+})
+
+test('qualification requires terminal instrumentation except in fault runs', () => {
+  for (const terminalProbes of [undefined, []]) {
+    const result = judge(evidence({ terminalProbes }), config())
+    expect(result.disqualified).toContain('missing instrumentation: terminalProbes')
+    const fault = judge(evidence({ terminalProbes }), config({ fault: 'storm' }))
+    expect(fault.disqualified).toEqual(['fault injected: storm'])
+  }
+})
+
+test('terminal host-busy qualification applies strictly above five percent and never to faults', () => {
+  const probes = (total: number) => Array.from({ length: total }, (_, index) => ({
+    at: index, ms: index === 0 ? 1500 : 10, ownLagMs: index === 0 ? 600 : 0,
+    timedOut: false, failed: false,
+  }))
+  expect(judge(evidence({ terminalProbes: probes(20) }), config()).disqualified).toEqual([])
+  expect(judge(evidence({ terminalProbes: probes(19) }), config()).disqualified)
+    .toContain('host too busy to judge terminal stalls: 1 of 19 probes')
+  expect(judge(evidence({ terminalProbes: probes(19) }), config({ fault: 'storm' })).disqualified)
+    .toEqual(['fault injected: storm'])
 })

@@ -21,6 +21,7 @@ import type {
   SoakLimits,
   SoakReport,
   SwitchRecord,
+  TerminalProbeRecord,
   WindowBeat,
   WorkerBeat,
 } from './contracts'
@@ -44,6 +45,7 @@ export type SoakEvidence = {
   windowRequestSeconds?: number[][]
   panelRequests?: PanelRequestRecord[]
   gitProbes?: GitProbeRecord[]
+  terminalProbes?: TerminalProbeRecord[]
   day?: DayInputs
   switches?: SwitchRecord[]
   phases?: PhaseRecord[]
@@ -514,6 +516,37 @@ function judgeGitStalls(
   }
 }
 
+function judgeTerminalStalls(
+  records: TerminalProbeRecord[],
+  maxStallMs: number,
+): SoakReport['checks']['stalls']['terminal'] {
+  const sortedLatencies = records.map(({ ms }) => ms).sort((left, right) => left - right)
+  let stalls = 0
+  let failed = 0
+  let hostBusy = 0
+  for (const probe of records) {
+    if (probe.failed) failed += 1
+    if (probe.timedOut) stalls += 1
+    else if (probe.ms > maxStallMs) {
+      if (probe.ownLagMs > HOST_LAG_LIMIT_MS) hostBusy += 1
+      else stalls += 1
+    }
+  }
+  return {
+    probes: records.length,
+    stalls,
+    failed,
+    hostBusy,
+    p50Ms: median([...sortedLatencies]),
+    p95Ms: percentile(sortedLatencies, 0.95),
+    maxMs: sortedLatencies.at(-1) ?? 0,
+    worst: [...records]
+      .sort((left, right) => right.ms - left.ms || left.at - right.at)
+      .slice(0, TOP_COUNT)
+      .map(({ at, ms }) => ({ at, ms })),
+  }
+}
+
 function judgeStalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['checks']['stalls'] {
   const chronologicalProbes = [...evidence.probes].sort((left, right) => left.at - right.at)
   const latencies = chronologicalProbes.map((probe) => probe.ms)
@@ -536,8 +569,10 @@ function judgeStalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['ch
     .map(({ at, ms }) => ({ at, ms }))
 
   const git = judgeGitStalls(evidence.gitProbes ?? [], config.limits.maxStallMs)
+  const terminal = judgeTerminalStalls(evidence.terminalProbes ?? [], config.limits.maxStallMs)
   return {
-    ok: stalls === 0 && git.stalls === 0 && git.failed === 0 && !evidence.daemonExited,
+    ok: stalls === 0 && git.stalls === 0 && git.failed === 0
+      && terminal.stalls === 0 && terminal.failed === 0 && !evidence.daemonExited,
     probes: chronologicalProbes.length,
     stalls,
     hostBusy,
@@ -547,6 +582,7 @@ function judgeStalls(evidence: SoakEvidence, config: SoakConfig): SoakReport['ch
     worst,
     daemonExited: evidence.daemonExited,
     git,
+    terminal,
   }
 }
 
@@ -702,6 +738,8 @@ function disqualifications(
   probes: number,
   gitHostBusy: number,
   gitProbes: number,
+  terminalHostBusy: number,
+  terminalProbes: number,
 ): string[] {
   const reasons: string[] = []
   const runMinutes = Math.min(config.minutes, evidence.durationSeconds / 60)
@@ -738,6 +776,12 @@ function disqualifications(
   }
 
   if (config.fault === undefined) {
+    if (terminalProbes > 0 && terminalHostBusy / terminalProbes > 0.05) {
+      reasons.push(`host too busy to judge terminal stalls: ${terminalHostBusy} of ${terminalProbes} probes`)
+    }
+    if (!evidence.terminalProbes || evidence.terminalProbes.length === 0) {
+      reasons.push('missing instrumentation: terminalProbes')
+    }
     if (!evidence.gitProbes || evidence.gitProbes.length === 0) {
       reasons.push('missing instrumentation: gitProbes')
     }
@@ -802,6 +846,8 @@ export function judge(
     checks.stalls.probes,
     checks.stalls.git.hostBusy,
     checks.stalls.git.probes,
+    checks.stalls.terminal.hostBusy,
+    checks.stalls.terminal.probes,
   )
 
   return {
