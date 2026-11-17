@@ -264,7 +264,7 @@ function ActionSection({ context, worktree, action, title, recipe, agents, onRec
 
   return (
     <section className="ui-stack" data-action={action}>
-      <h3>{title}</h3>
+      <SectionHeader title={title} />
       {overridden && <p className="ui-text-muted">This repository has its own recipe, which takes precedence here.</p>}
       <FormRow label="Agent" htmlFor={agentId}>
         <select
