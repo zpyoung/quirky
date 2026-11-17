@@ -136,7 +136,8 @@ export function SuggestionList({
                     {item.source === 'file' && <FileIcon path={item.path} />} {item.label}
                   </>
                 }
-                {...(item.source === 'agent' && item.detail ? { description: <span style={oneLine}>{item.detail}</span>, mainTitle: item.detail } : {})}
+                description={item.source === 'agent' && item.detail ? <span style={oneLine}>{item.detail}</span> : undefined}
+                mainTitle={item.source === 'agent' ? item.detail : undefined}
                 trailing={item.tag ? <span style={tagStyle}>{item.source !== 'agent' && item.detail ? `${item.detail} · ${item.tag}` : item.tag}</span> : undefined}
               />
             </div>
