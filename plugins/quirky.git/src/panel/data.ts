@@ -213,7 +213,7 @@ export type CompareData = {
   compare: GitCompare | null
   /** The compare call itself failed (not an unready compare, which is a result). */
   error: string | null
-  /** A comparison for the current status/base trigger has not arrived. */
+  /** The current status/base trigger has no settled comparison read, successful or failed. */
   pending: boolean
   refresh(): Promise<void>
 }
@@ -224,23 +224,28 @@ export type CompareData = {
  * `refresh` is called.
  */
 export function useCompare(context: UiPluginContext, worktree: string, trigger: string, enabled: boolean): CompareData {
-  const [loaded, setLoaded] = useState<{ compare: GitCompare; trigger: string } | null>(null)
+  const [loaded, setLoaded] = useState<{ compare: GitCompare | null; trigger: string } | null>(null)
   const compare = loaded?.compare ?? null
   const [error, setError] = useState<string | null>(null)
   const newest = useRef(0)
   const alive = useRef(true)
+  const currentTrigger = useRef(trigger)
+  currentTrigger.current = trigger
 
   const refresh = useCallback(async function refresh(): Promise<void> {
     const ticket = ++newest.current
+    const requestedTrigger = currentTrigger.current
     try {
       const next = (await context.call('quirky.git/compare', { worktree })) as GitCompare
       if (!alive.current || ticket !== newest.current) return
-      setLoaded((prev) => prev?.trigger === trigger && same(prev.compare, next) ? prev : { compare: next, trigger })
+      setLoaded((prev) => prev?.trigger === requestedTrigger && same(prev.compare, next) ? prev : { compare: next, trigger: requestedTrigger })
       setError(null)
     } catch (e) {
-      if (alive.current && ticket === newest.current) setError(messageOf(e))
+      if (!alive.current || ticket !== newest.current) return
+      setLoaded((prev) => ({ compare: prev?.compare ?? null, trigger: requestedTrigger }))
+      setError(messageOf(e))
     }
-  }, [context, worktree, trigger])
+  }, [context, worktree])
 
   useEffect(() => {
     alive.current = true
