@@ -1365,6 +1365,35 @@ console.log(JSON.stringify({ error, summaryFailures, reviewCalls, attached: [...
     }
   })
 
+  test.each(['plugin-gate.json', 'plugin-gate.md'])('passing campaign summary failure in %s persists an error verdict', async (filename) => {
+    const value = fixture()
+    const harness = dependencies(value)
+    harness.deps.io = { writeFile: async (path, contents, options) => {
+      if (path.endsWith(filename)) throw new Error('injected summary persistence failure')
+      writeFileSync(path, contents, options)
+    } }
+
+    expect(await runPluginGate(args(value.output), harness.deps)).toBe(2)
+    expect(harness.reviewCalls()).toBe(6)
+    const survivor = join(value.output, filename.endsWith('.json') ? 'plugin-gate.md' : 'plugin-gate.json')
+    const survivorText = readFileSync(survivor, 'utf8')
+    if (filename === 'plugin-gate.md') {
+      const report = JSON.parse(survivorText) as GateReport
+      expect(report.status).toBe('error')
+      expect(report.cells).toHaveLength(2)
+      expect(report.cells.every(({ status, median }) => status === 'pass' && median === 90)).toBe(true)
+      expect(report.failures).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: 'persistence', message: expect.stringContaining('plugin-gate.md') })
+      ]))
+    } else {
+      expect(/^Status: \*\*(passed|failed|error)\*\*$/m.exec(survivorText)?.[1]).toBe('error')
+      const cellRows = survivorText.split('\n').filter((line) => line.startsWith('| view:alpha/target-1 |'))
+      expect(cellRows).toHaveLength(2)
+      expect(cellRows.every((line) => line.split('|').at(-2)?.trim() === 'pass')).toBe(true)
+      expect(survivorText.split('\n').some((line) => line.startsWith('- persistence:') && line.includes(filename))).toBe(true)
+    }
+  })
+
   test('summary persistence failures retain capture-derived and skipped-slot diagnostics', async () => {
     const failedCell = { targetId: 'view:alpha/target-1', theme: 'dark' as const }
     for (const filename of ['plugin-gate.json', 'plugin-gate.md']) {
