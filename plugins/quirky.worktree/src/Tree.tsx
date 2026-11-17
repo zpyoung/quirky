@@ -567,13 +567,17 @@ function WorktreeRowView({
           )}
           {definitionStatus === 'available' && <p className="ui-text-muted" role="status">Automation available.</p>}
           {runHistoryStatus === 'available' && <p className="ui-text-muted" role="status">Run history available.</p>}
-          {definitionStatus === 'missing' && <p className="ui-text-muted" role="status">Automation no longer available.</p>}
-          {runHistoryStatus === 'missing' && <p className="ui-text-muted" role="status">Run history no longer available.</p>}
+          {definitionStatus === 'missing' && (
+            <div role="status"><NoticeLine>Automation no longer available.</NoticeLine></div>
+          )}
+          {runHistoryStatus === 'missing' && (
+            <div role="status"><NoticeLine>Run history no longer available.</NoticeLine></div>
+          )}
           {(definitionStatus === 'error' || runHistoryStatus === 'error') && (
             <InlineError message="Automation availability could not be checked." />
           )}
           {(definitionStatus === 'unavailable' || runHistoryStatus === 'unavailable') && (
-            <p className="ui-text-muted" role="status">Automations plugin unavailable.</p>
+            <div role="status"><NoticeLine>Automations plugin unavailable.</NoticeLine></div>
           )}
           <div className="ui-actions">
             <Button onClick={openAutomation} disabled={definitionStatus !== 'available'}>Open automation</Button>

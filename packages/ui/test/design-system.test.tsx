@@ -9,6 +9,7 @@ import { ToolPanelActions } from '@quirky/ui'
 import {
   Badge,
   Button,
+  Checkbox,
   ContextMenu,
   Dialog,
   EmptyState,
@@ -1030,12 +1031,30 @@ describe('shared graphite components', () => {
     await render(<FormRow label="Workspace name" htmlFor="workspace-name" help="Visible to you" error="Name is required">
       <input />
     </FormRow>)
+    expect(container.querySelector('.ui-form-row')?.className).toBe('ui-form-row')
     const input = container.querySelector('input')!
     expect(input.id).toBe('workspace-name')
     expect(container.querySelector('label')?.htmlFor).toBe(input.id)
     expect(input.getAttribute('aria-describedby')?.split(' ')).toEqual(['workspace-name-help', 'workspace-name-error'])
     expect(input.getAttribute('aria-invalid')).toBe('true')
   })
+  test('inline form rows associate a hidden Checkbox with the visible label and native descriptions', async () => {
+    await render(<FormRow label="Enable feature" htmlFor="enable-feature" layout="inline" help="Used by this workspace" error="Choose whether to enable it">
+      <Checkbox checked={false} label="Enable feature" hideLabel disabled onChange={() => undefined} />
+    </FormRow>)
+    const input = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    const label = container.querySelector<HTMLLabelElement>('.ui-form-row__label')!
+    expect(container.querySelector('.ui-form-row')?.classList.contains('ui-form-row--inline')).toBe(true)
+    expect(input.id).toBe('enable-feature')
+    expect(input.getAttribute('aria-describedby')).toBe('enable-feature-help enable-feature-error')
+    expect(input.getAttribute('aria-invalid')).toBe('true')
+    expect(input.disabled).toBe(true)
+    expect(label.htmlFor).toBe(input.id)
+    expect(label.control).toBe(input)
+    expect(input.getAttribute('aria-label')).toBe(label.textContent)
+    expect(container.querySelector('.ui-checkbox__text')).toBeNull()
+  })
+
 
   test('tool panels expose a heading and a functioning minimize action', async () => {
     const calls: number[] = []

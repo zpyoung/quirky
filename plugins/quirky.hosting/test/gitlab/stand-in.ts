@@ -1,4 +1,4 @@
-export type GitLabFailure = { status: number; body?: unknown; headers?: Record<string, string> }
+export type GitLabFailure = { status: number; body?: unknown; raw?: string; headers?: Record<string, string> }
 export type GitLabCreateMode = 'normal' | 'conflict' | 'lost-created' | 'lost-empty'
 export type GitLabRequestRecord = {
   method: string
@@ -107,7 +107,10 @@ export function startGitLab(): GitLabStandIn {
   }
 
   function failedResponse(failure: GitLabFailure): Response {
-    return json(failure.body ?? { message: 'fixture failure' }, failure.status, failure.headers)
+    const headers = new Headers(failure.headers)
+    if (failure.raw !== undefined) return new Response(failure.raw, { status: failure.status, headers })
+    const body = Object.hasOwn(failure, 'body') ? failure.body : { message: 'fixture failure' }
+    return json(body, failure.status, failure.headers)
   }
   function pageResponse(path: string, query: Record<string, string>, items: Record<string, any>[]): Response {
     const page = Math.max(1, Number(query.page) || 1)

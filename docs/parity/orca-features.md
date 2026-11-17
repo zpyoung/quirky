@@ -50,6 +50,12 @@ Every check below is a literal single-file test command. An optional `title` is 
 | delegated-definitions-references | Orca code definition/reference navigation | Goal 6 evidence | none | delegated: Definition/reference navigation is assigned to Goal 6 and is not claimed by the local editor read/search check. |
 | delegated-profile-recovery | Orca profile-state backup/rollback diagnostics | Goal 2 recovery evidence | none | delegated: Profile backup/rollback diagnostics are assigned to Goal 2 recovery evidence; this table does not claim coverage. |
 
+## GitLab review update confirmation
+
+GitLab review updates report the state confirmed by the returned merge request, not the requested action. If a successful response is malformed or does not show the requested effect, Hosting reads the merge request once without repeating the write. An unconfirmed effect rejects with `unknown_completion`; refresh before retrying. Invalid pre-write records are rejected without writing.
+
+Ready can leave a closed review closed, and reopening a draft returns `draft`. Reviews applies that confirmed draft state. Regression coverage uses the local stand-in: `bun test plugins/quirky.hosting/test/gitlab/update-review.test.ts` and `bun test plugins/quirky.reviews/test/gitlab-methods.test.ts`. No real GitLab mutation is claimed.
+
 ## Workflow translation notes
 
 Run `bun scripts/parity/goal-loop.ts --json` for the isolated real-CLI rehearsal. It prints one report after product and owned-process cleanup, using only local provider stand-ins. It accepts no caller-selected home, runtime, repository, command, or executable.

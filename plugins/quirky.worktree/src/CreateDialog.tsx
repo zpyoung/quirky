@@ -1015,7 +1015,7 @@ export function CreateDialog({ context, repos, worktrees, repoId, onRepoChange, 
                 ))}
               </select>
             </FormRow>
-            {hostError && <p className="ui-help-text" role="status">Remote host discovery is unavailable: {hostError}</p>}
+            {hostError && <div className="ui-help-text" role="status"><NoticeLine>Remote host discovery is unavailable: {hostError}</NoticeLine></div>}
             {showBranchName && (
               <TextField label="Branch name" id="create-branch-name-advanced" value={branchName} onChange={(event) => setBranchName(event.target.value)} placeholder="Generated from the name" />
             )}

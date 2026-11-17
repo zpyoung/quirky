@@ -32,25 +32,40 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+const AUTOMATIC_REFRESH_MS = 1_500
+
+type ActivationClock = {
+  lastStartedAt: number | null
+  focusWorkspace: string | null | undefined
+}
+
+const activationClocks = new WeakMap<UiPluginContext, ActivationClock>()
+
+function activationClock(context: UiPluginContext): ActivationClock {
+  let clock = activationClocks.get(context)
+  if (!clock) {
+    clock = { lastStartedAt: null, focusWorkspace: undefined }
+    activationClocks.set(context, clock)
+  }
+  return clock
+}
+
 function eventSession(event: QuirkyEvent): string | null | undefined {
   if (!('data' in event)) return undefined
   const data = event.data
-  if (data === null || typeof data !== 'object' || Array.isArray(data)) return undefined
-  if ('session' in data) {
-    const session = data.session
-    return session === null ? null : typeof session === 'string' ? session : undefined
-  }
-  if ('sessionId' in data) {
-    const session = data.sessionId
-    return session === null ? null : typeof session === 'string' ? session : undefined
-  }
-  return undefined
+  if (data === null || typeof data !== 'object' || Array.isArray(data) || !('sessionId' in data)) return undefined
+  const session = data.sessionId
+  return session === null || typeof session === 'string' ? session : undefined
 }
 
-function isRefreshEvent(type: string): boolean {
-  return type === 'quirky.session-info/changed' || type === 'quirky.terminal/focusContextChanged' ||
-    type === 'quirky.session/changed' || type === 'quirky.session/removed' || type === 'quirky.agent-status/changed'
+function eventWorkspace(event: QuirkyEvent): string | null | undefined {
+  if (!('data' in event)) return undefined
+  const data = event.data
+  if (data === null || typeof data !== 'object' || Array.isArray(data) || !('workspace' in data)) return undefined
+  const workspace = data.workspace
+  return workspace === null || typeof workspace === 'string' ? workspace : undefined
 }
+
 
 function displayValue(value: string | null | undefined): string | null {
   return value === undefined || value === '' ? null : value
@@ -266,14 +281,20 @@ export function SessionInfoPanel({ context, report }: Props) {
   const [enableBusy, setEnableBusy] = useState(false)
   const [nextLaunchEffect, setNextLaunchEffect] = useState<string | null>(null)
   const [copied, setCopied] = useState<CopyFeedback | null>(null)
+  const clock = activationClock(context)
+  const connection = useRef<{ status: 'connected' | 'reconnecting' | undefined; failed: boolean }>({
+    status: undefined,
+    failed: false
+  })
   const projectionRef = useRef<PanelState | null>(null)
   const aliveRef = useRef(true)
   const requestRef = useRef(0)
+  const activeRequestRef = useRef<number | null>(null)
   const inspectionRequestRef = useRef(0)
   const telemetryRequestRef = useRef(0)
   const inspectedSessionRef = useRef<string | null>(null)
-  const refreshQueuedRef = useRef(false)
-  const refreshLoopRef = useRef<Promise<void> | null>(null)
+  const automaticDirtyRef = useRef(false)
+  const automaticTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const sectionWritesRef = useRef<Promise<void>>(Promise.resolve())
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -282,60 +303,95 @@ export function SessionInfoPanel({ context, report }: Props) {
     setProjection(next)
   }
 
-  async function reload(clearFirst = false): Promise<void> {
-    requestRef.current++
-    if (clearFirst) {
-      updateProjection(null)
-      setLoading(true)
-      setLoadError(null)
-      setActionError(null)
-      telemetryRequestRef.current++
-      setEnableBusy(false)
-    }
-    refreshQueuedRef.current = true
-    const activeLoop = refreshLoopRef.current
-    if (activeLoop) {
-      await activeLoop
+  function clearAutomaticTimer(): void {
+    if (automaticTimerRef.current !== undefined) clearTimeout(automaticTimerRef.current)
+    automaticTimerRef.current = undefined
+  }
+
+  function clearForRetarget(): void {
+    updateProjection(null)
+    setLoading(true)
+    setLoadError(null)
+    setActionError(null)
+    setInspectionError(null)
+    setInspectionBusy(false)
+    setEnableBusy(false)
+    setNextLaunchEffect(null)
+    inspectedSessionRef.current = null
+    inspectionRequestRef.current++
+    telemetryRequestRef.current++
+  }
+
+  function flushAutomatic(): void {
+    if (!aliveRef.current || !automaticDirtyRef.current || activeRequestRef.current !== null) return
+    if (connection.current.status === 'reconnecting') return
+
+    const deadline = clock.lastStartedAt === null ? Date.now() : clock.lastStartedAt + AUTOMATIC_REFRESH_MS
+    const delay = deadline - Date.now()
+    if (delay > 0) {
+      if (automaticTimerRef.current === undefined) {
+        automaticTimerRef.current = setTimeout(() => {
+          automaticTimerRef.current = undefined
+          flushAutomatic()
+        }, delay)
+      }
       return
     }
-    const loop = (async () => {
-      try {
-        while (refreshQueuedRef.current && aliveRef.current) {
-          refreshQueuedRef.current = false
-          const request = requestRef.current
-          setLoading(projectionRef.current === null)
-          setLoadError(null)
-          try {
-            const fetched = await context.call('quirky.session-info/get', {}) as PanelState
-            if (!aliveRef.current || request !== requestRef.current) continue
-            let next = fetched
-            const current = projectionRef.current
-            const previousSession = current?.session
-            if (previousSession !== next.session) {
-              inspectionRequestRef.current++
-              telemetryRequestRef.current++
-              inspectedSessionRef.current = null
-              setInspectionBusy(false)
-              setEnableBusy(false)
-              setInspectionError(null)
-              setNextLaunchEffect(null)
-            } else if (current?.info?.hooksAndMcp && next.info && !next.info.hooksAndMcp) {
-              next = { ...next, info: { ...next.info, hooksAndMcp: current.info.hooksAndMcp } }
-            }
-            updateProjection(next)
-            setLoading(false)
-          } catch (error) {
-            if (!aliveRef.current || request !== requestRef.current) continue
-            setLoading(false)
-            setLoadError(messageOf(error))
-          }
-        }
-      } finally {
-        refreshLoopRef.current = null
+
+    clearAutomaticTimer()
+    automaticDirtyRef.current = false
+    void reload()
+  }
+
+  function invalidateAutomatically(): void {
+    if (!aliveRef.current) return
+    automaticDirtyRef.current = true
+    flushAutomatic()
+  }
+
+  async function reload(clearFirst = false): Promise<void> {
+    clearAutomaticTimer()
+    automaticDirtyRef.current = false
+    const request = ++requestRef.current
+    const unverifiedConnection = connection.current.status === undefined
+    connection.current.failed = false
+    activeRequestRef.current = request
+    if (clearFirst) clearForRetarget()
+    setLoading(projectionRef.current === null)
+    setLoadError(null)
+    clock.lastStartedAt = Date.now()
+    try {
+      const fetched = await context.call('quirky.session-info/get', {}) as PanelState
+      if (!aliveRef.current || request !== requestRef.current) return
+      if (connection.current.status === undefined) connection.current.status = 'connected'
+      let next = fetched
+      const current = projectionRef.current
+      if (current?.session !== next.session) {
+        inspectionRequestRef.current++
+        telemetryRequestRef.current++
+        inspectedSessionRef.current = null
+        setInspectionBusy(false)
+        setEnableBusy(false)
+        setInspectionError(null)
+        setNextLaunchEffect(null)
+      } else if (current?.info?.hooksAndMcp && next.info && !next.info.hooksAndMcp) {
+        next = { ...next, info: { ...next.info, hooksAndMcp: current.info.hooksAndMcp } }
       }
-    })()
-    refreshLoopRef.current = loop
-    await loop
+      clock.focusWorkspace = next.workspace
+      updateProjection(next)
+      setLoading(false)
+    } catch (error) {
+      if (!aliveRef.current || request !== requestRef.current) return
+      connection.current.failed = true
+      setLoading(false)
+      setLoadError(messageOf(error))
+      if (unverifiedConnection && connection.current.status === 'connected') void reload(true)
+    } finally {
+      if (activeRequestRef.current === request) {
+        activeRequestRef.current = null
+        if (aliveRef.current && automaticDirtyRef.current) flushAutomatic()
+      }
+    }
   }
 
   async function inspect(session: string, force = false): Promise<void> {
@@ -358,20 +414,35 @@ export function SessionInfoPanel({ context, report }: Props) {
 
   useEffect(() => {
     aliveRef.current = true
+    connection.current.status = undefined
+    connection.current.failed = false
     const unsubscribe = context.subscribe((event) => {
-      if (!isRefreshEvent(event.type)) return
+      if (event.type === 'quirky.terminal/focusContextChanged') {
+        const workspace = eventWorkspace(event)
+        if (workspace !== undefined && workspace !== clock.focusWorkspace) {
+          clock.focusWorkspace = workspace
+          void reload(true)
+        } else invalidateAutomatically()
+        return
+      }
+      if (event.type !== 'quirky.session-info/changed') return
       const changedSession = eventSession(event)
-      const focusedChanged = event.type === 'quirky.terminal/focusContextChanged'
-      const current = projectionRef.current?.session
-      if (focusedChanged || changedSession === null || changedSession === undefined || changedSession === current) void reload(focusedChanged)
+      if (changedSession === null || changedSession === undefined || changedSession === projectionRef.current?.session) {
+        invalidateAutomatically()
+      }
     })
     const disconnect = context.onConnection((status) => {
-      if (status === 'connected') void reload(true)
+      const reconnected = status === 'connected' && (connection.current.status === 'reconnecting' ||
+        (connection.current.status === undefined && connection.current.failed))
+      connection.current.status = status
+      if (reconnected) void reload(true)
     })
-    void reload()
+    invalidateAutomatically()
     return () => {
       aliveRef.current = false
-      refreshQueuedRef.current = false
+      automaticDirtyRef.current = false
+      clearAutomaticTimer()
+      activeRequestRef.current = null
       requestRef.current++
       inspectionRequestRef.current++
       telemetryRequestRef.current++
@@ -448,8 +519,9 @@ export function SessionInfoPanel({ context, report }: Props) {
     const current = projectionRef.current
     setRetryBusy(true)
     try {
-      if (current?.session) await inspect(current.session, true)
-      await reload()
+      const projectionRead = reload()
+      const inspection = current?.session ? inspect(current.session, true) : Promise.resolve()
+      await Promise.all([projectionRead, inspection])
     } finally {
       if (aliveRef.current) setRetryBusy(false)
     }

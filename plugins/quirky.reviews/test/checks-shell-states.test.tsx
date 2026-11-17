@@ -179,6 +179,11 @@ function latestShellControl(reports: unknown[], id: string): Report {
   }
   throw new Error(`No shell control was reported for ${id}.`)
 }
+function latestChecksControl(harness: ReturnType<typeof makeContext>) {
+  const control = listReviewsUiControls(harness.context, CHECKS_PANEL).find((item) => item.slot === 'checks')
+  if (!control) throw new Error('No Checks control was registered.')
+  return control
+}
 
 for (const surface of surfaces) {
   test(`${surface.kind} shell reports loading, failed read, exact-window Retry, and recovered child`, async () => {
@@ -225,21 +230,78 @@ for (const surface of surfaces) {
 }
 
 test('a failed refresh retains the loaded shell child beside the shared error', async () => {
-  const harness = makeContext()
-  let stateReads = 0
-  harness.methods.set('quirky.reviews/state', () => {
-    stateReads += 1
-    if (stateReads === 1) return reviewsState()
-    throw new Error('later read failed')
-  })
-  const { element } = await mountSurface(harness, CHECKS_PANEL)
-  await settle()
-  expect(element.querySelector('.ui-tool-panel-frame')).not.toBeNull()
+  const originalNow = Date.now
+  const originalGlobalSetTimeout = globalThis.setTimeout
+  const originalGlobalClearTimeout = globalThis.clearTimeout
+  const originalWindowSetTimeout = window.setTimeout
+  const originalWindowClearTimeout = window.clearTimeout
+  let now = originalNow()
+  let nextTimer = 0
+  const scheduled = new Map<number, { deadline: number; run(): void }>()
+  const schedule = (handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+    const id = --nextTimer
+    scheduled.set(id, {
+      deadline: now + Number(delay ?? 0),
+      run: () => { if (typeof handler === 'function') handler(...args) }
+    })
+    return id
+  }
+  const clearScheduled = (id: unknown) => {
+    if (typeof id !== 'number') return false
+    return scheduled.delete(id)
+  }
+  Date.now = () => now
+  globalThis.setTimeout = ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+    if (delay < 1_000) return Reflect.apply(originalGlobalSetTimeout, globalThis, [handler, delay, ...args])
+    return schedule(handler, delay, ...args)
+  }) as typeof globalThis.setTimeout
+  globalThis.clearTimeout = ((id: unknown) => {
+    if (!clearScheduled(id)) Reflect.apply(originalGlobalClearTimeout, globalThis, [id])
+  }) as typeof globalThis.clearTimeout
+  window.setTimeout = ((handler: TimerHandler, delay = 0, ...args: unknown[]) => {
+    if (delay < 1_000) return Reflect.apply(originalWindowSetTimeout, window, [handler, delay, ...args])
+    return schedule(handler, delay, ...args)
+  }) as typeof window.setTimeout
+  window.clearTimeout = ((id: unknown) => {
+    if (!clearScheduled(id)) Reflect.apply(originalWindowClearTimeout, window, [id])
+  }) as typeof window.clearTimeout
+  const advanceAutomaticState = async () => {
+    now += 3_000
+    const due = [...scheduled.entries()].filter(([, timer]) => timer.deadline <= now)
+    if (due.length === 0) throw new Error('No automatic Checks state refresh reached its deadline.')
+    await act(async () => {
+      for (const [id, timer] of due) {
+        scheduled.delete(id)
+        timer.run()
+      }
+      await Promise.resolve()
+    })
+    await settle()
+  }
+  try {
+    const harness = makeContext()
+    let stateReads = 0
+    harness.methods.set('quirky.reviews/state', () => {
+      stateReads += 1
+      if (stateReads === 1) return reviewsState()
+      throw new Error('later read failed')
+    })
+    const { element } = await mountSurface(harness, CHECKS_PANEL)
+    await settle()
+    expect(element.querySelector('.ui-tool-panel-frame')).not.toBeNull()
 
-  await act(async () => { await harness.emitChanged() })
-  expect(element.querySelector('.ui-inline-error')?.textContent).toContain('later read failed')
-  expect(element.querySelector('.ui-tool-panel-frame')).not.toBeNull()
-  expect(element.querySelector('.ui-notice-line')).toBeNull()
+    await act(async () => { await harness.emitChanged() })
+    await advanceAutomaticState()
+    expect(element.querySelector('.ui-inline-error')?.textContent).toContain('later read failed')
+    expect(element.querySelector('.ui-tool-panel-frame')).not.toBeNull()
+    expect(element.querySelector('.ui-notice-line')).toBeNull()
+  } finally {
+    Date.now = originalNow
+    globalThis.setTimeout = originalGlobalSetTimeout
+    globalThis.clearTimeout = originalGlobalClearTimeout
+    window.setTimeout = originalWindowSetTimeout
+    window.clearTimeout = originalWindowClearTimeout
+  }
 })
 
 test('a retained Checks shell cannot retry a replacement layout worktree through its old descriptor', async () => {
@@ -483,6 +545,278 @@ for (const [label, update, selector, message] of [
     if (label === 'retained review failure') expect(element.textContent).toContain('Review 12')
   })
 }
+
+function checksWithoutReview(diagnostics: Record<string, unknown>, provider?: string): ReviewsState {
+  const state = reviewsState()
+  state.checks.review = null
+  state.checks.lookup = {
+    kind: 'unsupported',
+    reason: 'not_authenticated',
+    ...(provider ? { provider } : {}),
+    authDiagnostics: diagnostics,
+  }
+  state.checks.eligibility = {
+    eligible: false,
+    reason: 'authentication_required',
+    ...(provider ? { provider } : {}),
+    authDiagnostics: diagnostics,
+  }
+  return state
+}
+
+test('Checks scopes unavailable GitHub CLI feedback and preserves exact-window copy and Retry', async () => {
+  const account = { user: 'fixture-user', host: 'github.example.test', source: 'fixture', active: true }
+  const state = checksWithoutReview({
+    ghAvailable: false,
+    requiredHost: 'github.example.test',
+    activeAccount: account,
+    accounts: [account],
+  })
+  const harness = makeContext(42)
+  harness.methods.set('quirky.reviews/state', () => state)
+  harness.methods.set('quirky.hosting/refresh', () => ({ kind: 'queued' }))
+  harness.methods.set('quirky.reviews/checksRefresh', () => ({ ok: true }))
+  const { element } = await mountSurface(harness, CHECKS_PANEL)
+  await settle()
+
+  const accountStatus = element.querySelector<HTMLElement>('[aria-label="GitHub account status"]')
+  expect(accountStatus).not.toBeNull()
+  const errors = accountStatus!.querySelectorAll('.ui-inline-error__message')
+  expect(errors).toHaveLength(1)
+  expect(errors[0]?.textContent).toBe('GitHub CLI (gh) is unavailable. Install it, then retry.')
+  expect(accountStatus!.textContent).toContain('Required host: github.example.test')
+  expect(accountStatus!.textContent).toContain('fixture-user · github.example.test · fixture · active')
+
+  const copy = [...accountStatus!.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Copy gh auth status')
+  const retry = [...element.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Retry')
+  expect(copy?.disabled).toBe(false)
+  expect(retry?.disabled).toBe(false)
+
+  const control = latestChecksControl(harness)
+  const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+  const copied: string[] = []
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async (text: string) => { copied.push(text) } },
+  })
+  try {
+    await act(async () => { copy!.click() })
+    await settle()
+    expect(copied).toEqual(['gh auth status'])
+
+    await act(async () => { retry!.click() })
+    await settle()
+    expect(harness.calls.filter((call) => call.method === 'ui.window.command.run').map((call) => call.params)).toEqual([
+      {
+        connId: 42,
+        id: CONTROL_COMMAND,
+        args: {
+          target: control.target,
+          generation: control.generation,
+          action: 'copy-link',
+          value: { source: 'auth-status' },
+        },
+      },
+      {
+        connId: 42,
+        id: CONTROL_COMMAND,
+        args: {
+          target: control.target,
+          generation: control.generation,
+          action: 'refresh',
+        },
+      },
+    ])
+    expect(harness.calls.filter((call) => call.method === 'ui.window.self')).toHaveLength(2)
+    expect(harness.executeCommandCalls()).toBe(0)
+  } finally {
+    if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard)
+    else Reflect.deleteProperty(navigator, 'clipboard')
+  }
+})
+
+for (const fixture of [
+  {
+    label: 'GitHub with an available CLI',
+    provider: undefined,
+    diagnostics: {
+      ghAvailable: true,
+      requiredHost: 'github.example.test',
+      activeAccount: { user: 'fixture-user', host: 'github.example.test', source: 'fixture', active: true },
+      accounts: [{ user: 'fixture-user', host: 'github.example.test', source: 'fixture', active: true }],
+    },
+    section: 'GitHub account status',
+    copy: 'Copy gh auth status',
+  },
+  {
+    label: 'GitLab diagnostics',
+    provider: 'gitlab',
+    diagnostics: {
+      provider: 'gitlab',
+      ghAvailable: false,
+      requiredHost: 'gitlab.example.test',
+      activeAccount: { user: 'fixture-user', host: 'gitlab.example.test', source: 'fixture', active: true },
+      accounts: [{ user: 'fixture-user', host: 'gitlab.example.test', source: 'fixture', active: true }],
+    },
+    section: 'GitLab account status',
+    copy: 'Copy glab auth status',
+  },
+] as const) {
+  test(`Checks omits the GitHub CLI alert for ${fixture.label}`, async () => {
+    const state = checksWithoutReview(fixture.diagnostics, fixture.provider)
+    const harness = makeContext()
+    harness.methods.set('quirky.reviews/state', () => state)
+    const { element } = await mountSurface(harness, CHECKS_PANEL)
+    await settle()
+
+    const accountStatus = element.querySelector<HTMLElement>(`[aria-label="${fixture.section}"]`)
+    expect(accountStatus).not.toBeNull()
+    expect(accountStatus!.querySelectorAll('.ui-inline-error__message')).toHaveLength(0)
+    expect(accountStatus!.textContent).toContain(fixture.diagnostics.requiredHost)
+    expect(accountStatus!.textContent).toContain(`${fixture.diagnostics.accounts[0]!.user} · ${fixture.diagnostics.accounts[0]!.host} · ${fixture.diagnostics.accounts[0]!.source} · active`)
+    const copyButton = [...accountStatus!.querySelectorAll('button')].find((button) => button.textContent?.trim() === fixture.copy)
+    expect(copyButton).not.toBeUndefined()
+    if (fixture.provider === 'gitlab') {
+      const control = latestChecksControl(harness)
+      const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+      const copied: string[] = []
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (text: string) => { copied.push(text) } },
+      })
+      try {
+        await act(async () => { copyButton!.click() })
+        await settle()
+        expect(copied).toEqual(['glab auth status'])
+        expect(harness.calls.filter((call) => call.method === 'ui.window.command.run').map((call) => call.params)).toEqual([
+          {
+            connId: 41,
+            id: CONTROL_COMMAND,
+            args: {
+              target: control.target,
+              generation: control.generation,
+              action: 'copy-link',
+              value: { source: 'auth-status' },
+            },
+          },
+        ])
+        expect(harness.calls.filter((call) => call.method === 'ui.window.self')).toHaveLength(1)
+        expect(harness.executeCommandCalls()).toBe(0)
+      } finally {
+        if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard)
+        else Reflect.deleteProperty(navigator, 'clipboard')
+      }
+    }
+  })
+}
+
+for (const fixture of [
+  {
+    label: 'a provider-conflicting review with a supplied preview message',
+    mergeable: 'CONFLICTING',
+    mergeStateStatus: 'DIRTY',
+    message: 'preview fixture failed',
+    expectedMessage: 'preview fixture failed',
+  },
+  {
+    label: 'a local unavailable preview without a string message',
+    mergeable: 'MERGEABLE',
+    mergeStateStatus: 'CLEAN',
+    message: null,
+    expectedMessage: 'Conflict paths are unavailable from the read-only preview.',
+  },
+] as const) {
+  test(`Checks renders one shared error and retains conflict data for ${fixture.label}`, async () => {
+    const state = reviewsState()
+    state.checks.review = { ...state.checks.review!, mergeable: fixture.mergeable, mergeStateStatus: fixture.mergeStateStatus }
+    state.checks.conflicts = {
+      status: 'unavailable',
+      message: fixture.message,
+      files: [{ path: 'provider.ts' }],
+      localFiles: [{ path: 'local.ts' }],
+      truncated: true,
+    }
+    const harness = makeContext(42)
+    harness.methods.set('quirky.reviews/state', () => state)
+    harness.methods.set('quirky.reviews/checksSetAgentDialog', () => ({ ok: true }))
+    const { element } = await mountSurface(harness, CHECKS_PANEL)
+    await settle()
+
+    const conflicts = element.querySelector<HTMLElement>('[aria-label="Merge conflicts"]')
+    expect(conflicts).not.toBeNull()
+    expect(conflicts!.querySelectorAll('.ui-inline-error')).toHaveLength(1)
+    const messages = conflicts!.querySelectorAll('.ui-inline-error__message')
+    expect(messages).toHaveLength(1)
+    expect(messages[0]?.textContent).toBe(fixture.expectedMessage)
+    expect(conflicts!.querySelector('.ui-notice-line')).toBeNull()
+    expect(element.textContent).toContain('Review 12')
+    expect(conflicts!.textContent).toContain('provider.ts')
+    expect(conflicts!.textContent).toContain('Active workspace conflicts')
+    expect(conflicts!.textContent).toContain('local.ts')
+    expect(conflicts!.textContent).toContain('Conflict file list is truncated at 100 entries.')
+
+    if (fixture.mergeable === 'CONFLICTING') {
+      const resolve = [...element.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Resolve')
+      expect(resolve?.disabled).toBe(false)
+      const control = latestChecksControl(harness)
+      await act(async () => { resolve!.click() })
+      await settle()
+      expect(harness.calls.filter((call) => call.method === 'ui.window.command.run').map((call) => call.params)).toEqual([
+        {
+          connId: 42,
+          id: CONTROL_COMMAND,
+          args: {
+            target: control.target,
+            generation: control.generation,
+            action: 'agent-open',
+            value: { action: 'conflicts' },
+          },
+        },
+      ])
+      expect(harness.calls.find((call) => call.method === 'quirky.reviews/checksSetAgentDialog')?.params).toEqual({
+        surface: 'checks',
+        worktree: WORKTREE,
+        action: 'conflicts',
+      })
+      expect(harness.executeCommandCalls()).toBe(0)
+    }
+  })
+}
+
+test('Checks keeps conflict loading in NoticeLine rather than error styling', async () => {
+  const state = reviewsState()
+  state.checks.review = { ...state.checks.review!, mergeable: 'CONFLICTING' }
+  state.checks.conflicts = { status: 'loading' }
+  const harness = makeContext()
+  harness.methods.set('quirky.reviews/state', () => state)
+  const { element } = await mountSurface(harness, CHECKS_PANEL)
+  await settle()
+
+  const conflicts = element.querySelector<HTMLElement>('[aria-label="Merge conflicts"]')
+  expect(conflicts).not.toBeNull()
+  expect(conflicts!.querySelectorAll('.ui-notice-line')).toHaveLength(1)
+  expect(conflicts!.querySelector('.ui-notice-line')?.textContent).toBe('Loading conflict paths…')
+  expect(conflicts!.querySelector('.ui-inline-error')).toBeNull()
+})
+
+test('Checks keeps ready preview advice and paths as loaded content', async () => {
+  const state = reviewsState()
+  state.checks.review = { ...state.checks.review!, mergeable: 'CONFLICTING' }
+  state.checks.conflicts = {
+    status: 'ready', available: true, conflicting: false,
+    files: [{ path: 'provider.ts' }], localFiles: [{ path: 'local.ts' }],
+  }
+  const harness = makeContext()
+  harness.methods.set('quirky.reviews/state', () => state)
+  const { element } = await mountSurface(harness, CHECKS_PANEL)
+  await settle()
+  const conflicts = element.querySelector<HTMLElement>('[aria-label="Merge conflicts"]')!
+  expect(conflicts.textContent).toContain('Git’s read-only preview found no conflicting paths; refresh the review metadata before merging.')
+  expect(conflicts.textContent).toContain('provider.ts')
+  expect(conflicts.textContent).toContain('local.ts')
+  expect(conflicts.querySelector('.ui-inline-error')).toBeNull()
+  expect(conflicts.querySelector('.ui-notice-line')).toBeNull()
+})
 
 function agentState(): ReviewsState {
   const state = reviewsState()

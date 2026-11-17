@@ -34,7 +34,11 @@ const state: TasksState = {
   links: {}
 }
 
-async function mountTasks(initialState: TasksState = state, viewId = 'view:quirky.tasks/tasks') {
+async function mountTasks(
+  initialState: TasksState = state,
+  viewId = 'view:quirky.tasks/tasks',
+  options: { preferenceError?: Error } = {},
+) {
   const provided = new Map<string, unknown>()
   const calls: { method: string; params: unknown }[] = []
   let current = initialState
@@ -48,6 +52,7 @@ async function mountTasks(initialState: TasksState = state, viewId = 'view:quirk
         return current
       }
       if (method === 'quirky.tasks/preferences') {
+        if (options.preferenceError) throw options.preferenceError
         current = { ...current, revision: current.revision + 1, preferences: { ...current.preferences, ...(params as Partial<TasksState['preferences']>) } }
         return current
       }
@@ -66,6 +71,26 @@ async function mountTasks(initialState: TasksState = state, viewId = 'view:quirk
   })
   await act(async () => new Promise((resolve) => setTimeout(resolve, 20)))
   return { element, calls, current: () => current }
+}
+function inlineCheckbox(container: ParentNode, id: string, label: string) {
+  const input = container.querySelector<HTMLInputElement>(`#${id}`)
+  expect(input?.type).toBe('checkbox')
+  expect(input?.classList.contains('ui-checkbox__input')).toBe(true)
+  expect(input?.getAttribute('aria-label')).toBe(label)
+  const row = input?.closest('.ui-form-row')
+  expect(row?.classList.contains('ui-form-row--inline')).toBe(true)
+  const visibleLabel = row?.querySelector<HTMLLabelElement>(`.ui-form-row__label[for="${id}"]`)
+  expect(visibleLabel?.textContent).toBe(label)
+  return { input: input!, label: visibleLabel! }
+}
+
+async function clickAndSettle(element: HTMLElement) {
+  const { promise, resolve } = Promise.withResolvers<void>()
+  await act(async () => {
+    element.click()
+    setTimeout(resolve, 20)
+    await promise
+  })
 }
 
 test('Tasks puts its mode tabs in the frame header next to one title and keeps them working', async () => {
@@ -105,13 +130,57 @@ test('collapsing from Projects keeps Projects selected when the expanded tab ope
   expect(projectsTab?.getAttribute('aria-selected')).toBe('true')
 })
 
-test('Task Sources keeps the Show Tasks button preference available', async () => {
+test('Task Sources keeps the Show Tasks button preference available through its native label', async () => {
   const { element, calls } = await mountTasks(state, 'view:quirky.tasks/settings')
-  const setting = element.querySelector<HTMLInputElement>('.tasks-settings input[type="checkbox"]')!
-  expect(setting.checked).toBe(true)
-  const { promise: preferenceSaved, resolve } = Promise.withResolvers<void>()
-  setTimeout(resolve, 20)
-  await act(async () => { setting.click(); await preferenceSaved })
-  expect(calls.find((call) => call.method === 'quirky.tasks/preferences')?.params).toEqual({ showTasksButton: false })
-  expect(setting.checked).toBe(false)
+  const setting = inlineCheckbox(element, 'tasks-show-button', 'Show Tasks button')
+  expect(setting.input.checked).toBe(true)
+  await clickAndSettle(setting.label)
+  expect(calls.filter((call) => call.method === 'quirky.tasks/preferences').map((call) => call.params)).toEqual([
+    { showTasksButton: false },
+  ])
+  const saveIndex = calls.findIndex((call) => call.method === 'quirky.tasks/preferences')
+  expect(calls[saveIndex + 1]).toEqual({ method: 'quirky.tasks/state', params: {} })
+  expect(setting.input.checked).toBe(false)
+})
+
+test('Task provider checkboxes save exact visible-provider booleans and protect the last provider', async () => {
+  const { element, calls, current } = await mountTasks(state, 'view:quirky.tasks/settings')
+  const github = inlineCheckbox(element, 'tasks-provider-github', 'GitHub')
+  expect(github.input.checked).toBe(true)
+  expect(github.input.disabled).toBe(true)
+  await act(async () => {
+    github.label.click()
+    github.input.focus()
+    github.input.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+    github.input.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }))
+  })
+  expect(github.input.checked).toBe(true)
+  expect(calls.filter((call) => call.method === 'quirky.tasks/preferences')).toHaveLength(0)
+
+  const gitlab = inlineCheckbox(element, 'tasks-provider-gitlab', 'GitLab')
+  expect(gitlab.input.checked).toBe(false)
+  await clickAndSettle(gitlab.label)
+  expect(gitlab.input.checked).toBe(true)
+  await clickAndSettle(gitlab.label)
+  expect(gitlab.input.checked).toBe(false)
+  expect(calls.filter((call) => call.method === 'quirky.tasks/preferences').map((call) => call.params)).toEqual([
+    { visibleTaskProviders: ['github', 'gitlab'] },
+    { visibleTaskProviders: ['github'] },
+  ])
+  expect(current().preferences.visibleTaskProviders).toEqual(['github'])
+})
+
+test('rejected Task provider checkbox saves retain the current provider set and show an error', async () => {
+  const { element, calls, current } = await mountTasks(state, 'view:quirky.tasks/settings', {
+    preferenceError: new Error('Preferences are read-only.'),
+  })
+  const gitlab = inlineCheckbox(element, 'tasks-provider-gitlab', 'GitLab')
+  await clickAndSettle(gitlab.label)
+
+  expect(calls.filter((call) => call.method === 'quirky.tasks/preferences').map((call) => call.params)).toEqual([
+    { visibleTaskProviders: ['github', 'gitlab'] },
+  ])
+  expect(gitlab.input.checked).toBe(false)
+  expect(current().preferences.visibleTaskProviders).toEqual(['github'])
+  expect([...element.querySelectorAll('.ui-inline-error__message')].some((message) => message.textContent === 'Preferences are read-only.')).toBe(true)
 })

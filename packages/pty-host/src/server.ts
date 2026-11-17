@@ -19,6 +19,7 @@ import {
 import { socketPath as resolveSocketPath } from '@quirky/protocol/node'
 import { SessionManager, type DataSink, type SessionManagerOptions } from './session'
 import { SocketWriter } from './writer'
+import { bindOwnedSocket, claimHome, type BindOps, type OwnedSocket, type OwnershipLoss } from './ownership'
 
 export type PtyServerOptions = Partial<Omit<SessionManagerOptions, 'home'>> & {
   home: string
@@ -28,13 +29,19 @@ export type PtyServerOptions = Partial<Omit<SessionManagerOptions, 'home'>> & {
   maxSessionQueuedBytes?: number
   /** Bounds all encoded output queued or held for each connection; defaults to 32 MiB. */
   maxConnectionQueuedBytes?: number
+  /** Ownership polling period; zero disables polling but not write or stop guards. */
+  ownershipCheckMs?: number
+  /** Injects filesystem operations for socket publication tests. */
+  socketBindingOps?: BindOps
+  /** Reports ownership loss after shutdown settles. */
+  onOrphaned?: (loss: OwnershipLoss, error?: unknown) => void
 }
 
 export type PtyServer = {
   readonly manager: SessionManager
   readonly socketPath: string
   readonly token: string
-  /** Kills every session, closes all connections and removes `pty.sock` and `pty.pid`. */
+  /** Kills every session, closes connections and removes only owned socket and pid paths. */
   stop(): Promise<void>
 }
 
@@ -57,29 +64,29 @@ type Connection = {
 }
 
 /**
- * Serves the PTY host protocol on `socketPath(home, 'pty.sock')`. Writes a fresh token to `pty.token` and
- * the pid to `pty.pid`; the caller is responsible for ensuring no other host owns the home.
+ * Serves the PTY protocol while the claimed home and published socket remain owned.
+ * Writes a fresh token and pid; the caller must exclude other hosts during startup.
  */
 export function startPtyServer(options: PtyServerOptions): PtyServer {
   const { home, maxSessionQueuedBytes = 4_194_304, maxConnectionQueuedBytes = 33_554_432 } = options
   const socketPath = resolveSocketPath(home, 'pty.sock')
   mkdirSync(home, { recursive: true, mode: 0o700 })
+  const homeClaim = claimHome(home)
+  let startupSocket: OwnedSocket<Bun.UnixSocketListener<Connection>> | undefined
+  let startupManager: SessionManager | undefined
+  let ownershipTimer: NodeJS.Timeout | undefined
+
+  function removePid() {
+    if (homeClaim.check() === null && readPid(join(home, 'pty.pid')) === process.pid) {
+      rmSync(join(home, 'pty.pid'), { force: true })
+    }
+  }
+
+  try {
 
   const token = randomBytes(32).toString('hex')
   writePrivate(join(home, 'pty.token'), token)
   writePrivate(join(home, 'pty.pid'), String(process.pid))
-  rmSync(socketPath, { force: true })
-
-  const manager = new SessionManager({
-    home,
-    logMaxBytes: options.logMaxBytes,
-    tailBytes: options.tailBytes,
-    checkpointIntervalMs: options.checkpointIntervalMs,
-    shellReadyTimeoutMs: options.shellReadyTimeoutMs,
-    processRunner: options.processRunner,
-    shutdownDrainMs: options.shutdownDrainMs,
-    storedIndex: options.storedIndex
-  })
   const connections = new Set<Connection>()
 
   const sendFrame = (conn: Connection, frame: Uint8Array, tag?: string) => {
@@ -95,11 +102,9 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
   const broadcast = (event: PtyEvent) => {
     for (const conn of connections) if (conn.authenticated) send(conn, event)
   }
-  const stopExitEvents = manager.onExit(broadcast)
-  const stopFactEvents = manager.onFact(broadcast)
 
-  const listener = Bun.listen<Connection>({
-    unix: socketPath,
+  const ownedSocket = bindOwnedSocket(socketPath, privatePath => Bun.listen<Connection>({
+    unix: privatePath,
     socket: {
       open(socket) {
         const conn: Connection = {
@@ -163,6 +168,7 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         socket.data.writer.drain()
       },
       close(socket) {
+        connections.delete(socket.data)
         dropConnection(socket.data)
       },
       error(socket, error) {
@@ -170,13 +176,27 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
         dropConnection(socket.data)
       }
     }
+  }), options.socketBindingOps)
+  startupSocket = ownedSocket
+
+  const manager = new SessionManager({
+    home,
+    logMaxBytes: options.logMaxBytes,
+    tailBytes: options.tailBytes,
+    checkpointIntervalMs: options.checkpointIntervalMs,
+    shellReadyTimeoutMs: options.shellReadyTimeoutMs,
+    processRunner: options.processRunner,
+    shutdownDrainMs: options.shutdownDrainMs,
+    storedIndex: options.storedIndex,
+    ownsHome: () => homeClaim.check() === null
   })
-  chmodSync(socketPath, 0o600)
+  startupManager = manager
+  const stopExitEvents = manager.onExit(broadcast)
+  const stopFactEvents = manager.onFact(broadcast)
 
   function dropConnection(conn: Connection | undefined) {
     if (!conn || conn.closed) return
     conn.closed = true
-    connections.delete(conn)
     manager.dropSink(conn.sink)
     for (const holds of conn.pendingHolds.values()) {
       for (const held of holds) {
@@ -366,6 +386,7 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
       case 'resetModes':
         return manager.resetModes(request.sessionId).then(() => ({}))
       case 'shutdown':
+        clearInterval(ownershipTimer)
         return manager.shutdown().then(() => {
           void conn.writer.flushed().then(async () => {
             try {
@@ -449,28 +470,70 @@ export function startPtyServer(options: PtyServerOptions): PtyServer {
 
   let stopping: Promise<void> | null = null
   function stop(): Promise<void> {
+    clearInterval(ownershipTimer)
     stopping ??= (async () => {
       stopExitEvents()
       stopFactEvents()
+      if (homeClaim.check()) manager.homeLost()
       try {
         await manager.shutdown()
       } finally {
+        for (const conn of connections) {
+          dropConnection(conn)
+          conn.socket.terminate()
+        }
         try {
-          listener.stop(true)
+          ownedSocket.close()
         } finally {
-          try {
-            if (readPid(join(home, 'pty.pid')) === process.pid) rmSync(join(home, 'pty.pid'), { force: true })
-          } finally {
-            rmSync(socketPath, { force: true })
-          }
+          removePid()
         }
       }
     })()
     return stopping
   }
 
+  const ownershipCheckMs = options.ownershipCheckMs ?? 1000
+  if (ownershipCheckMs > 0) {
+    ownershipTimer = setInterval(() => {
+      if (stopping) return
+      const homeLoss = homeClaim.check()
+      const loss = homeLoss ?? ownedSocket.check()
+      if (!loss) return
+      if (homeLoss) manager.homeLost()
+      process.stderr.write(`quirky-pty ${process.pid} stopping: ${loss.reason}\n`)
+      void stop().then(
+        () => options.onOrphaned?.(loss),
+        error => {
+          const failure = error ?? new Error('unknown shutdown error')
+          if (options.onOrphaned) options.onOrphaned(loss, failure)
+          else process.stderr.write(`[quirky-pty] shutdown failed: ${inspect(failure)}\n`)
+        }
+      )
+    }, ownershipCheckMs)
+    ownershipTimer.unref()
+  }
+
   console.log(`quirky-pty ${process.pid} listening on ${socketPath}`)
   return { manager, socketPath, token, stop }
+  } catch (error) {
+    clearInterval(ownershipTimer)
+    if (startupManager) {
+      void startupManager.shutdown().catch(cleanupError => {
+        process.stderr.write(`[quirky-pty] startup cleanup failed: ${inspect(cleanupError)}\n`)
+      })
+    }
+    try {
+      startupSocket?.close()
+    } catch (cleanupError) {
+      process.stderr.write(`[quirky-pty] startup cleanup failed: ${inspect(cleanupError)}\n`)
+    }
+    try {
+      removePid()
+    } catch (cleanupError) {
+      process.stderr.write(`[quirky-pty] startup cleanup failed: ${inspect(cleanupError)}\n`)
+    }
+    throw error
+  }
 }
 
 function writePrivate(path: string, content: string): void {

@@ -392,7 +392,11 @@ export function RemoteWorkspace({ context, workspace }: Props) {
         <SectionHeader title="Changes" />
         {mirror?.worktree.kind === 'folder' ? <p className="ui-text-muted">Folder workspaces do not have Git changes.</p> : <>
           <div className="ui-text-muted">Branch: {status?.branch ?? mirror?.worktree.branch ?? 'Unknown'} · Operation: {status?.operation ?? (connected ? 'unknown' : 'unavailable')}</div>
-          {files.length === 0 ? connected ? <EmptyState message="No changed files were reported." /> : <p className="ui-text-muted">Remote changes are unavailable.</p> : (
+          {files.length === 0 && connected ? (
+            <EmptyState message="No changed files were reported." />
+          ) : files.length === 0 && !connected ? (
+            <div role="status"><NoticeLine>Remote changes are unavailable.</NoticeLine></div>
+          ) : (
             <ul className="remote-changes">{files.map((change) => (
               <li key={changeKey(change)}>
                 <ListRow

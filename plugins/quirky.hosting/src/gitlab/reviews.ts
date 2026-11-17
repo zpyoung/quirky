@@ -15,6 +15,13 @@ type ReviewLookup =
   | { kind: 'unavailable'; reason: string; message: string; fetchedAt: number; retryDisabledUntil?: number; nextAutoRetryAt?: number }
 type ReviewState = 'open' | 'draft' | 'closed' | 'merged'
 type ApprovalSummary = { reviewDecision: string; reviews: { author: string | null; state: string }[] | null }
+type ValidMergeRequest = {
+  raw: Record<string, unknown>
+  state: 'opened' | 'closed' | 'merged'
+  title: string
+  draft: boolean
+  description: string | null
+}
 
 const REVIEW_CACHE_MS = 15_000
 const PROJECT_CACHE_MS = 10 * 60_000
@@ -767,26 +774,61 @@ function validateEditParams(env: HostingEnv, params: Record<string, unknown>): {
   return edit
 }
 
+function draftOf(raw: Record<string, unknown>, title: string): boolean {
+  return raw.draft === true || raw.work_in_progress === true || /^(?:draft:|\[draft\]|\(draft\))/iu.test(title)
+}
+
+function validMergeRequest(raw: unknown, number: number, projectId: string | number): ValidMergeRequest | undefined {
+  if (!isRecord(raw) || parsePositiveInteger(raw.iid) !== number || !sameProject(raw.project_id, projectId)) return undefined
+  if (raw.state !== 'opened' && raw.state !== 'closed' && raw.state !== 'merged') return undefined
+  if (typeof raw.title !== 'string' || raw.title.trim().length === 0) return undefined
+  if (raw.draft !== undefined && typeof raw.draft !== 'boolean') return undefined
+  if (raw.work_in_progress !== undefined && typeof raw.work_in_progress !== 'boolean') return undefined
+  const title = raw.title.trim()
+  return {
+    raw,
+    state: raw.state,
+    title,
+    draft: draftOf(raw, title),
+    description: typeof raw.description === 'string' ? raw.description : null
+  }
+}
+
+function stateOf(mr: ValidMergeRequest): ReviewState {
+  if (mr.state === 'merged' || mr.state === 'closed') return mr.state
+  return mr.draft ? 'draft' : 'open'
+}
+
+function confirmsUpdate(
+  mr: ValidMergeRequest,
+  action: 'edit' | 'close' | 'reopen' | 'ready' | 'draft',
+  sent: Record<string, unknown>
+): boolean {
+  if (action === 'ready') return !mr.draft
+  if (action === 'draft') return mr.draft
+  if (action === 'close') return mr.state === 'closed'
+  if (action === 'reopen') return mr.state === 'opened'
+  if (sent.title !== undefined && mr.title !== sent.title) return false
+  if (typeof sent.description === 'string'
+    && mr.description?.replace(/\r\n/gu, '\n') !== sent.description.replace(/\r\n/gu, '\n')) return false
+  return true
+}
+
 async function readCurrent(
   env: HostingEnv,
   scope: GitLabScope,
   number: number,
-  client: GitLabClient
-): Promise<Record<string, unknown>> {
+  client: GitLabClient,
+  projectId: string | number
+): Promise<ValidMergeRequest> {
   const response = await client.request(scope, { method: 'GET', path: mergeRequestPath(scope, number) })
   if (response.status === 404) throw gitlabError(env, 'not_found', safeMessage('not_found'))
   requireSuccess(env, response)
-  if (!isRecord(response.json)) throw gitlabError(env, 'schema_drift', safeMessage('schema_drift'))
-  return response.json
+  const current = validMergeRequest(response.json, number, projectId)
+  if (!current) throw gitlabError(env, 'schema_drift', safeMessage('schema_drift'))
+  return current
 }
 
-function stateAfterUpdate(raw: Record<string, unknown>, action: 'edit' | 'close' | 'reopen' | 'ready' | 'draft'): ReviewState {
-  if (action === 'close') return 'closed'
-  if (action === 'reopen') return 'open'
-  if (action === 'ready') return 'open'
-  if (action === 'draft') return 'draft'
-  return reviewState(raw)
-}
 
 async function updateMergeRequest(
   env: HostingEnv,
@@ -799,30 +841,53 @@ async function updateMergeRequest(
   const action = params.action
   const edit = action === 'edit' ? validateEditParams(env, params) : undefined
   await requireAuth(env, scope, client)
-  const current = await readCurrent(env, scope, number, client)
-  const currentDraft = isDraft(current)
+  const project = await getProject(env, scope, client)
+  const current = await readCurrent(env, scope, number, client, project.id)
+  if ((action === 'close' || action === 'reopen') && current.state === 'merged') {
+    throw env.invalid('invalid_state', `GitLab cannot ${action} a merged merge request.`)
+  }
+  if ((action === 'close' && current.state === 'closed') || (action === 'reopen' && current.state === 'opened')) {
+    return { number, updated: false, state: stateOf(current) }
+  }
   let body: Record<string, unknown>
 
   if (action === 'ready') {
-    if (!currentDraft) return { number, updated: false, state: reviewState(current) }
-    body = { title: stripDraftPrefix(mrTitle(current)) }
+    if (!current.draft) return { number, updated: false, state: stateOf(current) }
+    body = { title: stripDraftPrefix(current.title) }
   } else if (action === 'draft') {
-    if (currentDraft) return { number, updated: false, state: 'draft' }
-    body = { title: titleWithDraftPrefix(mrTitle(current)) }
+    if (current.draft) return { number, updated: false, state: stateOf(current) }
+    body = { title: titleWithDraftPrefix(current.title) }
   } else if (action === 'edit') {
     body = {
-      ...(edit?.title === undefined ? {} : { title: currentDraft ? titleWithDraftPrefix(edit.title) : stripDraftPrefix(edit.title) }),
+      ...(edit?.title === undefined ? {} : { title: current.draft ? titleWithDraftPrefix(edit.title) : stripDraftPrefix(edit.title) }),
       ...(edit?.body === undefined ? {} : { description: edit.body })
     }
   } else {
     body = { state_event: action }
   }
 
-  const response = await client.request(scope, { method: 'PUT', path: mergeRequestPath(scope, number), body })
-  requireSuccess(env, response)
-  const updated = isRecord(response.json) ? response.json : current
+  let confirmed: ValidMergeRequest | undefined
+  try {
+    const response = await client.request(scope, { method: 'PUT', path: mergeRequestPath(scope, number), body })
+    requireSuccess(env, response)
+    const updated = validMergeRequest(response.json, number, project.id)
+    if (updated && confirmsUpdate(updated, action, body)) confirmed = updated
+  } catch (error) {
+    if (!isReason(error, 'schema_drift') && !isReason(error, 'output_limit')) throw error
+  }
+  if (!confirmed) {
+    try {
+      const readback = await readCurrent(env, scope, number, client, project.id)
+      if (confirmsUpdate(readback, action, body)) confirmed = readback
+    } catch {
+      confirmed = undefined
+    }
+  }
   env.changed(scope)
-  return { number, updated: true, state: stateAfterUpdate(updated, action) }
+  if (!confirmed) {
+    throw gitlabError(env, 'unknown_completion', 'GitLab did not confirm the merge request update. Refresh before retrying.')
+  }
+  return { number, updated: true, state: stateOf(confirmed) }
 }
 
 export function createGitLabReviewHandlers(env: HostingEnv, client: GitLabClient): Record<string, GitLabHandler> {

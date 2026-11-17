@@ -11,6 +11,16 @@ export type CaptureTarget = {
   title: string
   kind: 'host' | 'panel' | 'view' | 'sidebar-section' | 'activity-item' | 'status-bar' | 'overlay' | 'settings-section'
 }
+export type ToolNavigationAlias = {
+  declaration: CaptureTarget
+  toolId: string
+  renderedTarget: CaptureTarget
+  reason: 'tool-navigation-alias'
+}
+export type ContributionInventory = {
+  declaredTargets: CaptureTarget[]
+  toolAliases: ToolNavigationAlias[]
+}
 export type ImageEvidence = { path: string; sha256: string }
 export type CaptureEvidence = {
   targetId: string
@@ -32,6 +42,8 @@ export type CaptureManifest = {
   targets: CaptureTarget[]
   captures: CaptureEvidence[]
   failures: string[]
+  contributionInventory?: ContributionInventory
+  activatedVisibilitySettings?: string[]
 }
 export type CaptureOptions = {
   repoRoot: string
@@ -46,6 +58,38 @@ export type CaptureOptions = {
   /** Test-only bound for overlay visibility waits. */
   overlayOpenMs?: number
 }
+export type ReviewCellKey = { targetId: string; theme: CaptureTheme }
+export type ContractRule = { id: string; source: string; text: string }
+export type HostContractContext = {
+  schemaVersion: 1
+  targetId: string
+  theme: CaptureTheme
+  rules: ContractRule[]
+}
+export type ContractAudit = {
+  contextSha256: string
+  acknowledgedRuleIds: string[]
+  reasonChecks: {
+    reasonIndex: number
+    contractIds: string[]
+    conflictsWithContract: boolean
+    affectsScore: boolean
+  }[]
+  conflicts: { contractId: string; reason: string; affectsScore: boolean }[]
+}
+export type ContractAwareResponse = { assessment: VisualAssessment; contractAudit: ContractAudit }
+export type ContractReviewEvidence = {
+  contextPath: string
+  contextSha256: string
+  audit: ContractAudit
+}
+export type ReviewIssue = {
+  targetId?: string
+  theme?: CaptureTheme
+  code: 'operational' | 'response-shape' | 'invalid-sample' | 'contract-conflict' |
+    'evidence-changed' | 'identity-mismatch' | 'persistence' | 'aborted' | 'usage-limit'
+  message: string
+}
 export type ReviewOptions = {
   outputDir: string
   reviewerAlias: string
@@ -55,6 +99,8 @@ export type ReviewOptions = {
   /** Explicit executable override for local installs and isolated subprocess tests. */
   reviewerExecutable?: string
   signal?: AbortSignal
+  /** Internal retry selection; the full manifest and all evidence are still validated. */
+  onlyCells?: readonly ReviewCellKey[]
 }
 export type ReviewerIdentity = { alias: string; provider: string; model: string; family: ModelFamily }
 export type VisualAssessment = {
@@ -72,6 +118,7 @@ export type ReviewedCapture = {
   assessment: VisualAssessment
   score: number
   passed: boolean
+  contractReview?: ContractReviewEvidence
 }
 export type ReviewReport = {
   schemaVersion: 1
@@ -83,6 +130,8 @@ export type ReviewReport = {
   reviewerAlias: string
   captures: ReviewedCapture[]
   failures: string[]
+  issues?: ReviewIssue[]
+  selectedCells?: ReviewCellKey[]
 }
 
 /** capture.ts exports: captureApplication(options: CaptureOptions): Promise<CaptureManifest>.

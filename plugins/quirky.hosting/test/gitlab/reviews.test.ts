@@ -630,7 +630,7 @@ test('updateReview edits drafts, validates empty edits before PUT, and closes/re
 
   expect(await world.call('updateReview', { number: 6, action: 'close' })).toEqual({ number: 6, updated: true, state: 'closed' })
   expect(world.server.requests.filter((request) => request.method === 'PUT').at(-1)?.body).toEqual({ state_event: 'close' })
-  expect(await world.call('updateReview', { number: 6, action: 'reopen' })).toEqual({ number: 6, updated: true, state: 'open' })
+  expect(await world.call('updateReview', { number: 6, action: 'reopen' })).toEqual({ number: 6, updated: true, state: 'draft' })
   expect(world.server.requests.filter((request) => request.method === 'PUT').at(-1)?.body).toEqual({ state_event: 'reopen' })
   expect(events.filter((event) => typeof event === 'object' && event !== null && 'type' in event && event.type === 'quirky.hosting/changed')).toHaveLength(4)
   expect(events.every((event) => !JSON.stringify(event).includes('dummy-gitlab-token'))).toBe(true)

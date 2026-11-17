@@ -3,8 +3,9 @@ import { lstatSync, readFileSync, readdirSync } from 'node:fs'
 import type { Dirent, Stats } from 'node:fs'
 import { extname, join, relative, resolve, sep } from 'node:path'
 import type { UiModel, UiSlotEntry } from '@quirky/protocol'
-import { discoverCaptureTargets } from '../ui-review/capture'
-import type { CaptureTarget } from '../ui-review/contracts'
+import { discoverCaptureTargets, projectCaptureInventory } from '../ui-review/contribution-inventory'
+import { projectTools } from '../../packages/daemon/src/plugins/tool-layout'
+import type { CaptureTarget, ContributionInventory } from '../ui-review/contracts'
 import type { CliCommandDeclaration, Evidence, Exclusion, Inventory, PluginContributions, PluginInventory, SourceFile } from './contracts'
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs', '.html', '.htm', '.svg', '.css', '.scss', '.sass', '.less'])
@@ -432,6 +433,7 @@ function parseManifest(
   const uiValue = manifest?.ui
   const hasUi = typeof uiValue === 'string' && uiValue.trim().length > 0
   if (uiValue !== undefined && !hasUi) failures.push(evidence('invalid-plugin-ui', `Plugin UI entry must be a non-empty string in ${file}`))
+  const modulePath = typeof uiValue === 'string' && uiValue.trim().length > 0 ? uiValue : null
 
   const contributions = manifest?.contributes
   if (contributions !== undefined && record(contributions) === undefined) {
@@ -460,7 +462,7 @@ function parseManifest(
       seenTargetIds.add(targetId)
       const order = typeof entry?.order === 'number' ? entry.order : 100
       const title = typeof entry?.title === 'string' ? entry.title : entryId
-      slotEntries[kind].push({ id: targetId, plugin: id, kind, title, order, module: null })
+      slotEntries[kind].push({ id: targetId, plugin: id, kind, title, order, module: modulePath })
       const pluginTargets = targetIds.get(id) ?? []
       pluginTargets.push(targetId)
       targetIds.set(id, pluginTargets)
@@ -639,6 +641,20 @@ export function collectInventory(repoRoot: string): Inventory {
   const failures: Evidence[] = []
   const snapshots = new Map<string, string>()
   const discovered = discoverPlugins(root, snapshots, failures)
+  let targets: CaptureTarget[]
+  let contributionInventory: ContributionInventory
+  try {
+    const projection = projectCaptureInventory({
+      ...discovered.model,
+      tools: projectTools(discovered.model)
+    })
+    targets = projection.targets
+    contributionInventory = projection.contributionInventory
+  } catch (error) {
+    failures.push(evidence('invalid-tool-projection', errorMessage(error)))
+    targets = discoverTargets(discovered.model, failures)
+    contributionInventory = { declaredTargets: targets, toolAliases: [] }
+  }
   if (discovered.avatarPresent) failures.push(evidence('paused-plugin-present', 'Paused plugin quirky.avatar is present in the scanned repository'))
 
   if (discovered.plugins.length === 0) failures.push(evidence('empty-plugin-inventory', 'No immediate plugin manifests were discovered'))
@@ -668,7 +684,8 @@ export function collectInventory(repoRoot: string): Inventory {
     sourceDigest: snapshotDigest(snapshots),
     dirty,
     plugins: discovered.plugins.sort((left, right) => compareText(left.id, right.id)),
-    targets: discoverTargets(discovered.model, failures),
+    targets,
+    contributionInventory,
     sharedSources,
     exclusions: discovered.discoveryComplete && !discovered.avatarPresent ? [AVATAR_EXCLUSION] : [],
     failures

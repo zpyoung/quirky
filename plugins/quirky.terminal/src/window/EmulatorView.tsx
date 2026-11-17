@@ -93,8 +93,8 @@ export function EmulatorView({ context, input, report }: { context: UiPluginCont
               action={{ label: 'Refresh', onAction: refresh }}
             />
           ) : null}
-          {selected && !device && !loading ? <p className="ui-text-muted">The selected simulator is no longer available. Choose another device explicitly.</p> : null}
-          {device && device.state !== 'Booted' ? <p className="ui-text-muted">{device.name} is {device.state}. Start this exact device in Simulator, then Refresh.</p> : null}
+          {selected && !device && !loading ? <div role="status"><NoticeLine>The selected simulator is no longer available. Choose another device explicitly.</NoticeLine></div> : null}
+          {device && device.state !== 'Booted' ? <div role="status"><NoticeLine>{device.name} is {device.state}. Start this exact device in Simulator, then Refresh.</NoticeLine></div> : null}
           {device?.state === 'Booted' && !frame && !error ? <div role="status"><NoticeLine>Capturing {device.name}…</NoticeLine></div> : null}
           {frame ? <small className="ui-text-muted">Last frame: {new Date(frame.capturedAt).toLocaleTimeString()}{error ? ' · Preview paused; Refresh to retry.' : ''}</small> : null}
           {frame ? <img className="tt-emulator-frame" alt={`Preview of ${device?.name ?? frame.device}`} src={`data:image/png;base64,${frame.data}`} /> : null}

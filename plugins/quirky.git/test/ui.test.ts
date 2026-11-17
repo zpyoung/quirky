@@ -1,11 +1,11 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './ui/register-dom'
 
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./ui/panel-support')
-const { act, byLabel, buttonText, click, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, PANEL, q, rowOf, settle, statusOf, type } = s
+const { act, byLabel, buttonText, click, DIFF_VIEW, entry, failure, fakeContext, layoutFor, mountPanel, noticeOf, PANEL, q, rowOf, settle, settleAfter, statusOf, type } = s
 const { activate } = await import('../src/ui')
 
 afterAll(() => GlobalRegistrator.unregister())
@@ -102,19 +102,32 @@ describe('quirky.git source-control panel', () => {
   })
 
   test('refreshes on quirky.git/changed for this worktree and ignores other events', async () => {
-    const fake = fakeContext(layoutFor('w1'))
-    const { unmount } = mountPanel(fake)
-    await settle()
-    const before = fake.calls.length
-    await act(async () => fake.emit({ type: 'quirky.session/changed', data: {} }))
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'someone-else' } }))
-    await settle()
-    expect(fake.calls.length).toBe(before)
-    fake.status = statusOf([])
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
-    await settle()
-    expect(fake.calls.slice(before).map((c) => c.method)).toEqual(['quirky.git/status', 'quirky.git/review'])
-    unmount()
+    jest.useFakeTimers()
+    let dispose: (() => void) | null = null
+    try {
+      const fake = fakeContext(layoutFor('w1'))
+      const mounted = mountPanel(fake)
+      dispose = mounted.unmount
+      await settle()
+      const beforeStatus = fake.called('quirky.git/status').length
+      const beforeReview = fake.called('quirky.git/review').length
+      await act(async () => fake.emit({ type: 'quirky.session/changed', data: {} }))
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'someone-else' } }))
+      await settle()
+      expect(fake.called('quirky.git/status')).toHaveLength(beforeStatus)
+
+      fake.status = statusOf([entry('latest.ts')], { branch: 'latest' })
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+      await settle()
+      expect(fake.called('quirky.git/status')).toHaveLength(beforeStatus)
+      await settleAfter(3_000)
+      expect(fake.called('quirky.git/status')).toHaveLength(beforeStatus + 1)
+      expect(fake.called('quirky.git/review').length).toBeGreaterThan(beforeReview)
+      expect(mounted.element.textContent).toContain('latest.ts')
+    } finally {
+      dispose?.()
+      jest.useRealTimers()
+    }
   })
 
   test('keeps polling status and the review model every 3 seconds and compare every 30', async () => {
@@ -147,12 +160,17 @@ describe('quirky.git source-control panel', () => {
       { connId: expect.any(Number), id: 'command:quirky.git/ui-control', args: { surface: PANEL, target: 'worktree:w1', generation: expect.any(String), action: 'row-menu-open', data: { path: 'edited.ts', x: 5, y: 5 } } },
       { connId: expect.any(Number), id: 'command:quirky.git/ui-control', args: { surface: PANEL, target: 'row-menu:w1:edited.ts', generation: expect.any(String), action: 'stage' } }
     ])
-    expect(calls.filter(({ method }) => method !== 'ui.window.self' && method !== 'ui.window.command.run')).toEqual([
+    const actionCalls = calls.filter(({ method }) => method !== 'ui.window.self' && method !== 'ui.window.command.run')
+    expect(actionCalls).toHaveLength(4)
+    expect(actionCalls).toEqual(expect.arrayContaining([
       { method: 'quirky.git/stage', params: { worktree: 'w1', paths: ['edited.ts'] } },
       { method: 'quirky.git/status', params: { worktree: 'w1' } },
       { method: 'quirky.git/compare', params: { worktree: 'w1' } },
       { method: 'quirky.git/review', params: { worktree: 'w1' } }
-    ])
+    ]))
+    expect(actionCalls[0]?.method).toBe('quirky.git/stage')
+    expect(actionCalls.findIndex(({ method }) => method === 'quirky.git/review'))
+      .toBeGreaterThan(actionCalls.findIndex(({ method }) => method === 'quirky.git/status'))
     unmount()
   })
 
@@ -226,26 +244,35 @@ describe('quirky.git source-control panel', () => {
   })
 
   test('a failing status read keeps the last good rows and offers retry', async () => {
-    const fake = fakeContext(layoutFor('w1'))
-    fake.status = fixture()
-    const { element, unmount } = mountPanel(fake)
-    await settle()
-    let failStatus = true
-    fake.on('quirky.git/status', () => {
-      if (failStatus) throw new Error('git is gone')
-      return fake.status
-    })
-    await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
-    await settle()
-    const alert = q(element, '[role="alert"]')!
-    expect(alert.textContent).toContain('git is gone')
-    expect(buttonText(alert, 'Retry')).toBeDefined()
-    expect(rowOf(element, 'edited.ts')).not.toBeNull()
-    failStatus = false
-    await click(buttonText(alert, 'Retry'))
-    expect(q(element, '[role="alert"]')).toBeNull()
-    expect(rowOf(element, 'edited.ts')).not.toBeNull()
-    unmount()
+    jest.useFakeTimers()
+    let dispose: (() => void) | null = null
+    try {
+      const fake = fakeContext(layoutFor('w1'))
+      fake.status = fixture()
+      const mounted = mountPanel(fake)
+      dispose = mounted.unmount
+      await settle()
+      let failStatus = true
+      fake.on('quirky.git/status', () => {
+        if (failStatus) throw new Error('git is gone')
+        return fake.status
+      })
+      await act(async () => fake.emit({ type: 'quirky.git/changed', data: { worktreeId: 'w1' } }))
+      await settle()
+      expect(q(mounted.element, '[role="alert"]')).toBeNull()
+      await settleAfter(3_000)
+      const alert = q(mounted.element, '[role="alert"]')!
+      expect(alert.textContent).toContain('git is gone')
+      expect(buttonText(alert, 'Retry')).toBeDefined()
+      expect(rowOf(mounted.element, 'edited.ts')).not.toBeNull()
+      failStatus = false
+      await click(buttonText(alert, 'Retry'))
+      expect(q(mounted.element, '[role="alert"]')).toBeNull()
+      expect(rowOf(mounted.element, 'edited.ts')).not.toBeNull()
+    } finally {
+      dispose?.()
+      jest.useRealTimers()
+    }
   })
 
   test('closing the panel releases its listeners without removing plugin-owned listeners', async () => {

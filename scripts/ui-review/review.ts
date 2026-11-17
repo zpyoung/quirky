@@ -12,14 +12,23 @@ import {
   type CaptureManifest,
   type CaptureTarget,
   type CaptureTheme,
+  type ContractAudit,
+  type ContractReviewEvidence,
+  type ContractAwareResponse,
+  type HostContractContext,
   type ImageEvidence,
   type ModelFamily,
+  type ReviewCellKey,
+  type ReviewIssue,
   type ReviewOptions,
   type ReviewReport,
   type ReviewedCapture,
   type ReviewerIdentity,
   type VisualAssessment
 } from './contracts'
+import type { ContributionInventory } from './contracts'
+import { validateContributionInventory } from './contribution-inventory'
+import { hostContractContext, serializeContractContext } from './host-contracts'
 import { goldenFor } from './goldens'
 
 const MAX_IMAGE_BYTES = 64 * 1024 * 1024
@@ -47,6 +56,13 @@ type PreparedManifest = {
   cells: PreparedCell[]
   stableEvidence: LoadedImage[]
 }
+type SavedContractContext = {
+  context: HostContractContext
+  bytes: string
+  sha256: string
+  path: string
+  evidence: LoadedImage
+}
 type CollectedOutput = { text: string; bytes: number; truncated: boolean; error?: string }
 type ReviewerProcessResult = {
   exitCode?: number
@@ -72,6 +88,15 @@ function isRecord(value: unknown): value is RecordValue {
   const prototype = Object.getPrototypeOf(value)
   return prototype === Object.prototype || prototype === null
 }
+function checkedActivatedVisibilitySettings(value: unknown): void {
+  if (!Array.isArray(value) || value.some((setting) => !safeText(setting, 256) || !setting.startsWith('setting:'))) {
+    fail('Capture manifest activated visibility settings are malformed.')
+  }
+  for (let index = 1; index < value.length; index++) {
+    if (value[index - 1]! >= value[index]!) fail('Capture manifest activated visibility settings must be unique and sorted.')
+  }
+}
+
 
 function hasExactKeys(value: RecordValue, required: string[], optional: string[] = []): boolean {
   const allowed = new Set([...required, ...optional])
@@ -174,7 +199,7 @@ async function loadImage(evidence: ImageEvidence, description: string, approvedB
 }
 
 async function prepareManifest(value: unknown): Promise<PreparedManifest> {
-  if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'createdAt', 'commit', 'surface', 'viewport', 'scope', 'selectors', 'targets', 'captures', 'failures'])) {
+  if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'createdAt', 'commit', 'surface', 'viewport', 'scope', 'selectors', 'targets', 'captures', 'failures'], ['contributionInventory', 'activatedVisibilitySettings'])) {
     fail('Capture manifest has an invalid runtime shape.')
   }
   if (value.schemaVersion !== CAPTURE_SCHEMA_VERSION) fail(`Unsupported capture schema version; expected ${CAPTURE_SCHEMA_VERSION}.`)
@@ -197,6 +222,14 @@ async function prepareManifest(value: unknown): Promise<PreparedManifest> {
     if (targetById.has(target.id)) fail(`Capture manifest contains duplicate target ID ${target.id}.`)
     targetById.set(target.id, target)
   }
+  if (Object.hasOwn(value, 'contributionInventory')) {
+    try {
+      validateContributionInventory(value.contributionInventory as ContributionInventory, targets)
+    } catch (error) {
+      fail(`Capture contribution inventory is invalid: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  if (Object.hasOwn(value, 'activatedVisibilitySettings')) checkedActivatedVisibilitySettings(value.activatedVisibilitySettings)
   if (!Array.isArray(value.failures)) fail('Capture manifest failures must be an array.')
   if (value.failures.length > 0) fail('Capture manifest records capture failures; incomplete runs cannot be reviewed as passing.')
   const stableEvidence = new Map<string, LoadedImage>()
@@ -270,7 +303,9 @@ function makeReport(
   options: ReviewOptions,
   status: ReviewReport['status'],
   captures: ReviewedCapture[],
-  failures: string[]
+  failures: string[],
+  issues: ReviewIssue[] = [],
+  selectedCells?: ReviewCellKey[]
 ): ReviewReport {
   const scope = isRecord(manifest) && (manifest.scope === 'full' || manifest.scope === 'filtered') ? manifest.scope : 'full'
   const threshold = Number.isFinite(options?.threshold) ? options.threshold : 85
@@ -287,7 +322,20 @@ function makeReport(
       provider: redactSensitiveText(capture.reviewer.provider),
       model: redactSensitiveText(capture.reviewer.model)
     },
-    assessment: { ...capture.assessment, reasons: capture.assessment.reasons.map(redactSensitiveText) }
+    assessment: { ...capture.assessment, reasons: capture.assessment.reasons.map(redactSensitiveText) },
+    ...(capture.contractReview ? {
+      contractReview: {
+        ...capture.contractReview,
+        contextPath: redactEvidencePath(capture.contractReview.contextPath),
+        audit: {
+          ...capture.contractReview.audit,
+          conflicts: capture.contractReview.audit.conflicts.map((conflict) => ({
+            ...conflict,
+            reason: redactSensitiveText(conflict.reason)
+          }))
+        }
+      }
+    } : {})
   }))
   return {
     schemaVersion: 1,
@@ -298,7 +346,13 @@ function makeReport(
     authorFamily,
     reviewerAlias,
     captures: safeCaptures,
-    failures: failures.map(redactSensitiveText)
+    failures: failures.map(redactSensitiveText),
+    issues: issues.map((issue) => ({
+      ...issue,
+      ...(issue.targetId ? { targetId: redactSensitiveText(issue.targetId) } : {}),
+      message: redactSensitiveText(issue.message)
+    })),
+    selectedCells: (selectedCells ?? []).map((cell) => ({ ...cell, targetId: redactSensitiveText(cell.targetId) }))
   }
 }
 
@@ -346,7 +400,7 @@ function assessmentResponse(stdout: string): string {
   const body = lines.filter((line) => !isResolvedIdentityHeader(line)).join('\n').trim()
   const fence = /^```(?:json)?[ \t]*\n([\s\S]*?)\n[ \t]*```$/.exec(body)
   const response = fence ? fence[1]!.trim() : body
-  if (!response.startsWith('{') || !response.endsWith('}')) fail('Reviewer response must contain only one strict VisualAssessment JSON object.')
+  if (!response.startsWith('{') || !response.endsWith('}')) fail('Reviewer response must contain only one strict contract-aware JSON object.')
   return response
 }
 
@@ -363,6 +417,138 @@ function validateAssessment(value: unknown): VisualAssessment {
     /^(?:n\/?a|none|looks? (?:good|great|fine)|fine|good|everything looks? (?:good|fine))$/i.test(reason.trim())
   )) fail('Reviewer must provide at least two concrete, non-empty reasons.')
   return value as unknown as VisualAssessment
+}
+
+function checkedKnownIds(value: unknown, knownIds: string[], description: string, sorted = false): string[] {
+  if (!Array.isArray(value) || value.some((id) => !safeText(id, 256) || !knownIds.includes(id))) {
+    fail(`${description} must contain only known contract rule IDs.`)
+  }
+  const ids = value as string[]
+  if (new Set(ids).size !== ids.length) fail(`${description} cannot contain duplicate contract rule IDs.`)
+  if (sorted && ids.some((id, index) => index > 0 && ids[index - 1]! >= id)) {
+    fail(`${description} must be sorted and unique.`)
+  }
+  return ids
+}
+
+function validateContractAudit(value: unknown, assessment: VisualAssessment, expectedDigest: string, expectedRuleIds: string[]): ContractAudit {
+  if (!isRecord(value) || !hasExactKeys(value, ['contextSha256', 'acknowledgedRuleIds', 'reasonChecks', 'conflicts'])) {
+    fail('Reviewer contractAudit does not match its strict response shape.')
+  }
+  if (typeof value.contextSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(value.contextSha256) || value.contextSha256 !== expectedDigest) {
+    fail('Reviewer echoed a missing or incorrect contract context SHA-256 digest.')
+  }
+  const acknowledgedRuleIds = checkedKnownIds(value.acknowledgedRuleIds, expectedRuleIds, 'Contract acknowledgments', true)
+  if (acknowledgedRuleIds.length !== expectedRuleIds.length ||
+      acknowledgedRuleIds.some((id, index) => id !== expectedRuleIds[index])) {
+    fail('Reviewer must acknowledge every contract rule exactly once.')
+  }
+  if (!Array.isArray(value.reasonChecks) || value.reasonChecks.length !== assessment.reasons.length) {
+    fail('Reviewer contract reason checks must cover every assessment reason exactly once.')
+  }
+  const reasonChecks = value.reasonChecks.map((entry, index) => {
+    if (!isRecord(entry) || !hasExactKeys(entry, ['reasonIndex', 'contractIds', 'conflictsWithContract', 'affectsScore'])) {
+      fail(`Contract reason check ${index} has an invalid shape.`)
+    }
+    if (!Number.isSafeInteger(entry.reasonIndex) || entry.reasonIndex !== index) {
+      fail('Contract reason checks must cover each reason index in order exactly once.')
+    }
+    const contractIds = checkedKnownIds(entry.contractIds, expectedRuleIds, `Contract reason check ${index} IDs`)
+    if (typeof entry.conflictsWithContract !== 'boolean' || typeof entry.affectsScore !== 'boolean') {
+      fail(`Contract reason check ${index} flags must be booleans.`)
+    }
+    return {
+      reasonIndex: entry.reasonIndex as number,
+      contractIds,
+      conflictsWithContract: entry.conflictsWithContract,
+      affectsScore: entry.affectsScore
+    }
+  })
+  if (!Array.isArray(value.conflicts) || value.conflicts.length > 20) {
+    fail('Reviewer contract conflicts must be an array of at most 20 entries.')
+  }
+  const conflictIds = new Set<string>()
+  const conflicts = value.conflicts.map((entry, index) => {
+    if (!isRecord(entry) || !hasExactKeys(entry, ['contractId', 'reason', 'affectsScore'])) {
+      fail(`Contract conflict ${index} has an invalid shape.`)
+    }
+    const [contractId] = checkedKnownIds([entry.contractId], expectedRuleIds, `Contract conflict ${index} ID`)
+    if (conflictIds.has(contractId!)) fail('Contract conflict IDs must be unique.')
+    conflictIds.add(contractId!)
+    if (!safeText(entry.reason, 1000) || typeof entry.affectsScore !== 'boolean') {
+      fail(`Contract conflict ${index} reason or score-affecting flag is invalid.`)
+    }
+    return { contractId: contractId!, reason: entry.reason, affectsScore: entry.affectsScore }
+  })
+  return {
+    contextSha256: value.contextSha256,
+    acknowledgedRuleIds,
+    reasonChecks,
+    conflicts
+  }
+}
+
+function validateContractAwareResponse(value: unknown, expectedDigest: string, expectedRuleIds: string[]): ContractAwareResponse {
+  if (!isRecord(value) || !hasExactKeys(value, ['assessment', 'contractAudit'])) {
+    fail('Reviewer response must contain exactly assessment and contractAudit.')
+  }
+  const assessment = validateAssessment(value.assessment)
+  const contractAudit = validateContractAudit(value.contractAudit, assessment, expectedDigest, expectedRuleIds)
+  return { assessment, contractAudit }
+}
+
+function penalizedContractConflict(response: ContractAwareResponse): string | undefined {
+  const conflicts = response.contractAudit.conflicts
+    .filter((conflict) => conflict.affectsScore)
+    .map((conflict) => `${conflict.contractId}: ${conflict.reason}`)
+  for (const check of response.contractAudit.reasonChecks) {
+    if (check.conflictsWithContract && check.affectsScore) {
+      conflicts.push(`reason ${check.reasonIndex}: ${response.assessment.reasons[check.reasonIndex]} (${check.contractIds.join(', ')})`)
+    }
+  }
+  return conflicts.length > 0 ? [...new Set(conflicts)].join('; ') : undefined
+}
+
+function supplementedPrompt(basePrompt: string, contextBytes: string, contextSha256: string): string {
+  return [
+    basePrompt,
+    '',
+    `Trusted host contract context (canonical JSON; sha256=${contextSha256}):`,
+    contextBytes,
+    'The unchanged assessment instructions above define VisualAssessment; they do not change the scoring rubric or base prompt.',
+    'Return exactly one JSON object with exactly two keys: assessment and contractAudit.',
+    'assessment is the unchanged VisualAssessment object specified above.',
+    'contractAudit must have exactly this TypeScript shape:',
+    'type ContractAudit = {',
+    '  contextSha256: string',
+    '  acknowledgedRuleIds: string[]',
+    '  reasonChecks: {',
+    '    reasonIndex: number',
+    '    contractIds: string[]',
+    '    conflictsWithContract: boolean',
+    '    affectsScore: boolean',
+    '  }[]',
+    '  conflicts: {',
+    '    contractId: string',
+    '    reason: string',
+    '    affectsScore: boolean',
+    '  }[]',
+    '}',
+    'contextSha256 is the 64-character lowercase hexadecimal digest of the exact context bytes.',
+    'acknowledgedRuleIds contains every context rule ID exactly once in sorted order.',
+    'reasonChecks contains exactly one entry per assessment reason; assessment.reasons has 2 to 20 items, each at most 1000 characters.',
+    'reasonIndex is the corresponding zero-based assessment reason position, in order.',
+    'contractIds contains only unique known rule IDs; use an empty array when no rule applies.',
+    'conflicts has at most 20 entries, with unique known contractId values and nonempty reason strings of at most 1000 characters.',
+    'Each conflicts entry records the exact text of the contradictory review reason, without paraphrase.',
+    'Do not use alternate field names or legacy aliases.',
+    'A contract conflict is a review reason or recommended change that contradicts an approved rule, not an implementation defect.',
+    'If the captured implementation violates a rule, report a legitimate defect and set conflictsWithContract and affectsScore false; requesting a compliant repair is not a contract conflict.',
+    'If an older golden or reference suggests changing a compliant implementation against a rule, set conflictsWithContract true and affectsScore false.',
+    'AffectsScore must be false for a contract conflict; audit flags never change or correct the returned dimension scores.',
+    'The unchanged visual rubric still scores actual defects; audit flags do not waive or penalize them.',
+    'Do not add keys beyond these shapes.'
+  ].join('\n')
 }
 
 function assessmentPrompt(target: CaptureTarget, theme: CaptureTheme, image: LoadedImage, reference: LoadedImage): string {
@@ -519,8 +705,23 @@ async function prepareArtifactDirectory(outputDir: string): Promise<string> {
     if (typeof error !== 'object' || error === null || !('code' in error) || error.code !== 'EEXIST') fail('Could not create a private reviewer evidence directory.')
   }
   const info = await lstat(reviewerDir).catch(() => undefined)
-  if (!info?.isDirectory() || info.isSymbolicLink()) fail('Reviewer evidence directory must be a private, non-symlink directory.')
+  const currentUid = typeof process.getuid === 'function' ? process.getuid() : undefined
+  if (!info?.isDirectory() || info.isSymbolicLink() || (info.mode & 0o777) !== 0o700 ||
+      (currentUid !== undefined && info.uid !== currentUid)) {
+    fail('Reviewer evidence directory must be an owned, private 0700 non-symlink directory.')
+  }
   return await realpath(reviewerDir)
+}
+
+function cellArtifactPrefix(runId: string, cell: PreparedCell): string {
+  const targetKey = createHash('sha256').update(cell.target.id).digest('hex').slice(0, 20)
+  return `capture-${targetKey}-${cell.capture.theme}-${runId}`
+}
+
+async function writeContextArtifact(directory: string, runId: string, cell: PreparedCell, bytes: string): Promise<string> {
+  const path = join(directory, `${cellArtifactPrefix(runId, cell)}.context.json`)
+  await writeFile(path, bytes, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+  return path
 }
 
 async function writeCaptureArtifacts(
@@ -530,8 +731,7 @@ async function writeCaptureArtifacts(
   response: string,
   log: RecordValue
 ): Promise<void> {
-  const targetKey = createHash('sha256').update(cell.target.id).digest('hex').slice(0, 20)
-  const prefix = `capture-${targetKey}-${cell.capture.theme}-${runId}`
+  const prefix = cellArtifactPrefix(runId, cell)
   const responsePath = join(directory, `${prefix}.response.txt`)
   const logPath = join(directory, `${prefix}.log.txt`)
   const safeResponse = redactSensitiveText(response)
@@ -540,11 +740,17 @@ async function writeCaptureArtifacts(
   await writeFile(logPath, safeLog, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
 }
 
+async function writeReportArtifact(directory: string, runId: string, report: ReviewReport): Promise<void> {
+  const path = join(directory, `review-report-${runId}.json`)
+  await writeFile(path, `${JSON.stringify(report, null, 2)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+}
+
 function processLog(result: ReviewerProcessResult, preflight: ResolvedModel | undefined, resolved: ResolvedModel | undefined, alias: string, error?: string): RecordValue {
   return {
     reviewerAlias: alias,
     identity: resolved ? { provider: resolved.provider, model: resolved.model, family: resolved.family ?? null } : null,
     preflight: preflight ? { provider: preflight.provider, model: preflight.model, family: preflight.family ?? null } : null,
+    preflightIdentityStatus: preflight?.family ? 'known' : 'unknown',
     exitCode: result.exitCode ?? null,
     timedOut: result.timedOut,
     aborted: result.aborted,
@@ -569,8 +775,100 @@ function validateOptions(options: ReviewOptions): void {
   if (options.reviewerExecutable !== undefined && !safeText(options.reviewerExecutable, 4096)) fail('Reviewer executable override is malformed.')
 }
 
-function errorReport(manifest: unknown, options: ReviewOptions, failures: string[], captures: ReviewedCapture[] = []): ReviewReport {
-  return makeReport(manifest, options, 'error', captures, failures.map((failure) => redactSensitiveText(failure)))
+function reviewCellKey(targetId: string, theme: CaptureTheme): string {
+  return `${targetId}\u0000${theme}`
+}
+
+function selectedReviewCells(prepared: PreparedManifest, onlyCells: ReviewOptions['onlyCells']): PreparedCell[] {
+  if (onlyCells === undefined) return prepared.cells
+  if (!Array.isArray(onlyCells) || onlyCells.length === 0) fail('onlyCells must be a nonempty subset of the complete capture manifest.')
+  const requested = new Set<string>()
+  for (const [index, value] of onlyCells.entries()) {
+    if (!isRecord(value) || !hasExactKeys(value, ['targetId', 'theme']) ||
+        !safeText(value.targetId, 256) || (value.theme !== 'dark' && value.theme !== 'light')) {
+      fail(`onlyCells entry ${index} is malformed.`)
+    }
+    const key = reviewCellKey(value.targetId, value.theme)
+    if (requested.has(key)) fail(`onlyCells contains duplicate cell ${value.targetId} (${value.theme}).`)
+    requested.add(key)
+    if (!prepared.cells.some((cell) => reviewCellKey(cell.target.id, cell.capture.theme) === key)) {
+      fail(`onlyCells references unknown cell ${value.targetId} (${value.theme}).`)
+    }
+  }
+  return prepared.cells.filter((cell) => requested.has(reviewCellKey(cell.target.id, cell.capture.theme)))
+}
+
+function errorReport(
+  manifest: unknown,
+  options: ReviewOptions,
+  failures: string[],
+  captures: ReviewedCapture[] = [],
+  issues: ReviewIssue[] = [],
+  selectedCells?: ReviewCellKey[]
+): ReviewReport {
+  return makeReport(manifest, options, 'error', captures, failures, issues, selectedCells)
+}
+
+async function persistLiveReport(
+  directory: string,
+  runId: string,
+  report: ReviewReport,
+  manifest: unknown,
+  options: ReviewOptions
+): Promise<ReviewReport> {
+  try {
+    await writeReportArtifact(directory, runId, report)
+    return report
+  } catch (error) {
+    const message = `Could not persist private review report: ${shortDiagnostic(error)}`
+    return makeReport(manifest, options, 'error', report.captures, [...report.failures, message], [
+      ...(report.issues ?? []),
+      { code: 'persistence', message }
+    ], report.selectedCells)
+  }
+}
+
+function isUsageLimit(result: ReviewerProcessResult): boolean {
+  const diagnostic = /\b(?:usage|quota|rate)\b[^\r\n]{0,100}\b(?:limit|exceeded|exhausted)\b|\b(?:limit|exceeded|exhausted)\b[^\r\n]{0,100}\b(?:usage|quota|rate)\b/i
+  const identityHeader = /^\s*✓\s+[A-Za-z0-9_-]+\s+[A-Za-z][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]+)?\s*$/
+  const cleanStderr = result.stderr.text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+  const stderrDiagnostics = cleanStderr.split(/\r?\n/)
+    .filter((line) => !isResolvedIdentityHeader(line) && !identityHeader.test(line))
+    .join('\n')
+  if (diagnostic.test(stderrDiagnostics)) return true
+
+  const cleanStdout = result.stdout.text.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+  let hasValidAssessment = false
+  try {
+    const body = JSON.parse(assessmentResponse(cleanStdout)) as unknown
+    const assessment = isRecord(body) && Object.hasOwn(body, 'assessment') ? body.assessment : body
+    validateAssessment(assessment)
+    hasValidAssessment = true
+  } catch {}
+  if (hasValidAssessment) return false
+
+  const stdoutDiagnostics = cleanStdout.split(/\r?\n/)
+    .filter((line) => !isResolvedIdentityHeader(line) && !identityHeader.test(line))
+    .join('\n')
+  return diagnostic.test(stdoutDiagnostics)
+}
+
+function processFailureCode(result: ReviewerProcessResult, identity: ResolvedModel | undefined, expectedIdentity?: ResolvedModel, authorFamily?: ModelFamily): ReviewIssue['code'] | undefined {
+  if (result.aborted) return 'aborted'
+  if (isUsageLimit(result)) return 'usage-limit'
+  if (identity && (!identity.family || identity.family === authorFamily ||
+      (expectedIdentity && (identity.provider !== expectedIdentity.provider ||
+        identity.model !== expectedIdentity.model || identity.family !== expectedIdentity.family)))) {
+    return 'identity-mismatch'
+  }
+  if (result.startError || result.timedOut || result.stdout.truncated || result.stderr.truncated ||
+      result.stdout.error || result.stderr.error || result.exitCode !== 0) return 'operational'
+  if (!identity || !identity.family) return 'identity-mismatch'
+  return undefined
+}
+
+function cellIssue(cell: PreparedCell, code: ReviewIssue['code'], message: string): ReviewIssue {
+  return { targetId: cell.target.id, theme: cell.capture.theme, code, message }
 }
 
 function preflightFailureMessage(result: ReviewerProcessResult, resolved?: ResolvedModel): string | undefined {
@@ -621,110 +919,333 @@ async function verifyEvidenceUnchanged(evidence: LoadedImage[]): Promise<{ failu
 
 /** Validates immutable capture evidence, then asks a read-only separate model to score every image independently. */
 export async function reviewManifest(manifest: CaptureManifest, options: ReviewOptions): Promise<ReviewReport> {
-  const reviewed: ReviewedCapture[] = []
-  let hasReviewerErrors = false
-  const failures: string[] = []
-  let prepared: PreparedManifest | undefined
-  let artifactDir: string | undefined
   const runId = randomUUID()
+  let artifactDir: string
+  try {
+    artifactDir = await prepareArtifactDirectory(options.outputDir)
+  } catch (error) {
+    const message = shortDiagnostic(error)
+    return errorReport(manifest, options, [message], [], [{ code: 'persistence', message }])
+  }
+
+  let prepared: PreparedManifest
   try {
     validateOptions(options)
     prepared = await prepareManifest(manifest)
-    artifactDir = await prepareArtifactDirectory(options.outputDir)
   } catch (error) {
-    return errorReport(manifest, options, [shortDiagnostic(error)])
+    const message = shortDiagnostic(error)
+    const report = errorReport(manifest, options, [message], [], [{ code: 'invalid-sample', message }])
+    return persistLiveReport(artifactDir, runId, report, manifest, options)
   }
 
-  if (!prepared || !artifactDir) return errorReport(manifest, options, ['Review could not initialize its evidence state.'])
+  let selected: PreparedCell[]
+  try {
+    selected = selectedReviewCells(prepared, options.onlyCells)
+  } catch (error) {
+    const message = shortDiagnostic(error)
+    const report = errorReport(manifest, options, [message], [], [{ code: 'invalid-sample', message }])
+    return persistLiveReport(artifactDir, runId, report, manifest, options)
+  }
 
+  const selectedCells: ReviewCellKey[] = selected.map((cell) => ({
+    targetId: cell.target.id,
+    theme: cell.capture.theme
+  }))
+  const reviewed: ReviewedCapture[] = []
+  const issues: ReviewIssue[] = []
+  const failures: string[] = []
+  const contexts = new Map<string, SavedContractContext>()
+  let hasReviewerErrors = false
+
+  const noProcess: ReviewerProcessResult = {
+    stdout: { text: '', bytes: 0, truncated: false },
+    stderr: { text: '', bytes: 0, truncated: false },
+    timedOut: false,
+    aborted: false
+  }
+
+  const saveAttempt = async (
+    cell: PreparedCell,
+    contextPath: string | null,
+    contextSha256: string | null,
+    result: ReviewerProcessResult,
+    preflight: ResolvedModel | undefined,
+    identity: ResolvedModel | undefined,
+    audit: ContractAudit | undefined,
+    error?: string
+  ): Promise<string | undefined> => {
+    const log = {
+      ...processLog(result, preflight, identity, options.reviewerAlias, error),
+      targetId: cell.target.id,
+      theme: cell.capture.theme,
+      contextPath,
+      contextSha256,
+      audit: audit ?? null
+    }
+    try {
+      await writeCaptureArtifacts(artifactDir, runId, cell, result.stdout.text, log)
+      return undefined
+    } catch (writeError) {
+      return `Could not preserve reviewer response and log: ${shortDiagnostic(writeError)}`
+    }
+  }
+
+  const recordSkippedCell = async (
+    cell: PreparedCell,
+    code: ReviewIssue['code'],
+    message: string,
+    preflight: ResolvedModel | undefined
+  ): Promise<void> => {
+    const saved = contexts.get(reviewCellKey(cell.target.id, cell.capture.theme))
+    const logFailure = await saveAttempt(cell, saved?.path ?? null, saved?.sha256 ?? null, {
+      ...noProcess,
+      aborted: code === 'aborted'
+    }, preflight, undefined, undefined, message)
+    issues.push(cellIssue(cell, code, message))
+    failures.push(`${cell.target.id} (${cell.capture.theme}): ${message}`)
+    if (logFailure) {
+      issues.push(cellIssue(cell, 'persistence', logFailure))
+      failures.push(`${cell.target.id} (${cell.capture.theme}): ${logFailure}`)
+    }
+    hasReviewerErrors = true
+  }
+
+  for (const cell of selected) {
+    const key = reviewCellKey(cell.target.id, cell.capture.theme)
+    const context = hostContractContext(cell.target, cell.capture.theme)
+    const bytes = serializeContractContext(context)
+    const sha256 = createHash('sha256').update(bytes, 'utf8').digest('hex')
+    const path = join(artifactDir, `${cellArtifactPrefix(runId, cell)}.context.json`)
+    try {
+      await writeContextArtifact(artifactDir, runId, cell, bytes)
+      contexts.set(key, { context, bytes, sha256, path, evidence: { path, sha256 } })
+    } catch (error) {
+      const message = `Could not persist trusted contract context: ${shortDiagnostic(error)}`
+      issues.push(cellIssue(cell, 'persistence', message))
+      failures.push(`${cell.target.id} (${cell.capture.theme}): ${message}`)
+      const logFailure = await saveAttempt(cell, path, sha256, noProcess, undefined, undefined, undefined, message)
+      if (logFailure) {
+        issues.push(cellIssue(cell, 'persistence', logFailure))
+        failures.push(`${cell.target.id} (${cell.capture.theme}): ${logFailure}`)
+      }
+      hasReviewerErrors = true
+    }
+  }
+
+  const reviewCells = selected.filter((cell) => contexts.has(reviewCellKey(cell.target.id, cell.capture.theme)))
   const executable = options.reviewerExecutable ?? 'pi-watch'
   const cwd = resolve(fileURLToPath(new URL('../..', import.meta.url)))
-  const preflightResult = await runReviewerProcess([executable, '--check', options.reviewerAlias], options.timeoutMs, options.signal, cwd)
-  const preflightIdentity = preflightResult.startError ? undefined : parseResolvedModel(preflightResult.stdout.text, preflightResult.stderr.text)
-  const preflightFailure = preflightFailureMessage(preflightResult, preflightIdentity) ??
-    (preflightIdentity?.family === options.authorFamily
-      ? `Resolved reviewer family ${preflightIdentity.family} matches author family ${options.authorFamily}.`
-      : undefined)
-  if (preflightFailure) {
-    for (const cell of prepared.cells) {
-      const log = processLog(preflightResult, preflightIdentity, undefined, options.reviewerAlias, preflightFailure)
-      try { await writeCaptureArtifacts(artifactDir, runId, cell, '', log) } catch (error) {
-        failures.push(`${cell.target.id} (${cell.capture.theme}): could not preserve reviewer evidence: ${shortDiagnostic(error)}`)
-      }
-    }
-    failures.unshift(preflightFailure)
-    return errorReport(manifest, options, failures)
-  }
-
-  for (const cell of prepared.cells) {
-    const prompt = assessmentPrompt(cell.target, cell.capture.theme, cell.image, cell.reference)
-    const result = await runReviewerProcess(
-      [executable, '--alias', options.reviewerAlias, '--tools', 'read', '--cwd', cwd, prompt],
+  let preflightIdentity: ResolvedModel | undefined
+  let preflightFailed = false
+  if (reviewCells.length > 0) {
+    const preflightResult = await runReviewerProcess(
+      [executable, '--check', options.reviewerAlias],
       options.timeoutMs,
       options.signal,
       cwd
     )
-    const evidenceAfterReview = await verifyEvidenceUnchanged([cell.image, cell.reference])
-    const identity = result.startError ? undefined : parseResolvedModel(result.stdout.text, result.stderr.text)
-    let failure = reviewFailureMessage(result, identity)
-    if (!failure && evidenceAfterReview.failures.length > 0) failure = evidenceAfterReview.failures.join(' ')
-    if (!failure && identity?.family === options.authorFamily) failure = `Resolved reviewer family ${identity.family} matches author family ${options.authorFamily}.`
-    let assessment: VisualAssessment | undefined
-    if (!failure) {
-      try {
-        const response = assessmentResponse(result.stdout.text)
-        assessment = validateAssessment(JSON.parse(response) as unknown)
-        if (!assessment.imagesRead) failure = 'Reviewer did not confirm reading both image files.'
-      } catch (error) {
-        failure = shortDiagnostic(error)
+    preflightIdentity = preflightResult.startError ? undefined : parseResolvedModel(preflightResult.stdout.text, preflightResult.stderr.text)
+    const preflightFailure = preflightFailureMessage(preflightResult, preflightIdentity) ??
+      (preflightIdentity?.family === options.authorFamily
+        ? `Resolved reviewer family ${preflightIdentity.family} matches author family ${options.authorFamily}.`
+        : undefined)
+    if (preflightFailure) {
+      preflightFailed = true
+      const code = processFailureCode(preflightResult, preflightIdentity, undefined, options.authorFamily) ?? 'identity-mismatch'
+      for (const cell of reviewCells) {
+        const saved = contexts.get(reviewCellKey(cell.target.id, cell.capture.theme))!
+        const logFailure = await saveAttempt(
+          cell,
+          saved.path,
+          saved.sha256,
+          preflightResult,
+          preflightIdentity,
+          undefined,
+          undefined,
+          preflightFailure
+        )
+        issues.push(cellIssue(cell, code, preflightFailure))
+        failures.push(`${cell.target.id} (${cell.capture.theme}): ${preflightFailure}`)
+        if (logFailure) {
+          issues.push(cellIssue(cell, 'persistence', logFailure))
+          failures.push(`${cell.target.id} (${cell.capture.theme}): ${logFailure}`)
+        }
       }
-    }
-
-    const log = processLog(result, preflightIdentity, identity, options.reviewerAlias, failure)
-    try {
-      await writeCaptureArtifacts(artifactDir, runId, cell, result.stdout.text, log)
-    } catch (error) {
-      failure = `Could not preserve reviewer response and log: ${shortDiagnostic(error)}`
-    }
-    if (failure) {
       hasReviewerErrors = true
-      failures.push(`${cell.target.id} (${cell.capture.theme}): ${failure}`)
-      continue
     }
-
-    const score = SCORE_DIMENSIONS.reduce((total, dimension) => total + assessment!.scores[dimension], 0) / SCORE_DIMENSIONS.length
-    const reviewer: ReviewerIdentity = {
-      alias: options.reviewerAlias,
-      provider: identity!.provider,
-      model: identity!.model,
-      family: identity!.family!
-    }
-    const passed = assessment!.targetVisible && score >= options.threshold
-    reviewed.push({
-      targetId: cell.target.id,
-      theme: cell.capture.theme,
-      image: { path: cell.image.path, sha256: cell.image.sha256 },
-      reference: { path: cell.reference.path, sha256: cell.reference.sha256 },
-      reviewer,
-      assessment: assessment!,
-      score,
-      passed
-    })
-    if (!assessment!.targetVisible) failures.push(`${cell.target.id} (${cell.capture.theme}): target is not visibly present.`)
-    if (score < options.threshold) failures.push(`${cell.target.id} (${cell.capture.theme}): score ${score} is below threshold ${options.threshold}.`)
   }
 
-  const changedEvidence = await verifyEvidenceUnchanged(prepared.stableEvidence)
+  if (!preflightFailed) {
+    for (let index = 0; index < reviewCells.length; index++) {
+      const cell = reviewCells[index]!
+      const key = reviewCellKey(cell.target.id, cell.capture.theme)
+      const saved = contexts.get(key)!
+      if (options.signal?.aborted) {
+        for (const pending of reviewCells.slice(index)) {
+          await recordSkippedCell(pending, 'aborted', 'Visual review was aborted before this cell was dispatched.', preflightIdentity)
+        }
+        break
+      }
+
+      const basePrompt = assessmentPrompt(cell.target, cell.capture.theme, cell.image, cell.reference)
+      const prompt = supplementedPrompt(basePrompt, saved.bytes, saved.sha256)
+      const result = await runReviewerProcess(
+        [executable, '--alias', options.reviewerAlias, '--tools', 'read', '--cwd', cwd, prompt],
+        options.timeoutMs,
+        options.signal,
+        cwd
+      )
+      const identity = result.startError ? undefined : parseResolvedModel(result.stdout.text, result.stderr.text)
+      const evidenceAfterReview = await verifyEvidenceUnchanged([cell.image, cell.reference, saved.evidence])
+      let response: ContractAwareResponse | undefined
+      let issueCode: ReviewIssue['code'] | undefined
+      let failure: string | undefined
+      const resultCode = processFailureCode(result, identity, preflightIdentity, options.authorFamily)
+
+      if (result.aborted) {
+        issueCode = 'aborted'
+        failure = 'Visual review was aborted.'
+      } else if (isUsageLimit(result)) {
+        issueCode = 'usage-limit'
+        failure = `Reviewer reported a usage limit. ${shortDiagnostic(`${result.stdout.text}\n${result.stderr.text}`)}`
+      } else if (evidenceAfterReview.failures.length > 0) {
+        issueCode = 'evidence-changed'
+        failure = evidenceAfterReview.failures.join(' ')
+      } else if (resultCode) {
+        issueCode = resultCode
+        if (resultCode === 'identity-mismatch') {
+          failure = identity?.family === options.authorFamily
+            ? `Resolved reviewer family ${identity.family} matches author family ${options.authorFamily}.`
+            : identity && !identity.family
+              ? `Reviewer resolved unknown provider family ${identity.provider}.`
+              : preflightIdentity && identity &&
+                (identity.provider !== preflightIdentity.provider || identity.model !== preflightIdentity.model || identity.family !== preflightIdentity.family)
+                ? `Resolved reviewer provider/model/family ${identity.provider}/${identity.model}/${identity.family ?? 'unknown'} differs from successful preflight identity ${preflightIdentity.provider}/${preflightIdentity.model}/${preflightIdentity.family ?? 'unknown'}.`
+                : 'Reviewer identity could not be verified.'
+        } else {
+          failure = reviewFailureMessage(result, identity) ?? 'Reviewer process failed.'
+        }
+      } else {
+        try {
+          const responseText = assessmentResponse(result.stdout.text)
+          response = validateContractAwareResponse(
+            JSON.parse(responseText) as unknown,
+            saved.sha256,
+            saved.context.rules.map((rule) => rule.id)
+          )
+          if (!response.assessment.imagesRead) {
+            issueCode = 'invalid-sample'
+            failure = 'Reviewer did not confirm reading both image files.'
+          } else {
+            const conflict = penalizedContractConflict(response)
+            if (conflict) {
+              issueCode = 'contract-conflict'
+              failure = `Reviewer penalized a contract conflict: ${conflict}`
+            }
+          }
+        } catch (error) {
+          issueCode = 'response-shape'
+          failure = shortDiagnostic(error)
+        }
+      }
+
+      const targetInvisible = response !== undefined && !response.assessment.targetVisible
+      const attemptFailure = failure ?? (targetInvisible ? 'Reviewer reports the target is not visibly present.' : undefined)
+      const logFailure = await saveAttempt(
+        cell,
+        saved.path,
+        saved.sha256,
+        result,
+        preflightIdentity,
+        identity,
+        response?.contractAudit,
+        attemptFailure
+      )
+      if (logFailure) {
+        if (issueCode) issues.push(cellIssue(cell, issueCode, failure ?? 'The sample was invalid.'))
+        issueCode = 'persistence'
+        failure = logFailure
+      }
+      if (issueCode) {
+        issues.push(cellIssue(cell, issueCode, failure ?? 'The sample was invalid.'))
+        failures.push(`${cell.target.id} (${cell.capture.theme}): ${failure ?? 'The sample was invalid.'}`)
+        if (issueCode === 'usage-limit') {
+          hasReviewerErrors = true
+          for (const pending of reviewCells.slice(index + 1)) {
+            await recordSkippedCell(pending, 'usage-limit', 'Review scheduling stopped after a reviewer usage limit.', preflightIdentity)
+          }
+          break
+        }
+        hasReviewerErrors = true
+        continue
+      }
+
+      if (!response || !identity?.family) {
+        const message = 'Reviewer response could not produce a validated assessment.'
+        issues.push(cellIssue(cell, 'invalid-sample', message))
+        failures.push(`${cell.target.id} (${cell.capture.theme}): ${message}`)
+        hasReviewerErrors = true
+        continue
+      }
+
+      const assessment = response.assessment
+      const score = SCORE_DIMENSIONS.reduce((total, dimension) => total + assessment.scores[dimension], 0) / SCORE_DIMENSIONS.length
+      const reviewer: ReviewerIdentity = {
+        alias: options.reviewerAlias,
+        provider: identity.provider,
+        model: identity.model,
+        family: identity.family
+      }
+      const passed = assessment.targetVisible && score >= options.threshold
+      reviewed.push({
+        targetId: cell.target.id,
+        theme: cell.capture.theme,
+        image: { path: cell.image.path, sha256: cell.image.sha256 },
+        reference: { path: cell.reference.path, sha256: cell.reference.sha256 },
+        reviewer,
+        assessment,
+        score,
+        passed,
+        contractReview: {
+          contextPath: saved.path,
+          contextSha256: saved.sha256,
+          audit: response.contractAudit
+        }
+      })
+      if (targetInvisible) {
+        const message = 'Reviewer reports the target is not visibly present.'
+        issues.push(cellIssue(cell, 'invalid-sample', message))
+        failures.push(`${cell.target.id} (${cell.capture.theme}): ${message}`)
+      }
+      if (score < options.threshold) failures.push(`${cell.target.id} (${cell.capture.theme}): score ${score} is below threshold ${options.threshold}.`)
+    }
+  }
+
+  const allEvidence = [...prepared.stableEvidence, ...[...contexts.values()].map((context) => context.evidence)]
+  const changedEvidence = await verifyEvidenceUnchanged(allEvidence)
   if (changedEvidence.failures.length > 0) {
     failures.push(...changedEvidence.failures)
     hasReviewerErrors = true
-    for (let index = reviewed.length - 1; index >= 0; index--) {
-      const entry = reviewed[index]!
-      const cell = prepared.cells.find((candidate) => candidate.target.id === entry.targetId && candidate.capture.theme === entry.theme)
-      if (cell && (changedEvidence.changedPaths.has(cell.image.path) || changedEvidence.changedPaths.has(cell.reference.path))) reviewed.splice(index, 1)
+    for (const cell of prepared.cells) {
+      const key = reviewCellKey(cell.target.id, cell.capture.theme)
+      const saved = contexts.get(key)
+      const changed = changedEvidence.changedPaths.has(cell.image.path) ||
+        changedEvidence.changedPaths.has(cell.reference.path) ||
+        (saved !== undefined && changedEvidence.changedPaths.has(saved.path))
+      if (!changed) continue
+      for (let index = reviewed.length - 1; index >= 0; index--) {
+        const entry = reviewed[index]!
+        if (reviewCellKey(entry.targetId, entry.theme) === key) reviewed.splice(index, 1)
+      }
+      if (!issues.some((issue) => issue.code === 'evidence-changed' && issue.targetId === cell.target.id && issue.theme === cell.capture.theme)) {
+        issues.push(cellIssue(cell, 'evidence-changed', 'Reviewed image, golden, or trusted contract context changed during review.'))
+      }
     }
   }
 
-  const status: ReviewReport['status'] = hasReviewerErrors ? 'error' : reviewed.some((capture) => !capture.passed) ? 'failed' : 'passed'
-  return makeReport(manifest, options, status, reviewed, failures.map(redactSensitiveText))
+  const status: ReviewReport['status'] = hasReviewerErrors
+    ? 'error'
+    : reviewed.some((capture) => !capture.passed) ? 'failed' : 'passed'
+  const report = makeReport(manifest, options, status, reviewed, failures, issues, selectedCells)
+  return persistLiveReport(artifactDir, runId, report, manifest, options)
 }

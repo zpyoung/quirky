@@ -1,7 +1,15 @@
 import { accessSync, appendFileSync, constants } from 'node:fs'
 import { delimiter, join } from 'node:path'
+import { createInterface } from 'node:readline'
 
 export const DEFAULT_BEAT_MS = 10_000
+const PING_LINE = /^soak-ping ([0-9a-f]{8}-[1-9]\d{0,8})$/
+
+export function pongFor(line: string): string | null {
+  const match = PING_LINE.exec(line)
+  if (match === null || match[0] !== line) return null
+  return `\nsoak-pong ${match[1]}\n`
+}
 
 const SPINNER_REDRAW_PREFIX = '\x1b[24;1H\x1b[2K'
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸']
@@ -174,4 +182,13 @@ async function run(): Promise<void> {
   }
 }
 
-if (import.meta.main) void run()
+if (import.meta.main) {
+  const input = createInterface({ input: process.stdin, crlfDelay: Infinity })
+  process.stdin.on('error', () => undefined)
+  input.on('error', () => undefined)
+  input.on('line', (line) => {
+    const pong = pongFor(line)
+    if (pong !== null) process.stdout.write(pong)
+  })
+  void run()
+}

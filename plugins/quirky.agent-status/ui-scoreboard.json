@@ -77,7 +77,7 @@
         },
         "import": {
           "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
-          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, ControlIcon, EmptyState, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
         }
       }
     },
@@ -97,7 +97,7 @@
         },
         "import": {
           "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
-          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, ControlIcon, EmptyState, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
         }
       }
     },
@@ -117,7 +117,7 @@
         },
         "import": {
           "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
-          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, ControlIcon, EmptyState, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
         }
       }
     },
@@ -137,7 +137,7 @@
         },
         "import": {
           "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
-          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, ControlIcon, EmptyState, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
         }
       }
     },
@@ -157,7 +157,7 @@
         },
         "import": {
           "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
-          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, ControlIcon, EmptyState, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
         }
       }
     },
@@ -177,7 +177,7 @@
         },
         "import": {
           "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
-          "quote": "import { Badge, Button, ControlIcon, EmptyState, FormRow, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, ControlIcon, EmptyState, IconButton, InlineAgentCard, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, TextField, ToolPanelFrame, ToolPanelTools, type UiStatus } from '@quirky/ui'"
         }
       }
     },
@@ -630,7 +630,7 @@
         "via": [
           {
             "file": "plugins/quirky.agent-status/src/ActivityView.tsx",
-            "quote": "function toggleUnreadOnly(event: ChangeEvent<HTMLInputElement>): void {\n    model.updateView({ text: draftText, worktree: draftWorktree, unreadOnly: event.currentTarget.checked })\n  }"
+            "quote": "function toggleUnreadOnly(checked: boolean): void {\n    model.updateView({ text: draftText, worktree: draftWorktree, unreadOnly: checked })\n  }"
           },
           {
             "file": "plugins/quirky.agent-status/src/activity-model.ts",

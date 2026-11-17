@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import type { Inventory, VisualOptions, VisualResult } from './contracts'
 import type { CaptureManifest, CaptureTarget, ImageEvidence, ReviewReport, ReviewedCapture, VisualAssessment } from '../ui-review/contracts'
+import { scopeCaptureInventory } from '../ui-review/contribution-inventory'
 import { collectInventory } from './inventory'
 import { measureVisuals, notRunVisuals } from './visual'
 import { CAPTURE_TIMEOUT_MS, DEFAULT_REVIEWER_ALIAS, REVIEW_TIMEOUT_MS } from '../ui-review/arguments'
@@ -79,6 +80,9 @@ function captureManifest(source: Inventory, overrides: Partial<CaptureManifest> 
     reference: image(`/goldens/${theme}.png`, theme === 'dark' ? 'c' : 'd'),
     status: 'captured' as const
   })))
+  const contributionInventory = overrides.contributionInventory ?? (source.contributionInventory === undefined
+    ? undefined
+    : scopeCaptureInventory(source.contributionInventory, targets))
   return {
     schemaVersion: 1,
     createdAt: '2026-11-12T00:00:00.000Z',
@@ -88,6 +92,7 @@ function captureManifest(source: Inventory, overrides: Partial<CaptureManifest> 
     scope: 'full',
     selectors: [],
     ...overrides,
+    ...(contributionInventory === undefined ? {} : { contributionInventory }),
     targets,
     captures: overrides.captures ?? captures,
     failures: overrides.failures ?? []
@@ -167,6 +172,72 @@ function completeAssessmentCapture(
     captures: [reviewedCapture(targetId, theme, 85, overrides)],
     ...reportOverrides
   })
+}
+
+type TestToolAlias = {
+  declaration: CaptureTarget
+  toolId: string
+  renderedTarget: CaptureTarget
+  reason: 'tool-navigation-alias'
+}
+
+type TestContributionInventory = { declaredTargets: CaptureTarget[]; toolAliases: TestToolAlias[] }
+
+function projectedInventory(includeDashboard = false): { source: Inventory; body: CaptureTarget; declaration: CaptureTarget } {
+  const source = inventory()
+  const plugin = source.plugins.find((candidate) => candidate.id === 'acme.ui')!
+  const bodies = [source.targets.find((target) => target.plugin === 'acme.ui')!]
+  for (let index = 2; index <= 5; index++) {
+    const kind = index % 2 === 0 ? 'panel' : 'view'
+    const target: CaptureTarget = {
+      id: `${kind}:acme.ui/body-${index}`,
+      plugin: 'acme.ui',
+      title: `Body ${index}`,
+      kind
+    }
+    bodies.push(target)
+    plugin.targets.push(target.id)
+    source.targets.push(target)
+  }
+  const aliases = bodies.map((renderedTarget, index) => {
+    const declaration: CaptureTarget = {
+      id: `sidebar-section:acme.ui/navigation${index === 0 ? '' : `-${index + 1}`}`,
+      plugin: 'acme.ui',
+      title: `Navigation ${index + 1}`,
+      kind: 'sidebar-section'
+    }
+    plugin.targets.push(declaration.id)
+    return { declaration, toolId: declaration.id, renderedTarget, reason: 'tool-navigation-alias' as const }
+  })
+  if (includeDashboard) {
+    const dashboard: CaptureTarget = {
+      id: 'sidebar-section:quirky.agent-status/dashboard',
+      plugin: 'quirky.agent-status',
+      title: 'Dashboard',
+      kind: 'sidebar-section'
+    }
+    source.plugins.push({
+      id: 'quirky.agent-status',
+      directory: 'plugins/quirky.agent-status',
+      hasUi: true,
+      targets: [dashboard.id],
+      sources: []
+    })
+    source.targets.push(dashboard)
+  }
+  const contributionInventory: TestContributionInventory = {
+    declaredTargets: [...source.targets.map((target) => ({ ...target })), ...aliases.map((alias) => alias.declaration)]
+      .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+    toolAliases: aliases.sort((left, right) => left.declaration.id < right.declaration.id ? -1 : left.declaration.id > right.declaration.id ? 1 : 0)
+  }
+  Object.assign(source, { contributionInventory })
+  return { source, body: bodies[0]!, declaration: aliases[0]!.declaration }
+}
+
+function projectedManifest(source: Inventory): CaptureManifest {
+  const manifest = captureManifest(source)
+  Object.assign(manifest, { contributionInventory: structuredClone((source as Inventory & { contributionInventory: TestContributionInventory }).contributionInventory) })
+  return manifest
 }
 
 describe('visual scoreboard measurement', () => {
@@ -266,11 +337,24 @@ describe('visual scoreboard measurement', () => {
   test('plugin measurement rejects and does not leak another plugin from a filtered manifest', async () => {
     const source = inventory()
     const pluginId = source.plugins[0]!.id
-    const foreign: CaptureTarget = { id: 'view:other/private', plugin: 'other.plugin', title: 'Private', kind: 'view' }
+    const foreign: CaptureTarget = { id: 'view:other.plugin/private', plugin: 'other.plugin', title: 'Private', kind: 'view' }
     source.plugins.push({ id: 'other.plugin', directory: 'plugins/other.plugin', hasUi: true, targets: [foreign.id], sources: [] })
     source.targets.push(foreign)
+    source.contributionInventory = {
+      declaredTargets: [...source.contributionInventory!.declaredTargets, foreign]
+        .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0),
+      toolAliases: source.contributionInventory!.toolAliases
+    }
     const targets = source.targets.filter((target) => target.plugin === pluginId)
-    const manifest = captureManifest(source, { scope: 'filtered', selectors: [pluginId], targets: [...targets, foreign] })
+    const manifest = captureManifest(source, { scope: 'filtered', selectors: [pluginId], targets })
+    manifest.targets.push(foreign)
+    manifest.captures.push(...THEMES.map((theme) => ({
+      targetId: foreign.id,
+      theme,
+      image: image(`/fixture/${foreign.id}/${theme}.png`, 'e'),
+      reference: image(`/goldens/${theme}.png`, 'f'),
+      status: 'captured' as const
+    })))
     const result = await measureVisuals(source, { ...options(), plugin: pluginId }, dependencies(manifest))
 
     expect(result.operationalError).toBe(true)
@@ -307,6 +391,7 @@ describe('visual scoreboard measurement', () => {
 
   test('retains the source inventory, missing surfaces, duplicate cells, and missing images as failed rows', async () => {
     const source = inventory()
+    delete source.contributionInventory
     const [missingTarget, duplicateTarget, imageTarget] = source.targets
     if (!missingTarget || !duplicateTarget || !imageTarget) throw new Error('fixture inventory needs host targets')
     const runtimeTargets = source.targets.filter((target) => target.id !== missingTarget.id)
@@ -495,4 +580,165 @@ describe('visual scoreboard measurement', () => {
     expect(result.cells.every((visual) => visual.status === 'fail' && visual.code === 'not-run' && visual.score === null)).toBe(true)
     expect(result.targets.map((target) => target.id)).toEqual(source.targets.map((target) => target.id).sort((left, right) => left.localeCompare(right)))
   })
+  test('reconciles source and runtime contribution metadata before reviewing projected targets', async () => {
+    const { source, body, declaration } = projectedInventory()
+    const manifest = projectedManifest(source)
+    const runtimeInventory = (manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory
+    const runtimeBody = manifest.targets.find((target) => target.id === body.id)!
+    runtimeBody.title = 'Runtime body title'
+    for (const target of runtimeInventory.declaredTargets) {
+      if (target.id === body.id) target.title = runtimeBody.title
+      if (target.id === declaration.id) target.title = 'Runtime navigation title'
+    }
+    for (const alias of runtimeInventory.toolAliases) {
+      if (alias.declaration.id === declaration.id) alias.declaration.title = 'Runtime navigation title'
+      if (alias.renderedTarget.id === body.id) alias.renderedTarget.title = runtimeBody.title
+    }
+    const reviewCalls: CaptureManifest[] = []
+    const result = await measureVisuals(source, options(), {
+      capture: async () => manifest,
+      review: async (filtered) => {
+        reviewCalls.push(structuredClone(filtered))
+        return reviewReport(filtered)
+      }
+    })
+    expect(result.failures).toEqual([])
+    const reviewedBody = reviewCalls.find((filtered) => filtered.targets[0]?.id === body.id)!
+    const scopedMetadata = (reviewedBody as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory
+
+    expect(result.operationalError).toBe(false)
+    expect(result.cells).toHaveLength(20)
+    expect(result.cells.filter((visual) => visual.plugin === 'acme.ui')).toHaveLength(10)
+    expect(result.cells.filter((visual) => visual.plugin === null)).toHaveLength(10)
+    expect(result.cells.every((visual) => visual.status === 'pass')).toBe(true)
+    expect(reviewCalls).toHaveLength(10)
+    const aliasIds = source.contributionInventory!.toolAliases.map((alias) => alias.declaration.id)
+    expect(source.contributionInventory!.declaredTargets.filter((target) => target.plugin === 'acme.ui')).toHaveLength(10)
+    expect(manifest.contributionInventory!.toolAliases).toHaveLength(5)
+    expect(aliasIds.every((id) => !result.cells.some((visual) => visual.targetId === id))).toBe(true)
+    expect(aliasIds.every((id) => !manifest.captures.some((capture) => capture.targetId === id))).toBe(true)
+    expect(scopedMetadata.toolAliases).toHaveLength(1)
+    expect(scopedMetadata.toolAliases[0]).toMatchObject({
+      declaration: { id: declaration.id, plugin: declaration.plugin, kind: declaration.kind },
+      toolId: declaration.id,
+      renderedTarget: { id: body.id, plugin: body.plugin, kind: body.kind },
+      reason: 'tool-navigation-alias'
+    })
+  })
+
+  type ContributionMutation = (source: Inventory, manifest: CaptureManifest, body: CaptureTarget, declaration: CaptureTarget) => void
+  const contributionMutations: Array<[string, string, ContributionMutation]> = [
+    ['missing a declared target', 'contribution-inventory', (source: Inventory, manifest: CaptureManifest) => {
+      const omitted = source.targets.find((target) => target.id === 'sidebar-section:quirky.agent-status/dashboard')!
+      manifest.targets = manifest.targets.filter((target) => target.id !== omitted.id)
+      manifest.captures = manifest.captures.filter((capture) => capture.targetId !== omitted.id)
+    }],
+    ['deleting the runtime alias record', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
+      ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases = []
+    }],
+    ['deleting the source alias record', 'contribution-inventory', (source: Inventory) => {
+      ;(source as Inventory & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases = []
+    }],
+    ['omitting runtime metadata from a legacy capture when source aliases exist', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
+      delete (manifest as CaptureManifest & { contributionInventory?: TestContributionInventory }).contributionInventory
+    }],
+    ['forging an alias for an ordinary target', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest, body: CaptureTarget) => {
+      ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases.push({
+        declaration: body, toolId: body.id, renderedTarget: body, reason: 'tool-navigation-alias'
+      })
+    }],
+    ['changing the alias body', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
+      ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!.renderedTarget.id = 'view:acme.ui/unknown'
+    }],
+    ['changing the tool ID', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
+      ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!.toolId = 'panel:acme.ui/forged'
+    }],
+    ['changing the alias owner', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
+      ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!.renderedTarget.plugin = 'acme.other'
+    }],
+    ['changing the declaration kind', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
+      ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!.declaration.kind = 'activity-item'
+    }],
+    ['duplicating an alias record', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
+      const aliases = (manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases
+      aliases.push(structuredClone(aliases[0]!))
+    }],
+    ['creating a self-alias', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest) => {
+      const alias = (manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.toolAliases[0]!
+      alias.renderedTarget = structuredClone(alias.declaration)
+    }],
+    ['adding a capture row for an alias declaration', 'contribution-inventory', (_source: Inventory, manifest: CaptureManifest, _body: CaptureTarget, declaration: CaptureTarget) => {
+      const capture = manifest.captures[0]!
+      manifest.captures.push({ ...capture, targetId: declaration.id, theme: 'dark' })
+    }]
+  ]
+  test.each(contributionMutations)('rejects contribution mutation: %s', async (_description, expectedCode, mutate) => {
+    const { source, body, declaration } = projectedInventory(true)
+    const manifest = projectedManifest(source)
+    mutate(source, manifest, body, declaration)
+    let reviewCalls = 0
+    const result = await measureVisuals(source, options(), {
+      capture: async () => manifest,
+      review: async (filtered) => {
+        reviewCalls++
+        return reviewReport(filtered)
+      }
+    })
+
+    expect(result.operationalError).toBe(true)
+    expect(result.failures.some((failure) => failure.code === expectedCode)).toBe(true)
+    expect(reviewCalls).toBe(0)
+  })
+
+  test('duplicate cells fail with contribution metadata while other projected targets remain reviewable', async () => {
+    const { source, body } = projectedInventory()
+    const manifest = projectedManifest(source)
+    const duplicate = manifest.captures.find((capture) => capture.targetId === body.id && capture.theme === 'dark')!
+    manifest.captures.push({ ...duplicate })
+    const reviewedTargets: string[] = []
+
+    const result = await measureVisuals(source, options(), {
+      capture: async () => manifest,
+      review: async (filtered) => {
+        reviewedTargets.push(filtered.targets[0]!.id)
+        return reviewReport(filtered)
+      }
+    })
+
+    expect(manifest.contributionInventory!.toolAliases).toHaveLength(5)
+    expect(result.failures).toEqual([])
+    expect(result.operationalError).toBe(false)
+    expect(cell(result, body.id, 'dark')).toMatchObject({ status: 'fail', code: 'duplicate-cell', score: null })
+    expect(cell(result, body.id, 'light')).toMatchObject({ status: 'fail', code: 'review-not-completed', score: null })
+    expect(reviewedTargets.sort()).toEqual(source.targets.filter((target) => target.id !== body.id).map((target) => target.id).sort())
+    expect(result.cells.filter((visual) => visual.targetId !== body.id).every((visual) => visual.status === 'pass')).toBe(true)
+  })
+
+  test('runtime-only contributions remain ownership failures and are never reviewed', async () => {
+    const { source } = projectedInventory()
+    const manifest = projectedManifest(source)
+    const extra: CaptureTarget = { id: 'view:acme.ui/runtime-only', plugin: 'acme.ui', title: 'Runtime only', kind: 'view' }
+    manifest.targets.push(extra)
+    manifest.captures.push(...THEMES.map((theme) => ({
+      targetId: extra.id,
+      theme,
+      image: image(`/fixture/${extra.id}/${theme}.png`, 'e'),
+      reference: image(`/goldens/${theme}.png`, 'f'),
+      status: 'captured' as const
+    })))
+    ;(manifest as CaptureManifest & { contributionInventory: TestContributionInventory }).contributionInventory.declaredTargets.push(extra)
+    let reviewCalls = 0
+    const result = await measureVisuals(source, options(), {
+      capture: async () => manifest,
+      review: async (filtered) => {
+        reviewCalls++
+        return reviewReport(filtered)
+      }
+    })
+
+    expect(result.operationalError).toBe(true)
+    expect(result.failures.some((failure) => failure.code === 'target-ownership' && failure.targetId === extra.id)).toBe(true)
+    expect(reviewCalls).toBe(0)
+  })
+
 })

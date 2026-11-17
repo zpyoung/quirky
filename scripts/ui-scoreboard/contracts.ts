@@ -1,4 +1,4 @@
-import type { CaptureTarget, CaptureTheme, ImageEvidence, ReviewerIdentity, VisualAssessment, CaptureManifest, CaptureOptions, ReviewOptions, ReviewReport, ModelFamily } from '../ui-review/contracts'
+import type { CaptureTarget, CaptureTheme, ContributionInventory, ImageEvidence, ReviewerIdentity, VisualAssessment, CaptureManifest, CaptureOptions, ReviewOptions, ReviewReport, ModelFamily } from '../ui-review/contracts'
 
 export const CHECK_IDS = ['compatibility-tokens', 'loading', 'empty', 'error', 'commands', 'screenshots'] as const
 export type CheckId = typeof CHECK_IDS[number]
@@ -49,7 +49,7 @@ export type PluginInventory = {
 export type Exclusion = { plugin: string; reason: 'paused-unmerged'; branch: string; pr: 305; steerDate: '2026-11-13' }
 export type Inventory = {
   repoRoot: string; commit: string; sourceDigest: string; dirty: boolean
-  plugins: PluginInventory[]; targets: CaptureTarget[]; sharedSources: SourceFile[]
+  plugins: PluginInventory[]; targets: CaptureTarget[]; contributionInventory?: ContributionInventory; sharedSources: SourceFile[]
   exclusions: Exclusion[]; failures: Evidence[]
 }
 export type VisualCell = {
@@ -72,4 +72,5 @@ export type ScoreboardReport = {
   plugins: Array<{ id: string; checks: CheckResult[]; targets: string[] }>
   host: { checks: CheckResult[]; targets: string[] }; cells: VisualCell[]
   sharedTokenEvidence: Evidence[]; exclusions: Exclusion[]; failures: Evidence[]
+  contributionInventory?: ContributionInventory
 }

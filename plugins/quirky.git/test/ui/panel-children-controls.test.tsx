@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeEach, describe, expect, jest, test } from 'bun:test'
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 import { registerDom } from './register-dom'
 import type { GitChange, GitCommit, GitHistory } from '@quirky/protocol'
@@ -7,7 +7,7 @@ import type { RowHandlers, RowItem } from '../../src/panel/Rows'
 registerDom()
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 const s = await import('./panel-support')
-const { act, PANEL, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, settle, statusOf, type } = s
+const { act, PANEL, byLabel, buttonText, click, entry, failure, fakeContext, layoutFor, mountPanel, q, qa, settle, settleAfter, statusOf, type } = s
 const { createElement } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { Rows } = await import('../../src/panel/Rows')
@@ -21,6 +21,7 @@ beforeEach(() => {
 const mountedPanels = new Set<() => void>()
 afterEach(() => {
   for (const unmount of [...mountedPanels]) unmount()
+  jest.useRealTimers()
 })
 
 type Fake = ReturnType<typeof fakeContext>
@@ -509,6 +510,7 @@ describe('History dock mounted controls', () => {
   })
 
   test('rejects old generations after close/reopen and after remount', async () => {
+    jest.useFakeTimers()
     const { fake, element, unmount } = await openPanel((f) => f.on('quirky.git/history', () => historyOf([commit()])))
     await openHistory(element)
     const oldAddress = historyAddress(fake)
@@ -527,7 +529,7 @@ describe('History dock mounted controls', () => {
 
     unmount()
     const remounted = mountExistingPanel(fake)
-    await settle()
+    await settleAfter(3_000)
     await openHistory(remounted.element)
     const remountedAddress = historyAddress(fake)
     expect(remountedAddress.generation).not.toBe(oldAddress.generation)

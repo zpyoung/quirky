@@ -25,7 +25,7 @@ export const USAGE = `Usage: bun scripts/soak.ts [--minutes <n>] [--out <dir>] [
                     [--max-children <n>] [--max-growth <n>] [--max-zombies <n>]
                     [--max-events-per-5s <n>] [--max-stall-ms <n>]
                     [--max-unanswered <n>] [--max-window-requests-per-minute <n>] [--slow-git <ms>]
-                    [--fault leak|zombies|storm|block|slow-git|feedback] [--help]`
+                    [--fault leak|zombies|storm|block|slow-git|feedback|flood|pty-pause] [--help]`
 
 function parsePositiveInteger(value: string | undefined, flag: string, fallback: number | null): number | null {
   if (value === undefined) return fallback
@@ -156,6 +156,10 @@ export function parseArguments(argv: string[]): SoakConfig | { help: true } {
   if (fault === 'feedback' && windows < 2) {
     throw new UsageError('--fault feedback needs --windows 2 or more')
   }
+  if (fault === 'flood' && windows < 2) {
+    throw new UsageError('--fault flood needs --windows 2 or more')
+  }
+
 
 
   const minutes = parseNumber(values.minutes, '--minutes', QUALIFYING_MINUTES, false)

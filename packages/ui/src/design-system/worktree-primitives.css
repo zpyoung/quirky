@@ -133,7 +133,7 @@
   gap: var(--ui-space-6);
 }
 
-.ui-checkbox__input {
+.ui-checkbox > .ui-checkbox__input {
   accent-color: var(--ui-accent);
   cursor: pointer;
   flex: 0 0 auto;

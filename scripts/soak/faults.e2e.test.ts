@@ -5,14 +5,15 @@ import { join } from 'node:path'
 import { main } from '../soak.ts'
 import type { FaultCheck, FaultKind, Sample, SoakReport } from './contracts.ts'
 
-type LegacyFaultKind = Exclude<FaultKind, 'feedback'>
+type LegacyFaultKind = Exclude<FaultKind, 'feedback' | 'flood'>
 
 const FAULT_CHECK: Record<LegacyFaultKind, FaultCheck> = {
   leak: 'children',
   zombies: 'zombies',
   storm: 'events',
   block: 'stalls',
-  'slow-git': 'calls'
+  'slow-git': 'calls',
+  'pty-pause': 'stalls',
 }
 
 function isAlive(pid: number): boolean {
@@ -62,7 +63,17 @@ async function runFault(kind: LegacyFaultKind): Promise<void> {
     const daemonPid = Number(readFileSync(join(out, 'daemon.pid'), 'utf8').trim())
     expect(daemonPid).toBe(report.daemon.pid)
     expect(isAlive(daemonPid)).toBe(false)
-    expect(fault.detail.pids.every((pid) => !isAlive(pid))).toBe(true)
+    if (kind === 'pty-pause') {
+      expect(fault.detail.pids).toHaveLength(1)
+      for (const pid of fault.detail.pids) {
+        if (!isAlive(pid)) continue
+        const state = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)], { timeout: 2000 })
+        expect(state.exitCode).toBe(0)
+        expect(state.stdout.toString().trim().startsWith('T')).toBe(false)
+      }
+    } else {
+      expect(fault.detail.pids.every((pid) => !isAlive(pid))).toBe(true)
+    }
 
     if (kind === 'leak') {
       const check = report.checks.children
@@ -96,6 +107,15 @@ async function runFault(kind: LegacyFaultKind): Promise<void> {
       expect(timedOut >= 1 || report.checks.calls.refreshes.pending >= 1).toBe(true)
       expect(fault.detail.pids.length).toBeGreaterThanOrEqual(1)
       for (const pid of fault.detail.pids) expectGroupGone(pid)
+    } else if (kind === 'pty-pause') {
+      const check = report.checks.stalls
+      expect(check.ok).toBe(false)
+      expect(check.terminal.stalls).toBeGreaterThanOrEqual(1)
+      expect(check.terminal.maxMs).toBeGreaterThanOrEqual(2000)
+      expect(check.terminal.worst.some(({ at, ms }) =>
+        ms >= 2000 && at >= fault.at - 1 && at <= fault.at + 4
+      )).toBe(true)
+      expect(fault.detail.blockedMs).toBeGreaterThanOrEqual(2900)
     } else {
       const check = report.checks.stalls
       expect(check.ok).toBe(false)
@@ -130,4 +150,21 @@ test('detects the injected event-loop block', async () => {
 
 test('detects slow git calls and stops every wrapper process group', async () => {
   await runFault('slow-git')
+}, 180_000)
+
+test('detects a pause of the owned PTY host and leaves no stopped host behind', async () => {
+  await runFault('pty-pause')
+}, 180_000)
+
+test('terminal probes stay responsive throughout an unfaulted real-daemon run', async () => {
+  const out = mkdtempSync(join(tmpdir(), 'quirky-soak-terminal-control-'))
+  try {
+    const code = await main(['--windows', '0', '--minutes', '0.4', '--out', out])
+    expect([0, 1]).toContain(code)
+    const report = JSON.parse(readFileSync(join(out, 'soak-report.json'), 'utf8')) as SoakReport
+    expect(report.checks.stalls.terminal).toMatchObject({ stalls: 0, failed: 0 })
+    expect(report.checks.stalls.terminal.probes).toBeGreaterThanOrEqual(15)
+  } finally {
+    rmSync(out, { recursive: true, force: true })
+  }
 }, 180_000)

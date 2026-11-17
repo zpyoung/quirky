@@ -96,7 +96,7 @@ export function ReviewDiff({ context, input, settings, setSetting, report, bind 
   const mountInput = mount.request
   const controlTarget = viewTarget('review', { worktree, ...(input.tabId === undefined ? {} : { tabId: input.tabId }) })
   const [controlGeneration, setControlGeneration] = useState(viewControlGeneration)
-  const { model, error, refresh } = useReview(context, worktree)
+  const { model, error, refresh } = useReview(context, worktree, undefined)
   const [panelSettings] = useSettings(context)
   const viewMode = panelSettings.viewMode
   const notes = useNotes(context, worktree)

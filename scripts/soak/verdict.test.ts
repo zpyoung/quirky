@@ -3,6 +3,7 @@ import type {
   EventRecord, PanelRefreshRecord, PhaseRecord, ProcessRow, Sample, SoakConfig, SoakReport,
   SwitchRecord, TaskInteractionRecord, WindowBeat, WorkerBeat,
 } from './contracts'
+import { DEFAULT_LIMITS } from './contracts'
 import { daySchedule } from './day.ts'
 import type { SoakEvidence } from './verdict'
 import { countDaemonLog, isPanelRefreshRequest, judge, panelOfRequest, windowAlive } from './verdict'
@@ -32,7 +33,7 @@ function config(overrides: ConfigOverrides = {}): SoakConfig {
       maxEventsPer5s: 30,
       maxStallMs: 1000,
       maxUnanswered: 0,
-      maxWindowRequestsPerMinute: null,
+      maxWindowRequestsPerMinute: 2500,
       ...overrides.limits,
     },
     ...(overrides.fault === undefined ? {} : { fault: overrides.fault }),
@@ -137,6 +138,7 @@ function evidence(overrides: Partial<SoakEvidence> = {}): EvidenceFixture {
       failed: false,
       worktree: dayWorktrees[0]!,
     }],
+    terminalProbes: [{ at: 0, ms: 10, ownLagMs: 0, timedOut: false, failed: false }],
     day,
     ...overrides,
     switches: overrides.switches ?? switches,
@@ -1330,7 +1332,7 @@ test('scenario 16: reports rolling per-window request peaks and gates only a con
   })
   expect(run(3000).checks.requests.ok).toBe(false)
   expect(run(3001).checks.requests.ok).toBe(true)
-  expect(run(3001).disqualified).toEqual([])
+  expect(run(3001).disqualified).toEqual(['limit loosened: maxWindowRequestsPerMinute 3001 > 2500'])
 })
 
 test('scenario 20: judges git stalls, failures and host-busy rates independently', () => {
@@ -1680,7 +1682,127 @@ test('scenario 13 instrumentation disqualifications are suppressed for fault run
   expect(result.disqualified).toEqual(['fault injected: storm'])
 })
 
-test('scenario 17: request budget loosening is harmless while the default is report-only', () => {
-  const result = judge(evidence(), config({ limits: { maxWindowRequestsPerMinute: 3000 } }))
-  expect(result.disqualified).toEqual([])
+test('g2-96: the calibrated default accepts 2500 and rejects 2501 in one window only', () => {
+  const windowBeats = [windowBeat('a'), windowBeat('b')]
+  const run = (peak: number) => judge(
+    evidence({ windowBeats, windowRequestSeconds: [[peak], [100]] }),
+    config({ windows: 2, limits: { ...DEFAULT_LIMITS } }),
+  )
+  expect(run(2500).checks.requests).toMatchObject({ ok: true, limitPerMinute: 2500 })
+  const over = run(2501)
+  expect(over.checks.requests).toMatchObject({
+    ok: false, limitPerMinute: 2500, peakPerMinute: 2501, peakWindow: 0, peakWorktree: 'a',
+  })
+  expect(over.verdict).toBe('fail')
+  for (const [name, check] of Object.entries(over.checks)) {
+    if (name !== 'requests') expect(check.ok).toBe(true)
+  }
+})
+
+test('g2-96: loosening or disabling the default request budget cannot qualify', () => {
+  for (const limit of [2501, null]) {
+    const result = judge(evidence(), config({ limits: { maxWindowRequestsPerMinute: limit } }))
+    expect(result.checks.requests.ok).toBe(true)
+    expect(result.disqualified).toEqual([`limit loosened: maxWindowRequestsPerMinute ${limit} > 2500`])
+    expect(result.qualifies).toBe(false)
+  }
+  for (const limit of [2500, 2499, 1]) {
+    const result = judge(evidence(), config({ limits: { maxWindowRequestsPerMinute: limit } }))
+    expect(result.disqualified).toEqual([])
+    expect(result.qualifies).toBe(true)
+  }
+})
+
+test('g2-96 calibration: all nine rotated-soak window peaks fit 50% rounded headroom', () => {
+  const measured = [
+    {
+      run: '43918886589', commit: 'a63edf893a35f4ffd5b024d26070a06489f3ee18', source: 'PR #634',
+      windows: [
+        { index: 0, worktree: 'wt_58e460f79e59', peak: 1554 },
+        { index: 1, worktree: 'wt_b1eef1d681be', peak: 1602 },
+        { index: 2, worktree: 'wt_4f355db13c86', peak: 1594 },
+      ],
+    },
+    {
+      run: '43926394725', commit: '1aef44fbede9b6739b4ceed758b416e2841838f0', source: 'PR #634',
+      windows: [
+        { index: 0, worktree: 'wt_4924ede9d3d1', peak: 1565 },
+        { index: 1, worktree: 'wt_dba611fb4302', peak: 1576 },
+        { index: 2, worktree: 'wt_fc5e193aa479', peak: 1588 },
+      ],
+    },
+    {
+      run: '44021605080', commit: '6ca5e1b745ae757c979a47681e9d4bf8aa1d4a97', source: 'main default-input dispatch',
+      windows: [
+        { index: 0, worktree: 'wt_7ed9c91e4621', peak: 1534 },
+        { index: 1, worktree: 'wt_26233fbe9444', peak: 1551 },
+        { index: 2, worktree: 'wt_26ef7fc53415', peak: 1559 },
+      ],
+    },
+  ]
+  const maximum = Math.max(...measured.flatMap(({ windows }) => windows.map(({ peak }) => peak)))
+  expect(DEFAULT_LIMITS.maxWindowRequestsPerMinute).toBe(Math.ceil(maximum * 1.5 / 100) * 100)
+  expect(DEFAULT_LIMITS.maxWindowRequestsPerMinute! - maximum).toBe(898)
+  for (const { windows } of measured) {
+    const result = judge(evidence({
+      windowBeats: windows.map(({ worktree }) => windowBeat(worktree)),
+      windowRequestSeconds: windows.map(({ peak }) => [peak]),
+    }), config({ limits: { ...DEFAULT_LIMITS } }))
+    expect(result.checks.requests.ok).toBe(true)
+    expect(result.checks.requests.byWindow.map(({ index, worktree, peakPerMinute }) => ({ index, worktree, peak: peakPerMinute })))
+      .toEqual(windows)
+  }
+})
+
+test('g2-96: flood ticks are not panel requests or panel refreshes', () => {
+  const params = { owner: 'a', sequence: 1 }
+  expect(panelOfRequest('soak.faults/floodTick', params)).toBeNull()
+  expect(isPanelRefreshRequest('soak.faults/floodTick', params)).toBe(false)
+})
+
+test('terminal stalls preserve status-only counters and report terminal latency percentiles', () => {
+  const terminalProbes = Array.from({ length: 20 }, (_, index) => ({
+    at: index, ms: (index + 1) * 10, ownLagMs: 0, timedOut: false, failed: false,
+  }))
+  const result = judge(evidence({ terminalProbes }), config())
+  expect(result.checks.stalls).toMatchObject({
+    ok: true, probes: 0, stalls: 0, hostBusy: 0, p50Ms: 0, p95Ms: 0, maxMs: 0, worst: [],
+  })
+  expect(result.checks.stalls.terminal).toEqual({
+    probes: 20, stalls: 0, failed: 0, hostBusy: 0, p50Ms: 105, p95Ms: 190, maxMs: 200,
+    worst: terminalProbes.slice(-10).reverse().map(({ at, ms }) => ({ at, ms })),
+  })
+  expect(result.checks.stalls.git).toMatchObject({ probes: 1, maxMs: 10 })
+})
+
+test('terminal stalls and failures enforce the same latency and host-lag boundaries as git', () => {
+  const check = (ms: number, ownLagMs = 0, failed = false, timedOut = false) => judge(
+    evidence({ terminalProbes: [{ at: 1, ms, ownLagMs, failed, timedOut }] }), config(),
+  ).checks.stalls
+  expect(check(1000)).toMatchObject({ ok: true, terminal: { stalls: 0, failed: 0 } })
+  expect(check(1001, 500)).toMatchObject({ ok: false, terminal: { stalls: 1, hostBusy: 0 } })
+  expect(check(1500, 600)).toMatchObject({ ok: true, terminal: { stalls: 0, hostBusy: 1 } })
+  expect(check(5, 0, true)).toMatchObject({ ok: false, terminal: { stalls: 0, failed: 1 } })
+  expect(check(30_000, 600, false, true)).toMatchObject({ ok: false, terminal: { stalls: 1, hostBusy: 0 } })
+})
+
+test('qualification requires terminal instrumentation except in fault runs', () => {
+  for (const terminalProbes of [undefined, []]) {
+    const result = judge(evidence({ terminalProbes }), config())
+    expect(result.disqualified).toContain('missing instrumentation: terminalProbes')
+    const fault = judge(evidence({ terminalProbes }), config({ fault: 'storm' }))
+    expect(fault.disqualified).toEqual(['fault injected: storm'])
+  }
+})
+
+test('terminal host-busy qualification applies strictly above five percent and never to faults', () => {
+  const probes = (total: number) => Array.from({ length: total }, (_, index) => ({
+    at: index, ms: index === 0 ? 1500 : 10, ownLagMs: index === 0 ? 600 : 0,
+    timedOut: false, failed: false,
+  }))
+  expect(judge(evidence({ terminalProbes: probes(20) }), config()).disqualified).toEqual([])
+  expect(judge(evidence({ terminalProbes: probes(19) }), config()).disqualified)
+    .toContain('host too busy to judge terminal stalls: 1 of 19 probes')
+  expect(judge(evidence({ terminalProbes: probes(19) }), config({ fault: 'storm' })).disqualified)
+    .toEqual(['fault injected: storm'])
 })

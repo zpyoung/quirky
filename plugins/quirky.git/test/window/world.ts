@@ -199,7 +199,17 @@ export async function boot(scratch: () => string, options: BootOptions = {}): Pr
     state,
     report: async () => (await state()).slots.find((slot) => slot.id === PANEL)?.report,
     viewReport: async () => (await state()).slots.find((slot) => slot.id === DIFF_VIEW)?.report,
-    run: (command, args) => agent.callAny('ui.command.run', { id: `command:quirky.git/${command}`, ...(args === undefined ? {} : { args }) }),
+    async run(command, args) {
+      const commandId = `command:quirky.git/${command}`
+      try {
+        return await agent.callAny('ui.command.run', { id: commandId, ...(args === undefined ? {} : { args }) })
+      } catch (error) {
+        if (error instanceof Error && error.message === 'the window did not answer') {
+          console.log(`[headless window] ui.command.run ${commandId} did not answer`, error)
+        }
+        throw error
+      }
+    },
     problems: () => [
       ...errors.filter((message) => !message.startsWith(UNMOUNT_WARNING) && !message.startsWith('[quirkyd]')),
       ...Object.entries(win.host.getState().slots).flatMap(([id, slot]) => (slot.status === 'error' ? [`${id}: ${slot.message}`] : []))

@@ -332,9 +332,12 @@ function SearchSettings({ context, report, embedded = false }: SearchSettingsPro
         {state.scopeStatusError ? <div role="status" data-vault-scope-status><NoticeLine>{state.scopeStatusError}</NoticeLine></div> : null}
 
         {status && (status.filesFailed > 0 || status.degradedRoots.length > 0) ? (
-          <div className="qvh-degraded" role="status"><Badge tone="needs-you">Attention</Badge>
-            {status.filesFailed > 0 ? `${status.filesFailed} session files could not be read and will be retried. ` : ''}
-            {status.degradedRoots.length > 0 ? `${status.degradedRoots.length} session roots could not be checked.` : ''}
+          <div className="qvh-degraded" role="status">
+            <NoticeLine>
+              <Badge tone="needs-you">Attention</Badge>
+              {status.filesFailed > 0 ? ` ${status.filesFailed} session files could not be read and will be retried.` : ''}
+              {status.degradedRoots.length > 0 ? ` ${status.degradedRoots.length} session roots could not be checked.` : ''}
+            </NoticeLine>
           </div>
         ) : null}
         {localIndexing ? <div className="qvh-progress" aria-label="Indexing local sessions"><span /></div> : null}

@@ -194,6 +194,18 @@ UI contribution inventory in dark and light. It does not open the foreground nat
 load your profile, install hooks, or use your provider accounts. Chromium and all app processes are
 owned by the run and stopped before it returns.
 
+Capture enables only the boolean gates listed in `ui.contributions.visibilitySettings`,
+verifies their effective values, and refetches contributions before selecting targets.
+These writes stay in the disposable home; product defaults and your profile are unchanged.
+The manifest records the sorted activated setting IDs.
+
+The declaration inventory includes every contribution, but screenshots cover the bodies the
+production shell mounts. A sidebar declaration that navigates to a different declared view
+or panel is recorded as a `tool-navigation-alias`, with its logical owner, tool ID and actual
+body ID. Its source is still audited; it receives no image or score. Exact `--only` selectors
+for these declarations fail with the tool and body IDs rather than silently redirecting.
+Plugin selectors capture that plugin's real bodies and disclose its non-mounted declarations.
+
 Install the development dependencies, then either install a Playwright browser with
 `bunx playwright install chromium` or pass `--browser /absolute/path/to/chromium`.
 For model review, install `pi-watch`, authenticate its model provider with `pi /login`, and
@@ -220,7 +232,7 @@ bun run ui:review -- --author-family openai \
 
 The default separate reviewer is `gemini`; `--reviewer` selects another available pi-watch
 alias. Its resolved model family must differ from `--author-family`. Each image is compared to
-the approved same-theme PNG in `docs/quirk/specs/2026-10-28-ui-redesign/img/`, with scores for
+the approved same-theme PNG in `docs/quirk/specs/2026-10-30-ui-pycharm-shell/img/`, with scores for
 palette, typography, spacing, component consistency and hierarchy. **Every image** must meet
 `--threshold` (default 85/100); a high average cannot hide a bad view.
 
@@ -233,14 +245,58 @@ builds UI assets unless `--skip-build` is supplied; missing assets still fail.
 Reviewer output may contain one outer plain or `json` Markdown code fence. Assessment fields
 remain strictly validated; surrounding prose, nested fences and other non-JSON replies fail.
 
+Every model request includes checked-in, theme-specific host contracts and their SHA-256
+alongside the unchanged assessment prompt. These cover tab treatments (underline, tool-panel
+header, Worktrees saved views and boxed), palette selection colors/spacing, the approved
+Worktrees redesign and ownership of the surrounding host frame.
+They apply only to the named elements. Actual clipping, unreadability and broken controls
+remain defects. Responses wrap the assessment in a strict `contractAudit` that acknowledges
+every rule and audits every scored reason. Unpenalized conflicts retain their raw scores;
+a penalized conflict invalidates the sample, even at 100. Read the raw reasons too: structured
+acknowledgments cannot prove that a natural-language reason respects its contract.
+The audit keys are `contextSha256`, `acknowledgedRuleIds`, `reasonChecks` and `conflicts`;
+the exact response types are in `scripts/ui-review/contracts.ts`. A defect asking for
+compliance with a rule is not a contract conflict. A conflict asks for something the rule forbids.
+Private `reviewer/` artifacts retain each cell's exact context, response and audit/log, plus
+a fresh run-ID report so ordinary scoreboard calls preserve this evidence.
+
 Exit 0 means a complete requested capture-only inventory (**not reviewed**) or all requested
 reviews passed; exit 1 means capture/coverage/mount or score failure; exit 2 means invalid
 arguments, missing prerequisites, invalid evidence or reviewer/runtime failure. Signals await
-cleanup before returning 130/143. Unmounted, hidden, persistently loading, missing-required-input
-and native-only surfaces fail explicitly rather than disappearing from coverage; legitimate empty
+cleanup before returning 130/143. Required targets that are unmounted, hidden, persistently loading,
+missing-required-input or native-only fail explicitly rather than disappearing from coverage; legitimate empty
 states remain reviewable. Renderer screenshots do not certify OS chrome, native browser embedding,
 focus or notifications; those belong to native QA. The existing, not-yet-restyled UI is expected
 to fail against the new goldens.
+
+### Fixed three-review host gate
+
+```sh
+bun scripts/ui-review/host-gate.ts --author-family openai --reviewer gemini \
+  --output /tmp/quirky-host-gate
+```
+
+The output must be a fresh absolute path. `--browser` may select an installed Chromium
+executable; there are no selector, context, threshold or sample-count overrides.
+Artifact paths use the filesystem's canonical output directory, so macOS may show
+`/private/tmp` for an output requested under `/tmp`.
+The gate captures the five host targets once in both themes, then independently reviews
+each immutable image in exactly three sample slots. Every cell's unrounded median must
+be at least 85; `[84,85,86]` passes and `[84,84,100]` fails. Scores never pool across cells.
+Source, image/reference hashes, context and resolved reviewer identity must remain unchanged.
+
+An operational or response-shape failure that produces no valid score gets one replacement
+attempt per cell per slot, shared across both failure kinds. Only that cell is requested again,
+using the original complete manifest and frozen images. Valid low scores are final.
+Penalized conflicts, hidden/unread images, changed evidence or reviewer identity, persistence
+failures, usage limits and cancellation never retry. Failed attempts remain linked to replacements.
+
+`host-gate.json` records source/capture provenance, all attempts and ten cells with their
+raw triples, medians and conflict evidence. `host-gate.md` links their artifacts.
+Exit 0 means all ten medians pass; 1 means complete valid evidence below 85; 2 means invalid
+or incomplete evidence. Signals await cleanup and return 130/143, preserving partial evidence.
+The ordinary full scoreboard below still takes one review per cell over its generated inventory;
+its single-pass scores neither replace host medians nor certify a failed host gate.
 
 ## UI scoreboard
 
@@ -272,6 +328,11 @@ print their paths, and retain failures and non-applicable reasons. Full and plug
 plugin, omits host checks, and always records `goalPassed: false`; exit 0 means that plugin's
 checks passed. Plugins without declared capture targets receive `N/A` for screenshots even if
 they have a UI bundle; their source audits still run.
+Reports carry `contributionInventory` and a **Declared but not mounted** table. Source and
+runtime declaration ownership, kinds and tool mappings must agree before image review.
+Counts come from that projection: each real target requires dark and light evidence; alias
+records are not screenshot cells. Historical manifests without this metadata remain reviewable,
+but cannot prove alias coverage against a source inventory that requires it.
 Dirty production source blocks capture; source changes during measurement invalidate the run.
 Exit 0 certifies a complete passing full report, passing plugin checks, or a passing ratchet;
 1 means failed checks, 2 means operational/inventory errors. Cancellation awaits cleanup and exits 130/143.

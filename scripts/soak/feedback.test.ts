@@ -47,19 +47,28 @@ const activate: (context: UiPluginContext) => void = await (async () => {
 })()
 
 const PANEL = 'panel:soak.faults/feedback'
-type SlotReport = { ready: boolean; worktree: string | null; sequence: number; error: string | null }
+const FLOOD_PANEL = 'panel:soak.faults/flood'
+type SlotReport = { ready: boolean; worktree: string | null; sequence?: number; sent?: number; error: string | null }
 type Call = { method: string; params: Record<string, unknown> }
 type Subscription = {
   listener: (event: QuirkyEvent) => void | Promise<void>
   options?: { worktreeId?: string | null }
   active: boolean
 }
-type Shared = { calls: Call[]; sequence: number }
+type Shared = {
+  calls: Call[]
+  sequence: number
+  floodCalls?: number
+  outstanding?: number
+  maxOutstanding?: number
+  floodReply?: (params: Record<string, unknown>, index: number) => unknown | Promise<unknown>
+}
 type WindowHarness = {
   reports: (SlotReport & { activeSubscriptions: number })[]
   subscriptions: Subscription[]
   activeSubscriptions(): number
   bounceWorktree(next: string, back: string): Promise<void>
+  changeWorktree(next: string): Promise<void>
   emit(type: string, data: unknown): void
   unmount(): Promise<void>
 }
@@ -75,7 +84,7 @@ afterAll(async () => {
   rmSync(uiBuildDir, { recursive: true, force: true })
 })
 
-function makeWindow(worktree: string, shared: Shared) {
+function makeWindow(worktree: string, shared: Shared, panel = PANEL) {
   let layout = { worktree } as UiLayout
   const layouts = new Set<(next: UiLayout) => void>()
   const subscriptions: Subscription[] = []
@@ -84,7 +93,7 @@ function makeWindow(worktree: string, shared: Shared) {
   const context = {
     pluginId: 'soak.faults',
     provide: (id: string, implementation: unknown) => {
-      if (id === PANEL) mount = implementation as MountFunction
+      if (id === panel) mount = implementation as MountFunction
     },
     getLayout: () => layout,
     onLayout: (listener: (next: UiLayout) => void) => {
@@ -98,13 +107,26 @@ function makeWindow(worktree: string, shared: Shared) {
     },
     call: async (method: string, params: Record<string, unknown> = {}) => {
       shared.calls.push({ method, params })
+      if (method === 'soak.faults/floodTick') {
+        const index = shared.floodCalls ?? 0
+        shared.floodCalls = index + 1
+        shared.outstanding = (shared.outstanding ?? 0) + 1
+        shared.maxOutstanding = Math.max(shared.maxOutstanding ?? 0, shared.outstanding)
+        try {
+          return await (shared.floodReply
+            ? shared.floodReply(params, index)
+            : { owner: params.owner, sequence: params.sequence })
+        } finally {
+          shared.outstanding = (shared.outstanding ?? 1) - 1
+        }
+      }
       shared.sequence += 1
       return { owner: params.owner, sequence: shared.sequence }
     }
   } as unknown as UiPluginContext
 
   activate(context)
-  if (!mount) throw new Error('feedback panel mount was not registered')
+  if (!mount) throw new Error(`${panel} mount was not registered`)
   const element = document.createElement('div')
   document.body.appendChild(element)
   let cleanup: (() => void) | void
@@ -133,6 +155,13 @@ function makeWindow(worktree: string, shared: Shared) {
         await Promise.resolve()
       })
     },
+    async changeWorktree(next: string) {
+      await act(async () => {
+        layout = { ...layout, worktree: next }
+        for (const listener of [...layouts]) listener(layout)
+        await Promise.resolve()
+      })
+    },
     emit(type: string, data: unknown) {
       for (const subscription of subscriptions) {
         if (subscription.active) void subscription.listener({ type, data } as QuirkyEvent)
@@ -147,6 +176,7 @@ function makeWindow(worktree: string, shared: Shared) {
     }
   }
 }
+
 
 async function emitToAll(type: string, data: unknown): Promise<void> {
   await act(async () => {
@@ -221,4 +251,240 @@ test('a worktree round trip invalidates old callbacks and resubscribes at the co
     await Promise.resolve()
   })
   expect(shared.calls).toEqual([])
+})
+
+async function waitForFloodReport(
+  window: WindowHarness,
+  predicate: (report: SlotReport) => boolean
+): Promise<SlotReport> {
+  for (let attempt = 0; attempt < 1000; attempt += 1) {
+    const report = window.reports.at(-1)
+    if (report && predicate(report)) return report
+    await act(async () => { await Promise.resolve() })
+  }
+  throw new Error('timed out waiting for the flood panel report')
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await act(async () => {
+    for (let attempt = 0; attempt < 100; attempt += 1) await Promise.resolve()
+  })
+}
+
+test('mounted flood panels send each bounded tick only from the selected worktree', async () => {
+  const shared: Shared = { calls: [], sequence: 0 }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  const b = makeWindow('b', shared, FLOOD_PANEL)
+  const c = makeWindow('c', shared, FLOOD_PANEL)
+  windows.push(a, b, c)
+
+
+  await act(async () => { await Promise.resolve() })
+
+  expect([a, b, c].map((window) => window.reports.at(-1))).toEqual([
+    expect.objectContaining({ ready: true, worktree: 'a', sent: 0, error: null, activeSubscriptions: 1 }),
+    expect.objectContaining({ ready: true, worktree: 'b', sent: 0, error: null, activeSubscriptions: 1 }),
+    expect.objectContaining({ ready: true, worktree: 'c', sent: 0, error: null, activeSubscriptions: 1 })
+  ])
+  expect([a, b, c].map((window) => window.subscriptions[0]?.options)).toEqual([
+    { worktreeId: 'a' }, { worktreeId: 'b' }, { worktreeId: 'c' }
+  ])
+
+  const start = { worktree: 'a', requests: 3000 }
+  await emitToAll('soak.faults/floodStarted', start)
+  await emitToAll('soak.faults/floodStarted', start)
+  const complete = await waitForFloodReport(a, (report) => report.sent === 3000)
+
+  expect(shared.calls).toHaveLength(3000)
+  expect(shared.calls.every(({ method, params }) => method === 'soak.faults/floodTick' && params.owner === 'a')).toBe(true)
+  const sequences = shared.calls.map(({ params }) => params.sequence)
+  expect(sequences).toEqual(Array.from({ length: 3000 }, (_, index) => index + 1))
+  expect(new Set(sequences).size).toBe(3000)
+  expect(shared.maxOutstanding).toBe(50)
+  expect(complete).toMatchObject({ ready: true, worktree: 'a', sent: 3000, error: null })
+  expect(a.reports).toHaveLength(3)
+  expect([b.reports.length, c.reports.length]).toEqual([1, 1])
+  expect(b.reports.at(-1)).toMatchObject({ ready: true, worktree: 'b', sent: 0, error: null })
+  expect(c.reports.at(-1)).toMatchObject({ ready: true, worktree: 'c', sent: 0, error: null })
+})
+
+test('a flood waits for every reply in a batch before sending the next batch', async () => {
+  const pending: { params: Record<string, unknown>; resolve(value: unknown): void }[] = []
+  const shared: Shared = {
+    calls: [], sequence: 0,
+    floodReply: (params) => {
+      const { promise, resolve } = Promise.withResolvers<unknown>()
+      pending.push({ params, resolve })
+      return promise
+    },
+  }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  windows.push(a)
+  await emitToAll('soak.faults/floodStarted', { worktree: 'a', requests: 51 })
+  expect(pending).toHaveLength(50)
+  for (const request of pending.slice(0, 49)) request.resolve(request.params)
+  await flushMicrotasks()
+  expect(shared.calls).toHaveLength(50)
+  pending[49]!.resolve(pending[49]!.params)
+  await flushMicrotasks()
+  expect(pending).toHaveLength(51)
+  expect(shared.maxOutstanding).toBe(50)
+  pending[50]!.resolve(pending[50]!.params)
+  expect(await waitForFloodReport(a, (report) => report.sent === 51)).toMatchObject({ sent: 51, error: null })
+  expect(shared.calls).toHaveLength(51)
+})
+
+test('flood panels ignore malformed and foreign start events', async () => {
+  const shared: Shared = { calls: [], sequence: 0 }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  windows.push(a)
+
+  for (const data of [
+    null,
+    {},
+    { worktree: '', requests: 3000 },
+    { worktree: 'a', requests: 0 },
+    { worktree: 'a', requests: 10_001 },
+    { worktree: 'other', requests: 3000 }
+  ]) {
+    await emitToAll('soak.faults/floodStarted', data)
+  }
+
+  expect(shared.calls).toEqual([])
+  expect(a.reports).toHaveLength(1)
+  expect(a.reports.at(-1)).toMatchObject({ ready: true, worktree: 'a', sent: 0, error: null })
+})
+
+test('a flood panel stops after an invalid tick reply without publishing per-tick reports', async () => {
+  const shared: Shared = {
+    calls: [],
+    sequence: 0,
+    floodReply: (params) => params.sequence === 3
+      ? { owner: params.owner, sequence: 4 }
+      : { owner: params.owner, sequence: params.sequence }
+  }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  windows.push(a)
+
+  await emitToAll('soak.faults/floodStarted', { worktree: 'a', requests: 3000 })
+  const failed = await waitForFloodReport(a, (report) => report.error !== null)
+
+  expect(shared.calls).toHaveLength(50)
+  expect(shared.maxOutstanding).toBe(50)
+  expect(failed).toMatchObject({ ready: true, worktree: 'a', sent: 0 })
+  expect(failed.error).toContain('tick 3')
+  expect(a.reports).toHaveLength(3)
+})
+
+test('a flood panel stops after an RPC rejection without starting another batch', async () => {
+  const shared: Shared = {
+    calls: [],
+    sequence: 0,
+    floodReply: (params) => {
+      if (params.sequence === 7) return Promise.reject(new Error('fixture offline'))
+      return { owner: params.owner, sequence: params.sequence }
+    }
+  }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  windows.push(a)
+
+  await emitToAll('soak.faults/floodStarted', { worktree: 'a', requests: 3000 })
+  const failed = await waitForFloodReport(a, (report) => report.error !== null)
+
+  expect(shared.calls).toHaveLength(50)
+  expect(failed).toMatchObject({ ready: true, worktree: 'a', sent: 0, error: 'fixture offline' })
+  expect(a.reports).toHaveLength(3)
+})
+
+test('a worktree change invalidates a pending flood batch and its late report', async () => {
+  const pending: { params: Record<string, unknown>; resolve(value: unknown): void }[] = []
+  const shared: Shared = {
+    calls: [],
+    sequence: 0,
+    floodReply: (params) => {
+      const { promise, resolve } = Promise.withResolvers<unknown>()
+      pending.push({ params, resolve })
+      return promise
+    }
+  }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  windows.push(a)
+  const oldSubscription = a.subscriptions[0]!
+
+  await emitToAll('soak.faults/floodStarted', { worktree: 'a', requests: 3000 })
+  expect(shared.calls).toHaveLength(50)
+  expect(pending).toHaveLength(50)
+
+  await a.changeWorktree('b')
+  expect(oldSubscription.active).toBe(false)
+  expect(a.subscriptions.map(({ options }) => options)).toEqual([
+    { worktreeId: 'a' }, { worktreeId: 'b' }
+  ])
+  expect(a.reports.at(-1)).toMatchObject({ ready: true, worktree: 'b', sent: 0, error: null })
+  const reportsAfterChange = a.reports.length
+
+  for (const request of pending) {
+    request.resolve({ owner: request.params.owner, sequence: request.params.sequence })
+  }
+  await flushMicrotasks()
+
+  expect(shared.calls).toHaveLength(50)
+  expect(a.reports).toHaveLength(reportsAfterChange)
+  expect(a.activeSubscriptions()).toBe(1)
+})
+
+test('a worktree round trip cannot restart the armed flood while its original batch is pending', async () => {
+  const pending: { params: Record<string, unknown>; resolve(value: unknown): void }[] = []
+  const shared: Shared = {
+    calls: [], sequence: 0,
+    floodReply: (params) => {
+      const { promise, resolve } = Promise.withResolvers<unknown>()
+      pending.push({ params, resolve })
+      return promise
+    },
+  }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  windows.push(a)
+  const start = { worktree: 'a', requests: 3000 }
+  await emitToAll('soak.faults/floodStarted', start)
+  expect(shared.calls).toHaveLength(50)
+  await a.bounceWorktree('b', 'a')
+  const reportsAfterChange = a.reports.length
+  await emitToAll('soak.faults/floodStarted', start)
+  expect(shared.calls).toHaveLength(50)
+  expect(shared.maxOutstanding).toBe(50)
+  for (const request of pending) request.resolve(request.params)
+  await flushMicrotasks()
+  expect(shared.calls).toHaveLength(50)
+  expect(a.reports).toHaveLength(reportsAfterChange)
+  expect(a.activeSubscriptions()).toBe(1)
+})
+
+test('unmounting invalidates a pending flood batch and suppresses late reports', async () => {
+  const pending: { params: Record<string, unknown>; resolve(value: unknown): void }[] = []
+  const shared: Shared = {
+    calls: [],
+    sequence: 0,
+    floodReply: (params) => {
+      const { promise, resolve } = Promise.withResolvers<unknown>()
+      pending.push({ params, resolve })
+      return promise
+    }
+  }
+  const a = makeWindow('a', shared, FLOOD_PANEL)
+  windows.push(a)
+
+  await emitToAll('soak.faults/floodStarted', { worktree: 'a', requests: 3000 })
+  expect(shared.calls).toHaveLength(50)
+  await a.unmount()
+  const reportsAtUnmount = a.reports.length
+
+  for (const request of pending) {
+    request.resolve({ owner: request.params.owner, sequence: request.params.sequence })
+  }
+  await flushMicrotasks()
+
+  expect(shared.calls).toHaveLength(50)
+  expect(a.reports).toHaveLength(reportsAtUnmount)
+  expect(a.activeSubscriptions()).toBe(0)
 })
