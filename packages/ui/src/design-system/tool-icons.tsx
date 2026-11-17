@@ -27,6 +27,21 @@ function FallbackIcon({ name, size, label }: { name: string; size?: number; labe
   return <span className="ui-icon-fallback" style={sizeVariable(size)} {...accessibility(label)}>{letter}</span>
 }
 
+const innerHtmlCache = new Map<string, { __html: string }>()
+
+/**
+ * One shared `{ __html }` object per markup. React rewrites an element's innerHTML whenever that
+ * object changes identity, which would detach the paths under the pointer mid-click and lose it.
+ */
+function innerHtml(markup: string): { __html: string } {
+  let cached = innerHtmlCache.get(markup)
+  if (!cached) {
+    cached = { __html: markup }
+    innerHtmlCache.set(markup, cached)
+  }
+  return cached
+}
+
 function Glyph({ markup, viewBox, size, label, className, style, ...data }: {
   markup: string
   viewBox: string
@@ -47,7 +62,7 @@ function Glyph({ markup, viewBox, size, label, className, style, ...data }: {
       fill="currentColor"
       style={style}
       {...accessibility(label)}
-      dangerouslySetInnerHTML={{ __html: markup }}
+      dangerouslySetInnerHTML={innerHtml(markup)}
     />
   )
 }
@@ -151,7 +166,7 @@ export function FileIcon({ path, size, label }: FileIconProps) {
       data-icon={name}
       data-flavor={flavor}
       {...accessibility(label)}
-      dangerouslySetInnerHTML={{ __html: FILE_ICON_MARKUP[flavor][name] }}
+      dangerouslySetInnerHTML={innerHtml(FILE_ICON_MARKUP[flavor][name])}
     />
   )
 }

@@ -174,6 +174,13 @@ describe('ControlIcon', () => {
     expect(svg.getAttribute('style')).toBeNull()
   })
 
+  test('a re-render keeps the drawn paths, so a click that re-renders its button still lands', async () => {
+    await render(h(ControlIcon, { name: 'arrow-up' }))
+    const path = container.querySelector('svg path')!
+    await render(h(ControlIcon, { name: 'arrow-up', label: 'Send' }))
+    expect(path.isConnected).toBe(true)
+  })
+
   test('an unknown name draws its first letter', async () => {
     await render(h(ControlIcon, { name: 'nope' }))
     expect(container.querySelector('.ui-icon-fallback')!.textContent).toBe('n')
