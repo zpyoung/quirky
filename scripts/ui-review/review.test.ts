@@ -533,7 +533,7 @@ test('preflight keeps the usage-limit classification for usage diagnostics', asy
 test.each([
   ['129-character alias', { reviewerAlias: 'a'.repeat(129) }],
   ['shell syntax in alias', { reviewerAlias: 'gemini; touch /tmp/should-not-run' }],
-  ['unknown author family', { authorFamily: 'mystery' as ReviewerPreflightOptionsForTest['authorFamily'] }],
+  ['unknown author family', { authorFamily: 'mystery' as ReviewerPreflightOptions['authorFamily'] }],
   ['zero timeout', { timeoutMs: 0 }],
   ['timeout above maximum', { timeoutMs: 600_001 }],
   ['fractional timeout', { timeoutMs: 1.5 }]
