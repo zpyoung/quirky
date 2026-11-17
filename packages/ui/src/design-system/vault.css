@@ -803,7 +803,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ui-space-4);
+  gap: var(--ui-space-8);
 }
 
 .qvh-settings-host-row .ui-list-row {
@@ -815,7 +815,7 @@
   flex: 0 1 auto;
   flex-direction: row;
   align-items: center;
-  gap: var(--ui-space-4);
+  gap: var(--ui-space-8);
   margin-inline-start: auto;
 }
 
