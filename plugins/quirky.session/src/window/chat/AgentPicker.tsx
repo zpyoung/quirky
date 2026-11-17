@@ -4,6 +4,7 @@ import { Button, NoticeLine } from '@quirky/ui'
 import type { AgentListing } from '../menuEntries'
 import { NO_PICKS, type Picks } from './controls'
 import { createChat } from './createChat'
+import { loadStartingPicks } from './startingPicks'
 
 /** The four agents a chat can run, in the order the picker shows them. */
 const CHAT_AGENTS = [
@@ -26,7 +27,7 @@ const grid = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(ca
 const card = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 'var(--ui-space-2)', textAlign: 'left', height: 'auto', padding: 'var(--ui-space-8) var(--ui-space-12)' } satisfies CSSProperties
 const note = { color: 'var(--ui-muted)', fontSize: 'var(--ui-font-label)' } satisfies CSSProperties
 
-/** What a card says about an agent, from the catalog row and, when ready, its first listed model. */
+/** What a card says about an agent, from the catalog row and, when ready, the model a new chat starts on. */
 function readinessOf(row: Listed | undefined, model: string | undefined): Readiness {
   if (!row || !row.installed) return { ready: false, reason: 'not installed' }
   if (!row.enabled) return { ready: false, reason: 'turned off in Agents settings' }
@@ -34,8 +35,8 @@ function readinessOf(row: Listed | undefined, model: string | undefined): Readin
   return { ready: true, model: model ?? 'Default model' }
 }
 
-/** Loads the four chat agents' readiness; `quirky.agents/list` says what is installed and `options` names the default model. */
-function useCards(context: UiPluginContext): Card[] | null {
+/** Loads the four chat agents' readiness and the model a new chat in `worktree` starts on; `quirky.agents/list` says what is installed. */
+function useCards(context: UiPluginContext, worktree: string): Card[] | null {
   const [cards, setCards] = useState<Card[] | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -53,8 +54,8 @@ function useCards(context: UiPluginContext): Card[] | null {
           const row = listing?.agents.find((agent) => agent.id === id)
           if (!row?.installed || !row.enabled) return undefined
           try {
-            const options = (await context.call('quirky.agents/options', { agent: id })) as { models?: { label?: string }[] }
-            return options.models?.[0]?.label
+            const { options, picks } = await loadStartingPicks(context, id, worktree, NO_PICKS)
+            return picks.model === null ? undefined : options?.models.find((entry) => entry.id === picks.model)?.label ?? picks.model
           } catch {
             return undefined
           }
@@ -76,7 +77,7 @@ function useCards(context: UiPluginContext): Card[] | null {
       cancelled = true
       unsubscribe()
     }
-  }, [context])
+  }, [context, worktree])
   return cards
 }
 
@@ -102,7 +103,7 @@ export function AgentPicker({
   /** False when the host already titles the picker, such as a dialog. */
   heading?: boolean
 }) {
-  const cards = useCards(context)
+  const cards = useCards(context, worktree)
   const [starting, setStarting] = useState<string | null>(null)
 
   const start = async (agent: string) => {

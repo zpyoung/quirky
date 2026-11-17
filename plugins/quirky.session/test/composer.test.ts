@@ -6,7 +6,15 @@ import type { EditorView } from '@codemirror/view'
 import { RpcError, RpcErrorCode, type AgentCapabilities, type QueuedMessage } from '@quirky/protocol'
 import { fakeContext, session, settle, type FakeContext } from './ui-fake'
 
-type Props = { capabilities?: AgentCapabilities | null; working?: boolean; agent?: string; status?: 'starting' | 'running' | 'exited'; settings?: Record<string, unknown> }
+type Props = {
+  capabilities?: AgentCapabilities | null
+  working?: boolean
+  agent?: string
+  status?: 'starting' | 'running' | 'exited'
+  settings?: Record<string, unknown>
+  /** The model and effort the session launched with; claude defaults to Opus · Low, other agents to none. */
+  launched?: { model?: string; effort?: string } | null
+}
 type Handler = (params: Record<string, any>) => unknown
 
 const OK = { ok: true } as const
@@ -90,7 +98,11 @@ afterEach(async () => {
 
 const render = (props: Props) =>
   act(async () => {
-    const chat = session({ id: 's1', kind: 'structured', agent: props.agent ?? 'claude', status: props.status ?? 'running' })
+    const agent = props.agent ?? 'claude'
+    const launched = props.launched === undefined ? (agent === 'claude' ? { model: 'opus', effort: 'low' } : null) : props.launched
+    const options = Object.fromEntries(Object.entries(launched ?? {}).map(([id, value]) => [id, { value, source: 'explicit' as const }]))
+    const launchSettings = launched === null ? null : { agent, options, summary: '' }
+    const chat = session({ id: 's1', kind: 'structured', agent, status: props.status ?? 'running', launchSettings })
     const capabilities = props.capabilities === undefined ? CLAUDE : props.capabilities
     root!.render(createElement(Composer, { context: fake.context, session: chat, capabilities, working: props.working ?? false }))
   })
@@ -582,6 +594,17 @@ describe('screens: settings (SC-15, SC-16)', () => {
     expect(pane.querySelector('[role="switch"]')!.closest('div')!.textContent).toContain('Off')
   })
 
+  test('a setting the session launched without reads Default instead of the first listed entry', async () => {
+    await mount({}, { launched: null })
+    expect(settingsChip().textContent).toBe('Default')
+    await click(settingsChip())
+    expect(popover()!.querySelector('.ui-list-row--selected')?.textContent ?? '').not.toContain('Opus')
+    expect([...popover()!.querySelectorAll('[role="radio"]')].some((entry) => entry.getAttribute('aria-checked') === 'true')).toBe(false)
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    await render({ launched: { model: 'sonnet' } })
+    expect(settingsChip().textContent).toBe('Sonnet · Default')
+  })
+
   test('choosing a model and an effort applies each at once, updates the chip and Esc closes the popover', async () => {
     await mount({ 'quirky.structured/configure': () => ({ ok: true }) })
     await click(settingsChip())
@@ -627,7 +650,7 @@ describe('screens: settings (SC-15, SC-16)', () => {
   })
 
   test('unsupported controls stay visible, disabled, with the reason on hover; the chip shows the model alone without effort', async () => {
-    await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, agent: 'pi', models: [{ id: 'm', label: 'Pi model', description: null, options: [] }] }) }, { capabilities: { ...PI, model: OK }, agent: 'pi' })
+    await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, agent: 'pi', models: [{ id: 'm', label: 'Pi model', description: null, options: [] }] }) }, { capabilities: { ...PI, model: OK }, agent: 'pi', launched: { model: 'm' } })
     expect(settingsChip().textContent).toBe('Pi model')
     await click(settingsChip())
     const pane = popover()!
@@ -642,7 +665,7 @@ describe('screens: settings (SC-15, SC-16)', () => {
 
   test('the model list gets a search field once it passes 8 entries', async () => {
     const many = Array.from({ length: 9 }, (_, index) => ({ id: `m${index}`, label: `Model ${index}`, description: null, options: [] }))
-    await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, models: many }) })
+    await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, models: many }) }, { launched: null })
     await click(settingsChip())
     const search = popover()!.querySelector<HTMLInputElement>('input')!
     expect(search).not.toBeNull()

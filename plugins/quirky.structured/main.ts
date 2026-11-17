@@ -24,6 +24,7 @@ import { resolveCodexThroughLoginShell } from './codex-path'
 import { createCodexRunner } from './codex-runner'
 import { resolvePiThroughLoginShell } from './pi-path'
 import { createPiRunner } from './pi-runner'
+import { harnessDefaults, systemHarnessDeps } from './harness-defaults'
 import { Journal, journalMigrations } from './journal'
 import { errorItem, statusItem, stderrLines } from './items'
 import { MessageQueue, imagePathProblem } from './queue'
@@ -1427,6 +1428,14 @@ export function activate(context: PluginContext): void {
     }
   }
 
+  const defaults: MethodHandler = async (params, caller) => {
+    const unsupported = Object.keys(params).find((key) => key !== 'agent' && key !== 'worktree')
+    if (unsupported !== undefined) throw context.error('invalid-params', `structured defaults does not support ${unsupported}`)
+    if (!isStructuredAgent(params.agent)) throw context.error('invalid-params', 'structured sessions support only the claude, codex, pi or omp agent')
+    const worktree = await resolveWorktree(params.worktree, caller)
+    return harnessDefaults(params.agent, worktree.path, systemHarnessDeps())
+  }
+
   const configure: MethodHandler = async (params) => {
     const unsupported = Object.keys(params).find((key) => !['session', 'model', 'effort', 'permissionMode', 'planMode'].includes(key))
     if (unsupported !== undefined) throw context.error('invalid-params', `structured configure does not support ${unsupported}`)
@@ -1753,6 +1762,7 @@ export function activate(context: PluginContext): void {
   context.provide('method:quirky.structured/send', send)
   context.provide('method:quirky.structured/capabilities', capabilities)
   context.provide('method:quirky.structured/models', models)
+  context.provide('method:quirky.structured/defaults', defaults)
   context.provide('method:quirky.structured/queue', queued)
   context.provide('method:quirky.structured/dequeue', dequeue)
   context.provide('method:quirky.structured/editQueued', editQueued)

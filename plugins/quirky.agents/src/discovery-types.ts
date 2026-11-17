@@ -5,6 +5,8 @@ export type DiscoveryOptionInfo = {
   label: string
   type: 'select' | 'boolean'
   choices: { value: string; label: string }[] | null
+  /** The choice a new launch starts on, present only when it is among `choices`. */
+  default?: string
 }
 
 /** Only successful authoritative nonempty results may retire a saved model on this exact host. */

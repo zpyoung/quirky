@@ -1621,7 +1621,7 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
         },
         "target": "quirky.structured/create",
         "via": [
@@ -1631,7 +1631,7 @@
           },
           {
             "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const options = {\n    ...(picks.effort === null ? {} : { effort: picks.effort }),\n    ...(picks.mode === null ? {} : { mode: picks.mode }),\n    ...(picks.plan ? { plan: true } : {})\n  }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks\n  const options = {\n    ...(effort === null ? {} : { effort }),\n    ...(picks.mode === null ? {} : { mode: picks.mode }),\n    ...(picks.plan ? { plan: true } : {})\n  }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
           }
         ]
       }
@@ -1854,7 +1854,7 @@
       "route": {
         "invoke": {
           "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
+          "quote": "context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })"
         },
         "target": "quirky.structured/create",
         "via": [
@@ -1864,7 +1864,7 @@
           },
           {
             "file": "plugins/quirky.session/src/window/chat/createChat.ts",
-            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const options = {\n    ...(picks.effort === null ? {} : { effort: picks.effort }),\n    ...(picks.mode === null ? {} : { mode: picks.mode }),\n    ...(picks.plan ? { plan: true } : {})\n  }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(picks.model === null ? {} : { model: picks.model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
+            "quote": "export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {\n  const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks\n  const options = {\n    ...(effort === null ? {} : { effort }),\n    ...(picks.mode === null ? {} : { mode: picks.mode }),\n    ...(picks.plan ? { plan: true } : {})\n  }\n  return (await context.call('quirky.structured/create', {\n    agent,\n    worktree,\n    deferStart: true,\n    ...(model === null ? {} : { model }),\n    ...(Object.keys(options).length === 0 ? {} : { options })\n  })) as Session\n}"
           }
         ]
       }

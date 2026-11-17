@@ -360,6 +360,25 @@
         }
       },
       {
+        "id": "defaults",
+        "description": "The model and effort the agent's own settings give a new session in the worktree (Claude Code settings, Codex config.toml, pi settings.json, omp config.yml), null where they name none or cannot be read.",
+        "readOnly": true,
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "agent": { "type": "string", "enum": ["claude", "codex", "pi", "omp"] }, "worktree": { "type": "string" } },
+          "required": ["agent", "worktree"]
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "model": { "type": ["string", "null"] },
+            "effort": { "type": ["string", "null"] }
+          },
+          "required": ["model", "effort"]
+        }
+      },
+      {
         "id": "configure",
         "description": "Applies composer picks to a running session: model and effort, permission mode, plan mode. Takes effect on the next turn or at once where the agent allows it. A control the agent's capabilities mark not ok fails with conflict and the capability's reason; returns the settings now in force.",
         "params": {

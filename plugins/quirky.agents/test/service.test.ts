@@ -1372,6 +1372,19 @@ describe('launch settings', () => {
     expect(info.models[3].options).toEqual([])
     expect(info.unlistedOptions.map((option: any) => option.id)).toEqual(['effort'])
     expect(info.unlistedOptions[0].choices.map((choice: any) => choice.value)).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+     expect(info.defaultModel).toBe('opus')
+    expect(info.models[1].options[0].default).toBe('high')
+    expect((await t.call(A('options'), { agent: 'codex' })).defaultModel).toBeNull()
+  })
+
+  test('omp offers a thinking level for any model it is given', async () => {
+    const t = await start()
+    const info = await t.call(A('options'), { agent: 'omp' })
+    expect(info).toMatchObject({ models: [], unlisted: 'accept', defaultModel: null })
+    expect(info.unlistedOptions[0]).toMatchObject({ id: 'effort', label: 'Thinking level' })
+    expect(await t.call(A('resolveLaunch'), { agent: 'omp', model: 'openai-codex/gpt-6.1-sol', options: { effort: 'high' } })).toMatchObject({
+      added: ['--model', 'openai-codex/gpt-6.1-sol', '--thinking', 'high']
+    })
   })
 
   test('SC-2: Codex\'s effort list stops at each model\'s ceiling', async () => {
