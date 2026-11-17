@@ -460,7 +460,7 @@ describe('plugin sample validation', () => {
 
     expect(validated).toBeNull()
     expect(original.score).toBe(82.4)
-    expect(original.assessment.scores).toEqual(Object.fromEntries(SCORE_DIMENSIONS.map((dimension) => [dimension, 82.4])))
+    for (const dimension of SCORE_DIMENSIONS) expect(original.assessment.scores[dimension]).toBe(82.4)
   })
 
   test('rejects a foreign target or theme as an invalid sample', () => {
