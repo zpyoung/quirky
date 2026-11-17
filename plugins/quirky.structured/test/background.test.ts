@@ -85,7 +85,7 @@ async function journal(sessionId: string): Promise<StructuredMessage[]> {
   })
 }
 
-test('background structured sessions stay journaled without changing terminal selection and remain hidden on resume', async () => {
+test('background structured sessions stay journaled without changing terminal selection and remain hidden on resume, while ordinary ones get a tab', async () => {
   const home = makeTempDir('q-background-home-')
   const repoPath = makeRepo(gitConfig.scratch())
   const worktreesRoot = makeTempDir('q-background-worktrees-')
@@ -169,9 +169,11 @@ test('background structured sessions stay journaled without changing terminal se
   })) as Session
   await journal(ordinary.id)
   await waitForSessionChange(ordinary.id)
-  const afterOrdinary = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
-  expect(terminalSessionIds(afterOrdinary)).not.toContain(ordinary.id)
-  expect(activeTab(afterOrdinary)).toBe(activeTab(initial))
+  const afterOrdinary = await waitForAsync(async () => {
+    const current = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
+    return terminalSessionIds(current).includes(ordinary.id) ? current : null
+  })
+  expect(terminalSessionIds(afterOrdinary).filter((id) => id === ordinary.id)).toHaveLength(1)
 
   const explicitFalse = (await call('quirky.structured/create', {
     worktree: worktree!.id,
@@ -181,9 +183,12 @@ test('background structured sessions stay journaled without changing terminal se
   })) as Session
   await journal(explicitFalse.id)
   await waitForSessionChange(explicitFalse.id)
-  const afterExplicitFalse = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
-  expect(terminalSessionIds(afterExplicitFalse)).not.toContain(explicitFalse.id)
-  expect(activeTab(afterExplicitFalse)).toBe(activeTab(initial))
+  const afterExplicitFalse = await waitForAsync(async () => {
+    const current = (await call<{ workspace: Workspace }>('quirky.terminal/workspace', { workspace: worktree!.id })).workspace
+    return terminalSessionIds(current).includes(explicitFalse.id) ? current : null
+  })
+  expect(terminalSessionIds(afterExplicitFalse)).not.toContain(background.id)
+  expect(terminalSessionIds(afterExplicitFalse)).not.toContain(resumed.id)
 
   const sessionsBeforeInvalidCalls = (await call('quirky.session/list', { worktree: worktree!.id })) as Session[]
   await expectInvalid(
