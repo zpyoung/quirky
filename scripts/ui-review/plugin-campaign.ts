@@ -1126,6 +1126,9 @@ export function renderPluginCampaign(report: PluginCampaignReport): string {
         `| ${safeMarkdown(cell.targetId)} | ${safeMarkdown(cell.theme)} | ${slots[0]} | ${slots[1]} | ${slots[2]} | ` +
         `${safeMarkdown(cell.median ?? 'null')} | ${safeMarkdown(cell.range ?? 'null')} | ${safeMarkdown(cell.status)} |`
       )
+    }
+    lines.push('')
+    for (const cell of pluginCells) {
       for (const slot of cell.slots) {
         for (const attempt of slot.attempts) renderAttempt(lines, cell.targetId, cell.theme, slot, attempt)
       }

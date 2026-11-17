@@ -392,11 +392,17 @@ describe('plugin inventory projection and denominator', () => {
     expect(() => assertPluginInventory(duplicateTarget)).toThrow(/inventory-mismatch/i)
 
     const changedOwner = structuredClone(fixture.inventory)
-    changedOwner.targets[0] = { ...changedOwner.targets[0]!, plugin: 'acme.forged' }
+    const pluginTargetIndex = changedOwner.targets.findIndex(({ plugin }) => plugin !== null)
+    changedOwner.targets[pluginTargetIndex] = { ...changedOwner.targets[pluginTargetIndex]!, plugin: 'acme.forged' }
     expect(() => assertPluginInventory(changedOwner)).toThrow(/inventory-mismatch/i)
 
     const changedKind = structuredClone(fixture.inventory)
-    changedKind.targets[0] = { ...changedKind.targets[0]!, kind: 'panel' }
+    const pluginKindTargetIndex = changedKind.targets.findIndex(({ plugin }) => plugin !== null)
+    const pluginKindTarget = changedKind.targets[pluginKindTargetIndex]!
+    changedKind.targets[pluginKindTargetIndex] = {
+      ...pluginKindTarget,
+      kind: pluginKindTarget.kind === 'panel' ? 'view' : 'panel'
+    }
     expect(() => assertPluginInventory(changedKind)).toThrow(/inventory-mismatch/i)
   })
 
@@ -639,41 +645,146 @@ describe('plugin campaign reduction and reporting', () => {
     expect(report.status).toBe('error')
   })
 
-  test('does not certify foreign or duplicate slot samples or a fourth valid result', () => {
+  const reducerValidationCases: Array<{
+    name: string
+    code: ReviewIssue['code']
+    mutate: (sample: ReviewedCapture, target: CaptureTarget) => void
+  }> = [
+    {
+      name: 'a changed image hash',
+      code: 'evidence-changed',
+      mutate: (sample) => { sample.image.sha256 = HASH_C }
+    },
+    {
+      name: 'an invisible target',
+      code: 'invalid-sample',
+      mutate: (sample) => { sample.assessment.targetVisible = false }
+    },
+    {
+      name: 'a penalized known contract conflict',
+      code: 'contract-conflict',
+      mutate: (sample, target) => {
+        const rule = hostContractContext(target, 'dark').rules[0]!
+        sample.contractReview!.audit.reasonChecks[0] = {
+          reasonIndex: 0,
+          contractIds: [rule.id],
+          conflictsWithContract: true,
+          affectsScore: true
+        }
+        sample.contractReview!.audit.conflicts.push({
+          contractId: rule.id,
+          reason: 'Requested a prohibited plugin token change.',
+          affectsScore: true
+        })
+      }
+    }
+  ]
+  for (const scenario of reducerValidationCases) {
+    test(`revalidates ${scenario.name} inside the reducer without caller issues`, () => {
+      const fixture = makeInventoryFixture({
+        targets: [
+          { id: 'view:acme.one/home', kind: 'view' },
+          { id: 'panel:acme.one/settings', kind: 'panel' }
+        ],
+        aliases: [],
+        noTargetPlugins: []
+      })
+      const [target, sibling] = fixture.pluginTargets
+      const affectedAttempts = validAttemptsFor(fixture, target!, 'dark', [90, 91, 92])
+      const siblingAttempts = validAttemptsFor(fixture, sibling!, 'dark', [87, 88, 89])
+      scenario.mutate(affectedAttempts[1]!.attempt.sample!, target!)
+      const attempts = [...affectedAttempts, ...siblingAttempts]
+      expect(attempts.every(({ attempt }) => attempt.issues.length === 0)).toBe(true)
+
+      const report = summarizePluginCampaign(campaignInput(fixture, { attempts }))
+
+      expect(cell(report, target!.id, 'dark')).toMatchObject({ median: null, status: 'invalid' })
+      expect(report.failures).toContainEqual(expect.objectContaining({
+        code: scenario.code,
+        targetId: target!.id,
+        theme: 'dark'
+      }))
+      expect(cell(report, sibling!.id, 'dark')).toMatchObject({ median: 88, range: 2, status: 'pass' })
+    })
+  }
+
+  test('does not certify duplicate slot samples alongside otherwise complete triples', () => {
     const fixture = oneTargetFixture()
     const target = fixture.pluginTargets[0]!
-    const dark = validAttemptsFor(fixture, target, 'dark', [90, 90, 90])
-    const foreign = reviewerSample(target, 'dark', 100)
-    foreign.targetId = 'view:acme.foreign/other'
-    const duplicate = {
+    const dark = validAttemptsFor(fixture, target, 'dark', [90, 91, 92])
+    const attempts = [
+      ...dark,
+      ...validAttemptsFor(fixture, target, 'light', [85, 85, 85]),
+      {
+        targetId: target.id,
+        theme: 'dark' as const,
+        slot: 2 as PluginSampleSlot,
+        attempt: attempt('duplicate-slot-two', reviewerSample(target, 'dark', 100), {
+          retryOf: dark[1]!.attempt.id
+        })
+      }
+    ]
+    const report = summarizePluginCampaign(campaignInput(fixture, { attempts }))
+
+    expect(cell(report, target.id, 'dark')).toMatchObject({ median: null, status: 'invalid' })
+    expect(cell(report, target.id, 'light')).toMatchObject({ median: 85, status: 'pass' })
+    expect(report.failures).toContainEqual(expect.objectContaining({
+      code: 'invalid-sample',
+      targetId: target.id,
+      theme: 'dark'
+    }))
+    expect(report.status).toBe('error')
+  })
+
+  test('does not certify a foreign sample inside an otherwise complete triple', () => {
+    const fixture = oneTargetFixture()
+    const target = fixture.pluginTargets[0]!
+    const dark = validAttemptsFor(fixture, target, 'dark', [90, 91, 92])
+    dark[1]!.attempt.sample!.targetId = 'view:acme.foreign/other'
+    const attempts = [
+      ...dark,
+      ...validAttemptsFor(fixture, target, 'light', [90, 90, 90])
+    ]
+    const report = summarizePluginCampaign(campaignInput(fixture, { attempts }))
+
+    expect(cell(report, target.id, 'dark')).toMatchObject({ median: null, status: 'invalid' })
+    expect(cell(report, target.id, 'light')).toMatchObject({ median: 90, status: 'pass' })
+    expect(report.failures).toContainEqual(expect.objectContaining({
+      code: 'invalid-sample',
+      targetId: target.id,
+      theme: 'dark'
+    }))
+    expect(report.status).toBe('error')
+  })
+
+  test('retains and rejects a fourth valid result after an otherwise complete triple', () => {
+    const fixture = oneTargetFixture()
+    const target = fixture.pluginTargets[0]!
+    const fourthSlot = {
       targetId: target.id,
       theme: 'dark' as const,
-      slot: 2 as PluginSampleSlot,
-      attempt: attempt('duplicate-slot-two', reviewerSample(target, 'dark', 100), { retryOf: 'view-acme.one-home-dark-2' })
-    }
-    const fourSlotResponse = {
-      targetId: target.id,
-      theme: 'light' as const,
       slot: 4 as PluginSampleSlot,
-      attempt: attempt('fourth-valid-slot', reviewerSample(target, 'light', 100))
+      attempt: attempt('fourth-valid-slot', reviewerSample(target, 'dark', 100))
     }
     const report = summarizePluginCampaign(campaignInput(fixture, {
       attempts: [
-        ...dark,
-        { targetId: target.id, theme: 'light', slot: 1, attempt: attempt('light-foreign', foreign) },
-        ...validAttemptsFor(fixture, target, 'light', [90, 90], 2),
-        duplicate,
-        fourSlotResponse
+        ...validAttemptsFor(fixture, target, 'dark', [90, 91, 92]),
+        ...validAttemptsFor(fixture, target, 'light', [90, 90, 90]),
+        fourthSlot
       ]
     }))
 
-    expect(cell(report, target.id, 'dark').median).toBeNull()
-    expect(cell(report, target.id, 'dark').status).toBe('invalid')
-    expect(cell(report, target.id, 'light').median).toBeNull()
-    expect(cell(report, target.id, 'light').status).toBe('invalid')
-    expect(report.extraAttempts.map(({ attempt }) => attempt.id)).toContain('fourth-valid-slot')
+    expect(cell(report, target.id, 'dark')).toMatchObject({ median: null, status: 'invalid' })
+    expect(cell(report, target.id, 'light')).toMatchObject({ median: 90, status: 'pass' })
+    expect(report.extraAttempts).toContainEqual(expect.objectContaining({
+      targetId: target.id,
+      theme: 'dark',
+      slot: 4,
+      attempt: expect.objectContaining({ id: 'fourth-valid-slot', sample: expect.objectContaining({ score: 100 }) })
+    }))
     expect(report.status).toBe('error')
   })
+
 
   test('retains the exact six-cell capture/conflict table while continuing independent cells', () => {
     const fixture = makeInventoryFixture({
@@ -744,9 +855,21 @@ describe('plugin campaign reduction and reporting', () => {
     expect(report.status).toBe('error')
     expect(report.goalPassed).toBe(false)
     expect(report.failures).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: 'target-capture-incomplete', targetId: targetA!.id }),
+      expect.objectContaining({
+        code: 'capture-failure',
+        targetId: targetA!.id,
+        theme: 'light',
+        message: 'original capture error'
+      }),
+      expect.objectContaining({
+        code: 'target-capture-incomplete',
+        targetId: targetA!.id,
+        theme: 'dark',
+        message: `The paired theme capture is incomplete; ${targetA!.id} is not eligible for review.`
+      }),
       expect.objectContaining({ code: 'contract-conflict', targetId: bDarkTarget.id, theme: 'dark' })
     ]))
+
     expect(report.counts).toEqual({
       requiredCells: 6,
       completeValidCells: 3,
@@ -760,6 +883,56 @@ describe('plugin campaign reduction and reporting', () => {
     const markdown = renderPluginCampaign(report)
     expect(markdown).toContain('skipped')
     expect(markdown).toContain('Raw 100 response contradicts the approved contract.')
+  })
+
+  test('renders all plugin cell rows contiguously before attempt details', () => {
+    const fixture = makeInventoryFixture({
+      targets: [
+        { id: 'view:acme.one/home', kind: 'view' },
+        { id: 'panel:acme.one/settings', kind: 'panel' }
+      ],
+      aliases: [],
+      noTargetPlugins: []
+    })
+    const [targetA, targetB] = fixture.pluginTargets
+    const attempts = [
+      ...validAttemptsFor(fixture, targetA!, 'dark', [80, 82, 84]),
+      ...validAttemptsFor(fixture, targetA!, 'light', [90, 92, 94]),
+      ...validAttemptsFor(fixture, targetB!, 'dark', [70, 75, 80]),
+      ...validAttemptsFor(fixture, targetB!, 'light', [85, 87, 89])
+    ]
+    const report = summarizePluginCampaign(campaignInput(fixture, { attempts }))
+    const markdown = renderPluginCampaign(report)
+    const lines = markdown.split('\n')
+    const pluginHeading = lines.indexOf('### acme.one')
+    const nextHeadingOffset = lines.slice(pluginHeading + 1).findIndex((line) => /^##+ /.test(line))
+    const pluginSection = lines.slice(
+      pluginHeading,
+      nextHeadingOffset < 0 ? undefined : pluginHeading + 1 + nextHeadingOffset
+    )
+    const header = '| Target | Theme | Slot 1 | Slot 2 | Slot 3 | Median | Range | Status |'
+    expect(report.cells).toHaveLength(4)
+    const separator = '| --- | --- | --- | --- | --- | --- | --- | --- |'
+    const expectedRowsByCell = new Map<string, string>([
+      [`${targetA!.id}/dark`, `| ${targetA!.id} | dark | 80 (valid) | 82 (valid) | 84 (valid) | 82 | 4 | fail |`],
+      [`${targetA!.id}/light`, `| ${targetA!.id} | light | 90 (valid) | 92 (valid) | 94 (valid) | 92 | 4 | pass |`],
+      [`${targetB!.id}/dark`, `| ${targetB!.id} | dark | 70 (valid) | 75 (valid) | 80 (valid) | 75 | 10 | fail |`],
+      [`${targetB!.id}/light`, `| ${targetB!.id} | light | 85 (valid) | 87 (valid) | 89 (valid) | 87 | 4 | pass |`]
+    ])
+    const expectedRows = report.cells.map(({ targetId, theme }) => {
+      const row = expectedRowsByCell.get(`${targetId}/${theme}`)
+      if (!row) throw new Error(`Unexpected cell in renderer fixture: ${targetId}/${theme}`)
+      return row
+    })
+    const headerIndex = pluginSection.indexOf(header)
+    const firstAttemptDetailIndex = pluginSection.findIndex((line) =>
+      line.startsWith('  - Slot ') || line.startsWith('    - '))
+
+    expect(headerIndex).toBeGreaterThanOrEqual(0)
+    expect(pluginSection.slice(headerIndex, headerIndex + expectedRows.length + 2))
+      .toEqual([header, separator, ...expectedRows])
+    expect(firstAttemptDetailIndex).toBeGreaterThan(headerIndex + expectedRows.length + 1)
+    expect(markdown).toContain('After: not measured (no product repair in this PR).')
   })
 
   test('serializes complete reasons, contexts, statuses, counts, and failed raw attempts in JSON and Markdown', () => {
