@@ -451,6 +451,8 @@ describe('plugin sample validation', () => {
   const fixture = makeInventoryFixture()
   const target = fixture.pluginTargets.find(({ id }) => id === 'view:acme.one/home')!
   const capture = captureEvidence(target, 'dark')
+  // the pre-g3-78 rule text preserves the context whose reviews must be rejected
+  const LEGACY_WORKTREES_TEXT = 'The approved Worktrees redesign supersedes the older shell golden for this component. Worktrees rows are single-line 26px, with 4px gaps and 12px indentation; selection is neutral var(--ui-selected) with a bold name, not blue. Saved-view tabs, filter and changed lines, header actions, hierarchy, counts, and rail attention badges are approved capabilities. Their presence or one-line density is not a defect. Overflow, illegible names, missing controls, and incorrect implementation of these rules remain defects. This rule does not apply Worktrees row anatomy to Remote workspaces.'
 
   test('accepts one exact five-dimension mean with trusted context and an unpenalized conflict', () => {
     const original = reviewerSample(target, 'dark', 82.4, { capture })
@@ -543,6 +545,27 @@ describe('plugin sample validation', () => {
     changedContext.contractReview!.contextSha256 = HASH_C
     changedContext.contractReview!.audit.contextSha256 = HASH_C
     expect(validatePluginSample(changedContext, capture, target, AUTHOR_FAMILY, REVIEWER)?.code).toBe('evidence-changed')
+  })
+
+  test('rejects a review made under the pre-g3-78 Worktrees context', () => {
+    const currentContext = hostContractContext(target, 'dark')
+    const legacyContext = {
+      ...currentContext,
+      rules: currentContext.rules.map(rule =>
+        rule.id === 'worktrees-approved-redesign' ? { ...rule, text: LEGACY_WORKTREES_TEXT } : rule
+      )
+    }
+    const legacyDigest = sha256(serializeContractContext(legacyContext))
+    const currentDigest = sha256(serializeContractContext(currentContext))
+    const sample = reviewerSample(target, 'dark', 90, { capture })
+
+    sample.contractReview!.contextSha256 = legacyDigest
+    sample.contractReview!.audit.contextSha256 = legacyDigest
+    expect(validatePluginSample(sample, capture, target, AUTHOR_FAMILY, REVIEWER)?.code).toBe('evidence-changed')
+
+    sample.contractReview!.contextSha256 = currentDigest
+    sample.contractReview!.audit.contextSha256 = currentDigest
+    expect(validatePluginSample(sample, capture, target, AUTHOR_FAMILY, REVIEWER)).toBeNull()
   })
 
   test('rejects a g3-68 review context after the trusted contract changes', () => {
