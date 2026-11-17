@@ -417,7 +417,7 @@ describe('agents options', () => {
 
     const omp = testCliContext(client)
     await run('options', omp.ctx, ['omp'])
-    expect(omp.lines[0]).toStartWith('no listed models\nunlisted models: accepted\n')
+    expect(omp.lines[0]).toStartWith('no listed models\nunlisted models: accepted, with effort: off|minimal|low|medium|high|xhigh|max|auto\n')
 
     const json = testCliContext(client, { json: true })
     await run('options', json.ctx, ['codex'])
