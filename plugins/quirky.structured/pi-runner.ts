@@ -94,6 +94,10 @@ type Running = {
   exit?: PiExit
   deniedReasons: string[]
   settings: StructuredSettings
+  /** What started this process, so omp can be relaunched on the same conversation in another approval mode. */
+  launch: { session: Session; executable: string; options: StructuredStartOptions }
+  providerSessionId: string
+  sessionFile: string
 }
 
 type Starting = { stopped: boolean; run?: Running }
@@ -165,9 +169,11 @@ class PiRunner implements StructuredRunner {
         if (providerSession !== undefined && sessionId !== providerSession.id) {
           throw new Error(`${this.variant} resumed session ${sessionId}, expected ${providerSession.id}`)
         }
+        run.providerSessionId = sessionId
+        run.sessionFile = text(state?.sessionFile)
         await this.context.setProviderSession(session.id, {
           id: sessionId,
-          transcriptPath: text(state?.sessionFile) || null
+          transcriptPath: run.sessionFile || null
         })
         if (startup.stopped) return
         this.requireLive(run)
@@ -227,7 +233,55 @@ class PiRunner implements StructuredRunner {
       await run.rpc.request('set_thinking_level', { level: settings.effort }, SEND_TIMEOUT_MS)
       run.settings = { ...run.settings, effort: settings.effort }
     }
+    if (settings.permissionMode !== undefined && settings.permissionMode !== run.settings.permissionMode) {
+      if (this.variant !== 'omp') throw new Error(`${this.variant} has no permission modes`)
+      return { ...(await this.relaunch(run, settings.permissionMode)).settings }
+    }
     return { ...run.settings }
+  }
+
+  /**
+   * Restarts omp on the same conversation with another `--approval-mode`, since omp reads it only at
+   * launch. The old process keeps serving until the new one has resumed, so a failed relaunch leaves
+   * the chat as it was; a turn in progress refuses the switch instead of being cut off.
+   */
+  private async relaunch(old: Running, permissionMode: string): Promise<Running> {
+    const busy = () => old.working || old.pendingDialogs > 0
+    if (busy()) throw new Error(`wait for the turn to end before changing ${this.variant}'s approval mode`)
+    const resume = old.sessionFile !== '' && existsSync(old.sessionFile) ? old.sessionFile : old.providerSessionId
+    const { model, effort } = old.settings
+    const options: StructuredStartOptions = {
+      ...(old.launch.options.env === undefined ? {} : { env: old.launch.options.env }),
+      ...(model === undefined ? {} : { model }),
+      ...(effort === undefined ? {} : { effort }),
+      permissionMode
+    }
+    const next = this.createRun(old.launch.session, old.launch.executable, options, resume)
+    const discard = async (reason: Error): Promise<never> => {
+      next.stopped = true
+      await next.rpc.close()
+      throw reason
+    }
+    try {
+      const state = record(await next.rpc.request('get_state', {}, STARTUP_TIMEOUT_MS))
+      const resumed = text(state?.sessionId)
+      if (resumed !== old.providerSessionId) throw new Error(`${this.variant} resumed session ${resumed}, expected ${old.providerSessionId}`)
+      this.requireLive(next)
+      if (this.variant === 'omp') await next.rpc.request('set_ask_dialog', { enabled: true }).catch(() => undefined)
+      this.requireLive(next)
+      next.providerSessionId = resumed
+      next.sessionFile = text(state?.sessionFile) || old.sessionFile
+    } catch (error) {
+      return discard(error instanceof PiRpcError ? new Error(error.message, { cause: error }) : (error as Error))
+    }
+    if (this.running.get(old.sessionId) !== old || old.stopped || old.ended) return discard(new Error('session is not running'))
+    if (busy()) return discard(new Error(`wait for the turn to end before changing ${this.variant}'s approval mode`))
+    next.ready = true
+    next.idleStatus = old.idleStatus
+    this.running.set(old.sessionId, next)
+    old.stopped = true
+    await old.rpc.close()
+    return next
   }
 
   /** Lists the agent's available models as `provider/id`, so each id is one `configure` accepts. */
@@ -311,8 +365,12 @@ class PiRunner implements StructuredRunner {
       deniedReasons: [],
       settings: {
         ...(typeof options.model === 'string' ? { model: options.model } : {}),
-        ...(typeof options.effort === 'string' ? { effort: options.effort } : {})
-      }
+        ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
+        ...(this.variant === 'omp' && typeof options.permissionMode === 'string' ? { permissionMode: options.permissionMode } : {})
+      },
+      launch: { session, executable, options },
+      providerSessionId: '',
+      sessionFile: ''
     }
     run.rpc = new PiRpc(
       {
@@ -320,6 +378,7 @@ class PiRunner implements StructuredRunner {
         args: piLaunchArgs(this.variant, {
           ...(typeof options.model === 'string' ? { model: options.model } : {}),
           ...(typeof options.effort === 'string' ? { effort: options.effort } : {}),
+          ...(this.variant === 'omp' && typeof options.permissionMode === 'string' ? { approvalMode: options.permissionMode } : {}),
           ...(resume === undefined ? {} : { resume })
         }),
         cwd: session.cwd,

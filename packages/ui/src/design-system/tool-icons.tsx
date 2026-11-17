@@ -27,6 +27,15 @@ function FallbackIcon({ name, size, label }: { name: string; size?: number; labe
   return <span className="ui-icon-fallback" style={sizeVariable(size)} {...accessibility(label)}>{letter}</span>
 }
 
+const innerHtml = new Map<string, { __html: string }>()
+
+// react rewrites the svg's children whenever this prop object changes, which swaps the node under a pressed pointer and drops the click
+function innerHtmlOf(markup: string) {
+  let html = innerHtml.get(markup)
+  if (!html) innerHtml.set(markup, (html = { __html: markup }))
+  return html
+}
+
 function Glyph({ markup, viewBox, size, label, className, style, ...data }: {
   markup: string
   viewBox: string
@@ -47,7 +56,7 @@ function Glyph({ markup, viewBox, size, label, className, style, ...data }: {
       fill="currentColor"
       style={style}
       {...accessibility(label)}
-      dangerouslySetInnerHTML={{ __html: markup }}
+      dangerouslySetInnerHTML={innerHtmlOf(markup)}
     />
   )
 }
@@ -151,7 +160,7 @@ export function FileIcon({ path, size, label }: FileIconProps) {
       data-icon={name}
       data-flavor={flavor}
       {...accessibility(label)}
-      dangerouslySetInnerHTML={{ __html: FILE_ICON_MARKUP[flavor][name] }}
+      dangerouslySetInnerHTML={innerHtmlOf(FILE_ICON_MARKUP[flavor][name])}
     />
   )
 }

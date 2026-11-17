@@ -6,7 +6,15 @@ import type { EditorView } from '@codemirror/view'
 import { RpcError, RpcErrorCode, type AgentCapabilities, type QueuedMessage } from '@quirky/protocol'
 import { fakeContext, session, settle, type FakeContext } from './ui-fake'
 
-type Props = { capabilities?: AgentCapabilities | null; working?: boolean; agent?: string; status?: 'starting' | 'running' | 'exited'; settings?: Record<string, unknown> }
+type Props = {
+  capabilities?: AgentCapabilities | null
+  working?: boolean
+  agent?: string
+  status?: 'starting' | 'running' | 'exited'
+  settings?: Record<string, unknown>
+  /** The model and effort the session launched with; claude defaults to Opus · Low, other agents to none. */
+  launched?: { model?: string; effort?: string } | null
+}
 type Handler = (params: Record<string, any>) => unknown
 
 const OK = { ok: true } as const
@@ -20,6 +28,12 @@ const CLAUDE: AgentCapabilities = {
   effort: OK,
   approveForSession: OK,
   resume: OK
+}
+const CLAUDE_ALL_MODES: AgentCapabilities['permissionModes'] = {
+  ok: true,
+  modes: ['default', 'acceptEdits', 'auto', 'bypassPermissions'],
+  labels: { acceptEdits: 'Accept edits', bypassPermissions: 'Bypass permissions' },
+  dangerous: ['bypassPermissions']
 }
 const PI: AgentCapabilities = {
   agent: 'pi',
@@ -90,7 +104,11 @@ afterEach(async () => {
 
 const render = (props: Props) =>
   act(async () => {
-    const chat = session({ id: 's1', kind: 'structured', agent: props.agent ?? 'claude', status: props.status ?? 'running' })
+    const agent = props.agent ?? 'claude'
+    const launched = props.launched === undefined ? (agent === 'claude' ? { model: 'opus', effort: 'low' } : null) : props.launched
+    const options = Object.fromEntries(Object.entries(launched ?? {}).map(([id, value]) => [id, { value, source: 'explicit' as const }]))
+    const launchSettings = launched === null ? null : { agent, options, summary: '' }
+    const chat = session({ id: 's1', kind: 'structured', agent, status: props.status ?? 'running', launchSettings })
     const capabilities = props.capabilities === undefined ? CLAUDE : props.capabilities
     root!.render(createElement(Composer, { context: fake.context, session: chat, capabilities, working: props.working ?? false }))
   })
@@ -133,7 +151,16 @@ const buttonNamed = (name: string, scope: ParentNode = host!) =>
   [...scope.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.trim() === name || button.getAttribute('aria-label') === name)
 const settingsChip = () => host!.querySelector<HTMLButtonElement>('[aria-haspopup="dialog"]')!
 const popover = () => document.body.querySelector<HTMLElement>('[role="dialog"][aria-label="Turn settings"]')
-const row = (name: string) => [...popover()!.querySelectorAll<HTMLButtonElement>('.ui-list-row__main')].find((button) => button.textContent?.trim() === name)!
+const summaryRow = (name: string) => popover()!.querySelector<HTMLElement>(`[data-settings-row="${name}"]`)!
+const menuItems = () => [...popover()!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+const labelOf = (item: Element) => item.querySelector('.qt-menu-label')!.childNodes[0]!.textContent
+const menuItem = (label: string) => menuItems().find((item) => labelOf(item) === label)!
+const keyOn = (element: Element, key: string) => act(async () => void element.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })))
+const typeSearch = (input: HTMLInputElement, value: string) =>
+  act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
 const options = () => [...host!.querySelectorAll('[role="option"]')]
 const sent = () => fake.callsTo('quirky.structured/send').map((call) => call.params)
 const placeholder = () => host!.querySelector('.cm-placeholder')?.textContent ?? ''
@@ -206,7 +233,7 @@ describe('screens: idle', () => {
     await typeText('go')
     await press({ key: 'Enter' })
     await settle()
-    expect(byLabel('Attachments')!.textContent).toContain('a.png')
+    expect(byLabel('Attachments')!.querySelector('img')!.alt).toBe('a.png')
     expect(byLabel('Attachments')!.textContent).toContain('Pasted text')
   })
 })
@@ -571,28 +598,55 @@ describe('screens: suggestions (SC-5, SC-6)', () => {
 })
 
 describe('screens: settings (SC-15, SC-16)', () => {
-  test('popover: model list, effort segments, permission list and a Plan switch; the chip reads model and effort', async () => {
-    await mount({}, { capabilities: { ...CLAUDE, planMode: OK } })
+  test('summary: model, effort, permissions and a Plan switch with their current values; the chip reads model and effort', async () => {
+    await mount({}, { capabilities: { ...CLAUDE, permissionModes: { ok: true, modes: ['default', 'acceptEdits', 'plan'] } } })
     expect(settingsChip().textContent).toContain('Opus · Low')
     await click(settingsChip())
-    const pane = popover()!
-    expect([...pane.querySelectorAll('.ui-list-row__main')].map((entry) => entry.textContent?.trim())).toEqual(['Opus', 'Sonnet', 'Default', 'Accept edits'])
-    expect([...pane.querySelectorAll('[role="radio"]')].map((entry) => entry.textContent)).toEqual(['Low', 'Medium', 'High'])
-    expect(pane.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('false')
-    expect(pane.querySelector('[role="switch"]')!.closest('div')!.textContent).toContain('Off')
+    expect(summaryRow('model').textContent).toBe('ModelOpus')
+    expect(summaryRow('effort').getAttribute('role')).toBe('slider')
+    expect(summaryRow('effort').getAttribute('aria-valuetext')).toBe('Low')
+    expect(summaryRow('mode').textContent).toBe('PermissionsDefault')
+    expect(summaryRow('plan').getAttribute('role')).toBe('switch')
+    expect(summaryRow('plan').getAttribute('aria-checked')).toBe('false')
+    expect(summaryRow('plan').textContent).toContain('Read only until you approve a plan')
+    expect(document.activeElement).toBe(summaryRow('model'))
+    await click(summaryRow('mode'))
+    // plan is the Plan switch's job, so it never shows up as a permission mode
+    expect(menuItems().map(labelOf)).toEqual(['Default', 'Accept edits'])
   })
 
-  test('choosing a model and an effort applies each at once, updates the chip and Esc closes the popover', async () => {
+  test('a setting the session launched without reads Default instead of the first listed entry', async () => {
+    await mount({}, { launched: null })
+    expect(settingsChip().textContent).toBe('Default')
+    await click(settingsChip())
+    expect(summaryRow('model').textContent).toBe('ModelDefault')
+    expect(summaryRow('effort').textContent).toContain('This model has no effort setting')
+    await click(summaryRow('model'))
+    expect(menuItems().some((item) => item.getAttribute('aria-checked') === 'true')).toBe(false)
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
+    await render({ launched: { model: 'sonnet' } })
+    expect(settingsChip().textContent).toBe('Sonnet · Default')
+  })
+
+  test('choosing a model applies it and returns to the summary; arrow keys step effort in place; Esc closes', async () => {
     await mount({ 'quirky.structured/configure': () => ({ ok: true }) })
     await click(settingsChip())
-    await click(row('Sonnet'))
-    await click([...popover()!.querySelectorAll<HTMLElement>('[role="radio"]')].find((entry) => entry.textContent === 'Medium'))
+    await click(summaryRow('model'))
+    expect(menuItems().map(labelOf)).toEqual(['Opus', 'Sonnet'])
+    expect(menuItem('Opus').getAttribute('aria-checked')).toBe('true')
+    await click(menuItem('Sonnet'))
+    expect(document.activeElement).toBe(summaryRow('model'))
+    await keyOn(summaryRow('effort'), 'ArrowRight')
     await settle()
     expect(fake.callsTo('quirky.structured/configure').map((call) => call.params)).toEqual([
       { session: 's1', model: 'sonnet' },
       { session: 's1', effort: 'medium' }
     ])
     expect(settingsChip().textContent).toContain('Sonnet · Medium')
+    expect(summaryRow('effort').getAttribute('aria-valuetext')).toBe('Medium')
+    await click(buttonNamed('Less effort', popover()!))
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').at(-1)!.params).toEqual({ session: 's1', effort: 'low' })
     await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))
     expect(popover()).toBeNull()
   })
@@ -600,7 +654,8 @@ describe('screens: settings (SC-15, SC-16)', () => {
   test('a rejected change reverts the chip and shows an inline error', async () => {
     await mount({ 'quirky.structured/configure': () => { throw new Error('not now') } })
     await click(settingsChip())
-    await click(row('Sonnet'))
+    await click(summaryRow('model'))
+    await click(menuItem('Sonnet'))
     await settle()
     expect(settingsChip().textContent).toContain('Opus · Low')
     expect(host!.querySelector('[role="alert"]')!.textContent).toContain('Could not change the setting: not now')
@@ -610,47 +665,147 @@ describe('screens: settings (SC-15, SC-16)', () => {
     await mount({ 'quirky.structured/configure': () => ({ ok: true }) })
     expect(byLabel('Turn off Plan mode')).toBeNull()
     await click(settingsChip())
-    await click(popover()!.querySelector('[role="switch"]'))
-    await click(row('Accept edits'))
+    await click(summaryRow('plan'))
+    await click(summaryRow('mode'))
+    await click(menuItem('Accept edits'))
     await settle()
-    expect(popover()!.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true')
+    expect(summaryRow('plan').getAttribute('aria-checked')).toBe('true')
+    expect(summaryRow('mode').textContent).toContain('Accept edits')
     expect(byLabel('Turn off Plan mode')!.textContent).toContain('Plan')
     expect(buttonNamed('Return permissions to Default')!.textContent).toContain('Accept edits')
+    expect(buttonNamed('Return permissions to Default')!.querySelector('.ui-badge--needs-you')).not.toBeNull()
     await click(byLabel('Turn off Plan mode'))
     await settle()
     expect(byLabel('Turn off Plan mode')).toBeNull()
-    expect(buttonNamed('Return permissions to Default')).toBeDefined()
     await click(buttonNamed('Return permissions to Default'))
     await settle()
     expect(buttonNamed('Return permissions to Default')).toBeUndefined()
     expect(fake.callsTo('quirky.structured/configure').map((call) => call.params).at(-1)).toEqual({ session: 's1', permissionMode: 'default' })
   })
 
-  test('unsupported controls stay visible, disabled, with the reason on hover; the chip shows the model alone without effort', async () => {
-    await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, agent: 'pi', models: [{ id: 'm', label: 'Pi model', description: null, options: [] }] }) }, { capabilities: { ...PI, model: OK }, agent: 'pi' })
-    expect(settingsChip().textContent).toBe('Pi model')
+  test('permission modes use the agent labels and a description, and a mode that skips approvals is set apart', async () => {
+    const modes = { ...CLAUDE_ALL_MODES, modes: ['default', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'plan'], labels: { ...CLAUDE_ALL_MODES.labels, dontAsk: "Don't ask" } }
+    await mount({}, { capabilities: { ...CLAUDE, permissionModes: modes } })
     await click(settingsChip())
-    const pane = popover()!
-    const plan = pane.querySelector<HTMLButtonElement>('[role="switch"]')!
-    expect(plan.disabled).toBe(true)
-    expect(plan.closest<HTMLElement>('[title]')!.title).toBe('pi has no plan mode')
-    const effortButton = pane.querySelector<HTMLButtonElement>('[role="radio"]')!
-    expect(effortButton.disabled).toBe(true)
-    expect(effortButton.title).toBe('pi takes no effort setting')
-    expect(pane.querySelector<HTMLElement>('.ui-list-row--disabled')!.querySelector<HTMLElement>('[title]')!.title).toBe('pi has no permission modes')
+    await click(summaryRow('mode'))
+    expect(menuItems().map(labelOf)).toEqual(['Default', 'Accept edits', 'Auto', "Don't ask", 'Bypass permissions'])
+    expect(menuItem('Default').textContent).toContain('Ask before edits and commands')
+    expect(menuItem('Bypass permissions').textContent).toContain('Run every tool without asking')
+    expect(menuItems().filter((item) => item.classList.contains('qt-danger')).map(labelOf)).toEqual(['Bypass permissions'])
+    expect(menuItem('Bypass permissions').closest('.qt-menu-row')!.querySelector('[role="separator"]')).not.toBeNull()
   })
 
-  test('the model list gets a search field once it passes 8 entries', async () => {
-    const many = Array.from({ length: 9 }, (_, index) => ({ id: `m${index}`, label: `Model ${index}`, description: null, options: [] }))
-    await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, models: many }) })
+  test('a dangerous mode with no description of its own still says it skips approvals', async () => {
+    const modes = { ok: true as const, modes: ['always-ask', 'yolo'], labels: { 'always-ask': 'Always ask', yolo: 'Yolo' }, dangerous: ['yolo'] }
+    await mount({}, { capabilities: { ...CLAUDE, permissionModes: modes } })
     await click(settingsChip())
+    await click(summaryRow('mode'))
+    expect(menuItem('Yolo').textContent).toContain('Acts without asking for approval')
+    expect(menuItem('Always ask').querySelector('.ui-help-text')).toBeNull()
+  })
+
+  test('picking bypass permissions turns the summary value red and shows a failing-tone badge that says the agent acts without asking', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true, settings: { permissionMode: 'bypassPermissions' } }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    await click(settingsChip())
+    await click(summaryRow('mode'))
+    await click(menuItem('Bypass permissions'))
+    await settle()
+    expect(fake.callsTo('quirky.structured/configure').at(-1)!.params).toEqual({ session: 's1', permissionMode: 'bypassPermissions' })
+    expect(summaryRow('mode').querySelector<HTMLElement>('span:nth-of-type(2)')!.style.color).toBe('var(--ui-failing)')
+    const badge = buttonNamed('Return permissions to Default')!
+    expect(badge.textContent).toContain('Bypass permissions')
+    expect(badge.dataset.dangerous).toBe('true')
+    expect(badge.title).toContain('acts without asking for approval')
+    expect(badge.querySelector('.ui-badge--failing')).not.toBeNull()
+  })
+
+  test('a non-dangerous mode badge keeps the needs-you tone', async () => {
+    await mount({ 'quirky.structured/configure': () => ({ ok: true }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    await click(settingsChip())
+    await click(summaryRow('mode'))
+    await click(menuItem('Auto'))
+    await settle()
+    const badge = buttonNamed('Return permissions to Default')!
+    expect(badge.dataset.dangerous).toBeUndefined()
+    expect(badge.querySelector('.ui-badge--needs-you')).not.toBeNull()
+  })
+
+  test('a session that opened in another mode shows that mode, read from the runner', async () => {
+    await mount({ 'quirky.structured/settings': () => ({ settings: { permissionMode: 'bypassPermissions' } }) }, { capabilities: { ...CLAUDE, permissionModes: CLAUDE_ALL_MODES } })
+    expect(fake.callsTo('quirky.structured/settings')[0]!.params).toEqual({ session: 's1' })
+    expect(buttonNamed('Return permissions to Default')!.textContent).toContain('Bypass permissions')
+    expect(fake.callsTo('quirky.structured/configure')).toEqual([])
+  })
+
+  test('a reported mode the agent does not list is ignored', async () => {
+    await mount({ 'quirky.structured/settings': () => ({ settings: { permissionMode: 'mystery' } }) })
+    expect(buttonNamed('Return permissions to Default')).toBeUndefined()
+  })
+
+  test('unsupported settings stay visible, disabled, with the reason written under them; the chip shows the model alone', async () => {
+    await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, agent: 'pi', models: [{ id: 'm', label: 'Pi model', description: null, options: [] }] }) }, { capabilities: { ...PI, model: OK }, agent: 'pi', launched: { model: 'm' } })
+    expect(settingsChip().textContent).toBe('Pi model')
+    await click(settingsChip())
+    const plan = summaryRow('plan') as HTMLButtonElement
+    expect(plan.disabled).toBe(true)
+    expect(plan.title).toBe('pi has no plan mode')
+    expect(plan.textContent).toContain('pi has no plan mode')
+    expect(summaryRow('effort').getAttribute('aria-disabled')).toBe('true')
+    expect(summaryRow('effort').textContent).toContain('pi takes no effort setting')
+    const mode = summaryRow('mode') as HTMLButtonElement
+    expect(mode.disabled).toBe(true)
+    expect(mode.textContent).toContain('pi has no permission modes')
+    expect(document.activeElement).toBe(summaryRow('model'))
+  })
+
+  test('arrow keys walk the summary, skip disabled rows, and Right opens a list; Esc steps back before it closes', async () => {
+    await mount()
+    await click(settingsChip())
+    const order: (string | undefined)[] = []
+    for (let step = 0; step < 4; step += 1) {
+      order.push((document.activeElement as HTMLElement).dataset.settingsRow)
+      await keyOn(document.activeElement!, 'ArrowDown')
+    }
+    expect(order).toEqual(['model', 'effort', 'mode', 'plan'])
+    expect(document.activeElement).toBe(summaryRow('model'))
+    await keyOn(summaryRow('mode'), 'ArrowRight')
+    expect(menuItems().map(labelOf)).toEqual(['Default', 'Accept edits'])
+    await keyOn(document.activeElement!, 'Escape')
+    expect(popover()).not.toBeNull()
+    expect(document.activeElement).toBe(summaryRow('mode'))
+    await keyOn(document.activeElement!, 'Escape')
+    expect(popover()).toBeNull()
+  })
+
+  test('/mode opens the popover straight at the permission list', async () => {
+    await mount()
+    await typeText('/mode')
+    await settle()
+    await click(options().find((option) => option.textContent?.includes('Choose permission mode')))
+    await settle()
+    expect(popover()!.textContent).toContain('Permissions')
+    expect(menuItems().map(labelOf)).toEqual(['Default', 'Accept edits'])
+  })
+
+  test('a long model list gets a focused search field, says when nothing matches, and typing on the summary starts a search', async () => {
+    const many = Array.from({ length: 9 }, (_, index) => ({ id: `m${index}`, label: `Model ${index}`, description: null, options: [] }))
+    await mount({ 'quirky.agents/options': () => ({ ...OPTIONS, models: many }) }, { launched: null })
+    await click(settingsChip())
+    expect(popover()!.textContent).toContain('type to find a model')
+    await click(summaryRow('model'))
     const search = popover()!.querySelector<HTMLInputElement>('input')!
-    expect(search).not.toBeNull()
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(search, 'Model 7')
-      search.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    expect([...popover()!.querySelectorAll('.ui-list-row__main')].map((entry) => entry.textContent?.trim())).toEqual(['Model 7', 'Default', 'Accept edits'])
+    expect(document.activeElement).toBe(search)
+    expect(search.placeholder).toBe('Search 9 models')
+    await typeSearch(search, 'Model 7')
+    expect(menuItems().map(labelOf)).toEqual(['Model 7'])
+    await typeSearch(search, 'nothing')
+    expect(menuItems()).toHaveLength(0)
+    expect(popover()!.textContent).toContain('No models match')
+    await keyOn(search, 'Escape')
+    await keyOn(document.activeElement!, '7')
+    const reopened = popover()!.querySelector<HTMLInputElement>('input')!
+    expect(reopened.value).toBe('7')
+    expect(menuItems().map(labelOf)).toEqual(['Model 7'])
   })
 
   test('fills the model list from the live session when the agents catalog is empty', async () => {
@@ -698,14 +853,52 @@ describe('attachments (SC-7, SC-8, SC-9)', () => {
     await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
     await transfer('paste', [image('clip.png')])
     expect(fake.callsTo('quirky.session/pasteImage')[0]!.params).toEqual({ session: 's1', mime: 'image/png', data: btoa('x') })
-    expect(byLabel('Attachments')!.textContent).toContain('clip.png')
+    expect(byLabel('Attachments')!.querySelector('img')!.alt).toBe('clip.png')
   })
 
   test('a dropped image with a path attaches, and the same image dropped twice appears once', async () => {
     await mount()
     await transfer('drop', [image('shot.png', '/tmp/shot.png')])
     await transfer('drop', [image('shot.png', '/tmp/shot.png')])
-    expect(byLabel('Attachments')!.querySelectorAll('.ui-scope-chip')).toHaveLength(1)
+    expect(byLabel('Attachments')!.querySelectorAll('img')).toHaveLength(1)
+  })
+
+  test('a pasted image shows as a thumbnail named by its file, and its remove button drops it', async () => {
+    await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
+    await transfer('paste', [image('clip.png')])
+    const thumbnail = byLabel('Attachments')!.querySelector('img')!
+    expect(thumbnail.alt).toBe('clip.png')
+    expect(thumbnail.getAttribute('src')).toStartWith('blob:')
+    expect(byLabel('Attachments')!.querySelector('.ui-scope-chip')).toBeNull()
+    await click(buttonNamed('Remove clip.png'))
+    expect(byLabel('Attachments')).toBeNull()
+  })
+
+  test('an image alone enables Send and goes out with empty text', async () => {
+    await mount({ 'quirky.session/pasteImage': () => ({ path: '/data/pasted/s1/x.png' }) })
+    expect(buttonNamed('Send')!.disabled).toBe(true)
+    await transfer('paste', [image('clip.png')])
+    expect(buttonNamed('Send')!.disabled).toBe(false)
+    await click(buttonNamed('Send'))
+    await settle()
+    expect(sent()[0]).toMatchObject({ session: 's1', text: '', images: ['/data/pasted/s1/x.png'] })
+    expect(byLabel('Attachments')).toBeNull()
+  })
+
+  test('Enter sends an image with no text too', async () => {
+    await mount()
+    await transfer('drop', [image('shot.png', '/tmp/shot.png')])
+    await press({ key: 'Enter' })
+    await settle()
+    expect(sent()[0]).toMatchObject({ text: '', images: ['/tmp/shot.png'] })
+  })
+
+  test('a picker-added image keeps the name chip, with no thumbnail', async () => {
+    await mount({ 'desktop.file.pick': () => ({ cancelled: false, paths: ['/tmp/a.png'] }) })
+    await click(buttonNamed('Attach images'))
+    await settle()
+    expect(byLabel('Attachments')!.querySelector('.ui-scope-chip__label')!.textContent).toBe('a.png')
+    expect(byLabel('Attachments')!.querySelector('img')).toBeNull()
   })
 
   test('an image is refused inline with the reason when the agent takes none', async () => {

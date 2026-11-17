@@ -1,21 +1,22 @@
 import type { Session, UiPluginContext } from '@quirky/protocol'
 import type { Picks } from './controls'
+import { loadStartingPicks } from './startingPicks'
 
 /**
  * Creates a structured chat session for `agent` in `worktree` without starting its first turn,
- * applying whichever of the composer `picks` are set. Shared by every surface that starts a chat.
+ * applying the composer `picks` and filling an unpicked model and effort from the agent's own settings
+ * or the catalog default, so the session's launch settings name what it really runs on. Shared by
+ * every surface that starts a chat.
  */
 export async function createChat(context: UiPluginContext, agent: string, worktree: string, picks: Picks): Promise<Session> {
-  const options = {
-    ...(picks.effort === null ? {} : { effort: picks.effort }),
-    ...(picks.mode === null ? {} : { mode: picks.mode }),
-    ...(picks.plan ? { plan: true } : {})
-  }
+  const { model, effort } = (await loadStartingPicks(context, agent, worktree, picks)).picks
   return (await context.call('quirky.structured/create', {
     agent,
     worktree,
     deferStart: true,
-    ...(picks.model === null ? {} : { model: picks.model }),
-    ...(Object.keys(options).length === 0 ? {} : { options })
+    ...(model === null ? {} : { model }),
+    ...(effort === null ? {} : { options: { effort } }),
+    ...(picks.mode === null ? {} : { permissionMode: picks.mode }),
+    ...(picks.plan ? { planMode: true } : {})
   })) as Session
 }

@@ -3,11 +3,17 @@ import type { AgentCapabilities, Capability, Session, UiPluginContext } from '@q
 import { AgentIcon, Badge } from '@quirky/ui'
 
 export type Choice = { value: string; label: string }
-type ModelOption = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null }
+type ModelOption = { id: string; label: string; type: 'select' | 'boolean'; choices: Choice[] | null; default?: string }
 export type AgentModel = { id: string; label: string; options: ModelOption[] }
 
-/** The part of `quirky.agents/options` the composer reads; null models mean the list could not be loaded. */
-export type AgentOptions = { supported: boolean; models: AgentModel[]; unlistedOptions: ModelOption[] }
+/** The part of `quirky.agents/options` the composer reads; a null `defaultModel` means the agent picks its own. */
+export type AgentOptions = {
+  supported: boolean
+  models: AgentModel[]
+  unlisted: 'accept' | 'refuse'
+  unlistedOptions: ModelOption[]
+  defaultModel: string | null
+}
 
 /** What the user has picked in the composer; null means the agent's own default. */
 export type Picks = { model: string | null; effort: string | null; mode: string | null; plan: boolean }
@@ -22,6 +28,18 @@ export function reasonOf(capability: Capability | AgentCapabilities['permissionM
   return capability.ok ? undefined : capability.reason
 }
 
+/** Reads a `quirky.agents/options` reply, tolerating fields an older agents plugin leaves out. */
+export function agentOptionsOf(loaded: unknown): AgentOptions {
+  const info = loaded as Partial<AgentOptions> | undefined
+  return {
+    supported: info?.supported !== false,
+    models: info?.models ?? [],
+    unlisted: info?.unlisted === 'refuse' ? 'refuse' : 'accept',
+    unlistedOptions: info?.unlistedOptions ?? [],
+    defaultModel: typeof info?.defaultModel === 'string' ? info.defaultModel : null
+  }
+}
+
 /** Loads the model catalog for `agent`; null until it arrives and when the agents plugin is missing. */
 export function useAgentOptions(context: UiPluginContext, agent: string): AgentOptions | null {
   const [options, setOptions] = useState<AgentOptions | null>(null)
@@ -32,8 +50,7 @@ export function useAgentOptions(context: UiPluginContext, agent: string): AgentO
       .call('quirky.agents/options', { agent })
       .then((loaded) => {
         if (cancelled) return
-        const info = loaded as Partial<AgentOptions> | undefined
-        setOptions({ supported: info?.supported !== false, models: info?.models ?? [], unlistedOptions: info?.unlistedOptions ?? [] })
+        setOptions(agentOptionsOf(loaded))
       })
       .catch(() => {})
     return () => {
@@ -72,9 +89,13 @@ function useLiveModels(context: UiPluginContext, session: Session, capabilities:
   return wanted ? live : null
 }
 
-const effortChoices = (options: AgentOptions, model: string | null): Choice[] => {
+export const effortOption = (options: AgentOptions, model: string | null): ModelOption | undefined => {
   const known = options.models.find((entry) => entry.id === model)
-  const effort = (known?.options ?? options.unlistedOptions).find((option) => option.id === 'effort')
+  return (known?.options ?? options.unlistedOptions).find((option) => option.id === 'effort')
+}
+
+export const effortChoices = (options: AgentOptions, model: string | null): Choice[] => {
+  const effort = effortOption(options, model)
   return Array.isArray(effort?.choices) ? effort.choices : []
 }
 
@@ -120,19 +141,66 @@ export async function absolutePathsOf(context: UiPluginContext, files: File[]): 
 /** What the settings chip shows and offers: the lists, the current values and why a control is off. */
 export type TurnSettings = {
   modelList: Choice[]
+  /** Null when the session launched without one, so the agent runs on its own default. */
   model: string | null
   /** True when the current model is not in the list, so it needs an entry of its own. */
   unlisted: boolean
   choices: Choice[]
+  /** Empty when the session launched without one, so the agent runs on its own default. */
   effort: string
   modes: string[]
   mode: string
   defaultMode: string | null
+  /** The display name of a permission mode id. */
+  modeLabel: (mode: string) => string
+  /** Whether a permission mode lets the agent act without asking. */
+  isDangerous: (mode: string) => boolean
+  /** One line on what a permission mode lets the agent do, or undefined when there is none to say. */
+  modeDescription: (mode: string) => string | undefined
   modelReason: string | undefined
   effortReason: string | undefined
   modeReason: string | undefined
   planReason: string | undefined
   imagesReason: string | undefined
+}
+
+/** Loads the permission mode a running session is in, which can differ from the agent's default when it opened in another. */
+function useLiveMode(context: UiPluginContext, session: Session, capabilities: AgentCapabilities | null): string | null {
+  const [mode, setMode] = useState<string | null>(null)
+  const wanted = capabilities?.permissionModes.ok === true
+  const started = session.status !== 'starting' && session.status !== 'exited'
+  useEffect(() => {
+    setMode(null)
+    if (!wanted || !started) return
+    let cancelled = false
+    context
+      .call('quirky.structured/settings', { session: session.id })
+      .then((loaded) => {
+        const found = (loaded as { settings?: { permissionMode?: unknown } } | undefined)?.settings?.permissionMode
+        if (!cancelled && typeof found === 'string') setMode(found)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [context, session.id, wanted, started])
+  return mode
+}
+
+const MODE_DESCRIPTIONS: Record<string, Record<string, string>> = {
+  claude: {
+    default: 'Ask before edits and commands',
+    acceptEdits: 'Edit files; ask before commands',
+    auto: 'A classifier approves safe actions',
+    dontAsk: 'Deny anything not pre-approved',
+    bypassPermissions: 'Run every tool without asking'
+  },
+  codex: {
+    default: 'Work in the workspace; ask before leaving it',
+    'read-only': 'Read only; ask before any change',
+    'auto-review': 'A reviewer approves requests to leave the workspace',
+    'full-access': 'Run anything with no sandbox or approvals'
+  }
 }
 
 /** Resolves the model, effort and mode in effect from the picks, the launch settings and the agent's lists. */
@@ -145,16 +213,20 @@ export function useTurnSettings(
 ): TurnSettings {
   const launched = launchPicks(session)
   const live = useLiveModels(context, session, capabilities, options)
+  const liveMode = useLiveMode(context, session, capabilities)
   const liveList = live !== null && live !== 'failed' ? live.models : []
   const modelList: Choice[] = (options?.models ?? []).map((entry) => ({ value: entry.id, label: entry.label })).concat(liveList)
   const liveCurrent = live !== null && live !== 'failed' ? live.current : null
-  const model = picks.model ?? launched.model ?? liveCurrent ?? modelList[0]?.value ?? null
+  const model = picks.model ?? launched.model ?? liveCurrent
   const choices = options ? effortChoices(options, model) : []
-  const effort = picks.effort ?? launched.effort ?? choices[0]?.value ?? ''
+  const effort = picks.effort ?? launched.effort ?? ''
   const permissionModes = capabilities?.permissionModes
-  const modes = permissionModes?.ok ? permissionModes.modes : []
+  // the runner sends plan as the permission mode whenever planMode is on, so the Plan switch alone owns it
+  const modes = permissionModes?.ok ? permissionModes.modes.filter((name) => name !== 'plan') : []
   const defaultMode = modes[0] ?? null
-  const mode = picks.mode ?? defaultMode ?? ''
+  const mode = picks.mode ?? (liveMode !== null && modes.includes(liveMode) ? liveMode : null) ?? defaultMode ?? ''
+  const labels = permissionModes?.ok ? permissionModes.labels : undefined
+  const dangerous = permissionModes?.ok ? permissionModes.dangerous ?? [] : []
 
   const noModels =
     live === null ? (options !== null && modelList.length === 0 && capabilities?.model.ok ? 'Loading models' : undefined)
@@ -170,6 +242,9 @@ export function useTurnSettings(
     modes,
     mode,
     defaultMode,
+    modeLabel: (name) => labels?.[name] ?? modeLabel(name),
+    isDangerous: (name) => dangerous.includes(name),
+    modeDescription: (name) => MODE_DESCRIPTIONS[session.agent]?.[name],
     modelReason: reasonOf(capabilities?.model) ?? (options === null ? 'Models unavailable' : options.supported ? noModels : 'This agent takes no model setting'),
     effortReason: reasonOf(capabilities?.effort) ?? (choices.length === 0 ? 'This model has no effort setting' : undefined),
     modeReason: reasonOf(permissionModes),
@@ -178,7 +253,7 @@ export function useTurnSettings(
   }
 }
 
-/** A permission mode id as a sentence-case label, "acceptEdits" as "Accept edits". */
+/** A permission mode id as a sentence-case label, "acceptEdits" as "Accept edits"; the fallback when the agent names none. */
 export function modeLabel(mode: string): string {
   const words = mode.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ').toLowerCase()
   return words.charAt(0).toUpperCase() + words.slice(1)

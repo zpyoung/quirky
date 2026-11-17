@@ -24,11 +24,48 @@ import type {
 import { approvalOutcome, approvalSpec, nativeQuestionAnswers, nativeQuestionPlan, type NativeQuestionPlan } from './native-questions'
 
 const CLIENT_INFO = { name: 'quirky', title: 'Quirky', version: '0.1.0' }
-const APPROVAL_POLICY = 'on-request'
-const SANDBOX = 'workspace-write'
 const INTERRUPT_TIMEOUT_MS = 1_000
 const MAX_DEFERRED_EVENTS = 512
 const SUMMARY_LIMIT = 180
+
+type CodexPermissions = {
+  approvalPolicy: 'on-request' | 'never'
+  sandbox: 'read-only' | 'workspace-write' | 'danger-full-access'
+  approvalsReviewer: 'user' | 'auto_review'
+}
+
+/** What each permission mode in the Codex capabilities asks of app-server, matching Codex's `/permissions` presets. */
+const PERMISSIONS: Record<string, CodexPermissions> = {
+  default: { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'user' },
+  'read-only': { approvalPolicy: 'on-request', sandbox: 'read-only', approvalsReviewer: 'user' },
+  'auto-review': { approvalPolicy: 'on-request', sandbox: 'workspace-write', approvalsReviewer: 'auto_review' },
+  'full-access': { approvalPolicy: 'never', sandbox: 'danger-full-access', approvalsReviewer: 'user' }
+}
+const DEFAULT_PERMISSION_MODE = 'default'
+
+const SANDBOX_POLICY_TYPES: Record<CodexPermissions['sandbox'], string> = {
+  'read-only': 'readOnly',
+  'workspace-write': 'workspaceWrite',
+  'danger-full-access': 'dangerFullAccess'
+}
+
+function permissionsFor(mode: string): CodexPermissions {
+  const found = PERMISSIONS[mode]
+  if (!found) throw new Error(`Codex has no permission mode ${mode}`)
+  return found
+}
+
+/** The thread-level fields for `thread/start` and `thread/resume`; the default reviewer is left to app-server. */
+function threadPermissions(mode: string): Record<string, string> {
+  const { approvalPolicy, sandbox, approvalsReviewer } = permissionsFor(mode)
+  return { approvalPolicy, sandbox, ...(approvalsReviewer === 'user' ? {} : { approvalsReviewer }) }
+}
+
+/** The `turn/start` overrides, which app-server keeps for later turns too. */
+function turnPermissions(mode: string): Record<string, unknown> {
+  const { approvalPolicy, sandbox, approvalsReviewer } = permissionsFor(mode)
+  return { approvalPolicy, sandboxPolicy: { type: SANDBOX_POLICY_TYPES[sandbox] }, approvalsReviewer }
+}
 
 function environmentWithPatch(base: NodeJS.ProcessEnv, patch?: Record<string, string | null>): NodeJS.ProcessEnv {
   if (patch === undefined) return base
@@ -79,6 +116,10 @@ type Running = {
   threadId: string
   connection: CodexConnection
   options: StructuredLaunchOptions
+  /** The permission mode the next turn runs in. */
+  permissionMode: string
+  /** The permission mode app-server last applied; a differing `permissionMode` goes out with the next `turn/start`. */
+  appliedPermissionMode: string
   totalTokenUsage: TokenCounts | null
   turnUsageBaseline: TokenCounts | null
   activeTurnId: string | null
@@ -139,7 +180,11 @@ class CodexRunner implements StructuredRunner {
         ...(typeof startOptions.model === 'string' ? { model: startOptions.model } : {}),
         ...(typeof startOptions.effort === 'string' ? { effort: startOptions.effort } : {})
       }
+      const permissionMode = startOptions.permissionMode ?? DEFAULT_PERMISSION_MODE
+      const permissions = threadPermissions(permissionMode)
       const run = this.createRun(session, executable, providerSession?.id ?? '', options, startOptions.env)
+      run.permissionMode = permissionMode
+      run.appliedPermissionMode = permissionMode
       startup.run = run
       startup.connection = run.connection
       const connection = run.connection
@@ -152,8 +197,7 @@ class CodexRunner implements StructuredRunner {
         const response = await connection.request('thread/resume', {
           threadId: providerSession.id,
           cwd: session.cwd,
-          approvalPolicy: APPROVAL_POLICY,
-          sandbox: SANDBOX,
+          ...permissions,
           excludeTurns: true,
           ...(options.model === undefined ? {} : { model: options.model })
         })
@@ -168,8 +212,7 @@ class CodexRunner implements StructuredRunner {
       } else {
         const response = await connection.request('thread/start', {
           cwd: session.cwd,
-          approvalPolicy: APPROVAL_POLICY,
-          sandbox: SANDBOX,
+          ...permissions,
           ...(options.model === undefined ? {} : { model: options.model })
         })
         run.threadId = this.threadIdFromResponse(response, 'thread/start')
@@ -209,9 +252,14 @@ class CodexRunner implements StructuredRunner {
     if (!run || run.stopped || run.failed) throw new Error('session is not running')
     if (settings.model !== undefined) run.options = { ...run.options, model: settings.model }
     if (settings.effort !== undefined) run.options = { ...run.options, effort: settings.effort }
+    if (settings.permissionMode !== undefined) {
+      permissionsFor(settings.permissionMode)
+      run.permissionMode = settings.permissionMode
+    }
     return {
       ...(run.options.model === undefined ? {} : { model: run.options.model }),
-      ...(run.options.effort === undefined ? {} : { effort: run.options.effort })
+      ...(run.options.effort === undefined ? {} : { effort: run.options.effort }),
+      permissionMode: run.permissionMode
     }
   }
 
@@ -338,6 +386,8 @@ class CodexRunner implements StructuredRunner {
       threadId,
       connection,
       options,
+      permissionMode: DEFAULT_PERMISSION_MODE,
+      appliedPermissionMode: DEFAULT_PERMISSION_MODE,
       totalTokenUsage: null,
       turnUsageBaseline: threadId === '' ? { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0 } : null,
       activeTurnId: null,
@@ -389,16 +439,18 @@ class CodexRunner implements StructuredRunner {
     const expectedTurnId = run.activeTurnId
     const method = expectedTurnId === null ? 'turn/start' : 'turn/steer'
     const input = [
-      { type: 'text', text },
+      ...(text === '' ? [] : [{ type: 'text', text }]),
       ...(options.images ?? []).map((path) => ({ type: 'localImage', path }))
     ]
+    const sentPermissionMode = run.permissionMode
     const params =
       method === 'turn/start'
         ? {
             threadId: run.threadId,
             input,
             ...(run.options.model === undefined ? {} : { model: run.options.model }),
-            ...(run.options.effort === undefined ? {} : { effort: run.options.effort })
+            ...(run.options.effort === undefined ? {} : { effort: run.options.effort }),
+            ...(sentPermissionMode === run.appliedPermissionMode ? {} : turnPermissions(sentPermissionMode))
           }
         : {
             threadId: run.threadId,
@@ -422,6 +474,7 @@ class CodexRunner implements StructuredRunner {
         if (typeof turnId !== 'string' || turnId.length === 0) throw new Error('Codex app-server turn/start returned an invalid turn ID')
         run.activeTurnId = turnId
         run.turnStartedAt ??= Date.now()
+        run.appliedPermissionMode = sentPermissionMode
       } else {
         if (typeof response !== 'object' || response === null || Array.isArray(response)) {
           throw new Error('Codex app-server turn/steer returned an invalid response')
