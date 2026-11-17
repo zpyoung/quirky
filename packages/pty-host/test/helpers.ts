@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createProcessScope, type ProcessScope } from '../../../scripts/test-support/process-scope'
@@ -7,6 +7,7 @@ import { type CreateParams, SessionManager } from '../src/session'
 import { startPtyServer, type PtyServer, type PtyServerOptions } from '../src/server'
 import { createProcessRunner } from '@quirky/process'
 import type { ProcessRunner, RunOptions, RunResult } from '@quirky/protocol'
+import { socketPath } from '@quirky/protocol/node'
 
 const ENTRY = new URL('../src/main.ts', import.meta.url).pathname
 
@@ -158,6 +159,28 @@ export function tempHome(): string {
   return home
 }
 
+export function longTempHome(): string {
+  const base = mkdtempSync(join(tmpdir(), 'qpty-'))
+  onCleanup(() => rmSync(base, { recursive: true, force: true }))
+  const home = join(base, 'h'.repeat(120 - Buffer.byteLength(base) - 10))
+  mkdirSync(home, { mode: 0o700 })
+  chmodSync(home, 0o700)
+  const resolvedSocket = socketPath(home, 'pty.sock')
+  onCleanup(() => rmSync(resolvedSocket, { force: true }))
+  return home
+}
+
+export function homeOfSocketLength(bytes: number): string {
+  const base = mkdtempSync('/tmp/qpty-')
+  onCleanup(() => rmSync(base, { recursive: true, force: true }))
+  const home = join(base, 'h'.repeat(bytes - Buffer.byteLength(base) - 10))
+  mkdirSync(home, { mode: 0o700 })
+  chmodSync(home, 0o700)
+  const resolvedSocket = socketPath(home, 'pty.sock')
+  onCleanup(() => rmSync(resolvedSocket, { force: true }))
+  return home
+}
+
 export type TestHost = { home: string; server: PtyServer; connect: () => Promise<PtyClient> }
 
 export function startHost(options: Partial<PtyServerOptions> = {}): TestHost {
@@ -189,6 +212,24 @@ export async function waitFor<T>(
   }
 }
 
+/** Tests a real process-group disappearance rather than only the session leader. */
+export function groupGone(pid: number): boolean {
+  try {
+    process.kill(-pid, 0)
+    return false
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ESRCH') return true
+    throw error
+  }
+}
+
+/** Bounds a real child-process exit using wall-clock time. */
+export function exitWithin(proc: { pid: number; exited: Promise<number> }, timeoutMs: number): Promise<number> {
+  const { promise: timeout, reject } = Promise.withResolvers<never>()
+  const timer = setTimeout(() => reject(new Error(`process ${proc.pid} did not exit within ${timeoutMs}ms`)), timeoutMs)
+  return Promise.race([proc.exited, timeout]).finally(() => clearTimeout(timer))
+}
+
 export function concat(parts: Uint8Array[]): Uint8Array {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
   let pos = 0
@@ -213,14 +254,15 @@ export function startProcess(home: string) {
 
 /** Waits for the host on `home` to listen, then returns an authenticated client and the token. */
 export async function ready(home: string): Promise<{ client: PtyClient; token: string }> {
+  const resolvedSocket = socketPath(home, 'pty.sock')
   const token = await waitFor(
-    () => (existsSync(join(home, 'pty.sock')) && existsSync(join(home, 'pty.token')) ? readFileSync(join(home, 'pty.token'), 'utf8') : ''),
+    () => (existsSync(resolvedSocket) && existsSync(join(home, 'pty.token')) ? readFileSync(join(home, 'pty.token'), 'utf8') : ''),
     10000,
     'host to listen'
   )
   for (let attempt = 0; ; attempt++) {
     try {
-      const c = await PtyClient.connect(join(home, 'pty.sock'))
+      const c = await PtyClient.connect(resolvedSocket)
       onCleanup(() => c.close())
       await c.hello(token)
       return { client: c, token }
