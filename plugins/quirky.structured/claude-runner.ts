@@ -132,7 +132,8 @@ async function encodeImage(path: string): Promise<EncodedImage> {
 }
 
 function userMessage(text: string, providerSessionId?: string, images: EncodedImage[] = []): SDKUserMessage {
-  const content = images.length === 0 ? text : [{ type: 'text', text }, ...images]
+  // the api rejects an empty text block, so an image-only message carries the images alone
+  const content = images.length === 0 ? text : [...(text === '' ? [] : [{ type: 'text', text }]), ...images]
   return {
     type: 'user',
     message: { role: 'user', content } as SDKUserMessage['message'],

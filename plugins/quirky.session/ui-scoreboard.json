@@ -1266,6 +1266,14 @@
       },
       "anchor": "if (this.pill.kind === 'file')",
       "reason": "Chooses the pill glyph by whether it names a file or a command."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "image.preview ? ("
+      },
+      "anchor": "image.preview ?",
+      "reason": "Shows a thumbnail for an image the composer holds the bytes of, and the name chip otherwise."
     }
   ],
   "actions": [
@@ -1893,7 +1901,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
           }
         ]
       }
@@ -1947,11 +1955,29 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-        "quote": "onRemove={() => setImages((current) => current.filter((existing) => existing !== image))}"
+        "quote": "<ImageChip key={image.path} name={image.name} preview={image.preview} onRemove={() => removeImage(image)} />"
       },
       "anchor": "onRemove",
       "transient": "draft",
       "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
+        "quote": "<ScopeChip key={image.path} label={image.name} removeLabel={`Remove ${image.name}`} onRemove={() => removeImage(image)} />"
+      },
+      "anchor": "onRemove",
+      "transient": "draft",
+      "reason": "Removes an unsent attachment from the message."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/ImageChip.tsx",
+        "quote": "<IconButton label={`Remove ${name}`} style={remove} onClick={onRemove}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onRemove, which the composer routes."
     },
     {
       "site": {
@@ -1986,7 +2012,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '') return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
           }
         ]
       }
@@ -2087,7 +2113,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
           }
         ]
       }
@@ -2107,7 +2133,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
+            "quote": "const takeFiles = async (files: File[]) => {\n    if (files.length === 0) return\n    const paths = await absolutePathsOf(context, files)\n    const added: Attachment[] = []\n    let problem: string | null = null\n    for (const [index, file] of files.entries()) {\n      const path = paths[index]\n      if (!isImage(file)) {\n        if (path) editor.current?.insertPill({ kind: 'file', path: relativeTo(session.cwd, path) })\n        else problem ??= `${file.name} has no file path`\n      } else if (settings.imagesReason !== undefined) {\n        problem ??= settings.imagesReason\n      } else if (path) {\n        added.push({ name: file.name, path, preview: previewOf(file) })\n      } else if (!PASTE_MIMES.includes(file.type)) {\n        problem ??= `${file.name || 'The pasted file'} is not a supported image`\n      } else {\n        try {\n          const saved = (await context.call('quirky.session/pasteImage', { session: session.id, mime: file.type, data: await base64Of(file) })) as { path: string }\n          added.push({ name: file.name || basename(saved.path), path: saved.path, preview: previewOf(file) })\n        } catch (error) {\n          problem ??= messageOf(error)\n        }\n      }\n    }\n    addImages(added)\n    if (problem !== null) fail(problem)\n  }"
           }
         ]
       }
@@ -2214,7 +2240,7 @@
         "via": [
           {
             "file": "plugins/quirky.session/src/window/chat/Composer.tsx",
-            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '') return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
+            "quote": "const submit = async (kind: 'send' | 'steer', again?: Snapshot) => {\n    const snapshot = again ?? { text, images, pastes }\n    const body = composeMessage(snapshot.text, snapshot.pastes)\n    if (body === '' && snapshot.images.length === 0) return\n    const steerReason = reasonOf(capabilities?.steer)\n    if (kind === 'steer' && working && steerReason !== undefined) {\n      fail(steerReason)\n      return\n    }\n    setText('')\n    setImages([])\n    setPastes([])\n    setTrigger(null)\n    setFailure(null)\n    const watcher = { text: body, arrived: false }\n    if (kind === 'steer' && working) steerWatchers.current.add(watcher)\n    try {\n      const result = (await context.call('quirky.structured/send', {\n        session: session.id,\n        text: body,\n        ...(snapshot.images.length > 0 ? { images: snapshot.images.map((image) => image.path) } : {}),\n        when: working ? 'idle' : 'now'\n      })) as { queuedId?: string } | undefined\n      draft.cleared()\n      if (kind === 'steer' && working && result?.queuedId) {\n        const id = result.queuedId\n        if (!watcher.arrived) setSteered((current) => [...current, { id, text: body }])\n        try {\n          await context.call('quirky.structured/steer', { session: session.id, id })\n        } catch (error) {\n          setSteered((current) => current.filter((entry) => entry.id !== id))\n          fail(`Could not steer: ${messageOf(error)}`)\n        }\n      }\n    } catch (error) {\n      setText(snapshot.text)\n      setImages(snapshot.images)\n      setPastes(snapshot.pastes)\n      fail(`Could not send: ${messageOf(error)}`, () => void submitRef.current(kind, snapshot))\n    } finally {\n      steerWatchers.current.delete(watcher)\n    }\n  }"
           }
         ]
       }
