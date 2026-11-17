@@ -1174,46 +1174,6 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{searchable && <TextField label=\"Search models\" value={search} onChange={(event) => setSearch(event.target.value)} />}"
-      },
-      "anchor": "searchable &&",
-      "reason": "Shows the model search field once the list passes 8 entries."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{settings.unlisted && settings.model !== null && <ListRow compact selected title={settings.model} />}"
-      },
-      "anchor": "settings.unlisted && settings.model !== null &&",
-      "reason": "Adds the session's current model to the list when the catalog lacks it."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{settings.choices.length === 0 && ("
-      },
-      "anchor": "settings.choices.length === 0 &&",
-      "reason": "Keeps a disabled Effort control visible, with its reason, when the model lists no effort levels."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{settings.modes.length === 0 && <ListRow compact disabled mainTitle={settings.modeReason} title=\"Permission mode\" />}"
-      },
-      "anchor": "settings.modes.length === 0 &&",
-      "reason": "Keeps a disabled permission row visible, with its reason, when the agent has no permission modes."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "<span>{picks.plan ? 'On' : 'Off'}</span>"
-      },
-      "anchor": "picks.plan ?",
-      "reason": "Words the visible on or off state of the Plan switch."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
         "quote": "{picks.plan && ("
       },
       "anchor": "picks.plan &&",
@@ -1226,14 +1186,6 @@
       },
       "anchor": "defaultMode !== null && mode !== '' && mode !== defaultMode &&",
       "reason": "Shows the permission badge only while the mode is not the default."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "trailing={settings.isDangerous(name) ? <Badge tone=\"failing\">No approvals</Badge> : undefined}"
-      },
-      "anchor": "settings.isDangerous(name) ?",
-      "reason": "Marks a permission mode that skips approvals; it labels a list row, not a loading, empty or failed read."
     },
     {
       "site": {
@@ -1282,6 +1234,86 @@
       },
       "anchor": "image.preview ?",
       "reason": "Shows a thumbnail for an image the composer holds the bytes of, and the name chip otherwise."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{reason !== undefined && <span className=\"ui-help-text\">{reason}</span>}"
+      },
+      "anchor": "reason !== undefined &&",
+      "reason": "Shows why a setting is off under its name."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{reason === undefined && <span style={danger ? dangerValue : rowValue}>{value}</span>}"
+      },
+      "anchor": "reason === undefined &&",
+      "reason": "Shows a setting's current value only while it can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{effortOff && <span className=\"ui-help-text\">{settings.effortReason}</span>}"
+      },
+      "anchor": "effortOff &&",
+      "reason": "Shows why Effort is off under its name."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{!effortOff && ("
+      },
+      "anchor": "!effortOff &&",
+      "reason": "Shows the effort stepper only while effort can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{settings.planReason ?? PLAN_DESCRIPTION}"
+      },
+      "anchor": "settings.planReason ??",
+      "reason": "Explains Plan mode, or says why it is off."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{!effortOff && <span>←→ effort</span>}"
+      },
+      "anchor": "!effortOff &&",
+      "reason": "Mentions the effort keys only while effort can be changed."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{searchable && settings.modelReason === undefined && <span>type to find a model</span>}"
+      },
+      "anchor": "searchable && settings.modelReason === undefined &&",
+      "reason": "Mentions type-to-search only when the model list has a search field."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{searching && <span style={rowValue}>{settings.modelList.length}</span>}"
+      },
+      "anchor": "searching &&",
+      "reason": "Counts the models beside the title when the list is long enough to search."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "{view === 'model' && modelItems.length === 0 && <div className=\"ui-help-text\" style={empty}>No models match</div>}"
+      },
+      "anchor": "view === 'model' && modelItems.length === 0 &&",
+      "reason": "Says no model matches the typed search; a local filter, not a read state."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<div ref={body}>{view === 'summary' ? summary : list}</div>"
+      },
+      "anchor": "view === 'summary' ?",
+      "reason": "Swaps between the settings summary and one setting's list."
     }
   ],
   "actions": [
@@ -2404,42 +2436,6 @@
     {
       "site": {
         "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "{searchable && <TextField label=\"Search models\" value={search} onChange={(event) => setSearch(event.target.value)} />}"
-      },
-      "anchor": "onChange",
-      "transient": "draft",
-      "reason": "Filters the model list by the typed search text."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "onClick={() => onPicks({ ...picks, model: entry.value, effort: null })}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "onClick={() => onPicks({ ...picks, effort: choice.value })}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
-        "quote": "onClick={() => onPicks({ ...picks, mode: name })}"
-      },
-      "anchor": "onClick",
-      "notAction": "forwarded",
-      "reason": "Forwards the choice to onPicks, which records the pick and applies it through the composer."
-    },
-    {
-      "site": {
-        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
         "quote": "onClick={() => onPicks({ ...picks, plan: !picks.plan })}"
       },
       "anchor": "onClick",
@@ -2481,6 +2477,123 @@
       "anchor": "onClick",
       "notAction": "forwarded",
       "reason": "Forwards the click to onPick, which the composer routes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "data-opens={name} disabled={reason !== undefined} title={reason} onClick={onOpen}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards the click to onOpen, which only opens that setting's list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onChange={(event) => setQuery(event.target.value)}"
+      },
+      "anchor": "onChange",
+      "transient": "draft",
+      "reason": "Filters the model list by the typed search text."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "<div style={panel} onKeyDown={onSummaryKeyDown}>"
+      },
+      "anchor": "onKeyDown",
+      "notAction": "forwarded",
+      "reason": "Forwards keys to onSummaryKeyDown, which moves focus or opens a setting's list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onOpen={() => onShowList('model')}"
+      },
+      "anchor": "onOpen",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowList, which only shows the model list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onOpen={() => onShowList('mode')}"
+      },
+      "anchor": "onOpen",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowList, which only shows the permission list."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onKeyDown={onEffortKeyDown}"
+      },
+      "anchor": "onKeyDown",
+      "notAction": "forwarded",
+      "reason": "Forwards keys to onEffortKeyDown, which steps effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label=\"Less effort\" disabled={effortIndex <= 0} onClick={() => onStepEffort(-1)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onStepEffort, which applies the lower effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label=\"More effort\" disabled={effortIndex >= settings.choices.length - 1} onClick={() => onStepEffort(1)}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onStepEffort, which applies the higher effort through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "aria-label={`${title}, back to all settings`} onClick={onShowSummary}>"
+      },
+      "anchor": "onClick",
+      "notAction": "forwarded",
+      "reason": "Forwards to onShowSummary, which only returns to the settings summary."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onBack={searching ? undefined : onShowSummary}"
+      },
+      "anchor": "onBack",
+      "transient": "draft",
+      "reason": "Steps back to the settings summary; only local view state changes."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onChoose={onPickRow}"
+      },
+      "anchor": "onChoose",
+      "notAction": "forwarded",
+      "reason": "Forwards the chosen row to onPickRow, which applies it through onPicks."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "onClose={() => onOpenChange(false)}\n"
+      },
+      "anchor": "onClose",
+      "notAction": "forwarded",
+      "reason": "Forwards the close to onOpenChange, which only hides the popover."
+    },
+    {
+      "site": {
+        "file": "plugins/quirky.session/src/window/chat/SettingsChip.tsx",
+        "quote": "window.addEventListener('keydown', escape, true)"
+      },
+      "anchor": "window.addEventListener('keydown'",
+      "transient": "draft",
+      "reason": "Escape steps back to the settings summary; only local view state changes."
     }
   ]
 }
