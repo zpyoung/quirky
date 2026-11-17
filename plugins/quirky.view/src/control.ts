@@ -146,6 +146,7 @@ function snapshot(state: ViewUiState): ViewUiState {
   return { ...state, tabs: state.tabs.map((tab) => ({ ...tab })) }
 }
 
+/** Routes view commands to explicit live mounts without changing daemon authority. */
 export function createViewUiController(context: UiPluginContext): { mount(options: MountOptions): ViewUiInstance } {
   const mounts = new Map<string, MountEntry>()
 
@@ -179,6 +180,7 @@ export function createViewUiController(context: UiPluginContext): { mount(option
           ...(activeChanged ? { pendingLink: null } : {}),
           tabs: patch.tabs === undefined ? entry.state.tabs : patch.tabs.map((tab) => ({ ...tab }))
         }
+        if (activeChanged || patch.pendingLink === null) entry.handlers.cancelLink?.()
         reportEntry(entry, mounts, context)
       },
       setHandlers(handlers) {
@@ -229,8 +231,8 @@ export function createViewUiController(context: UiPluginContext): { mount(option
     if (command.action === 'link-preview') {
       const href = validateLink(command.href)
       if (!entry.handlers.previewLink) throw new Error('View link preview is not available for this mount.')
-      entry.state = { ...entry.state, pendingLink: href }
       entry.handlers.previewLink(href)
+      entry.state = { ...entry.state, pendingLink: href }
       reportEntry(entry, mounts, context)
       return { ok: true }
     }
@@ -273,6 +275,3 @@ function reportEntry(entry: MountEntry, mounts: Map<string, MountEntry>, context
   }
 }
 
-export function runViewUiCommand(context: UiPluginContext, id: string, args: unknown): Promise<void> {
-  return context.executeCommand(id, args, { activateOwner: false })
-}

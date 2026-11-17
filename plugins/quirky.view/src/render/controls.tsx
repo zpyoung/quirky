@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ComponentProps, type FormEvent } from 'react'
 import { Button, TextArea, TextField } from '@quirky/ui'
 import { textAnswerError } from '../core/contract'
 import { asItems, asNumber, asString, isRecord, oneOf, type Props } from './props'
@@ -6,6 +6,10 @@ import { useRuntime } from './runtime'
 import { COLUMN, MUTED, ROW } from './styles'
 
 const BUTTON_VARIANTS = ['primary', 'ghost'] as const
+
+function DraftChoice({ onPress, ...props }: Omit<ComponentProps<typeof Button>, 'onClick'> & { onPress: () => void }) {
+  return <Button {...props} onClick={onPress} />
+}
 
 export function ViewButton({ props }: { props: Props }) {
   const { send } = useRuntime()
@@ -108,10 +112,10 @@ export function Field({ props }: { props: Props }) {
     control = (
       <div role="group" aria-label={prompt} style={{ ...COLUMN, gap: 'var(--ui-space-6)' }}>
         {options.map((option) => (
-          <Button key={option.value} variant={draft.selected.includes(option.value) ? 'primary' : 'secondary'} aria-pressed={draft.selected.includes(option.value)} onClick={() => toggle(option.value)}>
+          <DraftChoice key={option.value} variant={draft.selected.includes(option.value) ? 'primary' : 'secondary'} aria-pressed={draft.selected.includes(option.value)} onPress={() => toggle(option.value)}>
             {option.label}
             {option.description !== '' && <span> {option.description}</span>}
-          </Button>
+          </DraftChoice>
         ))}
       </div>
     )
@@ -119,9 +123,9 @@ export function Field({ props }: { props: Props }) {
     control = (
       <div role="group" aria-label={prompt} style={ROW}>
         {([true, false] as const).map((value) => (
-          <Button key={String(value)} variant={draft.confirm === value ? 'primary' : 'secondary'} aria-pressed={draft.confirm === value} onClick={() => change({ confirm: value })}>
+          <DraftChoice key={String(value)} variant={draft.confirm === value ? 'primary' : 'secondary'} aria-pressed={draft.confirm === value} onPress={() => change({ confirm: value })}>
             {value ? 'Yes' : 'No'}
-          </Button>
+          </DraftChoice>
         ))}
       </div>
     )

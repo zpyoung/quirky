@@ -9,6 +9,11 @@ import { createViewUiController } from '../src/control'
 import type { createRoot as CreateRoot } from 'react-dom/client'
 import type { ViewsPane as ViewsPaneComponent } from '../src/Pane'
 import type { ViewCardView as ViewCardViewComponent } from '../src/render/ViewCard'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { collectInventory } from '../../../scripts/ui-scoreboard/inventory'
+import { checkPlugin } from '../../../scripts/ui-scoreboard/tokens'
+import { discoverUiFiles } from '../../../scripts/ui-scoreboard/audit-discovery'
 
 const RENDER = 'view:quirky.view/render'
 const PANE = 'view:quirky.view/pane'
@@ -1145,4 +1150,98 @@ describe('visible view read states', () => {
     await settle()
     expect(fake.callsTo('quirky.view/list')).toHaveLength(reads)
   })
+
+  test.each([RENDER, PANE])('a failed refresh command rejects and retains last-good content in %s', async (surface) => {
+    let offline = false
+    const current = record(markdownSpec('last-good body'), { placement: surface === PANE ? 'pane' : 'inline' })
+    const read = () => {
+      if (offline) throw new Error('offline')
+      return current
+    }
+    const fake = start([current], {
+      'quirky.view/get': read,
+      'quirky.view/list': () => [read()]
+    })
+    const view = surface === PANE ? await mountPane(fake) : await mountCard(fake)
+    const instance = await instanceFor(fake, surface)
+    offline = true
+    await act(async () => {
+      await expect(fake.runCommand(CONTROL, { instance, action: 'refresh' })).rejects.toThrow('offline')
+    })
+    expect(text(view.element)).toContain('last-good body')
+    expect(view.element.querySelector('.ui-inline-error__message')?.textContent)
+      .toBe(`Could not load ${surface === PANE ? 'views' : 'view'}: offline`)
+    offline = false
+    await act(async () => void await fake.runCommand(CONTROL, { instance, action: 'refresh' }))
+    expect(view.element.querySelector('[role="alert"]')).toBeNull()
+    expect(text(view.element)).toContain('last-good body')
+  })
+
+  test.each([RENDER, PANE])('a refreshed spec invalidates pending confirmation before %s commands return', async (surface) => {
+    const records = [record(markdownSpec('[docs](https://example.test/docs)'), { placement: surface === PANE ? 'pane' : 'inline' })]
+    const fake = start(records)
+    const view = surface === PANE ? await mountPane(fake) : await mountCard(fake)
+    const instance = await instanceFor(fake, surface)
+    await view.click(view.element.querySelector('a')!)
+    records[0] = record(markdownSpec('changed content'), { placement: surface === PANE ? 'pane' : 'inline' })
+    await act(async () => {
+      await fake.runCommand(CONTROL, { instance, action: 'refresh' })
+      expect((await instances(fake)).find((state) => state.instance === instance)?.pendingLink).toBeNull()
+      await expect(fake.runCommand(CONTROL, { instance, action: 'link-confirm', viewId: 'view_1' }))
+        .rejects.toThrow('No link is awaiting confirmation.')
+    })
+    expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
+  })
+
+  test('selecting a pane card and preparing its link in one command turn opens the new card dialog', async () => {
+    const fake = start([paneRecord('view_1', 'First'), paneRecord('view_2', 'Second')])
+    await mountPane(fake)
+    const instance = await instanceFor(fake, PANE)
+    await act(async () => {
+      await fake.runCommand(CONTROL, { instance, action: 'select-tab', viewId: 'view_2' })
+      await fake.runCommand(CONTROL, { instance, action: 'link-preview', viewId: 'view_2', href: 'https://example.test/docs' })
+    })
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('https://example.test/docs')
+    expect((await instances(fake)).find((state) => state.instance === instance)?.pendingLink).toBe('https://example.test/docs')
+    expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
+  })
+
+  test.each(['closed', 'pane'])('a render card becoming %s clears its pending link without a spec change', async (change) => {
+    const spec = markdownSpec('[docs](https://example.test/docs)')
+    const records = [record(spec)]
+    const fake = start(records)
+    const view = await mountCard(fake)
+    const instance = await instanceFor(fake, RENDER)
+    await view.click(view.element.querySelector('a')!)
+    records[0] = record(spec, change === 'closed' ? { closed: true } : { placement: 'pane' })
+    await act(async () => {
+      await fake.runCommand(CONTROL, { instance, action: 'refresh' })
+      expect((await instances(fake)).find((state) => state.instance === instance)?.pendingLink).toBeNull()
+      await expect(fake.runCommand(CONTROL, { instance, action: 'link-confirm', viewId: 'view_1' }))
+        .rejects.toThrow('No link is awaiting confirmation.')
+    })
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(fake.callsTo('quirky.terminal/openExternal')).toHaveLength(0)
+  })
+})
+
+test('view surfaces pass every applicable static scoreboard check and ratchet', () => {
+  const root = resolve(import.meta.dir, '../../..')
+  const inventory = collectInventory(root)
+  const plugin = inventory.plugins.find((entry) => entry.id === 'quirky.view')!
+  const checks = checkPlugin(inventory, plugin.id)
+  expect(checks.map(({ id, status, applicable }) => ({ id, status, applicable }))).toEqual(
+    (['compatibility-tokens', 'loading', 'empty', 'error', 'commands'] as const).map((id) => ({ id, status: 'pass', applicable: true }))
+  )
+  const coverage = JSON.parse(plugin.coverage!.content)
+  expect(Object.keys(coverage.surfaces).sort()).toEqual([PANE, RENDER].sort())
+  for (const surface of [PANE, RENDER]) {
+    for (const state of ['loading', 'empty', 'error']) expect(coverage.surfaces[surface][state]).toEqual({ applicable: true })
+  }
+  const graph = discoverUiFiles(plugin)
+  expect(graph.failures).toEqual([])
+  expect(graph.files).toContain('plugins/quirky.view/src/core/contract.ts')
+  expect(graph.files).not.toContain('plugins/quirky.view/src/core/catalog.ts')
+  const ratchet = JSON.parse(readFileSync(resolve(root, 'scripts/ui-scoreboard-ratchet.json'), 'utf8'))
+  expect(ratchet['quirky.view']?.slice().sort()).toEqual(['commands', 'compatibility-tokens', 'empty', 'error', 'loading'])
 })
