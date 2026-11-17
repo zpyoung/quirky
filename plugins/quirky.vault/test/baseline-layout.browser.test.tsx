@@ -463,43 +463,49 @@ for (const target of [
   })
 }
 
-test('a pending write disables both switches and blocks further label and Space activation', async () => {
-  await withSettingsPage({
-    theme: 'dark', viewportWidth: 1000, containerWidth: 600,
-    fixture: { mount: 'embedded', hosts: defaultHosts(), write: 'pending' }
-  }, async (page) => {
-    await waitForDefaultRows(page)
-    const localSwitch = page.getByRole('switch', { name: LOCAL_LABEL, exact: true })
-    const remoteSwitch = page.getByRole('switch', { name: REMOTE_SWITCH_LABEL, exact: true })
-    const { label: localLabel } = await switchLabel(page, LOCAL_LABEL)
-    const { label: remoteLabel } = await switchLabel(page, REMOTE_SWITCH_LABEL)
-    await localLabel.click()
-    await page.waitForFunction(() => {
-      const local = document.querySelector<HTMLInputElement>('[data-vault-search-enabled]')
-      const remote = document.querySelector<HTMLInputElement>('[data-vault-host-switch]')
-      return window.__vaultSettingsFixture.calls.filter((call) => call.method === 'quirky.vault/setSearchEnabled').length === 1 && Boolean(local?.disabled && remote?.disabled)
+for (const target of [
+  { host: 'local' },
+  { host: 'owner' }
+] as const) {
+  test(`a pending ${target.host} write disables both switches and blocks further label and Space activation`, async () => {
+    await withSettingsPage({
+      theme: 'dark', viewportWidth: 1000, containerWidth: 600,
+      fixture: { mount: 'embedded', hosts: defaultHosts(), write: 'pending' }
+    }, async (page) => {
+      await waitForDefaultRows(page)
+      const localSwitch = page.getByRole('switch', { name: LOCAL_LABEL, exact: true })
+      const remoteSwitch = page.getByRole('switch', { name: REMOTE_SWITCH_LABEL, exact: true })
+      const { label: localLabel } = await switchLabel(page, LOCAL_LABEL)
+      const { label: remoteLabel } = await switchLabel(page, REMOTE_SWITCH_LABEL)
+      await (target.host === 'local' ? localLabel : remoteLabel).click()
+      await page.waitForFunction(() => {
+        const local = document.querySelector<HTMLInputElement>('[data-vault-search-enabled]')
+        const remote = document.querySelector<HTMLInputElement>('[data-vault-host-switch]')
+        return window.__vaultSettingsFixture.calls.filter((call) => call.method === 'quirky.vault/setSearchEnabled').length === 1 && Boolean(local?.disabled && remote?.disabled)
+      })
+      expect(await localSwitch.isDisabled()).toBe(true)
+      expect(await remoteSwitch.isDisabled()).toBe(true)
+      for (const label of [localLabel, remoteLabel]) {
+        const bounds = await label.boundingBox()
+        if (!bounds) throw new Error('The disabled switch label is not visible.')
+        await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+        await page.keyboard.press('Space')
+      }
+      expect(await writeCalls(page)).toEqual([{
+        method: 'quirky.vault/setSearchEnabled',
+        params: { enabled: true, host: target.host }
+      }])
+      await page.evaluate((host) => window.__vaultSettingsFixture.resolveWrite(host), target.host)
+      await page.waitForFunction((host) => {
+        const local = document.querySelector<HTMLInputElement>('[data-vault-search-enabled]')
+        const remote = document.querySelector<HTMLInputElement>('[data-vault-host-switch]')
+        return local?.checked === (host === 'local') && local.disabled === false &&
+          remote?.checked === (host === 'owner') && remote.disabled === false
+      }, target.host)
+      expect(await writeCalls(page)).toHaveLength(1)
     })
-    expect(await localSwitch.isDisabled()).toBe(true)
-    expect(await remoteSwitch.isDisabled()).toBe(true)
-    for (const label of [localLabel, remoteLabel]) {
-      const bounds = await label.boundingBox()
-      if (!bounds) throw new Error('The disabled switch label is not visible.')
-      await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
-      await page.keyboard.press('Space')
-    }
-    expect(await writeCalls(page)).toEqual([{
-      method: 'quirky.vault/setSearchEnabled',
-      params: { enabled: true, host: 'local' }
-    }])
-    await page.evaluate(() => window.__vaultSettingsFixture.resolveWrite('local'))
-    await page.waitForFunction(() => {
-      const local = document.querySelector<HTMLInputElement>('[data-vault-search-enabled]')
-      const remote = document.querySelector<HTMLInputElement>('[data-vault-host-switch]')
-      return local?.checked === true && local.disabled === false && remote?.disabled === false
-    })
-    expect(await writeCalls(page)).toHaveLength(1)
   })
-})
+}
 
 for (const target of [
   { host: 'local', name: LOCAL_LABEL },
