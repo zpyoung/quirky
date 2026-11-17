@@ -623,7 +623,10 @@ type PaneToolbarGeometry = {
   scrollWidth: number
   controls: {
     name: string
-    present: boolean
+    width: number
+    height: number
+    visible: boolean
+    hit: boolean
     left: number
     right: number
     centerY: number
@@ -652,9 +655,13 @@ function paneToolbarGeometry(page: Page): Promise<PaneToolbarGeometry> {
     const items = controls.map(([name, element]) => {
       if (!(element instanceof HTMLElement)) throw new Error(`Missing Browser toolbar control: ${name}`)
       const rect = element.getBoundingClientRect()
+      const target = document.elementFromPoint((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2)
       return {
         name,
-        present: true,
+        width: rect.width,
+        height: rect.height,
+        visible: element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }),
+        hit: target === element || (target !== null && element.contains(target)),
         left: rect.left,
         right: rect.right,
         centerY: (rect.top + rect.bottom) / 2,
@@ -682,8 +689,14 @@ function paneToolbarGeometry(page: Page): Promise<PaneToolbarGeometry> {
 
 function expectAllToolbarControlsInside(metrics: PaneToolbarGeometry): void {
   expect(metrics.inOrder).toBe(true)
-  expect(metrics.controls.every((control) => control.present)).toBe(true)
-  expect(metrics.controls.every((control) => control.left >= metrics.left - 0.5 && control.right <= metrics.right + 0.5)).toBe(true)
+  for (const control of metrics.controls) {
+    expect(control.width).toBeGreaterThan(0)
+    expect(control.height).toBeGreaterThan(0)
+    expect(control.visible).toBe(true)
+    expect(control.hit).toBe(true)
+    expect(control.left).toBeGreaterThanOrEqual(metrics.left - 0.5)
+    expect(control.right).toBeLessThanOrEqual(metrics.right + 0.5)
+  }
   expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth)
 }
 
