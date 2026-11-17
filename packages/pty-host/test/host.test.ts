@@ -969,7 +969,8 @@ describe('connection output queues', () => {
     const listening = spyOn(Bun, 'listen')
     onCleanup(() => listening.mockRestore())
     const host = startHost({ maxConnectionQueuedBytes: 1024 })
-    const listener = listening.mock.results[0]!.value
+    // the overloaded listen spy erases the Unix listener's return type.
+    const listener = listening.mock.results[0]!.value as Bun.UnixSocketListener<unknown>
     listening.mockRestore()
     onCleanup(() => listener.stop(true))
     const control = await host.connect()
