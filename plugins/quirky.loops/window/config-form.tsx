@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { Button, FormRow, SelectField, TextArea, TextField } from '@quirky/ui'
+import { Button, Checkbox, FormRow, SelectField, TextArea, TextField } from '@quirky/ui'
 import type { LoopConfig, LoopCreateInput, LoopSnapshot } from '../src/types'
 import type { ConfigFieldsProps, DraftValidation, LoopDraft } from './contracts'
 
@@ -252,13 +252,14 @@ export function ConfigFields(props: ConfigFieldsProps) {
         <option value="continue">Continue</option>
       </SelectField>
       {editing && draft.preset === 'queue' && (
-        <FormRow label="Start over when the queue is empty" htmlFor={`${checkboxId}-repeat-queue`}>
-          <input
+        <FormRow layout="inline" label="Start over when the queue is empty" htmlFor={`${checkboxId}-repeat-queue`}>
+          <Checkbox
+            hideLabel
+            label="Start over when the queue is empty"
             id={`${checkboxId}-repeat-queue`}
-            type="checkbox"
             checked={draft.repeatQueue}
             disabled={isDisabled}
-            onChange={(event) => onChange({ repeatQueue: event.currentTarget.checked })}
+            onChange={(checked) => onChange({ repeatQueue: checked })}
           />
         </FormRow>
       )}
@@ -354,42 +355,46 @@ export function ConfigFields(props: ConfigFieldsProps) {
             disabled={isDisabled}
             onChange={(event) => onChange({ protectedPaths: event.currentTarget.value })}
           />
-          <FormRow label="Pause after 3 iterations with no changes" htmlFor={`${checkboxId}-no-progress`}>
-            <input
+          <FormRow layout="inline" label="Pause after 3 iterations with no changes" htmlFor={`${checkboxId}-no-progress`}>
+            <Checkbox
+              hideLabel
+              label="Pause after 3 iterations with no changes"
               id={`${checkboxId}-no-progress`}
-              type="checkbox"
               checked={draft.noProgress}
               disabled={isDisabled}
-              onChange={(event) => onChange({ noProgress: event.currentTarget.checked })}
+              onChange={(checked) => onChange({ noProgress: checked })}
             />
           </FormRow>
           {workspaceKind === 'git' && (
-            <FormRow label="Commit a checkpoint after each iteration" htmlFor={`${checkboxId}-checkpoint-commits`}>
-              <input
+            <FormRow layout="inline" label="Commit a checkpoint after each iteration" htmlFor={`${checkboxId}-checkpoint-commits`}>
+              <Checkbox
+                hideLabel
+                label="Commit a checkpoint after each iteration"
                 id={`${checkboxId}-checkpoint-commits`}
-                type="checkbox"
                 checked={draft.checkpointCommits}
                 disabled={isDisabled}
-                onChange={(event) => onChange({ checkpointCommits: event.currentTarget.checked })}
+                onChange={(checked) => onChange({ checkpointCommits: checked })}
               />
             </FormRow>
           )}
-          <FormRow label="Ask before each new iteration" htmlFor={`${checkboxId}-ask-before-next`}>
-            <input
+          <FormRow layout="inline" label="Ask before each new iteration" htmlFor={`${checkboxId}-ask-before-next`}>
+            <Checkbox
+              hideLabel
+              label="Ask before each new iteration"
               id={`${checkboxId}-ask-before-next`}
-              type="checkbox"
               checked={draft.askBeforeNext}
               disabled={isDisabled}
-              onChange={(event) => onChange({ askBeforeNext: event.currentTarget.checked })}
+              onChange={(checked) => onChange({ askBeforeNext: checked })}
             />
           </FormRow>
-          <FormRow label="Resume when the usage limit resets" htmlFor={`${checkboxId}-resume-at-limit-reset`}>
-            <input
+          <FormRow layout="inline" label="Resume when the usage limit resets" htmlFor={`${checkboxId}-resume-at-limit-reset`}>
+            <Checkbox
+              hideLabel
+              label="Resume when the usage limit resets"
               id={`${checkboxId}-resume-at-limit-reset`}
-              type="checkbox"
               checked={draft.resumeAtLimitReset}
               disabled={isDisabled}
-              onChange={(event) => onChange({ resumeAtLimitReset: event.currentTarget.checked })}
+              onChange={(checked) => onChange({ resumeAtLimitReset: checked })}
             />
           </FormRow>
         </div>
