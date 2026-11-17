@@ -24,7 +24,10 @@ const SOURCE_CITATIONS: Record<string, string[]> = {
   ],
   'palette-retained-spacing': ['g3-62 scenario 12'],
   'palette-selected-colors': ['g3-62 scenario 7'],
-  'worktrees-approved-redesign': ['docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md']
+  'worktrees-approved-redesign': [
+    'docs/quirk/specs/2026-11-05-worktrees-plugin-redesign/logic.md',
+    'docs/quirk/specs/2026-10-28-m6-orchestration-ui/logic.md'
+  ]
 }
 const THEME_VALUES: Record<CaptureTheme, Record<string, string>> = {
   dark: {
@@ -70,6 +73,62 @@ function target(id: string, title: string): CaptureTarget {
 
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex')
+}
+
+const LEGACY_WORKTREES_TEXT = 'The approved Worktrees redesign supersedes the older shell golden for this component. Worktrees rows are single-line 26px, with 4px gaps and 12px indentation; selection is neutral var(--ui-selected) with a bold name, not blue. Saved-view tabs, filter and changed lines, header actions, hierarchy, counts, and rail attention badges are approved capabilities. Their presence or one-line density is not a defect. Overflow, illegible names, missing controls, and incorrect implementation of these rules remain defects. This rule does not apply Worktrees row anatomy to Remote workspaces.'
+const ORCHESTRATION_ROW_PHRASES = [
+  'Orchestration session rows nested under a worktree are not checkout rows',
+  'Coordinator followed by a session name',
+  'Orphaned coordinator',
+  'Coordinator unavailable',
+  'Worker assignment unverified',
+  '34px minimum',
+  'wrap their full text',
+  'the single-line 26px checkout anatomy does not apply to them',
+  'That second line, the 34px height and that wrapping are not defects'
+]
+
+function orchestrationRowFailures(text: string): string[] {
+  return ORCHESTRATION_ROW_PHRASES.filter((phrase) => !text.includes(phrase))
+}
+
+for (const theme of ['dark', 'light'] as const) {
+  const text = hostContractContext(target('host:shell', 'Shell'), theme)
+    .rules.find(({ id }) => id === 'worktrees-approved-redesign')!.text
+
+  test(`${theme}: checkout anatomy is limited to checkout rows`, () => {
+    for (const phrase of ['Worktree checkout rows', 'activity mark', 'worktree name', 'up to two tag chips plus +N', 'one right-side fact']) {
+      expect(text).toContain(phrase)
+    }
+    for (const pattern of [/26px/, /4px gaps/, /12px indentation/, /neutral .*--ui-selected/i, /bold name/, /one-line/]) {
+      expect(text).toMatch(pattern)
+    }
+  })
+
+  test(`${theme}: orchestration titles and descriptions may wrap above their shared minimum height`, () => {
+    expect(text).toMatch(/Orchestration session rows[^.]*not checkout rows/)
+    expect(orchestrationRowFailures(text)).toEqual([])
+  })
+
+  test(`${theme}: both row kinds retain legibility and control requirements`, () => {
+    expect(text).toMatch(/clips or overlaps text[^.]*illegible names[^.]*missing controls[^.]*in either kind of row/)
+    expect(text).toContain('This rule does not apply Worktrees row anatomy to Remote workspaces')
+  })
+
+  test(`${theme}: removing the orchestration exception loses the required guidance`, () => {
+    expect(LEGACY_WORKTREES_TEXT).toHaveLength(583)
+    expect(orchestrationRowFailures(LEGACY_WORKTREES_TEXT)).toEqual(ORCHESTRATION_ROW_PHRASES)
+    const withoutException = text.split('. ')
+      .filter((sentence) => !/Orchestration|34px/.test(sentence)).join('. ')
+    expect(orchestrationRowFailures(text)).toEqual([])
+    expect(orchestrationRowFailures(withoutException).length).toBeGreaterThan(0)
+  })
+
+  test(`${theme}: Worktrees guidance stays one ASCII line within the context limit`, () => {
+    expect(text.length).toBeLessThanOrEqual(2000)
+    expect(text).not.toMatch(/[\r\n]/)
+    expect(text).toMatch(/^[\x20-\x7e]+$/)
+  })
 }
 
 test('each theme receives the five sorted, cited host rules and checked-in token values', () => {
