@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { isDeepStrictEqual } from 'node:util'
+import { isDeepStrictEqual, stripVTControlCharacters } from 'node:util'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { HOOK_PATH_PREFIX, HOOK_TOKEN_HEADER } from '@quirky/protocol'
@@ -734,6 +734,9 @@ export async function prepareCaptureTerminalFixture(
     data: `printf '\\n${CAPTURE_TERMINAL_READY_MARKER}\\n'\n`
   }, remaining())
   while (Date.now() < deadline) {
+    const snapshot = record(await callRpc(client, 'quirky.terminal/snapshot', { session: terminal.sessionId }, remaining()))
+    if (typeof snapshot.ansi === 'string' && stripVTControlCharacters(snapshot.ansi).split(/\r?\n/)
+      .some((line) => line.trim() === CAPTURE_TERMINAL_READY_MARKER)) return
     const history = record(await callRpc(client, 'quirky.terminal/history', { session: terminal.sessionId, lines: 100, format: 'text' }, remaining()))
     if (Array.isArray(history.lines) && history.lines.some((line) =>
       typeof line === 'string' && line.split(/\r?\n/).some((part) => part.trim() === CAPTURE_TERMINAL_READY_MARKER))) return

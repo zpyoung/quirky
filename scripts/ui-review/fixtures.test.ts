@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test'
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
+import { Screen } from '../../packages/pty-host/src/screen'
 import {
   ASK_CARD_FIXTURE_COMMAND,
   closeAskCardFixture,
@@ -1104,7 +1105,6 @@ test('terminal readiness waits for a supported shell state and marker output exa
     expect(writes).toBe(1)
     expect(writeCalls).toHaveLength(1)
     expect(String(writeCalls[0]?.params.data).match(/UI review terminal ready/g)).toHaveLength(1)
-    expect(calls.filter((call) => call.method === 'quirky.terminal/snapshot')).toHaveLength(2)
     expect(historiesAfterWrite).toBeGreaterThanOrEqual(2)
   }
 })
@@ -1190,6 +1190,31 @@ test('terminal readiness rejects unrelated history and an echoed marker command 
     }
     await expect(prepareCaptureTerminalFixture(client, terminal, { timeoutMs: 40 })).rejects.toThrow()
     expect(writes).toBe(1)
+  }
+})
+
+test('terminal readiness finds the marker on the live screen before it reaches scrollback', async () => {
+  const terminal = { sessionId: 'session:owned', tabId: 'tab:owned', paneId: 'pane:owned' }
+  const screen = new Screen({ cols: 80, rows: 24 })
+  let writes = 0
+  const client: FixtureRpcClient = {
+    async callAny(method) {
+      if (method === 'quirky.terminal/snapshot') return { ...screen.snapshot(), shellState: 'ready' }
+      if (method === 'quirky.terminal/history') return { lines: [] }
+      if (method === 'quirky.terminal/write') {
+        writes += 1
+        screen.write('\r\n\x1b[32mUI review terminal ready\x1b[0m\r\n')
+        await screen.settled()
+        return { ok: true }
+      }
+      throw new Error(`unexpected ${method}`)
+    }
+  }
+  try {
+    await prepareCaptureTerminalFixture(client, terminal, { timeoutMs: 250 })
+    expect(writes).toBe(1)
+  } finally {
+    screen.dispose()
   }
 })
 
