@@ -190,7 +190,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -210,7 +210,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -230,7 +230,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -250,7 +250,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -270,7 +270,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -290,7 +290,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -310,7 +310,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -330,7 +330,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -350,7 +350,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -370,7 +370,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -390,7 +390,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -410,7 +410,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -430,7 +430,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -450,7 +450,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -470,7 +470,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -490,14 +490,14 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
     {
       "site": {
         "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-        "quote": "<section className=\"section-card\">\n    <SectionHeader title=\"Gemini CLI (legacy)\" />\n    <p className=\"settings-description\">Gemini CLI OAuth credential refresh is opt-in. When enabled, Quirky may let Gemini CLI refresh its local OAuth credentials for quota checks. It is off until you explicitly enable it.</p>\n    <p className=\"settings-description\">Usage checks do not send prompts, run models, sign you in, or change the active Gemini account.</p>\n    <FormRow label=\"Allow Gemini CLI OAuth credential refresh\" htmlFor=\"gemini-cli-oauth-enabled\">\n      <input id=\"gemini-cli-oauth-enabled\" type=\"checkbox\" checked={enabled} disabled={saving} onChange={(event) => void update(event.currentTarget.checked)} />\n    </FormRow>\n    {saving && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n  </section>"
+        "quote": "<section className=\"section-card\">\n    <SectionHeader title=\"Gemini CLI (legacy)\" />\n    <p className=\"settings-description\">Gemini CLI OAuth credential refresh is opt-in. When enabled, Quirky may let Gemini CLI refresh its local OAuth credentials for quota checks. It is off until you explicitly enable it.</p>\n    <p className=\"settings-description\">Usage checks do not send prompts, run models, sign you in, or change the active Gemini account.</p>\n    <FormRow layout=\"inline\" label=\"Allow Gemini CLI OAuth credential refresh\" htmlFor=\"gemini-cli-oauth-enabled\">\n      <Checkbox hideLabel label=\"Allow Gemini CLI OAuth credential refresh\" id=\"gemini-cli-oauth-enabled\" checked={enabled} disabled={saving} onChange={(value) => void update(value)} />\n    </FormRow>\n    {saving && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n  </section>"
       },
       "anchor": "saving &&",
       "surface": "view:quirky.accounts/settings",
@@ -510,7 +510,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -530,7 +530,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -550,7 +550,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -570,7 +570,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     },
@@ -590,7 +590,7 @@
         },
         "import": {
           "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-          "quote": "import { Badge, Button, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
+          "quote": "import { Badge, Button, Checkbox, EmptyState, FormRow, InlineError, ListRow, NoticeLine, SectionHeader, SelectField, Tabs } from '@quirky/ui'"
         }
       }
     }
@@ -671,7 +671,7 @@
     {
       "site": {
         "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-        "quote": "<section className=\"section-card\">\n    <SectionHeader title=\"Gemini CLI (legacy)\" />\n    <p className=\"settings-description\">Gemini CLI OAuth credential refresh is opt-in. When enabled, Quirky may let Gemini CLI refresh its local OAuth credentials for quota checks. It is off until you explicitly enable it.</p>\n    <p className=\"settings-description\">Usage checks do not send prompts, run models, sign you in, or change the active Gemini account.</p>\n    <FormRow label=\"Allow Gemini CLI OAuth credential refresh\" htmlFor=\"gemini-cli-oauth-enabled\">\n      <input id=\"gemini-cli-oauth-enabled\" type=\"checkbox\" checked={enabled} disabled={saving} onChange={(event) => void update(event.currentTarget.checked)} />\n    </FormRow>\n    {saving && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n  </section>"
+        "quote": "<section className=\"section-card\">\n    <SectionHeader title=\"Gemini CLI (legacy)\" />\n    <p className=\"settings-description\">Gemini CLI OAuth credential refresh is opt-in. When enabled, Quirky may let Gemini CLI refresh its local OAuth credentials for quota checks. It is off until you explicitly enable it.</p>\n    <p className=\"settings-description\">Usage checks do not send prompts, run models, sign you in, or change the active Gemini account.</p>\n    <FormRow layout=\"inline\" label=\"Allow Gemini CLI OAuth credential refresh\" htmlFor=\"gemini-cli-oauth-enabled\">\n      <Checkbox hideLabel label=\"Allow Gemini CLI OAuth credential refresh\" id=\"gemini-cli-oauth-enabled\" checked={enabled} disabled={saving} onChange={(value) => void update(value)} />\n    </FormRow>\n    {saving && <div role=\"status\" aria-live=\"polite\"><NoticeLine>Saving…</NoticeLine></div>}\n  </section>"
       },
       "anchor": "role=\"status\"",
       "reason": "Announcement semantics around separately witnessed shared state components, not another loading, empty, or error presentation."
@@ -1440,7 +1440,7 @@
     {
       "site": {
         "file": "plugins/quirky.accounts/src/window/AccountsSettings.tsx",
-        "quote": "onChange={(event) => void update(event.currentTarget.checked)}"
+        "quote": "onChange={(value) => void update(value)}"
       },
       "anchor": "onChange",
       "route": {
